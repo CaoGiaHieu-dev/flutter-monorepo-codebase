@@ -1,0 +1,74 @@
+{{#isProvider}}
+import 'package:core_common/core_common.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+import '../pages/pages.dart';
+import '../providers/providers.dart';
+import '{{snakeNameInput}}_path.dart';
+
+part '{{snakeNameInput}}_route_module.g.dart';
+
+@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.PATH)
+class {{pascalNameInput}}Route extends GoRouteDataCustom
+    with ${{pascalNameInput}}Route {
+  const {{pascalNameInput}}Route();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return ChangeNotifierProvider(
+      create: (context) => getIt<{{pascalNameInput}}Provider>(),
+      child: const {{pascalNameInput}}Page(),
+    );
+  }
+}
+{{/isProvider}}
+{{#isBloc}}
+import 'package:bloc_state_management/bloc_state_management.dart';
+import 'package:core_common/core_common.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../blocs/blocs.dart';
+import '../pages/pages.dart';
+import '{{snakeNameInput}}_path.dart';
+
+part '{{snakeNameInput}}_route_module.g.dart';
+
+@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.PATH)
+class {{pascalNameInput}}Route extends GoRouteDataCustom
+    with ${{pascalNameInput}}Route {
+  const {{pascalNameInput}}Route();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return BlocProvider(
+      create: (context) =>
+          getIt<{{pascalNameInput}}Bloc>()..add(const {{pascalNameInput}}Event.started()),
+      child: const {{pascalNameInput}}Page(),
+    );
+  }
+}
+{{/isBloc}}
+{{#isNone}}
+import 'package:core_common/core_common.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../pages/pages.dart';
+import '{{snakeNameInput}}_path.dart';
+
+part '{{snakeNameInput}}_route_module.g.dart';
+
+@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.PATH)
+class {{pascalNameInput}}Route extends GoRouteDataCustom
+    with ${{pascalNameInput}}Route {
+  const {{pascalNameInput}}Route();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const {{pascalNameInput}}Page();
+  }
+}
+{{/isNone}}

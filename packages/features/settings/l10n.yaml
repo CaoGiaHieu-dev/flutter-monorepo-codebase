@@ -1,0 +1,7 @@
+arb-dir: assets/language
+template-arb-file: en.arb
+output-localization-file: app_localizations.dart
+output-class: FeatureSettingsLocalizations
+preferred-supported-locales: [en, vi]
+untranslated-messages-file: untranslated-messages.txt
+output-dir: lib/src/gen/language

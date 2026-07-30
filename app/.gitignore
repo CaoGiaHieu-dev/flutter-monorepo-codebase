@@ -1,0 +1,32 @@
+# App-specific Dart/Flutter ignore
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Android Studio / Android specific
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+
+# Xcode specific
+/ios/Flutter/.last_build_id
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.module.dart
+**/gen/**
+**/generated/**
+
+# Lock files
+pubspec.lock
+
+# Firebase configuration
+firebase.json
+google-services.json
+**/google-services.json

@@ -1,0 +1,8 @@
+import 'package:flutter/widgets.dart';
+
+import '../../{{moduleName}}.dart';
+
+extension Context{{pascalNameInput}}Extension on BuildContext {
+  {{pascalName}}Localizations get l10n{{pascalNameInput}} =>
+      {{pascalName}}Localizations.of(this)!;
+}

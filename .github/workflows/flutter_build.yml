@@ -1,0 +1,101 @@
+name: "Build and Distribute"
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: "Flavor"
+        required: true
+        default: "prod"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      version:
+        description: "Version"
+        required: true
+        type: string
+        default: 1.0.0
+      notes:
+        description: "Notes"
+        required: false
+        type: string
+jobs:
+  build:
+    name: Build & Release
+    runs-on: macos-latest
+
+    steps:
+      #1 Checkout Repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+        #2 Setup Java
+      - name: Set Up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "oracle"
+          java-version: "17"
+
+        #3 Setup Flutter
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: "stable"
+          cache: true
+
+        #4 Install Dependencies and Generate
+      - name: Install Dependencies
+        run: |
+          chmod +x tools/workspace_setup/configure.sh
+          ./tools/workspace_setup/configure.sh
+
+        #5 Setup Env
+      - name: Decode Env
+        run: |
+          echo -n ${{ secrets.ENV }} | base64 -d > .env
+
+        #6 Setup Keystore
+      - name: Decode Keystore
+        run: |
+          echo -n ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > app/android/keystore.jks
+
+      - name: Create key.properties
+        run: |
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > app/android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> app/android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> app/android/key.properties
+          echo "storeFile=../keystore.jks" >> app/android/key.properties
+
+        #7 Building APK
+      - name: Build APK
+        run: |
+          cd app
+          flutter build apk --flavor=${{ inputs.flavor }} --build-name=${{ inputs.version }} --build-number=${{ github.run_number }} --dart-define-from-file=../.env --obfuscate --split-debug-info=../obfuscate/ --no-tree-shake-icons --verbose
+
+      #   #7 Building App Bundle (aab)
+      # - name: Build appBundle
+      #   run: flutter build appbundle
+
+      #8 Build IPA ( IOS Build )
+      # - name: Build IPA
+      #   run: flutter build ipa --no-codesign
+
+      # - name: Compress Archives and IPAs
+      #   run: |
+      #     cd build
+      #     tar -czf ios_build.tar.gz ios
+
+      #8 Distribute Android
+      - name: Upload and Distribute App
+        uses: nickwph/firebase-app-distribution-action@v1
+        with:
+          credentials: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          app: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          file: "app/build/app/outputs/flutter-apk/app-${{ inputs.flavor}}-release.apk"
+          release-notes: |
+            Build version: ${{ inputs.version }}+${{ github.run_number }}
+            Flavor: ${{ inputs.flavor }}
+            Notes: ${{ inputs.notes }}

@@ -1,0 +1,19 @@
+# Package-specific Dart/Flutter ignore
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.module.dart
+**/gen/**
+**/generated/**
+
+# Lock files
+pubspec.lock

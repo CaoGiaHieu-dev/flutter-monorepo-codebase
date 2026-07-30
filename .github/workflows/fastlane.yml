@@ -1,0 +1,101 @@
+name: Fastlane build and distribute
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-on:
+        description: "Build on"
+        required: true
+        type: choice
+        default: "self-hosted"
+        options:
+          - self-hosted
+          - macos-latest
+      flutter_version:
+        description: "Flutter version"
+        required: true
+        default: "stable"
+      version:
+        description: "App version"
+        required: true
+        default: "1.0.0"
+      build_number:
+        description: "Build number (leave empty to auto-increment)"
+        required: false
+      flavor:
+        description: "Flavor"
+        required: true
+        default: "prod"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      change_log:
+        description: "Change log"
+        required: true
+        default: "Initial release"
+      build_type:
+        description: "Build type (apk or aab)"
+        required: true
+        type: choice
+        default: "apk"
+        options:
+          - apk
+          - aab
+      distribute_store:
+        description: "Distribute to Play Store? (true/false)"
+        required: true
+        type: boolean
+        default: false
+      distribute_firebase:
+        description: "Distribute to Firebase? (true/false)"
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ${{ inputs.build-on }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set Up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "oracle"
+          java-version: "17"
+
+      - name: Set up Ruby
+        if: ${{ inputs.build-on != 'self-hosted' }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Install fastlane dependency
+        run: fastlane add_plugin firebase_app_distribution
+
+      - name: Build and distribute
+        run: |
+          fastlane flutter_build \
+            flutter_version:${{ github.event.inputs.flutter_version }} \
+            version:${{ github.event.inputs.version }} \
+            flavor:${{ github.event.inputs.flavor }} \
+            change_log:"${{ github.event.inputs.change_log }}" \
+            build_type:${{ github.event.inputs.build_type }} \
+            distribute_store:${{ github.event.inputs.distribute_store }} \
+            auto_increment:${{ github.event.inputs.build_number == '' }} \
+            build_number:${{ github.event.inputs.build_number }} \
+            distribute_firebase:${{ github.event.inputs.distribute_firebase }}

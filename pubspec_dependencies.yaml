@@ -1,0 +1,74 @@
+# Source of Truth for shared package versions across the entire monorepo.
+# Running `dart tools/dependency_sync.dart` will synchronize these versions to all pubspec.yaml files.
+
+dependencies:
+  # State Management
+  equatable: "^2.1.0"
+  flutter_bloc: "^9.1.1"
+  provider: "^6.1.5+1"
+
+  # Dependency Injection
+  get_it: "^9.2.1"
+  injectable: "^3.0.0"
+
+  # Networking & HTTP client
+  dio: "^5.11.0"
+  http_security_pinning: "^1.0.1"
+  retrofit: "^4.9.2"
+
+  # Navigation & Routing
+  go_router: "^17.3.0"
+
+  # Code Generation Annotations
+  freezed_annotation: "^3.1.0"
+  json_annotation: "^4.12.0"
+
+  # Firebase & Push Notifications
+  cloud_firestore: "^6.6.0"
+  firebase_auth: "^6.5.3"
+  firebase_core: "^4.11.0"
+  firebase_messaging: "^16.2.1"
+  flutter_local_notifications: "^22.0.1"
+
+  # Authentication Providers
+  flutter_facebook_auth: "^7.1.7"
+  google_sign_in: "^7.2.0"
+
+  # Media & Image Processing
+  cached_network_image_ce: "^4.9.0"
+  extended_image: "^10.0.1"
+  image_picker: "^1.2.2"
+  photo_manager: "^3.9.0"
+
+  # Device Info & Permissions
+  device_info_plus: "^13.1.0"
+  package_info_plus: "^10.1.0"
+  permission_handler: "^12.0.1"
+
+  # UI Components & Styling
+  dotted_line: "^3.2.3"
+  flutter_screenutil: "^5.9.3"
+  gradient_borders: "^1.0.2"
+  jumping_dot: "^0.0.7"
+  refresh_sticky: "^0.1.2"
+
+  # Utilities
+  email_validator: "^3.0.0"
+  internet_connection_checker_plus: "^3.0.0"
+  dynamic_logger: "^0.4.0"
+  path: "^1.9.1"
+  path_provider: "^2.1.5"
+
+  # Local Database (Drift + SQLite)
+  drift: "^2.34.3"
+
+dev_dependencies:
+  # Build Runner & Code Generators
+  build_runner: "^2.15.1"
+  freezed: "^4.0.0-dev.3"
+  go_router_builder: "^4.4.0"
+  injectable_generator: "^3.0.2"
+  json_serializable: "^6.14.0"
+  retrofit_generator: "^10.2.7"
+  drift_dev: "^2.34.5"
+  flutter_lints: "^6.0.0"

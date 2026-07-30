@@ -1,0 +1,26 @@
+# Package-specific Dart/Flutter ignore
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.module.dart
+**/gen/**
+**/generated/**
+
+# Lock files
+pubspec.lock
+
+# Firebase configuration
+firebase_options_*.dart
+firebase_options.dart
+!firebase_options_module.dart
+firebase.json
+google-services.json

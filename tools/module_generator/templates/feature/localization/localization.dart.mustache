@@ -1,0 +1,12 @@
+import 'package:core_di/core_di.dart';
+import 'package:flutter/widgets.dart';
+import 'package:injectable/injectable.dart';
+
+import '../{{moduleName}}.dart';
+
+@LazySingleton(as: IFeatureLocalization)
+class {{pascalName}}LocalizationImpl implements IFeatureLocalization {
+  @override
+  LocalizationsDelegate<dynamic> get delegate =>
+      {{pascalName}}Localizations.delegate;
+}

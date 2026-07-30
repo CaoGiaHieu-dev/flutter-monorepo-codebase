@@ -1,0 +1,100 @@
+name: {{moduleName}}
+description: "A new Flutter package."
+version: 0.0.1
+publish_to: 'none'
+
+resolution: workspace
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # internal packages
+{{#isFeature}}
+  core_common:
+    path: ../../core/core_common
+  core_di:
+    path: ../../core/core_di
+  core_base_ui:
+    path: ../../core/core_base_ui
+  feature_shared:
+    path: ../shared
+{{#isProvider}}
+  provider_state_management:
+    path: ../../core/provider_state_management
+{{/isProvider}}
+{{#isBloc}}
+  bloc_state_management:
+    path: ../../core/bloc_state_management
+{{/isBloc}}
+{{/isFeature}}
+{{#isDomain}}
+  core_common:
+    path: ../../core/core_common
+  domain_core:
+    path: ../domain_core
+{{/isDomain}}
+{{#isData}}
+  core_common:
+    path: ../../core/core_common
+  core_network:
+    path: ../../core/core_network
+  core_storage:
+    path: ../../core/core_storage
+  data_core:
+    path: ../data_core
+{{/isData}}
+{{#isCore}}
+  core_common:
+    path: ../core_common
+{{/isCore}}
+{{#isCustom}}
+  core_common:
+    path: ../packages/core/core_common
+{{/isCustom}}
+
+  # external packages
+  injectable:
+  get_it:
+  flutter_localizations:
+    sdk: flutter
+  intl:
+{{#isFeature}}
+  go_router:
+  freezed_annotation:
+  json_annotation:
+{{/isFeature}}
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  build_runner:
+  injectable_generator:
+  flutter_lints:
+{{#isFeature}}
+  freezed:
+  json_serializable:
+  go_router_builder:
+{{/isFeature}}
+
+{{#isFeature}}
+flutter:
+  generate: true
+  assets:
+    - assets/
+
+flutter_gen:
+  output: lib/src/gen/
+  assets:
+    outputs:
+      class_name: {{moduleAssetName}}Assets
+      package_parameter_enabled: true
+      style: "dot-delimiter"
+  integrations:
+    flutter_svg: true
+{{/isFeature}}

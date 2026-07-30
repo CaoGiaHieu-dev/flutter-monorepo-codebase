@@ -1,0 +1,206 @@
+# =============================================================================
+# FILE: analysis_options.yaml
+# MÔ TẢ: Cấu hình quy tắc kiểm tra mã nguồn (Linter) và chỉ số (Metrics)
+# CHI TIẾT: Xem hướng dẫn tại analysis_options_guide.md trong artifacts.
+# =============================================================================
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**.freezed.dart"
+    - "**.g.dart"
+    - "**.mocks.dart"
+    - "**.config.dart"
+    - "**.module.dart"
+    - "**/core/localization/generated/**"
+    - "**/gen/**"
+  errors:
+    # Bỏ qua cảnh báo về annotation target không hợp lệ (thường dùng cho Freezed/JSON Serializable).
+    invalid_annotation_target: ignore
+
+linter:
+  rules:
+    # Đơn giản hóa việc khai báo biến trong pattern.
+    # Bad: Square(area: var area) | Good: Square(:var area)
+    simplify_variable_pattern: true
+
+    # Sử dụng tham số khởi tạo trực tiếp (this.field).
+    # Bad: Point(int x) : x = x; | Good: Point(this.x);
+    prefer_initializing_formals: true
+
+    # Không import tương đối vào thư mục lib/.
+    # Bad: import '../../lib/src/utils.dart'; | Good: import 'package:package/utils.dart';
+    avoid_relative_lib_imports: true
+
+    # Cảnh báo HTML không mong muốn trong doc comments.
+    # Bad: /// Returns a List<String> | Good: /// Returns a `List<String>`
+    unintended_html_in_doc_comment: false
+
+    # Lược bỏ kiểu dữ liệu rõ ràng cho static/top-level variables.
+    # Bad: static const List<String> names = <String>[]; | Good: static const names = <String>[];
+    omit_obvious_property_types: false
+
+    # Cảnh báo các câu lệnh trống (dấu chấm phẩy thừa).
+    # Bad: if (cond); { ... }
+    empty_statements: true
+
+    # Ưu tiên dùng cú pháp inline khi khởi tạo collection.
+    # Bad: list.add('a'); | Good: var list = ['a'];
+    prefer_inlined_adds: true
+
+    # Đảm bảo chuỗi multiline bắt đầu bằng dòng mới.
+    leading_newlines_in_multiline_strings: true
+
+    # Một dòng chỉ nên khai báo một biến.
+    # Bad: var a, b;
+    avoid_multiple_declarations_per_line: true
+
+    # Cho phép/Cảnh báo sử dụng thành phần bị deprecated trong cùng package.
+    deprecated_member_use_from_same_package: true
+
+    # Bỏ các dấu gạch dưới không cần thiết.
+    unnecessary_underscores: true
+
+    # Tên file phải dùng snake_case.
+    # Bad: MyFile.dart | Good: my_file.dart
+    file_names: true
+
+    # Tên biến/hàm không hằng số dùng lowerCamelCase.
+    # Bad: var MyVar; | Good: var myVar;
+    non_constant_identifier_names: true
+
+    # Cảnh báo khi tear-off phương thức call() ngầm định.
+    implicit_call_tearoffs: true
+
+    # Yêu cầu kiểu dữ liệu tường minh cho top-level variables.
+    strict_top_level_inference: true
+    # Tên super parameters phải khớp với lớp cha.
+    # Bad: Child({super.diffName}) // Parent(name) | Good: Child({super.name})
+    matching_super_parameters: true
+
+    # Yêu cầu dấu phẩy ở cuối danh sách (tắt trong dự án này).
+    require_trailing_commas: false
+
+    # Không được sử dụng biến wildcard (_).
+    # Bad: print(_);
+    no_wildcard_variable_uses: true
+
+    # Không cần thiết đặt tên cho library.
+    unnecessary_library_name: false
+
+    # Tránh dùng print() trong code production.
+    # Good: dùng logger hoặc debugPrint.
+    avoid_print: true
+
+    # Ưu tiên nháy đơn cho String.
+    # Bad: "Hello" | Good: 'Hello'
+    prefer_single_quotes: true
+
+    # Tránh dùng function literals trong foreach (ưu tiên for-in).
+    # Bad: list.forEach((e) => print(e)) | Good: for (var e in list) print(e)
+    avoid_function_literals_in_foreach_calls: false
+
+    # Luôn khai báo kiểu trả về cho hàm.
+    always_declare_return_types: false
+
+    # Bỏ từ khóa 'new' thừa.
+    unnecessary_new: true
+
+    # Tránh câu lệnh else trống.
+    avoid_empty_else: true
+
+    # Sắp xếp import theo thứ tự (dart, package, relative).
+    directives_ordering: true
+
+    # Tránh tham số constructor không dùng.
+    avoid_unused_constructor_parameters: false
+
+    # Ưu tiên import tương đối trong cùng package.
+    # Good: import '../models/user.dart';
+    prefer_relative_imports: true
+
+    # Yêu cầu ngoặc nhọn cho if/for/while.
+    curly_braces_in_flow_control_structures: false
+
+    # Quy tắc tên hằng số (đang tắt).
+    constant_identifier_names: false
+    # Không để block catch trống.
+    empty_catches: false
+
+    # Chỉ dùng package đã khai báo trong pubspec.
+    depend_on_referenced_packages: false
+
+    # Ưu tiên const constructor cho Widget (hiệu năng Flutter).
+    # Good: const Text('Hi')
+    prefer_const_constructors: true
+
+    # Yêu cầu tham số Key cho Widget constructor.
+    use_key_in_widget_constructors: false
+
+    # Bỏ 'await' thừa khi return Future.
+    unnecessary_await_in_return: true
+
+    # Bỏ '{}' thừa trong string interpolation.
+    # Bad: '${name}' | Good: '$name'
+    unnecessary_brace_in_string_interps: true
+
+    # Bỏ 'const' thừa khi đã có ở cấp cha.
+    unnecessary_const: true
+
+    # Bỏ tên constructor mặc định (.new) nếu không cần.
+    unnecessary_constructor_name: true
+
+    # Tránh getter/setter chỉ làm nhiệm vụ bọc field.
+    unnecessary_getters_setters: true
+
+    # Ưu tiên tear-off thay vì lambda.
+    # Bad: (x) => print(x) | Good: print
+    unnecessary_lambdas: true
+
+    # Bỏ 'late' nếu biến được gán ngay.
+    unnecessary_late: true
+
+    # Bỏ '??=' nếu không cần thiết.
+    unnecessary_null_aware_assignments: true
+
+    # Bỏ '!' thừa.
+    unnecessary_null_checks: true
+
+    # Bỏ '?? null' thừa.
+    unnecessary_null_in_if_null_operators: true
+
+    # Bỏ kiểu nullable cho biến final nếu có giá trị non-null.
+    unnecessary_nullable_for_final_variable_declarations: true
+
+    # Bỏ override nếu chỉ gọi super.
+    unnecessary_overrides: true
+
+    # Bỏ ngoặc đơn thừa.
+    unnecessary_parenthesis: true
+
+    # Tránh dùng raw strings (r'') nếu không cần.
+    unnecessary_raw_strings: false
+
+    # Cảnh báo các câu lệnh không có tác dụng.
+    unnecessary_statements: true
+
+    # Bỏ escape characters không cần thiết trong chuỗi.
+    unnecessary_string_escapes: true
+
+    # Bỏ string interpolation nếu chỉ có 1 biến chuỗi.
+    # Bad: '${myString}' | Good: myString
+    unnecessary_string_interpolations: true
+
+    # Không dùng 'this.' nếu không bị trùng tên.
+    unnecessary_this: true
+
+    # Không cần '.toList()' khi dùng spread operator (...).
+    unnecessary_to_list_in_spreads: true
+
+    # Không trùng lặp giá trị trong switch-case.
+    no_duplicate_case_values: true
+
+formatter:
+  page_width: 80
+  trailing_commas: preserve

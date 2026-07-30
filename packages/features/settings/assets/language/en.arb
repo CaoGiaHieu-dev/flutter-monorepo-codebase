@@ -1,0 +1,8 @@
+{
+  "@@locale": "en",
+  "settings": "Settings Screen (Skeleton)",
+  "tabLabel": "Settings",
+  "changeLanguage": "Change Language",
+  "changeTheme": "Change Theme",
+  "logout": "Logout"
+}

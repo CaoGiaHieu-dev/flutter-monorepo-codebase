@@ -1,0 +1,6 @@
+*.xml
+change_log*.txt
+.p8
+*.json
+*.yaml
+!Config.example.yaml

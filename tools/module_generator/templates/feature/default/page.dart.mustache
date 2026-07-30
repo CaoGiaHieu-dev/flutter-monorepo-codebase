@@ -1,0 +1,19 @@
+import 'package:flutter/material.dart';
+
+import '../extensions/extensions.dart';
+
+class {{pascalNameInput}}Page extends StatelessWidget {
+  const {{pascalNameInput}}Page({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(context.l10n{{pascalNameInput}}.title),
+      ),
+      body: Center(
+        child: Text(context.l10n{{pascalNameInput}}.title),
+      ),
+    );
+  }
+}

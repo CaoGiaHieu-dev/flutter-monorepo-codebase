@@ -1,0 +1,19 @@
+import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
+import 'package:flutter/material.dart';
+import 'package:injectable/injectable.dart';
+
+import '../extensions/extensions.dart';
+import '{{snakeNameInput}}_route_module.dart';
+
+@LazySingleton(as: IDashboardTabModule)
+class {{pascalName}}DashboardTabModule implements IDashboardTabModule {
+  @override
+  DashboardTabItem get tabItem => DashboardTabItem(
+        route: ${{camelNameInput}}Route,
+        order: 10,
+        icon: (context) => const Icon(Icons.star_border),
+        activeIcon: (context) => const Icon(Icons.star),
+        label: (context) => context.l10n{{pascalNameInput}}.title,
+      );
+}

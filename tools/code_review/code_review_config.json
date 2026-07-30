@@ -1,0 +1,9 @@
+{
+    "reportLanguage": "vi",
+    "outputFormat": "markdown",
+    "includeTimestamps": true,
+    "detailedOutput": true,
+    "batchSize": 3,
+    "delayBetweenBatches": 1000,
+    "geminiApiKey": ""
+}

@@ -1,0 +1,270 @@
+name: AI Code Review
+
+on:
+    pull_request:
+        branches: [main, develop, master]
+        paths:
+            - "app/lib/**/*.dart"
+            - "packages/**/*.dart"
+            - "!**/*.g.dart"
+            - "!**/*.freezed.dart"
+            - "!**/*.module.dart"
+    workflow_dispatch:
+        inputs:
+            review_scope:
+                description: "Review scope"
+                required: true
+                default: "changed"
+                type: choice
+                options:
+                    - changed
+                    - all
+                    - domain
+                    - data
+                    - presentation
+            language:
+                description: "Report language"
+                required: false
+                default: "vi"
+                type: choice
+                options:
+                    - en
+                    - vi
+                    - ja
+                    - ko
+                    - zh
+            flutter_version:
+                description: "Flutter version"
+                required: true
+                default: "3.41.9"
+
+jobs:
+    code-review:
+        name: AI Code Review with Gemini
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: 📥 Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0 # Full history for git diff
+
+            - name: 🎯 Setup Flutter
+              uses: subosito/flutter-action@v2
+              with:
+                  flutter-version: "${{ github.event.inputs.flutter_version }}" # Specify your desired Flutter version
+                  channel: "stable" # Or 'beta', 'dev'
+                  cache: true
+
+            - name: 📦 Get dependencies
+              run: |
+                  chmod +x tools/workspace_setup/configure.sh
+                  ./tools/workspace_setup/configure.sh
+
+            - name: 📜 Get changed .dart files
+              id: changed_files
+              uses: tj-actions/changed-files@v46.0.1
+              with:
+                  files: |
+                      app/lib/**/*.dart
+                      packages/**/*.dart
+                      app/test/**/*.dart
+                      packages/**/test/**/*.dart
+                      !**/*.g.dart
+                      !**/*.freezed.dart
+                      !**/*.module.dart
+
+            - name: 🔍 Run Code Review (PR)
+              if: github.event_name == 'pull_request' && steps.changed_files.outputs.any_changed == 'true'
+              env:
+                  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+              run: |
+                  FILE_ARGS=""
+                  for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
+                    FILE_ARGS="$FILE_ARGS --file $file"
+                  done
+
+                  dart tools/code_review/code_review.dart \
+                    --format markdown \
+                    --language vi \
+                    --output-dir code_review_reports \
+                    $FILE_ARGS
+
+            - name: 🔍 Run Code Review (Manual)
+              if: github.event_name == 'workflow_dispatch'
+              env:
+                  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+              run: |
+                  SCOPE="${{ github.event.inputs.review_scope }}"
+                  LANG="${{ github.event.inputs.language }}"
+
+                  if [ "$SCOPE" = "all" ]; then
+                    dart tools/code_review/code_review.dart --all --language "$LANG" --format markdown
+                  elif [ "$SCOPE" = "domain" ]; then
+                    dart tools/code_review/code_review.dart --folder packages/domain --language "$LANG" --format markdown
+                  elif [ "$SCOPE" = "data" ]; then
+                    dart tools/code_review/code_review.dart --folder packages/data --language "$LANG" --format markdown
+                  elif [ "$SCOPE" = "presentation" ]; then
+                    dart tools/code_review/code_review.dart --folder app/lib --language "$LANG" --format markdown
+                  else
+                    dart tools/code_review/code_review.dart --changed --language "$LANG" --format markdown
+                  fi
+
+            - name: 📊 Upload Review Report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: code-review-report-${{ github.run_number }}
+                  path: code_review_reports/
+                  retention-days: 30
+
+            - name: 📝 Comment PR with Inline Suggestions
+              if: github.event_name == 'pull_request' && always()
+              uses: actions/github-script@v7
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      const fs = require('fs');
+                      const path = require('path');
+                      const { repo: { owner, repo }, issue: { number: issue_number } } = context;
+
+                      // Helper to check if a line is in the PR's diff
+                      const isLineInDiff = (filePath, lineNumber, diffs) => {
+                        const fileDiff = diffs.find(d => d.filename === filePath);
+                        if (!fileDiff) return false;
+
+                        const hunks = fileDiff.patch.split('\n').filter(line => line.startsWith('@@'));
+                        for (const hunk of hunks) {
+                          const match = hunk.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+                          if (match) {
+                            const startLine = parseInt(match[1]);
+                            const lineCount = parseInt(match[2] || '1');
+                            if (lineNumber >= startLine && lineNumber < startLine + lineCount) {
+                              return true;
+                            }
+                          }
+                        }
+                        return false;
+                      };
+
+                      // 1. Get PR diff and find the report file
+                      const { data: diffs } = await github.rest.pulls.listFiles({ owner, repo, pull_number: issue_number });
+                      const reportsDir = 'code_review_reports';
+                      if (!fs.existsSync(reportsDir)) {
+                        console.log('No reports directory found. Skipping comment.');
+                        return;
+                      }
+                      const files = fs.readdirSync(reportsDir)
+                        .filter(f => f.startsWith('code_review_report_'))
+                        .sort()
+                        .reverse();
+
+                      if (files.length === 0) {
+                        // If no report file, it might mean no issues were found. Post a success message.
+                        const existingComments = await github.rest.issues.listComments({ owner, repo, issue_number });
+                        const botComment = existingComments.data.find(comment => comment.user.login === 'github-actions[bot]' && comment.body.includes('AI Code Review Results'));
+                        if (!botComment) {
+                           await github.rest.issues.createComment({
+                              owner, repo, issue_number,
+                              body: '## 🤖 AI Code Review Results\n\n✅ **Tuyệt vời!** Không tìm thấy vấn đề nào trong các file đã thay đổi.'
+                           });
+                        }
+                        return;
+                      }
+
+                      const reportPath = path.join(reportsDir, files[0]);
+                      const report = fs.readFileSync(reportPath, 'utf8');
+
+                      // 2. Parse the report to extract inline comments
+                      const inlineComments = [];
+                      const generalIssues = [];
+                      const fileSections = report.split('## 📄 ').slice(1);
+
+                      for (const section of fileSections) {
+                        const pathMatch = section.match(/\*\*Đường dẫn:\*\* `(.+?)`/);
+                        if (!pathMatch) continue;
+                        const filePath = pathMatch[1];
+
+                        const issueRegex = /-\s+\*\*Line\*\*:\s*([\d, ]+)\n\s+-\s+\*\*Problem\*\*:\s*([\s\S]+?)\n\s+-\s+\*\*Impact\*\*:\s*([\s\S]+?)\n\s+-\s+\*\*Fix\*\*:\s*([\s\S]+?)(?=\n\s*-\s+\*\*Line\*\*|\n\n\n|###|---)/g;
+                        let issueMatch;
+                        while ((issueMatch = issueRegex.exec(section)) !== null) {
+                          const lines = issueMatch[1].split(',').map(s => parseInt(s.trim()));
+                          const problem = issueMatch[2].trim();
+                          const impact = issueMatch[3].trim();
+                          const fix = issueMatch[4].trim();
+
+                          const commentBody = `**🤖 AI Suggestion:**\n\n- **Vấn đề:** ${problem}\n- **Ảnh hưởng:** ${impact}\n- **Gợi ý:** ${fix}`;
+
+                          const targetLine = lines[lines.length - 1]; // Comment on the last line of the range
+
+                          if (isLineInDiff(filePath, targetLine, diffs)) {
+                            inlineComments.push({
+                              path: filePath,
+                              line: targetLine,
+                              body: commentBody,
+                            });
+                          } else {
+                            // Group non-inline issues by file path
+                            let fileGroup = generalIssues.find(g => g.path === filePath);
+                            if (!fileGroup) {
+                              fileGroup = { path: filePath, comments: [] };
+                              generalIssues.push(fileGroup);
+                            }
+                            fileGroup.comments.push(`- **Dòng ~${lines.join(', ')}**: ${problem}\n  - **Gợi ý**: ${fix}`);
+                          }
+                        }
+                      }
+
+                      // 3. Create a summary comment and post the review
+                      const summaryHeader = `## 🤖 AI Code Review Results\n\n`;
+                      const summaryFooter = `\n\n---\n\n*Các gợi ý chi tiết đã được thêm trực tiếp vào các dòng code liên quan.*\n\n🔗 **Xem báo cáo đầy đủ và workflow run tại đây:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+                      let summaryBody = (report.match(/# 📊 PHẦN 1: TỔNG QUAN[\s\S]+?(?=# 🔍 PHẦN 2:)/) || [""])[0];
+
+                      if (generalIssues.length > 0) {
+                        summaryBody += `\n\n### ⚠️ Các vấn đề ngoài phạm vi thay đổi\n\n*Một số vấn đề được tìm thấy trong các file nhưng nằm ngoài những dòng code bạn đã thay đổi. Các vấn đề này đã được gộp lại và bình luận riêng trên PR.*`;
+                      }
+
+                      // Post the main review with inline comments
+                      if (inlineComments.length > 0 || summaryBody.trim().length > 0) {
+                         await github.rest.pulls.createReview({
+                          owner, repo,
+                          pull_number: issue_number,
+                          commit_id: context.payload.pull_request.head.sha,
+                          event: 'COMMENT',
+                          body: summaryHeader + summaryBody + summaryFooter,
+                          comments: inlineComments,
+                        });
+                      }
+
+                      // Post separate comments for issues outside the diff
+                      for (const fileIssue of generalIssues) {
+                          const fileCommentBody = `### 🤖 AI Review cho file \`${fileIssue.path}\`\n\n(Các vấn đề này nằm ngoài phạm vi thay đổi của PR nên không thể bình luận inline)\n\n---\n\n${fileIssue.comments.join('\n\n---\n\n')}`;
+                          await github.rest.issues.createComment({
+                              owner,
+                              repo,
+                              issue_number,
+                              body: fileCommentBody,
+                          });
+                      }
+
+            - name: ❌ Fail on Critical Issues
+              if: github.event_name == 'pull_request'
+              run: |
+                  # Check if report contains critical issues
+                  if [ -d "code_review_reports" ]; then
+                    REPORT=$(find code_review_reports -name "code_review_report_*.md" | head -1)
+                    if [ -f "$REPORT" ]; then
+                      # Count critical issues (🔴 markers)
+                      CRITICAL_COUNT=$(grep -c "🔴" "$REPORT" || true)
+                      
+                      if [ "$CRITICAL_COUNT" -gt 0 ]; then
+                        echo "::error::Found $CRITICAL_COUNT critical issues in code review"
+                        echo "::warning::Please review the detailed report and fix critical issues"
+                        # Don't fail the build, just warn
+                        # exit 1
+                      else
+                        echo "✅ No critical issues found"
+                      fi
+                    fi
+                  fi

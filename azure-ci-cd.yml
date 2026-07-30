@@ -1,0 +1,165 @@
+# Variable 'flutter-version' was defined in the Variables tab
+# Variable 'flutterPath' was defined in the Variables tab
+# Variable 'note' was defined in the Variables tab
+# Variable 'numberBuild' was defined in the Variables tab
+# Variable 'version' was defined in the Variables tab
+name: $(Date:yyyyMMdd).$(Rev:r)
+resources:
+  repositories:
+    - repository: self
+      type: git
+      ref: master
+
+pool:
+  name: codebase
+
+trigger: none
+
+stages:
+  - stage: Build
+    jobs:
+      - job:
+        displayName: Flutter Build And Upload Artifacts
+        steps:
+          - checkout: self
+            clean: true
+            fetchTags: false
+          - task: Bash@3
+            displayName: Get source version
+            inputs:
+              targetType: inline
+              filePath: SourceVersion=$(git rev-parse HEAD) echo "##vso[task.setvariable variable=SourceVersionId]$SourceVersion" COMMAND="$(echo $SourceVersion | cut -c-7)" echo $COMMAND echo "##vso[task.setvariable variable=commitTag]$COMMAND"
+              script: >-
+                SourceVersion=$(git rev-parse HEAD)
+
+                echo "##vso[task.setvariable variable=SourceVersionId]$SourceVersion"
+
+                COMMAND="$(echo $SourceVersion | cut -c-7)"
+
+                echo $COMMAND
+
+                echo "##vso[task.setvariable variable=commitTag]$COMMAND"
+
+          - task: Hey24sheep.flutter.flutter-install.FlutterInstall@0
+            displayName: Flutter Install
+            inputs:
+              version: custom
+              customVersion: $(flutter-version)
+
+          - task: Hey24sheep.flutter.flutter-command.FlutterCommand@0
+            displayName: Flutter Clean
+            inputs:
+              flutterDirectory: $(flutterPath)
+              arguments: clean
+
+          - task: Hey24sheep.flutter.flutter-command.FlutterCommand@0
+            displayName: Flutter pub get
+            inputs:
+              flutterDirectory: $(flutterPath)
+              arguments: pub get
+
+          - task: Bash@3
+            displayName: Flutter Config
+            inputs:
+              targetType: inline
+              filePath: SourceVersion=$(git rev-parse HEAD) echo "##vso[task.setvariable variable=SourceVersionId]$SourceVersion" COMMAND="$(echo $SourceVersion | cut -c-7)" echo $COMMAND echo "##vso[task.setvariable variable=commitTag]$COMMAND"
+              script: >-
+                chmod +x tools/workspace_setup/configure.sh
+                ./tools/workspace_setup/configure.sh
+
+          - task: DownloadSecureFile@1
+            name: keyProperties
+            displayName: "Download key.properties"
+            inputs:
+              secureFile: "key.properties"
+              retryCount: 3
+
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: "$(Agent.TempDirectory)"
+              Contents: key.properties
+              TargetFolder: "$(Build.SourcesDirectory)/app/android/"
+
+          - task: DownloadSecureFile@1
+            name: keystore
+            displayName: "Download keystore.jks"
+            inputs:
+              secureFile: "keystore.jks"
+              retryCount: 3
+
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: "$(Agent.TempDirectory)"
+              Contents: keystore.jks
+              TargetFolder: "$(Build.SourcesDirectory)/app/android/"
+
+          - task: Hey24sheep.flutter.flutter-build.FlutterBuild@0
+            displayName: Flutter Build Android
+            inputs:
+              target: apk
+              projectDirectory: $(Build.SourcesDirectory)/app
+              flutterDirectory: $(flutterPath)
+              verboseMode: true
+              buildNumber: $(numberBuild)
+              buildName: $(version)
+              extraArgs: --flavor=prod --dart-define-from-file=../.env --obfuscate --split-debug-info=../obfuscate/ --no-tree-shake-icons
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Android
+            inputs:
+              targetPath: $(Build.SourcesDirectory)/app/build/app/outputs/flutter-apk/app-release.apk
+              artifact: android
+          # - task: Hey24sheep.flutter.flutter-build.FlutterBuild@0
+          #   displayName: Flutter Build Ios
+          #   inputs:
+          #     target: ipa
+          #     projectDirectory: $(Build.SourcesDirectory)
+          #     flutterDirectory: $(flutterPath)
+          #     verboseMode: true
+          #     buildNumber: $(numberBuild)
+          #     buildName: $(version)
+          #     exportOptionsPlist: $(Build.SourcesDirectory)/ExportOptions.plist
+          #     extraArgs: --flavor=prod --dart-define-from-file=.env --obfuscate --split-debug-info=./obfuscate/ --no-tree-shake-icons
+          # - task: PublishPipelineArtifact@1
+          #   displayName: Publish Ios
+          #   inputs:
+          #     targetPath: $(Build.SourcesDirectory)/build/ios/ipa/codebase.ipa
+          #     artifact: ios
+
+  - stage: Distribute
+    dependsOn: Build
+    jobs:
+      - job:
+        displayName: Download Artifacts and Distribute
+        steps:
+          - checkout: self
+            clean: true
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Android
+            inputs:
+              artifact: android
+              patterns: "**/*.apk"
+              targetPath: $(Build.SourcesDirectory)/android-download
+          - task: CmdLine@2
+            displayName: "Deploy Android to Firebase"
+            inputs:
+              script: |
+                firebase appdistribution:distribute app-release.apk  \
+                --app $(FIREBASE-ANDROID-ID)  \
+                --release-notes "$(note)" \
+                --groups "test"
+              workingDirectory: $(Build.SourcesDirectory)/android-download
+          # - task: DownloadPipelineArtifact@2
+          #   displayName: Download Ios
+          #   inputs:
+          #     artifact: ios
+          #     patterns: "**/*.ipa"
+          #     targetPath: $(Build.SourcesDirectory)/ios-download
+          # - task: CmdLine@2
+          #   displayName: "Deploy Ios to Firebase"
+          #   inputs:
+          #     script: |
+          #       firebase appdistribution:distribute codebase.ipa  \
+          #       --app $(FIREBASE-IOS-ID)  \
+          #       --release-notes "$(note)" --groups "test"
+          #     workingDirectory: $(Build.SourcesDirectory)/ios-download

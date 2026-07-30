@@ -1,0 +1,28 @@
+name: bloc_state_management
+description: Core Bloc state management package providing base classes and standardized state handling.
+version: 1.0.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_bloc: "^9.1.1"
+  freezed_annotation: "^3.1.0"
+  get_it: ^9.2.1
+  injectable: ^3.0.0
+  core_common:
+    path: ../common
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: "^2.15.1"
+  injectable_generator: "^3.0.2"
+  json_serializable: "^6.14.0"
+  freezed: "^4.0.0-dev.3"
+

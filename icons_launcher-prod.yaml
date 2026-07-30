@@ -1,0 +1,14 @@
+icons_launcher:
+  image_path: "../packages/core/base_ui/assets/images/ic_launcher.png"
+  platforms:
+    android:
+      enable: true
+      image_path: "../packages/core/base_ui/assets/images/ic_launcher.png"
+      notification_image: "../packages/core/base_ui/assets/images/ic_launcher_round.png"
+      adaptive_background_color: "#FFFFFF"
+      adaptive_foreground_image: "../packages/core/base_ui/assets/images/ic_launcher_foreground.png"
+      adaptive_round_image: "../packages/core/base_ui/assets/images/ic_launcher_round.png"
+
+    ios:
+      enable: true
+      image_path: "../packages/core/base_ui/assets/images/ios_ic_launcher.png"

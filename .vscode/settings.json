@@ -1,0 +1,27 @@
+{
+  "cSpell.words": [
+    "Codebase",
+    "Deeplink",
+    "ekyc",
+    "encrypter",
+    "externically",
+    "Keychain",
+    "lerp",
+    "nomatter",
+    "posttitle",
+    "Pwith",
+    "roboto",
+    "screenutil",
+    "skeletonizer",
+    "tearoffs",
+    "Unfocus",
+    "usecase",
+    "usecases",
+    "wechat",
+    "withdrawmember"
+  ],
+  "arb-editor.suppressedWarnings": [
+    "missing_metadata_for_key"
+  ],
+  "dart.flutterSdkPath": ".fvm/versions/stable"
+}

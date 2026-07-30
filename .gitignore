@@ -1,0 +1,56 @@
+# Workspace-level Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+.tmp_outdated/
+migrate_working_dir/
+untranslated-messages.txt
+analyze_output.txt
+obfuscate
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.metadata
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Workspace Dart/Flutter related
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+**/doc/api/
+
+# FVM
+
+# Environment / Secrets
+Environment.xcconfig
+env/
+*.env
+
+# Global Lock files
+*.lock
+Gemfile.lock
+.kiro
+
+# Workspace Tools & Reports
+code_review_reports/
+
+# FVM Version Cache
+.fvm/

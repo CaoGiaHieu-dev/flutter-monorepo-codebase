@@ -1,0 +1,4 @@
+# Root fastlane Pluginfile
+# Evaluates the real Pluginfile from the app's fastlane folder
+
+eval_gemfile "../app/fastlane/Pluginfile"

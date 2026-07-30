@@ -1,0 +1,12 @@
+# Fastlane Main Entry Point
+# 
+# This file imports modular components for better maintainability.
+# - helpers.rb: Configuration and shared helper functions.
+# - ios_lanes.rb: Lanes specific to the iOS platform.
+# - android_lanes.rb: Lanes specific to the Android platform.
+# - flutter_lanes.rb: Combined lanes that orchestrate builds for both platforms.
+
+import "modules/helpers.rb"
+import "modules/ios_lanes.rb"
+import "modules/android_lanes.rb"
+import "modules/flutter_lanes.rb"

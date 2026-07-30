@@ -1,0 +1,91 @@
+# fastlane/Config.example.yaml
+#
+# This file serves as an example configuration for your Fastlane setup.
+# Duplicate this file to `fastlane/Config.yaml` and fill in your actual project details.
+
+# Flutter configuration
+flutter:
+  default_version: "stable" # e.g., "3.16.9", "stable"
+
+# Default app version to use if not specified when building
+default_app_version: "1.0.0" # e.g., "1.0.0"
+
+# List of valid flavors for this project.
+# The special 'none' flavor is always supported by default by the Fastfile logic.
+valid_flavors:
+  - "dev"
+  - "staging"
+  - "prod"
+  # Add or remove flavors as per your project's setup
+  # - "qa"
+  # - "custom"
+
+# Application Bundle IDs per platform
+app_bundle_ids:
+  ios: "com.yourcompany.yourapp" # e.g., "com.example.myapp"
+  android: "com.yourcompany.yourapp" # e.g., "com.example.myapp"
+
+# Firebase App IDs and Credentials Mapping
+firebase:
+  app_ids:
+    # Get these from your Firebase project settings -> Project Overview -> Add App
+    # (e.g., 1:XXXXXXXXXXXX:ios:YYYYYYYYYYYYYYYYYYYYYYYY)
+    ios:
+      dev: "YOUR_FIREBASE_APP_ID_IOS_DEV"
+      staging: "YOUR_FIREBASE_APP_ID_IOS_STAGING"
+      prod: "YOUR_FIREBASE_APP_ID_IOS_PROD"
+      default: "YOUR_FIREBASE_APP_ID_IOS_DEFAULT" # Used when building without a specific flavor (i.e., 'none')
+    android:
+      dev: "YOUR_FIREBASE_APP_ID_ANDROID_DEV"
+      staging: "YOUR_FIREBASE_APP_ID_ANDROID_STAGING"
+      prod: "YOUR_FIREBASE_APP_ID_ANDROID_PROD"
+      default: "YOUR_FIREBASE_APP_ID_ANDROID_DEFAULT" # Used when building without a specific flavor (i.e., 'none')
+
+  # Mapping of flavors to their corresponding Firebase service account JSON files.
+  # These files should be placed in the 'fastlane/' directory (or specified with full path).
+  # Important: These files should be added to .gitignore for security!
+  credentials_map:
+    dev: "fastlane/firebase-auth-dev.json"
+    staging: "fastlane/firebase-auth-staging.json" # Optional: If you have a separate staging credential file
+    prod: "fastlane/firebase-auth.json"
+    default: "fastlane/firebase-auth.json" # Default credential file when no flavor is specified (i.e., 'none')
+
+# Apple App Store Connect Configuration
+# Generate an API Key in App Store Connect (Users and Access -> Keys)
+# Key file should be placed in the 'fastlane/' directory and named 'AuthKey_YOURKEYID.p8'.
+app_store_connect:
+  api_key_id: "<YOUR_APP_STORE_CONNECT_API_KEY_ID>" # e.g., "Z2ABCD6E7F"
+  issuer_id: "<YOUR_APP_STORE_CONNECT_ISSUER_ID>" # e.g., "69a6de80-d5d8-47e3-e053-5b8c7c11a4d1"
+
+  # Optional: Fallback for older actions or if API Key is not used. API Key authentication is generally preferred.
+  username: "<YOUR_APPLE_DEVELOPER_EMAIL>" # e.g., "developer@example.com"
+  team_id: "<YOUR_APPLE_TEAM_ID>" # e.g., "A1B2C3D4E5"
+  apple_ids:
+    dev: "<YOUR_APPLE_ID_DEV>"
+    staging: "<YOUR_APPLE_ID_STAGING>"
+    prod: "<YOUR_APPLE_ID_PROD>"
+    default: "<YOUR_APPLE_ID_DEFAULT>"
+
+# Google Play Store Configuration
+google_play:
+  # This ID is used *only* for constructing the console links (e.g., in Discord notifications).
+  # The upload actions use the JSON key file for authentication.
+  account_id: "<YOUR_GOOGLE_PLAY_DEVELOPER_ACCOUNT_ID>" # e.g., "1234567890123456789"
+
+# File paths used in the Fastfile
+# All paths are relative to the project root (where the 'fastlane' directory is).
+# These are internal paths for the Fastfile logic.
+paths:
+  firebase_testers_file: "fastlane/firebase_tester.txt" # List of tester emails for Firebase App Distribution
+
+  # Google Play credentials JSON files
+  google_play_key_prod: "fastlane/google-play-store.json"
+  google_play_key_dev: "fastlane/google-play-store-dev.json" # Optional: if you have a separate dev key
+
+  # App Store Connect API Key .p8 file
+  # Rename your downloaded .p8 file to match this pattern and place it in the 'fastlane/' directory.
+  app_store_connect_key_filepath: "fastlane/AuthKey_YOURKEYID.p8"
+
+  # Temporary change log files (managed by Fastlane itself)
+  change_log_android: "change_log_android.txt"
+  change_log_ios: "change_log_ios.txt"

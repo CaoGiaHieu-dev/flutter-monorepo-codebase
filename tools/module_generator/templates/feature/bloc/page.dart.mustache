@@ -1,0 +1,32 @@
+import 'package:bloc_state_management/bloc_state_management.dart';
+import 'package:flutter/material.dart';
+
+import '../blocs/blocs.dart';
+import '../extensions/extensions.dart';
+
+class {{pascalNameInput}}Page extends StatelessWidget {
+  const {{pascalNameInput}}Page({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(context.l10n{{pascalNameInput}}.title),
+      ),
+      body: BlocBuilder<{{pascalNameInput}}Bloc, ViewState<{{pascalNameInput}}StateData>>(
+        builder: (context, state) {
+          return state.when(
+            initial: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
+            success: (data) => Center(
+              child: Text(context.l10n{{pascalNameInput}}.title),
+            ),
+            error: (failure) => Center(
+              child: Text(failure.message),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

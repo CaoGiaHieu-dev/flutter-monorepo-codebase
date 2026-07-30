@@ -1,0 +1,18 @@
+import 'package:domain_core/domain_core.dart';
+import 'package:injectable/injectable.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+@injectable
+class {{pascalNameInput}}Provider extends BaseProvider<Object> {
+  {{pascalNameInput}}Provider();
+
+  Future<void> init() async {
+    await executeOperation(
+      OperationConfig(
+        operation: () async {
+          return const Result.success(Object());
+        },
+      ),
+    );
+  }
+}

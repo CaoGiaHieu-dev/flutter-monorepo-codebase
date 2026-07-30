@@ -1,0 +1,22 @@
+import 'package:bloc_state_management/bloc_state_management.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:injectable/injectable.dart';
+
+part '{{snakeNameInput}}_event.dart';
+part '{{snakeNameInput}}_state.dart';
+part '{{snakeNameInput}}_bloc.freezed.dart';
+
+@injectable
+class {{pascalNameInput}}Bloc
+    extends BaseBloc<{{pascalNameInput}}Event, ViewState<{{pascalNameInput}}StateData>> {
+  {{pascalNameInput}}Bloc() : super(const ViewState.initial()) {
+    on<_{{pascalNameInput}}Started>(_onStarted);
+  }
+
+  Future<void> _onStarted(
+    _{{pascalNameInput}}Started event,
+    Emitter<ViewState<{{pascalNameInput}}StateData>> emit,
+  ) async {
+    emit(const ViewState.success({{pascalNameInput}}StateData()));
+  }
+}

@@ -1,0 +1,34 @@
+name: codebase
+publish_to: "none"
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.44.0"
+
+workspace:
+  - app
+  - tools
+  - packages/core/common
+  - packages/core/network
+  - packages/core/storage
+  - packages/core/database
+  - packages/core/provider_state_management
+  - packages/core/bloc_state_management
+  - packages/core/base_ui
+  - packages/core/notifications
+  - packages/features/shared
+  - packages/features/auth
+  - packages/features/dashboard
+  - packages/features/onboarding
+  - packages/features/splash
+  - packages/features/home
+  - packages/features/settings
+  - packages/core/di
+  - packages/domain/core
+  - packages/domain/auth
+  - packages/data/core
+  - packages/data/auth
+  - packages/domain/language
+  - packages/data/language
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

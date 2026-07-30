@@ -1,0 +1,11 @@
+# Root Fastlane Entry Point
+# Delegates all lanes and imports to the real modular configuration inside app/fastlane
+
+# Change directory to app/fastlane to align working directories with the app configuration
+Dir.chdir("../app/fastlane")
+
+# Import all modules relative to the root fastlane folder
+import "../app/fastlane/modules/helpers.rb"
+import "../app/fastlane/modules/ios_lanes.rb"
+import "../app/fastlane/modules/android_lanes.rb"
+import "../app/fastlane/modules/flutter_lanes.rb"

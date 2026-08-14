@@ -2,6 +2,7 @@ import 'package:core_base_ui/core_base_ui.dart';
 import 'package:feature_shared/feature_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+
 import '../extensions/extensions.dart';
 
 /// Authentication form widget with comprehensive input validation and user experience

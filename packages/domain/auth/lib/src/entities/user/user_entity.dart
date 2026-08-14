@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+
 import 'user_role.dart';
 
 part 'user_entity.freezed.dart';

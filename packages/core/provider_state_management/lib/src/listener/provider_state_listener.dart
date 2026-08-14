@@ -10,8 +10,11 @@ import '../base/base_provider.dart';
 /// - [context]: The current build context
 /// - [error]: The optional ErrorState attached to the error
 /// - [message]: The optional error message
-typedef OnErrorCallback<T> =
-    void Function(BuildContext context, ErrorState? error, String? message);
+typedef OnErrorCallback<T> = void Function(
+  BuildContext context,
+  ErrorState? error,
+  String? message,
+);
 
 /// Callback type for when the provider transitions to the success state.
 typedef OnSuccessCallback<T> = void Function(BuildContext context, T? data);
@@ -20,12 +23,16 @@ typedef OnSuccessCallback<T> = void Function(BuildContext context, T? data);
 typedef OnLoadingCallback = void Function(BuildContext context);
 
 /// Callback type for when any state change occurs.
-typedef OnStateChangedCallback<T> =
-    void Function(BuildContext context, ViewStateModel<T> state);
+typedef OnStateChangedCallback<T> = void Function(
+  BuildContext context,
+  ViewStateModel<T> state,
+);
 
 /// Callback type for filtering which state changes should trigger callbacks.
-typedef ListenWhenCallback<T> =
-    bool Function(ViewStateModel<T> previous, ViewStateModel<T> current);
+typedef ListenWhenCallback<T> = bool Function(
+  ViewStateModel<T> previous,
+  ViewStateModel<T> current,
+);
 
 /// A widget that listens to state changes from a [BaseProvider] and invokes
 /// declarative callbacks for each state transition.

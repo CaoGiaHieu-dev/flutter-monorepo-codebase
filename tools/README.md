@@ -145,8 +145,8 @@ dart tools/unused_checker/check_unused_file.dart
 
 ## 🔑 Prerequisites
 
-- **Dart SDK**: >= 3.12.0
-- **Flutter SDK**: >= 3.44.0
+- **Dart SDK**: >= 3.13.0
+- **Flutter SDK**: >= 3.47.0
 - **Ruby**: >= 3.0 (cho Fastlane, chỉ cần khi build CI/CD)
 - **Gemini API Key**: Chỉ cần cho Code Review Tool
 

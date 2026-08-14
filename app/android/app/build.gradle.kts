@@ -75,8 +75,20 @@ kotlin {
 
 android {
     namespace = "com.example.codebase"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned above Flutter 3.47's default (36): permission_handler_android 14.x
+    // is compiled against API 37, and AGP requires the app's compileSdk to be
+    // at least as high as any dependency's.
+    compileSdk = 37
+    // API 37 is only published as a minor-versioned platform (android-37.0,
+    // android-37.1, ...); AGP 9 needs compileSdkMinor to resolve it.
+    compileSdkMinor = 0
     ndkVersion = "28.2.13676358"
+
+    buildFeatures {
+        // AGP 9 turns resValues off by default; defaultConfig below declares
+        // resValue entries for the Facebook/app-schema/app-name strings.
+        resValues = true
+    }
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -152,7 +164,8 @@ android {
         }
     }
 
-    flavorDimensions("environment")
+    // AGP 9 removed the `flavorDimensions(...)` method form.
+    flavorDimensions += "environment"
 
     productFlavors {
         create("dev") {
@@ -178,7 +191,9 @@ android {
                 // Includes the default ProGuard rules files that are packaged with
                 // the Android Gradle plugin. To learn more, go to the section about
                 // R8 configuration files.
-                getDefaultProguardFile("proguard-android.txt"),
+                // AGP 9 dropped support for "proguard-android.txt" because it
+                // carries `-dontoptimize` and blocks most R8 optimizations.
+                getDefaultProguardFile("proguard-android-optimize.txt"),
 
                 // Includes a local, custom Proguard rules file
                 "proguard-rules.pro"

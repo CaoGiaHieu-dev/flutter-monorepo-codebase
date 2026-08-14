@@ -60,7 +60,10 @@ class RefreshTokenHandler {
         // Complete the completer with the new token to unblock waiting requests.
         _completer!.complete(newToken);
         // Retry the current request that initiated the refresh.
-        return _retryRequest(err, handler);
+        // `await` keeps the refresh lock (`_completer`) held until the retry
+        // finishes; without it the `finally` below clears the lock early and a
+        // concurrent 401 would start a second, redundant refresh.
+        return await _retryRequest(err, handler);
       } else {
         // Clear local token/session by calling failure callback.
         await onRefreshFailed();

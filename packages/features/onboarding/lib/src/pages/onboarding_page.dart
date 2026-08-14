@@ -2,6 +2,7 @@ import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+
 import '../extensions/extensions.dart';
 
 class OnboardingPage extends StatelessWidget {

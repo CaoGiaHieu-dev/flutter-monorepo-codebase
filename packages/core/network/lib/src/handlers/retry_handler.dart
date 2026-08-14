@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import 'package:flutter/foundation.dart';
+
 import '../interceptors/logging_interceptor.dart';
 
 /// A class that handles retrying requests when there is an error.

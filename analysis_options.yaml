@@ -15,6 +15,13 @@ analyzer:
     - "**.module.dart"
     - "**/core/localization/generated/**"
     - "**/gen/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   errors:
     # Bỏ qua cảnh báo về annotation target không hợp lệ (thường dùng cho Freezed/JSON Serializable).
     invalid_annotation_target: ignore
@@ -138,8 +145,11 @@ linter:
     # Yêu cầu tham số Key cho Widget constructor.
     use_key_in_widget_constructors: false
 
-    # Bỏ 'await' thừa khi return Future.
-    unnecessary_await_in_return: true
+    # NOTE: `unnecessary_await_in_return` đã bị deprecated (Dart 3.13 /
+    # Flutter 3.47) và được gỡ bỏ khỏi cấu hình. Rule này khuyến khích bỏ
+    # `await` ở câu lệnh return, nhưng bên trong khối try/finally việc đó làm
+    # thay đổi ngữ nghĩa (finally chạy trước khi Future hoàn tất). Diagnostic
+    # kế nhiệm là `unawaited_return_in_try_block`, đã được analyzer bật sẵn.
 
     # Bỏ '{}' thừa trong string interpolation.
     # Bad: '${name}' | Good: '$name'

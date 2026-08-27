@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../interceptors/logging_interceptor.dart';
+import '../utils/network_constants.dart';
 
 /// A class that handles retrying requests when there is an error.
 ///
@@ -125,7 +126,9 @@ class RetryHandler {
     // Create a new [Dio] client with the same options as the original client.
     final retryDio = Dio(options)
       // Add the logger interceptor to the new [Dio] client.
-      ..interceptors.add(LoggingInterceptor(tag: 'Retry'));
+      ..interceptors.add(
+        LoggingInterceptor(tag: NetworkConstants.RETRY_LOG_TAG),
+      );
 
     // Retry all requests in the queue.
     for (var item in _retryQueue.toList()) {

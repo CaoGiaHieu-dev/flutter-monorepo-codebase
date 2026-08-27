@@ -10,13 +10,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + SOLID + MVVM** with dual state management support (**Provider** and **BLoC**). The shipped feature/domain/data packages (auth, home, settings, onboarding, splash, dashboard, language) are **sample reference code** demonstrating the wiring — patterns to copy or delete, not production logic.
 
-**Author:** CaoGiaHieu-dev. **Docs hub:** `docs/en/` (00–14) covers each layer in depth.
+**Author:** CaoGiaHieu-dev. **Docs hub:** `docs/en/` (and `docs/vi/`), grouped by purpose:
+
+| Folder | For |
+|:-------|:----|
+| `getting-started/` | First run, project tour, daily workflow |
+| `architecture/` | Overview + one file per layer (core, domain, data, features, app shell) |
+| `guides/` | How-to: new feature, domain/data, state management, routing, DI, storage, database, networking, localization/theming, cross-feature |
+| `reference/` | Rules, naming, tooling, PR checklist |
+| `operations/` | CI/CD, Fastlane & release |
 
 ---
 
 ## Commands
 
-FVM is used — prefix flutter/dart commands with `fvm` (e.g. `fvm flutter run`, `fvm dart run ...`).
+**FVM is optional — do not hardcode an `fvm` prefix.** `.fvmrc` pins a version, but that does not mean `fvm` is installed on the current machine. Write commands bare (`flutter pub get`); add `fvm ` yourself only if your machine uses it. Tools that shell out must **detect** FVM — see `CommonHelpers.useFvm` in `tools/module_generator/src/common_helpers.dart`.
 
 ```bash
 # Install all workspace dependencies (single pubspec.lock at root)
@@ -82,17 +90,14 @@ dart tools/code_review/code_review.dart --file lib/main.dart
 dart tools/code_review/code_review.dart --changed
 dart tools/code_review/code_review.dart --all --focus architecture,security
 
-# Workspace setup scripts
-# Windows:
-.\tools\workspace_setup\configure.bat
-# macOS/Linux:
-./tools/workspace_setup/configure.sh
+# Workspace setup (cross-platform — there is no .bat/.sh wrapper)
+dart tools/workspace_setup/configure.dart
 
 # Firebase multi-environment config
-.\tools\firebase\firebase_config.bat
+dart tools/firebase/firebase_config.dart
 
 # Theme (splash screen + app icons)
-.\tools\theme_generator\theme_setting.bat
+dart tools/theme_generator/theme_setting.dart
 
 # Android 15+ 16KB page size compliance check
 .\tools\android_compliance\16kb_ckeck.bat   # Windows
@@ -129,38 +134,43 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Package | Purpose | Key Notes |
 |:--------|:--------|:----------|
-| `core_common` | Constants (`UPPER_SNAKE_CASE`), enums, `AppFailure`, `ErrorHandler`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty` |
+| `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` moved to `domain_core`; a re-export shim at `src/error/failures.dart` keeps old imports working |
 | `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in app shell |
-| `core_storage` | Reactive `StorageValue<T>`, AES-256 encryption, dual-layer security (Keychain/KeyStore), `StorageValuePresets` | `@PostConstruct(preResolve: true)` hydrates at startup |
-| `core_database` | Drift/SQLite on background isolate, tables, DAOs, migrations | `AppDatabase` via `@preResolve` DI. See sample `CacheEntries` / `CacheEntriesDao` |
-| `core_notifications` | Push notification management | — |
-| `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | See package README for full API |
-| `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `ViewState` (optional Freezed union) | See package README for full API |
+| `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
+| `core_database` | **Mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener` | **Owns no database/table/DAO**; its DI module registers nothing. Each package declares its own database — see [Database System](#database-system-package-owned-drift--sqlite) |
+| `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
+| `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit` |
+| `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union) | **`BaseBloc`/`BaseCubit` are empty extension points** — no `executeOperation` equivalent; handlers unwrap `Result` by hand |
 
 ### Domain Layer Rules (Pure Dart Mandate)
 
-- **FORBIDDEN imports:** `package:flutter/...`, `package:dio/...`, `package:retrofit/...`
-- **Allowed imports:** `dart:core`, `core_common`, `domain_core` (`Result<T>`, `BaseEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`
-- Components: `entities/` (Freezed immutable), `params/`, `repositories/` (interfaces), `usecases/` (`@injectable`, returns `Result<T>`), `services/` (optional)
-- `Result<T>` is a sealed Freezed class in `domain_core` with 4 variants: `Success<T>`, `Failure<T>` (containing `AppFailure`), `None<T>`, `Cancel<T>`
+- **FORBIDDEN imports:** `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, **and any `core_*` package**
+- **Allowed imports:** `dart:*`, `domain_core` (`Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`, `get_it`
+- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth`/`domain_language` depend only on `domain_core`. Verify: `grep -rn "package:flutter" packages/domain/*/lib` must print nothing
+- `AppFailure` lives in `domain_core` (`lib/src/failures/`) — it is part of the `Result` contract. Moving it there is what let Domain drop `core_common`
+- Domain constants live in the domain package's own `utils/` (e.g. `DomainConstants`) — never in `core_common`
+- Components: `entities/` (Freezed immutable), `params/`, `repositories/` (interfaces), `usecases/` (`@injectable`, returns `Result<T>`), `utils/`, `services/` (optional)
+- `Result<T>` is a sealed Freezed class in `domain_core` with 4 variants: `Success<T>`, `Failure<T>` (containing `AppFailure`), `None<T>`, `Cancel<T>`. Note `None`/`Cancel` are never returned by production code today
 
 ### Data Layer Rules
 
 - Directory convention: `data_sources/remote/` (Retrofit) and `data_sources/local/` (Storage/DB). **NOT** `datasources/`
 - Models use `freezed` + `json_serializable` with `.toEntity()` mapper
 - `RepositoryImpl` extends `IBaseRepository` from `data_core` and uses `execute()` (async) / `executeSync()` (sync) wrappers
-- Error handling: `ErrorHandler.handleError(e)` — **NEVER** use `AppFailure.fromException()`
-- DataSources return Models only, never Entities. They let exceptions bubble up to RepositoryImpl
+- Error handling: `ErrorHandler.handleError(e)` — there is **no** `AppFailure.fromException()`, do not invent one
+- ⚠️ `ErrorHandler` has **no Firebase branch** — `FirebaseException`/`FirebaseAuthException`/`PlatformException` all collapse to `ServerFailure(code: 9999)` → *"Unknown error occurred"* in release. Add a branch before relying on Firebase error codes in UI
+- DataSources return Models only, never Entities, and **never leak a generated type** (a Drift row must be converted at the boundary — see `CacheEntryModel.fromRow`). They let exceptions bubble up to RepositoryImpl
 
 ### Feature Layer Rules
 
-- **Allowed deps:** `domain_*`, `core_di`, `core_common`, `core_base_ui`, `provider_state_management` or `bloc_state_management`, `feature_shared`
-- **FORBIDDEN:** Direct deps on `data` layer or other feature packages (except `feature_shared`)
+- **Allowed deps:** `domain_*` and `core_*` — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, and `provider_state_management` **or** `bloc_state_management`
+- **FORBIDDEN:** Direct deps on the `data` layer or on **any** other feature package — no exception. Shared widgets come from `core_ui_kit`, which is core
 - **One bounded UI concern per package** — Home and Settings are separate packages; `feature_dashboard` is shell chrome only
 - Feature-specific assets go in `<feature>/assets/` (images, SVGs, language ARBs)
-- Structure: `pages/`, `widgets/`, `provider/` or `blocs/`, `routing/`, `handlers/` (optional), `di/module.dart`
+- Structure: `pages/`, `widgets/`, `provider/` **or** `bloc/` (both **singular**), `routing/`, `utils/` (constants — route paths live here, not in `routing/`), `extensions/`, `handlers/` (optional), `di/module.dart`
+- **Any feature must be removable** — see [Feature Removability](#feature-removability)
 
 ---
 
@@ -190,7 +200,8 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 | **Feature controllers** | `@injectable` (factory) | ViewModels, Blocs — **NEVER** singleton (causes memory leaks) |
 | **Global controllers** | `@lazySingleton` | `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider` |
 | **Repository impls** | `@LazySingleton(as: IFooRepository)` or `@Injectable(as: IFooRepository)` | RepositoryImpls |
-| **Third-party libs** | `@module` + `@preResolve` | `SharedPreferences`, `Dio`, `AppDatabase` |
+| **Third-party libs** | `@module` + `@preResolve` | `SharedPreferences`, `Dio`, a package's own Drift database |
+| **Supertype binding** | `@module` returning the supertype | `SslPinningConfig` ← `NetworkConfig` (GetIt does not walk supertypes) |
 
 ### Critical DI Rules
 
@@ -199,12 +210,25 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 3. Never create monolithic `DomainPackageModule`/`DataPackageModule` — register each micro-package module separately
 4. Categorize new modules into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, or `_otherModules`
 5. When using `ignoreUnregisteredTypes`, use **relative imports** from the package's barrel file
+6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` for exactly this reason (it injects `AuthLocalDataSource` from `data_auth`). `flutter analyze` cannot catch this — verify in generated `app/lib/di/injection.config.dart`
+7. **`getAll<T>()` THROWS when `T` is unregistered** — use `getAllOrEmpty<T>()` for optional contributions, and `getItOrNull<T>()` + fallback for single ones
+8. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable even if `InterfaceA implements InterfaceB`. Bind the second type via `@module`:
+   ```dart
+   // app/lib/di/network_binding_module.dart
+   @module
+   abstract class NetworkBindingModule {
+     @lazySingleton
+     SslPinningConfig bindSslPinningConfig(NetworkConfig config) => config;
+   }
+   ```
+   Missing this is why SSL pinning was **silently disabled** on staging/prod.
 
 ### App-Shell Storage Adapters
 
-`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `app/lib/di/`:
-- `language_storage_impl.dart` → `StorageValuePresets.locale`
-- `theme_storage_impl.dart` → `StorageValuePresets.themeMode`
+`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `app/lib/di/` and each owns its **own** `StorageValue` (no shared preset object); their keys live in `app/lib/di/utils/`:
+- `language_storage_impl.dart` → own `StorageValue<String>` @ `LanguageStorageKeys.LOCALE`
+- `theme_storage_impl.dart` → own `StorageValue<ThemeMode>` @ `ThemeStorageKeys.THEME_MODE`
+- `app_boot_storage.dart` → own `StorageValue<bool>` @ `AppBootStorageKeys.VIEWED_ONBOARD`
 
 ---
 
@@ -269,7 +293,7 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ### Key Router Components
 
-- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (rootKey, appKey, authKey, homeKey)
+- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, `authKey`) from `core_di/lib/src/routing/navigator_keys.dart` — its own file now, and `homeKey` was deleted as unused. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
 - **`NavigatorWrapperWidget`**: App shell widget at `app/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
 - **`UndefineRouteWidget`**: GoRouter's `errorPageBuilder` child — never use inline anonymous widgets
 - **SplashPage**: Manually managed by `MainScope` (`AppMaterialWrapper`), NOT a GoRouter route
@@ -303,7 +327,8 @@ Widget build(BuildContext context, GoRouterState state) {
 ### BLoC Pattern (`bloc_state_management`)
 
 - **Prefer `BaseBloc`** — use `BaseCubit` only when events are unnecessary
-- **`ViewState<T>`** is a shared optional helper (initial/loading/success/error) — not mandatory
+- ⚠️ **`BaseBloc`/`BaseCubit` are empty extension points.** There is no BLoC equivalent of Provider's `executeOperation`: each handler must unwrap `Result`, map `AppFailure`, and set loading by hand. The two branches are **not** at parity
+- **`BlocViewState<T>`** (renamed from `ViewState` to avoid colliding with Provider's `ViewState`) is a shared optional helper (initial/loading/success/error) — not mandatory. It carries data and takes a required `AppFailure` in `error`; Provider's `ViewState` has 5 variants, no generic, and a nullable `ErrorState`
 - Complex features may define custom Freezed UI state (`BaseBloc<Event, CustomState>`)
 - **Freezed Event Rules:**
   - All event subclasses must be **private** (`_HomeStarted`, not `HomeStarted`)
@@ -312,15 +337,15 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ```dart
 // CORRECT:
-HomeBloc() : super(const ViewState.initial()) {
+HomeBloc() : super(const BlocViewState.initial()) {
   on<_HomeStarted>(_fetchInitialData);
 }
 
 Future<void> _fetchInitialData(
   HomeEvent event,
-  Emitter<ViewState<HomeStateData>> emit,
+  Emitter<BlocViewState<HomeStateData>> emit,
 ) async {
-  emit(const ViewState.loading());
+  emit(const BlocViewState.loading());
   // ... async logic
 }
 ```
@@ -334,7 +359,7 @@ Future<void> _fetchInitialData(
 | 1 | Business logic sharing | **Domain UseCase** | Both features inject same UseCase from `domain_*` |
 | 2 | Infrastructure utils | **Core Service** | Import `core_storage`, `core_network`, etc. |
 | 3 | Cross-feature state | **Agnostic Streams** | Neutral `Stream`/`ValueListenable` interface on `core_di`; dual-register owner impl |
-| 4 | Pure UI prefs (theme/locale) | **Bypass Domain** | `ThemeProvider → IThemeStorage → StorageValuePresets` |
+| 4 | Pure UI prefs (theme/locale) | **Bypass Domain** | `ThemeProvider → IThemeStorage → ThemeStorageImpl` (owns its own `StorageValue`) |
 | 5 | Embed complex widgets | **Builder/Service Interface** | Interface in `core_di`, impl in owning feature, use via GetIt |
 | 6 | Cross-feature UI actions | **Action Handler** | `I*ActionHandler` in `core_di/src/actions/`, `*ActionHandlerImpl` in owning feature's `handlers/` |
 
@@ -391,7 +416,7 @@ abstract class AuthModule {
 
 - **ALL user-facing text MUST be translated** — hardcoded UI strings are FORBIDDEN
 - **Feature-scoped:** Each feature owns `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI
-- **Global strings only** in `core_base_ui`; `feature_shared` uses `core_base_ui` translations, does NOT define its own ARBs
+- **Global strings only** in `core_base_ui`; `core_ui_kit` uses `core_base_ui` translations, does NOT define its own ARBs
 - Access via feature extension: `context.l10nAuth.translationKey`
 - Features **MUST NOT** edit `root_app.dart` to add delegates — root app collects via `getIt.getAll<IFeatureLocalization>()`
 
@@ -401,7 +426,7 @@ abstract class AuthModule {
 
 - **ALL sizing** (width, height, padding, margin, font size, border radius) MUST use ScreenUtil: `.w`, `.h`, `.sp`, `.r`
 - **FORBIDDEN:** Raw doubles in layout (e.g., `SizedBox(height: 24)` → must be `SizedBox(height: 24.h)`)
-- **Reusable widgets** in `feature_shared` take **unscaled** values — caller applies ScreenUtil
+- **Reusable widgets** in `core_ui_kit` take **unscaled** values — caller applies ScreenUtil
 
 ---
 
@@ -423,45 +448,109 @@ abstract class AuthModule {
 1. **Layer 1 (Software):** AES-256-CBC with per-device Master Key + random IV per write
 2. **Layer 2 (Hardware):** Apple Keychain / Android KeyStore via `flutter_secure_storage`
 
+### Ownership Rule (CRITICAL)
+
+`core_storage` ships the **mechanism only**. It defines **no keys and no presets** — there is no
+`StorageValuePresets`, and `core_common` has no `StorageKeyConstants`. Both were removed: a single
+shared object holding every domain's keys let any injector read/write another feature's data.
+
+**Every consumer declares and owns its own `StorageValue`**, keyed by constants living in that
+package's `utils/` folder. Isolation is enforced by the dependency graph — a package that does not
+declare `data_auth` in its pubspec simply cannot reach `AuthStorageKeys`.
+
 ### Adding a New Storage Key
 
-1. Declare key in `core_common/lib/src/constants/storage_key_constants.dart`
-2. Define `late final` `StorageValue<T>` in `core_storage/lib/src/presets/storage_presets.dart`
-3. Add to `initialize()` list for automatic hydration at startup
-4. Use `reviver` callback for complex types (Enums, JSON objects, Lists)
+1. Add the key to the **owning package's** `utils/` keys class (create it if absent), e.g.
+   `packages/data/auth/lib/src/utils/auth_storage_keys.dart`. Never put it in `core_common`.
+2. In the owning class, inject `StorageManager` and declare a `late final StorageValue<T>`.
+3. Register the owner as a **singleton** (`@singleton` / `@lazySingleton` / `@Singleton(as: IFoo)`)
+   with `@PostConstruct(preResolve: true)` to hydrate at startup.
+   **Never `@injectable` (factory)** — each injection would get an empty cache.
+4. Use a `reviver` callback for complex types (Enums, JSON objects, Lists).
+5. Run `dart run build_runner build -d --workspace`.
+
+```dart
+// packages/data/auth/lib/src/utils/auth_storage_keys.dart
+class AuthStorageKeys {
+  AuthStorageKeys._();
+  static const String TOKEN = 'token';
+  static const String AUTH_USER = 'auth_user';
+}
+
+// packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart
+@lazySingleton
+class AuthLocalDataSource {
+  AuthLocalDataSource(this._storageManager);
+  final StorageManager _storageManager;
+
+  late final _token = StorageValue<String>(
+    _storageManager.getStorage(StorageType.secure),
+    AuthStorageKeys.TOKEN,
+  );
+
+  @PostConstruct(preResolve: true)
+  Future<void> initialize() async {
+    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
+  }
+}
+```
+
+**Storage types:** `StorageType.pref` (SharedPreferences — settings, flags) ·
+`StorageType.secure` (encrypted — tokens, sensitive data).
 
 ### Usage
 
 ```dart
-_storagePresets.isBioLocked.value = true;          // Write (auto-encrypted, async to disk)
-final locked = _storagePresets.isBioLocked.value;   // Read (instant from RAM)
-_storagePresets.isBioLocked.addListener(() { ... }); // Listen (ChangeNotifier)
-_storagePresets.isBioLocked.listen((val) { ... });   // Stream
+_token.value = 'abc';                  // Write (auto-encrypted, async to disk)
+final t = _token.value;                // Read (instant from RAM, de-obfuscated)
+_token.addListener(() { ... });        // Listen (ChangeNotifier)
+_token.listen((val) { ... });          // Stream
+await _token.readFromStorage();        // Hydrate cache from disk
 ```
 
 ---
 
-## Database System (core_database — Drift + SQLite)
+## Database System (Package-Owned Drift + SQLite)
 
-- Background isolate via `NativeDatabase.createInBackground`
-- `AppDatabase` registered via `@preResolve` DI — no manual `.open()` in `main.dart`
-- Template ships a working sample: `CacheEntries` table + `CacheEntriesDao` + `CacheEntryLocalDataSource` + `CacheEntryRepositoryImpl` + Domain UseCases
+### Ownership Rule (CRITICAL)
+
+`core_database` ships the **mechanism only** — it owns **no database, table or DAO**, and its DI module body is literally `init(gh) {}`. There is no `AppDatabase`.
+
+**Why:** Drift resolves `@DriftDatabase(tables:, daos:)` at compile time, and a DAO must be `part of` its database library. One shared database therefore forces whichever package declares it to own *every* table — the same god-object problem the storage refactor removed.
+
+**Rule:** a package needing relational storage declares **its own database** next to its own tables and DAO. Reference: `packages/data/core/lib/src/database/` → `cache_database.dart`, `tables/cache_entries_table.dart`, `dao/cache_entries_dao.dart`.
+
+`core_database` supplies:
+
+| Piece | Purpose |
+|:------|:--------|
+| `IDatabaseHandle<TDb extends GeneratedDatabase>` | Hands a package only the accessor it asks for, plus `transaction` |
+| `IDatabaseMigration` | A package contributes its own upgrade/downgrade steps |
+| `DatabaseMigrationRunner` | Sorts + replays contributed steps (ascending up, descending down) |
+| `DatabaseConnectionFactory` / `DriftDatabaseOpener` | Background-isolate opening, corruption quarantine, `beforeOpen` pragmas |
+
+**Accepted trade-off:** SQL cannot join across package boundaries — deliberate; crossing a bounded context belongs at the repository layer.
+
+**Drift limits:** no `onDowngrade` callback (downgrade rides `onUpgrade` via `from`/`to`); no runtime table registration (a package cannot add a table to another package's database).
 
 ### When to Use What
 
 | Need | Package |
 |:-----|:--------|
-| Tokens, flags, theme, locale (key-value) | `core_storage` |
-| Lists, relations, SQL queries, migrations | `core_database` |
+| Tokens, flags, theme, locale (key-value) | `core_storage` mechanism, key owned by the consumer |
+| Lists, relations, SQL queries, migrations | Your **own** Drift database, opened via `core_database` |
 
 ### Adding a New Table
 
-1. Create table class in `core_database/lib/src/database/tables/`
-2. Create DAO with `part of '../app_database.dart'`
-3. Register table + DAO in `AppDatabase` `@DriftDatabase` annotation
-4. Bump `schemaVersion` and add migration in `MigrationStrategy`
+1. Create the table class in **your package**, e.g. `packages/<layer>/<pkg>/lib/src/database/tables/`
+2. Create the DAO as `part of` **your** database library (not someone else's)
+3. Register table + DAO in **your** `@DriftDatabase` annotation
+4. Bump your `schemaVersion` and contribute an `IDatabaseMigration` implementation
 5. Run `dart run build_runner build -d --workspace`
-6. Add Local DataSource → Repository → UseCase following the cache sample
+6. Add Local DataSource → Repository → UseCase following the cache sample. **DataSource returns a Model** (`CacheEntryModel`), never the Drift row type
+
+> [!NOTE]
+> The cache chain (`CacheEntries` → DAO → DataSource → Repository → 3 UseCases) is **sample scaffolding with no runtime consumer** — it also serves as the test fixture. Do not delete it on the word of `unused_checker`.
 
 ---
 
@@ -486,15 +575,22 @@ abstract class RegisterModule {
 
 ### Interceptors Chain
 
-1. **AuthInterceptor**: Auto-injects Bearer JWT Token from `core_storage`
-2. **RetryInterceptor**: Auto-retry with Exponential Backoff, groups concurrent failures into single retry dialog
-3. **LoggingInterceptor**: JSON-formatted HTTP logs via `dynamic_logger`, disabled in production
+Registration order in `ApiClient.createClient()` (`packages/core/network/lib/src/api_client.dart`):
+
+1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it from its owner, `AuthLocalDataSource` — `core_network` never touches storage). Also sends the locale under the non-standard header key `language`
+2. **RefreshTokenInterceptor**: added **only when `NetworkConfig.onRefreshToken != null`**; catches 401 and replays. Sits **before** Retry so a 401 is never retried with a dead token. `RefreshTokenHandler` serialises concurrent 401s behind one `Completer`, and marks a replayed request so `dio.fetch` re-entering the same interceptor cannot recurse
+3. **RetryInterceptor**: retries timeout/connection errors only (not HTTP status codes); honours the per-request `canRetry` extra; groups concurrent failures into a single retry dialog
+4. **LoggingInterceptor**: JSON-formatted logs via `dynamic_logger`, `kDebugMode`-gated on **all three** hooks (including `onError`), with `Authorization`/`Cookie` headers redacted
 
 ### SSL Certificate Pinning
 
-- **Global:** `HttpOverrides.global` with `HttpSecurityPinningClient` (SPKI SHA-256)
+- **Global:** `HttpOverrides.global` with `HttpSecurityPinningClient` (SPKI SHA-256), installed by `AppInitializer._setupHttpOverrides`
 - **Dev:** SSL bypass enabled for self-signed certs
-- **Staging/Prod:** Strict SPKI hash matching — MANDATORY
+- **Staging/Prod:** strict SPKI hash matching
+- > [!CAUTION]
+  > Pinning needs **two** things or it silently no-ops (the initializer logs an ERROR in each case):
+  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `app/lib/di/network_binding_module.dart` binds it.
+  > 2. `sslPinningHashes` must be **non-empty**. It currently returns `const []`, i.e. **pinning is off** until you fill it in. See the `openssl` recipe in `network_config_impl.dart`; pin at least two keys (leaf + backup) so cert rotation cannot lock every client out.
 
 ### Data Standardization
 
@@ -522,7 +618,7 @@ fastlane flutter flavor:dev version:1.2.0 build_number:45
 fastlane store version:1.2.0 build_number:45
 ```
 
-Config: `app/fastlane/Config.yaml`. Modules: `app/fastlane/modules/` (helpers, android_lanes, ios_lanes, flutter_lanes).
+Config: copy `app/fastlane/Config.example.yaml` → `app/fastlane/Config.yaml` (gitignored, not in the repo). Modules: `app/fastlane/modules/` (helpers, android_lanes, ios_lanes, flutter_lanes).
 
 ---
 
@@ -531,25 +627,54 @@ Config: `app/fastlane/Config.yaml`. Modules: `app/fastlane/modules/` (helpers, a
 | Package | Contains | Key Rule |
 |:--------|:---------|:---------|
 | `core_base_ui` | Design tokens, themes, colors, fonts, images, icons, L10n | **Zero Flutter widgets.** Only global assets |
-| `feature_shared` | All reusable widgets (atomic + business) | May depend on `domain_*`, `core_common`, `core_base_ui` |
+| `core_ui_kit` | All reusable widgets (atomic + business) | Lives in `packages/core/ui_kit`. Depends on `core_common`, `core_base_ui`, `provider_state_management` — never on a feature |
 
 ### Sharing Across Features
 
-- **Pure UI widgets** (buttons, inputs) → `feature_shared`
+- **Pure UI widgets** (buttons, inputs) → `core_ui_kit`
 - **Widgets with Feature B logic** → Widget Builder Interface via DI (declare in `core_di`, implement in owning feature)
 - **Dialogs/BottomSheets** → Always separate widget classes (`*_dialog.dart`/`*_bottom_sheet.dart`), never inline
 
 ---
 
+## Feature Removability
+
+Deleting any `packages/features/*` package must leave the app compiling and booting.
+
+**`app/lib/di/injection.dart` is the app shell's only intentional hard reference to features** — as the composition root it must name what it composes. Every other shell file resolves features through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
+
+**To drop a feature** (order matters):
+
+1. its `ExternalModule(...)` entry + matching import in `app/lib/di/injection.dart`
+2. its `feature_x:` entry in `app/pubspec.yaml`
+3. its path in the root `pubspec.yaml` `workspace:` list
+4. `flutter pub get` + `dart run build_runner build -d --workspace`
+
+**A type import defeats `getItOrNull`** — guarding the lookup is useless if the file still imports the feature for the type. When the shell needs something a feature owns, declare a contract in `core_di`:
+
+| Contract | Replaces the shell's direct use of |
+|:---------|:-----------------------------------|
+| `IAppSplashScreen` | `SplashPage` from `feature_splash` in `main.dart` |
+| `IAuthRefreshListenable` (`implements Listenable`) | `AuthProvider` as GoRouter's `refreshListenable` |
+| `IAuthSessionState` + `AuthSessionFailure` | `AuthProvider`/`AuthErrorState`/`context.l10nAuth` in `NavigatorWrapperWidget` |
+| `IAppTreeWrapper` | `ChangeNotifierProvider<AuthProvider>` in `app_material_wrapper.dart` |
+
+Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `AuthSessionFailure`) — `core_di` runs no codegen.
+
+> [!NOTE]
+> The shared widget library is **not** a removable feature, which is why it lives at `packages/core/ui_kit` as `core_ui_kit` rather than under `packages/features/`. Everything remaining in `packages/features/` is a genuinely removable product surface.
+
+---
+
 ## Frequently-Violated Rules (Full List in AGENTS.md)
 
-1. **ScreenUtil:** All UI dimensions use `.w`/`.h`/`.sp`/`.r` — no raw doubles. Reusable widgets in `feature_shared` take unscaled values — caller scales.
+1. **ScreenUtil:** All UI dimensions use `.w`/`.h`/`.sp`/`.r` — no raw doubles. Reusable widgets in `core_ui_kit` take unscaled values — caller scales.
 2. **Freezed BLoC events:** Private subclasses (`_HomeStarted`) via `part`/`part of`. `on<Event>` handlers must be async `(event, emit)` — never sync closure calling unawaited async.
 3. **Dialogs/BottomSheets:** Always separate widget classes, never inline in `showDialog`/`showModalBottomSheet` builders.
 4. **Naming:** `I` prefix reserved for interfaces. Data source dirs are `data_sources/` (not `datasources/`). Suffixes: `_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `_repository_impl`, etc.
 5. **CLI tools** in `tools/` use `stdout.writeln`/`stderr.writeln`, **never** `print()`.
 6. **No lint suppressions** — research proper migration for deprecation warnings.
-7. **No PowerShell scripts** (`.ps1`) — only `.sh`/`.bat` due to Windows execution policy restrictions.
+7. **No PowerShell scripts** (`.ps1`) — Windows execution policy blocks them. Prefer a cross-platform `.dart` script (as `tools/workspace_setup/configure.dart` does); `.sh`/`.bat` only when Dart cannot do the job.
 8. **BuildContext** must be passed directly from UI caller — don't use `NavigatorKeys.*.currentContext`.
 9. **Never edit `app_router.dart`** to hardcode routes — register via DI contracts.
 10. **Features must not edit `root_app.dart`** for delegates — use `IFeatureLocalization` DI.
@@ -559,10 +684,22 @@ Config: `app/fastlane/Config.yaml`. Modules: `app/fastlane/modules/` (helpers, a
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files.
 15. **Build runner flag:** Use `-d` (replaces deprecated `--delete-conflicting-outputs`).
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
+17. **Core never depends on features or data.** No `packages/core/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); four such edges exist today: `core_di → domain_auth`, `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `core_common → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" packages/core/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
+18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
+19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead — e.g. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it depends on `AuthLocalDataSource` from `data_auth`. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
+20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.
+21. **`getAll<T>()` throws when `T` is unregistered.** Use `getAllOrEmpty<T>()` for optional multi-instance contributions and `getItOrNull<T>()` + fallback for single ones — otherwise removing a feature crashes the app at boot (this exact bug killed `MaterialApp` construction via `IFeatureLocalization`).
+22. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable. Bind the second type through a `@module` — missing this silently disabled SSL pinning.
+23. **Barrel generator deletes hand-written `export` lines.** Never hand-add an export to a barrel; put deliberate re-exports in a normal source file (see `core_common/lib/src/error/failures.dart`).
+24. **`flutter analyze` cannot see generated code** — `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart`, `**.module.dart`. A clean analyze does **not** mean the app builds. Always finish with a real `flutter build apk`. Moving `AppFailure` between packages broke `bloc_view_state.freezed.dart` while analyze stayed green.
+25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
+26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.
+27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
+28. **Any feature must be removable.** `app/lib/di/injection.dart` is the shell's only intentional hard reference to features; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — declare a contract instead.
 
 ---
 
-## PR Review Checklist (from docs/en/10_review_checklist.md)
+## PR Review Checklist (full version: `docs/en/reference/04_review_checklist.md`)
 
 - [ ] New package has `resolution: workspace` in pubspec
 - [ ] Barrel file exports all public APIs
@@ -580,6 +717,18 @@ Config: `app/fastlane/Config.yaml`. Modules: `app/fastlane/modules/` (helpers, a
 - [ ] ScreenUtil applied to all sizing
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
+- [ ] No `packages/core/*` imports or declares `feature_*` (only `core_di → domain_auth` and `provider_state_management → domain_core` allowed)
+- [ ] Package constants live in that package's `utils/` folder — no shared cross-domain constants file
+- [ ] New `StorageValue` is owned by its consumer (keys in `utils/`), registered as a singleton with `@PostConstruct(preResolve: true)` — never `@injectable`
+- [ ] No eager `@Singleton` depends on a type registered by a later module (check generated `injection.config.dart`)
+- [ ] Every used package is declared in `pubspec.yaml`, production deps in `dependencies` — `dart tools/unused_checker/check_unused_packages.dart` is clean
+- [ ] Optional contributions use `getAllOrEmpty` / `getItOrNull` — no bare `getAll`/`getIt` for a removable feature's type
+- [ ] A second interface on the same impl is bound via `@module` (GetIt does not resolve supertypes)
+- [ ] No hand-written `export` added to a barrel file
+- [ ] Domain packages still declare zero `core_*` deps and no `flutter` — `grep -rn "package:flutter" packages/domain/*/lib` is empty
+- [ ] New tables/DAOs live in the **owning package's** database, not a shared one; DataSource returns a Model, not a Drift row
+- [ ] The feature is still removable — shell touches it only via `core_di` contracts
+- [ ] **`flutter build apk --flavor dev --debug` passes** — a clean `flutter analyze` does not cover generated code
 
 ---
 
@@ -602,7 +751,11 @@ dart run build_runner build -d --workspace
 # 5. Create feature if needed:
 dart tools/module_generator/generate.dart 1 payment "" 2 1
 
-# 6. Verify: flutter analyze
+# 6. Verify — all four steps; analyze alone does not cover generated code:
+dart run build_runner build -d --workspace
+flutter analyze
+cd packages/data/payment && flutter test && cd -
+cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
 ---

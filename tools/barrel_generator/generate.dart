@@ -234,7 +234,14 @@ void _createOrUpdateBarrelForDir(Directory dir) {
   var lastImportIdx = -1;
   for (var i = 0; i < cleanedLines.length; i++) {
     final trimmed = cleanedLines[i].trim();
-    if (trimmed.startsWith("import '") || trimmed.startsWith('library ')) {
+    // `library;` (Dart 3's unnamed form) must anchor too, not just the legacy
+    // `library some_name;`. Without it a barrel that opens with a doc comment
+    // has no anchor, so the exports get prepended *above* that comment and the
+    // file reads back-to-front — which is how the sample banners would end up
+    // buried under the export block on the next run.
+    if (trimmed.startsWith("import '") ||
+        trimmed == 'library;' ||
+        trimmed.startsWith('library ')) {
       lastImportIdx = i;
     }
   }

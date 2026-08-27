@@ -8,15 +8,15 @@ part '{{snakeNameInput}}_bloc.freezed.dart';
 
 @injectable
 class {{pascalNameInput}}Bloc
-    extends BaseBloc<{{pascalNameInput}}Event, ViewState<{{pascalNameInput}}StateData>> {
-  {{pascalNameInput}}Bloc() : super(const ViewState.initial()) {
+    extends BaseBloc<{{pascalNameInput}}Event, BlocViewState<{{pascalNameInput}}StateData>> {
+  {{pascalNameInput}}Bloc() : super(const BlocViewState.initial()) {
     on<_{{pascalNameInput}}Started>(_onStarted);
   }
 
   Future<void> _onStarted(
     _{{pascalNameInput}}Started event,
-    Emitter<ViewState<{{pascalNameInput}}StateData>> emit,
+    Emitter<BlocViewState<{{pascalNameInput}}StateData>> emit,
   ) async {
-    emit(const ViewState.success({{pascalNameInput}}StateData()));
+    emit(const BlocViewState.success({{pascalNameInput}}StateData()));
   }
 }

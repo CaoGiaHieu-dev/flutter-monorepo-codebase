@@ -4,3 +4,4 @@ export 'gen/gen.dart';
 export 'language/language.dart';
 export 'styles/styles.dart';
 export 'theme/theme.dart';
+export 'utils/utils.dart';

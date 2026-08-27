@@ -1,9 +1,9 @@
-import 'package:core_common/core_common.dart';
 import 'package:dio/dio.dart';
 import 'package:domain_core/domain_core.dart';
 import 'package:retrofit/retrofit.dart';
 
 import '../../models/user/user_model.dart';
+import '../../utils/auth_api_constants.dart';
 
 part 'auth_remote_data_source.g.dart';
 
@@ -18,10 +18,10 @@ abstract class AuthRemoteDataSource {
       _AuthRemoteDataSource;
 
   /// Authenticates user with provided credentials
-  @POST(ApiConstants.LOGIN)
+  @POST(AuthApiConstants.LOGIN)
   Future<BaseEntity<UserModel>> login(@Body() Map<String, dynamic> loginData);
 
   /// Refreshes the current authentication token
-  @POST(ApiConstants.REFRESH_TOKEN)
+  @POST(AuthApiConstants.REFRESH_TOKEN)
   Future<BaseEntity<UserModel>> refreshToken();
 }

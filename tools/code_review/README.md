@@ -165,7 +165,7 @@ Sử dụng checklist này để tự review code của bạn.
 - [ ] **Lớp Domain Thuần Túy**: Lớp Domain có import `flutter` hoặc `dart:ui` không? (Cấm).
 
 ### 🧬 Theo Từng Lớp
-- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải dùng `StorageValuePresets`).
+- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `core/*` KHÔNG được phụ thuộc `feature_*`.
 - **Domain**: `Entity` phải thuần túy (không có `statusCode`, `message`). `Repository` phải trả về `Future<Result<T>>`.
 - **Data**: `Repository` phải `implement` interface từ Domain. Mọi lệnh gọi API phải dùng `executeApi`.
 - **Presentation**: `Provider` KHÔNG được chứa controller UI. Các lệnh gọi bất đồng bộ phải dùng `executeOperation`.

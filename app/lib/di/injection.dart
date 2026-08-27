@@ -28,6 +28,8 @@ const _coreModules = [
   ExternalModule(CoreNetworkPackageModule),
   ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
+  // Registers nothing: `core_database` is mechanism only and owns no database.
+  // Each package that persists data declares its own (see `data_core`).
   ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
@@ -49,6 +51,21 @@ const _dataModules = [
   ExternalModule(DataLanguagePackageModule),
 ];
 
+/// Feature modules the app assembles.
+///
+/// These imports are the app shell's **only intentional hard reference** to
+/// feature packages: as the composition root it must name what it composes.
+///
+/// To drop a feature, remove in this order:
+///   1. its `ExternalModule(...)` entry below and the matching import above;
+///   2. its `feature_x:` entry in `app/pubspec.yaml`;
+///   3. its path in the root `pubspec.yaml` `workspace:` list;
+///   4. `flutter pub get` + `dart run build_runner build -d --workspace`.
+///
+/// Everything the shell consumes at runtime resolves through `core_di`
+/// contracts with `getAllOrEmpty` / `getItOrNull` fallbacks, so no other file
+/// needs editing — except the ones still holding a direct `feature_auth` /
+/// `feature_splash` / `feature_shared` import (see their doc comments).
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
   ExternalModule(FeatureDashboardPackageModule),
@@ -63,7 +80,19 @@ const _otherModules = [
   ExternalModule(BlocStateManagementPackageModule),
 ];
 
-/// Configure dependency injection
+/// Configure dependency injection.
+///
+/// ## Ordering rule for databases
+///
+/// A module that opens a database with `@preResolve` runs its collected
+/// `IDatabaseMigration` steps *during its own initialisation*, so any package
+/// contributing a step must be registered before it. `data_core` opens
+/// `CacheDatabase` here, which means a migration contributed by a **feature**
+/// would not be seen — features initialise after `_dataModules`.
+///
+/// Nothing in the template hits this yet (no feature contributes a schema
+/// step). When one does, move that feature's module ahead of the module that
+/// owns the database, or give the feature its own database instead.
 @InjectableInit(
   externalPackageModulesBefore: [..._coreModules],
   externalPackageModulesAfter: [

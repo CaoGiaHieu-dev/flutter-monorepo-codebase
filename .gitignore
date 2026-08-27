@@ -47,6 +47,10 @@ env/
 # Global Lock files
 *.lock
 Gemfile.lock
+# This repo ships an application, not a library: its resolved dependency set
+# must be committed so CI and every machine build the exact same versions.
+!pubspec.lock
+!app/ios/Podfile.lock
 .kiro
 
 # Workspace Tools & Reports

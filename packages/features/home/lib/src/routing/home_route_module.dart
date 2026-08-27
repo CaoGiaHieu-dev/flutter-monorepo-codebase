@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../bloc/home_profile_bloc.dart';
 import '../pages/pages.dart';
-import 'home_path.dart';
+import '../utils/home_path.dart';
 
 part 'home_route_module.g.dart';
 

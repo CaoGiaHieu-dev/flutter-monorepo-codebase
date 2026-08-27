@@ -2,7 +2,7 @@ import 'package:core_di/core_di.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 
-import 'onboarding_path.dart';
+import '../utils/onboarding_path.dart';
 import 'onboarding_route_module.dart';
 
 @LazySingleton(as: IFeatureRouteModule)

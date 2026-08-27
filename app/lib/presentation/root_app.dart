@@ -1,7 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
-import 'package:feature_shared/dialogs/app_overlay.dart';
-import 'package:feature_shared/feature_shared.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
+import 'package:core_ui_kit/dialogs/app_overlay.dart';
 import 'package:flutter/material.dart';
 
 import 'app_material_wrapper.dart';

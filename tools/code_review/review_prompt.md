@@ -46,8 +46,8 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 9.  **Localization & Decentralized Delegation**:
     - **ABSOLUTELY FORBIDDEN** to hardcode UI text strings. Must use the localization system.
     - **ABSOLUTELY FORBIDDEN** for Features to modify `root_app.dart` to inject `LocalizationsDelegates`.
-    - Feature packages MUST implement the `IFeatureLocalization` interface and register it with local DI (`@LazySingleton(as: IFeatureLocalization)`) so the Host App can automatically collect them via `getIt.getAll`.
-    - **ABSOLUTELY FORBIDDEN** to hardcode new feature `$…Route` / `StatefulShellBranch` lists in `app_router.dart`. Register `IFeatureRouteModule` (no order) or `IDashboardTabModule` (with order) via DI; optional `IAppEntryLocation`. `feature_dashboard` may only implement `DashboardRouteModule` (chrome) — never own tab pages. See `docs/en/08_routing.md` § Dashboard.
+    - Feature packages MUST implement the `IFeatureLocalization` interface and register it with local DI (`@Injectable(as: IFeatureLocalization)`) so the Host App can automatically collect them via `getIt.getAll`.
+    - **ABSOLUTELY FORBIDDEN** to hardcode new feature `$…Route` / `StatefulShellBranch` lists in `app_router.dart`. Register `IFeatureRouteModule` (no order) or `IDashboardTabModule` (with order) via DI; optional `IAppEntryLocation`. `feature_dashboard` may only implement `DashboardRouteModule` (chrome) — never own tab pages. See `docs/en/guides/04_routing.md`.
     10. **Centralized DI Registration (`injection.dart`)**:
     - **ABSOLUTELY FORBIDDEN** to directly declare `ExternalModule` inside the `externalPackageModulesBefore` / `externalPackageModulesAfter` arrays. Categorize into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, `_otherModules` and spread them.
     - `CoreBaseUiPackageModule` MUST be in `_uiModules` → `externalPackageModulesAfter` (depends on app-local `ILanguageStorage` / `IThemeStorage`).
@@ -64,7 +64,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 - **Action Handlers**: Cross-feature UI actions use `I*ActionHandler` from `core_di` instead of importing another feature package?
 
 ### 💅 Clean Code & Shared Assets
-- **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `packages/features/shared`?
+- **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `packages/core/ui_kit`?
 - **Extensions**: Is the developer using `Theme.of(context)` instead of `context.themeExtension`?
 - **Logging**: Use `DynamicLogger` instead of `print()`.
 - **DI Ordering**: Is `CoreBaseUiPackageModule` registered in `externalPackageModulesAfter` (via `_uiModules`) so `ILanguageStorage` / `IThemeStorage` exist first?

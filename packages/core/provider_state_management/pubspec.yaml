@@ -4,8 +4,8 @@ version: 1.0.0
 publish_to: none
 
 environment:
-  sdk: ">=3.13.0 <4.0.0"
-  flutter: ">=3.47.0"
+  sdk: ">=3.13.1 <4.0.0"
+  flutter: ">=3.47.1"
 
 resolution: workspace
 
@@ -19,8 +19,6 @@ dependencies:
     path: ../common
   domain_core:
     path: ../../domain/core
-  feature_shared:
-    path: ../../features/shared
   freezed_annotation: "^3.1.0"
   json_annotation: "^4.12.0"
 

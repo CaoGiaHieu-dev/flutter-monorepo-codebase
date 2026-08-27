@@ -4,22 +4,22 @@ version: 1.0.0
 publish_to: none
 
 environment:
-  sdk: ">=3.13.0 <4.0.0"
-  flutter: ">=3.47.0"
+  sdk: ">=3.13.1 <4.0.0"
+  flutter: ">=3.47.1"
 
 resolution: workspace
 
 dependencies:
   flutter:
     sdk: flutter
-  core_common:
-    path: ../../core/common
   core_storage:
     path: ../../core/storage
   domain_core:
     path: ../../domain/core
   domain_auth:
     path: ../../domain/auth
+  data_core:
+    path: ../core
   firebase_auth: "^6.5.7"
   cloud_firestore: "^6.8.0"
   google_sign_in: "^7.2.0"
@@ -39,5 +39,3 @@ dev_dependencies:
   retrofit_generator: "^10.2.8"
   flutter_test:
     sdk: flutter
-  data_core:
-    path: ../core

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 
+import '../utils/network_constants.dart';
+
 /// Interceptor that retries requests if the `canRetry` flag in the `ExtraRequest` is set to true.
 ///
 /// This interceptor provides an additional layer of error handling by retrying requests if they
@@ -43,7 +45,9 @@ class RetryInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     /// Retrieve the `canRetry` configuration from the request options extra map.
-    final canRetry = err.requestOptions.extra['canRetry'] as bool? ?? true;
+    final canRetry =
+        err.requestOptions.extra[NetworkConstants.EXTRA_CAN_RETRY] as bool? ??
+        true;
 
     /// If the `canRetry` flag is false, do not retry the request.
     if (!canRetry) {

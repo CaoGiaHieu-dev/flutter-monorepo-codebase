@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:dio/dio.dart';
 
+import '../utils/network_constants.dart';
+
 /// Interceptor that adds headers to every request.
 class AuthInterceptor extends Interceptor {
   /// Callback to get the current auth token.
@@ -17,7 +19,7 @@ class AuthInterceptor extends Interceptor {
   AuthInterceptor({
     required this.getToken,
     required this.getLocale,
-    this.defaultLanguageCode = 'vi',
+    this.defaultLanguageCode = NetworkConstants.DEFAULT_LANGUAGE_CODE,
   });
 
   @override
@@ -29,17 +31,20 @@ class AuthInterceptor extends Interceptor {
       // Get the language code of the device.
       languageCode = PlatformDispatcher.instance.locale.languageCode;
       // Default to Vietnamese if the locale is not Vietnamese or English.
-      if (languageCode != 'vi' && languageCode != 'en') {
+      if (!NetworkConstants.SUPPORTED_LANGUAGE_CODES.contains(languageCode)) {
         languageCode = defaultLanguageCode;
       }
     }
 
     // Add the language code to the headers.
-    options.headers.addAll({'language': languageCode.toUpperCase()});
+    options.headers.addAll({
+      NetworkConstants.LANGUAGE_HEADER: languageCode.toUpperCase(),
+    });
 
     // Get the extra request configuration from the options extra map.
     final needAuthentication =
-        options.extra['needAuthentication'] as bool? ?? true;
+        options.extra[NetworkConstants.EXTRA_NEED_AUTHENTICATION] as bool? ??
+        true;
 
     // If the request requires authentication and the authentication token is not null,
     // add the authentication token to the headers.
@@ -47,7 +52,8 @@ class AuthInterceptor extends Interceptor {
       final token = getToken() ?? '';
       if (token.isNotEmpty) {
         options.headers.addAll({
-          HttpHeaders.authorizationHeader: 'Bearer $token',
+          HttpHeaders.authorizationHeader:
+              '${NetworkConstants.BEARER_PREFIX} $token',
         });
       }
     }

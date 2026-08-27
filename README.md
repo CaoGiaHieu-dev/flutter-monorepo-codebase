@@ -51,6 +51,7 @@ graph TD
         CoreCom["core_common"]:::core
         CoreNet["core_network"]:::core
         CoreStore["core_storage"]:::core
+        CoreDB["core_database"]:::core
         CoreDI["core_di"]:::core
     end
 
@@ -64,9 +65,19 @@ graph TD
     DataLayer -->|"Implements Repository Contracts"| DomainLayer
 
     FeatureLayer -.->|"Uses Tokens/Widgets/DI"| CoreLayer
-    DataLayer -.->|"Uses API/Cache Services"| CoreLayer
-    DomainLayer -.->|"Uses Primitive Types"| CoreCom
+    DataLayer -.->|"Uses API/DB/Cache mechanisms"| CoreLayer
+
+    %% Domain sits at the centre and depends on NOTHING.
+    %% Core may depend on Domain — never the reverse.
+    CoreCom -.->|"Uses Result / AppFailure"| DomCore
+    CoreDI -.->|"Uses UserEntity in contracts"| DomAuth
 ```
+
+> [!IMPORTANT]
+> **Domain depends on nothing.** `domain_core` declares **zero** workspace dependencies and no
+> domain package declares the Flutter SDK — `AppFailure` lives in `domain_core` alongside
+> `Result<T>`. Arrows into Domain (`core_common → domain_core`, `core_di → domain_auth`) are the
+> only approved upward edges; see [`reference/01_rules.md`](docs/en/reference/01_rules.md).
 
 ---
 
@@ -93,21 +104,23 @@ Below is the complete physical organization structure of the Workspace:
 │   │   └── main_scope.dart        # Boot Lifecycle Management (Splash → RootApp)
 │   └── pubspec.yaml               # Host App config (links all sub-packages)
 ├── packages/                      # Contains Micro-packages
-│   ├── core/                      # Shared infrastructure and utilities (Core Packages)
-│   │   ├── base_ui/               # Theme, LanguageProvider, global assets & l10n (no widgets)
-│   │   ├── bloc_state_management/ # BaseCubit, BaseBloc, and ViewState for BLoC
-│   │   ├── common/                # Constants, Enums, AppFailure, ErrorHandler
-│   │   ├── di/                    # DI Hub (Navigator / ActionHandler interfaces)
-│   │   ├── network/               # API Connection Client (Dio + custom Retrofit factory)
+│   ├── core/                      # Shared infrastructure — MECHANISM ONLY, never feature data
+│   │   ├── base_ui/               # Theme, LanguageProvider, design tokens & l10n (zero widgets)
+│   │   ├── bloc_state_management/ # BaseBloc, BaseCubit, BlocViewState<T>
+│   │   ├── common/                # Enums, ErrorHandler, AppConfig, extensions, src/utils/
+│   │   ├── database/              # Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
+│   │   ├── di/                    # DI Hub — every cross-package contract lives here
+│   │   ├── network/               # Dio + Retrofit factory, interceptor chain, SSL pinning
 │   │   ├── notifications/         # Push Notification management module
-│   │   ├── provider_state_management/ # BaseProvider and state management helpers
-│   │   └── storage/               # Reactive Secure Storage + Shared Preferences
-│   ├── domain/                    # Pure business Micro-packages (Pure Dart)
-│   │   ├── core/                  # Result<T>, BaseEntity, shared types
+│   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   │   ├── storage/               # StorageManager + StorageValue<T> (defines NO keys)
+│   │   └── ui_kit/                # core_ui_kit — reusable widgets every feature may use
+│   ├── domain/                    # Pure Dart business Micro-packages — ZERO dependencies
+│   │   ├── core/                  # Result<T>, AppFailure, BaseEntity, BaseUseCase
 │   │   ├── auth/                  # Entities, UseCases, Repository interfaces for Auth
 │   │   └── language/              # Entities, UseCases for multi-language
 │   ├── data/                      # Integration implementation Micro-packages
-│   │   ├── core/                  # IBaseRepository, error handling wrapper functions
+│   │   ├── core/                  # IBaseRepository + CacheDatabase (owns its own tables/DAO)
 │   │   ├── auth/                  # Models, DataSources, RepositoryImpl for Auth
 │   │   └── language/              # RepositoryImpl for multi-language
 │   └── features/                  # Independent feature packages (Feature Packages)
@@ -116,8 +129,7 @@ Below is the complete physical organization structure of the Workspace:
 │       ├── auth/                  # Auth Feature (sample): Login, Register, Forgot Password
 │       ├── dashboard/             # Dashboard Feature (sample): Shell chrome only (Bottom Tab host)
 │       ├── home/                  # Home Feature (sample): Home Tab
-│       ├── settings/              # Settings Feature (sample): Settings Tab (separate from Home)
-│       └── shared/                # Shared Feature: Shared widgets between features
+│       └── settings/              # Settings Feature (sample): Settings Tab (separate from Home)
 ├── tools/                         # Command-line toolset for developers
 │   ├── android_compliance/        # 16KB Page Size compatibility check (Android 15+)
 │   ├── barrel_generator/          # Script to auto-generate barrel files for packages
@@ -133,6 +145,12 @@ Below is the complete physical organization structure of the Workspace:
 ├── pubspec_dependencies.yaml      # Single source of truth for library versions (Version Catalog)
 └── README.md                      # This Master Technical Manual
 ```
+
+> [!NOTE]
+> **Every package owns a `utils/` folder** holding *its own* constants — storage keys, route
+> paths, timeouts. Nothing domain-specific belongs in `core_common`. The single approved
+> exception is the design-token set under `core_base_ui/src/styles/`, which stays put because it
+> is the public surface of the design system.
 
 ---
 
@@ -164,8 +182,7 @@ All tools can be run from the root directory.
     ```
 5.  **Workspace Setup (`tools/workspace_setup/`)**:
     ```bash
-    .\tools\workspace_setup\configure.bat  # Windows
-    ./tools/workspace_setup/configure.sh   # macOS/Linux
+    dart tools/workspace_setup/configure.dart  # cross-platform
     ```
 6.  **Code Review AI (`tools/code_review/`)**:
     ```bash
@@ -177,8 +194,8 @@ All tools can be run from the root directory.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    .\tools\theme_generator\theme_setting.bat
-    .\tools\firebase\firebase_config.bat
+    dart tools/theme_generator/theme_setting.dart
+    dart tools/firebase/firebase_config.dart
     ```
 
 ---
@@ -187,16 +204,29 @@ All tools can be run from the root directory.
 
 ### Separation of Concerns
 1. **Domain Layer (`packages/domain/*`)**:
-   - **Pure Dart**: Do not import `flutter/material.dart`, `dio`, `retrofit`, or any UI/Network libraries.
-   - Defines `Entities`, `UseCases`, and `Repository Interfaces`.
+   - **Pure Dart, enforced by the package graph** — not merely by convention. `domain_core` has
+     **zero** workspace dependencies and none of the three domain packages declares the Flutter SDK.
+   - Do not import `flutter/material.dart`, `dio`, `retrofit`, or any UI/Network library.
+   - Defines `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` and `AppFailure`.
 2. **Data Layer (`packages/data/*`)**:
    - Implements contracts from the `domain`.
-   - Connects directly with `core_network` (API) and `core_storage` (Local DB).
-   - Transforms DTOs/Models → Entities via the `.toEntity()` function.
+   - Uses `core_network` (API), `core_storage` (key-value) and `core_database` (SQL) as *mechanisms*
+     — each data package declares its own storage keys and its own database.
+   - DataSources return **Models**, never Entities, and never expose Drift-generated row classes.
+   - Transforms Models → Entities via the `.toEntity()` function.
 3. **Presentation Layer (`packages/features/*`)**:
    - Renders UI and manages state (Provider or BLoC).
    - **Only communicates with Domain through UseCases**, absolutely no direct API calls.
-   - **FORBIDDEN to depend on the `data` layer** or other feature packages (except `feature_shared`).
+   - **FORBIDDEN to depend on the `data` layer** or on any other feature package — no exception; shared widgets come from the core package `core_ui_kit`.
+4. **Core Layer (`packages/core/*`)**:
+   - Supplies mechanism only. **FORBIDDEN to depend on any `feature_*` or `data_*` package.**
+   - May depend on `domain_*` (Domain is the centre): `core_common → domain_core`,
+     `core_di → domain_auth`, `provider_state_management → domain_core`.
+
+> [!IMPORTANT]
+> **Any feature can be deleted and the app still boots.** Everything the shell consumes at runtime
+> resolves through a `core_di` contract behind `getItOrNull` / `getAllOrEmpty` with a safe fallback.
+> `getAll<T>()` **throws** when nothing is registered — always prefer `getAllOrEmpty<T>()`.
 
 ### Dependency Inversion Principle (DIP)
 Features communicate across each other entirely through intermediate interfaces in `core_di`:
@@ -234,6 +264,8 @@ const _coreModules = [
   ExternalModule(CoreNetworkPackageModule),
   ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
+  // Registers nothing: `core_database` is mechanism only and owns no database.
+  ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 
@@ -255,11 +287,14 @@ const _dataModules = [
   ExternalModule(DataLanguagePackageModule),
 ];
 
+// The app shell's ONLY intentional hard reference to feature packages —
+// as the composition root it must name what it composes.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
   ExternalModule(FeatureDashboardPackageModule),
   ExternalModule(FeatureHomePackageModule),
   ExternalModule(FeatureOnboardingPackageModule),
+  ExternalModule(FeatureSettingsPackageModule),
   ExternalModule(FeatureSplashPackageModule),
 ];
 
@@ -285,6 +320,17 @@ Future<void> configureDependencies({String? environment}) async {
 }
 ```
 
+### Two ordering rules that bite
+
+> [!CAUTION]
+> **An eager `@Singleton` must not depend on a type registered by a later module** — it throws
+> *"not registered"* at boot. `flutter analyze` cannot catch this; verify against the generated
+> `app/lib/di/injection.config.dart`. Use `@LazySingleton` when the dependency lands later.
+>
+> **GetIt does not resolve supertypes.** Registering `Impl as InterfaceA` leaves
+> `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB` — bind the second
+> interface explicitly through an `@module` (see `app/lib/di/network_binding_module.dart`).
+
 ---
 
 ## 🚦 6. Decoupled Type-Safe Routing System
@@ -304,9 +350,20 @@ Each Feature Package owns its own routing structure and files:
 - `getAllOrEmpty<IDashboardTabModule>()` sorted by `order` → `StatefulShellBranch` list
 - `getItOrNull<DashboardRouteModule>()` → dashboard chrome (optional)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (else first tab / `/`)
-- `getItOrNull<AuthProvider>()` → `refreshListenable`
+- `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
 
-Removing a feature = drop its `ExternalModule` + pubspec entry; hot restart. See [docs/en/08_routing.md](docs/en/08_routing.md) § Dashboard.
+Note the last one: the router depends on a **`core_di` contract**, not on `AuthProvider`. The shell
+holds no feature type at all, which is what makes `feature_auth` removable.
+
+### Removing a feature
+
+1. Delete its `ExternalModule(...)` entry and matching import in `app/lib/di/injection.dart`.
+2. Delete its `feature_x:` entry in `app/pubspec.yaml`.
+3. Delete its path from the `workspace:` list in the root `pubspec.yaml`.
+4. `flutter pub get && dart run build_runner build -d --workspace`.
+
+No other file needs editing — every runtime lookup falls back safely. See
+[`guides/04_routing.md`](docs/en/guides/04_routing.md).
 
 ---
 
@@ -331,8 +388,9 @@ fastlane android build flavor:dev build_type:apk distribute_store:false distribu
 ## 🚀 Initialization & Local Development Guide
 
 ### 1. Environment Preparation
-- **Flutter**: >= 3.47.0 (Stable)
-- **Dart SDK**: >= 3.13.0
+- **Flutter**: >= 3.47.1 (Stable)
+- **Dart SDK**: >= 3.13.1
+- **JDK**: 17
 - **Ruby**: >= 3.0 (for Fastlane)
 
 ### 2. Install All Dependencies
@@ -341,35 +399,88 @@ flutter pub get
 ```
 *Thanks to Pub Workspaces, all dependencies of the Host App and all sub-packages are fetched concurrently and create a single `pubspec.lock`.*
 
-### 3. Trigger Bulk Code Generation
+### 3. Generate Firebase Options (required — the repo will not compile without it)
+`packages/core/common/lib/src/firebase/firebase_module.dart` imports all three
+`firebase_options_{dev,staging,prod}.dart` files unconditionally, and they are git-ignored. Run
+`flutterfire configure` once per flavor before the first build — see
+[`getting-started/01_setup.md`](docs/en/getting-started/01_setup.md).
+
+### 4. Trigger Bulk Code Generation
 ```bash
 dart run build_runner build -d --workspace
 ```
 
-### 4. Run Application
+### 5. Run Application
 ```bash
-flutter run -t app/lib/main.dart --flavor dev
+flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
 ```
+
+### 6. Build an APK
+```bash
+cd app   # required — building from the workspace root fails with a misleading Gradle error
+flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+```
+
+> [!WARNING]
+> `flutter analyze` **excludes generated files** (`**.freezed.dart`, `**.g.dart`, `**.config.dart`,
+> `**.module.dart` — see `analysis_options.yaml`). A clean analyze does **not** prove the app
+> compiles. Always run a real build before trusting a large refactor.
 
 ---
 
-## 📚 Supplementary Documentation Hub
+## 📚 Documentation Hub
 
-*   [📘 00. Overview & Architecture Analysis](docs/en/00_overview.md)
-*   [🎨 01. Core Base UI Layer & Theme System](docs/en/01_core_layer.md)
-*   [🧬 02. Domain Layer & UseCase Creation Process](docs/en/02_domain_layer.md)
-*   [💾 03. Data Layer & Repository Integration](docs/en/03_data_layer.md)
-*   [🖥️ 04. MVVM Presentation Layer & State Management](docs/en/04_presentation_layer.md)
-*   [🔌 05. Modular Dependency Injection (DI Manual)](docs/en/05_dependency_injection.md)
-*   [🌐 06. Networking & Static API Calls](docs/en/06_networking.md)
-*   [🛡️ 07. Naming Rules & Clean Code Conventions](docs/en/07_rules_and_conventions.md)
-*   [🚦 08. GoRouter Routing & Decoupled Navigation](docs/en/08_routing.md)
-*   [📦 09. Shared Component Usage Manual](docs/en/09_commons_and_shared.md)
-*   [📝 10. Review Checklist](docs/en/10_review_checklist.md)
-*   [🔐 11. Reactive Secure Storage System](docs/en/11_storage_system.md)
-*   [🗄️ 14. Local Database System (Drift + Isolate)](docs/en/14_database_system.md)
-*   [🚀 12. Advanced Fastlane CI/CD Guide](docs/en/12_fastlane_guide.md)
-*   [🛠️ 13. New Module Guide](docs/en/13_new_module_guide.md)
+**Start here → [`docs/en/README.md`](docs/en/README.md)** *(Vietnamese: [`docs/vi/README.md`](docs/vi/README.md))*
+
+The documentation is organised by **what you are trying to do**, not by layer.
+
+### 🚀 Getting Started — *new to the repo? read these in order*
+| Doc | Answers |
+| :--- | :--- |
+| [01. Setup](docs/en/getting-started/01_setup.md) | What do I install, and how do I get the app running? |
+| [02. Project Tour](docs/en/getting-started/02_project_tour.md) | What is every package for, and where do I change X? |
+| [03. Daily Workflow](docs/en/getting-started/03_daily_workflow.md) | Which commands do I run, and when? |
+
+### 🏛️ Architecture — *understand the system*
+| Doc | Covers |
+| :--- | :--- |
+| [01. Overview](docs/en/architecture/01_overview.md) | Clean Architecture, the dependency rule, key trade-offs |
+| [02. Core Layer](docs/en/architecture/02_core.md) | All nine `core_*` packages and what does **not** belong in them |
+| [03. Domain Layer](docs/en/architecture/03_domain.md) | Pure Dart mandate, `Result<T>`, entities, use cases |
+| [04. Data Layer](docs/en/architecture/04_data.md) | Models, data sources, repositories, error conversion |
+| [05. Feature Layer](docs/en/architecture/05_features.md) | Feature boundaries, structure, controller lifecycle |
+| [06. App Shell](docs/en/architecture/06_app_shell.md) | Boot lifecycle, DI assembly, dynamic router |
+
+### 🧭 Guides — *how to actually do it*
+| Doc | Task |
+| :--- | :--- |
+| [01. New Feature](docs/en/guides/01_new_feature.md) | Scaffold a feature end to end |
+| [02. New Domain + Data](docs/en/guides/02_new_domain_data.md) | Add a business capability |
+| [03. State Management](docs/en/guides/03_state_management.md) | Choose and use Provider or BLoC |
+| [04. Routing](docs/en/guides/04_routing.md) | Register routes, navigate across features |
+| [05. Dependency Injection](docs/en/guides/05_di.md) | Scopes, module order, common traps |
+| [06. Storage](docs/en/guides/06_storage.md) | Persist a value your package owns |
+| [07. Database](docs/en/guides/07_database.md) | Tables, DAOs, migrations (Drift) |
+| [08. Networking](docs/en/guides/08_networking.md) | API client, interceptors, token refresh, SSL pinning |
+| [09. Localization & Theming](docs/en/guides/09_localization_theming.md) | Translations, design tokens, responsive sizing |
+| [10. Cross-Feature Communication](docs/en/guides/10_cross_feature.md) | The six sanctioned models |
+
+### 📐 Reference — *look it up*
+| Doc | Contains |
+| :--- | :--- |
+| [01. Rules](docs/en/reference/01_rules.md) | Every architectural rule with its rationale |
+| [02. Naming](docs/en/reference/02_naming.md) | File/class suffixes, folder conventions |
+| [03. Tooling](docs/en/reference/03_tooling.md) | Every script in `tools/` |
+| [04. Review Checklist](docs/en/reference/04_review_checklist.md) | PR gate |
+
+### 🚢 Operations — *ship it*
+| Doc | Contains |
+| :--- | :--- |
+| [01. CI/CD](docs/en/operations/01_cicd.md) | GitHub Actions & Azure pipelines, required secrets |
+| [02. Fastlane & Release](docs/en/operations/02_fastlane_release.md) | Lanes, signing, store distribution |
+
+> AI-agent rules live separately in [`.agents/AGENTS.md`](.agents/AGENTS.md) and
+> [`.agents/skills/`](.agents/skills/).
 
 ---
 *Intellectual property rights belong to CaoGiaHieu-dev. All rights reserved.*

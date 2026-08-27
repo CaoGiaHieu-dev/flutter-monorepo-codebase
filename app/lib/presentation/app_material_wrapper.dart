@@ -1,7 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:feature_auth/feature_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider_state_management/provider_state_management.dart';
@@ -11,9 +10,14 @@ import '../app.dart';
 /// A wrapper around [MaterialApp] and [MaterialApp.router] to avoid code duplication
 /// of common configurations like title, debugShowCheckedModeBanner, and showPerformanceOverlay.
 ///
-/// If [useGlobalProviders] is enabled, it automatically injects global providers
-/// (AppProvider, ThemeProvider, AuthProvider, DeeplinkProvider) and listens to
-/// theme/language changes to update the MaterialApp context dynamically.
+/// If [useGlobalProviders] is enabled, it automatically injects the app-shell
+/// providers (ThemeProvider, LanguageProvider, AppProvider, DeeplinkProvider)
+/// and listens to theme/language changes to update the MaterialApp context
+/// dynamically.
+///
+/// Feature-owned controllers are *not* named here. Each feature contributes its
+/// own [IAppTreeWrapper], collected with `getAllOrEmpty`, so this file imports
+/// no feature package and a build missing any of them still compiles.
 class AppMaterialWrapper extends StatelessWidget {
   /// Creates a standard [MaterialApp] wrapper (typically used for Splash screen).
   const AppMaterialWrapper({
@@ -77,6 +81,21 @@ class AppMaterialWrapper extends StatelessWidget {
   final RouterDelegate<Object>? routerDelegate;
   final BackButtonDispatcher? backButtonDispatcher;
 
+  /// Folds every feature-contributed [IAppTreeWrapper] around [child].
+  ///
+  /// Lowest `order` is applied first, so it ends up innermost — closest to the
+  /// app — which is what a wrapper needs when it must read a value another one
+  /// provides. No registrations simply returns [child] untouched.
+  Widget _wrapWithFeatureTrees(BuildContext context, Widget child) {
+    final wrappers = getAllOrEmpty<IAppTreeWrapper>().toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+
+    return wrappers.fold(
+      child,
+      (wrapped, wrapper) => wrapper.wrap(context, wrapped),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Set up global dependency providers and listen to theme/language changes.
@@ -94,16 +113,18 @@ class AppMaterialWrapper extends StatelessWidget {
               child: MultiProvider(
                 providers: [
                   ChangeNotifierProvider.value(value: getIt<AppProvider>()),
-                  ChangeNotifierProvider.value(value: getIt<AuthProvider>()),
                   ChangeNotifierProvider.value(
                     value: getIt<DeeplinkProvider>(),
                   ),
                 ],
-                child: _buildMaterialApp(
-                  themeMode: themeProvider.themeMode,
-                  theme: themeProvider.currentTheme,
-                  darkTheme: themeProvider.darkTheme,
-                  locale: languageProvider.locale,
+                child: _wrapWithFeatureTrees(
+                  context,
+                  _buildMaterialApp(
+                    themeMode: themeProvider.themeMode,
+                    theme: themeProvider.currentTheme,
+                    darkTheme: themeProvider.darkTheme,
+                    locale: languageProvider.locale,
+                  ),
                 ),
               ),
             ),
@@ -123,8 +144,12 @@ class AppMaterialWrapper extends StatelessWidget {
     const debugShowCheckedModeBanner = false;
     const showPerformanceOverlay = false;
     // Localization configuration
+    // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
+    // registers `IFeatureLocalization`. Every feature package is removable, so
+    // an app built without any of them must still resolve its delegates —
+    // falling back to the global `core_base_ui` ones.
     final delegates = [
-      ...getIt.getAll<IFeatureLocalization>().map((e) => e.delegate),
+      ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
       ...AppLocalizations.localizationsDelegates,
     ];
 

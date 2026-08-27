@@ -22,7 +22,7 @@
         "--flavor",
         "staging",
         "--dart-define-from-file",
-        "env.staging"
+        "env.stg"
       ]
     },
     {
@@ -34,7 +34,7 @@
         "--flavor",
         "prod",
         "--dart-define-from-file",
-        "env"
+        "env.prod"
       ]
     }
   ]

@@ -9,6 +9,161 @@ class CommonHelpers {
     stdout.writeln('  -> Đã tạo thư mục: $path');
   }
 
+  // ---------------------------------------------------------------------------
+  // Toolchain resolution (FVM vs global SDK)
+  // ---------------------------------------------------------------------------
+
+  static bool? _useFvmCache;
+
+  /// Whether toolchain commands should be prefixed with `fvm`.
+  ///
+  /// Two conditions must BOTH hold, because either one alone gives a wrong
+  /// answer: a repo can pin a version in `.fvmrc` on a machine that never
+  /// installed FVM, and a machine can have FVM installed for other projects
+  /// while this repo does not pin anything.
+  ///
+  /// Checks `.fvmrc` (used by this repo) as well as the legacy
+  /// `.fvm/fvm_config.json`, then verifies the executable actually runs.
+  static bool get useFvm {
+    final cached = _useFvmCache;
+    if (cached != null) return cached;
+
+    final hasConfig =
+        File('.fvmrc').existsSync() || File('.fvm/fvm_config.json').existsSync();
+    if (!hasConfig) return _useFvmCache = false;
+
+    try {
+      final result = Process.runSync('fvm', ['--version'], runInShell: true);
+      return _useFvmCache = result.exitCode == 0;
+    } on ProcessException {
+      return _useFvmCache = false;
+    }
+  }
+
+  /// Fails fast when the toolchain this run needs is not callable.
+  ///
+  /// Called before any shared file is touched, so an unusable environment is
+  /// reported while the workspace is still pristine.
+  static void assertToolchainAvailable() {
+    if (useFvm) {
+      stdout.writeln('[INFO] Phát hiện cấu hình FVM. Dùng "fvm dart/flutter".');
+      return;
+    }
+
+    for (final executable in const ['dart', 'flutter']) {
+      try {
+        final result =
+            Process.runSync(executable, ['--version'], runInShell: true);
+        if (result.exitCode != 0) {
+          throw Exception('"$executable --version" trả về ${result.exitCode}');
+        }
+      } on ProcessException {
+        throw Exception(
+          'Không tìm thấy "$executable" trong PATH và cũng không có FVM khả dụng. '
+          'Cài Flutter SDK hoặc chạy "dart pub global activate fvm" trước khi tạo module.',
+        );
+      }
+    }
+    stdout.writeln('[INFO] Không dùng FVM. Dùng "dart/flutter" toàn cục.');
+  }
+
+  /// Runs `dart <args>`, routed through FVM when this repo uses it.
+  static Future<void> runDart(
+    List<String> args, {
+    String? workingDirectory,
+  }) {
+    return useFvm
+        ? runCommand('fvm', ['dart', ...args],
+            workingDirectory: workingDirectory)
+        : runCommand('dart', args, workingDirectory: workingDirectory);
+  }
+
+  /// Runs `flutter <args>`, routed through FVM when this repo uses it.
+  static Future<void> runFlutter(
+    List<String> args, {
+    String? workingDirectory,
+  }) {
+    return useFvm
+        ? runCommand('fvm', ['flutter', ...args],
+            workingDirectory: workingDirectory)
+        : runCommand('flutter', args, workingDirectory: workingDirectory);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rollback of shared-file mutations
+  // ---------------------------------------------------------------------------
+
+  /// Files outside the new module that generation rewrites in place.
+  ///
+  /// A failure partway through used to leave these half-edited — a module
+  /// registered in the workspace whose directory was never finished building,
+  /// which then breaks `pub get` for everyone.
+  static const List<String> sharedMutatedFiles = [
+    'pubspec.yaml',
+    'app/pubspec.yaml',
+    'app/lib/di/injection.dart',
+  ];
+
+  static final Map<String, String?> _sharedFileSnapshots = {};
+  static String? _createdModulePath;
+
+  /// Snapshots every shared file before the first mutation.
+  ///
+  /// A `null` value records "did not exist", so restore deletes rather than
+  /// resurrecting a file generation created.
+  static void snapshotSharedFiles(String modulePath) {
+    _createdModulePath = modulePath;
+    _sharedFileSnapshots.clear();
+    for (final path in sharedMutatedFiles) {
+      final file = File(path);
+      _sharedFileSnapshots[path] =
+          file.existsSync() ? file.readAsStringSync() : null;
+    }
+  }
+
+  /// Restores the snapshotted files and removes the half-built module.
+  ///
+  /// Best-effort by design: it reports what it could not undo instead of
+  /// throwing, because it runs while another error is already propagating.
+  static void rollback() {
+    final failures = <String>[];
+
+    _sharedFileSnapshots.forEach((path, original) {
+      try {
+        final file = File(path);
+        if (original == null) {
+          if (file.existsSync()) file.deleteSync();
+        } else {
+          file.writeAsStringSync(original);
+        }
+      } catch (e) {
+        failures.add('$path ($e)');
+      }
+    });
+
+    final modulePath = _createdModulePath;
+    if (modulePath != null) {
+      try {
+        final dir = Directory(modulePath);
+        if (dir.existsSync()) dir.deleteSync(recursive: true);
+      } catch (e) {
+        failures.add('$modulePath ($e)');
+      }
+    }
+
+    if (failures.isEmpty) {
+      stderr.writeln(
+        '[ROLLBACK] Đã hoàn tác mọi thay đổi. Workspace trở lại nguyên trạng.',
+      );
+      return;
+    }
+
+    stderr.writeln('[ROLLBACK] Không hoàn tác được các mục sau — cần dọn tay:');
+    for (final failure in failures) {
+      stderr.writeln('  - $failure');
+    }
+  }
+
   static void registerInRootWorkspace(String path) {
     final rootPubspec = File('pubspec.yaml');
     if (!rootPubspec.existsSync()) return;
@@ -239,6 +394,11 @@ class CommonHelpers {
     return pascal[0].toLowerCase() + pascal.substring(1);
   }
 
+  /// `user_profile` -> `USER_PROFILE`, matching the repo's constant style.
+  static String toScreamingSnakeCase(String snakeCase) {
+    return snakeCase.toUpperCase();
+  }
+
   static void createFeatureTemplates(ModuleConfig config) {
     final pascalNameInput = toPascalCase(config.nameInput);
     final camelNameInput = toCamelCase(config.nameInput);
@@ -251,6 +411,7 @@ class CommonHelpers {
       'camelNameInput': camelNameInput,
       'snakeNameInput': snakeNameInput,
       'snakeName': snakeNameInput,
+      'screamingNameInput': toScreamingSnakeCase(snakeNameInput),
       'isProvider': config.smType == StateManagementType.provider,
       'isBloc': config.smType == StateManagementType.bloc,
       'isNone': config.smType == StateManagementType.none,
@@ -267,7 +428,7 @@ class CommonHelpers {
         ).readAsStringSync(),
       );
       File(
-        '${config.modulePath}/lib/src/providers/${snakeNameInput}_provider.dart',
+        '${config.modulePath}/lib/src/provider/${snakeNameInput}_provider.dart',
       ).writeAsStringSync(providerTpl.renderString(values));
     } else if (config.smType == StateManagementType.bloc) {
       pageTemplatePath =
@@ -289,17 +450,16 @@ class CommonHelpers {
         ).readAsStringSync(),
       );
 
-      CommonHelpers.createDir(
-        '${config.modulePath}/lib/src/blocs/$snakeNameInput',
-      );
+      // Flat `bloc/`, matching feature_home — the `part` files must sit beside
+      // the bloc, and the repo does not nest one folder per bloc.
       File(
-        '${config.modulePath}/lib/src/blocs/$snakeNameInput/${snakeNameInput}_bloc.dart',
+        '${config.modulePath}/lib/src/bloc/${snakeNameInput}_bloc.dart',
       ).writeAsStringSync(blocTpl.renderString(values));
       File(
-        '${config.modulePath}/lib/src/blocs/$snakeNameInput/${snakeNameInput}_event.dart',
+        '${config.modulePath}/lib/src/bloc/${snakeNameInput}_event.dart',
       ).writeAsStringSync(eventTpl.renderString(values));
       File(
-        '${config.modulePath}/lib/src/blocs/$snakeNameInput/${snakeNameInput}_state.dart',
+        '${config.modulePath}/lib/src/bloc/${snakeNameInput}_state.dart',
       ).writeAsStringSync(stateTpl.renderString(values));
     } else {
       pageTemplatePath =
@@ -311,14 +471,15 @@ class CommonHelpers {
       '${config.modulePath}/lib/src/pages/${snakeNameInput}_page.dart',
     ).writeAsStringSync(pageTpl.renderString(values));
 
-    // 2. Create routing path and route_module files
+    // 2. Create route path constants (in utils/, per the repo-wide rule that a
+    // package keeps its constants there) and the route_module file.
     final pathTpl = Template(
       File(
         'tools/module_generator/templates/feature/routing/path.dart.mustache',
       ).readAsStringSync(),
     );
     File(
-      '${config.modulePath}/lib/src/routing/${snakeNameInput}_path.dart',
+      '${config.modulePath}/lib/src/utils/${snakeNameInput}_path.dart',
     ).writeAsStringSync(pathTpl.renderString(values));
 
     final routeModuleTpl = Template(

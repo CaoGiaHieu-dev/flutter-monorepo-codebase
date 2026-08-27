@@ -1,0 +1,114 @@
+name: PR Quality Check
+
+# The architecture rules in docs/en/reference/01_rules.md are only real if
+# something enforces them. This is that something: it runs on every PR and
+# blocks the merge when a gate fails.
+on:
+    pull_request:
+        branches: [main, develop, master]
+    workflow_dispatch:
+
+concurrency:
+    group: quality-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    quality:
+        name: Analyze, test and audit
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Set up Java
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "oracle"
+                  java-version: "17"
+
+            - name: Set up Flutter
+              uses: subosito/flutter-action@v2
+              with:
+                  flutter-version: "3.47.1"
+                  channel: "stable"
+                  cache: true
+
+            # `packages/core/common/lib/src/firebase/firebase_module.dart`
+            # imports three generated `firebase_options_*.dart` files that are
+            # gitignored, so a clean checkout does not compile. Analysis and
+            # unit tests never reach Firebase, so a stub is enough to build —
+            # it is written only when the real file is absent, so a workflow
+            # that does restore real options keeps them.
+            - name: Stub Firebase options (compile only)
+              run: |
+                  dir="packages/core/common/lib/src/firebase"
+                  for env in dev staging prod; do
+                    file="$dir/firebase_options_$env.dart"
+                    if [ -f "$file" ]; then
+                      echo "kept existing $file"
+                      continue
+                    fi
+                    cat > "$file" <<'DART'
+                  // CI-only stub. Not a real Firebase configuration: analysis and unit
+                  // tests never initialise Firebase, they only need this to compile.
+                  // Generate the real file with `flutterfire configure`.
+                  import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+
+                  class DefaultFirebaseOptions {
+                    static FirebaseOptions get currentPlatform => const FirebaseOptions(
+                          apiKey: 'ci-stub',
+                          appId: 'ci-stub',
+                          messagingSenderId: 'ci-stub',
+                          projectId: 'ci-stub',
+                        );
+                  }
+                  DART
+                    echo "stubbed $file"
+                  done
+
+            - name: Install dependencies and run code generation
+              run: dart tools/workspace_setup/configure.dart
+
+            # Gate 1 — architecture rules.
+            # Runs first and needs no codegen: it reads imports and pubspecs, so
+            # it fails in seconds on a layering mistake instead of after a full
+            # analyze+test cycle. `flutter analyze` cannot see these rules at
+            # all — nothing in analysis_options.yaml knows that core must not
+            # import a feature.
+            - name: Architecture rules
+              run: dart tools/arch_check/check.dart
+
+            # Gate 2 — static analysis.
+            # Note this cannot see generated code: analysis_options.yaml excludes
+            # **.freezed.dart / **.g.dart / **.config.dart / **.module.dart, so a
+            # clean analyze does not prove the app builds. Gate 3 covers that.
+            - name: Analyze
+              run: flutter analyze
+
+            # Gate 3 — tests, per package (tests live in packages/<layer>/<pkg>/test).
+            - name: Test
+              run: |
+                  set -e
+                  failed=0
+                  for dir in packages/*/*/; do
+                    if [ -d "${dir}test" ]; then
+                      echo "::group::flutter test ${dir}"
+                      ( cd "$dir" && flutter test ) || failed=1
+                      echo "::endgroup::"
+                    fi
+                  done
+                  exit $failed
+
+            # Gate 4 — the version catalog is the single source of truth.
+            - name: Dependency catalog in sync
+              run: dart tools/dependency_sync.dart --check
+
+            # Advisory: undeclared/unused package dependencies. Not a hard gate
+            # because the checker cannot see intentional scaffolding — see
+            # .agents/skills/run_unused_checker/SKILL.md for what is deliberately
+            # unused and must not be deleted on the tool's word.
+            - name: Unused dependency audit (advisory)
+              continue-on-error: true
+              run: dart tools/unused_checker/check_unused_packages.dart

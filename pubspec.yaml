@@ -1,8 +1,8 @@
 name: codebase
 publish_to: "none"
 environment:
-  sdk: ">=3.13.0 <4.0.0"
-  flutter: ">=3.47.0"
+  sdk: ">=3.13.1 <4.0.0"
+  flutter: ">=3.47.1"
 
 workspace:
   - app
@@ -15,7 +15,7 @@ workspace:
   - packages/core/bloc_state_management
   - packages/core/base_ui
   - packages/core/notifications
-  - packages/features/shared
+  - packages/core/ui_kit
   - packages/features/auth
   - packages/features/dashboard
   - packages/features/onboarding

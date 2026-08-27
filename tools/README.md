@@ -32,12 +32,11 @@ tools/
 │   ├── check_unused_packages.dart  # Phát hiện packages không sử dụng
 │   └── check_unused_translate.dart # Phát hiện translation keys dư thừa
 ├── workspace_setup/                # ⚙️ Thiết lập workspace tổng
-│   ├── configure.bat               # Script Windows
-│   └── configure.sh                # Script macOS/Linux
+│   └── configure.dart              # Script đa nền tảng (Windows/macOS/Linux)
 ├── firebase/                       # 🔥 Cấu hình Firebase đa môi trường
-│   └── firebase_config.bat
+│   └── firebase_config.dart
 ├── theme_generator/                # 🎨 Sinh Splash Screen & App Icons
-│   └── theme_setting.bat
+│   └── theme_setting.dart
 ├── android_compliance/             # 📱 Kiểm tra Android 15+ 16KB Page Size
 ├── dependency_sync.dart            # 📦 Đồng bộ version thư viện từ catalog
 └── check_outdated.dart             # 🔄 Kiểm tra thư viện lỗi thời trên pub.dev
@@ -53,7 +52,7 @@ tools/
 # <loại>: 1=Feature, 2=Domain, 3=Data, 4=Core, 5=Custom
 # <SM> (chỉ Feature): 1=Provider, 2=BLoC, 3=None
 # <route> (chỉ Feature): 1=IFeatureRouteModule, 2=IDashboardTabModule (tab Bottom Nav), 3=none
-# Chọn 2 chỉ khi feature là tab chính sau login — xem docs/en|vi/08_routing.md mục Dashboard.
+# Chon 2 chi khi feature la tab chinh sau login - xem docs/{en,vi}/guides/04_routing.md.
 
 # Feature 'profile' + Provider + stack routes (IFeatureRouteModule):
 dart tools/module_generator/generate.dart 1 profile "" 1 1
@@ -131,22 +130,21 @@ dart tools/unused_checker/check_unused_file.dart
 ### ⚙️ Workspace Setup & Config
 ```bash
 # Thiết lập workspace:
-.\tools\workspace_setup\configure.bat   # Windows
-./tools/workspace_setup/configure.sh    # macOS/Linux
+dart tools/workspace_setup/configure.dart   # đa nền tảng
 
 # Firebase config:
-.\tools\firebase\firebase_config.bat
+dart tools/firebase/firebase_config.dart
 
 # Theme (splash + icons):
-.\tools\theme_generator\theme_setting.bat
+dart tools/theme_generator/theme_setting.dart
 ```
 
 ---
 
 ## 🔑 Prerequisites
 
-- **Dart SDK**: >= 3.13.0
-- **Flutter SDK**: >= 3.47.0
+- **Dart SDK**: >= 3.13.1
+- **Flutter SDK**: >= 3.47.1
 - **Ruby**: >= 3.0 (cho Fastlane, chỉ cần khi build CI/CD)
 - **Gemini API Key**: Chỉ cần cho Code Review Tool
 

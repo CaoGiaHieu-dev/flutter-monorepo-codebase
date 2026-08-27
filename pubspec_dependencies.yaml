@@ -19,7 +19,7 @@ dependencies:
   retrofit: "^4.10.0"
 
   # Navigation & Routing
-  go_router: "^17.5.0"
+  go_router: "^18.0.0"
   app_links: "^7.2.1"
 
   # Code Generation Annotations
@@ -70,10 +70,7 @@ dependencies:
 
   # Local Storage (Key-Value / Secure)
   encrypt: "^5.0.3"
-  # Held at 10.x: flutter_facebook_auth -> facebook_auth_desktop still pins
-  # flutter_secure_storage ^10.3.1. Bump to ^11.0.0 once that transitive
-  # constraint is relaxed upstream.
-  flutter_secure_storage: "^10.3.1"
+  flutter_secure_storage: "10.3.1"
   shared_preferences: "^2.5.5"
 
   # Local Database (Drift + SQLite)

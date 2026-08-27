@@ -15,6 +15,8 @@ Use this skill when requested to: "call logout from settings without importing a
 | :--- | :--- |
 | Navigate to another feature's screen | **Navigator** (`AuthNavigator`, `HomeNavigator`, `SettingsNavigator`) |
 | Shared business logic without UI | **Domain UseCase** |
+| Observe another feature's state | **Agnostic stream** (`IAuthStatusStream`, `IAuthSessionState`) |
+| Inject a widget/scope from another feature | **`IAppTreeWrapper`** or a widget-builder interface in `core_di` |
 | Trigger Feature B Provider / dialog / UI method from Feature A (e.g. Settings → logout in Auth) | **Action Handler** (`I*ActionHandler`) |
 
 **Sample in this template:** `feature_settings` calls `getIt<IAuthActionHandler>().logout(context)` — Settings and Auth remain separate packages.
@@ -55,9 +57,19 @@ class AuthActionHandlerImpl implements IAuthActionHandler {
 
 ### Step 3: Call from the Consuming Feature
 ```dart
-getIt<IAuthActionHandler>().logout(context);
+getItOrNull<IAuthActionHandler>()?.logout(context);
 ```
 The consumer MUST NOT import the owning feature package.
+
+> [!CAUTION]
+> **Prefer `getItOrNull` over `getIt` for cross-feature calls.** The app must still run when
+> any feature package is deleted, and the handler's implementation lives in the *owning*
+> feature. `getIt<T>()` throws when that feature is gone; `getItOrNull<T>()?` degrades to a
+> no-op. (`packages/features/settings/lib/src/pages/settings_page.dart` still uses the
+> throwing form — do not copy that line.)
+>
+> If the action must visibly do *something* when the owner is absent, branch on the null and
+> show a fallback rather than letting the widget throw.
 
 ### Step 4: Barrel + Code Gen
 ```bash
@@ -76,3 +88,11 @@ dart run build_runner build -d --workspace
 | Implementation | `<name>_action_handler_impl.dart` | `*ActionHandlerImpl` |
 
 **ABSOLUTELY FORBIDDEN**: Naming an implementation with the `I` prefix (e.g., `IAuthActionHandlerImpl` as a class name for the interface, or renaming navigator impls to `IAuthNavigator`).
+
+---
+
+## 🔗 Related
+
+- `docs/{en,vi}/guides/10_cross_feature.md` — all six cross-feature communication models
+- `implement_navigation_route` — use a Navigator when the action is pure navigation
+- `implement_dependency_injection` — `getIt` vs `getItOrNull` vs `getAllOrEmpty`

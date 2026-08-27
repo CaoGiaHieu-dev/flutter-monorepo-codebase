@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 
 import '../extensions/extensions.dart';
-import 'home_path.dart';
+import '../utils/home_path.dart';
 import 'home_route_module.dart';
 
 @LazySingleton(as: IDashboardTabModule)

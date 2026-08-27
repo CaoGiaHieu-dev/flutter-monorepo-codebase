@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:domain_core/domain_core.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
@@ -10,8 +10,16 @@ import 'package:provider_state_management/provider_state_management.dart';
 import '../services/services.dart';
 import 'auth_error_state.dart';
 
+/// Global auth controller, and the auth feature's side of two `core_di`
+/// contracts.
+///
+/// Implementing [IAuthSessionState] and [IAuthRefreshListenable] here is what
+/// lets the app shell drive its boot redirect and refresh routing without
+/// importing this package — delete `feature_auth` and the shell's optional
+/// lookups simply return `null`.
 @lazySingleton
-class AuthProvider extends BaseProvider<UserEntity> {
+class AuthProvider extends BaseProvider<UserEntity>
+    implements IAuthSessionState, IAuthRefreshListenable {
   AuthProvider(
     this._loginUseCase,
     this._logoutUseCase,
@@ -30,10 +38,29 @@ class AuthProvider extends BaseProvider<UserEntity> {
 
   StreamSubscription<ViewStateModel<UserEntity>>? _authSubscription;
 
+  final _failureController = StreamController<AuthSessionFailure>.broadcast();
+
   /// Marks whether the first session restore has finished.
-  /// Used by the shell [ProviderStateListener] to ignore bootstrap success.
+  /// Used by the shell to ignore the bootstrap success it already handled.
   bool _hasRestoredSession = false;
+
+  @override
   bool get hasRestoredSession => _hasRestoredSession;
+
+  // --- IAuthSessionState -----------------------------------------------------
+  //
+  // The session view the app shell consumes. `sessionChanges` reuses the same
+  // broadcast stream `IAuthStatusStream` publishes, so shell and features
+  // observe one source of truth rather than two that can drift.
+
+  @override
+  UserEntity? get signedInUser => data;
+
+  @override
+  Stream<UserEntity?> get sessionChanges => _authStream.authStatusStream;
+
+  @override
+  Stream<AuthSessionFailure> get sessionFailures => _failureController.stream;
 
   @override
   Future<void> initialize() async {
@@ -44,9 +71,38 @@ class AuthProvider extends BaseProvider<UserEntity> {
     await super.initialize();
   }
 
+  /// Fans this provider's state out to the two neutral channels.
+  ///
+  /// Hooking both here — rather than inside [login] — means every error
+  /// transition is published, including ones from operations that supply no
+  /// `errorStateBuilder` (e.g. [logout]). That matches what the shell's
+  /// previous listener saw when it observed the raw view state.
   void _syncAuthStream(ViewStateModel<UserEntity> value) {
-    if (!value.isSuccess) return;
-    _authStream.updateAuthStatus(value.data);
+    if (value.isSuccess) {
+      _authStream.updateAuthStatus(value.data);
+      return;
+    }
+    if (value.isError) {
+      _failureController.add(_toSessionFailure(value));
+    }
+  }
+
+  /// Translates this feature's error state into the shell-facing contract.
+  ///
+  /// Classification stays here because only the auth feature knows what its
+  /// backend's codes mean; the shell just picks a string per variant.
+  AuthSessionFailure _toSessionFailure(ViewStateModel<UserEntity> value) {
+    final error = value.state.whenOrNull(error: (error) => error);
+    if (error is AuthErrorState) {
+      return error.maybeWhen(
+        invalidCredentials: () => const AuthInvalidCredentialsFailure(),
+        userNotFound: () => const AuthUserNotFoundFailure(),
+        serverError: (message, code) =>
+            AuthServerFailure(message: message, code: code),
+        orElse: () => const AuthUnknownFailure(),
+      );
+    }
+    return const AuthUnknownFailure();
   }
 
   Future<void> _restoreSession() async {
@@ -90,8 +146,8 @@ class AuthProvider extends BaseProvider<UserEntity> {
     );
   }
 
-  /// Clears the session. Navigation is handled by [ProviderStateListener]
-  /// in the app shell — do not navigate from here.
+  /// Clears the session. Navigation is handled by the app shell, which listens
+  /// to [sessionChanges] — do not navigate from here.
   Future<void> logout() async {
     updateState(state: const ViewState.loading());
     executeOperation(
@@ -102,6 +158,14 @@ class AuthProvider extends BaseProvider<UserEntity> {
       ),
     );
     _setLoggedOut();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
+    _failureController.close();
+    super.dispose();
   }
 
   ErrorState? _mapAuthFailure(AppFailure failure) {

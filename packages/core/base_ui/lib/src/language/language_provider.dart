@@ -33,7 +33,12 @@ class LanguageProvider extends ChangeNotifier {
     _locale = AppLocalizations.supportedLocales.first;
   }
 
+  /// Switches the app locale and persists the choice.
+  ///
+  /// Re-selecting the current locale is a no-op: notifying here would rebuild
+  /// the whole app for nothing. Mirrors the guard in `ThemeProvider.themeMode`.
   void setLocale(Locale locale) {
+    if (_locale == locale) return;
     _locale = locale;
     _storage.saveLanguage(locale);
     notifyListeners();

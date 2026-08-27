@@ -1,19 +1,36 @@
-import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 
 import '../extensions/extensions.dart';
+import '../utils/{{snakeNameInput}}_path.dart';
 import '{{snakeNameInput}}_route_module.dart';
 
+/// Contributes one bottom-nav tab and its [StatefulShellBranch] routes.
+///
+/// `extends` (not `implements`) so [IDashboardTabModule.onRestore] keeps its
+/// default body. The app shell collects every registration with
+/// `getAllOrEmpty<IDashboardTabModule>()` sorted by [order], so removing this
+/// package simply drops the tab.
 @LazySingleton(as: IDashboardTabModule)
-class {{pascalName}}DashboardTabModule implements IDashboardTabModule {
+class {{pascalName}}DashboardTabModule extends IDashboardTabModule {
+  /// Must match this tab's index in the bottom navigation bar.
   @override
-  DashboardTabItem get tabItem => DashboardTabItem(
-        route: ${{camelNameInput}}Route,
-        order: 10,
-        icon: (context) => const Icon(Icons.star_border),
-        activeIcon: (context) => const Icon(Icons.star),
-        label: (context) => context.l10n{{pascalNameInput}}.title,
-      );
+  int get order => 10;
+
+  @override
+  String get path => {{pascalNameInput}}Path.{{screamingNameInput}};
+
+  @override
+  List<RouteBase> get routes => [${{camelNameInput}}Route];
+
+  @override
+  BottomNavigationBarItem navigationBarItem(BuildContext context) {
+    return BottomNavigationBarItem(
+      icon: const Icon(Icons.star_border),
+      activeIcon: const Icon(Icons.star),
+      label: context.l10n{{pascalNameInput}}.title,
+    );
+  }
 }

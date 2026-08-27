@@ -5,38 +5,56 @@ import '../../../data_auth.dart';
 
 /// Local data source for authentication-related data.
 ///
-/// All storage access goes through the DI-injected [StorageValuePresets]
-/// instance — no static calls.
-@injectable
+/// Declares and owns its own [StorageValue] instances via [StorageManager] —
+/// no shared cross-domain storage object, so no other package can reach
+/// these keys. Registered as a singleton (never `@injectable`) so the
+/// in-memory cache stays hydrated for the app's lifetime.
+@lazySingleton
 class AuthLocalDataSource {
-  final StorageValuePresets _storagePresets;
+  AuthLocalDataSource(this._storageManager);
 
-  /// Constructor – receives [StorageValuePresets] through DI.
-  AuthLocalDataSource(this._storagePresets);
+  final StorageManager _storageManager;
+
+  late final _token = StorageValue<String>(
+    _storageManager.getStorage(StorageType.secure),
+    AuthStorageKeys.TOKEN,
+  );
+
+  late final _authUser = StorageValue<Map<String, dynamic>>(
+    _storageManager.getStorage(StorageType.secure),
+    AuthStorageKeys.AUTH_USER,
+  );
+
+  /// Hydrates the in-memory cache from disk at startup so synchronous
+  /// getters below return correct values immediately.
+  @PostConstruct(preResolve: true)
+  Future<void> initialize() async {
+    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
+  }
 
   /// Save user token securely
   void saveUserToken(String? token) {
-    _storagePresets.token.value = token;
+    _token.value = token;
   }
 
   /// Get user token
   String? getUserToken() {
-    return _storagePresets.token.value;
+    return _token.value;
   }
 
   /// Clear user token
   void clearUserToken() {
-    _storagePresets.token.value = null;
+    _token.value = null;
   }
 
   /// Save user data
   void saveUserData(UserModel? user) {
-    _storagePresets.authUser.value = user?.toJson();
+    _authUser.value = user?.toJson();
   }
 
   /// Get user data
   UserModel? getUserData() {
-    final userData = _storagePresets.authUser.value;
+    final userData = _authUser.value;
     if (userData != null) {
       return UserModel.fromJson(userData);
     }
@@ -45,7 +63,7 @@ class AuthLocalDataSource {
 
   /// Clear user data
   void clearUserData() {
-    _storagePresets.authUser.value = null;
+    _authUser.value = null;
   }
 
   /// Clear all auth data

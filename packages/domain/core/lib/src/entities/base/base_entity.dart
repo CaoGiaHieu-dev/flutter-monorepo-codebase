@@ -1,5 +1,6 @@
-import 'package:core_common/core_common.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+
+import '../../utils/domain_constants.dart';
 
 part 'base_entity.freezed.dart';
 part 'base_entity.g.dart';
@@ -14,7 +15,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == ApiStatusConstants.SUCCESS;
+  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
   bool get hasError => !isSuccess;
 
   factory BaseEntity.fromJson(

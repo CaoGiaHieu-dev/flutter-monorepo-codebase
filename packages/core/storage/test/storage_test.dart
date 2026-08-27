@@ -131,8 +131,11 @@ void main() {
     });
   });
 
-  group('StorageValuePresets', () {
-    late StorageValuePresets presets;
+  group('StorageManager — independently-owned StorageValues', () {
+    // core_storage exposes only the mechanism (StorageManager/StorageValue).
+    // Each consumer package declares and owns its own StorageValue instances
+    // with its own keys — there is no shared cross-domain presets object.
+    late StorageManager manager;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -146,23 +149,80 @@ void main() {
       final secureStorage = SecureStorageImpl();
       await secureStorage.init();
 
-      final manager = StorageManager(prefStorage, secureStorage);
-      presets = StorageValuePresets(manager);
-      await presets.initialize();
+      manager = StorageManager(prefStorage, secureStorage);
     });
 
-    test('should manage predefined presets correctly', () async {
-      presets.token.value = 'preset_token_abc';
-      presets.locale.value = 'vi';
-      presets.themeMode.value = ThemeMode.dark;
-      presets.viewedOnboard.value = true;
+    /// Mirrors how each owner package declares its own value:
+    /// `AuthLocalDataSource` (secure/'token'), `LanguageStorageImpl`
+    /// (pref/'locale'), `ThemeStorageImpl` (pref/'themeMode'),
+    /// `AppBootStorage` (pref/'viewed_onboard').
+    StorageValue<String> buildToken() =>
+        StorageValue<String>(manager.getStorage(StorageType.secure), 'token');
+
+    StorageValue<String> buildLocale() =>
+        StorageValue<String>(manager.getStorage(StorageType.pref), 'locale');
+
+    StorageValue<ThemeMode> buildThemeMode() => StorageValue<ThemeMode>(
+      manager.getStorage(StorageType.pref),
+      'themeMode',
+      reviver: (key, value) => value == null
+          ? ThemeMode.system
+          : ThemeMode.values.byName(value.toString()),
+    );
+
+    test('each owner round-trips its own value through its own backend', () async {
+      final token = buildToken();
+      final locale = buildLocale();
+      final themeMode = buildThemeMode();
+
+      token.value = 'preset_token_abc';
+      locale.value = 'vi';
+      themeMode.value = ThemeMode.dark;
       await Future<void>.delayed(Duration.zero);
 
-      expect(presets.token.value, equals('preset_token_abc'));
-      expect(presets.locale.value, equals('vi'));
-      expect(presets.themeMode.value, equals(ThemeMode.dark));
-      expect(presets.viewedOnboard.value, isTrue);
+      expect(token.value, equals('preset_token_abc'));
+      expect(locale.value, equals('vi'));
+      expect(themeMode.value, equals(ThemeMode.dark));
     });
+
+    test('writing one owner value never disturbs another owner key', () async {
+      final token = buildToken();
+      final locale = buildLocale();
+      final themeMode = buildThemeMode();
+
+      locale.value = 'vi';
+      themeMode.value = ThemeMode.dark;
+      await Future<void>.delayed(Duration.zero);
+
+      // Auth writes and then clears its own key…
+      token.value = 'preset_token_abc';
+      token.value = null;
+      await Future<void>.delayed(Duration.zero);
+
+      // …the other owners' keys survive untouched, on disk too.
+      expect(token.value, isNull);
+      expect(locale.value, equals('vi'));
+      expect(themeMode.value, equals(ThemeMode.dark));
+      expect(
+        await manager.getStorage(StorageType.pref).read<String>('locale'),
+        equals('vi'),
+      );
+    });
+
+    test(
+      'a separately constructed StorageValue sees the same persisted key',
+      () async {
+        buildLocale().value = 'vi';
+        await Future<void>.delayed(Duration.zero);
+
+        // A second owner instance (e.g. app-shell vs data layer) hydrating
+        // the same physical key must read back what was persisted.
+        final reopened = buildLocale();
+        await reopened.readFromStorage();
+
+        expect(reopened.value, equals('vi'));
+      },
+    );
   });
 
   group('Security & RAM Obfuscation', () {

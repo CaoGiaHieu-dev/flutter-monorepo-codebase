@@ -1,3 +1,10 @@
+/// Route paths owned by `{{moduleName}}`.
+///
+/// Lives in `utils/` because every package keeps its constants there.
+/// Other packages must not reference these directly — navigate through this
+/// feature's Navigator interface in `core_di` instead.
 class {{pascalNameInput}}Path {
-  static const String PATH = '/{{snakeNameInput}}';
+  {{pascalNameInput}}Path._();
+
+  static const String {{screamingNameInput}} = '/{{snakeNameInput}}';
 }

@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:injectable/injectable.dart';
 
+import 'utils/notification_constants.dart';
+
 /// Enum to define the type of operation for blocked types.
 enum _BlockedTypeOperationType { add, remove }
 
@@ -297,15 +299,30 @@ class PushNotificationService {
   /// Handles notification response.
   void _onDidReceiveNotificationResponse(
     NotificationResponse notificationResponse,
-  ) async {
+  ) {
+    final payload = notificationResponse.payload;
+    // A tap can arrive with no payload at all (e.g. a notification posted
+    // without one). Decoding an empty string always throws, so bail out early
+    // instead of logging a bogus FormatException on every such tap.
+    if (payload == null || payload.isEmpty) return;
+
     try {
-      final data = jsonDecode(notificationResponse.payload ?? '');
-      _dataStreamController.sink.add(data);
-    } catch (e) {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) {
+        DynamicLogger.log(
+          'Notification payload is not a JSON object: $decoded',
+          tag: 'PushNotificationService.onDidReceiveNotificationResponse',
+          level: LogLevel.ERROR,
+        );
+        return;
+      }
+      _dataStreamController.sink.add(Map<String, dynamic>.from(decoded));
+    } catch (e, s) {
       DynamicLogger.log(
         e,
         tag: 'PushNotificationService.onDidReceiveNotificationResponse',
         level: LogLevel.ERROR,
+        stackTrace: s,
       );
     }
   }
@@ -345,8 +362,9 @@ class PushNotificationService {
     if (!force &&
         _blockedNotificationTypes
             .map((e) => e.toLowerCase())
-            .contains(message.data['type']))
+            .contains(message.data['type'])) {
       return;
+    }
 
     // Get the active notifications and use them to create an inbox style if more than one active notification.
     final activeNotifications = await flutterLocalNotificationsPlugin
@@ -357,9 +375,13 @@ class PushNotificationService {
 
     InboxStyleInformation? inboxStyleInformation;
     if (activeNotifications?.isNotEmpty ?? false) {
+      // Match on `groupKey`, not `channelId`: every notification posted below
+      // carries `groupKey: _channelGroup.id`, whereas its `channelId` is
+      // `_channel.id`. Comparing `channelId` against the *group* id never
+      // matches, which left the inbox style permanently empty.
       final lines =
           activeNotifications
-              ?.where((element) => element.channelId == _channelGroup.id)
+              ?.where((element) => element.groupKey == _channelGroup.id)
               .map((element) => element.body ?? '')
               .toList() ??
           [];
@@ -392,7 +414,7 @@ class PushNotificationService {
     );
 
     // Show the notification.
-    _showMessage(
+    await _showMessage(
       id: notification.hashCode,
       title: notification.title,
       body: notification.body,
@@ -403,18 +425,25 @@ class PushNotificationService {
   }
 
   /// Shows a notification.
-  void _showMessage({
+  ///
+  /// [android] and [iOS] are bundled into a [NotificationDetails] and handed to
+  /// the plugin, which selects the entry matching the current platform. Passing
+  /// them is what preserves the channel, group, inbox style, icon and priority
+  /// configured by [showFlutterNotification] — omitting them makes the OS fall
+  /// back to its defaults.
+  Future<void> _showMessage({
     required int id,
     String? title,
     String? body,
     AndroidNotificationDetails? android,
     DarwinNotificationDetails? iOS,
     String? payload,
-  }) {
-    flutterLocalNotificationsPlugin.show(
+  }) async {
+    await flutterLocalNotificationsPlugin.show(
       id: id,
       title: title,
       body: body,
+      notificationDetails: NotificationDetails(android: android, iOS: iOS),
       payload: payload,
     );
   }
@@ -493,7 +522,16 @@ class PushNotificationService {
     }
   }
 
-  /// Disposes the notification service.
+  /// Closes every broadcast controller owned by this service.
+  ///
+  /// Not called in production: this service is registered as a `@singleton`,
+  /// so the DI container holds it for the whole application lifetime and the
+  /// process exits before teardown would matter. It exists for tests and for
+  /// callers that tear the container down explicitly (e.g. `getIt.reset()`
+  /// between integration tests) — without it those tests leak stream
+  /// controllers across cases.
+  ///
+  /// After calling this the instance is unusable; resolve a fresh one from DI.
   void dispose() {
     _dataStreamController.close();
     _bodyStreamController.close();

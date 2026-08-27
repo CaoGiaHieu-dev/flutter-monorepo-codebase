@@ -1,6 +1,5 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:feature_auth/feature_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +17,12 @@ import '../widgets/undefine_route_widget.dart';
 /// - [IAppEntryLocation] — cold-start path (optional)
 ///
 /// Missing modules fall back to empty routes / [SizedBox] / `/`.
+///
+/// Every contribution is resolved optionally and this file imports no feature
+/// package, so removing any feature leaves routing intact — including
+/// [IAuthRefreshListenable], which simply resolves to `null` when no auth
+/// feature is present (the router then never refreshes on session changes,
+/// which is correct when there are none).
 @singleton
 class AppRouter {
   final routeObserver = RouteObserver<ModalRoute>();
@@ -78,7 +83,7 @@ class AppRouter {
   late final GoRouter router = GoRouter(
     debugLogDiagnostics: kDebugMode,
     navigatorKey: NavigatorKeys.rootKey,
-    refreshListenable: getItOrNull<AuthProvider>(),
+    refreshListenable: getItOrNull<IAuthRefreshListenable>(),
     errorPageBuilder: (context, state) {
       return NoTransitionPage(child: UndefineRouteWidget(state: state));
     },

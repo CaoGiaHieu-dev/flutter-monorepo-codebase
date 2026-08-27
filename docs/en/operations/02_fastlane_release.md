@@ -220,51 +220,47 @@ Keep the `.jks` outside the repository, and back it up somewhere durable — los
 
 ---
 
-## 5. Bundle IDs — a real mismatch
+## 5. Bundle IDs
 
-`helpers.rb` derives the bundle ID by appending a flavor suffix:
+`helpers.rb` derives the bundle ID by appending a flavor suffix, and the suffixes now match Gradle exactly:
 
 ```ruby
 def get_bundle_id_with_suffix(base_bundle_id, flavor)
   return base_bundle_id if flavor.nil? || flavor.empty?
   case flavor
   when 'dev' then "#{base_bundle_id}.dev"
-  when 'staging' then "#{base_bundle_id}.staging"
+  when 'staging' then "#{base_bundle_id}.stg"
   else base_bundle_id
   end
 end
 ```
 
-Gradle uses a **different** suffix for staging:
-
 ```kotlin
 create("staging") {
     dimension = "environment"
-    applicationIdSuffix = ".stg"     // ← .stg, not .staging
+    applicationIdSuffix = ".stg"
     signingConfig = signingConfigs.getByName("staging")
 }
 ```
 
-> [!CAUTION]
-> **The two disagree for `staging`.** The APK Gradle produces has applicationId `<base>.stg`, but Fastlane computes `<base>.staging` and uses that value to look up the Play Store listing and to fetch the latest build number. A staging upload therefore targets a package name that does not match the artifact — the upload is rejected, or worse, silently targets a different listing.
->
-> `dev` (`.dev` on both sides) and `prod` (no suffix on both sides) are consistent. Only `staging` is broken.
->
-> Fix by aligning `helpers.rb` with Gradle:
-> ```ruby
-> when 'staging' then "#{base_bundle_id}.stg"
-> ```
-> Changing Gradle instead would alter the applicationId of already-installed staging builds, so prefer changing the Ruby side.
+| Flavor | Gradle `applicationIdSuffix` | Fastlane bundle ID | Agree |
+|:---|:---|:---|:---|
+| `dev` | `.dev` | `<base>.dev` | ✅ |
+| `staging` | `.stg` | `<base>.stg` | ✅ |
+| `prod` | *(none)* | `<base>` | ✅ |
+
+> [!NOTE]
+> These two lists have drifted before: Fastlane used to compute `.staging` while Gradle produced `.stg`, so a staging upload looked up a Play listing that did not match the artifact. If you add a flavor, change **both** sides in the same commit.
 
 ---
 
 ## 6. Flavors and env files
 
-| Flavor | applicationId suffix | dart-define file expected by Fastlane |
-|:---|:---|:---|
-| `dev` | `.dev` | `app/env.dev` ✅ exists |
-| `staging` | `.stg` | `app/env.stg` ✅ exists |
-| `prod` | *(none)* | `app/env` ❌ **does not exist** |
+| Flavor | applicationId suffix | dart-define file expected by Fastlane | Present |
+|:---|:---|:---|:---|
+| `dev` | `.dev` | `app/env.dev` | ✅ |
+| `staging` | `.stg` | `app/env.stg` | ✅ |
+| `prod` | *(none)* | `app/env.prod` | ❌ **you must create it** |
 
 `helpers.rb` maps flavor to file:
 
@@ -273,29 +269,29 @@ def get_dart_define_file(flavor)
   case flavor
   when 'dev' then "env.dev"
   when 'staging' then "env.stg"
-  else "env"
+  else "env.prod"
   end
 end
 ```
 
-and then only passes the flag when the file is present:
+and refuses to build when that file is missing:
 
 ```ruby
-if File.exist?("../#{dart_define_file}")
-  build_command += " --dart-define-from-file=#{dart_define_file}"
-else
-  UI.message("Dart define file '#{dart_define_file}' not found, skipping '--dart-define-from-file'.")
+unless File.exist?("../#{dart_define_file}")
+  UI.user_error!(
+    "Dart define file 'app/#{dart_define_file}' not found for flavor "     "'#{flavor}'. Building without it would ship empty "     "String.fromEnvironment values (API base URL, keys), so this is "     "a hard failure. Create the file first."
+  )
 end
+build_command += " --dart-define-from-file=#{dart_define_file}"
 ```
 
+> [!IMPORTANT]
+> **A prod release cannot be built until you create `app/env.prod`.** That is deliberate. The lane used to skip the flag with a bare `UI.message` when the file was missing, which meant a prod build *succeeded* with every `String.fromEnvironment` in `packages/core/common/lib/src/utils/env_constants.dart` falling back to empty — an APK pointing at empty API URLs and empty keys, signed and shipped with no warning. Failing loudly is the safer trade.
+>
+> Copy the key names from `app/env.dev`; `.vscode/launch.json` already points its Prod configuration at `env.prod`.
+
 > [!WARNING]
-> **A prod Fastlane build currently ships with no dart-defines at all.** There is no `app/env` file, so the flag is skipped with only a `UI.message` — not a warning, not an error. Every `String.fromEnvironment` value in `packages/core/common/lib/src/utils/env_constants.dart` falls back to its empty default, so the release points at empty API URLs and empty keys.
->
-> Two ways out, pick one and be consistent with `.vscode/launch.json`:
-> - create `app/env.prod` and change the `else` branch to `"env.prod"` *(preferred — matches the `env.<flavor>` naming already used)*, or
-> - create a file literally named `app/env`.
->
-> Either way the file must stay out of git. Note that `.gitignore`'s `*.env` pattern does **not** match `env.dev` / `env.stg` / `env.prod` — those names have the dot on the wrong side — which is why `env.dev` and `env.stg` are currently tracked. Add explicit entries if the file will hold real credentials.
+> `.gitignore`'s `*.env` pattern does **not** match `env.dev` / `env.stg` / `env.prod` — the dot is on the wrong side — which is why `env.dev` and `env.stg` are currently tracked in git. Add explicit entries before putting real credentials in `env.prod`.
 
 ---
 
@@ -309,16 +305,9 @@ sh "#{prefix}dart pub global activate flutter_gen"
 sh "#{prefix}flutter clean"
 sh "#{prefix}flutter pub get"
 # ...then flutter gen-l10n for every packages/**/l10n.yaml
-sh "#{prefix}dart run build_runner build --delete-conflicting-outputs --workspace"
+sh "#{prefix}dart run build_runner build -d --workspace"
 ```
 
-> [!NOTE]
-> That last line uses the **deprecated** `--delete-conflicting-outputs` flag. The rest of the repository has standardised on the short form `-d`. It still works, but it is drift worth fixing:
-> ```ruby
-> sh "#{prefix}dart run build_runner build -d --workspace"
-> ```
-
-`prefix` is `""` when `flutter_version == 'stable'` and `"fvm "` otherwise — so `flutter_version:stable` is how you tell a lane to use the system toolchain rather than FVM.
 
 Because this runs `flutter clean` and a full workspace `build_runner`, it is slow. Use `skip_setup:true` for iterative local builds.
 
@@ -328,7 +317,7 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
 
 1. **Pick the version.** Decide the `version` (build name). Use `build_number:auto` unless you need a specific code.
 2. **Verify signing.** `test -f app/android/key.properties` — see the [§4](#4-signing) caution.
-3. **Verify the env file exists for the flavor** — see [§6](#6-flavors-and-env-files). For prod this currently requires manual action.
+3. **Verify the env file exists for the flavor** — see [§6](#6-flavors-and-env-files). For prod you must create `app/env.prod` first; the lane hard-fails without it.
 4. **Confirm `Config.yaml` is filled in**, particularly `firebase.app_ids`, `app_store_connect.apple_ids` and the credential paths.
 5. **Dry run locally**, no distribution:
    ```bash
@@ -351,9 +340,8 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
 - [ ] `app/android/key.properties` exists and points at your **release** keystore
 - [ ] Release keystore is backed up outside the repository
 - [ ] Env file for the target flavor exists (`app/env.prod` for prod — see [§6](#6-flavors-and-env-files))
-- [ ] `helpers.rb` staging suffix aligned with Gradle if you are shipping staging — see [§5](#5-bundle-ids--a-real-mismatch)
 - [ ] `Config.yaml` complete; credential JSON/`.p8` files present at the configured paths
-- [ ] `flutter analyze` clean; package tests pass (CI does not check this — see [`01_cicd.md`](01_cicd.md#6-missing-quality-gate))
+- [ ] `flutter analyze` clean and package tests pass — `pr_quality_check.yml` gates this on PRs, but the release pipelines do not (see [`01_cicd.md`](01_cicd.md#6-the-quality-gate))
 - [ ] `sslPinningHashes` populated if this build faces production traffic — it defaults to `const []`, which disables pinning entirely
 - [ ] Changelog written
 - [ ] Build number does not collide with an existing release

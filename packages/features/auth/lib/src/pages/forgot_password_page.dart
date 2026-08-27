@@ -5,7 +5,7 @@ import 'package:core_ui_kit/dialogs/app_dialog.dart';
 import 'package:core_ui_kit/navigation/app_bar_custom.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../../feature_auth.dart';
 
@@ -101,10 +101,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       appBar: AppBarCustom(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(24.w),
+          padding: EdgeInsets.all(context.w(24)),
           child: Column(
             children: [
-              SizedBox(height: 40.h),
+              SizedBox(height: context.h(40)),
 
               // Header
               AuthHeaderWidget(
@@ -113,7 +113,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 showLogo: false,
               ),
 
-              SizedBox(height: 40.h),
+              SizedBox(height: context.h(40)),
 
               // Email input
               TextFormField(
@@ -126,16 +126,16 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   hintText: context.l10nAuth.enter_email_address,
                   prefixIcon: const Icon(Icons.email_outlined),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: BorderRadius.circular(context.r(12)),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: BorderRadius.circular(context.r(12)),
                     borderSide: BorderSide(
                       color: context.colorScheme.outline.withValues(alpha: 0.5),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: BorderRadius.circular(context.r(12)),
                     borderSide: BorderSide(
                       color: context.colorScheme.primary,
                       width: 2,
@@ -144,7 +144,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
               ),
 
-              SizedBox(height: 32.h),
+              SizedBox(height: context.h(32)),
 
               // Reset button
               SizedBox(
@@ -152,17 +152,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _onResetPressed,
                   style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 16.h),
+                    padding: EdgeInsets.symmetric(vertical: context.h(16)),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: BorderRadius.circular(context.r(12)),
                     ),
                     backgroundColor: context.colorScheme.primary,
                     foregroundColor: context.colorScheme.onPrimary,
                   ),
                   child: _isLoading
                       ? SizedBox(
-                          width: 20.w,
-                          height: 20.h,
+                          width: context.w(20),
+                          height: context.h(20),
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -179,7 +179,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
               ),
 
-              SizedBox(height: 32.h),
+              SizedBox(height: context.h(32)),
 
               // Back to login
               AuthFooterWidget(
@@ -188,7 +188,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 onActionPressed: _onBackToLoginPressed,
               ),
 
-              SizedBox(height: 40.h),
+              SizedBox(height: context.h(40)),
             ],
           ),
         ),

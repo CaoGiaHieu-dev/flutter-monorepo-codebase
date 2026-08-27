@@ -3,7 +3,7 @@
 Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế nào, có những lane nào và nhận tham số gì, app được ký ra sao, và quy trình phát hành đầy đủ gồm những bước nào.** Đọc xong bạn cấu hình được `Config.yaml`, chạy được mọi lane từ thư mục gốc, và đưa được bản build lên Firebase App Distribution, Google Play hoặc TestFlight.
 
 > [!IMPORTANT]
-> Có hai lỗi thật trong cấu hình Fastlane được mô tả bên dưới — **lệch hậu tố bundle ID** ([§5](#5-bundle-id--lệch-thật-sự)) và **bỏ qua dart-define cho prod một cách im lặng** ([§6](#6-flavor-và-file-env)). Đọc hai mục đó trước lần upload store đầu tiên.
+> Trước lần phát hành đầu tiên, đọc [§5](#5-bundle-id) (hậu tố bundle ID phải khớp Gradle) và [§6](#6-flavor-và-file-env) — **bạn phải tự tạo `app/env.prod`**, thiếu nó thì lane fail cứng.
 
 ---
 
@@ -220,51 +220,47 @@ Giữ file `.jks` **ngoài** repo, và sao lưu ở nơi bền vững — mất 
 
 ---
 
-## 5. Bundle ID — lệch thật sự
+## 5. Bundle ID
 
-`helpers.rb` dựng bundle ID bằng cách gắn hậu tố theo flavor:
+`helpers.rb` sinh bundle ID bằng cách thêm hậu tố theo flavor, và các hậu tố giờ khớp Gradle chính xác:
 
 ```ruby
 def get_bundle_id_with_suffix(base_bundle_id, flavor)
   return base_bundle_id if flavor.nil? || flavor.empty?
   case flavor
   when 'dev' then "#{base_bundle_id}.dev"
-  when 'staging' then "#{base_bundle_id}.staging"
+  when 'staging' then "#{base_bundle_id}.stg"
   else base_bundle_id
   end
 end
 ```
 
-Gradle lại dùng hậu tố **khác** cho staging:
-
 ```kotlin
 create("staging") {
     dimension = "environment"
-    applicationIdSuffix = ".stg"     // ← .stg, không phải .staging
+    applicationIdSuffix = ".stg"
     signingConfig = signingConfigs.getByName("staging")
 }
 ```
 
-> [!CAUTION]
-> **Hai bên không khớp nhau ở `staging`.** APK do Gradle tạo có applicationId `<base>.stg`, nhưng Fastlane tính ra `<base>.staging` và dùng giá trị đó để tra listing trên Play Store cũng như lấy build number mới nhất. Vì vậy lần upload staging sẽ nhắm vào một package name không khớp artifact — hoặc bị từ chối, hoặc tệ hơn là âm thầm nhắm sang một listing khác.
->
-> `dev` (`.dev` ở cả hai bên) và `prod` (không hậu tố ở cả hai bên) thì khớp. Chỉ `staging` bị lệch.
->
-> Sửa bằng cách chỉnh `helpers.rb` cho khớp Gradle:
-> ```ruby
-> when 'staging' then "#{base_bundle_id}.stg"
-> ```
-> Sửa phía Gradle thay vào đó sẽ làm đổi applicationId của các bản staging đã cài trên máy, nên ưu tiên sửa phía Ruby.
+| Flavor | `applicationIdSuffix` của Gradle | Bundle ID Fastlane tính | Khớp |
+|:---|:---|:---|:---|
+| `dev` | `.dev` | `<base>.dev` | ✅ |
+| `staging` | `.stg` | `<base>.stg` | ✅ |
+| `prod` | *(không có)* | `<base>` | ✅ |
+
+> [!NOTE]
+> Hai danh sách này từng lệch nhau: Fastlane tính `.staging` trong khi Gradle sinh `.stg`, khiến một lần upload staging tra đúng một Play listing không khớp artifact. Nếu thêm flavor mới, hãy sửa **cả hai** phía trong cùng một commit.
 
 ---
 
 ## 6. Flavor và file env
 
-| Flavor | Hậu tố applicationId | File dart-define Fastlane tìm |
-|:---|:---|:---|
-| `dev` | `.dev` | `app/env.dev` ✅ có |
-| `staging` | `.stg` | `app/env.stg` ✅ có |
-| `prod` | *(không có)* | `app/env` ❌ **không tồn tại** |
+| Flavor | Hậu tố applicationId | File dart-define Fastlane mong đợi | Có sẵn |
+|:---|:---|:---|:---|
+| `dev` | `.dev` | `app/env.dev` | ✅ |
+| `staging` | `.stg` | `app/env.stg` | ✅ |
+| `prod` | *(không có)* | `app/env.prod` | ❌ **bạn phải tự tạo** |
 
 `helpers.rb` ánh xạ flavor sang file:
 
@@ -273,29 +269,29 @@ def get_dart_define_file(flavor)
   case flavor
   when 'dev' then "env.dev"
   when 'staging' then "env.stg"
-  else "env"
+  else "env.prod"
   end
 end
 ```
 
-rồi chỉ truyền cờ khi file có thật:
+và từ chối build khi file đó không tồn tại:
 
 ```ruby
-if File.exist?("../#{dart_define_file}")
-  build_command += " --dart-define-from-file=#{dart_define_file}"
-else
-  UI.message("Dart define file '#{dart_define_file}' not found, skipping '--dart-define-from-file'.")
+unless File.exist?("../#{dart_define_file}")
+  UI.user_error!(
+    "Dart define file 'app/#{dart_define_file}' not found for flavor "     "'#{flavor}'. Building without it would ship empty "     "String.fromEnvironment values (API base URL, keys), so this is "     "a hard failure. Create the file first."
+  )
 end
+build_command += " --dart-define-from-file=#{dart_define_file}"
 ```
 
+> [!IMPORTANT]
+> **Không build được bản prod cho tới khi bạn tạo `app/env.prod`.** Đó là có chủ đích. Trước đây lane bỏ qua cờ này bằng một `UI.message` trống rỗng khi thiếu file, nghĩa là build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `packages/core/common/lib/src/utils/env_constants.dart` rơi về giá trị rỗng — một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
+>
+> Sao chép danh sách key từ `app/env.dev`; `.vscode/launch.json` vốn đã trỏ cấu hình Prod vào `env.prod`.
+
 > [!WARNING]
-> **Bản build prod qua Fastlane hiện không có dart-define nào cả.** Không có file `app/env`, nên cờ bị bỏ qua kèm đúng một dòng `UI.message` — không phải warning, không phải error. Mọi giá trị `String.fromEnvironment` trong `packages/core/common/lib/src/utils/env_constants.dart` rơi về mặc định rỗng, nghĩa là bản release trỏ tới URL API rỗng và key rỗng.
->
-> Hai cách xử lý, chọn một và giữ nhất quán với `.vscode/launch.json`:
-> - tạo `app/env.prod` rồi đổi nhánh `else` thành `"env.prod"` *(nên chọn — khớp quy ước `env.<flavor>` đang dùng)*, hoặc
-> - tạo file tên đúng là `app/env`.
->
-> Dù chọn cách nào, file đó phải nằm ngoài git. Lưu ý mẫu `*.env` trong `.gitignore` **không** khớp `env.dev` / `env.stg` / `env.prod` — dấu chấm nằm sai phía — nên `env.dev` và `env.stg` hiện đang bị track. Cần thêm dòng ignore tường minh nếu file sẽ chứa credential thật.
+> Mẫu `*.env` trong `.gitignore` **không** khớp `env.dev` / `env.stg` / `env.prod` — dấu chấm nằm sai phía — nên `env.dev` và `env.stg` hiện đang bị track trong git. Hãy thêm dòng ignore tường minh trước khi đặt credential thật vào `env.prod`.
 
 ---
 
@@ -309,8 +305,9 @@ sh "#{prefix}dart pub global activate flutter_gen"
 sh "#{prefix}flutter clean"
 sh "#{prefix}flutter pub get"
 # ...rồi flutter gen-l10n cho mọi packages/**/l10n.yaml
-sh "#{prefix}dart run build_runner build --delete-conflicting-outputs --workspace"
+sh "#{prefix}dart run build_runner build -d --workspace"
 ```
+
 
 > [!NOTE]
 > Dòng cuối dùng cờ `--delete-conflicting-outputs` **đã lỗi thời**. Phần còn lại của repo đã thống nhất dùng dạng ngắn `-d`. Nó vẫn chạy được, nhưng đây là chỗ lệch nên sửa:
@@ -351,9 +348,8 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 - [ ] `app/android/key.properties` tồn tại và trỏ tới keystore **release** của bạn
 - [ ] Keystore release đã được sao lưu ngoài repo
 - [ ] File env của flavor đích đã có (`app/env.prod` cho prod — xem [§6](#6-flavor-và-file-env))
-- [ ] Đã sửa hậu tố staging trong `helpers.rb` cho khớp Gradle nếu bạn phát hành staging — xem [§5](#5-bundle-id--lệch-thật-sự)
 - [ ] `Config.yaml` đầy đủ; các file JSON/`.p8` credential có mặt đúng đường dẫn đã cấu hình
-- [ ] `flutter analyze` sạch; test các package pass (CI **không** kiểm tra việc này — xem [`01_cicd.md`](01_cicd.md#6-thiếu-quality-gate))
+- [ ] `flutter analyze` sạch và test các package pass — `pr_quality_check.yml` chặn ở PR, nhưng các pipeline phát hành thì không (xem [`01_cicd.md`](01_cicd.md#6-quality-gate))
 - [ ] `sslPinningHashes` đã điền nếu bản build này chạy với traffic production — mặc định nó là `const []`, tức tắt hoàn toàn pinning
 - [ ] Đã viết changelog
 - [ ] Build number không trùng với bản release đã có

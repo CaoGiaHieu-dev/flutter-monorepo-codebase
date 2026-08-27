@@ -1,7 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 part 'custom_button_widgets/dropdown_button_widget.dart';
@@ -440,98 +439,4 @@ class CustomButtonState<T> extends State<CustomButton<T>> {
     }
     return button;
   }
-}
-
-// ==========================================
-// 🛠️ Interactive Previews (Flutter 3.44+)
-// ==========================================
-
-@Preview(name: 'Rectangle Primary Button', group: 'Shared Buttons')
-Widget customButtonRectanglePreview() {
-  return Builder(
-    builder: (context) {
-      return Scaffold(
-        body: Center(
-          child: CustomButton.rectangle(
-            color: Colors.blue,
-            onPressed: () {},
-            child: Text(
-              'Submit Application',
-              style: AppTextStyles.labelLargeStyle(context).copyWith(
-                color: context.colors.surface,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-@Preview(name: 'Outlined Secondary Button', group: 'Shared Buttons')
-Widget customButtonOutlinedPreview() {
-  return Builder(
-    builder: (context) {
-      return Scaffold(
-        body: Center(
-          child: CustomButton.outlined(
-            color: Colors.transparent,
-            borderSide: const BorderSide(color: Colors.blue, width: 2),
-            onPressed: () {},
-            child: Text(
-              'Cancel Action',
-              style: AppTextStyles.labelLargeStyle(context).copyWith(
-                color: context.colors.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-@Preview(name: 'Circle Icon Button', group: 'Shared Buttons')
-Widget customButtonCirclePreview() {
-  return const Scaffold(
-    body: Center(
-      child: CustomButton.circle(
-        color: Colors.blue,
-        diameter: 56,
-        onPressed: null, // Disabled state
-        child: Icon(Icons.add, color: Colors.white),
-      ),
-    ),
-  );
-}
-
-@Preview(name: 'Options Button', group: 'Shared Buttons')
-Widget customButtonOptionsPreview() {
-  return Scaffold(
-    body: Center(
-      child: CustomButton.options(
-        items: OptionsButtonType.values,
-        onSelected: (value) {
-          // Handle select callback in preview
-        },
-      ),
-    ),
-  );
-}
-
-@Preview(name: 'Drop Down Selector', group: 'Shared Buttons')
-Widget customButtonDropDownPreview() {
-  return Scaffold(
-    body: Center(
-      child: CustomButton.dropDown<String>(
-        displayText: 'Filter Language',
-        items: const ['English', 'Vietnamese', 'Spanish'],
-        onSelected: (value) {
-          // Handle selection in preview
-        },
-      ),
-    ),
-  );
 }

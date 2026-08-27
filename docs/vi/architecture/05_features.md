@@ -172,7 +172,7 @@ Thư viện widget dùng lại là **`core_ui_kit`** tại `packages/core/ui_kit
 CustomButton(width: 120.w, height: 44.h)
 ```
 
-Widget trong `core_ui_kit` không bao giờ tự áp `flutter_screenutil` bên trong. Nếu bạn truyền vào giá trị đã scale thì nó sẽ bị scale hai lần, nên việc scale luôn được làm ở đây, ngay tại chỗ gọi.
+Widget trong `core_ui_kit` không bao giờ tự áp `flutter_screenutil_plus` bên trong. Nếu bạn truyền vào giá trị đã scale thì nó sẽ bị scale hai lần, nên việc scale luôn được làm ở đây, ngay tại chỗ gọi.
 
 ## 6. Vòng đời UI controller
 

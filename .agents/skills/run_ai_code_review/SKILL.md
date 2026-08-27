@@ -50,7 +50,7 @@ Use the `run_command` tool to run the commands above. After execution, analyze t
 - UI Controllers (ViewModel, Bloc, Cubit) must be `@injectable`, never singletons.
 - Instantiation happens at the **route** via `ChangeNotifierProvider` / `BlocProvider`; the
   `Page` must not wrap itself a second time.
-- All sizing goes through `flutter_screenutil` (`.w` / `.h` / `.sp` / `.r`); reusable widgets
+- All sizing goes through `flutter_screenutil_plus` (`.w` / `.h` / `.sp` / `.r`); reusable widgets
   in `core_ui_kit` take **unscaled** values and never scale internally.
 
 **Layering**

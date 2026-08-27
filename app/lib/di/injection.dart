@@ -64,8 +64,11 @@ const _dataModules = [
 ///
 /// Everything the shell consumes at runtime resolves through `core_di`
 /// contracts with `getAllOrEmpty` / `getItOrNull` fallbacks, so no other file
-/// needs editing — except the ones still holding a direct `feature_auth` /
-/// `feature_splash` / `feature_shared` import (see their doc comments).
+/// needs editing. `core_ui_kit` is imported directly in a few shell files, but
+/// it is a core library rather than a removable feature.
+///
+/// `dart tools/sample_cleanup/remove_sample.dart <name>` performs these steps
+/// and reports the couplings a manual removal would miss.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
   ExternalModule(FeatureDashboardPackageModule),

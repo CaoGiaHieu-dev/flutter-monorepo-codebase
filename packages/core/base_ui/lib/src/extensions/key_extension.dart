@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../utils/base_ui_constants.dart';
 import 'context_extension.dart';
@@ -101,7 +101,8 @@ extension GlobalKeyExtension on GlobalKey {
           ancestor: overlay,
         ),
       ),
-      Offset(0, BaseUiConstants.DROPDOWN_VERTICAL_OFFSET.h) & overlay.size,
+      Offset(0, context.h(BaseUiConstants.DROPDOWN_VERTICAL_OFFSET)) &
+          overlay.size,
     );
 
     // Get the size of the screen
@@ -124,13 +125,13 @@ extension GlobalKeyExtension on GlobalKey {
           shape ??
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(
-              BaseUiConstants.DROPDOWN_BORDER_RADIUS.r,
+              context.r(BaseUiConstants.DROPDOWN_BORDER_RADIUS),
             ),
             side:
                 side ??
                 BorderSide(
                   color: context.colors.surfaceVariant,
-                  width: BaseUiConstants.DROPDOWN_BORDER_WIDTH.r,
+                  width: context.r(BaseUiConstants.DROPDOWN_BORDER_WIDTH),
                 ),
           ),
       shadowColor: Colors.transparent,
@@ -158,7 +159,7 @@ extension GlobalKeyExtension on GlobalKey {
             // When the item is tapped, call the `onTap` callback and pass the item value
             onTap?.call(item);
           },
-          height: BaseUiConstants.DROPDOWN_ITEM_HEIGHT.h,
+          height: context.h(BaseUiConstants.DROPDOWN_ITEM_HEIGHT),
           padding: padding,
           child: item == null
               ? const SizedBox()

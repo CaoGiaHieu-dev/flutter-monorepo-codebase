@@ -5,7 +5,7 @@ import 'package:core_common/core_common.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 class SelectedPhotosPreview extends StatefulWidget {
@@ -44,7 +44,7 @@ class _SelectedPhotosPreviewState extends State<SelectedPhotosPreview> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Container(
-      height: 200.h,
+      height: context.h(200),
       color: CupertinoColors.systemGrey.withAlpha(0.1.toOpacity),
       child: SafeArea(
         top: false,
@@ -52,11 +52,11 @@ class _SelectedPhotosPreviewState extends State<SelectedPhotosPreview> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+              padding: context.edgeInsets(horizontal: 12, vertical: 12),
               child: DefaultTextStyle(
                 style: TextStyle(
                   color: CupertinoColors.black,
-                  fontSize: 18.sp,
+                  fontSize: context.sp(18),
                   fontWeight: FontWeight.bold,
                 ),
                 child: Text(
@@ -83,9 +83,9 @@ class _SelectedPhotosPreviewState extends State<SelectedPhotosPreview> {
                       }
 
                       return Container(
-                        width: 110.w,
-                        height: 110.h,
-                        margin: EdgeInsets.symmetric(horizontal: 6.w),
+                        width: context.w(110),
+                        height: context.h(110),
+                        margin: context.edgeInsets(horizontal: 6),
                         child: PhotoItemPreview(
                           photo: photo,
                           thumbnail: thumbnail,
@@ -120,15 +120,15 @@ class PhotoItemPreview extends StatelessWidget {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: context.borderRadius(all: 12),
           child: Container(
             decoration: BoxDecoration(
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha((0.2 * 255).round()),
-                  spreadRadius: 2.r,
-                  blurRadius: 5.r,
-                  offset: Offset(0, 3.h),
+                  spreadRadius: context.r(2),
+                  blurRadius: context.r(5),
+                  offset: Offset(0, context.h(3)),
                 ),
               ],
             ),
@@ -136,8 +136,8 @@ class PhotoItemPreview extends StatelessWidget {
                 ? ExtendedImage.memory(
                     thumbnail!,
                     fit: BoxFit.cover,
-                    width: 110.w,
-                    height: 110.h,
+                    width: context.w(110),
+                    height: context.h(110),
                   )
                 : const Center(child: CupertinoActivityIndicator()),
           ),
@@ -155,7 +155,7 @@ class PhotoItemPreview extends StatelessWidget {
               child: Icon(
                 CupertinoIcons.clear_circled_solid,
                 color: CupertinoColors.destructiveRed,
-                size: 24.r,
+                size: context.r(24),
               ),
             ),
           ),

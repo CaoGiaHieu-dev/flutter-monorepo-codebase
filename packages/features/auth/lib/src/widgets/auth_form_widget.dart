@@ -1,7 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../extensions/extensions.dart';
 
@@ -176,16 +176,16 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
               hintText: context.l10nAuth.enter_your_email,
               prefixIcon: const Icon(Icons.email_outlined),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(context.r(12)),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(context.r(12)),
                 borderSide: BorderSide(
                   color: context.colorScheme.outline.withValues(alpha: 0.5),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(context.r(12)),
                 borderSide: BorderSide(
                   color: context.colorScheme.primary,
                   width: 2,
@@ -194,7 +194,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
             ),
           ),
 
-          SizedBox(height: 16.h),
+          SizedBox(height: context.h(16)),
 
           // Password field
           TextFormField(
@@ -222,16 +222,16 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
                 },
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(context.r(12)),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(context.r(12)),
                 borderSide: BorderSide(
                   color: context.colorScheme.outline.withValues(alpha: 0.5),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.r),
+                borderRadius: BorderRadius.circular(context.r(12)),
                 borderSide: BorderSide(
                   color: context.colorScheme.primary,
                   width: 2,
@@ -242,7 +242,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
 
           // Confirm password field (if needed)
           if (widget.showConfirmPassword) ...[
-            SizedBox(height: 16.h),
+            SizedBox(height: context.h(16)),
             TextFormField(
               controller: widget.confirmPasswordController,
               obscureText: _obscureConfirmPassword,
@@ -266,16 +266,16 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
                   },
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: BorderRadius.circular(context.r(12)),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: BorderRadius.circular(context.r(12)),
                   borderSide: BorderSide(
                     color: context.colorScheme.outline.withValues(alpha: 0.5),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: BorderRadius.circular(context.r(12)),
                   borderSide: BorderSide(
                     color: context.colorScheme.primary,
                     width: 2,
@@ -285,7 +285,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
             ),
           ],
 
-          SizedBox(height: 24.h),
+          SizedBox(height: context.h(24)),
 
           // Submit button
           CustomButton.rectangle(
@@ -295,8 +295,8 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
             },
             child: widget.isLoading
                 ? SizedBox(
-                    width: 20.w,
-                    height: 20.h,
+                    width: context.w(20),
+                    height: context.h(20),
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(

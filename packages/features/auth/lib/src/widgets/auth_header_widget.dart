@@ -1,6 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 /// Authentication header widget for displaying app branding and welcome content
 ///
@@ -67,16 +67,16 @@ class AuthHeaderWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 24.w),
+      padding: EdgeInsets.symmetric(horizontal: context.w(24)),
       child: Column(
         children: [
           if (showLogo) ...[
             // App logo
             Container(
-              width: 120.w,
-              height: 120.h,
+              width: context.w(120),
+              height: context.h(120),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20.r),
+                borderRadius: BorderRadius.circular(context.r(20)),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -88,11 +88,11 @@ class AuthHeaderWidget extends StatelessWidget {
               ),
               child: Icon(
                 Icons.lock_outline,
-                size: 60.r,
+                size: context.r(60),
                 color: context.colorScheme.onPrimary,
               ),
             ),
-            SizedBox(height: 32.h),
+            SizedBox(height: context.h(32)),
           ],
 
           // Title
@@ -105,7 +105,7 @@ class AuthHeaderWidget extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
 
-          SizedBox(height: 8.h),
+          SizedBox(height: context.h(8)),
 
           // Subtitle
           Text(

@@ -1,7 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../buttons/custom_button.dart';
 
@@ -29,9 +29,9 @@ class _ErrorDialogState extends OverlayDialogState<ErrorDialog> {
         backgroundColor: context.colors.surface,
         surfaceTintColor: context.colors.surface,
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 20.h),
+          padding: context.edgeInsets(horizontal: 20, vertical: 20),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8.r),
+            borderRadius: context.borderRadius(all: 8),
             color: context.colors.surface,
           ),
           child: Column(
@@ -44,22 +44,22 @@ class _ErrorDialogState extends OverlayDialogState<ErrorDialog> {
                   color: context.colors.textPrimary,
                 ),
               ),
-              SizedBox(height: 8.h),
+              SizedBox(height: context.h(8)),
               Text(
                 widget.content,
                 style: AppTextStyles.bodyMediumStyle(
                   context,
-                ).copyWith(fontSize: 13.sp, color: context.colors.textPrimary),
+                ).copyWith(fontSize: context.sp(13), color: context.colors.textPrimary),
               ),
-              SizedBox(height: 20.h),
+              SizedBox(height: context.h(20)),
               CustomButton.rectangle(
-                height: 40.h,
+                height: context.h(40),
                 minWidth: ButtonTheme.of(context).minWidth,
                 onPressed: () {
                   closeDialog();
                   widget.onConfirm?.call();
                 },
-                radius: 4.r,
+                radius: context.r(4),
                 color: context.primary,
                 child: Text(
                   context.l10n.ok,

@@ -292,7 +292,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 
 ## 12. Responsive UI
 
-**Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều dùng `flutter_screenutil`: `.w`, `.h`, `.sp`, `.r`. Cấm dùng double thô trong layout.
+**Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều dùng `flutter_screenutil_plus`: `.w`, `.h`, `.sp`, `.r`. Cấm dùng double thô trong layout.
 
 **Widget dùng lại nhận giá trị RAW và không được tự scale bên trong.** Scale là việc của nơi gọi.
 

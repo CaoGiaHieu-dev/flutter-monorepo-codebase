@@ -28,7 +28,7 @@ The bottom of the stack. No local package dependencies at all; everything else m
 | Errors | `src/error/` | `AppFailure` (Freezed union), `ErrorHandler.handleError()`, exception types |
 | Extensions | `src/extensions/` | `bool`, `DateTime`, `Dio`, `Enum`, `List`, `num`, `String` |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
-| Routing helpers | `src/routing/` | `AppNavigator`, `GoRouteDataCustom`, page transitions |
+| Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
 | Utils **and constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
 | Firebase | `src/firebase/` | `FirebaseModule` providing per-flavor `FirebaseOptions` |
 
@@ -80,7 +80,7 @@ Design tokens, themes, typography, global assets and the base localization bundl
 | Area | Path | Contents |
 |:--|:--|:--|
 | Design tokens | `src/styles/` | `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` |
-| Theme | `src/theme/` | `ThemeProvider`, `ThemeSystemExtensions`, `ThemeSystemInterface` |
+| Theme | `src/theme/` | `ThemeProvider`, `ThemeSystemExtension`, `ThemeSystemInterface` |
 | Language | `src/language/` | `LanguageProvider` |
 | Extensions | `src/extensions/` | `context.colors`, key/locale extensions |
 | Generated | `src/gen/` | `Assets`, `AppLocalizations` (global strings) |
@@ -122,7 +122,7 @@ It depends on `core_common`, `core_base_ui` and `provider_state_management` — 
 
 ### The UI-agnostic rule
 
-Reusable widgets take **raw, unscaled** numbers and must not apply `flutter_screenutil` internally. Scaling is the caller's job:
+Reusable widgets take **raw, unscaled** numbers and must not apply `flutter_screenutil_plus` internally. Scaling is the caller's job:
 
 ```dart
 // caller scales

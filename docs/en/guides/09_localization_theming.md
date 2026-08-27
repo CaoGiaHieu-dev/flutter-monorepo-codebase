@@ -129,65 +129,26 @@ Text(context.l10nHome.user_logged_in)
 
 # Part B — Theming
 
-## 6. Design tokens
+## 6. Design tokens and colours
 
-Tokens live in `packages/core/base_ui/lib/src/styles/`:
+Tokens live in `packages/core/base_ui/lib/src/styles/`; colours come from a
+`ThemeExtension` so they flip with light/dark automatically.
 
 | Token class | File | Purpose |
 |---|---|---|
 | `AppSpacing` | `app_spacing.dart` | Paddings, margins, gaps |
 | `AppRadius` | `app_radius.dart` | Corner radii, `BorderRadius` objects |
 | `AppTextStyles` | `app_text_styles.dart` | Typography, resolved from theme |
-| `AppGradients` | `app_gradients.dart` | Gradients |
+| `AppGradients` | `app_gradients.dart` | Gradients, resolved from theme |
 | `AppShadows` | `app_shadows.dart` | Elevation shadows |
 
-> [!NOTE]
-> **These are the approved exception to the "constants live in `utils/`" rule.** They stay in `styles/` because they are the design system's *public API*, imported directly by every feature — and because `styles/` describes them far better than the catch-all name `utils/`. Do not "fix" this in a future cleanup.
-
-Tokens are already responsive:
-
-```dart
-// packages/core/base_ui/lib/src/styles/app_spacing.dart
-class AppSpacing {
-  AppSpacing._();
-
-  // Proportional responsive spacing (based on width .w - standard for paddings/margins to maintain aspect ratio)
-  static double get xxs => 2.w;
-  static double get xs => 4.w;
-  static double get sm => 8.w;
-  static double get md => 12.w;
-  static double get lg => 16.w;
-  // ...
-
-  // Height-based responsive spacing (based on height .h - useful for vertical gaps / heights)
-  static double get smH => 8.h;
-  // ...
-
-  // Raw spacing values (for non-responsive contexts, canvas, or test environments)
-  static const double rawSm = 8;
-```
-
-Use `AppSpacing.lg` (already `.w`-scaled) — do **not** write `AppSpacing.lg.w`, that would scale twice. The `raw*` variants exist for tests and canvas painting.
-
-```dart
-// packages/core/base_ui/lib/src/styles/app_radius.dart
-static double get md => 8.r;
-static BorderRadius get mdRadius => BorderRadius.all(Radius.circular(md));
-```
-
-## 7. Colours and typography
-
-Colours come from a theme extension, so they switch with light/dark automatically:
-
-```dart
-// packages/core/base_ui/lib/src/extensions/context_extension.dart
-ThemeSystemExtension get colors => themeExtension;
-```
+Every accessor takes a `BuildContext`, because scaling resolves through the
+context-aware extensions of `flutter_screenutil_plus`:
 
 ```dart
 Container(
   color: context.colors.surface,
-  padding: EdgeInsets.all(AppSpacing.lg),
+  padding: EdgeInsets.all(AppSpacing.lg(context)),
   child: Text(
     context.l10nHome.home,
     style: AppTextStyles.bodyMediumStyle(context),
@@ -195,10 +156,17 @@ Container(
 )
 ```
 
-`AppTextStyles` methods take `BuildContext` (`titleLargeStyle(context)`, `bodyMediumStyle(context)`, …) because they resolve against the active theme.
-
 > [!CAUTION]
-> Never hard-code a `Color`, `fontSize`, spacing number or `BorderRadius` in a widget. If a token is missing, add it to `core_base_ui` — do not inline the value.
+> Never hard-code a `Color`, `fontSize`, spacing number or `BorderRadius` in a
+> widget. If a token is missing, add it to `core_base_ui` — do not inline the
+> value. And never re-scale an already-scaled token: `AppSpacing.lg(context).w`
+> scales twice.
+
+> [!NOTE]
+> **Configuring the design system — swapping the palette, changing the font,
+> retuning the scales, moving the design canvas, adding a token — has its own
+> page: [`11_design_system.md`](11_design_system.md).** It is kept separate so
+> there is exactly one place describing how these values are defined.
 
 ## 8. `ThemeMode.system` follows the OS live
 
@@ -255,15 +223,20 @@ SizedBox(height: 24)
 padding: EdgeInsets.all(16)
 fontSize: 16
 
-// ✅ Right
-SizedBox(height: 24.h)
-padding: EdgeInsets.all(16.r)
-fontSize: 16.sp
+// ✅ Right — context-aware extensions
+SizedBox(height: context.h(24))
+padding: EdgeInsets.all(context.r(16))
+fontSize: context.sp(16)
 
 // ✅ Better — use a token
-SizedBox(height: AppSpacing.lgH)
-padding: EdgeInsets.all(AppSpacing.lg)
+SizedBox(height: AppSpacing.lgH(context))
+padding: EdgeInsets.all(AppSpacing.lg(context))
 ```
+
+> [!NOTE]
+> `context.edgeInsets(all: 16)` scales with `r`, not `w` — so it is not a
+> drop-in swap for `EdgeInsets.all(context.w(16))`. See
+> [`11_design_system.md`](11_design_system.md) for the full axis table.
 
 Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-height multiplier, `flex` is a ratio.
 
@@ -345,7 +318,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 - [ ] `core_ui_kit` uses `core_base_ui` strings, defines no `.arb`
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`
 - [ ] Every dimension scaled (`.w`/`.h`/`.sp`/`.r`) or taken from a token
-- [ ] Tokens not double-scaled (`AppSpacing.lg`, not `AppSpacing.lg.w`)
+- [ ] Tokens not double-scaled (`AppSpacing.lg(context)`, not `AppSpacing.lg(context).w`)
 - [ ] Reusable widgets accept raw values and scale nothing internally
 - [ ] Dialogs/bottom sheets extracted into their own suffixed files
 

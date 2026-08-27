@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 class LoadingMoreWidget<P extends LoadMoreMixin> extends StatelessWidget {
@@ -21,7 +21,7 @@ class LoadingMoreWidget<P extends LoadMoreMixin> extends StatelessWidget {
       child:
           builder?.call(context) ??
           SafeArea(
-            minimum: EdgeInsets.symmetric(vertical: 10.h),
+            minimum: context.edgeInsets(vertical: 10),
             child: const Center(child: CircularProgressIndicator.adaptive()),
           ),
     );
@@ -75,7 +75,7 @@ class LoadMoreListView<P extends LoadMoreMixin> extends BoxScrollView {
       (BuildContext context, int index) {
         if (index == _computeActualChildCount(itemCount) - 1 && isLoadMore) {
           return SafeArea(
-            minimum: EdgeInsets.symmetric(vertical: 10.h),
+            minimum: context.edgeInsets(vertical: 10),
             child: const Center(child: CircularProgressIndicator.adaptive()),
           );
         }

@@ -1,6 +1,5 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
 
 /// Widget displayed when there is no content to show
 ///
@@ -45,13 +44,4 @@ class EmptyWidget extends StatelessWidget {
       slivers: [SliverFillRemaining(child: child)],
     );
   }
-}
-
-// ==========================================
-// 🛠️ Interactive Previews (Flutter 3.44+)
-// ==========================================
-
-@Preview(name: 'Empty State View', group: 'Feedback')
-Widget emptyWidgetPreview() {
-  return const Scaffold(body: EmptyWidget());
 }

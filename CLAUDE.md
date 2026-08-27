@@ -57,6 +57,17 @@ flutter test test/debounce_test.dart   # a single test file
 ### Repo Tooling (run from root)
 
 ```bash
+# Enforce the layering rules — Gate 1 of pr_quality_check.yml, exits 1 on violation.
+# The only check that can see layering; analysis_options.yaml knows nothing about it.
+dart tools/arch_check/check.dart
+dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R6)
+
+# Which packages are sample code, and how to delete one safely.
+# Source of truth: tools/sample_manifest.yaml
+dart tools/sample_cleanup/remove_sample.dart --list
+dart tools/sample_cleanup/remove_sample.dart auth           # dry-run (default)
+dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
+
 # Generate a new module
 # Syntax: dart tools/module_generator/generate.dart <type> <name> [<dir>] [<SM>] [<route>]
 # <type>: 1=Feature, 2=Domain, 3=Data, 4=Core, 5=Custom
@@ -422,7 +433,7 @@ abstract class AuthModule {
 
 ---
 
-## Responsive UI (flutter_screenutil — Strict)
+## Responsive UI (flutter_screenutil_plus — Strict)
 
 - **ALL sizing** (width, height, padding, margin, font size, border radius) MUST use ScreenUtil: `.w`, `.h`, `.sp`, `.r`
 - **FORBIDDEN:** Raw doubles in layout (e.g., `SizedBox(height: 24)` → must be `SizedBox(height: 24.h)`)

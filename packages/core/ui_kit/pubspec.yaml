@@ -30,7 +30,7 @@ dependencies:
   gradient_borders: "^1.0.4"
   jumping_dot: "^0.0.7"
   refresh_sticky: "^0.1.2"
-  flutter_screenutil: ^5.9.3
+  flutter_screenutil_plus: "^1.6.0"
   dynamic_logger: "^0.5.0"
 
 dev_dependencies:

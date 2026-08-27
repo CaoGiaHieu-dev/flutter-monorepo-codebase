@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 class SplashPage extends StatelessWidget {
   const SplashPage({super.key});
@@ -20,24 +21,24 @@ class SplashPage extends StatelessWidget {
           // High-fidelity Glassmorphic Card Content
           Center(
             child: ClipRRect(
-              borderRadius: AppRadius.xxlRadius,
+              borderRadius: AppRadius.xxlRadius(context),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
                 child: Container(
-                  width: 280,
-                  height: 280,
-                  padding: EdgeInsets.all(AppSpacing.xl),
+                  width: context.w(280),
+                  height: context.w(280),
+                  padding: EdgeInsets.all(AppSpacing.xl(context)),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: AppRadius.xxlRadius,
+                    borderRadius: AppRadius.xxlRadius(context),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.25),
-                      width: 1.5,
+                      width: context.w(1.5),
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 30,
+                        blurRadius: context.r(30),
                         offset: const Offset(0, 10),
                       ),
                     ],
@@ -47,21 +48,21 @@ class SplashPage extends StatelessWidget {
                     children: [
                       // Glowing Brand Logo
                       Container(
-                        padding: EdgeInsets.all(AppSpacing.md),
+                        padding: EdgeInsets.all(AppSpacing.md(context)),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
                               color: Colors.white.withValues(alpha: 0.1),
-                              blurRadius: 20,
-                              spreadRadius: 2,
+                              blurRadius: context.r(20),
+                              spreadRadius: context.r(2),
                             ),
                           ],
                         ),
-                        child: const FlutterLogo(size: 64),
+                        child: FlutterLogo(size: context.w(64)),
                       ),
-                      SizedBox(height: AppSpacing.lg),
+                      SizedBox(height: AppSpacing.lg(context)),
                       // Styled Premium Typography
                       Text(
                         'Template',
@@ -72,7 +73,7 @@ class SplashPage extends StatelessWidget {
                               letterSpacing: 2.0,
                             ),
                       ),
-                      SizedBox(height: AppSpacing.sm),
+                      SizedBox(height: AppSpacing.sm(context)),
                       Text(
                         'Clean Codebase Architecture',
                         style: AppTextStyles.bodyMediumStyle(context).copyWith(
@@ -83,12 +84,12 @@ class SplashPage extends StatelessWidget {
                       ),
                       const Spacer(),
                       // Sleek Spinner
-                      const SizedBox(
-                        width: 24,
-                        height: 24,
+                      SizedBox(
+                        width: context.w(24),
+                        height: context.w(24),
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
+                          strokeWidth: context.w(2.5),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
                             Colors.white,
                           ),
                         ),

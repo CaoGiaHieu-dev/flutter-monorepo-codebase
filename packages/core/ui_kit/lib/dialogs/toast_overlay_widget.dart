@@ -1,6 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 class ToastOverlayWidget extends StatelessWidget {
   const ToastOverlayWidget({super.key, required this.content});
@@ -12,12 +12,12 @@ class ToastOverlayWidget extends StatelessWidget {
     return Positioned.fill(
       child: Center(
         child: Container(
-          constraints: BoxConstraints(maxWidth: context.width - (16.w * 2)),
+          constraints: BoxConstraints(maxWidth: context.width - (context.w(16) * 2)),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4.r),
+            borderRadius: context.borderRadius(all: 4),
             color: context.colors.textPrimary.withValues(alpha: 0.4),
           ),
-          padding: EdgeInsets.symmetric(horizontal: 28.w, vertical: 12.h),
+          padding: context.edgeInsets(horizontal: 28, vertical: 12),
           child: Text(
             content,
             style: AppTextStyles.bodyMediumStyle(

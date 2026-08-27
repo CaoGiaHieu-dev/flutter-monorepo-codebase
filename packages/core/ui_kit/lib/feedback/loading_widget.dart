@@ -1,6 +1,5 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
 
 /// A reusable loading widget that displays a centered circular progress indicator
 ///
@@ -68,20 +67,4 @@ class LoadingWidget extends StatelessWidget {
       ),
     );
   }
-}
-
-// ==========================================
-// 🛠️ Interactive Previews (Flutter 3.44+)
-// ==========================================
-
-@Preview(name: 'Default Loading Indicator', group: 'Feedback')
-Widget loadingWidgetPreview() {
-  return const Scaffold(body: LoadingWidget());
-}
-
-@Preview(name: 'Custom Colored Loading', group: 'Feedback')
-Widget loadingWidgetCustomPreview() {
-  return Scaffold(
-    body: LoadingWidget(color: Colors.blue.withValues(alpha: 0.1)),
-  );
 }

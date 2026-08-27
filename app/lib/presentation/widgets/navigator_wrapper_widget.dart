@@ -21,8 +21,9 @@ import '../providers/deeplink_provider.dart';
 /// treats the app as signed out, and boot falls through to the registered
 /// entry location instead of throwing.
 ///
-/// (`feature_shared` is still imported for [AppOverlay]; it is a shared UI
-/// library rather than a removable feature.)
+/// (`core_ui_kit` is still imported for [AppOverlay]; it lives under
+/// `packages/core/` because it is a shared UI library, not a removable
+/// feature.)
 class NavigatorWrapperWidget extends StatefulWidget {
   final Widget child;
 

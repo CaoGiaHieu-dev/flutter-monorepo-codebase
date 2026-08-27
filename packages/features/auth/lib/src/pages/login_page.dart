@@ -4,7 +4,7 @@ import 'package:core_di/core_di.dart';
 import 'package:core_ui_kit/buttons/custom_button.dart';
 import 'package:core_ui_kit/dialogs/app_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 import '../extensions/extensions.dart';
@@ -97,12 +97,12 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: context.colorScheme.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(24.w),
+          padding: EdgeInsets.all(context.w(24)),
           child: Consumer<AuthProvider>(
             builder: (context, authProvider, child) {
               return Column(
                 children: [
-                  SizedBox(height: 40.h),
+                  SizedBox(height: context.h(40)),
 
                   // Header
                   AuthHeaderWidget(
@@ -110,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
                     subtitle: context.l10nAuth.sign_in_subtitle,
                   ),
 
-                  SizedBox(height: 40.h),
+                  SizedBox(height: context.h(40)),
 
                   // Login form
                   AuthFormWidget(
@@ -121,7 +121,7 @@ class _LoginPageState extends State<LoginPage> {
                     onSubmit: _onLoginPressed,
                   ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: context.h(32)),
 
                   CustomButton.rectangle(
                     onPressed: () {
@@ -135,7 +135,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: context.h(32)),
 
                   // Social login
                   AuthSocialWidget(
@@ -143,7 +143,7 @@ class _LoginPageState extends State<LoginPage> {
                     onApplePressed: _onApplePressed,
                   ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: context.h(32)),
 
                   // Footer
                   AuthFooterWidget(
@@ -155,7 +155,7 @@ class _LoginPageState extends State<LoginPage> {
                     onForgotPasswordPressed: _onForgotPasswordPressed,
                   ),
 
-                  SizedBox(height: 40.h),
+                  SizedBox(height: context.h(40)),
                 ],
               );
             },

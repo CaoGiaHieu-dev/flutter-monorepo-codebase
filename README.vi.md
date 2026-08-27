@@ -30,7 +30,6 @@ graph TD
         FeatSplash["splash"]:::feature
         FeatAuth["auth"]:::feature
         FeatDash["dashboard"]:::feature
-        FeatShared["shared"]:::feature
     end
 
     subgraph DataLayer ["🔌 Data Layer (packages/data/*)"]
@@ -53,6 +52,7 @@ graph TD
         CoreStore["core_storage"]:::core
         CoreDB["core_database"]:::core
         CoreDI["core_di"]:::core
+        CoreKit["core_ui_kit"]:::core
     end
 
     %% Cross-layer Relationships

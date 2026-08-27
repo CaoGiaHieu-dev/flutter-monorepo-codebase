@@ -80,7 +80,7 @@ Version thư viện **không bao giờ** được viết tay vào `pubspec.yaml`
 
 ```bash
 # 1. Sửa pubspec_dependencies.yaml
-# 2. Đẩy version xuống toàn bộ 23 package:
+# 2. Đẩy version xuống mọi thành viên workspace:
 dart tools/dependency_sync.dart
 
 # Chỉ kiểm tra — thoát mã 1 nếu có sai lệch. Dùng cho CI / pre-commit:

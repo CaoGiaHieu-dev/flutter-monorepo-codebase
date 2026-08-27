@@ -1,8 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widget_previews.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 class CustomInputField extends StatefulWidget {
   const CustomInputField({
@@ -71,7 +70,7 @@ class _CustomInputFieldState extends State<CustomInputField> {
     final border =
         widget.border ??
         OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.r),
+          borderRadius: context.borderRadius(all: 8),
           borderSide: BorderSide(color: context.colors.surfaceVariant),
         );
     return TextFormField(
@@ -87,8 +86,8 @@ class _CustomInputFieldState extends State<CustomInputField> {
           }) {
             if (widget.showCounter) {
               return Container(
-                padding: EdgeInsets.only(bottom: widget.paddingBottom ?? 10.h),
-                transform: Matrix4.translationValues(-10.h, -30.h, 0),
+                padding: EdgeInsets.only(bottom: widget.paddingBottom ?? context.h(10)),
+                transform: Matrix4.translationValues(-context.h(10), -context.h(30), 0),
                 child: Text(
                   '$currentLength/$maxLength',
                   style: AppTextStyles.labelMediumStyle(
@@ -144,52 +143,14 @@ class _CustomInputFieldState extends State<CustomInputField> {
         fillColor: context.colors.surface,
         filled: true,
         prefix: widget.prefixIcon == null
-            ? Padding(padding: EdgeInsetsDirectional.only(start: 12.w))
+            ? Padding(padding: EdgeInsetsDirectional.only(start: context.w(12)))
             : null,
         suffix: widget.suffixIcon == null
-            ? Padding(padding: EdgeInsetsDirectional.only(end: 12.w))
+            ? Padding(padding: EdgeInsetsDirectional.only(end: context.w(12)))
             : null,
         contentPadding:
-            widget.contentPadding ?? EdgeInsets.symmetric(vertical: 11.h),
+            widget.contentPadding ?? context.edgeInsets(vertical: 11),
       ),
     );
   }
-}
-
-// ==========================================
-// 🛠️ Interactive Previews (Flutter 3.44+)
-// ==========================================
-
-@Preview(name: 'Email Input Field', group: 'Shared Inputs')
-Widget customInputFieldTextPreview() {
-  return const Scaffold(
-    body: Padding(
-      padding: EdgeInsets.all(16.0),
-      child: Center(
-        child: CustomInputField(
-          hintText: 'Enter your email address',
-          prefixIcon: Icon(Icons.email_outlined),
-          keyboardType: TextInputType.emailAddress,
-        ),
-      ),
-    ),
-  );
-}
-
-@Preview(name: 'Secure Password Input', group: 'Shared Inputs')
-Widget customInputFieldPasswordPreview() {
-  return const Scaffold(
-    body: Padding(
-      padding: EdgeInsets.all(16.0),
-      child: Center(
-        child: CustomInputField(
-          hintText: 'Enter secure password',
-          prefixIcon: Icon(Icons.lock_outline),
-          obscureText: true,
-          showCounter: true,
-          maxLength: 20,
-        ),
-      ),
-    ),
-  );
 }

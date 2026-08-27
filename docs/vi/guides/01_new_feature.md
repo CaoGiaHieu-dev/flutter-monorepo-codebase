@@ -410,8 +410,27 @@ App phải chạy được khi xoá bất kỳ feature nào. Gỡ theo đúng th
 4. Thư mục `packages/features/<tên>/`
 5. `flutter pub get && dart run build_runner build -d --workspace`
 
-Không cần sửa gì thêm: mọi thứ app shell tiêu thụ lúc chạy đều phân giải qua hợp đồng `core_di`
-kèm fallback `getAllOrEmpty` / `getItOrNull`.
+**Hãy để tool làm.** `remove_sample.dart` thực hiện cả năm bước trên, và quan trọng hơn là nó
+nói cho bạn biết điều mà danh sách thủ công kia không nói:
+
+```bash
+dart tools/sample_cleanup/remove_sample.dart --list   # cái nào sample, cái nào framework
+dart tools/sample_cleanup/remove_sample.dart auth     # dry-run, không ghi gì
+dart tools/sample_cleanup/remove_sample.dart auth --apply
+```
+
+> [!CAUTION]
+> **Năm bước trên không phải lúc nào cũng đủ.** App shell thì suy biến an toàn — nó phân giải mọi
+> thứ qua hợp đồng `core_di` kèm fallback `getAllOrEmpty` / `getItOrNull` — nhưng *các sample khác*
+> có thể đang phụ thuộc cứng vào cái bạn định xoá. Gỡ `auth` làm vỡ hai chỗ:
+>
+> | Nơi tiêu thụ | Kiểu phụ thuộc | Hậu quả |
+> |---|---|---|
+> | `feature_settings` (`settings_page.dart:60`) | `getIt<IAuthActionHandler>()` — bản **ném lỗi** | Bấm logout là crash lúc chạy |
+> | `feature_home` (`home_profile_bloc.dart:35`) | `IAuthStatusStream` qua **constructor injection** | DI không dựng nổi `HomeProfileBloc` |
+>
+> Dry-run in ra cả hai chỗ này, cộng các contract trong `core_di` trở thành code chết. Hãy đọc nó
+> trước khi xoá bất cứ thứ gì.
 
 > [!NOTE]
 > Việc `injection.dart` gọi tên các package feature là **tham chiếu cứng có chủ đích duy nhất** của

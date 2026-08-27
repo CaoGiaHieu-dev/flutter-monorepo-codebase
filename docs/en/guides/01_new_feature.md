@@ -412,8 +412,28 @@ The app must keep running when any feature is deleted. Remove in this order:
 4. The `packages/features/<name>/` directory
 5. `flutter pub get && dart run build_runner build -d --workspace`
 
-Nothing else should need editing: everything the shell consumes at runtime resolves through
-`core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
+**Let the tool do it.** `remove_sample.dart` performs all five steps and, more importantly,
+tells you what the manual list above cannot:
+
+```bash
+dart tools/sample_cleanup/remove_sample.dart --list   # what is sample vs framework
+dart tools/sample_cleanup/remove_sample.dart auth     # dry-run, writes nothing
+dart tools/sample_cleanup/remove_sample.dart auth --apply
+```
+
+> [!CAUTION]
+> **The five steps are not always sufficient.** The shell degrades gracefully — it resolves
+> everything through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks — but
+> *other samples* may hold a hard dependency on the one you are deleting. Removing `auth` breaks
+> two of them:
+>
+> | Consumer | How it couples | Result |
+> |---|---|---|
+> | `feature_settings` (`settings_page.dart:60`) | `getIt<IAuthActionHandler>()` — the **throwing** lookup | Tapping logout throws at runtime |
+> | `feature_home` (`home_profile_bloc.dart:35`) | `IAuthStatusStream` via **constructor injection** | DI cannot build `HomeProfileBloc` at all |
+>
+> The dry-run prints these, plus the `core_di` contracts that become dead code. Read it before
+> deleting anything.
 
 > [!NOTE]
 > `injection.dart` naming feature packages is the composition root's **one intentional hard

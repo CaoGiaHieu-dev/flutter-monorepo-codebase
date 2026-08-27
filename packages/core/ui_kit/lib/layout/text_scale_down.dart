@@ -1,8 +1,6 @@
 import 'dart:ui' as ui;
 
-import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
 
 class TextScaleDown extends StatelessWidget {
   const TextScaleDown(
@@ -65,26 +63,4 @@ class TextScaleDown extends StatelessWidget {
       ),
     );
   }
-}
-
-// ==========================================
-// 🛠️ Interactive Previews (Flutter 3.44+)
-// ==========================================
-
-@Preview(name: 'Default', group: 'Text Scale Down')
-Widget textScaleDownPreview() {
-  return Builder(
-    builder: (context) {
-      return Center(
-        child: Container(
-          color: Colors.blue.shade100,
-          width: 100, // Small width to force scaling down
-          child: TextScaleDown(
-            'This is a very long text that will scale down to fit the small container.',
-            style: AppTextStyles.bodyLargeStyle(context),
-          ),
-        ),
-      );
-    },
-  );
 }

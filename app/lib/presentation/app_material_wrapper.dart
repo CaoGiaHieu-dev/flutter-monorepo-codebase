@@ -121,8 +121,8 @@ class AppMaterialWrapper extends StatelessWidget {
                   context,
                   _buildMaterialApp(
                     themeMode: themeProvider.themeMode,
-                    theme: themeProvider.currentTheme,
-                    darkTheme: themeProvider.darkTheme,
+                    theme: themeProvider.currentTheme(context),
+                    darkTheme: themeProvider.darkTheme(context),
                     locale: languageProvider.locale,
                   ),
                 ),

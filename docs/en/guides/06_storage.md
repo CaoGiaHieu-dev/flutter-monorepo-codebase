@@ -319,7 +319,7 @@ class ThemeStorageImpl implements IThemeStorage {
 Consumers (here `ThemeProvider` in `core_base_ui`) depend on `IThemeStorage` only. They cannot see the key, the backend, or the `StorageValue`.
 
 > [!WARNING]
-> Registering an impl `as: IThemeStorage` makes it resolvable **only** as `IThemeStorage`. GetIt does not walk the supertype chain, so if a second interface must resolve to the same instance you need an explicit `@module` binding — exactly the bug that silently disabled SSL pinning; see [`08_networking.md`](08_networking.md#ssl-pinning).
+> Registering an impl `as: IThemeStorage` makes it resolvable **only** as `IThemeStorage`. GetIt does not walk the supertype chain, so if a second interface must resolve to the same instance you need an explicit `@module` binding — exactly the bug that silently disabled SSL pinning; see [`08_networking.md`](08_networking.md#5-ssl-pinning).
 
 ---
 

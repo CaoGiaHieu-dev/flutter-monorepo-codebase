@@ -9,17 +9,17 @@ Tài liệu này trả lời: **có những pipeline nào, mỗi cái làm gì, 
 
 ## 1. Danh sách pipeline
 
-Template có **bốn** pipeline — ba trên GitHub Actions, một trên Azure DevOps.
+Template có **năm** pipeline — bốn trên GitHub Actions, một trên Azure DevOps.
 
 | Pipeline | File | Kích hoạt | Đầu ra |
 |:---|:---|:---|:---|
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Thủ công (`workflow_dispatch`) | APK release đã ký → Firebase App Distribution |
 | AI Code Review | `.github/workflows/code_review.yml` | PR vào `main`/`develop`/`master` + thủ công | Báo cáo Markdown + comment trên PR |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Thủ công (`workflow_dispatch`) | Uỷ quyền cho các lane Fastlane |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — chặn merge |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (chỉ chạy tay) | APK prod → Firebase |
 
-> [!WARNING]
-> `.github/workflows/README.md` mô tả một workflow thứ tư tên `pr_quality_check.yml` chạy analyze, test và coverage như một "quality gate". **File đó không tồn tại.** Thư mục chỉ có `code_review.yml`, `fastlane.yml` và `flutter_build.yml`. Hiện **không có cổng kiểm tra chất lượng tự động nào** trên pull request — xem [§6](#6-thiếu-quality-gate).
+`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Nó chạy bốn gate chặn theo thứ tự — luật kiến trúc, `flutter analyze`, test từng package, lệch catalog — cộng một audit chỉ cảnh báo. Xem [§6](#6-quality-gate).
 
 ---
 
@@ -74,31 +74,12 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 **Nó làm gì**: lấy danh sách file thay đổi bằng `tj-actions/changed-files`, chạy reviewer, upload báo cáo Markdown làm artifact (giữ 30 ngày), rồi phân tích báo cáo đó và đăng **comment inline đúng dòng** khi dòng đó nằm trong diff của PR. Phát hiện nằm ngoài diff được gom thành comment riêng theo từng file.
 
-### Hai lỗi khiến workflow này không chạy được
+### Một điểm cần lưu ý
 
-> [!CAUTION]
-> **Workflow này fail ở bước "Get dependencies" mọi lần chạy.**
->
-> ```yaml
-> - name: 📦 Get dependencies
->   run: |
->       chmod +x tools/workspace_setup/configure.sh
->       ./tools/workspace_setup/configure.sh
-> ```
->
-> `tools/workspace_setup/configure.sh` **không tồn tại** — thư mục chỉ có `configure.dart`. Thay cả hai dòng bằng:
->
-> ```yaml
-> - name: 📦 Get dependencies
->   run: dart tools/workspace_setup/configure.dart
-> ```
->
-> (`flutter_build.yml` đã được sửa theo cách này rồi; workflow này bị bỏ sót.)
+Bước cài dependency chạy `dart tools/workspace_setup/configure.dart`, và `flutter_version` mặc định `3.47.1`, khớp ràng buộc trong `pubspec.yaml` gốc.
 
-> [!WARNING]
-> **Phiên bản Flutter mặc định thấp hơn yêu cầu.** `flutter_version` mặc định `"3.47.0"`, trong khi `pubspec.yaml` gốc yêu cầu `flutter: ">=3.47.1"`. Chạy tay mà giữ mặc định sẽ fail ở `pub get`. Đổi mặc định thành `3.47.1`.
->
-> Thêm nữa, tham số này chỉ có khi sự kiện là `workflow_dispatch`. Với sự kiện `pull_request`, `github.event.inputs.flutter_version` rỗng, nên `subosito/flutter-action@v2` nhận `flutter-version` rỗng và tự lấy bản stable mới nhất.
+> [!NOTE]
+> `flutter_version` chỉ được bind ở `workflow_dispatch`. Với sự kiện `pull_request` thì `github.event.inputs.flutter_version` rỗng, nên `subosito/flutter-action@v2` nhận `flutter-version` rỗng và tự lấy bản stable mới nhất thay vì bản đã pin. Vô hại với một AI review; nhưng đừng sao chép pattern này sang pipeline có tạo artefact.
 
 ### Bước "Fail on Critical Issues" không hề fail
 
@@ -121,35 +102,12 @@ fi
 
 Chạy tay, giao toàn bộ việc build cho Fastlane. Cài Java 17, Ruby 3.3 (bỏ qua nếu `self-hosted`), Flutter (kênh `stable`, **không ghim phiên bản**), cài Fastlane và plugin `firebase_app_distribution`, rồi gọi một lane.
 
-> [!CAUTION]
-> **Workflow này gọi một lane không tồn tại.**
->
-> ```yaml
-> run: |
->   fastlane flutter_build \
->     flutter_version:... version:... flavor:... \
->     auto_increment:... build_number:...
-> ```
->
-> Không có lane nào tên `flutter_build`. Lane cross-platform thật tên là **`flutter`** (khai trong `app/fastlane/modules/flutter_lanes.rb` là `lane :flutter do |options|`). Fastlane sẽ dừng với lỗi *"Could not find lane 'flutter_build'"*.
->
-> Nó còn truyền `auto_increment:` mà **không lane nào đọc**. Tự tăng build number được kích hoạt bằng cách truyền `build_number:auto` — xem [`02_fastlane_release.md`](02_fastlane_release.md#build-number).
->
-> Lệnh đúng:
-> ```yaml
-> run: |
->   fastlane flutter \
->     flutter_version:${{ inputs.flutter_version }} \
->     version:${{ inputs.version }} \
->     flavor:${{ inputs.flavor }} \
->     change_log:"${{ inputs.change_log }}" \
->     build_type:${{ inputs.build_type }} \
->     distribute_store:${{ inputs.distribute_store }} \
->     distribute_firebase:${{ inputs.distribute_firebase }} \
->     build_number:${{ inputs.build_number || 'auto' }}
-> ```
+Nó gọi đúng lane cross-platform thật là `fastlane flutter` (khai trong `app/fastlane/modules/flutter_lanes.rb` dạng `lane :flutter do |options|`), và `flutter_version` mặc định `3.47.1`.
 
-Tham số `flutter_version` cũng mặc định `"3.47.0"` — cùng vấn đề với `code_review.yml`. Và vì bước setup Flutter chỉ truyền `channel: stable` mà không truyền `flutter-version`, tham số này thực ra không tới được toolchain; nó được chuyển tiếp cho Fastlane để quyết định có dùng `fvm` hay không.
+> [!WARNING]
+> Lệnh gọi vẫn truyền `auto_increment:` (`fastlane.yml:99`), và **không lane nào đọc nó** — `grep -rn auto_increment app/fastlane/` không trả về gì. Auto-increment được kích hoạt bằng cách truyền `build_number:auto`; xem [`02_fastlane_release.md`](02_fastlane_release.md). Tham số này bị bỏ qua âm thầm, nên một lần dispatch trông cậy vào nó sẽ nhận đúng `build_number` đã truyền chứ không phải số đã tăng.
+
+Vì bước setup Flutter chỉ truyền `channel: stable` mà không truyền `flutter-version`, tham số `flutter_version` không tới được toolchain; nó được chuyển tiếp cho Fastlane để quyết định có dùng `fvm` hay không.
 
 ---
 
@@ -163,74 +121,39 @@ Hai stage trên pool self-hosted tên `codebase`. `trigger: none` nên chỉ ch�
 
 Các biến pipeline phải khai trong tab Variables của Azure: `flutter-version`, `flutterPath`, `version`, `numberBuild`, `note`, và `FIREBASE-ANDROID-ID`.
 
-### Ba lỗi
+### Một lỗi còn lại
 
-> [!CAUTION]
-> **1 — Bước distribute upload một tên file không bao giờ được tạo ra.**
->
-> Bước build publish `app-prod-release.apk` (đúng, vì build truyền `--flavor=prod`), nhưng stage Distribute lại chạy:
->
-> ```bash
-> firebase appdistribution:distribute app-release.apk --app $(FIREBASE-ANDROID-ID) ...
-> ```
->
-> `app-release.apk` không tồn tại trong artifact vừa tải. Sửa thành `app-prod-release.apk`.
-
-> [!CAUTION]
-> **2 — "Flutter Config" gọi đúng cái script không tồn tại đó, và còn viết sai cú pháp.**
->
-> ```yaml
-> script: >-
->   chmod +x tools/workspace_setup/configure.sh
->   ./tools/workspace_setup/configure.sh
-> ```
->
-> Hai vấn đề. `configure.sh` không tồn tại. Và `>-` là *folded scalar* của YAML — nó nối hai dòng bằng dấu cách thành một lệnh duy nhất `chmod +x tools/workspace_setup/configure.sh ./tools/workspace_setup/configure.sh`, nên kể cả nếu file có tồn tại thì nó cũng chỉ được chmod chứ không bao giờ được chạy. Thay toàn bộ phần `script:` bằng `dart tools/workspace_setup/configure.dart`.
+Tên file artefact và lệnh gọi `configure.dart` giờ đều đúng: build publish `app-prod-release.apk` và stage Distribute tải lên đúng tên đó, còn "Flutter Config" chạy `dart tools/workspace_setup/configure.dart`.
 
 > [!WARNING]
-> **3 — `.env` không bao giờ được tạo, nhưng build lại cần nó.**
+> **`.env` không bao giờ được tạo, nhưng build lại cần nó.**
 >
-> Bước build truyền `--dart-define-from-file=../.env`, nhưng không bước nào trong pipeline sinh ra `.env`. Hai task `DownloadSecureFile@1` chỉ lấy `key.properties` và `keystore.jks`. Cần thêm một secure file thứ ba cho `.env` (và copy nó về `$(Build.SourcesDirectory)`), tương tự cách `flutter_build.yml` xử lý `secrets.ENV`.
+> Build truyền `--dart-define-from-file=../.env` (`azure-ci-cd.yml:104`), nhưng không bước nào trong pipeline sinh ra `.env`. Hai task `DownloadSecureFile@1` chỉ lấy `key.properties` và `keystore.jks`. Hãy thêm một secure file thứ ba cho `.env` rồi copy vào `$(Build.SourcesDirectory)`, giống cách `flutter_build.yml` làm với `secrets.ENV`. Thiếu nó thì mọi `String.fromEnvironment` rơi về giá trị rỗng mặc định.
 
-Phần build iOS và distribute iOS có sẵn nhưng bị comment toàn bộ.
+Các task build và distribute cho iOS có mặt nhưng đã bị comment toàn bộ.
 
 ---
 
-## 6. Thiếu quality gate
+## 6. Quality gate
 
-> [!WARNING]
-> **Không pipeline nào chạy `flutter analyze` hay `flutter test` trước khi build và phát hành.**
->
-> `flutter_build.yml` đi thẳng từ cài dependency sang `flutter build apk` rồi gửi artifact cho tester. Một thay đổi làm hỏng analyze hoặc vỡ toàn bộ test vẫn sẽ được build, ký và phân phối. File `pr_quality_check.yml` mà `.github/workflows/README.md` quảng cáo là lo việc này thì không tồn tại.
+`pr_quality_check.yml` chạy trên mọi pull request vào `main`, `develop` hoặc `master`. Đây là pipeline duy nhất có thể chặn merge.
 
-Thêm hai bước sau vào `flutter_build.yml`, nằm giữa bước 4 (Install Dependencies) và bước 7 (Build APK):
+| # | Gate | Lệnh | Chặn merge |
+|:--|:---|:---|:---|
+| 1 | Luật kiến trúc | `dart tools/arch_check/check.dart` | có |
+| 2 | Phân tích tĩnh | `flutter analyze` | có |
+| 3 | Test theo từng package | `flutter test` trong mỗi `packages/*/*/test` | có |
+| 4 | Lệch catalog version | `dart tools/dependency_sync.dart --check` | có |
+| — | Audit dependency thừa | `dart tools/unused_checker/check_unused_packages.dart` | không (chỉ cảnh báo) |
 
-```yaml
-      - name: Analyze
-        run: flutter analyze
+Gate 1 chạy đầu tiên là có chủ đích: nó chỉ đọc import và pubspec, không cần codegen, xong trong khoảng 200 ms — nên lỗi phân tầng fail sau vài giây thay vì sau cả chu kỳ analyze và test. Nó cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
 
-      - name: Test
-        run: |
-          set -e
-          for pkg in packages/core/* packages/data/* packages/domain/* packages/features/*; do
-            if [ -d "$pkg/test" ]; then
-              echo "::group::flutter test $pkg"
-              (cd "$pkg" && flutter test)
-              echo "::endgroup::"
-            fi
-          done
-```
+Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm ở `packages/<layer>/<pkg>/test/`, chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
 
-Phải dùng vòng lặp vì đây là Pub Workspace: test nằm riêng theo từng package tại `packages/<layer>/<pkg>/test/`, chạy `flutter test` một lần ở gốc sẽ không quét tới.
+> [!IMPORTANT]
+> `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Template đã dính đúng lỗi này: chuyển `AppFailure` sang package khác làm `bloc_view_state.freezed.dart` tham chiếu một type nó không còn thấy — analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.
 
-Nên thêm luôn bước kiểm tra lệch version catalog — rẻ mà chặn được cả một nhóm lỗi merge:
-
-```yaml
-      - name: Check dependency catalog
-        run: dart tools/dependency_sync.dart --check
-```
-
-`--check` trả mã lỗi khác 0 khi version ở package nào đó lệch khỏi `pubspec_dependencies.yaml`.
+**Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 1–4 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
 
 ---
 
@@ -269,11 +192,12 @@ Chạy những lệnh này trước khi push; chúng đúng là những lệnh p
 # 1. Thiết lập toàn workspace — tương đương bước "Install Dependencies" của CI
 dart tools/workspace_setup/configure.dart
 
-# 2. Quality gate mà CI đang thiếu
+# 2. Đúng các gate mà pr_quality_check.yml chạy, theo đúng thứ tự
+dart tools/arch_check/check.dart
 flutter analyze
 dart tools/dependency_sync.dart --check
 
-# 3. Test theo từng package (đúng vòng lặp đề xuất ở §6)
+# 3. Test theo từng package (gate 3 — xem §6)
 (cd packages/core/storage && flutter test)
 (cd packages/core/database && flutter test)
 # ...lặp cho mọi package có thư mục test/
@@ -294,19 +218,20 @@ Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configu
 
 ## 9. Danh sách việc cần sửa
 
-Tổng hợp mọi thứ ở trên thành checklist:
+Đã sửa xong trong template này:
 
-- [ ] `code_review.yml` — thay `configure.sh` bằng `dart tools/workspace_setup/configure.dart`
-- [ ] `code_review.yml` — nâng mặc định `flutter_version` lên `3.47.1`
-- [ ] `code_review.yml` — quyết định có bỏ comment `exit 1` hay không
-- [ ] `fastlane.yml` — đổi lane `flutter_build` → `flutter`, bỏ `auto_increment:`
-- [ ] `fastlane.yml` — nâng mặc định `flutter_version` lên `3.47.1`
-- [ ] `azure-ci-cd.yml` — distribute `app-prod-release.apk`, không phải `app-release.apk`
-- [ ] `azure-ci-cd.yml` — thay script `configure.sh` bị folded bằng `dart tools/workspace_setup/configure.dart`
-- [ ] `azure-ci-cd.yml` — thêm secure file + bước copy cho `.env`
-- [ ] `flutter_build.yml` — thêm bước analyze + test trước khi build
-- [ ] `flutter_build.yml` — cân nhắc `ubuntu-latest` thay cho `macos-latest`
-- [ ] `.github/workflows/README.md` — xoá phần `pr_quality_check.yml`, hoặc bổ sung workflow đó
+- [x] `code_review.yml` — dùng `dart tools/workspace_setup/configure.dart`; `flutter_version` mặc định `3.47.1`
+- [x] `fastlane.yml` — gọi đúng lane `flutter`; `flutter_version` mặc định `3.47.1`
+- [x] `azure-ci-cd.yml` — distribute `app-prod-release.apk`; "Flutter Config" chạy `configure.dart`
+- [x] `pr_quality_check.yml` — đã tồn tại và chặn mọi PR (luật kiến trúc, analyze, test, lệch catalog)
+
+Còn lại, theo thứ tự ưu tiên:
+
+- [ ] `azure-ci-cd.yml` — thêm secure file + bước copy cho `.env`; build prod hiện không nhận được dart-define nào
+- [ ] `fastlane.yml` — bỏ tham số `auto_increment:` đang bị bỏ qua, hoặc cho một lane đọc nó
+- [ ] `flutter_build.yml` — chạy bốn gate của `pr_quality_check.yml` trước khi build, để một lần dispatch thủ công không thể ship code chưa kiểm
+- [ ] `code_review.yml` — quyết định có bỏ comment `exit 1` hay không (chỉ sau khi tin tưởng tỷ lệ báo nhầm của nó)
+- [ ] `flutter_build.yml` — cân nhắc `ubuntu-latest` thay cho `macos-latest` với build chỉ cho Android
 
 ---
 

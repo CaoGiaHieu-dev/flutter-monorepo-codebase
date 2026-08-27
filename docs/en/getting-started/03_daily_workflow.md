@@ -80,7 +80,7 @@ Package versions are **never** written by hand into a package's `pubspec.yaml`. 
 
 ```bash
 # 1. Edit pubspec_dependencies.yaml
-# 2. Push the versions down into all 23 packages:
+# 2. Push the versions down into every workspace member:
 dart tools/dependency_sync.dart
 
 # Verify only — exits 1 on any mismatch. Use in CI / pre-commit:

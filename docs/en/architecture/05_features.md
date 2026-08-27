@@ -172,7 +172,7 @@ What matters on the feature side is the **caller's** obligation:
 CustomButton(width: 120.w, height: 44.h)
 ```
 
-`core_ui_kit` widgets never apply `flutter_screenutil` internally. If you pass an already-scaled value they would double-scale it, so scaling is always done here, at the call site.
+`core_ui_kit` widgets never apply `flutter_screenutil_plus` internally. If you pass an already-scaled value they would double-scale it, so scaling is always done here, at the call site.
 
 ## 6. UI controller lifecycle
 

@@ -1,31 +1,43 @@
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
+/// Responsive spacing scale.
+///
+/// Every accessor takes a [BuildContext] and resolves through
+/// `flutter_screenutil_plus`' context-aware extensions (`context.w` /
+/// `context.h`) — the form the package documents as the faster path, since it
+/// scopes rebuilds to the widgets that actually read a value. Taking a context
+/// also lines this up with `AppTextStyles`, which has always required one.
+///
+/// Use [rawXxs] and friends when there is no context to scale against —
+/// canvas painting or tests.
 class AppSpacing {
   AppSpacing._();
 
-  // Proportional responsive spacing (based on width .w - standard for paddings/margins to maintain aspect ratio)
-  static double get xxs => 2.w;
-  static double get xs => 4.w;
-  static double get sm => 8.w;
-  static double get md => 12.w;
-  static double get lg => 16.w;
-  static double get xl => 24.w;
-  static double get xxl => 32.w;
-  static double get xxxl => 48.w;
-  static double get huge => 64.w;
+  // Width-proportional spacing — the default for padding and margins, so a
+  // layout keeps its aspect ratio across screen widths.
+  static double xxs(BuildContext context) => context.w(rawXxs);
+  static double xs(BuildContext context) => context.w(rawXs);
+  static double sm(BuildContext context) => context.w(rawSm);
+  static double md(BuildContext context) => context.w(rawMd);
+  static double lg(BuildContext context) => context.w(rawLg);
+  static double xl(BuildContext context) => context.w(rawXl);
+  static double xxl(BuildContext context) => context.w(rawXxl);
+  static double xxxl(BuildContext context) => context.w(rawXxxl);
+  static double huge(BuildContext context) => context.w(rawHuge);
 
-  // Height-based responsive spacing (based on height .h - useful for vertical gaps / heights)
-  static double get xxsH => 2.h;
-  static double get xsH => 4.h;
-  static double get smH => 8.h;
-  static double get mdH => 12.h;
-  static double get lgH => 16.h;
-  static double get xlH => 24.h;
-  static double get xxlH => 32.h;
-  static double get xxxlH => 48.h;
-  static double get hugeH => 64.h;
+  // Height-proportional spacing — for vertical gaps and fixed heights.
+  static double xxsH(BuildContext context) => context.h(rawXxs);
+  static double xsH(BuildContext context) => context.h(rawXs);
+  static double smH(BuildContext context) => context.h(rawSm);
+  static double mdH(BuildContext context) => context.h(rawMd);
+  static double lgH(BuildContext context) => context.h(rawLg);
+  static double xlH(BuildContext context) => context.h(rawXl);
+  static double xxlH(BuildContext context) => context.h(rawXxl);
+  static double xxxlH(BuildContext context) => context.h(rawXxxl);
+  static double hugeH(BuildContext context) => context.h(rawHuge);
 
-  // Raw spacing values (for non-responsive contexts, canvas, or test environments)
+  // Design values, unscaled. These are the single source of the numbers above.
   static const double rawXxs = 2;
   static const double rawXs = 4;
   static const double rawSm = 8;

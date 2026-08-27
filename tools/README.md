@@ -10,6 +10,11 @@ Thư mục này chứa các công cụ CLI dành cho lập trình viên, hỗ tr
 
 ```text
 tools/
+├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
+│   └── check.dart                   # R1-R6: hướng phụ thuộc, domain thuần Dart, ranh giới feature…
+├── sample_cleanup/                  # 🧹 Phân loại và gỡ code mẫu an toàn
+│   └── remove_sample.dart           # --list / dry-run / --apply, có rollback
+├── sample_manifest.yaml             # 📑 Nguồn chân lý: package nào là sample/framework/shell
 ├── module_generator/               # 🏗️ CLI tạo module mới (Feature/Domain/Data/Core)
 │   ├── generate.dart               # Entry point chính
 │   └── src/
@@ -45,6 +50,35 @@ tools/
 ---
 
 ## 🚀 Quick Usage
+
+### 🛡️ Architecture Check (Cưỡng chế luật phân tầng)
+```bash
+# Kiểm tra 6 luật kiến trúc — exit 1 nếu có vi phạm (dùng được cho CI):
+dart tools/arch_check/check.dart
+
+# Xem mô tả đầy đủ từng luật:
+dart tools/arch_check/check.dart --help
+```
+
+Chạy trước `flutter analyze` trong CI: nó chỉ đọc import và pubspec nên xong trong ~200 ms,
+và là thứ duy nhất nhìn thấy được phân tầng — `analysis_options.yaml` không biết
+rằng core không được import feature.
+
+### 🧹 Sample Cleanup (Gỡ code mẫu)
+```bash
+# Xem package nào là sample, framework hay shell:
+dart tools/sample_cleanup/remove_sample.dart --list
+
+# Xem trước việc gỡ bundle 'auth' (mặc định dry-run, không ghi gì):
+dart tools/sample_cleanup/remove_sample.dart auth
+
+# Thực sự gỡ:
+dart tools/sample_cleanup/remove_sample.dart auth --apply
+```
+
+Dry-run in ra cả những sample khác sẽ vỡ và vỡ ở đâu — thông tin mà hướng dẫn
+gỡ feature thủ công không có.
+
 
 ### 🏗️ Module Generator (Tạo Module Mới)
 ```bash

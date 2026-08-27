@@ -319,7 +319,7 @@ class ThemeStorageImpl implements IThemeStorage {
 Bên tiêu thụ (ở đây là `ThemeProvider` trong `core_base_ui`) chỉ phụ thuộc `IThemeStorage`. Nó không thấy key, không thấy backend, không thấy `StorageValue`.
 
 > [!WARNING]
-> Đăng ký impl `as: IThemeStorage` khiến nó **chỉ** phân giải được dưới kiểu `IThemeStorage`. GetIt **không** đi ngược chuỗi supertype, nên nếu cần một interface thứ hai trỏ về cùng instance thì phải bind tường minh bằng `@module` — đây chính là lỗi đã âm thầm vô hiệu hoá SSL pinning; xem [`08_networking.md`](08_networking.md#ssl-pinning).
+> Đăng ký impl `as: IThemeStorage` khiến nó **chỉ** phân giải được dưới kiểu `IThemeStorage`. GetIt **không** đi ngược chuỗi supertype, nên nếu cần một interface thứ hai trỏ về cùng instance thì phải bind tường minh bằng `@module` — đây chính là lỗi đã âm thầm vô hiệu hoá SSL pinning; xem [`08_networking.md`](08_networking.md#5-ssl-pinning).
 
 ---
 

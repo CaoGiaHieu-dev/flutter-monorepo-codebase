@@ -302,10 +302,10 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ## 📏 14. Responsive UI & Screen Size Scaling
 
-- **Strict usage of `flutter_screenutil`**: All UI sizing, including but not limited to width, height, padding, margins, font sizes, and border radii, **MUST** be scaled using the `flutter_screenutil` extension methods.
+- **Strict usage of `flutter_screenutil_plus`**: All UI sizing, including but not limited to width, height, padding, margins, font sizes, and border radii, **MUST** be scaled using the `flutter_screenutil_plus` extension methods.
 - Specifically, you must use `.w` for widths, `.h` for heights, `.sp` for font sizes, and `.r` for border radii.
 - **ABSOLUTELY FORBIDDEN** to use raw double values (e.g., `SizedBox(height: 24)`, `fontSize: 16`, `padding: EdgeInsets.all(16)`) in UI layout constraints. Always scale them (e.g., `SizedBox(height: 24.h)`, `fontSize: 16.sp`, `padding: EdgeInsets.all(16.r)`).
-- **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They should accept raw, unscaled numerical values in their constructors and **MUST NOT** scale incoming parameter values internally (e.g., no `widget.width.w` or `widget.radius.r`). It is the caller's responsibility to apply `flutter_screenutil` to arguments *before* passing them to these reusable widgets.
+- **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They should accept raw, unscaled numerical values in their constructors and **MUST NOT** scale incoming parameter values internally (e.g., no `widget.width.w` or `widget.radius.r`). It is the caller's responsibility to apply `flutter_screenutil_plus` to arguments *before* passing them to these reusable widgets.
 
 ---
 

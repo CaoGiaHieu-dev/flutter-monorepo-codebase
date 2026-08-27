@@ -26,7 +26,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Lỗi | `src/error/` | `AppFailure` (union Freezed), `ErrorHandler.handleError()`, các kiểu exception |
 | Extension | `src/extensions/` | `bool`, `DateTime`, `Dio`, `Enum`, `List`, `num`, `String` |
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
-| Trợ giúp routing | `src/routing/` | `AppNavigator`, `GoRouteDataCustom`, page transition |
+| Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transition |
 | Utils **và constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
 | Firebase | `src/firebase/` | `FirebaseModule` cấp `FirebaseOptions` theo từng flavor |
 
@@ -78,7 +78,7 @@ Design token, theme, typography, asset toàn cục và bộ localization nền.
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Design token | `src/styles/` | `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` |
-| Theme | `src/theme/` | `ThemeProvider`, `ThemeSystemExtensions`, `ThemeSystemInterface` |
+| Theme | `src/theme/` | `ThemeProvider`, `ThemeSystemExtension`, `ThemeSystemInterface` |
 | Ngôn ngữ | `src/language/` | `LanguageProvider` |
 | Extension | `src/extensions/` | `context.colors`, extension cho key/locale |
 | Sinh tự động | `src/gen/` | `Assets`, `AppLocalizations` (chuỗi toàn cục) |
@@ -120,7 +120,7 @@ Nó phụ thuộc `core_common`, `core_base_ui` và `provider_state_management` 
 
 ### Quy tắc UI-agnostic
 
-Widget dùng lại nhận số **thô, chưa scale** và không được tự áp `flutter_screenutil` bên trong. Scale là việc của bên gọi:
+Widget dùng lại nhận số **thô, chưa scale** và không được tự áp `flutter_screenutil_plus` bên trong. Scale là việc của bên gọi:
 
 ```dart
 // bên gọi scale

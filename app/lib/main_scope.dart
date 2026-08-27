@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:core_common/core_common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import 'presentation/app_material_wrapper.dart';
 
@@ -105,7 +105,7 @@ class _ResponsiveWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ScreenUtilInit(
+    return ScreenUtilPlusInit(
       designSize: AppConfig.design,
       minTextAdapt: true,
       fontSizeResolver: (fontSize, instance) {

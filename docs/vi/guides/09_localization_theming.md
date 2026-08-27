@@ -129,65 +129,26 @@ Text(context.l10nHome.user_logged_in)
 
 # Phần B — Theme
 
-## 6. Design token
+## 6. Design token và màu sắc
 
-Token nằm ở `packages/core/base_ui/lib/src/styles/`:
+Token nằm trong `packages/core/base_ui/lib/src/styles/`; màu đến từ một
+`ThemeExtension` nên tự đổi theo light/dark.
 
-| Class token | File | Dùng cho |
+| Class token | File | Nhiệm vụ |
 |---|---|---|
 | `AppSpacing` | `app_spacing.dart` | Padding, margin, khoảng cách |
 | `AppRadius` | `app_radius.dart` | Bo góc, đối tượng `BorderRadius` |
 | `AppTextStyles` | `app_text_styles.dart` | Typography, lấy từ theme |
-| `AppGradients` | `app_gradients.dart` | Gradient |
-| `AppShadows` | `app_shadows.dart` | Đổ bóng |
+| `AppGradients` | `app_gradients.dart` | Gradient, lấy từ theme |
+| `AppShadows` | `app_shadows.dart` | Shadow đổ bóng |
 
-> [!NOTE]
-> **Đây là ngoại lệ ĐƯỢC DUYỆT của luật "constants phải nằm trong `utils/`".** Chúng ở lại `styles/` vì chúng là *public API* của design system, được mọi feature import trực tiếp — và vì cái tên `styles/` mô tả đúng bản chất hơn hẳn cái tên chung chung `utils/`. Đừng "sửa lại" điều này ở các đợt dọn dẹp sau.
-
-Token đã responsive sẵn:
-
-```dart
-// packages/core/base_ui/lib/src/styles/app_spacing.dart
-class AppSpacing {
-  AppSpacing._();
-
-  // Proportional responsive spacing (based on width .w - standard for paddings/margins to maintain aspect ratio)
-  static double get xxs => 2.w;
-  static double get xs => 4.w;
-  static double get sm => 8.w;
-  static double get md => 12.w;
-  static double get lg => 16.w;
-  // ...
-
-  // Height-based responsive spacing (based on height .h - useful for vertical gaps / heights)
-  static double get smH => 8.h;
-  // ...
-
-  // Raw spacing values (for non-responsive contexts, canvas, or test environments)
-  static const double rawSm = 8;
-```
-
-Dùng `AppSpacing.lg` (đã `.w` sẵn) — **đừng** viết `AppSpacing.lg.w`, như vậy là scale hai lần. Nhóm `raw*` dành cho test và vẽ canvas.
-
-```dart
-// packages/core/base_ui/lib/src/styles/app_radius.dart
-static double get md => 8.r;
-static BorderRadius get mdRadius => BorderRadius.all(Radius.circular(md));
-```
-
-## 7. Màu sắc và typography
-
-Màu lấy từ theme extension nên tự đổi theo sáng/tối:
-
-```dart
-// packages/core/base_ui/lib/src/extensions/context_extension.dart
-ThemeSystemExtension get colors => themeExtension;
-```
+Mọi accessor đều nhận `BuildContext`, vì việc scale được quy đổi qua
+context-aware extension của `flutter_screenutil_plus`:
 
 ```dart
 Container(
   color: context.colors.surface,
-  padding: EdgeInsets.all(AppSpacing.lg),
+  padding: EdgeInsets.all(AppSpacing.lg(context)),
   child: Text(
     context.l10nHome.home,
     style: AppTextStyles.bodyMediumStyle(context),
@@ -195,10 +156,17 @@ Container(
 )
 ```
 
-Các method của `AppTextStyles` nhận `BuildContext` (`titleLargeStyle(context)`, `bodyMediumStyle(context)`, …) vì chúng phân giải theo theme đang hoạt động.
-
 > [!CAUTION]
-> Không bao giờ hard-code `Color`, `fontSize`, con số spacing hay `BorderRadius` trong widget. Nếu thiếu token, hãy **thêm token vào `core_base_ui`** chứ đừng viết thẳng giá trị.
+> Tuyệt đối không hardcode `Color`, `fontSize`, số spacing hay `BorderRadius`
+> trong widget. Thiếu token thì thêm vào `core_base_ui` — đừng nhét thẳng giá
+> trị vào chỗ dùng. Và đừng scale lại token đã scale:
+> `AppSpacing.lg(context).w` là scale hai lần.
+
+> [!NOTE]
+> **Việc cấu hình design system — đổi bảng màu, đổi font, chỉnh lại thang,
+> đổi khung thiết kế, thêm token — có trang riêng:
+> [`11_design_system.md`](11_design_system.md).** Tách ra để chỉ có đúng một nơi
+> mô tả cách định nghĩa những giá trị này.
 
 ## 8. `ThemeMode.system` bám theo OS ngay lúc chạy
 
@@ -255,15 +223,20 @@ SizedBox(height: 24)
 padding: EdgeInsets.all(16)
 fontSize: 16
 
-// ✅ Đúng
-SizedBox(height: 24.h)
-padding: EdgeInsets.all(16.r)
-fontSize: 16.sp
+// ✅ Đúng — context-aware extension
+SizedBox(height: context.h(24))
+padding: EdgeInsets.all(context.r(16))
+fontSize: context.sp(16)
 
 // ✅ Tốt hơn — dùng token
-SizedBox(height: AppSpacing.lgH)
-padding: EdgeInsets.all(AppSpacing.lg)
+SizedBox(height: AppSpacing.lgH(context))
+padding: EdgeInsets.all(AppSpacing.lg(context))
 ```
+
+> [!NOTE]
+> `context.edgeInsets(all: 16)` scale bằng `r`, không phải `w` — nên nó không
+> thay thế trực tiếp được cho `EdgeInsets.all(context.w(16))`. Xem bảng trục
+> đầy đủ ở [`11_design_system.md`](11_design_system.md).
 
 Những giá trị **không phải** kích thước vật lý thì được miễn: `TextStyle.height` là hệ số giãn dòng, `flex` là tỉ lệ.
 
@@ -345,7 +318,7 @@ Builder inline không thể tái sử dụng, không preview được, không te
 - [ ] `core_ui_kit` dùng chuỗi của `core_base_ui`, không định nghĩa `.arb`
 - [ ] Màu qua `context.colors.*`, typography qua `AppTextStyles.*(context)`
 - [ ] Mọi kích thước đều scale (`.w`/`.h`/`.sp`/`.r`) hoặc lấy từ token
-- [ ] Token không bị scale hai lần (`AppSpacing.lg`, không phải `AppSpacing.lg.w`)
+- [ ] Token không bị scale hai lần (`AppSpacing.lg(context)`, không phải `AppSpacing.lg(context).w`)
 - [ ] Widget dùng lại nhận giá trị thô, không scale gì bên trong
 - [ ] Dialog/bottom sheet đã tách ra file riêng đúng hậu tố
 

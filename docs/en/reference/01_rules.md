@@ -292,7 +292,7 @@ Cross-feature navigation goes through a Navigator interface declared in `core_di
 
 ## 12. Responsive UI
 
-**Rule.** Every dimension — width, height, padding, margin, font size, border radius — uses `flutter_screenutil`: `.w`, `.h`, `.sp`, `.r`. Raw doubles in layout are forbidden.
+**Rule.** Every dimension — width, height, padding, margin, font size, border radius — uses `flutter_screenutil_plus`: `.w`, `.h`, `.sp`, `.r`. Raw doubles in layout are forbidden.
 
 **Reusable widgets take raw, unscaled values and must not scale internally.** Scaling is the caller's job.
 

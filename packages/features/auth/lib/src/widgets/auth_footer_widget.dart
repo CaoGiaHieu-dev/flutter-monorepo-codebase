@@ -1,6 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 /// Authentication footer widget for navigation and secondary actions
 ///
@@ -100,7 +100,10 @@ class AuthFooterWidget extends StatelessWidget {
           TextButton(
             onPressed: onForgotPasswordPressed,
             style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              padding: EdgeInsets.symmetric(
+                horizontal: context.w(16),
+                vertical: context.h(8),
+              ),
             ),
             child: Text(
               forgotPasswordText ?? '',
@@ -110,7 +113,7 @@ class AuthFooterWidget extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(height: 16.h),
+          SizedBox(height: context.h(16)),
         ],
 
         // Question and action
@@ -126,7 +129,7 @@ class AuthFooterWidget extends StatelessWidget {
             TextButton(
               onPressed: onActionPressed,
               style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(horizontal: 8.w),
+                padding: EdgeInsets.symmetric(horizontal: context.w(8)),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),

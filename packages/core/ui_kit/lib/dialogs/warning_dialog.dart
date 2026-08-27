@@ -1,7 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../buttons/custom_button.dart';
 
@@ -37,9 +37,9 @@ class _WarningDialogState extends OverlayDialogState<WarningDialog> {
         backgroundColor: context.colors.surface,
         surfaceTintColor: context.colors.surface,
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 20.h),
+          padding: context.edgeInsets(horizontal: 20, vertical: 20),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8.r),
+            borderRadius: context.borderRadius(all: 8),
             color: context.colors.surface,
           ),
           child: Column(
@@ -52,14 +52,14 @@ class _WarningDialogState extends OverlayDialogState<WarningDialog> {
                   color: context.colors.textPrimary,
                 ),
               ),
-              SizedBox(height: 8.h),
+              SizedBox(height: context.h(8)),
               Text(
                 widget.content,
                 style: AppTextStyles.bodyMediumStyle(
                   context,
-                ).copyWith(fontSize: 13.sp, color: context.colors.textPrimary),
+                ).copyWith(fontSize: context.sp(13), color: context.colors.textPrimary),
               ),
-              SizedBox(height: 20.h),
+              SizedBox(height: context.h(20)),
               Row(
                 children: [
                   Expanded(
@@ -68,8 +68,8 @@ class _WarningDialogState extends OverlayDialogState<WarningDialog> {
                         closeDialog();
                         widget.onCancel?.call();
                       },
-                      height: 40.h,
-                      radius: 4.r,
+                      height: context.h(40),
+                      radius: context.r(4),
                       borderSide: BorderSide(
                         color: context.colors.surfaceVariant,
                       ),
@@ -82,15 +82,15 @@ class _WarningDialogState extends OverlayDialogState<WarningDialog> {
                       ),
                     ),
                   ),
-                  SizedBox(width: 8.h),
+                  SizedBox(width: context.h(8)),
                   Expanded(
                     child: CustomButton.rectangle(
-                      height: 40.h,
+                      height: context.h(40),
                       onPressed: () {
                         closeDialog();
                         widget.onConfirm?.call();
                       },
-                      radius: 4.r,
+                      radius: context.r(4),
                       color: widget.acceptColor,
                       child: Text(
                         widget.confirmText ?? context.l10n.ok,

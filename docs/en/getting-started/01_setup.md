@@ -47,7 +47,7 @@ flutter --version      # must be >= 3.47.1
 
 ## 2. Clone and install dependencies
 
-This is a **Pub Workspace**. There is exactly one dependency resolution for all 23 packages, so you run `pub get` **once, at the repo root** — never inside a sub-package.
+This is a **Pub Workspace**. There is exactly one dependency resolution for all 24 workspace members (22 packages plus `app` and `tools`), so you run `pub get` **once, at the repo root** — never inside a sub-package.
 
 ```bash
 git clone <repo-url>

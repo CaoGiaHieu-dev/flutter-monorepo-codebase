@@ -2,7 +2,7 @@ import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../bloc/home_profile_bloc.dart';
 import '../extensions/extensions.dart';
@@ -26,7 +26,7 @@ class HomePage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(context.l10nHome.home),
-                    SizedBox(height: 16.h),
+                    SizedBox(height: context.h(16)),
                     Text(
                       isLoggedIn
                           ? context.l10nHome.user_logged_in
@@ -36,14 +36,17 @@ class HomePage extends StatelessWidget {
                             ? context.colorScheme.primary
                             : context.colorScheme.error,
                         fontWeight: FontWeight.bold,
-                        fontSize: 14.sp,
+                        fontSize: context.sp(14),
                       ),
                     ),
                     if (user?.name != null) ...[
-                      SizedBox(height: 8.h),
-                      Text(user!.name!, style: TextStyle(fontSize: 12.sp)),
+                      SizedBox(height: context.h(8)),
+                      Text(
+                        user!.name!,
+                        style: TextStyle(fontSize: context.sp(12)),
+                      ),
                     ],
-                    SizedBox(height: 16.h),
+                    SizedBox(height: context.h(16)),
                     TextButton(
                       onPressed: () => context.read<HomeProfileBloc>().add(
                         const HomeProfileEvent.refreshed(),

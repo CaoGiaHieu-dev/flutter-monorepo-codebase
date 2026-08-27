@@ -441,6 +441,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.3"
+  equatable:
+    dependency: transitive
+    description:
+      name: equatable
+      sha256: "3bce007a596ff8b3119c45d68aaef631272537c03d30e5d4534dd24bf4c5eaa2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   extended_image:
     dependency: transitive
     description:
@@ -731,14 +739,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.35"
-  flutter_screenutil:
+  flutter_screenutil_plus:
     dependency: transitive
     description:
-      name: flutter_screenutil
-      sha256: "8239210dd68bee6b0577aa4a090890342d04a136ce1c81f98ee513fc0ce891de"
+      name: flutter_screenutil_plus
+      sha256: "68c1a436f440e7a735bdd430ba329a5272067a13c2c273a95be419b976cc56ed"
       url: "https://pub.dev"
     source: hosted
-    version: "5.9.3"
+    version: "1.6.0"
   flutter_secure_storage:
     dependency: transitive
     description:

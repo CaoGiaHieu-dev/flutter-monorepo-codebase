@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import 'album_selection.dart';
@@ -267,7 +267,7 @@ class _AssetsPickerState extends State<AssetsPicker> {
               Text(
                 selectedAlbum?.nameL10n(context) ?? context.l10n.selectAlbum,
               ),
-              Icon(CupertinoIcons.chevron_down, size: 16.sp),
+              Icon(CupertinoIcons.chevron_down, size: context.sp(16)),
             ],
           );
         },
@@ -294,13 +294,13 @@ class _AssetsPickerState extends State<AssetsPicker> {
         controller: _scrollController,
         slivers: [
           SliverPadding(
-            padding: EdgeInsets.all(4.w),
+            padding: EdgeInsets.all(context.w(4)),
             sliver: ValueListenableBuilder<List<AssetEntity>>(
               valueListenable: _photos,
               builder: (context, photos, child) {
                 return photos.isEmpty
                     ? _buildEmptyState(context)
-                    : _buildPhotoGridSliver(photos);
+                    : _buildPhotoGridSliver(context, photos);
               },
             ),
           ),
@@ -314,7 +314,7 @@ class _AssetsPickerState extends State<AssetsPicker> {
     return SliverFillRemaining(
       child: Center(
         child: DefaultTextStyle(
-          style: TextStyle(color: CupertinoColors.systemGrey, fontSize: 18.sp),
+          style: TextStyle(color: CupertinoColors.systemGrey, fontSize: context.sp(18)),
           child: Text(context.l10n.noPhotosAvailable),
         ),
       ),
@@ -322,12 +322,12 @@ class _AssetsPickerState extends State<AssetsPicker> {
   }
 
   /// Builds the photo grid sliver.
-  Widget _buildPhotoGridSliver(List<AssetEntity> photos) {
+  Widget _buildPhotoGridSliver(BuildContext context, List<AssetEntity> photos) {
     return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
-        crossAxisSpacing: 4.w,
-        mainAxisSpacing: 4.h,
+        crossAxisSpacing: context.w(4),
+        mainAxisSpacing: context.h(4),
       ),
       delegate: SliverChildBuilderDelegate(
         (context, index) => _buildGridItem(photos, index),

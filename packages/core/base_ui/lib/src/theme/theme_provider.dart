@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:injectable/injectable.dart';
 
@@ -63,32 +63,39 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// Getter for the current theme data based on the theme mode.
-  ThemeData get currentTheme {
+  /// The theme data for the active [themeMode].
+  ///
+  /// Takes a [BuildContext] because font sizes are scaled through
+  /// `context.sp`, the context-aware extension the package recommends.
+  ThemeData currentTheme(BuildContext context) {
     switch (themeMode) {
       case ThemeMode.dark:
-        return darkTheme;
+        return darkTheme(context);
       case ThemeMode.light:
-        return lightTheme;
+        return lightTheme(context);
       case ThemeMode.system:
         final brightness =
             SchedulerBinding.instance.platformDispatcher.platformBrightness;
-        return brightness == Brightness.dark ? darkTheme : lightTheme;
+        return brightness == Brightness.dark
+            ? darkTheme(context)
+            : lightTheme(context);
     }
   }
 
-  /// Getter for the light theme data.
-  ThemeData get lightTheme => _themeData(ThemeMode.light);
+  /// The light theme data.
+  ThemeData lightTheme(BuildContext context) =>
+      _themeData(context, ThemeMode.light);
 
-  /// Getter for the dark theme data.
-  ThemeData get darkTheme => _themeData(ThemeMode.dark);
+  /// The dark theme data.
+  ThemeData darkTheme(BuildContext context) =>
+      _themeData(context, ThemeMode.dark);
 
   /// Builds the ThemeData based on the given theme mode.
   ///
   /// This method selects the appropriate theme system and color scheme based on
   /// the theme mode. It also creates a custom text theme with adjusted font sizes
   /// and applies the theme system's colors to the text theme.
-  ThemeData _themeData(ThemeMode mode) {
+  ThemeData _themeData(BuildContext context, ThemeMode mode) {
     final themeSystem = ThemeSystemExtension.withMode(mode);
     final colorScheme = switch (mode) {
       ThemeMode.dark => const ColorScheme.dark(),
@@ -108,10 +115,12 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       ),
     };
 
-    /// Scales the font sizes of the text theme.
+    /// Scales one font size through the context-aware extension.
     ///
-    /// This method adjusts the font sizes of the text theme based on the device's
-    /// screen size.
+    /// Null-tolerant so the nullable `TextStyle.fontSize` chain stays readable.
+    double? scaleFont(double? size) => size == null ? null : context.sp(size);
+
+    /// Scales the font sizes of the text theme to the device's screen size.
     final textTheme = defaultTheme
         .apply(
           bodyColor: themeSystem.textPrimary,
@@ -120,49 +129,49 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
         )
         .copyWith(
           labelSmall: defaultTheme.labelSmall?.copyWith(
-            fontSize: defaultTheme.labelSmall?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.labelSmall?.fontSize),
           ),
           labelMedium: defaultTheme.labelMedium?.copyWith(
-            fontSize: defaultTheme.labelMedium?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.labelMedium?.fontSize),
           ),
           labelLarge: defaultTheme.labelLarge?.copyWith(
-            fontSize: defaultTheme.labelLarge?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.labelLarge?.fontSize),
           ),
           bodySmall: defaultTheme.bodySmall?.copyWith(
-            fontSize: defaultTheme.bodySmall?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.bodySmall?.fontSize),
           ),
           bodyMedium: defaultTheme.bodyMedium?.copyWith(
-            fontSize: defaultTheme.bodyMedium?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.bodyMedium?.fontSize),
           ),
           bodyLarge: defaultTheme.bodyLarge?.copyWith(
-            fontSize: defaultTheme.bodyLarge?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.bodyLarge?.fontSize),
           ),
           titleSmall: defaultTheme.titleSmall?.copyWith(
-            fontSize: defaultTheme.titleSmall?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.titleSmall?.fontSize),
           ),
           titleMedium: defaultTheme.titleMedium?.copyWith(
-            fontSize: defaultTheme.titleMedium?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.titleMedium?.fontSize),
           ),
           titleLarge: defaultTheme.titleLarge?.copyWith(
-            fontSize: defaultTheme.titleLarge?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.titleLarge?.fontSize),
           ),
           displaySmall: defaultTheme.displaySmall?.copyWith(
-            fontSize: defaultTheme.displaySmall?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.displaySmall?.fontSize),
           ),
           displayMedium: defaultTheme.displayMedium?.copyWith(
-            fontSize: defaultTheme.displayMedium?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.displayMedium?.fontSize),
           ),
           displayLarge: defaultTheme.displayLarge?.copyWith(
-            fontSize: defaultTheme.displayLarge?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.displayLarge?.fontSize),
           ),
           headlineSmall: defaultTheme.headlineSmall?.copyWith(
-            fontSize: defaultTheme.headlineSmall?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.headlineSmall?.fontSize),
           ),
           headlineMedium: defaultTheme.headlineMedium?.copyWith(
-            fontSize: defaultTheme.headlineMedium?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.headlineMedium?.fontSize),
           ),
           headlineLarge: defaultTheme.headlineLarge?.copyWith(
-            fontSize: defaultTheme.headlineLarge?.fontSize?.sp,
+            fontSize: scaleFont(defaultTheme.headlineLarge?.fontSize),
           ),
         );
 
@@ -200,7 +209,7 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
 
         /// Sets the title text style of the app bar.
         titleTextStyle: textTheme.titleLarge?.copyWith(
-          fontSize: BaseUiConstants.APP_BAR_TITLE_FONT_SIZE.sp,
+          fontSize: context.sp(BaseUiConstants.APP_BAR_TITLE_FONT_SIZE),
           fontWeight: FontWeight.bold,
         ),
 

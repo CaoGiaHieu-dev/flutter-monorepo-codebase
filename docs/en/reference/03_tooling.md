@@ -12,6 +12,9 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 
 | Problem | Command |
 |---|---|
+| **Check the layering rules hold** | `dart tools/arch_check/check.dart` |
+| **Which packages are sample code I can delete?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
+| **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <name>` |
 | Create a new feature / domain / data / core package | `dart tools/module_generator/generate.dart …` |
 | Added, renamed or deleted a file under `lib/` | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Changed a dependency version | `dart tools/dependency_sync.dart` |
@@ -23,6 +26,48 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 | Regenerate splash screen and app icons | `dart tools/theme_generator/theme_setting.dart` |
 | Check Android 15+ 16 KB page-size compliance | `./tools/android_compliance/16kb_ckeck.sh` |
 | AI review of a change | `dart tools/code_review/code_review.dart --changed` |
+
+---
+
+## `arch_check`
+
+Enforces the layering rules mechanically. **Gate 1 of `pr_quality_check.yml`** — it runs before `flutter analyze` because it only reads imports and `pubspec.yaml` files, needs no codegen, and finishes in roughly 200 ms.
+
+```bash
+dart tools/arch_check/check.dart          # exits 1 on any blocking violation
+dart tools/arch_check/check.dart --help   # full rule descriptions
+```
+
+| Rule | What it checks |
+|---|---|
+| R1 | Dependency direction — no `core/*` may import or declare `feature_*` / `data_*` / `domain_*`, except the approved edges |
+| R2 | Domain is pure Dart — no `flutter` / `dio` / `retrofit` import, no `flutter` under `dependencies:` |
+| R3 | Feature boundaries — no feature imports another feature or a `data_*` package |
+| R4 | Public `static const` live in the package's `utils/` |
+| R5 | Every `package:` import used in `lib/` is declared in that package's `pubspec.yaml` |
+| R6 | Generated files still carry their generator header (advisory) |
+
+The four approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fifth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
+
+R5 is the mirror image of `unused_checker`: that tool finds dependencies *declared but unused*, this one finds them *used but undeclared*. Pub Workspaces hide the second kind entirely — everything resolves locally through the shared `package_config.json` and only breaks when a package is extracted or published.
+
+---
+
+## `sample_cleanup`
+
+Answers "which of this is example code, and how do I delete it without breaking the app?".
+
+```bash
+dart tools/sample_cleanup/remove_sample.dart --list    # classification table
+dart tools/sample_cleanup/remove_sample.dart auth      # dry-run (default)
+dart tools/sample_cleanup/remove_sample.dart auth --apply
+```
+
+Its source of truth is [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), which classifies every package as `framework`, `sample` or `shell`, and additionally records `embedded_samples` — sample code living *inside* a framework package, like the cache chain in `data_core`.
+
+The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from `pubspec.yaml`, `app/pubspec.yaml` and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** — for example `feature_settings` calls `getIt<IAuthActionHandler>()` (the throwing lookup) so logout throws at runtime, while `HomeProfileBloc` takes `IAuthStatusStream` through its constructor so DI cannot build it at all.
+
+Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back.
 
 ---
 

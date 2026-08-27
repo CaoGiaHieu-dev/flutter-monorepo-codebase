@@ -3,7 +3,7 @@ import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_ui_kit/dialogs/app_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../extensions/extensions.dart';
@@ -92,12 +92,12 @@ class _RegisterPageState extends State<RegisterPage> {
       backgroundColor: context.colorScheme.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(24.w),
+          padding: EdgeInsets.all(context.w(24)),
           child: Consumer<AuthProvider>(
             builder: (context, authProvider, child) {
               return Column(
                 children: [
-                  SizedBox(height: 40.h),
+                  SizedBox(height: context.h(40)),
 
                   // Header
                   AuthHeaderWidget(
@@ -105,7 +105,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     subtitle: context.l10nAuth.sign_up_subtitle,
                   ),
 
-                  SizedBox(height: 40.h),
+                  SizedBox(height: context.h(40)),
 
                   // Registration form
                   AuthFormWidget(
@@ -118,7 +118,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     onSubmit: _onRegisterPressed,
                   ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: context.h(32)),
 
                   // Social registration
                   AuthSocialWidget(
@@ -126,7 +126,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     onApplePressed: _onApplePressed,
                   ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: context.h(32)),
 
                   // Footer
                   AuthFooterWidget(
@@ -135,7 +135,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     onActionPressed: _onLoginPressed,
                   ),
 
-                  SizedBox(height: 40.h),
+                  SizedBox(height: context.h(40)),
                 ],
               );
             },

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 /// A custom Page that creates a ModalBottomSheetRoute.
 ///
@@ -79,8 +79,8 @@ class BottomTransitionPage<T> extends Page<T> {
       settings: this,
       builder: (BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16.r),
-          topRight: Radius.circular(16.r),
+          topLeft: Radius.circular(context.r(16)),
+          topRight: Radius.circular(context.r(16)),
         ),
         child: child,
       ),

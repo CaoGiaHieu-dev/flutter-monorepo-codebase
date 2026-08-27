@@ -12,6 +12,9 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 
 | Vấn đề | Lệnh |
 |---|---|
+| **Kiểm tra luật phân tầng còn đúng không** | `dart tools/arch_check/check.dart` |
+| **Package nào là code mẫu có thể xoá?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
+| **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <tên>` |
 | Tạo package feature / domain / data / core mới | `dart tools/module_generator/generate.dart …` |
 | Vừa thêm, đổi tên hoặc xoá file trong `lib/` | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Vừa đổi version dependency | `dart tools/dependency_sync.dart` |
@@ -23,6 +26,48 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | Sinh lại splash screen và app icon | `dart tools/theme_generator/theme_setting.dart` |
 | Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_ckeck.sh` |
 | Nhờ AI review một thay đổi | `dart tools/code_review/code_review.dart --changed` |
+
+---
+
+## `arch_check`
+
+Cưỡng chế luật phân tầng bằng máy. **Gate 1 của `pr_quality_check.yml`** — chạy trước `flutter analyze` vì nó chỉ đọc import và `pubspec.yaml`, không cần codegen, xong trong khoảng 200 ms.
+
+```bash
+dart tools/arch_check/check.dart          # exit 1 khi có vi phạm chặn
+dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
+```
+
+| Luật | Kiểm tra gì |
+|---|---|
+| R1 | Hướng phụ thuộc — `core/*` không được import hay khai `feature_*` / `data_*` / `domain_*`, trừ các ngoại lệ đã duyệt |
+| R2 | Domain thuần Dart — không import `flutter` / `dio` / `retrofit`, không khai `flutter` trong `dependencies:` |
+| R3 | Ranh giới feature — không feature nào import feature khác hay package `data_*` |
+| R4 | `static const` public phải nằm trong `utils/` của package |
+| R5 | Mọi `package:` import dùng trong `lib/` phải được khai trong `pubspec.yaml` của chính package đó |
+| R6 | File generated còn giữ header của generator (chỉ cảnh báo) |
+
+Bốn ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ năm nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
+
+R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai mà không dùng*, tool này tìm dependency *đang dùng mà không khai*. Pub Workspaces che giấu hoàn toàn loại thứ hai — mọi thứ resolve được cục bộ qua `package_config.json` dùng chung, và chỉ vỡ khi tách package ra hay publish.
+
+---
+
+## `sample_cleanup`
+
+Trả lời câu "cái nào là code mẫu, và xoá sao cho không vỡ app?".
+
+```bash
+dart tools/sample_cleanup/remove_sample.dart --list    # bảng phân loại
+dart tools/sample_cleanup/remove_sample.dart auth      # dry-run (mặc định)
+dart tools/sample_cleanup/remove_sample.dart auth --apply
+```
+
+Nguồn chân lý của nó là [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), phân loại mọi package thành `framework`, `sample` hay `shell`, và ghi thêm mục `embedded_samples` — code mẫu nằm *bên trong* một package framework, như chuỗi cache trong `data_core`.
+
+Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml`, `app/pubspec.yaml` và `injection.dart`, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** — ví dụ `feature_settings` gọi `getIt<IAuthActionHandler>()` (bản ném lỗi) nên bấm logout sẽ crash, còn `HomeProfileBloc` nhận `IAuthStatusStream` qua constructor nên DI không dựng nổi.
+
+Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được.
 
 ---
 

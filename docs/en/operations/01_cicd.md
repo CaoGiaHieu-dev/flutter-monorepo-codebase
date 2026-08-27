@@ -9,17 +9,17 @@ This page answers: **what pipelines exist, what each one does, which secrets the
 
 ## 1. Pipeline inventory
 
-Four pipelines ship with the template — three on GitHub Actions, one on Azure DevOps.
+Five pipelines ship with the template — four on GitHub Actions, one on Azure DevOps.
 
 | Pipeline | File | Trigger | Output |
 |:---|:---|:---|:---|
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Manual (`workflow_dispatch`) | Signed release APK → Firebase App Distribution |
 | AI Code Review | `.github/workflows/code_review.yml` | PR to `main`/`develop`/`master` + manual | Markdown report artifact + PR comments |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Manual (`workflow_dispatch`) | Delegates to Fastlane lanes |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — blocks the merge |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (manual only) | Prod APK artifact → Firebase |
 
-> [!WARNING]
-> `.github/workflows/README.md` documents a fourth GitHub workflow called `pr_quality_check.yml` that runs analyze, tests and coverage as a "quality gate". **That file does not exist.** Only `code_review.yml`, `fastlane.yml` and `flutter_build.yml` are present. There is no automated quality gate on pull requests today — see [§5](#5-missing-quality-gate).
+`pr_quality_check.yml` is the only pipeline that gates a merge. It runs four blocking gates in order — architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift — plus one advisory audit. See [§6](#6-the-quality-gate).
 
 ---
 
@@ -58,7 +58,7 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 > [!NOTE]
 > **The `cd app` is not optional.** `flutter build apk` run from the repository root fails with a confusing `android/app/build.gradle not found`, because the Flutter project lives in `app/`, not at the workspace root. The same applies when you build locally — see [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
-The artifact name interpolates the flavor (`app-${{ inputs.flavor }}-release.apk`), so it stays correct for all three flavors. That is the right pattern; Azure does **not** do this — see [§4](#4-azure-ci-cdyml).
+The artifact name interpolates the flavor (`app-${{ inputs.flavor }}-release.apk`), so it stays correct for all three flavors. That is the right pattern; Azure does **not** do this — see [§5](#5-azure-ci-cdyml--azure-devops).
 
 ### Cost note
 
@@ -74,31 +74,12 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 **What it does**: resolves changed files with `tj-actions/changed-files`, runs the reviewer, uploads the Markdown report as an artifact (30-day retention), then parses that report and posts **inline review comments** on the exact lines when they fall inside the PR diff. Findings outside the diff are grouped into a separate per-file comment.
 
-### Two defects that stop this workflow from running
+### One remaining quirk
 
-> [!CAUTION]
-> **This workflow fails at the "Get dependencies" step on every run.**
->
-> ```yaml
-> - name: 📦 Get dependencies
->   run: |
->       chmod +x tools/workspace_setup/configure.sh
->       ./tools/workspace_setup/configure.sh
-> ```
->
-> `tools/workspace_setup/configure.sh` **does not exist** — the directory contains only `configure.dart`. Replace both lines with:
->
-> ```yaml
-> - name: 📦 Get dependencies
->   run: dart tools/workspace_setup/configure.dart
-> ```
->
-> (`flutter_build.yml` has already been corrected this way; this workflow was missed.)
+Dependency installation runs `dart tools/workspace_setup/configure.dart`, and `flutter_version` defaults to `3.47.1`, matching the root `pubspec.yaml` constraint.
 
-> [!WARNING]
-> **The default Flutter version is too low.** `flutter_version` defaults to `"3.47.0"`, but the root `pubspec.yaml` requires `flutter: ">=3.47.1"`. A manual dispatch that accepts the default will fail during `pub get`. Change the default to `3.47.1`.
->
-> Note also that this input is only bound on `workflow_dispatch`. On a `pull_request` event `github.event.inputs.flutter_version` is empty, so `subosito/flutter-action@v2` receives an empty `flutter-version` and resolves the latest stable instead.
+> [!NOTE]
+> `flutter_version` is only bound on `workflow_dispatch`. On a `pull_request` event `github.event.inputs.flutter_version` is empty, so `subosito/flutter-action@v2` receives an empty `flutter-version` and resolves the latest stable instead of the pinned one. Harmless for an AI review; do not copy this pattern into a pipeline that builds artefacts.
 
 ### The "Fail on Critical Issues" step does not fail
 
@@ -121,35 +102,13 @@ fi
 
 Manual dispatch that hands the whole build over to Fastlane. Sets up Java 17, Ruby 3.3 (skipped on `self-hosted`), Flutter (channel `stable`, **no pinned version**), installs Fastlane and the `firebase_app_distribution` plugin, then invokes a lane.
 
-> [!CAUTION]
-> **This workflow invokes a lane that does not exist.**
->
-> ```yaml
-> run: |
->   fastlane flutter_build \
->     flutter_version:... version:... flavor:... \
->     auto_increment:... build_number:...
-> ```
->
-> There is no `flutter_build` lane. The real cross-platform lane is named **`flutter`** (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`). Fastlane will abort with *"Could not find lane 'flutter_build'"*.
->
-> It also passes `auto_increment:`, which **no lane reads**. Auto-increment is triggered by passing `build_number:auto` instead — see [`02_fastlane_release.md`](02_fastlane_release.md#build-numbers).
->
-> Corrected invocation:
-> ```yaml
-> run: |
->   fastlane flutter \
->     flutter_version:${{ inputs.flutter_version }} \
->     version:${{ inputs.version }} \
->     flavor:${{ inputs.flavor }} \
->     change_log:"${{ inputs.change_log }}" \
->     build_type:${{ inputs.build_type }} \
->     distribute_store:${{ inputs.distribute_store }} \
->     distribute_firebase:${{ inputs.distribute_firebase }} \
->     build_number:${{ inputs.build_number || 'auto' }}
-> ```
+It invokes the real cross-platform lane, `fastlane flutter` (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.1`.
 
-The `flutter_version` input also defaults to `"3.47.0"` — same problem as `code_review.yml`. And because the Flutter setup step passes only `channel: stable` without `flutter-version`, that input never reaches the toolchain anyway; it is forwarded to Fastlane, which uses it to decide whether to drive `fvm`.
+> [!WARNING]
+> The invocation still passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment app/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
+
+Because the Flutter setup step passes only `channel: stable` without `flutter-version`, the `flutter_version` input never reaches the toolchain; it is forwarded to Fastlane, which uses it to decide whether to drive `fvm`.
+
 
 ---
 
@@ -163,74 +122,39 @@ Two stages on a self-hosted pool named `codebase`. `trigger: none`, so it only r
 
 Pipeline variables must be defined in the Azure Variables tab: `flutter-version`, `flutterPath`, `version`, `numberBuild`, `note`, and `FIREBASE-ANDROID-ID`.
 
-### Three defects
+### One remaining defect
 
-> [!CAUTION]
-> **1 — The distribute step uploads a filename that is never produced.**
->
-> The build publishes `app-prod-release.apk` (correct, because the build passes `--flavor=prod`), but the Distribute stage runs:
->
-> ```bash
-> firebase appdistribution:distribute app-release.apk --app $(FIREBASE-ANDROID-ID) ...
-> ```
->
-> `app-release.apk` does not exist in the downloaded artifact. Change it to `app-prod-release.apk`.
-
-> [!CAUTION]
-> **2 — "Flutter Config" calls the same nonexistent script, and is malformed on top of that.**
->
-> ```yaml
-> script: >-
->   chmod +x tools/workspace_setup/configure.sh
->   ./tools/workspace_setup/configure.sh
-> ```
->
-> Two problems. `configure.sh` does not exist. And `>-` is a *folded* YAML scalar, which joins those two lines with a space into the single command `chmod +x tools/workspace_setup/configure.sh ./tools/workspace_setup/configure.sh` — so even if the file existed, it would only be chmod'ed, never executed. Replace the whole `script:` body with `dart tools/workspace_setup/configure.dart`.
+The artefact filename and the `configure.dart` call are both correct now: the build publishes `app-prod-release.apk` and the Distribute stage downloads and uploads that same name, and "Flutter Config" runs `dart tools/workspace_setup/configure.dart`.
 
 > [!WARNING]
-> **3 — `.env` is never created, but the build requires it.**
+> **`.env` is never created, but the build requires it.**
 >
-> The build passes `--dart-define-from-file=../.env`, yet no step in the pipeline produces `.env`. The two `DownloadSecureFile@1` tasks fetch only `key.properties` and `keystore.jks`. Add a third secure file for `.env` (and copy it to `$(Build.SourcesDirectory)`), mirroring what `flutter_build.yml` does with `secrets.ENV`.
+> The build passes `--dart-define-from-file=../.env` (`azure-ci-cd.yml:104`), yet no step in the pipeline produces `.env`. The two `DownloadSecureFile@1` tasks fetch only `key.properties` and `keystore.jks`. Add a third secure file for `.env` and copy it to `$(Build.SourcesDirectory)`, mirroring what `flutter_build.yml` does with `secrets.ENV`. Without it every `String.fromEnvironment` falls back to its empty default.
 
 The iOS build and iOS distribute tasks are present but fully commented out.
 
 ---
 
-## 6. Missing quality gate
+## 6. The quality gate
 
-> [!WARNING]
-> **No pipeline runs `flutter analyze` or `flutter test` before building and distributing a release.**
->
-> `flutter_build.yml` goes straight from dependency installation to `flutter build apk` and then ships the artifact to testers. A change that fails analysis or breaks every test will still be built, signed and distributed. The `pr_quality_check.yml` that `.github/workflows/README.md` advertises as covering this does not exist.
+`pr_quality_check.yml` runs on every pull request to `main`, `develop` or `master`. It is the only pipeline that can block a merge.
 
-Add these two steps to `flutter_build.yml` between step 4 (Install Dependencies) and step 7 (Build APK):
+| # | Gate | Command | Blocking |
+|:--|:---|:---|:---|
+| 1 | Architecture rules | `dart tools/arch_check/check.dart` | yes |
+| 2 | Static analysis | `flutter analyze` | yes |
+| 3 | Tests, per package | `flutter test` in each `packages/*/*/test` | yes |
+| 4 | Catalog drift | `dart tools/dependency_sync.dart --check` | yes |
+| — | Unused dependency audit | `dart tools/unused_checker/check_unused_packages.dart` | no (advisory) |
 
-```yaml
-      - name: Analyze
-        run: flutter analyze
+Gate 1 runs first on purpose: it only reads imports and pubspecs, needs no codegen, and finishes in about 200 ms — so a layering mistake fails in seconds instead of after a full analyze-and-test cycle. It is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
 
-      - name: Test
-        run: |
-          set -e
-          for pkg in packages/core/* packages/data/* packages/domain/* packages/features/*; do
-            if [ -d "$pkg/test" ]; then
-              echo "::group::flutter test $pkg"
-              (cd "$pkg" && flutter test)
-              echo "::endgroup::"
-            fi
-          done
-```
+Gate 3 loops per package because this is a Pub Workspace: tests live under `packages/<layer>/<pkg>/test/`, and a single `flutter test` at the root does not pick them up.
 
-The loop is necessary because this is a Pub Workspace: tests live per-package under `packages/<layer>/<pkg>/test/`, and a single `flutter test` at the root does not pick them up.
+> [!IMPORTANT]
+> A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. This has bitten the template before: moving `AppFailure` between packages left `bloc_view_state.freezed.dart` referencing a type it could no longer see, and analyze stayed green while the APK build failed. Only a real build catches that class of error.
 
-Consider also adding the catalog drift check, which is cheap and catches a whole class of merge mistakes:
-
-```yaml
-      - name: Check dependency catalog
-        run: dart tools/dependency_sync.dart --check
-```
-
-`--check` exits non-zero when any package's pinned versions have drifted from `pubspec_dependencies.yaml`.
+**Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 1–4 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
 
 ---
 
@@ -269,11 +193,12 @@ Run these before pushing; they are the same commands the pipelines use.
 # 1. Full workspace setup — same as the CI "Install Dependencies" step
 dart tools/workspace_setup/configure.dart
 
-# 2. The quality gate CI is missing
+# 2. The same gates pr_quality_check.yml runs, in the same order
+dart tools/arch_check/check.dart
 flutter analyze
 dart tools/dependency_sync.dart --check
 
-# 3. Tests, per package (mirrors the loop suggested in §6)
+# 3. Tests, per package (gate 3 — see §6)
 (cd packages/core/storage && flutter test)
 (cd packages/core/database && flutter test)
 # ...repeat for any package with a test/ directory
@@ -294,19 +219,20 @@ A first build on a clean machine also needs `flutterfire configure` to have been
 
 ## 9. Fix checklist
 
-Everything above, as a to-do list:
+Already fixed in this template:
 
-- [ ] `code_review.yml` — replace `configure.sh` with `dart tools/workspace_setup/configure.dart`
-- [ ] `code_review.yml` — bump default `flutter_version` to `3.47.1`
-- [ ] `code_review.yml` — decide whether to uncomment `exit 1`
-- [ ] `fastlane.yml` — rename lane `flutter_build` → `flutter`, drop `auto_increment:`
-- [ ] `fastlane.yml` — bump default `flutter_version` to `3.47.1`
-- [ ] `azure-ci-cd.yml` — distribute `app-prod-release.apk`, not `app-release.apk`
-- [ ] `azure-ci-cd.yml` — replace the folded `configure.sh` script with `dart tools/workspace_setup/configure.dart`
-- [ ] `azure-ci-cd.yml` — add a secure file + copy step for `.env`
-- [ ] `flutter_build.yml` — add analyze + test steps before the build
-- [ ] `flutter_build.yml` — consider `ubuntu-latest` instead of `macos-latest`
-- [ ] `.github/workflows/README.md` — remove the `pr_quality_check.yml` section, or add the workflow
+- [x] `code_review.yml` — uses `dart tools/workspace_setup/configure.dart`; default `flutter_version` is `3.47.1`
+- [x] `fastlane.yml` — calls the real `flutter` lane; default `flutter_version` is `3.47.1`
+- [x] `azure-ci-cd.yml` — distributes `app-prod-release.apk`; "Flutter Config" runs `configure.dart`
+- [x] `pr_quality_check.yml` — exists and gates every PR (arch rules, analyze, tests, catalog drift)
+
+Still open, in rough priority order:
+
+- [ ] `azure-ci-cd.yml` — add a secure file + copy step for `.env`; the prod build currently gets no dart-defines
+- [ ] `fastlane.yml` — drop the ignored `auto_increment:` argument, or make a lane read it
+- [ ] `flutter_build.yml` — run the four `pr_quality_check.yml` gates before building, so a manual dispatch cannot ship unverified code
+- [ ] `code_review.yml` — decide whether to uncomment `exit 1` (only after you trust the reviewer's false-positive rate)
+- [ ] `flutter_build.yml` — consider `ubuntu-latest` instead of `macos-latest` for Android-only builds
 
 ---
 

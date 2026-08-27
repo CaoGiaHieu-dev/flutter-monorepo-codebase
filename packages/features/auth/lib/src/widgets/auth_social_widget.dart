@@ -1,7 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../extensions/extensions.dart';
 
@@ -30,7 +30,7 @@ class AuthSocialWidget extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              padding: EdgeInsets.symmetric(horizontal: context.w(16)),
               child: Text(
                 context.l10nAuth.or_divider,
                 style: AppTextStyles.bodySmallStyle(context).copyWith(
@@ -46,7 +46,7 @@ class AuthSocialWidget extends StatelessWidget {
             ),
           ],
         ),
-        SizedBox(height: 24.h),
+        SizedBox(height: context.h(24)),
         Column(
           children: [
             if (onGooglePressed != null)
@@ -55,9 +55,9 @@ class AuthSocialWidget extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onGooglePressed,
                   style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 16.h),
+                    padding: EdgeInsets.symmetric(vertical: context.h(16)),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: BorderRadius.circular(context.r(12)),
                     ),
                     side: BorderSide(
                       color: context.colorScheme.outline.withAlpha(
@@ -67,7 +67,7 @@ class AuthSocialWidget extends StatelessWidget {
                   ),
                   icon: Icon(
                     Icons.g_mobiledata,
-                    size: 24.r,
+                    size: context.r(24),
                     color: context.colorScheme.onSurface,
                   ),
                   label: Text(
@@ -80,15 +80,15 @@ class AuthSocialWidget extends StatelessWidget {
                 ),
               ),
             if (onApplePressed != null) ...[
-              SizedBox(height: 12.h),
+              SizedBox(height: context.h(12)),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: onApplePressed,
                   style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 16.h),
+                    padding: EdgeInsets.symmetric(vertical: context.h(16)),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: BorderRadius.circular(context.r(12)),
                     ),
                     side: BorderSide(
                       color: context.colorScheme.outline.withAlpha(
@@ -98,7 +98,7 @@ class AuthSocialWidget extends StatelessWidget {
                   ),
                   icon: Icon(
                     Icons.apple,
-                    size: 24.r,
+                    size: context.r(24),
                     color: context.colorScheme.onSurface,
                   ),
                   label: Text(
@@ -112,15 +112,15 @@ class AuthSocialWidget extends StatelessWidget {
               ),
             ],
             if (onFacebookPressed != null) ...[
-              SizedBox(height: 12.h),
+              SizedBox(height: context.h(12)),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: onFacebookPressed,
                   style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 16.h),
+                    padding: EdgeInsets.symmetric(vertical: context.h(16)),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: BorderRadius.circular(context.r(12)),
                     ),
                     side: BorderSide(
                       color: context.colorScheme.outline.withAlpha(
@@ -130,7 +130,7 @@ class AuthSocialWidget extends StatelessWidget {
                   ),
                   icon: Icon(
                     Icons.facebook,
-                    size: 24.r,
+                    size: context.r(24),
                     color: context.colorScheme.onSurface,
                   ),
                   label: Text(

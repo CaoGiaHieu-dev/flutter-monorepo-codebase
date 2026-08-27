@@ -28,7 +28,7 @@ flutter-monorepo-codebase/
 ├── docs/                   # This documentation (en/ + vi/)
 ├── .agents/                # AGENTS.md rules + skills for AI agents
 │
-├── pubspec.yaml            # Workspace root — lists all 23 member packages
+├── pubspec.yaml            # Workspace root — lists all 24 members
 ├── pubspec_dependencies.yaml  # Version catalog — the single source of truth
 ├── pubspec.lock            # ONE lock file for the whole workspace
 └── analysis_options.yaml

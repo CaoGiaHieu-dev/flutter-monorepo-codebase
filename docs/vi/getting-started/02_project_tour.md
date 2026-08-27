@@ -28,7 +28,7 @@ flutter-monorepo-codebase/
 ├── docs/                   # Chính bộ tài liệu này (en/ + vi/)
 ├── .agents/                # Luật AGENTS.md + skills cho AI agent
 │
-├── pubspec.yaml            # Gốc workspace — liệt kê đủ 23 package thành viên
+├── pubspec.yaml            # Gốc workspace — liệt kê đủ 24 thành viên
 ├── pubspec_dependencies.yaml  # Catalog version — nguồn chân lý duy nhất
 ├── pubspec.lock            # MỘT file lock cho cả workspace
 └── analysis_options.yaml

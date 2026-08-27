@@ -1,8 +1,8 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:feature_shared/buttons/custom_button.dart';
-import 'package:feature_shared/dialogs/app_dialog.dart';
+import 'package:core_ui_kit/buttons/custom_button.dart';
+import 'package:core_ui_kit/dialogs/app_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider_state_management/provider_state_management.dart';

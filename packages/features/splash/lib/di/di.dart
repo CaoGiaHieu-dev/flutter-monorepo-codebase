@@ -2,3 +2,4 @@
 export 'localization.dart';
 export 'module.dart';
 export 'module.module.dart';
+export 'splash_screen_impl.dart';

@@ -36,7 +36,7 @@ on:
             flutter_version:
                 description: "Flutter version"
                 required: true
-                default: "3.47.0"
+                default: "3.47.1"
 
 jobs:
     code-review:
@@ -58,9 +58,7 @@ jobs:
                   cache: true
 
             - name: 📦 Get dependencies
-              run: |
-                  chmod +x tools/workspace_setup/configure.sh
-                  ./tools/workspace_setup/configure.sh
+              run: dart tools/workspace_setup/configure.dart
 
             - name: 📜 Get changed .dart files
               id: changed_files

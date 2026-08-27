@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../gen/language/app_localizations.dart';
 import '../theme/theme_system_extensions.dart';
+import '../utils/base_ui_constants.dart';
 
 /// Extension on [BuildContext] to provide easy access to theme and media query data
 extension ContextExtension on BuildContext {
@@ -71,7 +72,7 @@ extension ContextExtension on BuildContext {
     ScaffoldMessenger.of(this).showSnackBar(
       SnackBar(
         content: Text(message),
-        duration: duration ?? const Duration(seconds: 3),
+        duration: duration ?? BaseUiConstants.SNACK_BAR_DURATION,
       ),
     );
   }

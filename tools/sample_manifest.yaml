@@ -1,0 +1,272 @@
+# Sample vs framework manifest — the single source of truth for "what can I delete?"
+#
+# This template ships working reference features. They exist to show how the
+# architecture is wired, not because your product needs them. Nothing here is
+# derivable from the folder layout alone: `packages/domain/core` is framework
+# while `packages/domain/auth` is a sample, and both live under `packages/domain/`.
+#
+# YAML rather than JSON on purpose: this file is read by humans first and by
+# `tools/sample_cleanup/remove_sample.dart` second, and JSON cannot carry the
+# comments that make the classification defensible. `yaml: ^3.1.3` is already a
+# dependency of `tools/`, so parsing costs nothing.
+#
+# Usage:
+#   dart tools/sample_cleanup/remove_sample.dart --list
+#   dart tools/sample_cleanup/remove_sample.dart auth --dry-run
+#   dart tools/sample_cleanup/remove_sample.dart auth --apply
+
+# ---------------------------------------------------------------------------
+# Classification
+# ---------------------------------------------------------------------------
+# kind: framework | sample | shell
+#   framework — infrastructure. Keep. Deleting breaks the template.
+#   sample    — reference implementation. Delete freely once you understand it.
+#   shell     — the host app. Keep, but you edit it whenever you add/remove a feature.
+
+packages:
+  # --- Framework: core infrastructure -------------------------------------
+  core_common: { kind: framework, path: packages/core/common }
+  core_di: { kind: framework, path: packages/core/di }
+  core_base_ui: { kind: framework, path: packages/core/base_ui }
+  core_network: { kind: framework, path: packages/core/network }
+  core_storage: { kind: framework, path: packages/core/storage }
+  core_database: { kind: framework, path: packages/core/database }
+  core_notifications: { kind: framework, path: packages/core/notifications }
+  core_ui_kit: { kind: framework, path: packages/core/ui_kit }
+  provider_state_management:
+    { kind: framework, path: packages/core/provider_state_management }
+  bloc_state_management:
+    { kind: framework, path: packages/core/bloc_state_management }
+
+  # --- Framework: layer foundations ---------------------------------------
+  # These carry the base contracts every domain/data package builds on
+  # (Result<T>, BaseEntity, IBaseRepository). They also happen to contain the
+  # cache sample — see `embedded_samples` below.
+  domain_core: { kind: framework, path: packages/domain/core }
+  data_core: { kind: framework, path: packages/data/core }
+
+  # --- Shell ---------------------------------------------------------------
+  app:
+    kind: shell
+    path: app
+    note: >-
+      Keep. Its `lib/di/injection.dart` names every feature it composes — that
+      is the one intentional hard reference from shell to features, and it is
+      what you edit when adding or removing one.
+
+  # --- Samples: features ---------------------------------------------------
+  feature_auth:
+    kind: sample
+    path: packages/features/auth
+    demonstrates: >-
+      Provider state management, a global @lazySingleton controller, Firebase
+      auth via the data layer, cross-feature contracts (agnostic streams,
+      action handlers), and route-level DI.
+
+  feature_home:
+    kind: sample
+    path: packages/features/home
+    demonstrates: >-
+      BLoC with private Freezed events, a dashboard tab (IDashboardTabModule),
+      and consuming another feature's state through a core_di contract.
+
+  feature_settings:
+    kind: sample
+    path: packages/features/settings
+    demonstrates: >-
+      A second dashboard tab, theme/locale switching that bypasses Domain, and
+      triggering another feature's action through an action handler.
+
+  feature_onboarding:
+    kind: sample
+    path: packages/features/onboarding
+    demonstrates: >-
+      A stack route (IFeatureRouteModule) and the cold-start entry point
+      (IAppEntryLocation).
+
+  feature_dashboard:
+    kind: sample
+    path: packages/features/dashboard
+    demonstrates: >-
+      Shell chrome only — builds the bottom bar from whatever tabs register
+      themselves. Owns no business logic and no tab page.
+
+  feature_splash:
+    kind: sample
+    path: packages/features/splash
+    demonstrates: >-
+      Supplying the boot splash screen to the app shell through
+      IAppSplashScreen.
+
+  # --- Samples: domain/data pairs -----------------------------------------
+  domain_auth:
+    kind: sample
+    path: packages/domain/auth
+    demonstrates: Pure-Dart entities, params, repository contract and use cases.
+  data_auth:
+    kind: sample
+    path: packages/data/auth
+    demonstrates: >-
+      Freezed models with .toEntity(), a package-owned storage key, and a
+      Firebase-backed repository. Also ships an unused Retrofit data source as
+      a REST reference.
+  domain_language:
+    kind: sample
+    path: packages/domain/language
+    demonstrates: A minimal domain package. Not wired to the Settings UI.
+  data_language:
+    kind: sample
+    path: packages/data/language
+    demonstrates: A minimal repository implementation over package-owned storage.
+
+# ---------------------------------------------------------------------------
+# Samples living inside framework packages
+# ---------------------------------------------------------------------------
+# These cannot be removed by deleting a package, because the package around
+# them is framework. Delete the listed files instead.
+
+embedded_samples:
+  cache_chain:
+    lives_in: [domain_core, data_core]
+    demonstrates: >-
+      One complete vertical slice — table, DAO, data source, repository,
+      entity, use cases — as a copy-me template for your first real table.
+    warning: >-
+      Nothing in the app consumes it. `unused_checker` will not flag it because
+      it is registered in DI, and the tests use it as a fixture, so it looks
+      alive. It is not.
+    files:
+      - packages/domain/core/lib/src/entities/cache_entry_entity.dart
+      - packages/domain/core/lib/src/params/cache_entry_params.dart
+      - packages/domain/core/lib/src/repositories/i_cache_entry_repository.dart
+      - packages/domain/core/lib/src/usecases/get_cache_entry_usecase.dart
+      - packages/domain/core/lib/src/usecases/get_all_cache_entries_usecase.dart
+      - packages/domain/core/lib/src/usecases/save_cache_entry_usecase.dart
+      - packages/data/core/lib/src/database/cache_database.dart
+      - packages/data/core/lib/src/database/tables/cache_entries_table.dart
+      - packages/data/core/lib/src/database/dao/cache_entries_dao.dart
+      - packages/data/core/lib/src/models/cache_entry_model.dart
+      - packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+      - packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart
+    also_remove:
+      - packages/data/core/test/cache_database_test.dart
+      - packages/data/core/test/database_handle_test.dart
+
+  auth_rest_reference:
+    lives_in: [data_auth]
+    demonstrates: A Retrofit remote data source over the endpoints in utils/.
+    warning: >-
+      Dead in the running app — AuthRepositoryImpl talks to the Firebase SDK
+      directly and never calls it. Kept as a REST reference.
+    files:
+      - packages/data/auth/lib/src/data_sources/remote/auth_remote_data_source.dart
+      - packages/data/auth/lib/src/utils/auth_api_constants.dart
+
+# ---------------------------------------------------------------------------
+# Removal bundles
+# ---------------------------------------------------------------------------
+# A "feature" is never just its feature package. Each bundle lists everything
+# that travels with it. `breaks` records samples that stop working when this
+# bundle is removed — the part no document covered before.
+
+bundles:
+  auth:
+    packages: [feature_auth, domain_auth, data_auth]
+    # Contracts declared in core_di purely so this feature could publish state
+    # across the boundary. They become dead declarations once it is gone.
+    orphaned_contracts:
+      - packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart
+      - packages/core/di/lib/src/agnostic_streams/i_auth_session_state.dart
+      - packages/core/di/lib/src/agnostic_streams/i_auth_refresh_listenable.dart
+      - packages/core/di/lib/src/agnostic_streams/auth_session_failure.dart
+      - packages/core/di/lib/src/actions/i_auth_action_handler.dart
+      - packages/core/di/lib/src/navigators/auth_navigator.dart
+    orphaned_keys:
+      - "NavigatorKeys.authKey in packages/core/di/lib/src/routing/navigator_keys.dart"
+    breaks:
+      - sample: feature_settings
+        at: packages/features/settings/lib/src/pages/settings_page.dart:60
+        why: >-
+          Calls getIt<IAuthActionHandler>() — the throwing lookup, not
+          getItOrNull. Tapping logout throws once auth is gone.
+        fix: Delete the logout row, or switch to getItOrNull and hide it when null.
+      - sample: feature_home
+        at: packages/features/home/lib/src/bloc/home_profile_bloc.dart:35
+        why: >-
+          HomeProfileBloc takes IAuthStatusStream through the constructor, so
+          DI cannot build it at all once nothing registers that contract.
+        fix: Drop the dependency from the bloc, or remove feature_home too.
+    safe_couplings:
+      - "feature_onboarding -> AuthNavigator (getItOrNull + fallback, degrades quietly)"
+
+  home:
+    packages: [feature_home]
+    orphaned_contracts:
+      - packages/core/di/lib/src/navigators/home_navigator.dart
+    breaks: []
+    safe_couplings:
+      - "feature_auth -> HomeNavigator (getItOrNull + fallback, degrades quietly)"
+    note: >-
+      Removing every IDashboardTabModule leaves the dashboard with no tabs;
+      AppRouter falls back to an empty branch rather than crashing.
+
+  settings:
+    packages: [feature_settings]
+    orphaned_contracts:
+      - packages/core/di/lib/src/navigators/settings_navigator.dart
+    breaks: []
+
+  onboarding:
+    packages: [feature_onboarding]
+    orphaned_contracts:
+      - packages/core/di/lib/src/navigators/onboarding_navigator.dart
+    breaks: []
+    note: >-
+      This is the only IAppEntryLocation. Without it the cold-start route falls
+      back to the first dashboard tab, then to '/'.
+
+  dashboard:
+    packages: [feature_dashboard]
+    orphaned_contracts:
+      - packages/core/di/lib/src/routing/dashboard_route_module.dart
+    breaks: []
+    note: >-
+      Tabs registered by other features have nothing to render into. Remove the
+      tab features as well, or supply your own DashboardRouteModule.
+
+  splash:
+    packages: [feature_splash]
+    orphaned_contracts:
+      - packages/core/di/lib/src/app/i_app_splash_screen.dart
+    breaks: []
+    note: >-
+      main.dart resolves it with getItOrNull, so the app simply keeps the
+      native splash until the first frame.
+
+  language:
+    packages: [domain_language, data_language]
+    orphaned_contracts: []
+    breaks: []
+    note: >-
+      Already unused by the UI — Settings changes locale through
+      LanguageProvider, which bypasses Domain entirely.
+
+# ---------------------------------------------------------------------------
+# Shared files every bundle removal edits
+# ---------------------------------------------------------------------------
+shared_files:
+  - pubspec.yaml # workspace: entry per package
+  - app/pubspec.yaml # dependency entry per package
+  - app/lib/di/injection.dart # import + ExternalModule entry per feature
+
+# Contracts that survive every removal: they are generic mechanisms, not
+# feature-specific. Do not delete these while chasing orphans.
+framework_contracts:
+  - packages/core/di/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
+  - packages/core/di/lib/src/routing/i_dashboard_tab_module.dart
+  - packages/core/di/lib/src/routing/i_app_entry_location.dart
+  - packages/core/di/lib/src/routing/navigator_keys.dart
+  - packages/core/di/lib/src/feature_localization.dart
+  - packages/core/di/lib/src/theme/i_theme_storage.dart
+  - packages/core/di/lib/src/language/i_language_storage.dart
+  - packages/core/di/lib/src/app/i_app_tree_wrapper.dart

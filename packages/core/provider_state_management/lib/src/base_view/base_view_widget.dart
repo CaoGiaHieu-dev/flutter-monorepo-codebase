@@ -1,4 +1,3 @@
-import 'package:feature_shared/feature_shared.dart';
 import 'package:flutter/material.dart' hide ErrorWidgetBuilder;
 
 import '../../provider_state_management.dart';
@@ -41,7 +40,7 @@ class BaseViewWidget<P extends BaseProvider<T>, T extends Object>
     Widget? child,
   ) {
     return viewState.data == null
-        ? emptyWidget?.call(context, child) ?? const EmptyWidget()
+        ? emptyWidget?.call(context, child) ?? const DefaultEmptyWidget()
         : builder.call(context, viewState.data!, child);
   }
 
@@ -57,9 +56,10 @@ class BaseViewWidget<P extends BaseProvider<T>, T extends Object>
           initial: () =>
               initialWidget?.call(context, child) ??
               loadingWidget?.call(context, child) ??
-              const LoadingWidget(),
+              const DefaultLoadingWidget(),
           loading: () =>
-              loadingWidget?.call(context, child) ?? const LoadingWidget(),
+              loadingWidget?.call(context, child) ??
+              const DefaultLoadingWidget(),
           error: (error) =>
               onErrorBuilder?.call(
                 context,
@@ -109,7 +109,7 @@ class BaseViewWidget2<
     Widget? child,
   ) {
     return viewState1.data == null && viewState2.data == null
-        ? emptyWidget?.call(context, child) ?? const EmptyWidget()
+        ? emptyWidget?.call(context, child) ?? const DefaultEmptyWidget()
         : builder.call(context, viewState1.data, viewState2.data, child);
   }
 
@@ -132,11 +132,12 @@ class BaseViewWidget2<
         final viewState2 = viewState.viewState2;
         final builder = _builder(context, viewState1, viewState2, child);
         if (viewState1.isLoading || viewState2.isLoading) {
-          return loadingWidget?.call(context, child) ?? const LoadingWidget();
+          return loadingWidget?.call(context, child) ??
+              const DefaultLoadingWidget();
         } else if (viewState1.isInitial || viewState2.isInitial) {
           return initialWidget?.call(context, child) ??
               loadingWidget?.call(context, child) ??
-              const LoadingWidget();
+              const DefaultLoadingWidget();
         } else if (viewState1.isError || viewState2.isError) {
           return onErrorBuilder?.call(
                 context,
@@ -194,7 +195,7 @@ class BaseViewWidget3<
     return viewState1.data == null &&
             viewState2.data == null &&
             viewState3.data == null
-        ? emptyWidget?.call(context, child) ?? const EmptyWidget()
+        ? emptyWidget?.call(context, child) ?? const DefaultEmptyWidget()
         : builder.call(
             context,
             viewState1.data,
@@ -238,13 +239,14 @@ class BaseViewWidget3<
         if (viewState1.isLoading ||
             viewState2.isLoading ||
             viewState3.isLoading) {
-          return loadingWidget?.call(context, child) ?? const LoadingWidget();
+          return loadingWidget?.call(context, child) ??
+              const DefaultLoadingWidget();
         } else if (viewState1.isInitial ||
             viewState2.isInitial ||
             viewState3.isInitial) {
           return initialWidget?.call(context, child) ??
               loadingWidget?.call(context, child) ??
-              const LoadingWidget();
+              const DefaultLoadingWidget();
         } else if (viewState1.isError ||
             viewState2.isError ||
             viewState3.isError) {
@@ -310,7 +312,7 @@ class BaseViewWidget4<
             viewState2.data == null &&
             viewState3.data == null &&
             viewState4.data == null
-        ? emptyWidget?.call(context, child) ?? const EmptyWidget()
+        ? emptyWidget?.call(context, child) ?? const DefaultEmptyWidget()
         : builder.call(
             context,
             viewState1.data,
@@ -361,14 +363,15 @@ class BaseViewWidget4<
             viewState2.isLoading ||
             viewState3.isLoading ||
             viewState4.isLoading) {
-          return loadingWidget?.call(context, child) ?? const LoadingWidget();
+          return loadingWidget?.call(context, child) ??
+              const DefaultLoadingWidget();
         } else if (viewState1.isInitial ||
             viewState2.isInitial ||
             viewState3.isInitial ||
             viewState4.isInitial) {
           return initialWidget?.call(context, child) ??
               loadingWidget?.call(context, child) ??
-              const LoadingWidget();
+              const DefaultLoadingWidget();
         } else if (viewState1.isError ||
             viewState2.isError ||
             viewState3.isError ||
@@ -441,7 +444,7 @@ class BaseViewWidget5<
             viewState3.data == null &&
             viewState4.data == null &&
             viewState5.data == null
-        ? emptyWidget?.call(context, child) ?? const EmptyWidget()
+        ? emptyWidget?.call(context, child) ?? const DefaultEmptyWidget()
         : builder.call(
             context,
             viewState1.data,
@@ -500,7 +503,8 @@ class BaseViewWidget5<
             viewState3.isLoading ||
             viewState4.isLoading ||
             viewState5.isLoading) {
-          return loadingWidget?.call(context, child) ?? const LoadingWidget();
+          return loadingWidget?.call(context, child) ??
+              const DefaultLoadingWidget();
         } else if (viewState1.isInitial ||
             viewState2.isInitial ||
             viewState3.isInitial ||
@@ -508,7 +512,7 @@ class BaseViewWidget5<
             viewState5.isInitial) {
           return initialWidget?.call(context, child) ??
               loadingWidget?.call(context, child) ??
-              const LoadingWidget();
+              const DefaultLoadingWidget();
         } else if (viewState1.isError ||
             viewState2.isError ||
             viewState3.isError ||
@@ -588,7 +592,7 @@ class BaseViewWidget6<
             viewState4.data == null &&
             viewState5.data == null &&
             viewState6.data == null
-        ? emptyWidget?.call(context, child) ?? const EmptyWidget()
+        ? emptyWidget?.call(context, child) ?? const DefaultEmptyWidget()
         : builder.call(
             context,
             viewState1.data,
@@ -662,7 +666,8 @@ class BaseViewWidget6<
             viewState4.isLoading ||
             viewState5.isLoading ||
             viewState6.isLoading) {
-          return loadingWidget?.call(context, child) ?? const LoadingWidget();
+          return loadingWidget?.call(context, child) ??
+              const DefaultLoadingWidget();
         } else if (viewState1.isInitial ||
             viewState2.isInitial ||
             viewState3.isInitial ||
@@ -671,7 +676,7 @@ class BaseViewWidget6<
             viewState6.isInitial) {
           return initialWidget?.call(context, child) ??
               loadingWidget?.call(context, child) ??
-              const LoadingWidget();
+              const DefaultLoadingWidget();
         } else if (viewState1.isError ||
             viewState2.isError ||
             viewState3.isError ||

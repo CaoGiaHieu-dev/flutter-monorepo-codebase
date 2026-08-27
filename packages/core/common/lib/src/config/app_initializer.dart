@@ -64,9 +64,29 @@ class AppInitializer {
     } else {
       // Apply Global SSL Certificate Pinning via HttpSecurityPinningClient on Staging and Production.
       // This automatically secures all HttpClients in the entire application (including Dio, Image loaders, WebSockets, etc.)
-      final hashes = getItOrNull<SslPinningConfig>()?.sslPinningHashes;
-      if (hashes?.isNotEmpty == true) {
-        HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes!);
+      //
+      // Requires `SslPinningConfig` to be registered in GetIt. Registering only
+      // the `NetworkConfig` subtype is not enough — GetIt resolves by exact
+      // type — which is why the app shell binds it explicitly in
+      // `app/lib/di/network_binding_module.dart`.
+      final config = getItOrNull<SslPinningConfig>();
+      final hashes = config?.sslPinningHashes;
+
+      if (hashes != null && hashes.isNotEmpty) {
+        HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
+      } else {
+        // Never fail silently here: without pinning the app still talks to the
+        // server over plain TLS, so a proxy with a trusted root can read every
+        // request. Surfacing it keeps a misconfiguration from shipping unnoticed.
+        DynamicLogger.log(
+          config == null
+              ? 'SSL pinning skipped: no SslPinningConfig registered in GetIt. '
+                    'Traffic on ${AppConfig.appFlavor.name} is NOT pinned.'
+              : 'SSL pinning skipped: sslPinningHashes is empty. '
+                    'Traffic on ${AppConfig.appFlavor.name} is NOT pinned.',
+          tag: 'Security',
+          level: LogLevel.ERROR,
+        );
       }
     }
   }

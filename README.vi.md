@@ -51,6 +51,7 @@ graph TD
         CoreCom["core_common"]:::core
         CoreNet["core_network"]:::core
         CoreStore["core_storage"]:::core
+        CoreDB["core_database"]:::core
         CoreDI["core_di"]:::core
     end
 
@@ -64,9 +65,19 @@ graph TD
     DataLayer -->|"Triển khai Repository Contracts"| DomainLayer
 
     FeatureLayer -.->|"Sử dụng Tokens/Widgets/DI"| CoreLayer
-    DataLayer -.->|"Sử dụng API/Cache Services"| CoreLayer
-    DomainLayer -.->|"Sử dụng Kiểu Nguyên thủy"| CoreCom
+    DataLayer -.->|"Sử dụng cơ chế API/DB/Cache"| CoreLayer
+
+    %% Domain nằm ở tâm và KHÔNG phụ thuộc gì cả.
+    %% Core được phép phụ thuộc Domain — không bao giờ ngược lại.
+    CoreCom -.->|"Dùng Result / AppFailure"| DomCore
+    CoreDI -.->|"Dùng UserEntity trong contract"| DomAuth
 ```
+
+> [!IMPORTANT]
+> **Domain không phụ thuộc bất cứ thứ gì.** `domain_core` khai báo **0** workspace dependency và
+> không package domain nào khai Flutter SDK — `AppFailure` nằm trong `domain_core` cạnh `Result<T>`.
+> Các mũi tên hướng vào Domain (`core_common → domain_core`, `core_di → domain_auth`) là những cạnh
+> đi lên **duy nhất** được duyệt; xem [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
 
 ---
 
@@ -93,21 +104,23 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │   │   └── main_scope.dart        # Quản lý Boot Lifecycle (Splash → RootApp)
 │   └── pubspec.yaml               # Cấu hình Host App (liên kết tất cả packages con)
 ├── packages/                      # Thư mục chứa các Micro-packages
-│   ├── core/                      # Các tiện ích và hạ tầng dùng chung (Core Packages)
-│   │   ├── base_ui/               # Theme, LanguageProvider, assets & l10n toàn cục (không widget)
-│   │   ├── bloc_state_management/ # Lớp BaseCubit, BaseBloc và ViewState cho BLoC
-│   │   ├── common/                # Hằng số (Constants), Enums, AppFailure, ErrorHandler
-│   │   ├── di/                    # DI Hub (Navigator / ActionHandler interfaces)
-│   │   ├── network/               # Client kết nối API (Dio + Retrofit custom factory)
+│   ├── core/                      # Hạ tầng dùng chung — CHỈ CƠ CHẾ, không chứa dữ liệu feature
+│   │   ├── base_ui/               # Theme, LanguageProvider, design token & l10n (0 widget)
+│   │   ├── bloc_state_management/ # BaseBloc, BaseCubit, BlocViewState<T>
+│   │   ├── common/                # Enums, ErrorHandler, AppConfig, extensions, src/utils/
+│   │   ├── database/              # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
+│   │   ├── di/                    # DI Hub — mọi contract xuyên package nằm ở đây
+│   │   ├── network/               # Dio + Retrofit factory, chuỗi interceptor, SSL pinning
 │   │   ├── notifications/         # Module quản lý thông báo đẩy (Push Notification)
-│   │   ├── provider_state_management/ # Lớp BaseProvider và các Helper quản lý trạng thái
-│   │   └── storage/               # Secure Storage Reactive + Shared Preferences
-│   ├── domain/                    # Micro-packages nghiệp vụ thuần (Pure Dart)
-│   │   ├── core/                  # Result<T>, BaseEntity, các types dùng chung
+│   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   │   ├── storage/               # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
+│   │   └── ui_kit/                # core_ui_kit — widget dùng chung cho mọi feature
+│   ├── domain/                    # Micro-packages nghiệp vụ Pure Dart — 0 phụ thuộc
+│   │   ├── core/                  # Result<T>, AppFailure, BaseEntity, BaseUseCase
 │   │   ├── auth/                  # Entities, UseCases, Repository interfaces cho Auth
 │   │   └── language/              # Entities, UseCases cho đa ngôn ngữ
 │   ├── data/                      # Micro-packages triển khai tích hợp
-│   │   ├── core/                  # IBaseRepository, các hàm wrapper xử lý lỗi
+│   │   ├── core/                  # IBaseRepository + CacheDatabase (tự sở hữu bảng/DAO)
 │   │   ├── auth/                  # Models, DataSources, RepositoryImpl cho Auth
 │   │   └── language/              # RepositoryImpl cho đa ngôn ngữ
 │   └── features/                  # Các gói tính năng độc lập (Feature Packages)
@@ -116,8 +129,7 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │       ├── auth/                  # Feature Auth (mẫu): Login, Register, Forgot Password
 │       ├── dashboard/             # Feature Dashboard (mẫu): Chrome shell Bottom Tab only
 │       ├── home/                  # Feature Home (mẫu): Tab Trang chủ
-│       ├── settings/              # Feature Settings (mẫu): Tab Cài đặt (tách khỏi Home)
-│       └── shared/                # Feature Shared: Widgets dùng chung giữa features
+│       └── settings/              # Feature Settings (mẫu): Tab Cài đặt (tách khỏi Home)
 ├── tools/                         # Bộ công cụ dòng lệnh dành cho lập trình viên
 │   ├── android_compliance/        # Kiểm tra tính tương thích 16KB Page Size (Android 15+)
 │   ├── barrel_generator/          # Script tự động tạo barrel files cho packages
@@ -133,6 +145,12 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 ├── pubspec_dependencies.yaml      # Nguồn chân lý phiên bản thư viện (Version Catalog)
 └── README.md                      # Cẩm nang kỹ thuật Master này
 ```
+
+> [!NOTE]
+> **Mọi package đều có thư mục `utils/`** chứa hằng số của **chính nó** — storage key, route path,
+> timeout. Không có gì mang tính domain được phép nằm ở `core_common`. Ngoại lệ duy nhất được duyệt
+> là bộ design token trong `core_base_ui/src/styles/`, giữ nguyên vị trí vì đó là bề mặt công khai
+> của design system.
 
 ---
 
@@ -164,8 +182,7 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 5.  **Workspace Setup (`tools/workspace_setup/`)**:
     ```bash
-    .\tools\workspace_setup\configure.bat  # Windows
-    ./tools/workspace_setup/configure.sh   # macOS/Linux
+    dart tools/workspace_setup/configure.dart  # đa nền tảng
     ```
 6.  **Code Review AI (`tools/code_review/`)**:
     ```bash
@@ -177,8 +194,8 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    .\tools\theme_generator\theme_setting.bat
-    .\tools\firebase\firebase_config.bat
+    dart tools/theme_generator/theme_setting.dart
+    dart tools/firebase/firebase_config.dart
     ```
 
 ---
@@ -187,16 +204,29 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
 
 ### Tách Biệt Mối Quan Tâm (Separation of Concerns)
 1. **Tầng Domain (`packages/domain/*`)**:
-   - **Pure Dart**: Không import `flutter/material.dart`, `dio`, `retrofit`, hoặc bất kỳ thư viện UI/Network nào.
-   - Định nghĩa `Entities`, `UseCases`, và `Repository Interfaces`.
+   - **Pure Dart, được bảo đảm bởi package graph** — không chỉ bằng quy ước. `domain_core` có
+     **0** workspace dependency và không package domain nào khai Flutter SDK.
+   - Không import `flutter/material.dart`, `dio`, `retrofit`, hay bất kỳ thư viện UI/Network nào.
+   - Định nghĩa `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` và `AppFailure`.
 2. **Tầng Data (`packages/data/*`)**:
    - Triển khai các hợp đồng (contracts) từ `domain`.
-   - Kết nối trực tiếp với `core_network` (API) và `core_storage` (DB cục bộ).
-   - Biến đổi DTOs/Models → Entities qua hàm `.toEntity()`.
+   - Dùng `core_network` (API), `core_storage` (key-value) và `core_database` (SQL) như *cơ chế* —
+     mỗi package data tự khai storage key và tự sở hữu database riêng.
+   - DataSource trả về **Model**, không bao giờ trả Entity, và không phơi class do Drift sinh.
+   - Biến đổi Models → Entities qua hàm `.toEntity()`.
 3. **Tầng Presentation (`packages/features/*`)**:
    - Hiển thị UI và quản lý trạng thái (Provider hoặc BLoC).
    - **Chỉ giao tiếp với Domain thông qua UseCases**, tuyệt đối không gọi trực tiếp API.
-   - **CẤM phụ thuộc vào tầng `data`** hoặc feature package khác (ngoại trừ `feature_shared`).
+   - **CẤM phụ thuộc vào tầng `data`** hoặc bất kỳ feature package nào khác — không ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit`.
+4. **Tầng Core (`packages/core/*`)**:
+   - Chỉ cung cấp cơ chế. **CẤM phụ thuộc bất kỳ package `feature_*` hoặc `data_*` nào.**
+   - Được phép phụ thuộc `domain_*` (Domain là tâm): `core_common → domain_core`,
+     `core_di → domain_auth`, `provider_state_management → domain_core`.
+
+> [!IMPORTANT]
+> **Gỡ bất kỳ feature nào app vẫn khởi động bình thường.** Mọi thứ app shell tiêu thụ lúc runtime
+> đều đi qua contract ở `core_di` sau `getItOrNull` / `getAllOrEmpty` kèm fallback an toàn.
+> `getAll<T>()` **ném lỗi** khi chưa có gì đăng ký — luôn ưu tiên `getAllOrEmpty<T>()`.
 
 ### Nguyên Lý Đảo Ngược Phụ Thuộc (DIP)
 Features giao tiếp chéo hoàn toàn qua giao diện trung gian trong `core_di`:
@@ -234,6 +264,8 @@ const _coreModules = [
   ExternalModule(CoreNetworkPackageModule),
   ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
+  // Không đăng ký gì: `core_database` chỉ là cơ chế, không sở hữu database nào.
+  ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 
@@ -255,11 +287,14 @@ const _dataModules = [
   ExternalModule(DataLanguagePackageModule),
 ];
 
+// Tham chiếu cứng DUY NHẤT có chủ đích của app shell tới feature package —
+// là composition root, nó buộc phải gọi tên những gì nó lắp ráp.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
   ExternalModule(FeatureDashboardPackageModule),
   ExternalModule(FeatureHomePackageModule),
   ExternalModule(FeatureOnboardingPackageModule),
+  ExternalModule(FeatureSettingsPackageModule),
   ExternalModule(FeatureSplashPackageModule),
 ];
 
@@ -285,6 +320,17 @@ Future<void> configureDependencies({String? environment}) async {
 }
 ```
 
+### Hai quy tắc thứ tự dễ gây lỗi
+
+> [!CAUTION]
+> **`@Singleton` eager KHÔNG được phụ thuộc type đăng ký ở module chạy sau** — sẽ ném
+> *"not registered"* ngay lúc boot. `flutter analyze` không bắt được lỗi này; phải kiểm chứng ở file
+> sinh ra `app/lib/di/injection.config.dart`. Dùng `@LazySingleton` khi phụ thuộc nằm ở module sau.
+>
+> **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
+> không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
+> qua `@module` (xem `app/lib/di/network_binding_module.dart`).
+
 ---
 
 ## 🚦 6. Hệ Thống Định Tuyến Phân Lớp (Decoupled Type-Safe Routing)
@@ -304,9 +350,20 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - `getAllOrEmpty<IDashboardTabModule>()` sort theo `order` → list `StatefulShellBranch`
 - `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (không có thì tab đầu / `/`)
-- `getItOrNull<AuthProvider>()` → `refreshListenable`
+- `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
 
-Gỡ feature = bỏ `ExternalModule` + pubspec; hot restart. Chi tiết: [docs/vi/08_routing.md](docs/vi/08_routing.md) mục Dashboard.
+Chú ý dòng cuối: router phụ thuộc vào **contract ở `core_di`**, không phải `AuthProvider`. App shell
+không giữ kiểu dữ liệu nào của feature — đó chính là điều khiến `feature_auth` gỡ được.
+
+### Gỡ một feature
+
+1. Xóa `ExternalModule(...)` và dòng import tương ứng trong `app/lib/di/injection.dart`.
+2. Xóa `feature_x:` trong `app/pubspec.yaml`.
+3. Xóa đường dẫn của nó khỏi danh sách `workspace:` trong `pubspec.yaml` gốc.
+4. `flutter pub get && dart run build_runner build -d --workspace`.
+
+Không cần sửa file nào khác — mọi lookup lúc runtime đều có fallback an toàn. Xem
+[`guides/04_routing.md`](docs/vi/guides/04_routing.md).
 
 ---
 
@@ -331,8 +388,9 @@ fastlane android build flavor:dev build_type:apk distribute_store:false distribu
 ## 🚀 Hướng Dẫn Khởi Tạo & Phát Triển Cục Bộ
 
 ### 1. Chuẩn Bị Môi Trường
-- **Flutter**: >= 3.47.0 (Stable)
-- **Dart SDK**: >= 3.13.0
+- **Flutter**: >= 3.47.1 (Stable)
+- **Dart SDK**: >= 3.13.1
+- **JDK**: 17
 - **Ruby**: >= 3.0 (cho Fastlane)
 
 ### 2. Cài Đặt Tất Cả Gói Phụ Thuộc
@@ -341,35 +399,88 @@ flutter pub get
 ```
 *Nhờ Pub Workspaces, toàn bộ phụ thuộc của Host App và tất cả packages con được tải đồng thời và tạo duy nhất một `pubspec.lock`.*
 
-### 3. Khởi Chạy Sinh Mã Đồng Loạt
+### 3. Sinh Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
+`packages/core/common/lib/src/firebase/firebase_module.dart` import cả ba file
+`firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Phải
+chạy `flutterfire configure` một lần cho mỗi flavor trước lần build đầu tiên — xem
+[`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md).
+
+### 4. Khởi Chạy Sinh Mã Đồng Loạt
 ```bash
 dart run build_runner build -d --workspace
 ```
 
-### 4. Chạy Ứng Dụng
+### 5. Chạy Ứng Dụng
 ```bash
-flutter run -t app/lib/main.dart --flavor dev
+flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
 ```
+
+### 6. Build APK
+```bash
+cd app   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu
+flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+```
+
+> [!WARNING]
+> `flutter analyze` **loại trừ các file sinh tự động** (`**.freezed.dart`, `**.g.dart`,
+> `**.config.dart`, `**.module.dart` — xem `analysis_options.yaml`). Analyze sạch **không** chứng
+> minh app biên dịch được. Luôn build thật trước khi tin vào một đợt refactor lớn.
 
 ---
 
-## 📚 Hệ Thống Tài Liệu Bổ Trợ (Documentation Hub)
+## 📚 Hệ Thống Tài Liệu (Documentation Hub)
 
-*   [📘 00. Tổng Quan & Phân Tích Kiến Trúc](docs/vi/00_overview.md)
-*   [🎨 01. Tầng Core Base UI & Theme System](docs/vi/01_core_layer.md)
-*   [🧬 02. Tầng Domain & Quy Trình Tạo UseCase](docs/vi/02_domain_layer.md)
-*   [💾 03. Tầng Data & Tích Hợp Kho Lưu Trữ](docs/vi/03_data_layer.md)
-*   [🖥️ 04. Tầng Giao Diện MVVM & Quản Lý Trạng Thái](docs/vi/04_presentation_layer.md)
-*   [🔌 05. Tiêm Phụ Thuộc Hướng Mô-đun (DI Manual)](docs/vi/05_dependency_injection.md)
-*   [🌐 06. Kết Nối Mạng & Gọi API Tĩnh](docs/vi/06_networking.md)
-*   [🛡️ 07. Quy Tắc Đặt Tên & Viết Mã Nguồn Sạch](docs/vi/07_rules_and_conventions.md)
-*   [🚦 08. Định Tuyến GoRouter & Decoupled Navigation](docs/vi/08_routing.md)
-*   [📦 09. Cẩm Nang Sử Dụng Component Dùng Chung](docs/vi/09_commons_and_shared.md)
-*   [📝 10. Danh Sách Kiểm Tra Khi Review (Review Checklist)](docs/vi/10_review_checklist.md)
-*   [🔐 11. Hệ Thống Lưu Trữ Reactive Secure Storage](docs/vi/11_storage_system.md)
-*   [🗄️ 14. Hệ Thống Database Drift + Isolate](docs/vi/14_database_system.md)
-*   [🚀 12. Hướng Dẫn CI/CD Fastlane Cấp Cao](docs/vi/12_fastlane_guide.md)
-*   [🛠️ 13. Hướng Dẫn Tạo Module Mới (New Module Guide)](docs/vi/13_new_module_guide.md)
+**Bắt đầu tại → [`docs/vi/README.md`](docs/vi/README.md)** *(English: [`docs/en/README.md`](docs/en/README.md))*
+
+Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không theo tầng kiến trúc.
+
+### 🚀 Bắt Đầu — *mới vào repo? đọc theo thứ tự này*
+| Tài liệu | Trả lời câu hỏi |
+| :--- | :--- |
+| [01. Cài đặt](docs/vi/getting-started/01_setup.md) | Cần cài gì, và làm sao chạy được app? |
+| [02. Dạo quanh dự án](docs/vi/getting-started/02_project_tour.md) | Mỗi package làm gì, muốn sửa X thì vào đâu? |
+| [03. Quy trình hàng ngày](docs/vi/getting-started/03_daily_workflow.md) | Gõ lệnh nào, khi nào? |
+
+### 🏛️ Kiến Trúc — *hiểu hệ thống*
+| Tài liệu | Nội dung |
+| :--- | :--- |
+| [01. Tổng quan](docs/vi/architecture/01_overview.md) | Clean Architecture, luật phụ thuộc, các đánh đổi chính |
+| [02. Tầng Core](docs/vi/architecture/02_core.md) | Cả chín package `core_*` và những gì **không** thuộc về chúng |
+| [03. Tầng Domain](docs/vi/architecture/03_domain.md) | Pure Dart, `Result<T>`, entity, use case |
+| [04. Tầng Data](docs/vi/architecture/04_data.md) | Model, data source, repository, chuyển đổi lỗi |
+| [05. Tầng Feature](docs/vi/architecture/05_features.md) | Ranh giới feature, cấu trúc, vòng đời controller |
+| [06. App Shell](docs/vi/architecture/06_app_shell.md) | Vòng đời khởi động, lắp ráp DI, router động |
+
+### 🧭 Hướng Dẫn — *bắt tay vào làm*
+| Tài liệu | Việc |
+| :--- | :--- |
+| [01. Tạo feature mới](docs/vi/guides/01_new_feature.md) | Dựng một feature từ đầu đến cuối |
+| [02. Tạo domain + data](docs/vi/guides/02_new_domain_data.md) | Thêm một nghiệp vụ mới |
+| [03. Quản lý trạng thái](docs/vi/guides/03_state_management.md) | Chọn và dùng Provider hay BLoC |
+| [04. Định tuyến](docs/vi/guides/04_routing.md) | Đăng ký route, điều hướng xuyên feature |
+| [05. Dependency Injection](docs/vi/guides/05_di.md) | Scope, thứ tự module, các bẫy thường gặp |
+| [06. Lưu trữ](docs/vi/guides/06_storage.md) | Lưu một giá trị mà package của bạn sở hữu |
+| [07. Database](docs/vi/guides/07_database.md) | Bảng, DAO, migration (Drift) |
+| [08. Networking](docs/vi/guides/08_networking.md) | API client, interceptor, refresh token, SSL pinning |
+| [09. Đa ngôn ngữ & Theming](docs/vi/guides/09_localization_theming.md) | Bản dịch, design token, responsive |
+| [10. Giao tiếp xuyên feature](docs/vi/guides/10_cross_feature.md) | Sáu mô hình được cho phép |
+
+### 📐 Tra Cứu — *tìm nhanh*
+| Tài liệu | Chứa |
+| :--- | :--- |
+| [01. Luật kiến trúc](docs/vi/reference/01_rules.md) | Mọi luật kèm lý do đằng sau |
+| [02. Quy ước đặt tên](docs/vi/reference/02_naming.md) | Hậu tố file/class, quy ước thư mục |
+| [03. Công cụ](docs/vi/reference/03_tooling.md) | Mọi script trong `tools/` |
+| [04. Checklist review](docs/vi/reference/04_review_checklist.md) | Cổng kiểm tra PR |
+
+### 🚢 Vận Hành — *đưa lên production*
+| Tài liệu | Chứa |
+| :--- | :--- |
+| [01. CI/CD](docs/vi/operations/01_cicd.md) | Pipeline GitHub Actions & Azure, secrets cần thiết |
+| [02. Fastlane & phát hành](docs/vi/operations/02_fastlane_release.md) | Lane, ký ứng dụng, phân phối store |
+
+> Luật dành cho AI Agent nằm riêng ở [`.agents/AGENTS.md`](.agents/AGENTS.md) và
+> [`.agents/skills/`](.agents/skills/).
 
 ---
 *Bản quyền sở hữu trí tuệ thuộc về CaoGiaHieu-dev. Mọi quyền được bảo lưu.*

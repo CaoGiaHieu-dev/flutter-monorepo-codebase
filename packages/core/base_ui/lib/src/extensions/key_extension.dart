@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import '../utils/base_ui_constants.dart';
 import 'context_extension.dart';
 
 /// Extension methods for [GlobalKey] to provide additional functionality.
@@ -100,7 +101,7 @@ extension GlobalKeyExtension on GlobalKey {
           ancestor: overlay,
         ),
       ),
-      Offset(0, -4.h) & overlay.size,
+      Offset(0, BaseUiConstants.DROPDOWN_VERTICAL_OFFSET.h) & overlay.size,
     );
 
     // Get the size of the screen
@@ -122,15 +123,20 @@ extension GlobalKeyExtension on GlobalKey {
       shape:
           shape ??
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.r),
+            borderRadius: BorderRadius.circular(
+              BaseUiConstants.DROPDOWN_BORDER_RADIUS.r,
+            ),
             side:
                 side ??
-                BorderSide(color: context.colors.surfaceVariant, width: 1.r),
+                BorderSide(
+                  color: context.colors.surfaceVariant,
+                  width: BaseUiConstants.DROPDOWN_BORDER_WIDTH.r,
+                ),
           ),
       shadowColor: Colors.transparent,
       clipBehavior: Clip.antiAlias,
       constraints: BoxConstraints(
-        maxHeight: realHeight / 3,
+        maxHeight: realHeight / BaseUiConstants.DROPDOWN_MAX_HEIGHT_DIVISOR,
         minWidth: button.size.width,
         maxWidth: fixedWidth ? button.size.width : double.infinity,
       ),
@@ -152,7 +158,7 @@ extension GlobalKeyExtension on GlobalKey {
             // When the item is tapped, call the `onTap` callback and pass the item value
             onTap?.call(item);
           },
-          height: 48.h,
+          height: BaseUiConstants.DROPDOWN_ITEM_HEIGHT.h,
           padding: padding,
           child: item == null
               ? const SizedBox()

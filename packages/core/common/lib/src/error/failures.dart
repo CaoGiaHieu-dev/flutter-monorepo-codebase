@@ -1,71 +1,25 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
-
-part 'failures.freezed.dart';
-part 'failures.g.dart';
-
-/// Base class for all application failures.
+/// Compatibility re-export — [AppFailure] now lives in `domain_core`.
 ///
-/// This abstract class represents the result of failed operations in the
-/// application. Unlike exceptions, failures are expected outcomes that
-/// should be handled gracefully by the application logic.
-@Freezed(genericArgumentFactories: true)
-sealed class AppFailure<T> with _$AppFailure<T> {
-  /// Failure that occurs during network operations.
-  const factory AppFailure.network({
-    required String message,
-    int? code,
-    T? data,
-  }) = NetworkFailure<T>;
+/// Failures are part of the `Result` contract, so they belong at the centre of
+/// the architecture alongside it, not in an infrastructure package. Moving the
+/// declaration is what lets `domain_core` drop its dependency on
+/// `core_common` (and on Flutter with it), restoring the Clean Architecture
+/// direction: Domain depends on nothing, every other layer may depend on
+/// Domain.
+///
+/// This file stays so the many existing `package:core_common/core_common.dart`
+/// imports keep resolving `AppFailure` unchanged. Prefer importing
+/// `package:domain_core/domain_core.dart` directly in new code.
+library;
 
-  /// Failure that occurs when server returns an error response.
-  const factory AppFailure.server({
-    required String message,
-    int? code,
-    T? data,
-  }) = ServerFailure<T>;
-
-  /// Failure that occurs during authentication or authorization.
-  const factory AppFailure.auth({required String message, int? code, T? data}) =
-      AuthFailure<T>;
-
-  /// Failure that occurs during local storage operations.
-  const factory AppFailure.storage({
-    required String message,
-    int? code,
-    T? data,
-  }) = StorageFailure<T>;
-
-  /// Failure that occurs during data validation.
-  const factory AppFailure.validation({
-    required String message,
-    int? code,
-    T? data,
-    String? field,
-  }) = ValidationFailure<T>;
-
-  /// Failure that occurs during data parsing or serialization.
-  const factory AppFailure.parse({
-    required String message,
-    int? code,
-    T? data,
-  }) = ParseFailure<T>;
-
-  /// Failure that occurs during cache operations.
-  const factory AppFailure.cache({
-    required String message,
-    int? code,
-    T? data,
-  }) = CacheFailure<T>;
-
-  /// Failure that occurs during external service operations.
-  const factory AppFailure.service({
-    required String message,
-    int? code,
-    T? data,
-  }) = ServiceFailure<T>;
-
-  factory AppFailure.fromJson(
-    Map<String, dynamic> json,
-    T Function(Object?) fromJsonT,
-  ) => _$AppFailureFromJson(json, fromJsonT);
-}
+export 'package:domain_core/domain_core.dart'
+    show
+        AppFailure,
+        AuthFailure,
+        CacheFailure,
+        NetworkFailure,
+        ParseFailure,
+        ServerFailure,
+        ServiceFailure,
+        StorageFailure,
+        ValidationFailure;

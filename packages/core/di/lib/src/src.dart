@@ -1,6 +1,7 @@
 // Auto-generated exports, do not edit manually.
 export 'actions/actions.dart';
 export 'agnostic_streams/agnostic_streams.dart';
+export 'app/app.dart';
 export 'feature_localization.dart';
 export 'language/language.dart';
 export 'navigators/navigators.dart';

@@ -5,12 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 import '../pages/pages.dart';
-import '../providers/providers.dart';
-import '{{snakeNameInput}}_path.dart';
+import '../provider/provider.dart';
+import '../utils/{{snakeNameInput}}_path.dart';
 
 part '{{snakeNameInput}}_route_module.g.dart';
 
-@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.PATH)
+@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.{{screamingNameInput}})
 class {{pascalNameInput}}Route extends GoRouteDataCustom
     with ${{pascalNameInput}}Route {
   const {{pascalNameInput}}Route();
@@ -30,13 +30,13 @@ import 'package:core_common/core_common.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../blocs/blocs.dart';
+import '../bloc/bloc.dart';
 import '../pages/pages.dart';
-import '{{snakeNameInput}}_path.dart';
+import '../utils/{{snakeNameInput}}_path.dart';
 
 part '{{snakeNameInput}}_route_module.g.dart';
 
-@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.PATH)
+@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.{{screamingNameInput}})
 class {{pascalNameInput}}Route extends GoRouteDataCustom
     with ${{pascalNameInput}}Route {
   const {{pascalNameInput}}Route();
@@ -57,11 +57,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../pages/pages.dart';
-import '{{snakeNameInput}}_path.dart';
+import '../utils/{{snakeNameInput}}_path.dart';
 
 part '{{snakeNameInput}}_route_module.g.dart';
 
-@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.PATH)
+@TypedGoRoute<{{pascalNameInput}}Route>(path: {{pascalNameInput}}Path.{{screamingNameInput}})
 class {{pascalNameInput}}Route extends GoRouteDataCustom
     with ${{pascalNameInput}}Route {
   const {{pascalNameInput}}Route();

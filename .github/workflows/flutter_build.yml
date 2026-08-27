@@ -42,15 +42,13 @@ jobs:
       - name: Set Up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.0"
+          flutter-version: "3.47.1"
           channel: "stable"
           cache: true
 
         #4 Install Dependencies and Generate
       - name: Install Dependencies
-        run: |
-          chmod +x tools/workspace_setup/configure.sh
-          ./tools/workspace_setup/configure.sh
+        run: dart tools/workspace_setup/configure.dart
 
         #5 Setup Env
       - name: Decode Env

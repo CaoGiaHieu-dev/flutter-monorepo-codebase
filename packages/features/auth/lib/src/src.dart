@@ -6,4 +6,5 @@ export 'pages/pages.dart';
 export 'provider/provider.dart';
 export 'routing/routing.dart';
 export 'services/services.dart';
+export 'utils/utils.dart';
 export 'widgets/widgets.dart';

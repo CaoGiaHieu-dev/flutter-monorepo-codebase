@@ -14,7 +14,7 @@ on:
       flutter_version:
         description: "Flutter version"
         required: true
-        default: "3.47.0"
+        default: "3.47.1"
       version:
         description: "App version"
         required: true
@@ -89,7 +89,7 @@ jobs:
 
       - name: Build and distribute
         run: |
-          fastlane flutter_build \
+          fastlane flutter \
             flutter_version:${{ github.event.inputs.flutter_version }} \
             version:${{ github.event.inputs.version }} \
             flavor:${{ github.event.inputs.flavor }} \

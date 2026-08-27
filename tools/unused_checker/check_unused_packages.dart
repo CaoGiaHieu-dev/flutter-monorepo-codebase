@@ -146,9 +146,14 @@ Set<String> getDartFilesForPackage(String pkgRoot, String projectRoot) {
 
 Set<String> findImportedPackages(Set<String> dartFiles, Set<String> declared) {
   final imported = <String>{};
+  // `dotAll` matters: a directive may wrap across lines when it carries a
+  // `show` / `hide` / `as` clause, e.g. the `AppFailure` re-export shim in
+  // `core_common`. Without it `.*?;` stops at the first newline, the directive
+  // never matches, and the package is wrongly reported as unused.
   final importRegex = RegExp(
     r'''^\s*(?:import|export)\s+['"]package:([a-zA-Z0-9_]+)(?:/[^'"]*)?['"].*?;''',
     multiLine: true,
+    dotAll: true,
   );
 
   for (final file in dartFiles) {

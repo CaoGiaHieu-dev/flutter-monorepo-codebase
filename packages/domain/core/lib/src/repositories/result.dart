@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:core_common/core_common.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../entities/base/base_entity.dart';
 import '../entities/base/paginate_entity.dart';
+import '../failures/failures.dart';
 
 part 'result.freezed.dart';
 

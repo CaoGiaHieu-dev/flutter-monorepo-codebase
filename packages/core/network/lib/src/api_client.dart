@@ -4,16 +4,14 @@ import 'package:core_common/core_common.dart';
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 
+import 'handlers/refresh_token_handler.dart';
 import 'handlers/retry_handler.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'interceptors/logging_interceptor.dart';
+import 'interceptors/refresh_token_interceptor.dart';
 import 'interceptors/retry_interceptor.dart';
 import 'network_config.dart';
-
-/// Timeout durations for network requests.
-const _connectTimeOut = Duration(seconds: 20);
-const _receiveTimeOut = Duration(seconds: 20);
-const _sendTimeout = Duration(seconds: 20);
+import 'utils/network_constants.dart';
 
 /// ApiClient is responsible for creating and configuring Dio HTTP clients.
 @lazySingleton
@@ -25,9 +23,9 @@ class ApiClient {
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
     baseUrl: EnvConstants.BASE_URL,
-    connectTimeout: _connectTimeOut,
-    receiveTimeout: _receiveTimeOut,
-    sendTimeout: _sendTimeout,
+    connectTimeout: NetworkConstants.CONNECT_TIMEOUT,
+    receiveTimeout: NetworkConstants.RECEIVE_TIMEOUT,
+    sendTimeout: NetworkConstants.SEND_TIMEOUT,
     followRedirects: false,
     headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
   );
@@ -58,16 +56,37 @@ class ApiClient {
         dio.options,
         onRetryCallback: _config.onRetryCallback,
       );
-      dio.interceptors.addAll([
+      dio.interceptors.add(
         AuthInterceptor(
           getToken: _config.getToken,
           getLocale: _config.getLocale,
         ),
+      );
+
+      // Renewing an expired session must happen before the retry pass,
+      // otherwise a 401 would be replayed with the same stale token.
+      // Only wired when the app supplies a refresh callback; without one a
+      // 401 surfaces to the caller unchanged.
+      final onRefreshToken = _config.onRefreshToken;
+      if (onRefreshToken != null) {
+        final onRefreshFailed = _config.onRefreshFailed;
+        dio.interceptors.add(
+          RefreshTokenInterceptor(
+            RefreshTokenHandler(
+              dio: dio,
+              onRefreshToken: onRefreshToken,
+              onRefreshFailed: onRefreshFailed ?? () async {},
+            ),
+          ),
+        );
+      }
+
+      dio.interceptors.addAll([
         RetryInterceptor(
           handleRetry: retryHandler.handleRetry,
           retryWhen: retryHandler.retryWhen,
         ),
-        LoggingInterceptor(tag: 'DioClient'),
+        LoggingInterceptor(tag: NetworkConstants.CLIENT_LOG_TAG),
       ]);
     }
 

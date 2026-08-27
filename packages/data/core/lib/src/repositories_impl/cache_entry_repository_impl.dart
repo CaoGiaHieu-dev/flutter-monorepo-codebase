@@ -1,4 +1,16 @@
-import 'package:core_database/core_database.dart';
+// SAMPLE CODE — safe to delete.
+//
+// Part of the `cache_chain` sample: one complete vertical slice (table -> DAO
+// -> data source -> repository -> entity -> use cases) kept as a copy-me
+// template for your first real table.
+//
+// Nothing in the app consumes it. `unused_checker` will not flag it because it
+// is registered in DI, and the tests use it as a fixture, so it looks alive.
+// It is not. This banner sits on the file rather than the package because the
+// package around it (`domain_core` / `data_core`) IS framework — keep that.
+//
+// Full file list: `tools/sample_manifest.yaml` -> embedded_samples.cache_chain
+
 import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 
@@ -13,9 +25,9 @@ class CacheEntryRepositoryImpl extends IBaseRepository
 
   @override
   Future<Result<CacheEntryEntity?>> getByKey(String key) {
-    return execute<CacheEntry?, CacheEntryEntity?>(
+    return execute<CacheEntryModel?, CacheEntryEntity?>(
       () => _local.getEntry(key),
-      mapper: (row) => row == null ? null : _toEntity(row),
+      mapper: (model) => model?.toEntity(),
     );
   }
 
@@ -31,17 +43,9 @@ class CacheEntryRepositoryImpl extends IBaseRepository
 
   @override
   Future<Result<List<CacheEntryEntity>>> getAll() {
-    return execute<List<CacheEntry>, List<CacheEntryEntity>>(
+    return execute<List<CacheEntryModel>, List<CacheEntryEntity>>(
       _local.getAll,
-      mapper: (rows) => rows.map(_toEntity).toList(),
-    );
-  }
-
-  CacheEntryEntity _toEntity(CacheEntry row) {
-    return CacheEntryEntity(
-      key: row.key,
-      value: row.value,
-      updatedAt: row.updatedAt,
+      mapper: (models) => models.map((model) => model.toEntity()).toList(),
     );
   }
 }

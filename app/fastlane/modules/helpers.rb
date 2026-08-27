@@ -42,7 +42,7 @@ def get_bundle_id_with_suffix(base_bundle_id, flavor)
   return base_bundle_id if flavor.nil? || flavor.empty?
   case flavor
   when 'dev' then "#{base_bundle_id}.dev"
-  when 'staging' then "#{base_bundle_id}.staging"
+  when 'staging' then "#{base_bundle_id}.stg"
   else base_bundle_id
   end
 end
@@ -52,7 +52,7 @@ def get_dart_define_file(flavor)
   case flavor
   when 'dev' then "env.dev"
   when 'staging' then "env.stg"
-  else "env"
+  else "env.prod"
   end
 end
 
@@ -150,7 +150,7 @@ def install_dependencies(flutter_version)
     # Run 'build_runner' for the entire workspace
     UI.message("Running build_runner for workspace...")
     Dir.chdir(workspace_root) do
-      sh "#{prefix}dart run build_runner build --delete-conflicting-outputs --workspace"
+      sh "#{prefix}dart run build_runner build -d --workspace"
     end
   end
 end
@@ -322,11 +322,15 @@ def run_flutter_build(platform:, flavor:, version:, build_number:, flutter_versi
 
   # Conditionally add --dart-define-from-file
   dart_define_file = get_dart_define_file(flavor)
-  if File.exist?("../#{dart_define_file}")
-    build_command += " --dart-define-from-file=#{dart_define_file}"
-  else
-    UI.message("Dart define file '#{dart_define_file}' not found, skipping '--dart-define-from-file'.")
+  unless File.exist?("../#{dart_define_file}")
+    UI.user_error!(
+      "Dart define file 'app/#{dart_define_file}' not found for flavor " \
+      "'#{flavor}'. Building without it would ship empty " \
+      "String.fromEnvironment values (API base URL, keys), so this is " \
+      "a hard failure. Create the file first."
+    )
   end
+  build_command += " --dart-define-from-file=#{dart_define_file}"
 
   build_command += " --obfuscate --split-debug-info=./obfuscate/" # Obfuscation flags
   build_command += " --no-tree-shake-icons" # Common flag

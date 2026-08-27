@@ -19,23 +19,45 @@ void main(List<String> args) async {
   final inputActions = InputActions();
   final config = inputActions.parseInput(args);
 
+  // Verify the toolchain BEFORE touching anything shared. Discovering a missing
+  // SDK at step 8 used to leave the workspace half-registered.
+  try {
+    CommonHelpers.assertToolchainAvailable();
+  } catch (e) {
+    stderr.writeln('[ERROR] $e');
+    exit(1);
+  }
+
+  if (Directory(config.modulePath).existsSync()) {
+    stderr.writeln(
+      '[ERROR] Thư mục "${config.modulePath}" đã tồn tại. '
+      'Xoá nó hoặc chọn tên module khác trước khi chạy lại.',
+    );
+    exit(1);
+  }
+
   stdout.writeln(
     '\n[!] Đang khởi tạo module: ${config.moduleName} tại ${config.modulePath}...',
   );
+
+  // Snapshot the shared files so any later failure can be undone.
+  CommonHelpers.snapshotSharedFiles(config.modulePath);
 
   try {
     // 3. Create Directory Structure
     CommonHelpers.createDir('${config.modulePath}/lib/di');
     CommonHelpers.createDir('${config.modulePath}/lib/src');
+    // Every package owns its constants in `utils/`, whatever the layer.
+    CommonHelpers.createDir('${config.modulePath}/lib/src/utils');
 
     switch (config.type) {
       case ModuleType.feature:
         CommonHelpers.createDir('${config.modulePath}/lib/src/pages');
         CommonHelpers.createDir('${config.modulePath}/lib/src/extensions');
         if (config.smType == StateManagementType.provider) {
-          CommonHelpers.createDir('${config.modulePath}/lib/src/providers');
+          CommonHelpers.createDir('${config.modulePath}/lib/src/provider');
         } else if (config.smType == StateManagementType.bloc) {
-          CommonHelpers.createDir('${config.modulePath}/lib/src/blocs');
+          CommonHelpers.createDir('${config.modulePath}/lib/src/bloc');
         }
         CommonHelpers.createDir('${config.modulePath}/lib/src/routing');
         CommonHelpers.createDir('${config.modulePath}/lib/src/widgets');
@@ -58,11 +80,13 @@ void main(List<String> args) async {
         final snakeName = config.nameInput;
 
         final routeValues = {
+          'moduleName': config.moduleName,
           'pascalName': pascalName,
           'pascalNameInput': pascalNameInput,
           'camelNameInput': camelNameInput,
           'snakeNameInput': snakeName,
           'snakeName': snakeName,
+          'screamingNameInput': CommonHelpers.toScreamingSnakeCase(snakeName),
         };
 
         if (config.routeContribution == FeatureRouteContribution.featureRoute) {
@@ -132,34 +156,28 @@ void main(List<String> args) async {
 
     // 8. Run dependency_sync.dart
     stdout.writeln('[!] Đang đồng bộ dependencies với dependency_sync...');
-    await CommonHelpers.runCommand('fvm', [
-      'dart',
-      'tools/dependency_sync.dart',
-    ]);
+    await CommonHelpers.runDart(['tools/dependency_sync.dart']);
 
     // 9. Run Toolchain
-    stdout.writeln('[!] Đang chạy fvm flutter pub get...');
-    await CommonHelpers.runCommand('fvm', ['flutter', 'pub', 'get']);
+    stdout.writeln('[!] Đang chạy flutter pub get...');
+    await CommonHelpers.runFlutter(['pub', 'get']);
 
     if (config.type == ModuleType.feature) {
-      stdout.writeln('[!] Đang chạy fvm flutter gen-l10n...');
-      await CommonHelpers.runCommand(
-        'fvm',
-        ['flutter', 'gen-l10n'],
+      stdout.writeln('[!] Đang chạy flutter gen-l10n...');
+      await CommonHelpers.runFlutter(
+        ['gen-l10n'],
         workingDirectory: config.modulePath,
       );
     }
 
     stdout.writeln('[!] Đang sinh barrel files...');
-    await CommonHelpers.runCommand('fvm', [
-      'dart',
+    await CommonHelpers.runDart([
       'tools/barrel_generator/generate.dart',
       '${config.modulePath}/lib',
     ]);
 
     stdout.writeln('[!] Đang chạy build_runner trên workspace...');
-    await CommonHelpers.runCommand('fvm', [
-      'dart',
+    await CommonHelpers.runDart([
       'run',
       'build_runner',
       'build',
@@ -168,17 +186,7 @@ void main(List<String> args) async {
     ]);
 
     stdout.writeln('[!] Đang sửa lỗi import với dart fix...');
-    await CommonHelpers.runCommand('fvm', [
-      'dart',
-      'fix',
-      '--dry-run',
-      'app/lib/di/injection.dart',
-    ]);
-    await CommonHelpers.runCommand('fvm', [
-      'dart',
-      'fix',
-      '--apply',
-    ]);
+    await CommonHelpers.runDart(['fix', '--apply']);
 
     stdout.writeln('\n==========================================');
     stdout.writeln('[V] Module "${config.moduleName}" đã được tạo thành công!');
@@ -202,7 +210,7 @@ void main(List<String> args) async {
             '   ⚠ Chỉ dùng cho tab Bottom Nav chính. Không nhét màn push (login/detail) vào đây.',
           );
           stdout.writeln(
-            '   Xem docs/en|vi/08_routing.md mục Dashboard.',
+            '   Xem docs/{en,vi}/guides/04_routing.md mục Dashboard.',
           );
           break;
         case FeatureRouteContribution.none:
@@ -218,6 +226,7 @@ void main(List<String> args) async {
     }
   } catch (e) {
     stderr.writeln('[ERROR] Đã xảy ra lỗi: $e');
+    CommonHelpers.rollback();
     exit(1);
   }
 }

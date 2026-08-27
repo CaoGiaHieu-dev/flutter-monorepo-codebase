@@ -18,6 +18,21 @@ abstract class NetworkConfig implements SslPinningConfig {
     required VoidCallback onCancel,
   });
 
+  /// Refreshes the expired session and returns the new bearer token, or `null`
+  /// when the refresh fails.
+  ///
+  /// Return `null` from this getter to disable automatic refresh entirely — in
+  /// that case a `401` is surfaced to the caller unchanged, which is the
+  /// behaviour of a client that has no refresh endpoint.
+  ///
+  /// Implementations must not issue the refresh call through an authenticated
+  /// client; see [RefreshTokenInterceptor] for the recursion guard.
+  Future<String?> Function()? get onRefreshToken => null;
+
+  /// Invoked once when [onRefreshToken] could not produce a new token, so the
+  /// app can clear the session and send the user back to the login screen.
+  Future<void> Function()? get onRefreshFailed => null;
+
   @override
   List<String> get sslPinningHashes;
 }

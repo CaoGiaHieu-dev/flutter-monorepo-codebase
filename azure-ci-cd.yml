@@ -63,9 +63,8 @@ stages:
             inputs:
               targetType: inline
               filePath: SourceVersion=$(git rev-parse HEAD) echo "##vso[task.setvariable variable=SourceVersionId]$SourceVersion" COMMAND="$(echo $SourceVersion | cut -c-7)" echo $COMMAND echo "##vso[task.setvariable variable=commitTag]$COMMAND"
-              script: >-
-                chmod +x tools/workspace_setup/configure.sh
-                ./tools/workspace_setup/configure.sh
+              script: |
+                dart tools/workspace_setup/configure.dart
 
           - task: DownloadSecureFile@1
             name: keyProperties
@@ -107,7 +106,7 @@ stages:
           - task: PublishPipelineArtifact@1
             displayName: Publish Android
             inputs:
-              targetPath: $(Build.SourcesDirectory)/app/build/app/outputs/flutter-apk/app-release.apk
+              targetPath: $(Build.SourcesDirectory)/app/build/app/outputs/flutter-apk/app-prod-release.apk
               artifact: android
           # - task: Hey24sheep.flutter.flutter-build.FlutterBuild@0
           #   displayName: Flutter Build Ios
@@ -144,7 +143,7 @@ stages:
             displayName: "Deploy Android to Firebase"
             inputs:
               script: |
-                firebase appdistribution:distribute app-release.apk  \
+                firebase appdistribution:distribute app-prod-release.apk  \
                 --app $(FIREBASE-ANDROID-ID)  \
                 --release-notes "$(note)" \
                 --groups "test"

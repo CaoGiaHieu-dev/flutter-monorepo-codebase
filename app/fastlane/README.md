@@ -1,5 +1,5 @@
 # CI/CD Documentation
-Để xem tài liệu chi tiết về hệ thống CI/CD, vui lòng truy cập: [**docs/FASTLANE_GUIDE.md**](../docs/FASTLANE_GUIDE.md)
+Để xem tài liệu chi tiết về hệ thống CI/CD, vui lòng truy cập: [**docs/vi/operations/02_fastlane_release.md**](../../docs/vi/operations/02_fastlane_release.md) (bản tiếng Anh: [docs/en/operations/02_fastlane_release.md](../../docs/en/operations/02_fastlane_release.md))
 
 ---
 

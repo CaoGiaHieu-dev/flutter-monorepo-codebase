@@ -12,7 +12,9 @@ class ToastOverlayWidget extends StatelessWidget {
     return Positioned.fill(
       child: Center(
         child: Container(
-          constraints: BoxConstraints(maxWidth: context.width - (context.w(16) * 2)),
+          constraints: BoxConstraints(
+            maxWidth: context.width - (context.w(16) * 2),
+          ),
           decoration: BoxDecoration(
             borderRadius: context.borderRadius(all: 4),
             color: context.colors.textPrimary.withValues(alpha: 0.4),

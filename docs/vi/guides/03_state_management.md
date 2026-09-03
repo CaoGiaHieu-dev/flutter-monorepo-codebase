@@ -295,7 +295,7 @@ Ba quy tắc bắt buộc:
 > `emit was called after an event handler completed normally`.
 > Hãy đăng ký tham chiếu tới một method `async` như ở §3.1.
 
-### 3.3 `BlocViewState<T>` — và vì sao phải đổi tên
+### 3.3 `BlocViewState<T>`
 
 `packages/core/bloc_state_management/lib/src/bloc_view_state.dart`:
 
@@ -312,7 +312,7 @@ abstract class BlocViewState<T> with _$BlocViewState<T> {
 }
 ```
 
-Trước đây nó tên là `ViewState`, trùng tên với kiểu cùng tên của nhánh Provider. Cả hai barrel đều public, nên bất kỳ file nào import cả hai package sẽ **không biên dịch được**. Hai kiểu này thực sự khác nhau:
+Tên gọi này để tránh trùng với `ViewState` của nhánh Provider. Cả hai barrel đều public, nên một file import cả hai package không được phép gặp hai kiểu cùng tên. Hai kiểu này thực sự khác nhau:
 
 | | `ViewState` (Provider) | `BlocViewState<T>` |
 |---|---|---|

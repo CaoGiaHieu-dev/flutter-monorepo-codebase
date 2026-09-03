@@ -86,8 +86,14 @@ class _CustomInputFieldState extends State<CustomInputField> {
           }) {
             if (widget.showCounter) {
               return Container(
-                padding: EdgeInsets.only(bottom: widget.paddingBottom ?? context.h(10)),
-                transform: Matrix4.translationValues(-context.h(10), -context.h(30), 0),
+                padding: EdgeInsets.only(
+                  bottom: widget.paddingBottom ?? context.h(10),
+                ),
+                transform: Matrix4.translationValues(
+                  -context.h(10),
+                  -context.h(30),
+                  0,
+                ),
                 child: Text(
                   '$currentLength/$maxLength',
                   style: AppTextStyles.labelMediumStyle(

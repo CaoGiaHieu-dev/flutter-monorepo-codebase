@@ -107,7 +107,7 @@ Same shape for local, non-async work. `onFailure` here receives the thrown `Obje
 Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `core_common`, which returns an `AppFailure`.
 
 > [!NOTE]
-> Older docs told you never to call `AppFailure.fromException()`. **That method does not exist in this codebase** (`grep fromException packages/core/common/lib` → nothing). The rule still stands as intent: convert through `ErrorHandler`, never hand-roll a failure at the call site. The helpers `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)` etc. are there when you must construct one explicitly.
+> `ErrorHandler` is the only conversion point. There is no `AppFailure.fromException()` — do not invent one, and do not hand-roll a failure at the call site. When you must construct one explicitly, use the helpers `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)` and so on.
 
 ### What `ErrorHandler` actually recognises
 
@@ -315,7 +315,7 @@ class AuthLocalDataSource {
 >
 > `StorageValue` keeps an in-memory cache that `initialize()` fills from disk once at boot. A factory registration builds a **new, empty** instance on every injection, so `getUserToken()` would return `null` even though the token is on disk. The pairing is: singleton registration **+** `@PostConstruct(preResolve: true)`.
 
-REST endpoints follow the same ownership rule — `packages/data/auth/lib/src/utils/auth_api_constants.dart` holds `AuthApiConstants`, which used to sit in `core_common` as `ApiConstants` where every package could read it.
+REST endpoints follow the same ownership rule — `packages/data/auth/lib/src/utils/auth_api_constants.dart` holds `AuthApiConstants`, because those endpoints belong to auth and to nothing else.
 
 ---
 

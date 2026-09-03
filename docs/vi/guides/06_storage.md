@@ -31,7 +31,7 @@
 | `SecureStorageImpl` | `@Named('Secure')` | Backend FlutterSecureStorage — nội bộ, DI phân giải |
 
 > [!NOTE]
-> **Không còn `StorageValuePresets`, không còn `StorageKeyConstants`.** Cả hai đã bị xoá: một object gom key của mọi domain nghĩa là bất kỳ ai inject nó cũng đọc/ghi được dữ liệu của feature khác. Nếu bạn thấy hai cái tên này ở nhánh cũ hay bài viết cũ, đó là thông tin lỗi thời.
+> Không có object preset dùng chung và không có sổ đăng ký key tập trung — không `StorageValuePresets`, không `StorageKeyConstants`. Một object gom key của mọi domain sẽ cho phép bất kỳ ai inject nó đọc và ghi dữ liệu của feature khác, nên cơ chế cố ý không cung cấp thứ đó để bạn với tay tới.
 
 ---
 
@@ -319,7 +319,7 @@ class ThemeStorageImpl implements IThemeStorage {
 Bên tiêu thụ (ở đây là `ThemeProvider` trong `core_base_ui`) chỉ phụ thuộc `IThemeStorage`. Nó không thấy key, không thấy backend, không thấy `StorageValue`.
 
 > [!WARNING]
-> Đăng ký impl `as: IThemeStorage` khiến nó **chỉ** phân giải được dưới kiểu `IThemeStorage`. GetIt **không** đi ngược chuỗi supertype, nên nếu cần một interface thứ hai trỏ về cùng instance thì phải bind tường minh bằng `@module` — đây chính là lỗi đã âm thầm vô hiệu hoá SSL pinning; xem [`08_networking.md`](08_networking.md#5-ssl-pinning).
+> Đăng ký impl `as: IThemeStorage` khiến nó **chỉ** phân giải được dưới kiểu `IThemeStorage`. GetIt **không** đi ngược chuỗi supertype, nên nếu cần một interface thứ hai trỏ về cùng instance thì phải bind tường minh bằng `@module`. Bỏ sót bước này thì SSL pinning âm thầm không hoạt động; xem [`08_networking.md`](08_networking.md#5-ssl-pinning).
 
 ---
 

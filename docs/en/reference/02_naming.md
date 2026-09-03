@@ -87,7 +87,7 @@ The private constructor is what prevents `HomePath()` from ever being instantiat
 | `gen/` | generated l10n / assets — never hand-edited |
 
 > [!WARNING]
-> `provider/` and `bloc/` are **singular**. The generator once emitted `providers/` and `blocs/`, which did not match any shipped feature. If you see a plural folder, it predates the fix.
+> `provider/` and `bloc/` are **singular**, matching every shipped feature and what `module_generator` scaffolds. A plural `providers/` or `blocs/` folder is a violation — rename it.
 
 ---
 

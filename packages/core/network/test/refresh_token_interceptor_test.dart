@@ -114,17 +114,20 @@ void main() {
       expect(err.requestOptions.extra['tokenRefreshAttempted'], isTrue);
     });
 
-    test('rejects and clears the session when refresh yields no token', () async {
-      final interceptor = buildInterceptor(newToken: null);
-      final handler = _RecordingErrorHandler();
+    test(
+      'rejects and clears the session when refresh yields no token',
+      () async {
+        final interceptor = buildInterceptor(newToken: null);
+        final handler = _RecordingErrorHandler();
 
-      interceptor.onError(_unauthorized(), handler);
-      await Future<void>.delayed(Duration.zero);
+        interceptor.onError(_unauthorized(), handler);
+        await Future<void>.delayed(Duration.zero);
 
-      expect(refreshCalls, 1);
-      expect(failureCalls, 1, reason: 'session must be cleared on failure');
-      expect(handler.rejected, isTrue);
-    });
+        expect(refreshCalls, 1);
+        expect(failureCalls, 1, reason: 'session must be cleared on failure');
+        expect(handler.rejected, isTrue);
+      },
+    );
 
     test('a single refresh serves several concurrent 401s', () async {
       final completer = Completer<String?>();

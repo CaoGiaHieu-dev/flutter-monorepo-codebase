@@ -295,7 +295,7 @@ Three non-negotiable rules:
 > `emit was called after an event handler completed normally`.
 > Register an `async` method reference instead, as in §3.1.
 
-### 3.3 `BlocViewState<T>` — and why it was renamed
+### 3.3 `BlocViewState<T>`
 
 `packages/core/bloc_state_management/lib/src/bloc_view_state.dart`:
 
@@ -312,7 +312,7 @@ abstract class BlocViewState<T> with _$BlocViewState<T> {
 }
 ```
 
-It used to be called `ViewState`, colliding with the Provider branch's type of the same name. Both barrels are public, so any file importing both packages would have failed to compile. The two are genuinely different:
+The name avoids a collision with the Provider branch's `ViewState`. Both barrels are public, so a file importing both packages must not meet two types with the same name. The two are genuinely different:
 
 | | Provider `ViewState` | `BlocViewState<T>` |
 |---|---|---|

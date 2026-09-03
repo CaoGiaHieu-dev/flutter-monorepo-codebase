@@ -56,7 +56,7 @@ Deferring is safe whenever every consumer is itself lazy — nothing resolves it
 GetIt looks up the **exact** type a binding was registered under; it never walks the
 supertype chain. Registering `@LazySingleton(as: NetworkConfig)` therefore leaves
 `getItOrNull<SslPinningConfig>()` returning `null` even though `NetworkConfig implements
-SslPinningConfig` — which silently disabled certificate pinning until it was fixed.
+SslPinningConfig` — and certificate pinning then silently no-ops.
 
 Bind the second type explicitly with a `@module` (`app/lib/di/network_binding_module.dart`):
 

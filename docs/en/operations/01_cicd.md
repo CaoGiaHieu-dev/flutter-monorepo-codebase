@@ -74,7 +74,7 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 **What it does**: resolves changed files with `tj-actions/changed-files`, runs the reviewer, uploads the Markdown report as an artifact (30-day retention), then parses that report and posts **inline review comments** on the exact lines when they fall inside the PR diff. Findings outside the diff are grouped into a separate per-file comment.
 
-### One remaining quirk
+### Flutter version pinning
 
 Dependency installation runs `dart tools/workspace_setup/configure.dart`, and `flutter_version` defaults to `3.47.2`, matching the root `pubspec.yaml` constraint.
 
@@ -102,10 +102,10 @@ fi
 
 Manual dispatch that hands the whole build over to Fastlane. Sets up Java 17, Ruby 3.3 (skipped on `self-hosted`), Flutter (channel `stable`, **no pinned version**), installs Fastlane and the `firebase_app_distribution` plugin, then invokes a lane.
 
-It invokes the real cross-platform lane, `fastlane flutter` (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.2`.
+It invokes the cross-platform lane, `fastlane flutter` (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.2`.
 
 > [!WARNING]
-> The invocation still passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment app/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
+> The invocation passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment app/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
 
 Because the Flutter setup step passes only `channel: stable` without `flutter-version`, the `flutter_version` input never reaches the toolchain; it is forwarded to Fastlane, which uses it to decide whether to drive `fvm`.
 
@@ -122,9 +122,9 @@ Two stages on a self-hosted pool named `codebase`. `trigger: none`, so it only r
 
 Pipeline variables must be defined in the Azure Variables tab: `flutter-version`, `flutterPath`, `version`, `numberBuild`, `note`, and `FIREBASE-ANDROID-ID`.
 
-### One remaining defect
+### One defect
 
-The artefact filename and the `configure.dart` call are both correct now: the build publishes `app-prod-release.apk` and the Distribute stage downloads and uploads that same name, and "Flutter Config" runs `dart tools/workspace_setup/configure.dart`.
+The artefact filename and the `configure.dart` call are consistent: the build publishes `app-prod-release.apk`, the Distribute stage downloads and uploads that same name, and "Flutter Config" runs `dart tools/workspace_setup/configure.dart`. One thing is missing.
 
 > [!WARNING]
 > **`.env` is never created, but the build requires it.**
@@ -152,7 +152,7 @@ Gate 1 runs first on purpose: it only reads imports and pubspecs, needs no codeg
 Gate 3 loops per package because this is a Pub Workspace: tests live under `packages/<layer>/<pkg>/test/`, and a single `flutter test` at the root does not pick them up.
 
 > [!IMPORTANT]
-> A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. This has bitten the template before: moving `AppFailure` between packages left `bloc_view_state.freezed.dart` referencing a type it could no longer see, and analyze stayed green while the APK build failed. Only a real build catches that class of error.
+> A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. Move a type between packages and a `.freezed.dart` file can end up referencing a symbol it cannot see: analyze stays green while the APK build fails. Only a real build catches that class of error.
 
 **Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 1–4 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
 
@@ -219,14 +219,7 @@ A first build on a clean machine also needs `flutterfire configure` to have been
 
 ## 9. Fix checklist
 
-Already fixed in this template:
-
-- [x] `code_review.yml` — uses `dart tools/workspace_setup/configure.dart`; default `flutter_version` is `3.47.2`
-- [x] `fastlane.yml` — calls the real `flutter` lane; default `flutter_version` is `3.47.2`
-- [x] `azure-ci-cd.yml` — distributes `app-prod-release.apk`; "Flutter Config" runs `configure.dart`
-- [x] `pr_quality_check.yml` — exists and gates every PR (arch rules, analyze, tests, catalog drift)
-
-Still open, in rough priority order:
+Open items, in rough priority order:
 
 - [ ] `azure-ci-cd.yml` — add a secure file + copy step for `.env`; the prod build currently gets no dart-defines
 - [ ] `fastlane.yml` — drop the ignored `auto_increment:` argument, or make a lane read it

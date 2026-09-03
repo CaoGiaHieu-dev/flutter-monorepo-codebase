@@ -8,8 +8,10 @@ import 'utils/responsive_constants.dart';
 ///
 /// Return the size in logical pixels. Supplied to [ResponsiveInit] when the
 /// default text scaling is not what the design calls for.
-typedef FontSizeResolver =
-    double Function(num fontSize, ResponsiveMetrics metrics);
+typedef FontSizeResolver = double Function(
+  num fontSize,
+  ResponsiveMetrics metrics,
+);
 
 /// An immutable snapshot of everything needed to scale a design value to the
 /// current screen.
@@ -51,7 +53,10 @@ class ResponsiveMetrics {
   /// Vertical ratio, honouring [splitScreenMode].
   double get scaleHeight {
     final height = splitScreenMode
-        ? math.max(screenSize.height, ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT)
+        ? math.max(
+            screenSize.height,
+            ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT,
+          )
         : screenSize.height;
     return height / designSize.height;
   }

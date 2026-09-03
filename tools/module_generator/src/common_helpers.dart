@@ -95,9 +95,10 @@ class CommonHelpers {
 
   /// Files outside the new module that generation rewrites in place.
   ///
-  /// A failure partway through used to leave these half-edited — a module
+  /// A failure partway through would leave these half-edited — a module
   /// registered in the workspace whose directory was never finished building,
-  /// which then breaks `pub get` for everyone.
+  /// which then breaks `pub get` for everyone. Hence the backup-and-restore
+  /// around them.
   static const List<String> sharedMutatedFiles = [
     'pubspec.yaml',
     'app/pubspec.yaml',

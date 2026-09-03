@@ -107,7 +107,7 @@ Cùng hình dạng, dành cho công việc cục bộ không bất đồng bộ.
 Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` của `core_common`, và hàm này trả về một `AppFailure`.
 
 > [!NOTE]
-> Tài liệu cũ dặn không bao giờ được gọi `AppFailure.fromException()`. **Method đó không tồn tại trong codebase này** (`grep fromException packages/core/common/lib` → không có gì). Tinh thần của quy tắc vẫn đúng: hãy chuyển đổi qua `ErrorHandler`, đừng tự nặn ra failure tại chỗ gọi. Khi buộc phải tạo tường minh, đã có sẵn `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)`…
+> `ErrorHandler` là điểm chuyển đổi duy nhất. Không hề có `AppFailure.fromException()` — đừng bịa ra một cái, và cũng đừng tự nặn failure tại chỗ gọi. Khi buộc phải tạo tường minh, hãy dùng các hàm trợ giúp `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)`…
 
 ### `ErrorHandler` thực sự nhận diện được gì
 
@@ -260,7 +260,7 @@ class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
 }
 ```
 
-Inject `AppDatabase` sẽ trao cho lớp này **mọi DAO** trong app; `IDatabaseHandle.accessor(...)` chỉ trao đúng một cái. Xem [hướng dẫn database](../guides/07_database.md).
+Inject nguyên object database sẽ trao cho lớp này **mọi DAO** có trên đó; `IDatabaseHandle.accessor(...)` chỉ trao đúng một cái. Xem [hướng dẫn database](../guides/07_database.md).
 
 ### Quy tắc 3 — để exception nổi lên
 
@@ -315,7 +315,7 @@ class AuthLocalDataSource {
 >
 > `StorageValue` giữ một cache trong RAM, được `initialize()` nạp từ đĩa đúng một lần lúc khởi động. Đăng ký dạng factory sẽ tạo instance **mới, rỗng** ở mỗi lần inject, nên `getUserToken()` trả `null` dù token vẫn nằm trên đĩa. Cặp bắt buộc là: đăng ký singleton **+** `@PostConstruct(preResolve: true)`.
 
-Endpoint REST cũng theo đúng quy tắc sở hữu này — `packages/data/auth/lib/src/utils/auth_api_constants.dart` chứa `AuthApiConstants`, vốn trước đây nằm ở `core_common` dưới tên `ApiConstants`, nơi mọi package đều đọc được.
+Endpoint REST cũng theo đúng quy tắc sở hữu này — `packages/data/auth/lib/src/utils/auth_api_constants.dart` chứa `AuthApiConstants`, vì những endpoint đó thuộc về auth và không thuộc về bất cứ thứ gì khác.
 
 ---
 

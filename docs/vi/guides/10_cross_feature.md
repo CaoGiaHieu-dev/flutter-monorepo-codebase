@@ -1,7 +1,7 @@
 # Hướng dẫn: Giao tiếp giữa các feature
 
 File này trả lời câu hỏi **"feature A cần thứ gì đó từ feature B — làm sao mà không import nó?"**.
-Các package feature không bao giờ được import lẫn nhau — không có ngoại lệ, vì widget dùng chung nay lấy từ package core `core_ui_kit` — nên mọi
+Các package feature không bao giờ được import lẫn nhau — không có ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit` — nên mọi
 tương tác đều đi qua một hợp đồng do package *trung lập* nắm giữ.
 
 Đọc xong bạn sẽ biết chọn mô hình nào trong sáu mô hình, và nối dây thế nào để xoá feature nào đi
@@ -62,7 +62,7 @@ không bao giờ phụ thuộc lẫn nhau. Đây là mô hình rẻ nhất — h
 **Dùng khi** năng lực cần dùng là hạ tầng, không phải logic nghiệp vụ.
 **Không dùng khi** hành vi đó thuộc về một feature cụ thể.
 
-Inject thẳng `StorageManager`, `Dio`, `AppDatabase`… từ package `core_*` tương ứng. Không có gì
+Inject thẳng `StorageManager`, `Dio`, `IDatabaseHandle<TDb>`… từ package `core_*` tương ứng. Không có gì
 dính tới feature cụ thể, nên cũng chẳng có ràng buộc nào để phá.
 
 Xem [`06_storage.md`](06_storage.md), [`08_networking.md`](08_networking.md),
@@ -327,9 +327,13 @@ getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
 
 > [!NOTE]
 > Việc `app/lib/di/injection.dart` gọi tên các package feature là tham chiếu cứng có chủ đích duy
-> nhất của composition root — nơi lắp ráp buộc phải biết nó lắp cái gì. Một số file trong shell vẫn
-> còn import trực tiếp `feature_auth` / `feature_splash` / `core_ui_kit`; chúng đã được ghi chú
-> tại chỗ và là phần việc còn lại trước khi mọi feature gỡ được hoàn toàn.
+> nhất của composition root — nơi lắp ráp buộc phải biết nó lắp cái gì. Không file nào khác dưới
+> `app/lib/` import package `feature_*`; tất cả phần còn lại chạm tới feature qua hợp đồng ở
+> `core_di` cùng fallback `getAllOrEmpty` / `getItOrNull`. Các import `core_ui_kit` trong shell
+> không phải ngoại lệ — đó là package core, không phải feature gỡ được.
+>
+> Kiểm chứng bằng `grep -rn "package:feature_" app/lib --include="*.dart"` — mọi kết quả đều phải
+> nằm trong `injection.dart` hoặc file sinh ra `injection.config.dart`.
 
 ---
 

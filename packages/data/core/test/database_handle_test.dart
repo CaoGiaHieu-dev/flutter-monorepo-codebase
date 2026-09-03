@@ -28,17 +28,20 @@ void main() {
       expect(await dao.getValue('greeting'), equals('hello'));
     });
 
-    test('shares one connection across separately obtained accessors', () async {
-      final writer = handle.accessor(CacheEntriesDao.new);
-      final reader = handle.accessor(CacheEntriesDao.new);
+    test(
+      'shares one connection across separately obtained accessors',
+      () async {
+        final writer = handle.accessor(CacheEntriesDao.new);
+        final reader = handle.accessor(CacheEntriesDao.new);
 
-      await writer.upsert('greeting', 'hello');
+        await writer.upsert('greeting', 'hello');
 
-      // Two accessors are independent objects over the same connection, so a
-      // write through one must be visible through the other.
-      expect(identical(writer, reader), isFalse);
-      expect(await reader.getValue('greeting'), equals('hello'));
-    });
+        // Two accessors are independent objects over the same connection, so a
+        // write through one must be visible through the other.
+        expect(identical(writer, reader), isFalse);
+        expect(await reader.getValue('greeting'), equals('hello'));
+      },
+    );
 
     test('accessor sees rows written directly on the database', () async {
       await database.cacheEntriesDao.upsert('greeting', 'hello');

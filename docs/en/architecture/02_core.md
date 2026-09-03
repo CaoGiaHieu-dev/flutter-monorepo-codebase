@@ -20,29 +20,29 @@ Three rules apply to everything on this page.
 
 ## 1. `core_common` — shared primitives
 
-The bottom of the stack. No local package dependencies at all; everything else may depend on it.
+The bottom of the infrastructure stack. It declares two workspace dependencies — `domain_core`, for the `AppFailure` that `ErrorHandler` produces, and `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`. Everything else may depend on it.
 
 | Area | Path | Contents |
 |:--|:--|:--|
 | Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation, system UI), `SslPinningConfig` |
-| Errors | `src/error/` | `AppFailure` (Freezed union), `ErrorHandler.handleError()`, exception types |
+| Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`) |
 | Extensions | `src/extensions/` | `bool`, `DateTime`, `Dio`, `Enum`, `List`, `num`, `String` |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
 | Utils **and constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
 | Firebase | `src/firebase/` | `FirebaseModule` providing per-flavor `FirebaseOptions` |
 
-### What is *not* here any more, and why
+### What does *not* belong here, and why
 
-`core_common` used to carry a `constants/` folder that had become a **god object** — a single place, importable by every package, listing constants that belonged to individual domains. Four files were removed:
+`core_common` has no `constants/` folder. A shared constants folder in the bottom package becomes a **god object** — one place, importable by every package, listing values that belong to individual domains:
 
-| Removed | Fate | Reason |
+| Kind of constant | Where it belongs | Why not here |
 |:--|:--|:--|
-| `StorageKeyConstants` | deleted | Listed `TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD` together. Every package could read every other feature's storage key. Keys now live with their owner — see [the storage guide](../guides/06_storage.md). |
-| `ApiConstants` | moved → `AuthApiConstants` | Held `/user/login`, `/user/register`, `/user/refresh-token`… — endpoints belonging solely to auth. Now at [`packages/data/auth/lib/src/utils/auth_api_constants.dart`](../../../packages/data/auth/lib/src/utils/auth_api_constants.dart). |
-| `AnalyticsConstants`, `SocketConstants`, `FirebaseRemoteConfigConstants` | deleted | Zero references anywhere in the repo, and the corresponding subsystems do not exist. `SocketConstants` in particular carried chat-specific events (`TYPING`, `USER_JOINED`) in a core package. |
+| Storage keys (`TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | with the class that owns the value — see [the storage guide](../guides/06_storage.md) | Listed together, every package can read and overwrite every other feature's storage key. |
+| REST endpoints (`/user/login`, `/user/register`, `/user/refresh-token`…) | the owning data package — [`packages/data/auth/lib/src/utils/auth_api_constants.dart`](../../../packages/data/auth/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
+| Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Two constants files remain, and both are genuinely global: `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). The former `utilities/` folder was merged into `utils/` so the package has exactly one place for this.
+Exactly two constants files live here, and both are genuinely global: `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Both sit in `src/utils/`, the one place this package keeps such values.
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.
@@ -62,7 +62,7 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 | Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 
-**`NavigatorKeys`** lives at [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart) (split out of `routing_interfaces.dart`, which now holds only the interface). It exposes `rootKey`, `appKey` and `authKey`.
+**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey` and `authKey`.
 
 `authKey` names a specific feature, which would normally be a layering smell. It is allowed because the class is *routing plumbing*: a `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside `feature_auth`. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it. The Hub never imports `feature_auth`.
 
@@ -97,7 +97,7 @@ They are an approved exception to the "constants live in `utils/`" rule:
 - They are **public API** imported directly by many feature packages.
 - `styles/` carries meaning — "this is the design system". `utils/` reads as "miscellaneous", which is exactly the wrong signal for tokens the whole app is expected to obey.
 
-Non-token magic values *were* collected into `src/utils/base_ui_constants.dart`. The dividing line: if a designer would recognise it, it is a token and stays in `styles/`.
+Non-token magic values live in `src/utils/base_ui_constants.dart`. The dividing line: if a designer would recognise it, it is a token and stays in `styles/`.
 
 ### `ThemeProvider` reacts to OS theme changes
 
@@ -118,7 +118,7 @@ Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout
 It depends on `core_common`, `core_base_ui`, `core_responsive` and `provider_state_management` — never on a feature or on `data_*`.
 
 > [!NOTE]
-> The dependency runs **one way**: `core_ui_kit -> provider_state_management`. It used to run both ways, which was a cycle inside the core ring; `provider_state_management` now ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones.
+> The dependency runs **one way**: `core_ui_kit -> provider_state_management`. The reverse edge would close a cycle inside the core ring, so `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
 
 ### The UI-agnostic rule
 
@@ -135,14 +135,14 @@ double _width(BuildContext context) => context.w(width);
 Scaling inside means a caller who already scaled gets it applied twice, and a caller who wants a literal pixel value cannot get one.
 
 > [!WARNING]
-> **A real bug this rule prevents.** `AppBarCustom` used to carry:
+> **What this rule forbids.** An `AppBar` in `core_ui_kit` that carries:
 >
 > ```dart
 > @override
 > double? get leadingWidth => context.w(64);
 > ```
 >
-> Two failures at once: it scaled internally, and -- because it is a getter override -- it **silently discarded the `leadingWidth` a caller passed to the constructor**. The parameter looked supported and did nothing. It has been removed.
+> Two failures at once: it scales internally, and -- because it is a getter override -- it **silently discards the `leadingWidth` a caller passed to the constructor**. The parameter looks supported and does nothing.
 
 ### Constants
 
@@ -165,7 +165,7 @@ They are defaults, not policy — a caller that needs a different value passes i
 
 ## 5. `core_responsive` — responsive sizing
 
-The scaling mechanism every widget in the app resolves through. It lives at `packages/core/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package. It replaced the third-party sizing package the template used to carry, which has been removed from the version catalogue and from every pubspec.
+The scaling mechanism every widget in the app resolves through. It lives at `packages/core/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package.
 
 | Piece | What it is |
 |:--|:--|
@@ -250,19 +250,23 @@ See [`../guides/06_storage.md`](../guides/06_storage.md) for the step-by-step.
 
 Runs on a background isolate via `NativeDatabase.createInBackground`. Depends on **no other workspace package**.
 
+This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing. Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. `data_core`'s `CacheDatabase` (`packages/data/core/lib/src/database/`) is the reference wiring.
+
 | Area | Path | Contents |
 |:--|:--|:--|
-| Database | `src/database/` | `AppDatabase`, `CacheEntries` table, `CacheEntriesDao` |
-| Connection | `src/connection/` | `DatabaseConnectionFactory` — file resolution, background executor, corruption quarantine |
+| Opening | `src/opening/` | `DriftDatabaseOpener` — opens any `GeneratedDatabase` on a background isolate, verifies it, quarantines a corrupt file |
+| Connection | `src/connection/` | `DatabaseConnectionFactory` — file resolution, background executor |
 | **Access** | `src/access/` | `IDatabaseHandle`, `DatabaseHandle` |
-| **Migration** | `src/migration/` | `IDatabaseMigration`, `DatabaseMigrationRunner` |
+| **Migration** | `src/migration/` | `IDatabaseMigration`, `DatabaseMigrationRunner`, `driftMigrationStrategy` |
 | Constants | `src/utils/database_constants.dart` | `DEFAULT_FILE_NAME`, `DEFAULT_READ_POOL`, `BUSY_TIMEOUT_MS` |
+
+Drift resolves `@DriftDatabase(tables:)` at compile time and requires a DAO to be `part of` its database library, so a database declared here would have to name the tables of whichever package owns them. Keeping databases package-owned buys one property: deleting a package deletes its database with it, and no other package can reach its rows. The trade-off is that SQL cannot join across package boundaries — crossing a bounded context belongs at the repository layer, not inside a query.
 
 ### Two contracts keep packages out of each other's tables
 
 **`IDatabaseMigration`** — a package that changes the schema implements this next to its own tables and registers it in its own DI module, exactly as features contribute routes. `version` is the schema version the step *produces*; steps replay in order so a device that skipped releases still lands correctly. Duplicate versions are rejected at startup rather than silently applying one.
 
-**`IDatabaseHandle`** — packages ask for the accessor they need instead of receiving `AppDatabase` with every DAO on it:
+**`IDatabaseHandle`** — a data source asks for the accessor it needs instead of receiving a database object with every DAO on it:
 
 ```dart
 ProfileLocalDataSource(IDatabaseHandle handle)
@@ -270,7 +274,7 @@ ProfileLocalDataSource(IDatabaseHandle handle)
 ```
 
 > [!NOTE]
-> This is **API-surface isolation, not enforced isolation**. Drift resolves every table at compile time through `@DriftDatabase` and shares one connection, so the factory callback still receives the database. The value is that crossing the boundary becomes a deliberate, reviewable act rather than an ordinary constructor parameter. Table definitions remain central; a package owns its *access path*.
+> Within one database this is **API-surface isolation, not enforced isolation**: the factory callback still receives the database object, so a determined caller can reach any DAO on it. The value is that crossing that line becomes a deliberate, reviewable act rather than an ordinary constructor parameter. Isolation *between* packages is the real barrier, and it is enforced by the package graph — a package that does not declare `data_core` cannot name `CacheDatabase` at all.
 
 Connection hardening (`foreign_keys = ON`, WAL journal mode, busy timeout) and the corruption-quarantine strategy are covered in [`../guides/07_database.md`](../guides/07_database.md).
 
@@ -278,7 +282,7 @@ Connection hardening (`foreign_keys = ON`, WAL journal mode, busy timeout) and t
 
 ## 9. `core_notifications` — push and local notifications
 
-`PushNotificationService` wraps Firebase Messaging and `flutter_local_notifications`. Channel IDs and payload types live in `src/utils/notification_constants.dart` — moved here from `core_common`, since a chat channel ID has no business being readable by every package in the app.
+`PushNotificationService` wraps Firebase Messaging and `flutter_local_notifications`. Channel IDs and payload types live in `src/utils/notification_constants.dart`, with the package that consumes them — a notification channel ID has no business being readable by every package in the app.
 
 ---
 
@@ -297,11 +301,11 @@ The template supports Provider and BLoC. Be aware before choosing: the two are n
 > [!WARNING]
 > On the BLoC branch you must unwrap `Result<T>`, map `AppFailure`, and emit loading/terminal states **by hand in every handler**. The Provider branch wraps all of that in `executeOperation`. `base_bloc.dart` documents this honestly and shows the manual pattern.
 
-### `BlocViewState` was renamed for a reason
+### `BlocViewState<T>`
 
-The BLoC state type is `BlocViewState<T>`, **not** `ViewState`. Both packages export from public barrels, and the Provider branch already exports a semantically different `ViewState`. Sharing the name meant any file importing both barrels would hit a compile-time name collision — a latent trap that has now been removed.
+The BLoC state type is `BlocViewState<T>`, **not** `ViewState`. Both packages export from public barrels, and the Provider branch exports a semantically different `ViewState`. The distinct name is what lets a file import both barrels without a compile-time collision.
 
-`OperationGlobalConfig` exposes read-only getters; `setup()` **merges** rather than overwriting, so calling it twice no longer silently erases the first set of hooks, and `reset()` exists for tests.
+`OperationGlobalConfig` exposes read-only getters; `setup()` **merges** rather than overwriting, so calling it twice keeps both sets of hooks, and `reset()` exists for tests.
 
 Practical usage for both branches: [`../guides/03_state_management.md`](../guides/03_state_management.md).
 
@@ -315,7 +319,7 @@ Local (workspace) dependencies only — pub.dev packages omitted.
 |:--|:--|
 | `core_database` | *(none)* |
 | `core_responsive` | *(none)* |
-| `core_common` | `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
+| `core_common` | `core_responsive`, `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
 | `core_di` | `domain_auth` *(approved exception)* |
 | `core_network` | `core_common` |
 | `core_storage` | `core_common` |

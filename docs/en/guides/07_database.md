@@ -32,10 +32,10 @@ Two Drift facts drive the whole design:
 1. `@DriftDatabase(tables: [...])` is resolved at **compile time**. There is no runtime table registration.
 2. A DAO must be a **`part of`** its database library — Drift generates `_$XDaoMixin` and `$XTable` into that same library.
 
-Put together: whichever package declares the database must name every table on it, and every DAO must live in that same library. A single shared `AppDatabase` would therefore force one package to know the tables of all the others — exactly the "one object knows everything" coupling that was removed from `core_storage` and `core_common`.
+Put together: whichever package declares the database must name every table on it, and every DAO must live in that same library. A single shared `AppDatabase` would therefore force one package to know the tables of all the others — the same "one object knows everything" coupling the storage and constants ownership rules exist to prevent.
 
 > [!NOTE]
-> Moving a shared `AppDatabase` up into `app/` would not have fixed this — it only relocates the god object, and the owning package still could not hold a usable DAO. Giving each package its own database is what actually removes the coupling.
+> Moving a shared `AppDatabase` up into `app/` does not solve this — it only relocates the god object, and the owning package still could not hold a usable DAO. Giving each package its own database is what actually removes the coupling.
 
 ### What you gain, and what you pay
 
@@ -152,7 +152,7 @@ class DataCoreConstants {
 ```
 
 > [!CAUTION]
-> Name the file after its **owning package**, not after the app. Several databases now coexist in the documents directory; a generic `app_database.sqlite` would collide. Changing this string after release makes existing rows unreachable.
+> Name the file after its **owning package**, not after the app. Several databases coexist in the documents directory; a generic `app_database.sqlite` would collide. Changing this string after release makes existing rows unreachable.
 
 ### Step 4 — Declare the database class
 
@@ -503,7 +503,7 @@ static bool isCorruptionError(Object error) {
 | `malformed database schema` | `attempt to write a readonly database` |
 | | `access denied` / `permission denied` / `operation not permitted` |
 
-The predicate matches on message strings rather than a typed `SqliteException` because `sqlite3` is not a declared dependency of `core_database` — importing it would re-introduce exactly the undeclared-dependency problem the repo just cleaned up. Because string matching is fragile, the predicate is **biased towards not recovering**: if an environment marker appears, the database is left alone even when a corruption marker also matched.
+The predicate matches on message strings rather than a typed `SqliteException` because `sqlite3` is not a declared dependency of `core_database` — importing it would add a dependency the package does not otherwise need, and every import must be declared. Because string matching is fragile, the predicate is **biased towards not recovering**: if an environment marker appears, the database is left alone even when a corruption marker also matched.
 
 Losing user data is worse than surfacing a startup error.
 

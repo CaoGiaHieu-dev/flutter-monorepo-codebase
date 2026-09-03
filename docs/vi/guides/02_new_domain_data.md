@@ -50,8 +50,9 @@ Mỗi bước chỉ phụ thuộc các bước phía trên, nên không phải l
 
 > [!CAUTION]
 > Tầng domain là **Dart thuần**. Cấm import `package:flutter/...`, `package:dio/...` hay
-> `package:retrofit/...` ở bất kỳ đâu dưới `packages/domain/`. Được phép: `dart:core`,
-> `core_common`, `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`.
+> `package:retrofit/...` ở bất kỳ đâu dưới `packages/domain/` — và cấm luôn mọi package `core_*`.
+> Được phép: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`,
+> `get_it`.
 
 ---
 

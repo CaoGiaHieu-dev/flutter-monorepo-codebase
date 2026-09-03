@@ -228,9 +228,9 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 ```
 
 > [!NOTE]
-> **`context.edgeInsets(all:)` scales with `w`**, so it is a true drop-in for `EdgeInsets.all(context.w(16))`. The old package used `r` for `all:`; no call site in this repo passed `all:`, so nothing changed behaviour when the axis was corrected.
+> **`context.edgeInsets(all:)` scales with `w`**, so it is a true drop-in for `EdgeInsets.all(context.w(16))`. Each axis of `edgeInsets` is scaled by the axis it belongs to, which keeps padding proportional instead of tracking one dimension.
 >
-> `borderRadius` still uses `r` — a radius scaled on one axis alone would turn a circle into an ellipse. When in doubt, write the explicit form, which states the axis out loud.
+> `borderRadius` uses `r` — a radius scaled on one axis alone would turn a circle into an ellipse. When in doubt, write the explicit form, which states the axis out loud.
 
 ---
 
@@ -277,7 +277,7 @@ return ResponsiveInit(
 `ResponsiveInit` sits at the very root (`_ResponsiveWrapper` in `main_scope.dart` wraps everything, including `AppMaterialWrapper`), so every widget context in the app can use the context-aware extensions.
 
 > [!NOTE]
-> There is no rebuild flag to tune. `ResponsiveInit` is a `StatelessWidget` that reads `MediaQuery.sizeOf(context)` — a size-only dependency — and publishes `ResponsiveMetrics` through the `ResponsiveScope` `InheritedWidget`. Every `context.w/h/r/sp` call registers a dependency on that scope, so Flutter rebuilds exactly the widgets that read a scaled value. This is why there is no `num` extension: `16.w` could only read a global, and a global cannot notify anyone. `arch_check` rule R7 enforces it.
+> Rebuilding needs no configuration. `ResponsiveInit` is a `StatelessWidget` that reads `MediaQuery.sizeOf(context)` — a size-only dependency — and publishes `ResponsiveMetrics` through the `ResponsiveScope` `InheritedWidget`. Every `context.w/h/r/sp` call registers a dependency on that scope, so Flutter rebuilds exactly the widgets that read a scaled value. This is why there is no `num` extension: `16.w` could only read a global, and a global cannot notify anyone. `arch_check` rule R7 enforces it.
 
 > [!TIP]
 > `ResponsiveScope.of(context)` asserts when no `ResponsiveInit` is above it, rather than silently returning unscaled values. A widget test that scales must wrap its subject in `ResponsiveInit`.

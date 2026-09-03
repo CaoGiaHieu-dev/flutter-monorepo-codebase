@@ -34,9 +34,9 @@ Reference sample in the template: `packages/features/home/lib/src/bloc/home_prof
 ### 1. UI State — `BlocViewState<T>` (optional) or a custom Freezed state
 
 > [!IMPORTANT]
-> The class is `BlocViewState<T>`, **not** `ViewState`. It was renamed because
-> `provider_state_management` exports its own, semantically different `ViewState`; both
-> barrels are public, so sharing the name would collide in any file importing both.
+> The class is `BlocViewState<T>`, **not** `ViewState`. `provider_state_management` exports
+> its own, semantically different `ViewState`; both barrels are public, so sharing the name
+> would collide in any file importing both.
 
 `packages/core/bloc_state_management/lib/src/bloc_view_state.dart`:
 

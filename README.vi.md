@@ -53,6 +53,10 @@ graph TD
         CoreDB["core_database"]:::core
         CoreDI["core_di"]:::core
         CoreKit["core_ui_kit"]:::core
+        CoreResp["core_responsive"]:::core
+        CoreNotif["core_notifications"]:::core
+        CoreProv["provider_state_management"]:::core
+        CoreBloc["bloc_state_management"]:::core
     end
 
     %% Cross-layer Relationships
@@ -70,14 +74,19 @@ graph TD
     %% Domain nằm ở tâm và KHÔNG phụ thuộc gì cả.
     %% Core được phép phụ thuộc Domain — không bao giờ ngược lại.
     CoreCom -.->|"Dùng Result / AppFailure"| DomCore
+    CoreProv -.->|"Dùng Result / AppFailure"| DomCore
+    CoreBloc -.->|"Dùng AppFailure trong BlocViewState"| DomCore
     CoreDI -.->|"Dùng UserEntity trong contract"| DomAuth
 ```
 
 > [!IMPORTANT]
 > **Domain không phụ thuộc bất cứ thứ gì.** `domain_core` khai báo **0** workspace dependency và
 > không package domain nào khai Flutter SDK — `AppFailure` nằm trong `domain_core` cạnh `Result<T>`.
-> Các mũi tên hướng vào Domain (`core_common → domain_core`, `core_di → domain_auth`) là những cạnh
-> đi lên **duy nhất** được duyệt; xem [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
+> Core được phép phụ thuộc Domain — Domain là vòng trong cùng nên hướng đó là đúng. Có đúng
+> **bốn** cạnh như vậy được duyệt: `core_common → domain_core`, `core_di → domain_auth`,
+> `provider_state_management → domain_core`, `bloc_state_management → domain_core`. Chúng được
+> hard-code trong `tools/arch_check/check.dart` và in ra ở mỗi lần chạy kèm lý do; cạnh thứ năm sẽ
+> làm fail build. Xem [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
 
 ---
 
@@ -113,6 +122,7 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │   │   ├── network/               # Dio + Retrofit factory, chuỗi interceptor, SSL pinning
 │   │   ├── notifications/         # Module quản lý thông báo đẩy (Push Notification)
 │   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   │   ├── responsive/            # Scale theo design size, gắn với BuildContext
 │   │   ├── storage/               # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
 │   │   └── ui_kit/                # core_ui_kit — widget dùng chung cho mọi feature
 │   ├── domain/                    # Micro-packages nghiệp vụ Pure Dart — 0 phụ thuộc

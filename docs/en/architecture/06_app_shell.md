@@ -174,9 +174,9 @@ The shell implements the contracts that core packages declare but cannot satisfy
 
 ### Why `SslPinningConfig` needs a separate binding
 
-`NetworkConfig implements SslPinningConfig`, but **GetIt resolves by exact registered type and does not walk the supertype chain**. Registering only `as: NetworkConfig` left `getItOrNull<SslPinningConfig>()` returning `null`, so `AppInitializer` skipped pinning entirely — silently, on every flavor.
+`NetworkConfig implements SslPinningConfig`, but **GetIt resolves by exact registered type and does not walk the supertype chain**. Register only `as: NetworkConfig` and `getItOrNull<SslPinningConfig>()` returns `null`, so `AppInitializer` skips pinning entirely — silently, on every flavor.
 
-The fix is a module binding, the same dual-registration pattern `feature_auth` uses for `IAuthStatusStream`:
+The second type therefore needs its own module binding, the same dual-registration pattern `feature_auth` uses for `IAuthStatusStream`:
 
 ```dart
 @module
@@ -252,7 +252,7 @@ Waiting for `endOfFrame` guarantees the first frame is on screen before any redi
 **Later transitions** are handled by a `ProviderStateListener<AuthProvider, UserEntity>` in `build`, gated on `_bootCompleted && authProvider.hasRestoredSession`. The gate exists so the listener does not fight the boot redirect over the very first navigation.
 
 > [!WARNING]
-> `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written even when the method returns `false` because a user is already signed in. The onboarding screen was never shown in that case. Harmless today, but the flag does not mean quite what its name suggests.
+> `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written even when the method returns `false` because a user is already signed in — that is, without the onboarding screen ever being shown. Harmless today, but the flag does not mean quite what its name suggests.
 
 ---
 

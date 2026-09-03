@@ -15,7 +15,7 @@
 
 **Luật.** Phụ thuộc luôn hướng vào trong: `Feature → Domain ← Data`, với `core/*` là hạ tầng nằm dưới. **Không package `core/*` nào được phụ thuộc `feature_*` hay `data_*`** — cả bằng import lẫn bằng khai báo trong `pubspec.yaml`.
 
-**Vì sao.** Core là vòng hạ tầng trong cùng. Nếu core với ngược lên trên, vòng tròn khép lại thành chu trình và không tầng nào phía trên có thể gỡ ra hay tái sử dụng độc lập được nữa.
+**Vì sao.** Core là vòng hạ tầng trong cùng. Nếu core với tay ngược lên trên, vòng tròn khép lại thành chu trình và không tầng nào phía trên có thể gỡ ra hay tái sử dụng độc lập được nữa.
 
 **Domain nằm ở tâm và không phụ thuộc ai.** Trạng thái đã kiểm chứng:
 
@@ -33,11 +33,11 @@ Chỉ có đúng bốn. Thêm cái thứ năm bắt buộc phải cập nhật `
 |---|---|
 | `core_di → domain_auth` | Hợp đồng agnostic stream phơi type entity cụ thể (`UserEntity`); dùng generic sẽ xoá mất type-safety. Xem [luật 15](#15-giao-tiếp-giữa-các-feature). |
 | `provider_state_management → domain_core` | Cần `Result<T>` và `PaginatedEntity<T>` cho `executeOperation` / `PaginatedViewWidget`. |
-| `core_common → domain_core` | `ErrorHandler` sinh ra `AppFailure`, mà class này giờ nằm ở `domain_core`. Core→Domain là chiều **đúng** của Clean Architecture. |
+| `core_common → domain_core` | `ErrorHandler` sinh ra `AppFailure`, class nằm ở `domain_core` như một phần của hợp đồng `Result`. Core→Domain là chiều **đúng** của Clean Architecture. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` mang thẳng `AppFailure`, nên kiểu state cơ sở cần nó. |
 
 > [!NOTE]
-> `core_ui_kit → provider_state_management` là đúng chiều. Chiều ngược lại bị cấm — trước đây nó tạo ra một chu trình ngay bên trong vòng core, và đó chính là lý do `provider_state_management` tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`.
+> `core_ui_kit → provider_state_management` là đúng chiều. Chiều ngược lại bị cấm: nó sẽ khép thành một chu trình ngay bên trong vòng core, và đó chính là lý do `provider_state_management` tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`.
 
 **Kiểm chứng**
 
@@ -83,7 +83,7 @@ dart tools/unused_checker/check_unused_packages.dart
 
 **Luật.** Mọi package, ở mọi tầng, giữ hằng số của chính nó trong thư mục `utils/` bên trong package đó. Một hằng số có đúng **một** chủ sở hữu. Cấm tạo file constants dùng chung xuyên domain.
 
-**Vì sao.** File constants dùng chung cho phép bất kỳ package nào đọc — và gõ nhầm — key của domain khác. Hai god-object kiểu này (`StorageKeyConstants`, `ApiConstants`) đã bị xoá vì lý do đó.
+**Vì sao.** File constants dùng chung cho phép bất kỳ package nào đọc — và gõ nhầm — key của domain khác. Storage key và API endpoint là hai thứ dễ bị gom thành god-object nhất; cả hai đều thuộc về package sở hữu dữ liệu.
 
 Quy ước đang áp dụng:
 
@@ -118,7 +118,7 @@ class AuthStorageKeys {
 
 **Luật.** `core_storage` chỉ cung cấp **cơ chế** và định nghĩa **zero** key. Mỗi nơi tiêu thụ tự inject `StorageManager`, tự khai `StorageValue<T>` của mình, key lấy từ class trong `utils/` của chính nó.
 
-**Vì sao.** `StorageValuePresets` (đã xoá) là một `@Singleton` duy nhất giữ key của mọi domain — ai inject nó vào cũng đọc hoặc xoá được dữ liệu của feature khác.
+**Vì sao.** Một object dùng chung giữ `StorageValue` của mọi domain thì ai inject nó vào cũng đọc hoặc xoá được dữ liệu của feature khác. Cô lập được cưỡng chế bằng đồ thị phụ thuộc: package không khai `data_auth` thì không thể với tới `AuthStorageKeys`.
 
 Đăng ký **bắt buộc là singleton** kèm `@PostConstruct(preResolve: true)`:
 
@@ -192,7 +192,7 @@ Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng
 | `getAll<T>()` | **ném lỗi** — đừng dùng cho đóng góp tuỳ chọn |
 
 > [!WARNING]
-> `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. Việc `getAll` ném lỗi khi type chưa đăng ký đã từng làm app crash ngay lúc dựng `MaterialApp` trong trường hợp không feature nào đóng góp `IFeatureLocalization`.
+> `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. `getAll` ném lỗi khi type chưa đăng ký, nên một lệnh `getAll<IFeatureLocalization>()` trần sẽ làm app crash ngay lúc dựng `MaterialApp` ở bất kỳ bản build nào không có feature nào đóng góp.
 
 **Gỡ một feature** — bốn bước được ghi ngay trong `app/lib/di/injection.dart`:
 
@@ -216,7 +216,7 @@ flutter pub get && dart analyze app
 
 **Luật.** Không `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, hay bất kỳ thư viện UI/network nào trong `packages/domain/*`. Khái niệm UI phải được dịch sang kiểu nguyên thuỷ hoặc enum.
 
-**Vì sao.** Domain là tầng duy nhất nên sống lâu hơn lựa chọn framework. Giờ nó được đảm bảo cả ở mức package graph: không `pubspec.yaml` domain nào khai Flutter SDK, và `domain_core` có zero phụ thuộc workspace.
+**Vì sao.** Domain là tầng duy nhất nên sống lâu hơn lựa chọn framework. Điều này được đảm bảo ngay ở mức package graph: không `pubspec.yaml` domain nào khai Flutter SDK, và `domain_core` có zero phụ thuộc workspace.
 
 Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `repositories/` (interface), `usecases/` (`@injectable`, trả `Result<T>`), `utils/`.
 
@@ -232,7 +232,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 - **DataSource trả Model, không bao giờ trả Entity** — và không bao giờ trả class do Drift sinh.
 - Không bao giờ `throw` từ Data lên UI; trả về `Result.failure(AppFailure)`.
 
-**Vì sao có luật Model.** Trả về class row của Drift là để thư viện lưu trữ rò rỉ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`packages/data/core/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
+**Vì sao có luật Model.** Trả về class row của Drift làm rò rỉ thư viện lưu trữ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`packages/data/core/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
 
 ---
 
@@ -247,7 +247,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 > [!CAUTION]
 > Closure đồng bộ gọi việc async mà không await sẽ sinh ra `emit was called after an event handler completed normally` — handler trả về ngay lập tức, rồi việc async mới emit vào một sink đã đóng.
 
-**Tồn tại hai kiểu `ViewState` và chúng khác nhau.** Bản BLoC đã được đổi tên để tránh trùng:
+**Tồn tại hai kiểu state và chúng khác nhau.** Bản BLoC mang tên `BlocViewState<T>` để một file import cả hai barrel công khai không bao giờ gặp hai type cùng tên `ViewState`:
 
 | | `ViewState` (Provider) | `BlocViewState<T>` (BLoC) |
 |---|---|---|
@@ -292,11 +292,11 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 
 ## 12. Responsive UI
 
-**Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều phải scale **qua `BuildContext`** bằng `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (và `context.spMin`, `context.dg`, `context.dm`). Cấm double thô trong layout.
+**Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều phải scale **qua `BuildContext`** bằng `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (và `context.spMin`, `context.dg`, `context.dm`). Cấm double thô trong layout, và cấm luôn dạng gọi trên receiver trần `16.h`.
 
-**Không có extension trên `num` — và đó là chủ đích.** `16.h` không biên dịch được: `core_responsive` không cung cấp extension nào trên `num`. Một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, mà widget đọc singleton thì **không bao giờ biết** metrics màn hình đã đổi — xoay máy, split-screen, resize cửa sổ desktop đều trôi qua trong im lặng. Ngược lại, `context.h()` đọc `ResponsiveScope` (một `InheritedWidget`) nên mỗi lần đọc đều **đăng ký dependency** và Flutter tự lo việc rebuild. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được.
+**Vì sao dạng trần thậm chí không tồn tại.** `core_responsive` **không** cung cấp extension nào trên `num`, nên `16.h` không biên dịch được. Đó là chủ đích: một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, mà widget đọc singleton thì không bao giờ biết metrics màn hình đã đổi. Ngược lại, `context.h(16)` **đăng ký dependency InheritedWidget** lên `ResponsiveScope`, nên nó rebuild khi metrics đổi: xoay máy, split-screen, resize cửa sổ desktop. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được — và luật R7 của `arch_check` từ chối dạng trần trong mọi file import `core_responsive`, nên một extension khai ở nơi khác cũng không lén đưa nó trở lại được.
 
-❌ **Sai** — không biên dịch được, và trước đây là lỗi cũ giá trị âm thầm:
+❌ **Sai** — không biên dịch được, và nếu có thì giá trị cũng sẽ cũ dần:
 ```dart
 SizedBox(height: 16.h)
 ```
@@ -329,12 +329,12 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 | `context.verticalSpace(x)` | `h` |
 | `context.horizontalSpace(x)` | `w` |
 
-> [!NOTE]
-> `context.edgeInsets(all:)` scale bằng **`w`**, nên nó thay thế trực tiếp được `EdgeInsets.all(context.w(16))`. Package cũ dùng `r` cho `all`; không call site nào trong repo dùng `all:` nên việc đổi trục không làm lệch giao diện. Khi không chắc, hãy viết dạng tường minh vì nó nói rõ đang scale theo trục nào.
+> [!WARNING]
+> `context.edgeInsets` scale mỗi trục theo đúng trục của nó — ngang theo `w`, dọc theo `h`, và `all:` theo `w`, nên nó thay thế trực tiếp được `EdgeInsets.all(context.w(16))`. `borderRadius` là ngoại lệ: nó dùng `r`, vì bán kính chỉ scale theo một trục sẽ biến hình tròn thành elip. Khi không chắc, hãy viết dạng tường minh vì nó nói rõ đang scale theo trục nào.
 
 **Widget dùng lại nhận giá trị RAW và không được tự scale bên trong.** Scale là việc của nơi gọi.
 
-❌ **Sai** — đoạn này từng tồn tại thật, và nó âm thầm vứt bỏ giá trị của caller:
+❌ **Sai** — một lệnh ghi đè bên trong âm thầm vứt bỏ giá trị của caller:
 ```dart
 // packages/core/ui_kit/lib/navigation/app_bar_custom.dart
 @override
@@ -342,8 +342,6 @@ double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩn
 ```
 
 ✅ **Đúng** — nhận tham số qua constructor, để nơi gọi tự scale.
-
-**Widget test có scale phải bọc trong `ResponsiveInit`.** `ResponsiveScope.of(context)` assert `"No ResponsiveInit found above this context."` khi không có scope phía trên — fail to tiếng là cố ý, vì một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị.
 
 **Kiểm chứng**
 

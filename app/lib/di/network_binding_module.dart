@@ -7,9 +7,9 @@ import 'package:injectable/injectable.dart';
 ///
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
-/// `NetworkConfig`, so `getItOrNull<SslPinningConfig>()` (called by
-/// `AppInitializer._setupHttpOverrides`) returned `null` and certificate
-/// pinning was silently skipped on staging and production.
+/// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
+/// (called by `AppInitializer._setupHttpOverrides`) resolves to `null` and
+/// certificate pinning is silently skipped on staging and production.
 ///
 /// Binding through a module — the same dual-registration pattern used for
 /// `IAuthStatusStream` in `feature_auth` — keeps a single instance behind both

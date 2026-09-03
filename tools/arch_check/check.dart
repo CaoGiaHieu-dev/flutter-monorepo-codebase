@@ -122,8 +122,12 @@ String _layerOf(String packageRoot) {
   return (i >= 0 && i + 1 < parts.length) ? parts[i + 1] : '';
 }
 
-/// Matches a bare sizing extension left over from the old package — a number or a
-/// closing paren followed by `.w`, `.h`, `.sp`, `.r`, `.spMin`, `.dg`, `.dm`.
+/// Matches a bare sizing extension — a number or a closing paren followed by
+/// `.w`, `.h`, `.sp`, `.r`, `.spMin`, `.dg`, `.dm`.
+///
+/// `core_responsive` declares no such extension on `num`, so these do not
+/// resolve against it. This catches one declared elsewhere, which would
+/// type-check while reading a value that never notifies anyone.
 ///
 /// Anchored on the receiver so ordinary members (`rect.width`, `state.hasData`)
 /// never match, and the trailing boundary keeps `.hour` or `.round()` out.

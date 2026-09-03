@@ -129,7 +129,7 @@ dart tools/workspace_setup/configure.dart
 This cross-platform script runs: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `gen-l10n` for every package that has ARB files → `build_runner build -d --workspace`.
 
 > [!NOTE]
-> There is **no** `configure.sh` or `configure.bat`. Older docs referenced them; only `configure.dart` exists.
+> `configure.dart` is the only entry point — there is no `configure.sh` or `configure.bat` wrapper. A Dart script runs identically on every platform, so no shell wrapper is needed.
 
 ---
 

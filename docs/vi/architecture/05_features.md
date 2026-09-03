@@ -164,7 +164,7 @@ Chỉ dùng `IDashboardTabModule` cho **điểm đến chính của bottom-nav**
 
 ## 5. Widget dùng chung nằm ở core, không phải ở đây
 
-Thư viện widget dùng lại là **`core_ui_kit`** tại `packages/core/ui_kit` — một package core, không phải feature. Nó đã được chuyển ra khỏi `packages/features/` để mọi thứ còn lại ở đây đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
+Thư viện widget dùng lại là **`core_ui_kit`** tại `packages/core/ui_kit` — một package core, không phải feature. Nó nằm ngoài `packages/features/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
 
 Điều quan trọng ở phía feature là nghĩa vụ của **bên gọi**:
 
@@ -232,7 +232,7 @@ Cả hai package state đều export một union trạng thái, và chúng **kh�
 | Số variant | 5 (có `loadingMore`) | 4 |
 | Nhánh error | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — bắt buộc |
 
-Bản BLoC được đổi tên từ `ViewState` thành `BlocViewState<T>` chính là để một file import cả hai barrel không bị trùng tên:
+Kiểu của nhánh BLoC được đặt tên là `BlocViewState<T>` chứ không phải `ViewState`, để một file import cả hai barrel không gặp hai kiểu khác nhau dưới cùng một cái tên:
 
 ```dart
 @injectable
@@ -286,7 +286,7 @@ Checklist:
 - [ ] Controller theo màn hình là `@injectable`, tạo ở route, không bọc lại trong page
 - [ ] Hằng số đường dẫn nằm ở `src/utils/<name>_path.dart`
 - [ ] Điều hướng liên feature đi qua Navigator interface ở `core_di`, `BuildContext` truyền từ bên gọi
-- [ ] Mọi kích thước đều scale bằng `.w` / `.h` / `.sp` / `.r`
+- [ ] Mọi kích thước đều scale qua `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
 - [ ] Asset riêng của feature nằm trong feature package, không nhét vào `core_base_ui`
 
 ---

@@ -1,7 +1,7 @@
 # Guide: Cross-Feature Communication
 
 This guide answers **"feature A needs something from feature B — how, without importing it?"**.
-Feature packages may never import each other — no exception, since shared widgets now come from the core package `core_ui_kit` — so every
+Feature packages may never import each other — no exception; shared widgets come from the core package `core_ui_kit` — so every
 interaction goes through a contract that a *neutral* package owns.
 
 By the end you will know which of the six models fits your case, and how to wire it so that
@@ -62,7 +62,7 @@ The use case lives in `domain_auth`; both `feature_auth` and `feature_checkout` 
 **Use when** the capability is infrastructure, not business logic.
 **Don't use when** the behaviour belongs to a specific feature.
 
-Inject `StorageManager`, `Dio`, `AppDatabase` and friends directly from the relevant `core_*`
+Inject `StorageManager`, `Dio`, `IDatabaseHandle<TDb>` and friends directly from the relevant `core_*`
 package. Nothing feature-specific is involved, so there is no coupling to break.
 
 See [`06_storage.md`](06_storage.md), [`08_networking.md`](08_networking.md),
@@ -327,9 +327,13 @@ getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
 
 > [!NOTE]
 > `app/lib/di/injection.dart` naming feature packages is the composition root's one intentional
-> hard reference — it must name what it composes. Some shell files still hold direct `feature_auth`
-> / `feature_splash` / `core_ui_kit` imports; those are documented in place and are the
-> remaining work before every feature is fully removable.
+> hard reference — it must name what it composes. No other file under `app/lib/` imports a
+> `feature_*` package; everything else reaches features through `core_di` contracts with
+> `getAllOrEmpty` / `getItOrNull` fallbacks. The `core_ui_kit` imports in the shell are not
+> exceptions — that is a core package, not a removable feature.
+>
+> Verify with `grep -rn "package:feature_" app/lib --include="*.dart"` — every hit should be in
+> `injection.dart` or the generated `injection.config.dart`.
 
 ---
 

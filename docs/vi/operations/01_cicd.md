@@ -74,7 +74,7 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 **Nó làm gì**: lấy danh sách file thay đổi bằng `tj-actions/changed-files`, chạy reviewer, upload báo cáo Markdown làm artifact (giữ 30 ngày), rồi phân tích báo cáo đó và đăng **comment inline đúng dòng** khi dòng đó nằm trong diff của PR. Phát hiện nằm ngoài diff được gom thành comment riêng theo từng file.
 
-### Một điểm cần lưu ý
+### Ghim phiên bản Flutter
 
 Bước cài dependency chạy `dart tools/workspace_setup/configure.dart`, và `flutter_version` mặc định `3.47.2`, khớp ràng buộc trong `pubspec.yaml` gốc.
 
@@ -102,7 +102,7 @@ fi
 
 Chạy tay, giao toàn bộ việc build cho Fastlane. Cài Java 17, Ruby 3.3 (bỏ qua nếu `self-hosted`), Flutter (kênh `stable`, **không ghim phiên bản**), cài Fastlane và plugin `firebase_app_distribution`, rồi gọi một lane.
 
-Nó gọi đúng lane cross-platform thật là `fastlane flutter` (khai trong `app/fastlane/modules/flutter_lanes.rb` dạng `lane :flutter do |options|`), và `flutter_version` mặc định `3.47.2`.
+Nó gọi lane cross-platform `fastlane flutter` (khai trong `app/fastlane/modules/flutter_lanes.rb` dạng `lane :flutter do |options|`), và `flutter_version` mặc định `3.47.2`.
 
 > [!WARNING]
 > Lệnh gọi vẫn truyền `auto_increment:` (`fastlane.yml:99`), và **không lane nào đọc nó** — `grep -rn auto_increment app/fastlane/` không trả về gì. Auto-increment được kích hoạt bằng cách truyền `build_number:auto`; xem [`02_fastlane_release.md`](02_fastlane_release.md). Tham số này bị bỏ qua âm thầm, nên một lần dispatch trông cậy vào nó sẽ nhận đúng `build_number` đã truyền chứ không phải số đã tăng.
@@ -121,9 +121,9 @@ Hai stage trên pool self-hosted tên `codebase`. `trigger: none` nên chỉ ch�
 
 Các biến pipeline phải khai trong tab Variables của Azure: `flutter-version`, `flutterPath`, `version`, `numberBuild`, `note`, và `FIREBASE-ANDROID-ID`.
 
-### Một lỗi còn lại
+### Một lỗi
 
-Tên file artefact và lệnh gọi `configure.dart` giờ đều đúng: build publish `app-prod-release.apk` và stage Distribute tải lên đúng tên đó, còn "Flutter Config" chạy `dart tools/workspace_setup/configure.dart`.
+Tên file artefact và lệnh gọi `configure.dart` thì nhất quán: build publish `app-prod-release.apk`, stage Distribute tải về và upload đúng tên đó, còn "Flutter Config" chạy `dart tools/workspace_setup/configure.dart`. Chỉ thiếu đúng một thứ.
 
 > [!WARNING]
 > **`.env` không bao giờ được tạo, nhưng build lại cần nó.**
@@ -151,7 +151,7 @@ Gate 1 chạy đầu tiên là có chủ đích: nó chỉ đọc import và pub
 Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm ở `packages/<layer>/<pkg>/test/`, chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
 
 > [!IMPORTANT]
-> `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Template đã dính đúng lỗi này: chuyển `AppFailure` sang package khác làm `bloc_view_state.freezed.dart` tham chiếu một type nó không còn thấy — analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.
+> `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Chuyển một type sang package khác là đủ để một file `.freezed.dart` tham chiếu tới symbol nó không thấy được: analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.
 
 **Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 1–4 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
 
@@ -218,14 +218,7 @@ Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configu
 
 ## 9. Danh sách việc cần sửa
 
-Đã sửa xong trong template này:
-
-- [x] `code_review.yml` — dùng `dart tools/workspace_setup/configure.dart`; `flutter_version` mặc định `3.47.2`
-- [x] `fastlane.yml` — gọi đúng lane `flutter`; `flutter_version` mặc định `3.47.2`
-- [x] `azure-ci-cd.yml` — distribute `app-prod-release.apk`; "Flutter Config" chạy `configure.dart`
-- [x] `pr_quality_check.yml` — đã tồn tại và chặn mọi PR (luật kiến trúc, analyze, test, lệch catalog)
-
-Còn lại, theo thứ tự ưu tiên:
+Các mục còn mở, theo thứ tự ưu tiên tương đối:
 
 - [ ] `azure-ci-cd.yml` — thêm secure file + bước copy cho `.env`; build prod hiện không nhận được dart-define nào
 - [ ] `fastlane.yml` — bỏ tham số `auto_increment:` đang bị bỏ qua, hoặc cho một lane đọc nó

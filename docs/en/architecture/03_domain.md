@@ -43,8 +43,7 @@ import 'package:drift/...';      // ❌
 | Package | Why it is allowed |
 |:---|:---|
 | `dart:core`, `dart:async` | Language basics |
-| `domain_core` | `Result<T>`, `BaseEntity<T>`, `BaseUseCase`, `NoParams` |
-| `core_common` | Constants, enums, `AppFailure` — pure Dart itself |
+| `domain_core` | `Result<T>`, `AppFailure`, `BaseEntity<T>`, `BaseUseCase`, `NoParams` |
 | `freezed_annotation`, `json_annotation` | Codegen annotations only |
 | `injectable`, `get_it` | DI annotations |
 
@@ -58,17 +57,23 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 # → no output
 ```
 
-> [!WARNING]
-> **The pubspecs do not match the claim.** All three domain packages declare the Flutter SDK:
+> [!NOTE]
+> **The package graph enforces this, not just review.** No domain pubspec lists `flutter` under `dependencies`, and none declares a `core_*` package:
 >
 > ```yaml
-> # packages/domain/core/pubspec.yaml, domain/auth, domain/language
+> # packages/domain/auth/pubspec.yaml
 > dependencies:
->   flutter:
->     sdk: flutter
+>   domain_core:
+>     path: ../core
+>   get_it: ^9.2.1
+>   injectable: ^3.0.0
+>   freezed_annotation: ^3.1.0
+>   json_annotation: ^4.12.0
 > ```
 >
-> No source file imports it, so the *code* is pure Dart and can be reasoned about as such. But the declaration means these packages cannot be published or consumed outside a Flutter toolchain, and nothing stops a future edit from importing Flutter without tripping a build error. Treat the mandate as a convention enforced by review and by the grep above — not by the package manager.
+> `domain_core` itself has **no** workspace dependency at all. An `import 'package:flutter/…'` added to a domain file therefore fails to resolve rather than quietly compiling. Keep it that way: never add `flutter` or a `core_*` package to a domain pubspec.
+>
+> One caveat, so the claim is not oversold: every domain pubspec still carries a `flutter:` constraint under `environment:`. That is a minimum-SDK assertion, not a dependency — it pulls no Flutter code into the package graph, and the purity check above still passes. It does mean pub wants the Flutter SDK present to resolve these packages, so they are not consumable from a Dart-only runtime as they stand. Drop the `environment: flutter:` line if you ever need to share a domain package with a pure Dart server.
 
 ### Why UI state bypasses Domain entirely
 
@@ -82,7 +87,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ### `Result<T>` — the return type of every use case
 
-Defined in `packages/domain/core/lib/src/repositories/result.dart`:
+Defined in `packages/domain/core/lib/src/repositories/result.dart`, with `AppFailure` alongside it in `src/failures/`:
 
 ```dart
 @freezed
@@ -156,7 +161,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == ApiStatusConstants.SUCCESS;
+  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
   bool get hasError => !isSuccess;
 ```
 

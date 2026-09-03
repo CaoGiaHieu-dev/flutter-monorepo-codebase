@@ -10,6 +10,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  material_ui: ^1.1.1
   flutter:
     sdk: flutter
   core_base_ui:

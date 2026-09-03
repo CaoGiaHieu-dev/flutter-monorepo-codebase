@@ -5,8 +5,8 @@ import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:data_auth/data_auth.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:domain_core/domain_core.dart';
-import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../presentation/navigation/app_router.dart';
 

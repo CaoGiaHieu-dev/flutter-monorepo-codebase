@@ -1,8 +1,8 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_storage/core_storage.dart';
-import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'utils/language_storage_keys.dart';
 

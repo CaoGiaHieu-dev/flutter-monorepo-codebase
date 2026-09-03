@@ -1,11 +1,11 @@
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../utils/base_ui_constants.dart';
 import 'theme_system_extensions.dart';
@@ -103,14 +103,18 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       ThemeMode.system => ColorScheme.fromSwatch(),
     };
 
+    TextTheme applyGoogleFont(TextTheme base) {
+      final font = GoogleFonts.plusJakartaSans();
+      return base.apply(
+        fontFamily: font.fontFamily,
+        fontFamilyFallback: font.fontFamilyFallback,
+      );
+    }
+
     final defaultTheme = switch (mode) {
-      ThemeMode.dark => GoogleFonts.plusJakartaSansTextTheme(
-        ThemeData.dark().textTheme,
-      ),
-      ThemeMode.light => GoogleFonts.plusJakartaSansTextTheme(
-        ThemeData.light().textTheme,
-      ),
-      ThemeMode.system => GoogleFonts.plusJakartaSansTextTheme(
+      ThemeMode.dark => applyGoogleFont(ThemeData.dark().textTheme),
+      ThemeMode.light => applyGoogleFont(ThemeData.light().textTheme),
+      ThemeMode.system => applyGoogleFont(
         ThemeData.from(colorScheme: colorScheme).textTheme,
       ),
     };

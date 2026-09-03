@@ -5,7 +5,7 @@ import 'package:core_common/di/module.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_ui_kit/dialogs/app_overlay.dart';
 import 'package:domain_auth/domain_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../di/app_boot_storage.dart';
 import '../providers/deeplink_provider.dart';

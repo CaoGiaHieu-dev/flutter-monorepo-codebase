@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:core_common/core_common.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Deep link provider for managing app deep link handling and navigation.
 ///

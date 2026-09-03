@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Interface for theme storage, decoupling ThemeProvider from the actual storage implementation.
 abstract class IThemeStorage {

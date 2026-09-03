@@ -1,9 +1,9 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../widgets/navigator_wrapper_widget.dart';
 import '../widgets/undefine_route_widget.dart';

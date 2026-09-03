@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:core_storage/core_storage.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
-import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -162,12 +161,12 @@ void main() {
     StorageValue<String> buildLocale() =>
         StorageValue<String>(manager.getStorage(StorageType.pref), 'locale');
 
-    StorageValue<ThemeMode> buildThemeMode() => StorageValue<ThemeMode>(
+    StorageValue<_TestThemeMode> buildThemeMode() => StorageValue<_TestThemeMode>(
       manager.getStorage(StorageType.pref),
       'themeMode',
       reviver: (key, value) => value == null
-          ? ThemeMode.system
-          : ThemeMode.values.byName(value.toString()),
+          ? _TestThemeMode.system
+          : _TestThemeMode.values.byName(value.toString()),
     );
 
     test(
@@ -179,12 +178,12 @@ void main() {
 
         token.value = 'preset_token_abc';
         locale.value = 'vi';
-        themeMode.value = ThemeMode.dark;
+        themeMode.value = _TestThemeMode.dark;
         await Future<void>.delayed(Duration.zero);
 
         expect(token.value, equals('preset_token_abc'));
         expect(locale.value, equals('vi'));
-        expect(themeMode.value, equals(ThemeMode.dark));
+        expect(themeMode.value, equals(_TestThemeMode.dark));
       },
     );
 
@@ -194,7 +193,7 @@ void main() {
       final themeMode = buildThemeMode();
 
       locale.value = 'vi';
-      themeMode.value = ThemeMode.dark;
+      themeMode.value = _TestThemeMode.dark;
       await Future<void>.delayed(Duration.zero);
 
       // Auth writes and then clears its own key…
@@ -205,7 +204,7 @@ void main() {
       // …the other owners' keys survive untouched, on disk too.
       expect(token.value, isNull);
       expect(locale.value, equals('vi'));
-      expect(themeMode.value, equals(ThemeMode.dark));
+      expect(themeMode.value, equals(_TestThemeMode.dark));
       expect(
         await manager.getStorage(StorageType.pref).read<String>('locale'),
         equals('vi'),
@@ -419,3 +418,5 @@ void main() {
     });
   });
 }
+
+enum _TestThemeMode { system, light, dark }

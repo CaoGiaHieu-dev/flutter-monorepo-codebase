@@ -12,6 +12,7 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.1.1
   domain_core:
     path: ../../domain/core
   uuid: "^4.6.0"
@@ -31,6 +32,7 @@ dependencies:
     path: ../responsive
   device_info_plus: "^13.2.0"
   permission_handler: "^13.0.1"
+  cupertino_ui: "^1.0.2"
 dev_dependencies:
   build_runner: "^2.16.0"
   injectable_generator: "^3.1.3"

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Interface for language storage, decoupling [LanguageProvider] from persistence.
 abstract class ILanguageStorage {

@@ -1,7 +1,7 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
 

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide ErrorWidgetBuilder;
+import 'package:material_ui/material_ui.dart' hide ErrorWidgetBuilder;
 
 import '../../provider_state_management.dart';
 

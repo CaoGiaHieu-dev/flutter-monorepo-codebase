@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:flutter/material.dart';
 import 'package:jumping_dot/jumping_dot.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:refresh_sticky/refresh_sticky.dart';
 
 /// A custom widget that extends the `RefreshSticky` widget to provide a more

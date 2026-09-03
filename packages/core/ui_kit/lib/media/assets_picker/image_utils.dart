@@ -5,11 +5,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:core_base_ui/core_base_ui.dart';
-
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart';
 

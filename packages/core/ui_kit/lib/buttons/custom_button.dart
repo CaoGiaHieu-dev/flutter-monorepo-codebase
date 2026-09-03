@@ -1,7 +1,7 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
-import 'package:flutter/material.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:material_ui/material_ui.dart';
 
 part 'custom_button_widgets/dropdown_button_widget.dart';
 // Part declarations for widget components

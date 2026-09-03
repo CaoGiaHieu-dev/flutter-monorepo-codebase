@@ -1,5 +1,5 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A reusable loading widget that displays a centered circular progress indicator
 ///

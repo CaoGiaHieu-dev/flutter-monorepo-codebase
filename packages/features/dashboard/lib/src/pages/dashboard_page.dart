@@ -1,7 +1,7 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({

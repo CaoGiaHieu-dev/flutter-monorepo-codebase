@@ -1,6 +1,6 @@
 import 'package:core_common/core_common.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../pages/pages.dart';
 import '../utils/settings_path.dart';

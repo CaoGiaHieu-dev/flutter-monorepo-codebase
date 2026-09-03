@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:core_responsive/core_responsive.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 class LoadingMoreWidget<P extends LoadMoreMixin> extends StatelessWidget {

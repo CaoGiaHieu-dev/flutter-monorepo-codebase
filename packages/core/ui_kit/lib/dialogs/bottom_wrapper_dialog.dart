@@ -1,5 +1,5 @@
 import 'package:core_responsive/core_responsive.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class BottomWrapperDialog extends StatelessWidget {
   const BottomWrapperDialog({super.key, required this.child});

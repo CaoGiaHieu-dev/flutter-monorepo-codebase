@@ -1,7 +1,7 @@
 library dialogs;
 
 import 'package:core_common/core_common.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../utils/shared_ui_constants.dart';
 import 'bottom_wrapper_dialog.dart';

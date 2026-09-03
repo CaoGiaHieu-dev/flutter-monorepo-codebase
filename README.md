@@ -388,7 +388,7 @@ fastlane android build flavor:dev build_type:apk distribute_store:false distribu
 ## 🚀 Initialization & Local Development Guide
 
 ### 1. Environment Preparation
-- **Flutter**: >= 3.47.1 (Stable)
+- **Flutter**: >= 3.47.2 (Stable)
 - **Dart SDK**: >= 3.13.1
 - **JDK**: 17
 - **Ruby**: >= 3.0 (for Fastlane)

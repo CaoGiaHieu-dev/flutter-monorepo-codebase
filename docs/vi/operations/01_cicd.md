@@ -41,7 +41,7 @@ Build number không phải tham số — nó dùng `${{ github.run_number }}`, n
 
 1. **Checkout** — `actions/checkout@v4`.
 2. **Set Up Java** — bản Oracle, **Java 17**. Khớp với `sourceCompatibility`/`targetCompatibility` trong `app/android/app/build.gradle.kts`.
-3. **Set Up Flutter** — `subosito/flutter-action@v2`, ghim **`3.47.1`**, kênh `stable`, bật cache.
+3. **Set Up Flutter** — `subosito/flutter-action@v2`, ghim **`3.47.2`**, kênh `stable`, bật cache.
 4. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. Script Dart này làm trọn gói: pub get, sinh l10n, và `build_runner` cho cả workspace.
 5. **Decode Env** — `echo -n ${{ secrets.ENV }} | base64 -d > .env` (ghi ra **thư mục gốc repo**).
 6. **Decode Keystore** — `secrets.KEYSTORE_BASE64` → `app/android/keystore.jks`.
@@ -76,7 +76,7 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 ### Một điểm cần lưu ý
 
-Bước cài dependency chạy `dart tools/workspace_setup/configure.dart`, và `flutter_version` mặc định `3.47.1`, khớp ràng buộc trong `pubspec.yaml` gốc.
+Bước cài dependency chạy `dart tools/workspace_setup/configure.dart`, và `flutter_version` mặc định `3.47.2`, khớp ràng buộc trong `pubspec.yaml` gốc.
 
 > [!NOTE]
 > `flutter_version` chỉ được bind ở `workflow_dispatch`. Với sự kiện `pull_request` thì `github.event.inputs.flutter_version` rỗng, nên `subosito/flutter-action@v2` nhận `flutter-version` rỗng và tự lấy bản stable mới nhất thay vì bản đã pin. Vô hại với một AI review; nhưng đừng sao chép pattern này sang pipeline có tạo artefact.
@@ -102,7 +102,7 @@ fi
 
 Chạy tay, giao toàn bộ việc build cho Fastlane. Cài Java 17, Ruby 3.3 (bỏ qua nếu `self-hosted`), Flutter (kênh `stable`, **không ghim phiên bản**), cài Fastlane và plugin `firebase_app_distribution`, rồi gọi một lane.
 
-Nó gọi đúng lane cross-platform thật là `fastlane flutter` (khai trong `app/fastlane/modules/flutter_lanes.rb` dạng `lane :flutter do |options|`), và `flutter_version` mặc định `3.47.1`.
+Nó gọi đúng lane cross-platform thật là `fastlane flutter` (khai trong `app/fastlane/modules/flutter_lanes.rb` dạng `lane :flutter do |options|`), và `flutter_version` mặc định `3.47.2`.
 
 > [!WARNING]
 > Lệnh gọi vẫn truyền `auto_increment:` (`fastlane.yml:99`), và **không lane nào đọc nó** — `grep -rn auto_increment app/fastlane/` không trả về gì. Auto-increment được kích hoạt bằng cách truyền `build_number:auto`; xem [`02_fastlane_release.md`](02_fastlane_release.md). Tham số này bị bỏ qua âm thầm, nên một lần dispatch trông cậy vào nó sẽ nhận đúng `build_number` đã truyền chứ không phải số đã tăng.
@@ -220,8 +220,8 @@ Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configu
 
 Đã sửa xong trong template này:
 
-- [x] `code_review.yml` — dùng `dart tools/workspace_setup/configure.dart`; `flutter_version` mặc định `3.47.1`
-- [x] `fastlane.yml` — gọi đúng lane `flutter`; `flutter_version` mặc định `3.47.1`
+- [x] `code_review.yml` — dùng `dart tools/workspace_setup/configure.dart`; `flutter_version` mặc định `3.47.2`
+- [x] `fastlane.yml` — gọi đúng lane `flutter`; `flutter_version` mặc định `3.47.2`
 - [x] `azure-ci-cd.yml` — distribute `app-prod-release.apk`; "Flutter Config" chạy `configure.dart`
 - [x] `pr_quality_check.yml` — đã tồn tại và chặn mọi PR (luật kiến trúc, analyze, test, lệch catalog)
 

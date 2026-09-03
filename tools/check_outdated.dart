@@ -50,7 +50,7 @@ description: A temporary pubspec to check outdated shared dependencies.
 publish_to: 'none'
 environment:
   sdk: '>=3.13.0 <4.0.0'
-  flutter: ">=3.47.1"
+  flutter: ">=3.47.2"
 
 $dependenciesContent
 ''';

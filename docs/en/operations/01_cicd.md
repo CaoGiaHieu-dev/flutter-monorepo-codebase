@@ -41,7 +41,7 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 
 1. **Checkout** — `actions/checkout@v4`.
 2. **Set Up Java** — Oracle distribution, **Java 17**. Matches `sourceCompatibility`/`targetCompatibility` in `app/android/app/build.gradle.kts`.
-3. **Set Up Flutter** — `subosito/flutter-action@v2`, pinned to **`3.47.1`**, channel `stable`, with cache enabled.
+3. **Set Up Flutter** — `subosito/flutter-action@v2`, pinned to **`3.47.2`**, channel `stable`, with cache enabled.
 4. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation and `build_runner` for the whole workspace.
 5. **Decode Env** — `echo -n ${{ secrets.ENV }} | base64 -d > .env` (written to the **repo root**).
 6. **Decode Keystore** — `secrets.KEYSTORE_BASE64` → `app/android/keystore.jks`.
@@ -76,7 +76,7 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 ### One remaining quirk
 
-Dependency installation runs `dart tools/workspace_setup/configure.dart`, and `flutter_version` defaults to `3.47.1`, matching the root `pubspec.yaml` constraint.
+Dependency installation runs `dart tools/workspace_setup/configure.dart`, and `flutter_version` defaults to `3.47.2`, matching the root `pubspec.yaml` constraint.
 
 > [!NOTE]
 > `flutter_version` is only bound on `workflow_dispatch`. On a `pull_request` event `github.event.inputs.flutter_version` is empty, so `subosito/flutter-action@v2` receives an empty `flutter-version` and resolves the latest stable instead of the pinned one. Harmless for an AI review; do not copy this pattern into a pipeline that builds artefacts.
@@ -102,7 +102,7 @@ fi
 
 Manual dispatch that hands the whole build over to Fastlane. Sets up Java 17, Ruby 3.3 (skipped on `self-hosted`), Flutter (channel `stable`, **no pinned version**), installs Fastlane and the `firebase_app_distribution` plugin, then invokes a lane.
 
-It invokes the real cross-platform lane, `fastlane flutter` (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.1`.
+It invokes the real cross-platform lane, `fastlane flutter` (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.2`.
 
 > [!WARNING]
 > The invocation still passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment app/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
@@ -221,8 +221,8 @@ A first build on a clean machine also needs `flutterfire configure` to have been
 
 Already fixed in this template:
 
-- [x] `code_review.yml` — uses `dart tools/workspace_setup/configure.dart`; default `flutter_version` is `3.47.1`
-- [x] `fastlane.yml` — calls the real `flutter` lane; default `flutter_version` is `3.47.1`
+- [x] `code_review.yml` — uses `dart tools/workspace_setup/configure.dart`; default `flutter_version` is `3.47.2`
+- [x] `fastlane.yml` — calls the real `flutter` lane; default `flutter_version` is `3.47.2`
 - [x] `azure-ci-cd.yml` — distributes `app-prod-release.apk`; "Flutter Config" runs `configure.dart`
 - [x] `pr_quality_check.yml` — exists and gates every PR (arch rules, analyze, tests, catalog drift)
 

@@ -14,7 +14,7 @@ on:
       flutter_version:
         description: "Flutter version"
         required: true
-        default: "3.47.1"
+        default: "3.47.2"
       version:
         description: "App version"
         required: true

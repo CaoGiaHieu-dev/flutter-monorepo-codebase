@@ -31,7 +31,7 @@
 | `SecureStorageImpl` | `@Named('Secure')` | FlutterSecureStorage backend — internal, resolved by DI |
 
 > [!NOTE]
-> There is no `StorageValuePresets` and no `StorageKeyConstants`. Both were removed: a single object holding every domain's keys meant any injector could read and write another feature's data. If you find either name in an old branch or article, it is out of date.
+> There is no shared preset object and no central key registry — no `StorageValuePresets`, no `StorageKeyConstants`. A single object holding every domain's keys would let any injector read and write another feature's data, so the mechanism deliberately offers no such object to reach for.
 
 ---
 
@@ -319,7 +319,7 @@ class ThemeStorageImpl implements IThemeStorage {
 Consumers (here `ThemeProvider` in `core_base_ui`) depend on `IThemeStorage` only. They cannot see the key, the backend, or the `StorageValue`.
 
 > [!WARNING]
-> Registering an impl `as: IThemeStorage` makes it resolvable **only** as `IThemeStorage`. GetIt does not walk the supertype chain, so if a second interface must resolve to the same instance you need an explicit `@module` binding — exactly the bug that silently disabled SSL pinning; see [`08_networking.md`](08_networking.md#5-ssl-pinning).
+> Registering an impl `as: IThemeStorage` makes it resolvable **only** as `IThemeStorage`. GetIt does not walk the supertype chain, so if a second interface must resolve to the same instance you need an explicit `@module` binding. Miss it and SSL pinning silently no-ops; see [`08_networking.md`](08_networking.md#5-ssl-pinning).
 
 ---
 

@@ -314,7 +314,10 @@ class _AssetsPickerState extends State<AssetsPicker> {
     return SliverFillRemaining(
       child: Center(
         child: DefaultTextStyle(
-          style: TextStyle(color: CupertinoColors.systemGrey, fontSize: context.sp(18)),
+          style: TextStyle(
+            color: CupertinoColors.systemGrey,
+            fontSize: context.sp(18),
+          ),
           child: Text(context.l10n.noPhotosAvailable),
         ),
       ),

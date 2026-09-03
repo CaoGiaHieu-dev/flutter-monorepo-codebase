@@ -87,7 +87,7 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 | `gen/` | l10n / asset sinh ra — không bao giờ sửa tay |
 
 > [!WARNING]
-> `provider/` và `bloc/` là **số ít**. Generator từng sinh ra `providers/` và `blocs/`, không khớp với bất kỳ feature nào đang có. Thấy thư mục số nhiều nghĩa là nó có từ trước khi lỗi này được sửa.
+> `provider/` và `bloc/` là **số ít**, khớp với mọi feature có sẵn và với đúng thứ `module_generator` sinh ra. Thư mục `providers/` hay `blocs/` số nhiều là vi phạm — hãy đổi tên lại.
 
 ---
 

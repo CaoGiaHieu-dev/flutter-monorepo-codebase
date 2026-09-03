@@ -36,8 +36,8 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 > [!IMPORTANT]
 > **Core must never depend on a feature.** `packages/core/*` sits underneath everything; if it reaches back up into `packages/features/*`, the dependency graph gains a cycle and a package can no longer be extracted or tested in isolation.
 >
-> This rule was violated once and has been repaired: `provider_state_management` used to import the shared widget library (then `feature_shared`, now `core_ui_kit`) purely to reuse its `EmptyWidget` / `LoadingWidget` as fallbacks. It now ships its own minimal
-> [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../packages/core/provider_state_management/lib/src/base_view/default_state_widgets.dart) instead.
+> The same reasoning applies inside the core ring. A state-management base needs an empty/loading placeholder, and `core_ui_kit` already has branded ones — but `core_ui_kit` depends on `provider_state_management`, so borrowing them back would close a cycle. `provider_state_management` therefore ships its own minimal
+> [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../packages/core/provider_state_management/lib/src/base_view/default_state_widgets.dart). When core needs a widget, core defines it.
 
 ---
 
@@ -47,9 +47,9 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 |:--|:--|:--|:--|:--|
 | **App Shell** | `app/` | Entry point, flavors, DI assembly, router assembly | everything | — |
 | **Feature** | `packages/features/*` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, one state-management package | `data_*`, another feature package |
-| **Domain** | `packages/domain/*` | Entities, use cases, repository contracts | `core_common`, `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
+| **Domain** | `packages/domain/*` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `packages/data/*` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `packages/features/*` |
-| **Core** | `packages/core/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the two exceptions below | `packages/features/*`, `packages/data/*` |
+| **Core** | `packages/core/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the four exceptions below | `packages/features/*`, `packages/data/*` |
 
 Each layer has a dedicated page:
 [Core](02_core.md) · [Domain](03_domain.md) · [Data](04_data.md) · [Features](05_features.md) · [App Shell](06_app_shell.md).
@@ -58,7 +58,7 @@ Each layer has a dedicated page:
 
 `packages/domain/*` is **100% pure Dart**. No `package:flutter/...`, no `package:dio/...`, no `package:drift/...`. This is what makes the business layer unit-testable without a device or a widget tree.
 
-When domain logic needs something that *looks* UI-shaped — a colour, an icon, a screen size — it must be expressed as a primitive or an enum defined in `core_common`, and the feature layer decides how to render it.
+When domain logic needs something that *looks* UI-shaped — a colour, an icon, a screen size — it must be expressed as a primitive or an enum defined inside the domain package itself, and the feature layer decides how to render it.
 
 ### The approved exceptions
 
@@ -68,6 +68,8 @@ Four `core_*` packages depend on a `domain_*` package. All are deliberate and do
 |:--|:--|
 | `core_di` → `domain_auth` | `core_di` is the **DI Hub** where cross-package contracts live. [`IAuthStatusStream`](../../../packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart) exposes `Stream<UserEntity?>` — a *concrete* domain type, deliberately not a generic `<T>`. Weakening it to a generic would push type-checking onto every consumer. The Hub is contracts only, never business logic, so importing an entity type does not make it a domain package. |
 | `provider_state_management` → `domain_core` | `PaginatedViewWidget` is typed over `PaginatedEntity<T>`, and `executeOperation` unwraps `Result<T>` — both defined in `domain_core`. The state-management base exists precisely to consume those types. |
+| `bloc_state_management` → `domain_core` | `BlocViewState.error` carries an `AppFailure`, which is part of the `Result` contract and therefore lives in `domain_core`. |
+| `core_common` → `domain_core` | `ErrorHandler.handleError()` produces an `AppFailure`. Its declaration sits with `Result<T>` in `domain_core`; `core_common` re-exports it for existing importers. |
 
 Everything else in `packages/core/*` has **zero** local-package dependencies beyond other `core_*` packages. `core_database`, notably, depends on no other workspace package at all.
 
@@ -82,7 +84,7 @@ Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `w
 > [!WARNING]
 > **The trade-off you must actively manage.** A Pub Workspace resolves one shared `package_config.json` for all members. That means a package can `import 'package:data_core/data_core.dart'` and **compile fine even if it never declared `data_core` in its own `pubspec.yaml`**.
 >
-> The code works today and breaks the moment anyone extracts that package or reorders the workspace. Two real instances of this were found and fixed in this repo: `data_auth` used `data_core` while declaring it under `dev_dependencies`, and `feature_splash` used `core_di` without declaring it at all.
+> The code works today and breaks the moment anyone extracts that package or reorders the workspace. The two shapes to watch for are an import with no pubspec entry at all, and a production import whose entry sits under `dev_dependencies` — both compile inside the workspace and neither survives outside it.
 >
 > Declare every dependency you import, in the right section. Verify with:
 > ```bash
@@ -98,9 +100,9 @@ Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `w
 | **`Result<T>` instead of thrown exceptions** across layer boundaries | `throw` / `try-catch` at the call site | An exception is invisible in a function signature — the caller has no way to know it must handle failure. `Future<Result<UserEntity>>` puts the failure case *in the type*, so the compiler reminds you. The Data layer never lets an exception escape; `IBaseRepository.execute()` converts it into `Result.failure(AppFailure)`. |
 | **Decentralized DI via micro-package modules** | One giant `injection.dart` listing every registration | Each package owns `lib/di/module.dart` with `@InjectableInit.microPackage()`. Adding a package means adding one line to the app shell, not editing a 500-line central file. Deleting a package removes its registrations with it. |
 | **Decentralized routing via DI contracts** | Hardcoding every `GoRoute` in `app_router.dart` | Features register [`IFeatureRouteModule`](../../../packages/core/di/lib/src/routing/routing_interfaces.dart) / `IDashboardTabModule`; `AppRouter` collects them with `getAllOrEmpty<T>()`. A feature can be deleted from the workspace without touching the app shell — the router simply collects one contribution fewer and falls back gracefully. |
-| **Package-owned storage keys** | A single shared "presets" object holding every key | A shared object hands *every* injector read/write access to *every* other feature's data. Each package now declares its own `StorageValue` instances with its own keys in its own `utils/` folder. See [the storage guide](../guides/06_storage.md). |
-| **Package-owned database access** | Injecting `AppDatabase` everywhere | Same reasoning: `AppDatabase` exposes every DAO. Packages depend on [`IDatabaseHandle`](../../../packages/core/database/lib/src/access/i_database_handle.dart) and receive only the accessor they ask for. See [the database guide](../guides/07_database.md). |
-| **Constants live in each package's `utils/`** | A central `constants/` folder in `core_common` | A central constants file becomes a god object: auth endpoints, chat channel IDs and theme keys all sitting where every package can read them. `core_common` now keeps only genuinely global values (`ApiStatusConstants`, `EnvConstants`). |
+| **Package-owned storage keys** | A single shared "presets" object holding every key | A shared object hands *every* injector read/write access to *every* other feature's data. Each package declares its own `StorageValue` instances with its own keys in its own `utils/` folder. See [the storage guide](../guides/06_storage.md). |
+| **Package-owned database access** | One shared app-wide database injected everywhere | Same reasoning: a shared database object exposes every DAO to every injector, and forces whichever package declares it to own every table. Packages depend on [`IDatabaseHandle`](../../../packages/core/database/lib/src/access/i_database_handle.dart) and receive only the accessor they ask for. See [the database guide](../guides/07_database.md). |
+| **Constants live in each package's `utils/`** | A central `constants/` folder in `core_common` | A central constants file becomes a god object: auth endpoints, chat channel IDs and theme keys all sitting where every package can read them. `core_common` keeps only genuinely global values (`ApiStatusConstants`, `EnvConstants`). |
 
 ---
 

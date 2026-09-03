@@ -18,10 +18,11 @@ The practical test: *if this screen were cut from the product, would the package
 |:---|:---|
 | `domain_*` | Use cases, entities, repository interfaces |
 | `core_di` | Navigator / action-handler / routing / stream contracts |
-| `core_common` | Constants, `AppFailure`, helpers, `getIt` helpers |
+| `core_common` | Constants, `ErrorHandler`, helpers, `getIt` helpers — and a re-export of `AppFailure` from `domain_core` |
 | `core_base_ui` | Design tokens, theme, `ThemeProvider` / `LanguageProvider` |
 | `provider_state_management` **or** `bloc_state_management` | Whichever state approach the feature uses |
 | `core_ui_kit` | Reusable widgets (a **core** package, not a feature) |
+| `core_responsive` | `context.w` / `.h` / `.sp` / `.r` — required by any file that sizes a widget |
 
 ### Forbidden
 
@@ -163,7 +164,7 @@ Use `IDashboardTabModule` **only** for primary bottom-nav destinations that need
 
 ## 5. Shared widgets live in core, not here
 
-The reusable widget library is **`core_ui_kit`** at `packages/core/ui_kit` — a core package, not a feature. It was moved out of `packages/features/` so that everything remaining here is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
+The reusable widget library is **`core_ui_kit`** at `packages/core/ui_kit` — a core package, not a feature. It sits outside `packages/features/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
 
 What matters on the feature side is the **caller's** obligation:
 
@@ -231,7 +232,7 @@ Both state packages export a state union, and they are **not interchangeable**:
 | Variants | 5 (includes `loadingMore`) | 4 |
 | Error | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — required |
 
-The BLoC one was renamed from `ViewState` to `BlocViewState<T>` precisely so a file importing both barrels does not hit a name collision:
+The BLoC type is named `BlocViewState<T>` rather than `ViewState` so that a file importing both barrels does not meet two different types under one name:
 
 ```dart
 @injectable
@@ -285,7 +286,7 @@ Checklist:
 - [ ] Screen controllers `@injectable`, created at the route, not re-wrapped in the page
 - [ ] Path constants in `src/utils/<name>_path.dart`
 - [ ] Cross-feature navigation through a Navigator interface from `core_di`, with `BuildContext` passed from the caller
-- [ ] All sizing scaled with `.w` / `.h` / `.sp` / `.r`
+- [ ] All sizing scaled through `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
 - [ ] Feature-specific assets inside the feature package, not in `core_base_ui`
 
 ---

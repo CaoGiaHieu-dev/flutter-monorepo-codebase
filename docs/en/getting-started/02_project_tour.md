@@ -46,13 +46,14 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enums, `AppFailure`, `ErrorHandler`, extensions, mixins, `EnvConstants`, `ApiStatusConstants`, Firebase options module |
+| `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enums, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), extensions, mixins, `EnvConstants`, `ApiStatusConstants`, Firebase options module |
 | `core_di` | `packages/core/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `packages/core/base_ui` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
 | `core_ui_kit` | `packages/core/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
 | `core_network` | `packages/core/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
 | `core_storage` | `packages/core/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
-| `core_database` | `packages/core/database` | Drift/SQLite on a background isolate: `AppDatabase`, connection factory, migration contracts, sample `CacheEntries` table + DAO |
+| `core_database` | `packages/core/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
+| `core_responsive` | `packages/core/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through |
 | `core_notifications` | `packages/core/notifications` | Push notification service + its own `NotificationConstants` |
 | `provider_state_management` | `packages/core/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
 | `bloc_state_management` | `packages/core/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
@@ -127,19 +128,21 @@ graph BT
 
 Read it as: **arrows point at what you are allowed to depend on.**
 
-- `Domain` is the centre. It depends on nothing but `core_common` and `domain_core`.
+- `Domain` is the centre. Outside `domain_core`, which it shares, it depends on no workspace package at all.
 - `Data` implements domain contracts and talks to `core_network` / `core_storage` / `core_database`.
 - `Features` consume domain use cases; they never see `data_*`.
 - `app/` sits outermost and is the only place allowed to know about everything at once.
 
 ### Core must not depend on features
 
-`tools/arch_check/check.dart` enforces this on every PR (Gate 1 of `pr_quality_check.yml`). Four exceptions are approved:
+`tools/arch_check/check.dart` enforces this on every PR (Gate 1 of `pr_quality_check.yml`). Four `core_* → domain_*` edges are approved — Domain is the innermost ring, so depending on it is legal:
 
 | Allowed exception | Why |
 | :--- | :--- |
 | `core_di → domain_auth` | Agnostic streams expose a concrete `UserEntity`; the DI hub needs the type |
 | `provider_state_management → domain_core` | `PaginatedEntity<T>` and `Result<T>` are used in base view widgets |
+| `bloc_state_management → domain_core` | `BlocViewState.error` carries an `AppFailure` |
+| `core_common → domain_core` | `ErrorHandler` produces an `AppFailure` |
 
 Verify at any time:
 
@@ -183,7 +186,7 @@ Consequences you must know:
 | Add a business rule / use case | `packages/domain/<name>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
 | Add an API endpoint | `packages/data/<name>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Persist a key/value | The **owning** package's `utils/*_storage_keys.dart` | [../guides/06_storage.md](../guides/06_storage.md) |
-| Add a database table | `packages/data/core/lib/src/database/tables/` | [../guides/07_database.md](../guides/07_database.md) |
+| Add a database table | The owning package's own `src/database/tables/` (reference: `packages/data/core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Change colors / spacing / typography | `packages/core/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |

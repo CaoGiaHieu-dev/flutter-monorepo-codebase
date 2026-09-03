@@ -142,7 +142,7 @@ Note `tabs.length < 2` hides the bar entirely when fewer than two tabs are regis
 
 Routes are declared with annotations and generated into `*_route_module.g.dart`. **Run `dart run build_runner build -d --workspace` after any change.**
 
-Path constants live in the feature's `src/utils/` folder (they moved out of `routing/` — every package keeps its constants under `utils/`):
+Path constants live in the feature's `src/utils/` folder, not in `routing/` — every package keeps its constants under `utils/`:
 
 `packages/features/auth/lib/src/utils/auth_path.dart`:
 

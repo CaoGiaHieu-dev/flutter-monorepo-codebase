@@ -217,6 +217,11 @@ Mọi kích thước đều phải scale, và **luôn qua `BuildContext`**:
 | `context.sp(x)` | Cỡ chữ |
 | `context.r(x)` | Bo góc, kích thước vuông/tròn |
 
+**Không có extension trên `num`:** `24.h` không biên dịch được. Một con số
+không mang theo context, nên extension kiểu đó chỉ có thể đọc một biến toàn
+cục — và widget đọc biến toàn cục thì không bao giờ biết metrics màn hình đã
+đổi. Dù sao thì luật R7 của `arch_check` cũng chặn dạng viết trần này.
+
 ```dart
 // ❌ Sai
 SizedBox(height: 24)
@@ -233,15 +238,10 @@ SizedBox(height: AppSpacing.lgH(context))
 padding: EdgeInsets.all(AppSpacing.lg(context))
 ```
 
-> [!CAUTION]
-> **Không tồn tại extension trên `num`.** `24.h` không biên dịch được —
-> `core_responsive` cố tình không cung cấp nó. Một con số không mang theo
-> context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, và
-> widget đọc singleton thì không bao giờ biết metrics màn hình đã đổi.
-
 > [!NOTE]
 > `context.edgeInsets(all: 16)` scale bằng `w`, nên nó **thay thế trực tiếp
-> được** cho `EdgeInsets.all(context.w(16))`. Xem bảng trục đầy đủ ở
+> được** cho `EdgeInsets.all(context.w(16))`. `horizontal:` scale bằng `w`,
+> `vertical:` bằng `h`. Xem bảng trục đầy đủ ở
 > [`11_design_system.md`](11_design_system.md).
 
 Những giá trị **không phải** kích thước vật lý thì được miễn: `TextStyle.height` là hệ số giãn dòng, `flex` là tỉ lệ.
@@ -251,15 +251,15 @@ Những giá trị **không phải** kích thước vật lý thì được mi�
 > [!CAUTION]
 > Widget dùng lại trong `core_ui_kit` **không được tự scale tham số của chính nó**. Nó nhận số thô; bên gọi mới là nơi scale trước khi truyền vào. Scale bên trong sẽ khiến người gọi (vốn đã scale) bị scale hai lần, còn người truyền token thì **không thể** ghi đè được nữa.
 
-Luật này tồn tại vì nó **đã từng bị vi phạm**. `AppBarCustom` trước đây kết thúc bằng:
+Luật này cấm điều gì — một `AppBar` trong `core_ui_kit` kết thúc bằng:
 
 ```dart
-// ❌ Chính là bug đã sinh ra luật này (nay đã bỏ)
+// ❌ Cấm: override cứng bên trong một widget dùng lại
 @override
 double? get leadingWidth => context.w(64);
 ```
 
-Đoạn override đó vừa scale bên trong, **vừa âm thầm vứt bỏ** giá trị `leadingWidth` mà người gọi truyền qua `super.leadingWidth` — tham số trở thành vô dụng. Nay class chỉ đơn giản chuyển tiếp mọi thứ cho `AppBar`:
+Đoạn override đó vừa scale bên trong, **vừa âm thầm vứt bỏ** giá trị `leadingWidth` mà người gọi truyền qua `super.leadingWidth` — tham số trở thành vô dụng. `AppBarCustom` thay vào đó chuyển tiếp mọi thứ cho `AppBar`:
 
 ```dart
 // packages/core/ui_kit/lib/navigation/app_bar_custom.dart

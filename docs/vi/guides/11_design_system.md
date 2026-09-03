@@ -214,7 +214,7 @@ Mặc định hãy dùng `w` cho spacing. Chỉ dùng `h` khi giá trị thực 
 
 ### Các helper tiện lợi — và một cái bẫy
 
-`core_responsive` có sẵn các dạng viết tắt. Đối chiếu trực tiếp với source của package (`packages/core/responsive/lib/src/context_extension.dart`), chúng ánh xạ sang các trục như sau:
+`core_responsive` cung cấp các dạng viết tắt trên cùng extension của `BuildContext`. Đối chiếu trực tiếp với `packages/core/responsive/lib/src/context_extension.dart`, chúng ánh xạ sang các trục như sau:
 
 ```dart
 context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
@@ -228,9 +228,9 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 ```
 
 > [!NOTE]
-> **`context.edgeInsets(all:)` scale bằng `w`**, nên nó là bản thay thế trực tiếp cho `EdgeInsets.all(context.w(16))`. Đây là khác biệt có chủ đích so với package cũ, vốn dùng `r` cho `all` — không call site nào trong repo dùng `all:` nên việc đổi không làm lệch giao diện hiện có.
+> **`context.edgeInsets(all:)` scale bằng `w`**, nên nó là bản thay thế trực tiếp cho `EdgeInsets.all(context.w(16))`. Mỗi trục của `edgeInsets` được scale theo đúng trục nó thuộc về, nhờ vậy padding giữ được tỉ lệ thay vì bám theo một chiều duy nhất.
 >
-> Khi không chắc, hãy viết dạng tường minh — `EdgeInsets.all(context.w(16))` — nó luôn nói rõ trục nào đang được scale.
+> `borderRadius` dùng `r` — bo góc mà scale theo một trục duy nhất sẽ biến hình tròn thành elip. Khi không chắc, hãy viết dạng tường minh, nó nói rõ trục nào đang được scale.
 
 ---
 
@@ -266,13 +266,10 @@ return ResponsiveInit(
 
 | Tham số | Ý nghĩa |
 |---|---|
-| `designSize` | Khung tham chiếu. `context.w(16)` nghĩa là "16 logical pixel **trên khung rộng 375**", rồi quy đổi sang thiết bị thật. Mặc định của `ResponsiveInit` là 360×690; app truyền `AppConfig.design`. |
-| `minTextAdapt` | Cho `scaleText` lấy **min** của hệ số rộng và cao, để chuỗi dài không tràn trên màn hình nhỏ. |
-| `fontSizeResolver` | Ghi đè cách tính `sp`. Template này quy đổi font hoàn toàn theo **tỉ lệ chiều rộng**, nên chữ scale cùng hệ số với spacing ngang thay vì lệch đi trên màn hình cao. |
-| `splitScreenMode` | Giữ cho việc scale còn hợp lý khi app chạy ở dạng cửa sổ chia đôi: chiều cao dùng để tính hệ số bị chặn dưới bằng `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700). |
-
-> [!WARNING]
-> `fontSizeResolver` **ghi đè hoàn toàn** cách tính `sp`, nên khi nó đang được đặt thì `minTextAdapt: true` nằm im, không có tác dụng. Ghi chú này có sẵn trong `main_scope.dart`. Bỏ resolver đi thì `minTextAdapt` mới thật sự hoạt động — và đó là một thay đổi thị giác, hãy làm có chủ đích.
+| `designSize` | Khung tham chiếu (`core_responsive` mặc định 360×690; app này truyền `AppConfig.design`). `context.w(16)` nghĩa là "16 logical pixel **trên khung rộng 375**", rồi quy đổi sang thiết bị thật. |
+| `minTextAdapt` | Tính `sp` theo hệ số **nhỏ hơn** trong hai hệ số rộng/cao, để chuỗi dài không tràn trên màn hình nhỏ. |
+| `fontSizeResolver` | Ghi đè **hoàn toàn** cách tính `sp` — khi nó được đặt thì `minTextAdapt` nằm im. Template này quy đổi font hoàn toàn theo **tỉ lệ chiều rộng**, nên chữ scale cùng hệ số với spacing ngang thay vì lệch đi trên màn hình cao. |
+| `splitScreenMode` | Chặn dưới chiều cao dùng để scale ở `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), giữ cho việc scale còn hợp lý khi app chạy ở dạng cửa sổ chia đôi thay vì toàn màn hình. |
 
 > [!CAUTION]
 > **Đổi `designSize` là scale lại toàn bộ app cùng lúc.** Mọi lời gọi `context.w/h/r/sp` đều quy chiếu về nó, nên giao diện tinh chỉnh ở 375×812 sẽ không đơn giản là "to ra" khi đổi sang 390×844 — tỉ lệ sẽ dịch chuyển. Chỉ đổi khi nguồn thiết kế gốc thực sự thay đổi, rồi rà lại app trên máy nhỏ, máy cao và tablet.
@@ -280,9 +277,10 @@ return ResponsiveInit(
 `ResponsiveInit` nằm ở ngoài cùng (`_ResponsiveWrapper` trong `main_scope.dart` bọc mọi thứ, kể cả `AppMaterialWrapper`), nên mọi context widget trong app đều dùng được extension.
 
 > [!NOTE]
-> `ResponsiveInit` là `StatelessWidget` và đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — rồi phát `ResponsiveMetrics` xuống qua `ResponsiveScope`, một `InheritedWidget`. Nghĩa là: rebuild khi màn hình đổi kích thước, bỏ qua thay đổi brightness/textScale/padding, và việc rebuild đúng widget do chính Flutter lo. Không có cờ `autoRebuild`, không có singleton toàn cục, và **không có extension trên `num`** — `16.w` không biên dịch được (luật R7 của `arch_check` chặn phần còn sót).
->
-> `ResponsiveScope.of(context)` assert `"No ResponsiveInit found above this context."` khi không tìm thấy. Vì vậy widget test nào có scale đều phải bọc widget cần test trong `ResponsiveInit`.
+> Việc rebuild không cần cấu hình gì. `ResponsiveInit` là `StatelessWidget` và đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — rồi phát `ResponsiveMetrics` xuống qua `ResponsiveScope`, một `InheritedWidget`. Mỗi lời gọi `context.w/h/r/sp` đăng ký dependency vào scope đó, nên Flutter rebuild đúng những widget có đọc giá trị đã scale. Đó cũng là lý do không có extension trên `num`: `16.w` chỉ có thể đọc một biến toàn cục, mà biến toàn cục thì không báo được cho ai. Luật R7 của `arch_check` cưỡng chế điều này.
+
+> [!TIP]
+> `ResponsiveScope.of(context)` sẽ assert khi phía trên không có `ResponsiveInit`, thay vì lặng lẽ trả về giá trị chưa scale. Widget test nào có scale đều phải bọc widget cần test trong `ResponsiveInit`.
 
 ---
 

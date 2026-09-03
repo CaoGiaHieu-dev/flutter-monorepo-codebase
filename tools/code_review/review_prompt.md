@@ -63,6 +63,13 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 - **Constructor Injection**: Does the class correctly receive its dependencies (like `AppRouter`) via Constructor Injection instead of `getIt<T>()` lookups?
 - **Action Handlers**: Cross-feature UI actions use `I*ActionHandler` from `core_di` instead of importing another feature package?
 
+### 📏 Responsive Sizing
+- **Everything is scaled**: Are there raw doubles in layout — `SizedBox(height: 24)`, `fontSize: 16`, `EdgeInsets.all(16)`, `BorderRadius.circular(8)`? Every one must go through `context.h(24)`, `context.sp(16)`, `context.edgeInsets(all: 16)`, `context.borderRadius(all: 8)` from `core_responsive`. **This is the one responsive rule no tool can catch** — `arch_check` R7 only finds bare `16.h`-style receivers, and a raw double is invisible to it.
+- **Scaled through context**: Never a bare receiver (`16.h`). `core_responsive` ships no `num` extension, so it should not compile, but an extension leaking in from elsewhere would type-check while reading a global that never notifies anyone.
+- **Design tokens take a context**: `AppSpacing.lg(context)`, `AppRadius.mdRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter, and never re-scaled at the call site (`context.w(AppSpacing.lg(context))` scales twice).
+- **Hard-coded design values**: colours, font sizes, spacings and radii must come from `core_base_ui` tokens, not literals in the widget.
+- **`core_ui_kit` widgets take unscaled values**: a shared widget must not scale its own constructor parameters — the caller scales before passing in.
+
 ### 💅 Clean Code & Shared Assets
 - **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `packages/core/ui_kit`?
 - **Extensions**: Is the developer using `Theme.of(context)` instead of `context.themeExtension`?

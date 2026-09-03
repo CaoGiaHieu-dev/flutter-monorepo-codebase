@@ -50,8 +50,9 @@ Each step only depends on the ones above it, so nothing needs rework:
 
 > [!CAUTION]
 > The domain layer is **pure Dart**. Importing `package:flutter/...`, `package:dio/...` or
-> `package:retrofit/...` anywhere under `packages/domain/` is forbidden. Allowed: `dart:core`,
-> `core_common`, `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`.
+> `package:retrofit/...` anywhere under `packages/domain/` is forbidden — and so is any `core_*`
+> package. Allowed: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`,
+> `injectable`, `get_it`.
 
 ---
 

@@ -3,7 +3,7 @@
 This page answers: **how the Fastlane setup is wired, which lanes exist and what they take, how the app is signed, and what the full release procedure is.** After reading it you can configure `Config.yaml`, run any lane from the repository root, and ship a build to Firebase App Distribution, Google Play or TestFlight.
 
 > [!IMPORTANT]
-> Two real defects in the Fastlane configuration are documented below — a **bundle-ID suffix mismatch** ([§4](#4-signing)) and a **silent dart-define skip for prod** ([§6](#6-flavors-and-env-files)). Read those before your first store upload.
+> Two traps in this setup are documented below — a **silent fallback to the committed dev keystore** ([§4](#4-signing)) and a **required `app/env.prod` file** without which a prod build hard-fails ([§6](#6-flavors-and-env-files)). Read both before your first store upload.
 
 ---
 
@@ -222,7 +222,7 @@ Keep the `.jks` outside the repository, and back it up somewhere durable — los
 
 ## 5. Bundle IDs
 
-`helpers.rb` derives the bundle ID by appending a flavor suffix, and the suffixes now match Gradle exactly:
+`helpers.rb` derives the bundle ID by appending a flavor suffix, and the suffixes match Gradle exactly:
 
 ```ruby
 def get_bundle_id_with_suffix(base_bundle_id, flavor)
@@ -250,7 +250,7 @@ create("staging") {
 | `prod` | *(none)* | `<base>` | ✅ |
 
 > [!NOTE]
-> These two lists have drifted before: Fastlane used to compute `.staging` while Gradle produced `.stg`, so a staging upload looked up a Play listing that did not match the artifact. If you add a flavor, change **both** sides in the same commit.
+> These two lists are maintained independently and nothing checks that they agree. If Fastlane computed `.staging` while Gradle produced `.stg`, a staging upload would look up a Play listing that does not match the artifact. If you add a flavor, change **both** sides in the same commit.
 
 ---
 
@@ -286,7 +286,7 @@ build_command += " --dart-define-from-file=#{dart_define_file}"
 ```
 
 > [!IMPORTANT]
-> **A prod release cannot be built until you create `app/env.prod`.** That is deliberate. The lane used to skip the flag with a bare `UI.message` when the file was missing, which meant a prod build *succeeded* with every `String.fromEnvironment` in `packages/core/common/lib/src/utils/env_constants.dart` falling back to empty — an APK pointing at empty API URLs and empty keys, signed and shipped with no warning. Failing loudly is the safer trade.
+> **A prod release cannot be built until you create `app/env.prod`.** That is deliberate. The alternative — skipping the flag with a warning — lets a prod build *succeed* with every `String.fromEnvironment` in `packages/core/common/lib/src/utils/env_constants.dart` falling back to empty, producing an APK that points at empty API URLs and empty keys, signed and shipped with no warning. Failing loudly is the safer trade.
 >
 > Copy the key names from `app/env.dev`; `.vscode/launch.json` already points its Prod configuration at `env.prod`.
 

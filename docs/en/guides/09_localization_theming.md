@@ -250,15 +250,15 @@ Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-he
 > [!CAUTION]
 > A reusable widget in `core_ui_kit` **must not scale its own parameters**. It accepts raw numbers; the caller scales before passing them in. Scaling inside means a caller who already scaled gets double-scaling, and a caller who passes a token cannot override it at all.
 
-This rule exists because it was broken. `AppBarCustom` used to end with:
+What the rule forbids — an `AppBar` in `core_ui_kit` that ends with:
 
 ```dart
-// ❌ The bug that motivated this rule (now removed)
+// ❌ Forbidden: a hardcoded override in a reusable widget
 @override
 double? get leadingWidth => context.w(64);
 ```
 
-That override scaled internally **and** silently discarded the `leadingWidth` the caller passed through `super.leadingWidth` — the parameter was dead. The class now simply forwards everything to `AppBar`:
+That override scales internally **and** silently discards the `leadingWidth` the caller passed through `super.leadingWidth` — the parameter is dead. `AppBarCustom` instead forwards everything to `AppBar`:
 
 ```dart
 // packages/core/ui_kit/lib/navigation/app_bar_custom.dart
@@ -322,7 +322,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 - [ ] Feature registers `IFeatureLocalization`; `root_app.dart` untouched
 - [ ] `core_ui_kit` uses `core_base_ui` strings, defines no `.arb`
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`
-- [ ] Every dimension scaled (`.w`/`.h`/`.sp`/`.r`) or taken from a token
+- [ ] Every dimension scaled through context (`context.w`/`context.h`/`context.sp`/`context.r`) or taken from a token
 - [ ] Tokens not double-scaled (`AppSpacing.lg(context)`, not `context.w(AppSpacing.lg(context))`)
 - [ ] Reusable widgets accept raw values and scale nothing internally
 - [ ] Dialogs/bottom sheets extracted into their own suffixed files

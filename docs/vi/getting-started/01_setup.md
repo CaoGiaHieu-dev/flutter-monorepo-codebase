@@ -99,7 +99,7 @@ flutterfire configure \
   --out=packages/core/common/lib/src/firebase/firebase_options_prod.dart
 ```
 
-Con co script ho tro: `dart tools/firebase/firebase_config.dart`.
+Ngoài ra còn có một script hỗ trợ: `dart tools/firebase/firebase_config.dart`.
 
 Phải có đủ **cả ba** file kể cả khi bạn chỉ định chạy `dev` — vì `firebase_module.dart` import cả ba một cách vô điều kiện, thiếu file `prod` là bản `dev` cũng gãy.
 
@@ -129,7 +129,7 @@ dart tools/workspace_setup/configure.dart
 Script đa nền tảng này chạy tuần tự: kích hoạt `flutterfire_cli` → `flutter clean` → `flutter pub get` → `gen-l10n` cho mọi package có file ARB → `build_runner build -d --workspace`.
 
 > [!NOTE]
-> **Không hề tồn tại** `configure.sh` hay `configure.bat`. Tài liệu cũ có nhắc tới chúng; thực tế chỉ có `configure.dart`.
+> `configure.dart` là điểm vào duy nhất — không có bản bọc `configure.sh` hay `configure.bat`. Một script Dart chạy y hệt nhau trên mọi nền tảng, nên không cần tới shell wrapper.
 
 ---
 

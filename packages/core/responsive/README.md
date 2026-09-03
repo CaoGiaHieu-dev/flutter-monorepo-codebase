@@ -1,6 +1,6 @@
 # Core Responsive
 
-Micro-core package cung cấp cơ chế **scale kích thước UI theo design size**, thay thế hoàn toàn `flutter_screenutil_plus`.
+Micro-core package cung cấp cơ chế **scale kích thước UI theo design size**.
 
 Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước về style — nó là điều kiện để widget **rebuild đúng chỗ** khi kích thước màn hình đổi (xoay máy, split-screen, resize cửa sổ desktop).
 
@@ -70,25 +70,13 @@ Mỗi trục scale theo đúng trục nó thuộc về, nên padding giữ đư�
 
 ---
 
-## ⛔ 3. Những thứ package này cố tình KHÔNG có
+## ⛔ 3. Không có extension trên `num`
 
-### Không có extension trên `num`
+`16.w` **không compile được**. Package cố tình không cung cấp extension nào trên `num`, và cũng không có singleton global nào để đọc.
 
-`16.w` **không compile được**. Đây là điểm khác biệt lớn nhất so với `flutter_screenutil_plus`, và là lý do package này tồn tại.
+Lý do: một con số không mang theo context. Extension kiểu `16.w` vì thế chỉ có thể đọc từ một biến global — và widget nào đọc global thì **không bao giờ biết metrics đã đổi**: nó tính một lần rồi thôi. Đó là bug giá trị cũ (stale value) im lặng, không lộ ra cho tới khi máy bị xoay.
 
-Một con số không mang theo context. Extension kiểu `16.w` vì thế chỉ có thể đọc từ một biến global — và widget nào đọc global thì **không bao giờ biết metrics đã đổi**: nó tính một lần rồi thôi. Đó là bug giá trị cũ (stale value) im lặng, không lộ ra cho tới khi máy bị xoay.
-
-Bắt buộc truyền context biến "thứ đúng" thành "thứ duy nhất viết được".
-
-### Không có `autoRebuild`
-
-`flutter_screenutil_plus` 1.6.0 quảng cáo tham số `autoRebuild` trong README của nó. Đọc source thì tham số này được khai báo nhưng **không hề được đọc ở bất kỳ đâu trong `lib/`** — một tham số chết. Ở đây, việc rebuild do `InheritedWidget` của Flutter lo, nên không có gì để bật/tắt.
-
-### Không có singleton global
-
-Không `ScreenUtil.instance`, không `ScreenUtil.init()`, không `.setWidth()`. Không có global thì giá trị cũ không thể biểu diễn được.
-
----
+Bắt buộc truyền context biến "thứ đúng" thành "thứ duy nhất viết được". Việc rebuild do `InheritedWidget` của Flutter lo, nên không có cờ nào để bật/tắt.
 
 ## ⚠️ 4. Hai cái bẫy
 

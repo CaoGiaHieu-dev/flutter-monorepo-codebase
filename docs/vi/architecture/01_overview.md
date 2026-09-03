@@ -36,8 +36,8 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 > [!IMPORTANT]
 > **Core tuyệt đối không được phụ thuộc feature.** `packages/core/*` nằm dưới cùng; nếu nó với ngược lên `packages/features/*` thì đồ thị phụ thuộc có chu trình, và package đó không còn tách ra hay test độc lập được nữa.
 >
-> Luật này từng bị vi phạm và đã được sửa: `provider_state_management` trước đây import thư viện widget dùng chung (khi đó tên là `feature_shared`, nay là `core_ui_kit`) chỉ để dùng lại `EmptyWidget` / `LoadingWidget` làm widget mặc định. Nay nó tự có
-> [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../packages/core/provider_state_management/lib/src/base_view/default_state_widgets.dart) tối giản của riêng mình.
+> Lập luận đó áp dụng y hệt bên trong vòng core. Một lớp nền state-management cần widget placeholder cho trạng thái rỗng/đang tải, và `core_ui_kit` đã có sẵn bản có nhận diện thương hiệu — nhưng `core_ui_kit` lại phụ thuộc `provider_state_management`, nên mượn ngược lại là khép một chu trình. Vì vậy `provider_state_management` tự mang
+> [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../packages/core/provider_state_management/lib/src/base_view/default_state_widgets.dart) tối giản của riêng nó. Core cần widget thì core tự định nghĩa.
 
 ---
 
@@ -47,7 +47,7 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 |:--|:--|:--|:--|:--|
 | **App Shell** | `app/` | Điểm khởi động, flavor, lắp ráp DI và router | tất cả | — |
 | **Feature** | `packages/features/*` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, một package state-management | `data_*`, feature package khác |
-| **Domain** | `packages/domain/*` | Entity, use case, hợp đồng repository | `core_common`, `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
+| **Domain** | `packages/domain/*` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
 | **Data** | `packages/data/*` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `packages/features/*` |
 | **Core** | `packages/core/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | `core_*` khác, cộng bốn ngoại lệ bên dưới | `packages/features/*`, `packages/data/*` |
 
@@ -58,18 +58,20 @@ Mỗi tầng có trang riêng:
 
 `packages/domain/*` là **Dart thuần 100%**. Không `package:flutter/...`, không `package:dio/...`, không `package:drift/...`. Chính điều này khiến tầng nghiệp vụ unit-test được mà không cần thiết bị hay cây widget.
 
-Khi domain cần thứ *trông giống* UI — màu sắc, icon, kích thước — phải quy về kiểu nguyên thuỷ hoặc enum khai trong `core_common`, còn tầng feature mới quyết định vẽ nó ra sao.
+Khi domain cần thứ *trông giống* UI — màu sắc, icon, kích thước — phải quy về kiểu nguyên thuỷ hoặc enum khai ngay trong chính package domain đó, còn tầng feature mới quyết định vẽ nó ra sao.
 
 ### Các ngoại lệ đã được duyệt
 
-Có hai package `core_*` phụ thuộc `domain_*`. Cả hai đều có chủ đích và đã được ghi nhận — đừng "dọn dẹp" chúng.
+Có bốn package `core_*` phụ thuộc một package `domain_*`. Cả bốn đều có chủ đích và đã được ghi nhận; đừng "dọn dẹp" chúng. `tools/arch_check/check.dart` giữ đúng danh sách này và sẽ đánh hỏng build nếu xuất hiện cạnh thứ năm.
 
 | Ngoại lệ | Vì sao tồn tại |
 |:--|:--|
 | `core_di` → `domain_auth` | `core_di` là **DI Hub**, nơi đặt hợp đồng liên package. [`IAuthStatusStream`](../../../packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart) phơi ra `Stream<UserEntity?>` — kiểu domain *cụ thể*, cố ý không dùng generic `<T>`. Hạ xuống generic sẽ đẩy gánh nặng ép kiểu sang mọi nơi tiêu thụ. Hub chỉ chứa hợp đồng, không chứa nghiệp vụ, nên việc import một kiểu entity không biến nó thành package domain. |
 | `provider_state_management` → `domain_core` | `PaginatedViewWidget` định kiểu theo `PaginatedEntity<T>`, còn `executeOperation` bóc `Result<T>` — cả hai khai trong `domain_core`. Lớp nền state-management sinh ra chính là để tiêu thụ hai kiểu đó. |
+| `bloc_state_management` → `domain_core` | `BlocViewState.error` mang thẳng một `AppFailure`, vốn là một phần của hợp đồng `Result` nên nằm trong `domain_core`. |
+| `core_common` → `domain_core` | `ErrorHandler.handleError()` sinh ra `AppFailure`. Khai báo của nó nằm cùng `Result<T>` trong `domain_core`; `core_common` re-export lại cho các nơi đang import sẵn. |
 
-Ngoài hai trường hợp trên, mọi package trong `packages/core/*` **không** phụ thuộc package cục bộ nào khác ngoài các `core_*`. Riêng `core_database` không phụ thuộc bất kỳ package nào trong workspace.
+Ngoài bốn trường hợp trên, mọi package trong `packages/core/*` **không** phụ thuộc package cục bộ nào khác ngoài các `core_*`. Riêng `core_database` không phụ thuộc bất kỳ package nào trong workspace.
 
 ---
 
@@ -82,7 +84,7 @@ Mọi package đều là thành viên trong danh sách `workspace:` của [`pubs
 > [!WARNING]
 > **Cái giá bạn phải chủ động quản lý.** Pub Workspace dùng chung một `package_config.json` cho mọi thành viên. Nghĩa là một package có thể `import 'package:data_core/data_core.dart'` và **vẫn biên dịch bình thường dù chưa hề khai `data_core` trong `pubspec.yaml` của nó**.
 >
-> Code chạy được hôm nay, và vỡ ngay khi ai đó tách package ra hoặc đổi thứ tự workspace. Repo này đã dính đúng hai lần và đều đã sửa: `data_auth` dùng `data_core` nhưng khai ở `dev_dependencies`, còn `feature_splash` dùng `core_di` mà không khai gì cả.
+> Code chạy được hôm nay, và vỡ ngay khi ai đó tách package ra hoặc đổi thứ tự workspace. Có hai hình dạng cần canh chừng: một `import` hoàn toàn không có mục tương ứng trong pubspec, và một import dùng cho production nhưng mục của nó lại nằm dưới `dev_dependencies` — cả hai đều biên dịch trót lọt bên trong workspace và không cái nào sống sót khi ra ngoài.
 >
 > Hãy khai đủ mọi dependency bạn import, đúng mục. Kiểm tra bằng:
 > ```bash
@@ -98,9 +100,9 @@ Mọi package đều là thành viên trong danh sách `workspace:` của [`pubs
 | **Dùng `Result<T>` thay vì ném exception** qua ranh giới tầng | `throw` / `try-catch` tại nơi gọi | Exception vô hình trong chữ ký hàm — người gọi không có cách nào biết mình phải xử lý lỗi. `Future<Result<UserEntity>>` đưa nhánh lỗi *vào trong kiểu*, nên trình biên dịch nhắc bạn. Tầng Data không bao giờ để exception lọt ra; `IBaseRepository.execute()` chuyển nó thành `Result.failure(AppFailure)`. |
 | **DI phi tập trung theo micro-package** | Một `injection.dart` khổng lồ liệt kê mọi đăng ký | Mỗi package tự giữ `lib/di/module.dart` với `@InjectableInit.microPackage()`. Thêm package chỉ là thêm một dòng ở app shell, không phải sửa file 500 dòng. Xoá package thì các đăng ký của nó biến mất theo. |
 | **Routing phi tập trung qua hợp đồng DI** | Hardcode mọi `GoRoute` trong `app_router.dart` | Feature đăng ký [`IFeatureRouteModule`](../../../packages/core/di/lib/src/routing/routing_interfaces.dart) / `IDashboardTabModule`; `AppRouter` gom bằng `getAllOrEmpty<T>()`. Xoá một feature khỏi workspace không cần đụng app shell — router chỉ gom thiếu một đóng góp và tự lùi về phương án dự phòng. |
-| **Storage key do package sở hữu** | Một object "presets" dùng chung chứa mọi key | Object dùng chung trao cho *mọi* nơi inject quyền đọc/ghi dữ liệu của *mọi* feature khác. Nay mỗi package tự khai `StorageValue` với key của mình trong thư mục `utils/` của chính nó. Xem [hướng dẫn storage](../guides/06_storage.md). |
-| **Truy cập database do package sở hữu** | Inject `AppDatabase` khắp nơi | Cùng lý do: `AppDatabase` phơi ra mọi DAO. Nay package phụ thuộc [`IDatabaseHandle`](../../../packages/core/database/lib/src/access/i_database_handle.dart) và chỉ nhận đúng accessor mình cần. Xem [hướng dẫn database](../guides/07_database.md). |
-| **Constants nằm trong `utils/` của từng package** | Một thư mục `constants/` tập trung ở `core_common` | File constants tập trung sẽ thành god object: endpoint auth, channel ID của chat và key theme cùng nằm ở nơi mọi package đọc được. `core_common` giờ chỉ giữ giá trị thật sự toàn cục (`ApiStatusConstants`, `EnvConstants`). |
+| **Storage key do package sở hữu** | Một object "presets" dùng chung chứa mọi key | Object dùng chung trao cho *mọi* nơi inject quyền đọc/ghi dữ liệu của *mọi* feature khác. Mỗi package tự khai `StorageValue` với key của mình trong thư mục `utils/` của chính nó. Xem [hướng dẫn storage](../guides/06_storage.md). |
+| **Truy cập database do package sở hữu** | Một database dùng chung cho cả app, inject khắp nơi | Cùng lý do: một database dùng chung phơi mọi DAO ra cho mọi nơi inject, và ép package nào khai nó phải sở hữu toàn bộ bảng. Package phụ thuộc [`IDatabaseHandle`](../../../packages/core/database/lib/src/access/i_database_handle.dart) và chỉ nhận đúng accessor mình cần. Xem [hướng dẫn database](../guides/07_database.md). |
+| **Constants nằm trong `utils/` của từng package** | Một thư mục `constants/` tập trung ở `core_common` | File constants tập trung sẽ thành god object: endpoint auth, channel ID của chat và key theme cùng nằm ở nơi mọi package đọc được. `core_common` chỉ giữ giá trị thật sự toàn cục (`ApiStatusConstants`, `EnvConstants`). |
 
 ---
 

@@ -56,7 +56,9 @@ void main() {
 
     test('ignores unrelated errors', () {
       expect(
-        DriftDatabaseOpener.isCorruptionError(Exception('some unrelated failure')),
+        DriftDatabaseOpener.isCorruptionError(
+          Exception('some unrelated failure'),
+        ),
         isFalse,
       );
     });

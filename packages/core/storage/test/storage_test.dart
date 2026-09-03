@@ -170,20 +170,23 @@ void main() {
           : ThemeMode.values.byName(value.toString()),
     );
 
-    test('each owner round-trips its own value through its own backend', () async {
-      final token = buildToken();
-      final locale = buildLocale();
-      final themeMode = buildThemeMode();
+    test(
+      'each owner round-trips its own value through its own backend',
+      () async {
+        final token = buildToken();
+        final locale = buildLocale();
+        final themeMode = buildThemeMode();
 
-      token.value = 'preset_token_abc';
-      locale.value = 'vi';
-      themeMode.value = ThemeMode.dark;
-      await Future<void>.delayed(Duration.zero);
+        token.value = 'preset_token_abc';
+        locale.value = 'vi';
+        themeMode.value = ThemeMode.dark;
+        await Future<void>.delayed(Duration.zero);
 
-      expect(token.value, equals('preset_token_abc'));
-      expect(locale.value, equals('vi'));
-      expect(themeMode.value, equals(ThemeMode.dark));
-    });
+        expect(token.value, equals('preset_token_abc'));
+        expect(locale.value, equals('vi'));
+        expect(themeMode.value, equals(ThemeMode.dark));
+      },
+    );
 
     test('writing one owner value never disturbs another owner key', () async {
       final token = buildToken();

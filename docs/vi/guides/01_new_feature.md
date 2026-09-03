@@ -65,15 +65,16 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 3. Chạy lại `build_runner`, rồi **restart hoàn toàn** app — DI mới không được hot reload nhận
 
 > [!NOTE]
-> Generator gọi mọi lệnh qua `fvm` (`generate.dart:135-181`). Nếu bạn không dùng FVM, tool sẽ lỗi ở
-> bước 8; khi đó tự chạy các lệnh bằng tay. Xem
+> FVM được tự phát hiện (`CommonHelpers.useFvm`): tool chỉ thêm tiền tố `fvm ` vào lệnh khi có đủ
+> cả hai — một file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) và `fvm --version` chạy được.
+> Nếu không, nó gọi thẳng `dart` / `flutter` toàn cục. Xem
 > [`../getting-started/03_daily_workflow.md`](../getting-started/03_daily_workflow.md).
 
 ---
 
 ## 3. Cấu trúc thư mục
 
-Generator sinh ra phần dưới; hai mục đánh dấu ➕ là bạn phải tự thêm.
+Generator sinh ra trọn vẹn cây thư mục dưới đây.
 
 ```
 packages/features/profile/
@@ -82,28 +83,23 @@ packages/features/profile/
 ├── lib/
 │   ├── di/
 │   │   ├── module.dart       @InjectableInit.microPackage()
-│   │   └── localization.dart ➕ implementation của IFeatureLocalization
+│   │   └── localization.dart implementation của IFeatureLocalization
 │   ├── feature_profile.dart  barrel công khai
 │   └── src/
 │       ├── pages/            widget *Page / *Screen
 │       ├── widgets/          widget con *Widget / *Card
-│       ├── providers/        controller (Provider) — xem cảnh báo bên dưới
+│       ├── provider/         controller (Provider) — là `bloc/` nếu bạn chọn BLoC
 │       ├── routing/          route module + navigator impl
 │       ├── extensions/       extension l10n
 │       ├── gen/language/     localisation sinh tự động (không sửa tay)
-│       └── utils/            ➕ hằng số thuộc sở hữu của package này
+│       └── utils/            hằng số thuộc sở hữu của package này
 └── pubspec.yaml
 ```
 
-> [!WARNING]
-> Hai lỗ hổng của generator bạn phải tự sửa:
->
-> - Nó tạo **`src/providers/`** và **`src/blocs/`** (số nhiều), nhưng các feature có sẵn dùng
->   **`src/provider/`** (`feature_auth`) và **`src/bloc/`** (`feature_home`) — số ít. Hãy đổi tên
->   cho khớp quy ước hiện hành.
-> - Nó **không** tạo `src/utils/`. Mọi package phải tự giữ hằng số của mình ở đó
->   ([`../reference/01_rules.md`](../reference/01_rules.md)), nên hãy tạo thư mục này và đặt route
->   path vào.
+> [!NOTE]
+> Thư mục controller là **số ít** — `src/provider/` (như `feature_auth`) hoặc `src/bloc/` (như
+> `feature_home`). Đặt tên số nhiều `providers/` / `blocs/` là vi phạm quy ước; xem
+> [`../reference/02_naming.md`](../reference/02_naming.md).
 
 Tạo hằng số path trước — mọi thứ khác đều tham chiếu tới nó:
 
@@ -394,7 +390,7 @@ Sau đó **restart hoàn toàn** app (không phải hot reload) để đồ th�
 - [ ] Controller màn hình là `@injectable`, không phải singleton
 - [ ] Đã đăng ký `IFeatureLocalization` — `root_app.dart` không bị đụng
 - [ ] Không hardcode chuỗi hiển thị
-- [ ] Mọi kích thước dùng `.w` / `.h` / `.sp` / `.r`
+- [ ] Mọi kích thước đi qua context — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
 - [ ] Navigator interface ở `core_di`, implementation nằm cục bộ
 - [ ] Không import feature khác (không ngoại lệ — widget dùng chung lấy từ `core_ui_kit`)
 
@@ -434,9 +430,9 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 > [!NOTE]
 > Việc `injection.dart` gọi tên các package feature là **tham chiếu cứng có chủ đích duy nhất** của
-> composition root — nơi lắp ráp thì buộc phải biết nó lắp cái gì. Một số file trong shell vẫn còn
-> import trực tiếp `feature_auth` / `feature_splash` / `core_ui_kit`; hãy đọc doc comment của
-> chúng trước khi gỡ đúng những feature đó.
+> composition root — nơi lắp ráp thì buộc phải biết nó lắp cái gì. Đó cũng là chỗ duy nhất: không
+> file nào khác dưới `app/lib/` import một package `feature_*`. Shell có import `core_ui_kit` ở vài
+> nơi, và điều đó hoàn toàn ổn — đó là package core, không phải feature có thể gỡ.
 
 ---
 

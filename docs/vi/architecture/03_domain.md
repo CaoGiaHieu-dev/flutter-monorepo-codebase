@@ -43,8 +43,7 @@ import 'package:drift/...';      // ❌
 | Package | Vì sao được phép |
 |:---|:---|
 | `dart:core`, `dart:async` | Nền tảng ngôn ngữ |
-| `domain_core` | `Result<T>`, `BaseEntity<T>`, `BaseUseCase`, `NoParams` |
-| `core_common` | Hằng số, enum, `AppFailure` — bản thân nó là pure Dart |
+| `domain_core` | `Result<T>`, `AppFailure`, `BaseEntity<T>`, `BaseUseCase`, `NoParams` |
 | `freezed_annotation`, `json_annotation` | Chỉ là annotation cho codegen |
 | `injectable`, `get_it` | Annotation DI |
 
@@ -58,19 +57,23 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 # → không có kết quả
 ```
 
-> [!WARNING]
-> **Nhưng pubspec lại không khớp với tuyên bố đó.** Cả ba domain package đều khai báo Flutter SDK:
+> [!NOTE]
+> **Đồ thị package cưỡng chế điều này, không chỉ mình khâu review.** Không domain pubspec nào liệt kê `flutter` dưới `dependencies`, và cũng không cái nào khai một package `core_*`:
 >
 > ```yaml
-> # packages/domain/core/pubspec.yaml, domain/auth, domain/language
+> # packages/domain/auth/pubspec.yaml
 > dependencies:
->   flutter:
->     sdk: flutter
+>   domain_core:
+>     path: ../core
+>   get_it: ^9.2.1
+>   injectable: ^3.0.0
+>   freezed_annotation: ^3.1.0
+>   json_annotation: ^4.12.0
 > ```
 >
-> Không file mã nguồn nào import nó, nên phần *code* vẫn thuần Dart và bạn có thể suy luận về nó như vậy. Nhưng khai báo này khiến các package đó không thể publish hay dùng ngoài môi trường Flutter, và không có gì ngăn một lần sửa sau này import Flutter vào mà build vẫn qua.
+> Bản thân `domain_core` **không** có phụ thuộc workspace nào cả. Vì vậy một dòng `import 'package:flutter/…'` thêm vào file domain sẽ không phân giải được, thay vì lặng lẽ biên dịch trót lọt. Hãy giữ nguyên như thế: đừng bao giờ thêm `flutter` hay một package `core_*` vào pubspec của domain.
 >
-> Hãy coi quy tắc Pure Dart là **quy ước được bảo vệ bởi review và bởi lệnh grep bên trên** — không phải bởi trình quản lý package.
+> Một điểm cần nói cho chính xác, kẻo tuyên bố trên bị hiểu quá: mọi domain pubspec vẫn mang một ràng buộc `flutter:` dưới mục `environment:`. Đó là khẳng định phiên bản SDK tối thiểu, không phải một dependency — nó không kéo dòng code Flutter nào vào đồ thị package, và phép kiểm tra độ thuần bên trên vẫn qua. Nhưng nó có nghĩa là pub cần Flutter SDK hiện diện để resolve các package này, nên ở trạng thái hiện tại chúng chưa dùng được từ một runtime Dart thuần. Nếu có ngày bạn cần chia sẻ một domain package cho server Dart thuần, hãy bỏ dòng `environment: flutter:` đi.
 
 ### Vì sao state của UI đi vòng qua Domain
 
@@ -84,7 +87,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ### `Result<T>` — kiểu trả về của mọi use case
 
-Định nghĩa tại `packages/domain/core/lib/src/repositories/result.dart`:
+Định nghĩa tại `packages/domain/core/lib/src/repositories/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
 
 ```dart
 @freezed
@@ -160,7 +163,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == ApiStatusConstants.SUCCESS;
+  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
   bool get hasError => !isSuccess;
 ```
 

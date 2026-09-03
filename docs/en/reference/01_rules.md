@@ -33,11 +33,11 @@ Only these four exist. Adding a fifth requires updating `AGENTS.md` and the allo
 |---|---|
 | `core_di → domain_auth` | Agnostic stream contracts expose concrete entity types (`UserEntity`); generics would erase type-safety. See [rule 15](#15-cross-feature-communication). |
 | `provider_state_management → domain_core` | Needs `Result<T>` and `PaginatedEntity<T>` for `executeOperation` / `PaginatedViewWidget`. |
-| `core_common → domain_core` | `ErrorHandler` produces `AppFailure`, which now lives in `domain_core`. Core→Domain is the *correct* Clean Architecture direction. |
+| `core_common → domain_core` | `ErrorHandler` produces `AppFailure`, which lives in `domain_core` as part of the `Result` contract. Core→Domain is the *correct* Clean Architecture direction. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries `AppFailure` directly, so the base state type needs it. |
 
 > [!NOTE]
-> `core_ui_kit → provider_state_management` is correct. The reverse is forbidden — it previously created a cycle inside the core ring, which is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`.
+> `core_ui_kit → provider_state_management` is correct. The reverse is forbidden — it would close a cycle inside the core ring, which is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`.
 
 **Verify**
 
@@ -83,7 +83,7 @@ dart tools/unused_checker/check_unused_packages.dart
 
 **Rule.** Every package, at every layer, keeps its own constants in a `utils/` folder inside that package. A constant has exactly **one** owner. Creating a shared cross-domain constants file is forbidden.
 
-**Why.** A shared constants file lets any package read — and typo — another domain's keys. Two such god-objects (`StorageKeyConstants`, `ApiConstants`) were deleted for this reason.
+**Why.** A shared constants file lets any package read — and typo — another domain's keys. Storage keys and API endpoints are the two that most invite such a god-object; both belong to the package that owns the data.
 
 Applied conventions:
 
@@ -118,7 +118,7 @@ class AuthStorageKeys {
 
 **Rule.** `core_storage` provides the **mechanism only** and defines zero keys. Each consumer injects `StorageManager`, declares its own `StorageValue<T>`, and keys it from its own `utils/` class.
 
-**Why.** The deleted `StorageValuePresets` was a single `@Singleton` holding every domain's keys — anyone who injected it could read or clear another feature's data.
+**Why.** A single shared object holding every domain's `StorageValue`s would let anyone who injected it read or clear another feature's data. Isolation is enforced by the dependency graph instead: a package that does not declare `data_auth` cannot reach `AuthStorageKeys`.
 
 Registration is **mandatory as a singleton** plus `@PostConstruct(preResolve: true)`:
 
@@ -192,7 +192,7 @@ Everything the shell consumes at runtime resolves through a `core_di` contract w
 | `getAll<T>()` | **throws** — do not use for optional contributions |
 
 > [!WARNING]
-> `getAll<T>()` and `getAllOrEmpty<T>()` differ exactly here. `getAll` throwing on an unregistered type once crashed the app during `MaterialApp` construction when no feature contributed an `IFeatureLocalization`.
+> `getAll<T>()` and `getAllOrEmpty<T>()` differ exactly here. `getAll` throws on an unregistered type, so a bare `getAll<IFeatureLocalization>()` crashes during `MaterialApp` construction in any build where no feature contributes one.
 
 **Removing a feature** — the four steps documented in `app/lib/di/injection.dart`:
 
@@ -216,7 +216,7 @@ flutter pub get && dart analyze app
 
 **Rule.** No `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, or any UI/network library in `packages/domain/*`. UI concepts must be translated into primitives or enums.
 
-**Why.** Domain is the one layer that should outlive framework choices. It is now enforced at the package-graph level too: no domain `pubspec.yaml` declares the Flutter SDK, and `domain_core` has zero workspace dependencies.
+**Why.** Domain is the one layer that should outlive framework choices. It is enforced at the package-graph level too: no domain `pubspec.yaml` declares the Flutter SDK, and `domain_core` has zero workspace dependencies.
 
 Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositories/` (interfaces), `usecases/` (`@injectable`, returning `Result<T>`), `utils/`.
 
@@ -247,7 +247,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 > [!CAUTION]
 > A synchronous closure that calls async work without awaiting produces `emit was called after an event handler completed normally` — the handler returns immediately, then the async work emits into a closed sink.
 
-**Two `ViewState` types exist and are different.** The BLoC one was renamed to avoid a name collision:
+**Two state types exist and are different.** The BLoC one is named `BlocViewState<T>` so that a file importing both public barrels never meets two types called `ViewState`:
 
 | | `ViewState` (Provider) | `BlocViewState<T>` (BLoC) |
 |---|---|---|
@@ -294,7 +294,7 @@ Cross-feature navigation goes through a Navigator interface declared in `core_di
 
 **Rule.** Every dimension — width, height, padding, margin, font size, border radius — is scaled **through `BuildContext`**, using `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (also `context.spMin`, `context.dg`, `context.dm`). Raw doubles in layout are forbidden, and so is the bare receiver form `16.h`.
 
-**Why the bare form is not even available.** `core_responsive` ships **no `num` extension**, so `16.h` does not compile. That is deliberate: a number carries no context, so such an extension could only read a global singleton, and a widget reading a global never learns the metrics changed. `context.h(16)` instead registers an **InheritedWidget dependency** on `ResponsiveScope`, so it rebuilds when screen metrics change: rotation, split-screen, a resized desktop window. Requiring the context makes the correct thing the only writable thing — and `arch_check` rule R7 rejects the bare form in any file importing `core_responsive`, so a leftover from the old package cannot survive review either.
+**Why the bare form is not even available.** `core_responsive` ships **no `num` extension**, so `16.h` does not compile. That is deliberate: a number carries no context, so such an extension could only read a global singleton, and a widget reading a global never learns the metrics changed. `context.h(16)` instead registers an **InheritedWidget dependency** on `ResponsiveScope`, so it rebuilds when screen metrics change: rotation, split-screen, a resized desktop window. Requiring the context makes the correct thing the only writable thing — and `arch_check` rule R7 rejects the bare form in any file importing `core_responsive`, so an extension declared elsewhere cannot smuggle it back in.
 
 ❌ **Wrong** — does not compile, and would go stale if it did:
 ```dart
@@ -318,11 +318,11 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 );
 ```
 
-**Helper scaling axes** — read from the package source; the published docs do not state them:
+**Helper scaling axes** — defined in `packages/core/responsive/lib/src/context_extension.dart`:
 
 | Helper | Scales by |
 |:--|:--|
-| `context.edgeInsets(all: x)` | `r` |
+| `context.edgeInsets(all: x)` | `w` |
 | `context.edgeInsets(horizontal: x)` | `w` |
 | `context.edgeInsets(vertical: x)` | `h` |
 | `context.borderRadius(all: x)` | `r` |
@@ -330,11 +330,11 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 | `context.horizontalSpace(x)` | `w` |
 
 > [!WARNING]
-> `context.edgeInsets(all:)` scales with **`r`**, not `w`. It is **not** interchangeable with `EdgeInsets.all(context.w(16))` — swapping them shifts layout on any device whose aspect ratio differs from the design canvas. When in doubt, write the explicit form; it names the axis.
+> `context.edgeInsets` scales each axis by the axis it belongs to — horizontal by `w`, vertical by `h`, and `all:` by `w`, which makes it a drop-in for `EdgeInsets.all(context.w(16))`. `borderRadius` is the exception: it uses `r`, because a radius scaled on one axis alone turns a circle into an ellipse. When in doubt, write the explicit form; it names the axis.
 
 **Reusable widgets take raw, unscaled values and must not scale internally.** Scaling is the caller's job.
 
-❌ **Wrong** — this shipped, and it silently discarded the caller's value:
+❌ **Wrong** — an internal override silently discards the caller's value:
 ```dart
 // packages/core/ui_kit/lib/navigation/app_bar_custom.dart
 @override

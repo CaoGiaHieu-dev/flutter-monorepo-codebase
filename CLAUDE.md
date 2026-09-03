@@ -145,14 +145,14 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Package | Purpose | Key Notes |
 |:--------|:--------|:----------|
-| `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` moved to `domain_core`; a re-export shim at `src/error/failures.dart` keeps old imports working |
+| `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` lives in `domain_core`; a re-export shim at `src/error/failures.dart` re-exports it for convenience |
 | `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in app shell |
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
 | `core_database` | **Mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener` | **Owns no database/table/DAO**; its DI module registers nothing. Each package declares its own database — see [Database System](#database-system-package-owned-drift--sqlite) |
 | `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
-| `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Replaced `flutter_screenutil_plus`. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
+| `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
 | `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit` |
 | `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union) | **`BaseBloc`/`BaseCubit` are empty extension points** — no `executeOperation` equivalent; handlers unwrap `Result` by hand |
 
@@ -233,7 +233,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
      SslPinningConfig bindSslPinningConfig(NetworkConfig config) => config;
    }
    ```
-   Missing this is why SSL pinning was **silently disabled** on staging/prod.
+   Miss it and SSL pinning silently no-ops on staging/prod — the app still builds and still makes requests.
 
 ### App-Shell Storage Adapters
 
@@ -474,8 +474,8 @@ abstract class AuthModule {
 ### Ownership Rule (CRITICAL)
 
 `core_storage` ships the **mechanism only**. It defines **no keys and no presets** — there is no
-`StorageValuePresets`, and `core_common` has no `StorageKeyConstants`. Both were removed: a single
-shared object holding every domain's keys let any injector read/write another feature's data.
+`StorageValuePresets`, and `core_common` has no `StorageKeyConstants`. A single shared object
+holding every domain's keys would let any injector read and write another feature's data.
 
 **Every consumer declares and owns its own `StorageValue`**, keyed by constants living in that
 package's `utils/` folder. Isolation is enforced by the dependency graph — a package that does not
@@ -539,7 +539,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 
 `core_database` ships the **mechanism only** — it owns **no database, table or DAO**, and its DI module body is literally `init(gh) {}`. There is no `AppDatabase`.
 
-**Why:** Drift resolves `@DriftDatabase(tables:, daos:)` at compile time, and a DAO must be `part of` its database library. One shared database therefore forces whichever package declares it to own *every* table — the same god-object problem the storage refactor removed.
+**Why:** Drift resolves `@DriftDatabase(tables:, daos:)` at compile time, and a DAO must be `part of` its database library. One shared database therefore forces whichever package declares it to own *every* table — the same god-object coupling the storage rules forbid.
 
 **Rule:** a package needing relational storage declares **its own database** next to its own tables and DAO. Reference: `packages/data/core/lib/src/database/` → `cache_database.dart`, `tables/cache_entries_table.dart`, `dao/cache_entries_dao.dart`.
 
@@ -711,8 +711,8 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
 19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead — e.g. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it depends on `AuthLocalDataSource` from `data_auth`. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.
-21. **`getAll<T>()` throws when `T` is unregistered.** Use `getAllOrEmpty<T>()` for optional multi-instance contributions and `getItOrNull<T>()` + fallback for single ones — otherwise removing a feature crashes the app at boot (this exact bug killed `MaterialApp` construction via `IFeatureLocalization`).
-22. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable. Bind the second type through a `@module` — missing this silently disabled SSL pinning.
+21. **`getAll<T>()` throws when `T` is unregistered.** Use `getAllOrEmpty<T>()` for optional multi-instance contributions and `getItOrNull<T>()` + fallback for single ones — otherwise removing a feature crashes the app at boot — `IFeatureLocalization` is the usual casualty, and it takes `MaterialApp` construction down with it.
+22. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable. Bind the second type through a `@module` — miss it and SSL pinning silently no-ops.
 23. **Barrel generator deletes hand-written `export` lines.** Never hand-add an export to a barrel; put deliberate re-exports in a normal source file (see `core_common/lib/src/error/failures.dart`).
 24. **`flutter analyze` cannot see generated code** — `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart`, `**.module.dart`. A clean analyze does **not** mean the app builds. Always finish with a real `flutter build apk`. Moving `AppFailure` between packages broke `bloc_view_state.freezed.dart` while analyze stayed green.
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.

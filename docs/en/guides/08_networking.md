@@ -186,7 +186,7 @@ abstract class NetworkConfig implements SslPinningConfig {
 }
 ```
 
-The two refresh getters default to `null`, so an app with no refresh endpoint keeps the old behaviour — a `401` reaches the caller untouched.
+The two refresh getters default to `null`, so in an app with no refresh endpoint a `401` reaches the caller untouched.
 
 The implementation delegates each value to whoever actually owns it, rather than reading storage itself:
 
@@ -319,15 +319,15 @@ if (hashes != null && hashes.isNotEmpty) {
 
 ### The registration trap
 
-`NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. That is why the lookup returned `null` and pinning was skipped even on production. The fix is an explicit binding:
+`NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. Without a second binding, `getItOrNull<SslPinningConfig>()` returns `null` and pinning is skipped on every flavour, production included. The binding that prevents it:
 
 ```dart
 // app/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
-/// `NetworkConfig`, so `getItOrNull<SslPinningConfig>()` (called by
-/// `AppInitializer._setupHttpOverrides`) returned `null` and certificate
-/// pinning was silently skipped on staging and production.
+/// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
+/// (called by `AppInitializer._setupHttpOverrides`) resolves to `null` and
+/// certificate pinning is silently skipped on staging and production.
 @module
 abstract class NetworkBindingModule {
   @lazySingleton
@@ -391,7 +391,7 @@ class AuthApiConstants {
 }
 ```
 
-These were previously in `core_common` as `ApiConstants`, where every layer could read them. They now live with the package that owns them — the same ownership rule as storage keys.
+Endpoint constants live with the package that owns them, never in `core_common` — the same ownership rule as storage keys. A shared endpoint file would let every layer read, and mistype, another package's routes.
 
 ---
 

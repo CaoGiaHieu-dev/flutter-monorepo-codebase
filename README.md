@@ -53,6 +53,10 @@ graph TD
         CoreDB["core_database"]:::core
         CoreDI["core_di"]:::core
         CoreKit["core_ui_kit"]:::core
+        CoreResp["core_responsive"]:::core
+        CoreNotif["core_notifications"]:::core
+        CoreProv["provider_state_management"]:::core
+        CoreBloc["bloc_state_management"]:::core
     end
 
     %% Cross-layer Relationships
@@ -70,14 +74,20 @@ graph TD
     %% Domain sits at the centre and depends on NOTHING.
     %% Core may depend on Domain — never the reverse.
     CoreCom -.->|"Uses Result / AppFailure"| DomCore
+    CoreProv -.->|"Uses Result / AppFailure"| DomCore
+    CoreBloc -.->|"Uses AppFailure in BlocViewState"| DomCore
     CoreDI -.->|"Uses UserEntity in contracts"| DomAuth
 ```
 
 > [!IMPORTANT]
 > **Domain depends on nothing.** `domain_core` declares **zero** workspace dependencies and no
 > domain package declares the Flutter SDK — `AppFailure` lives in `domain_core` alongside
-> `Result<T>`. Arrows into Domain (`core_common → domain_core`, `core_di → domain_auth`) are the
-> only approved upward edges; see [`reference/01_rules.md`](docs/en/reference/01_rules.md).
+> `Result<T>`. Core may depend on Domain — Domain is the innermost ring, so that direction is
+> correct. Exactly **four** such edges are approved: `core_common → domain_core`,
+> `core_di → domain_auth`, `provider_state_management → domain_core`,
+> `bloc_state_management → domain_core`. They are hard-coded in
+> `tools/arch_check/check.dart` and printed on every run, each with its reason; a fifth fails the
+> build. See [`reference/01_rules.md`](docs/en/reference/01_rules.md).
 
 ---
 
@@ -113,6 +123,7 @@ Below is the complete physical organization structure of the Workspace:
 │   │   ├── network/               # Dio + Retrofit factory, interceptor chain, SSL pinning
 │   │   ├── notifications/         # Push Notification management module
 │   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   │   ├── responsive/            # Design-size scaling bound to BuildContext
 │   │   ├── storage/               # StorageManager + StorageValue<T> (defines NO keys)
 │   │   └── ui_kit/                # core_ui_kit — reusable widgets every feature may use
 │   ├── domain/                    # Pure Dart business Micro-packages — ZERO dependencies

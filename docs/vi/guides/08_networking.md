@@ -186,7 +186,7 @@ abstract class NetworkConfig implements SslPinningConfig {
 }
 ```
 
-Hai getter refresh mặc định `null`, nên app không có endpoint refresh vẫn giữ hành vi cũ — `401` đi thẳng tới caller.
+Hai getter refresh mặc định `null`, nên trong một app không có endpoint refresh thì `401` đi thẳng tới caller, nguyên vẹn.
 
 Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, thay vì tự đọc storage:
 
@@ -297,7 +297,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 > [!WARNING]
 > **Pinning hiện đang TẮT.** `sslPinningHashes` trả về `const []`, và list rỗng nghĩa là pinning bị vô hiệu hoá hoàn toàn. Chừng nào chưa điền vào, app chấp nhận **mọi** certificate mà thiết bị tin tưởng — kể cả cert do proxy chèn vào.
 
-Initializer **từ chối im lặng** về việc này:
+Initializer **không im lặng bỏ qua** chuyện này:
 
 ```dart
 // packages/core/common/lib/src/config/app_initializer.dart
@@ -319,15 +319,15 @@ if (hashes != null && hashes.isNotEmpty) {
 
 ### Cái bẫy khi đăng ký DI
 
-`NetworkConfig implements SslPinningConfig`, nhưng đăng ký impl `as: NetworkConfig` **không** làm nó phân giải được dưới kiểu `SslPinningConfig` — GetIt khớp đúng kiểu đã đăng ký. Đó chính là lý do lệnh tra cứu trả `null` và pinning bị bỏ qua ngay cả trên production. Cách sửa là bind tường minh:
+`NetworkConfig implements SslPinningConfig`, nhưng đăng ký impl `as: NetworkConfig` **không** làm nó phân giải được dưới kiểu `SslPinningConfig` — GetIt khớp đúng kiểu đã đăng ký. Thiếu một binding thứ hai, `getItOrNull<SslPinningConfig>()` trả về `null` và pinning âm thầm vô hiệu trên mọi flavor, kể cả production. Binding ngăn điều đó:
 
 ```dart
 // app/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
-/// `NetworkConfig`, so `getItOrNull<SslPinningConfig>()` (called by
-/// `AppInitializer._setupHttpOverrides`) returned `null` and certificate
-/// pinning was silently skipped on staging and production.
+/// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
+/// (called by `AppInitializer._setupHttpOverrides`) resolves to `null` and
+/// certificate pinning is silently skipped on staging and production.
 @module
 abstract class NetworkBindingModule {
   @lazySingleton
@@ -375,7 +375,7 @@ abstract class AuthRemoteDataSource {
 Các bước: khai abstract class → thêm `part 'x.g.dart';` → chạy `dart run build_runner build -d --workspace`.
 
 > [!IMPORTANT]
-> `AuthRemoteDataSource` là **mẫu tham khảo, không phải đường chạy thật**. `AuthRepositoryImpl` gọi thẳng Firebase SDK và **chưa từng** gọi class này. Hãy giữ nó làm khuôn mẫu cho backend REST; đừng tưởng traffic auth đang đi qua đây.
+> `AuthRemoteDataSource` là **mẫu tham khảo, không phải đường chạy thật**. `AuthRepositoryImpl` gọi thẳng Firebase SDK và **không bao giờ** gọi class này. Hãy giữ nó làm khuôn mẫu cho backend REST; đừng tưởng traffic auth đang đi qua đây.
 
 ### Endpoint thuộc về package sở hữu
 
@@ -391,7 +391,7 @@ class AuthApiConstants {
 }
 ```
 
-Trước đây chúng nằm ở `core_common` dưới tên `ApiConstants`, nơi mọi tầng đều đọc được. Giờ chúng ở cùng package sở hữu — đúng luật sở hữu như với storage key.
+Hằng số endpoint nằm cùng package sở hữu chúng, không bao giờ ở `core_common` — đúng luật sở hữu như với storage key. Một file endpoint dùng chung sẽ cho phép mọi tầng đọc, và gõ nhầm, route của package khác.
 
 ---
 

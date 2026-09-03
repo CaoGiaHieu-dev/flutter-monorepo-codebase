@@ -110,7 +110,7 @@ class ProductListPage extends StatelessWidget {
 
 > [!CAUTION]
 > **Pass `emptyWidget` or you get a blank screen.** `core/*` must never depend on
-> `core_ui_kit`, so `provider_state_management` no longer borrows its branded widgets.
+> `core_ui_kit`, so `provider_state_management` cannot use its branded widgets.
 > The built-in fallbacks live in `src/base_view/default_state_widgets.dart` and are
 > deliberately minimal:
 > - `DefaultLoadingWidget` → `Center(child: CircularProgressIndicator.adaptive())`

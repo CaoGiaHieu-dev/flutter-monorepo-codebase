@@ -50,7 +50,7 @@ dart tools/arch_check/check.dart --help   # full rule descriptions
 
 The four approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fifth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
 
-R7 exists because `flutter analyze` cannot see the difference. `core_responsive` ships no `num` extension, so `16.h` cannot resolve against it — but a leftover extension from another package, or one someone adds locally, would type-check fine while reading a global that never notifies anyone. Only `context.h(16)` registers an `InheritedWidget` dependency on `ResponsiveScope` and therefore rebuilds when metrics change. The bare form is a silent stale-value bug, and a linter has no rule for it. The check only runs on files that reference `core_responsive`, and matches a numeric or closing-paren receiver followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
+R7 exists because `flutter analyze` cannot see the difference. `core_responsive` ships no `num` extension, so `16.h` cannot resolve against it — but an extension declared in another package, or one someone adds locally, would type-check fine while reading a global that never notifies anyone. Only `context.h(16)` registers an `InheritedWidget` dependency on `ResponsiveScope` and therefore rebuilds when metrics change. The bare form is a silent stale-value bug, and a linter has no rule for it. The check only runs on files that reference `core_responsive`, and matches a numeric or closing-paren receiver followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 
 R5 is the mirror image of `unused_checker`: that tool finds dependencies *declared but unused*, this one finds them *used but undeclared*. Pub Workspaces hide the second kind entirely — everything resolves locally through the shared `package_config.json` and only breaks when a package is extracted or published.
 
@@ -180,7 +180,7 @@ dart tools/workspace_setup/configure.dart
 Full setup for a fresh clone: activates `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`.
 
 > [!CAUTION]
-> There is **no** `configure.sh` and **no** `configure.bat`. Only `configure.dart` exists. Older docs and CI steps referencing the shell wrappers were broken and have been corrected.
+> There is **no** `configure.sh` and **no** `configure.bat`. Only `configure.dart` exists — invoke it with `dart`, never through a shell wrapper.
 
 ---
 
@@ -241,7 +241,7 @@ Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs an AP
 
 ## Known inconsistency
 
-`tools/workspace_setup/configure.dart` and `tools/theme_generator/theme_setting.dart` detect FVM by checking **only** `.fvm/fvm_config.json`. This repo pins its version in `.fvmrc`, which those two scripts do not look at, so they always fall through to the global `dart` / `flutter`. That happens to be correct on a machine without FVM, but it is not the robust detection that `module_generator` now performs.
+`tools/workspace_setup/configure.dart` and `tools/theme_generator/theme_setting.dart` detect FVM by checking **only** `.fvm/fvm_config.json`. This repo pins its version in `.fvmrc`, which those two scripts do not look at, so they always fall through to the global `dart` / `flutter`. That happens to be correct on a machine without FVM, but it is not the robust two-signal detection `module_generator` performs.
 
 ---
 

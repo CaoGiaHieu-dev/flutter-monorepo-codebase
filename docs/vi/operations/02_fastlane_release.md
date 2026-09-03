@@ -3,7 +3,7 @@
 Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế nào, có những lane nào và nhận tham số gì, app được ký ra sao, và quy trình phát hành đầy đủ gồm những bước nào.** Đọc xong bạn cấu hình được `Config.yaml`, chạy được mọi lane từ thư mục gốc, và đưa được bản build lên Firebase App Distribution, Google Play hoặc TestFlight.
 
 > [!IMPORTANT]
-> Trước lần phát hành đầu tiên, đọc [§5](#5-bundle-id) (hậu tố bundle ID phải khớp Gradle) và [§6](#6-flavor-và-file-env) — **bạn phải tự tạo `app/env.prod`**, thiếu nó thì lane fail cứng.
+> Có hai cái bẫy trong thiết lập này, được mô tả bên dưới — cơ chế **âm thầm lùi về keystore dev đã commit sẵn** ([§4](#4-ký-ứng-dụng)) và **file `app/env.prod` bắt buộc phải có**, thiếu nó thì build prod fail cứng ([§6](#6-flavor-và-file-env)). Đọc cả hai trước lần upload store đầu tiên.
 
 ---
 
@@ -222,7 +222,7 @@ Giữ file `.jks` **ngoài** repo, và sao lưu ở nơi bền vững — mất 
 
 ## 5. Bundle ID
 
-`helpers.rb` sinh bundle ID bằng cách thêm hậu tố theo flavor, và các hậu tố giờ khớp Gradle chính xác:
+`helpers.rb` sinh bundle ID bằng cách thêm hậu tố theo flavor, và các hậu tố khớp Gradle chính xác:
 
 ```ruby
 def get_bundle_id_with_suffix(base_bundle_id, flavor)
@@ -250,7 +250,7 @@ create("staging") {
 | `prod` | *(không có)* | `<base>` | ✅ |
 
 > [!NOTE]
-> Hai danh sách này từng lệch nhau: Fastlane tính `.staging` trong khi Gradle sinh `.stg`, khiến một lần upload staging tra đúng một Play listing không khớp artifact. Nếu thêm flavor mới, hãy sửa **cả hai** phía trong cùng một commit.
+> Hai danh sách này được duy trì độc lập và không có gì kiểm tra xem chúng có khớp nhau hay không. Nếu Fastlane tính ra `.staging` trong khi Gradle sinh `.stg`, một lần upload staging sẽ tra tới một Play listing không khớp artifact. Nếu thêm flavor mới, hãy sửa **cả hai** phía trong cùng một commit.
 
 ---
 
@@ -286,7 +286,7 @@ build_command += " --dart-define-from-file=#{dart_define_file}"
 ```
 
 > [!IMPORTANT]
-> **Không build được bản prod cho tới khi bạn tạo `app/env.prod`.** Đó là có chủ đích. Trước đây lane bỏ qua cờ này bằng một `UI.message` trống rỗng khi thiếu file, nghĩa là build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `packages/core/common/lib/src/utils/env_constants.dart` rơi về giá trị rỗng — một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
+> **Không build được bản prod cho tới khi bạn tạo `app/env.prod`.** Đó là có chủ đích. Phương án còn lại — bỏ qua cờ này kèm một cảnh báo — sẽ khiến build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `packages/core/common/lib/src/utils/env_constants.dart` rơi về giá trị rỗng, cho ra một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
 >
 > Sao chép danh sách key từ `app/env.dev`; `.vscode/launch.json` vốn đã trỏ cấu hình Prod vào `env.prod`.
 
@@ -309,14 +309,6 @@ sh "#{prefix}dart run build_runner build -d --workspace"
 ```
 
 
-> [!NOTE]
-> Dòng cuối dùng cờ `--delete-conflicting-outputs` **đã lỗi thời**. Phần còn lại của repo đã thống nhất dùng dạng ngắn `-d`. Nó vẫn chạy được, nhưng đây là chỗ lệch nên sửa:
-> ```ruby
-> sh "#{prefix}dart run build_runner build -d --workspace"
-> ```
-
-`prefix` là `""` khi `flutter_version == 'stable'` và `"fvm "` trong các trường hợp khác — nên `flutter_version:stable` chính là cách bảo lane dùng toolchain hệ thống thay vì FVM.
-
 Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace nên rất chậm. Dùng `skip_setup:true` khi build đi build lại ở local.
 
 ---
@@ -325,7 +317,7 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 
 1. **Chốt version.** Quyết định `version` (build name). Dùng `build_number:auto` trừ khi bạn cần một số cụ thể.
 2. **Kiểm tra ký ứng dụng.** `test -f app/android/key.properties` — xem cảnh báo ở [§4](#4-ký-ứng-dụng).
-3. **Kiểm tra file env của flavor tương ứng có tồn tại không** — xem [§6](#6-flavor-và-file-env). Với prod hiện phải xử lý thủ công.
+3. **Kiểm tra file env của flavor tương ứng có tồn tại không** — xem [§6](#6-flavor-và-file-env). Với prod bạn phải tạo `app/env.prod` trước; thiếu nó lane fail cứng.
 4. **Xác nhận `Config.yaml` đã điền đủ**, đặc biệt `firebase.app_ids`, `app_store_connect.apple_ids` và các đường dẫn credential.
 5. **Chạy thử ở local**, không phân phối:
    ```bash

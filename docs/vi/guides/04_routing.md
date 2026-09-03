@@ -142,7 +142,7 @@ Chú ý `tabs.length < 2` ẩn hẳn thanh bar khi có ít hơn hai tab — mộ
 
 Route được khai bằng annotation và sinh ra `*_route_module.g.dart`. **Phải chạy `dart run build_runner build -d --workspace` sau mỗi thay đổi.**
 
-Hằng số path nằm ở thư mục `src/utils/` của feature (đã chuyển khỏi `routing/` — mọi package giữ constants trong `utils/`):
+Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm trong `routing/` — mọi package đều giữ constants của mình dưới `utils/`:
 
 `packages/features/auth/lib/src/utils/auth_path.dart`:
 

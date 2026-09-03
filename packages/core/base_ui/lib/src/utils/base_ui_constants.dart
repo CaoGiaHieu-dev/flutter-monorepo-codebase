@@ -3,8 +3,8 @@
 /// These are NOT design tokens — the shared spacing / radius / typography
 /// scale lives in `src/styles/` (`AppSpacing`, `AppRadius`, `AppTextStyles`,
 /// …) and stays there because features consume it as public API. This class
-/// only collects the loose numbers that used to sit inline inside this
-/// package's extensions and theme builder.
+/// collects the loose numbers used only by this package's own extensions and
+/// theme builder — values no feature should reach for.
 ///
 /// Values are stored **unscaled**; the call site applies the `core_responsive`
 /// context extension (`context.h` / `context.r` / `context.sp`) so scaling stays

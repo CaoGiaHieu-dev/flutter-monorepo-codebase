@@ -65,15 +65,16 @@ Run it with no arguments to get an interactive prompt instead.
 3. Re-run `build_runner`, then **full restart** the app — new DI registrations are not picked up by hot reload
 
 > [!NOTE]
-> The generator invokes every command through `fvm` (`generate.dart:135-181`). If you do not use
-> FVM the tool will fail at step 8; run the commands yourself in that case. See
+> FVM is auto-detected (`CommonHelpers.useFvm`): the tool prefixes its commands with `fvm ` only
+> when both a config file (`.fvmrc` or `.fvm/fvm_config.json`) and a working `fvm --version` are
+> present. Otherwise it calls the global `dart` / `flutter`. See
 > [`../getting-started/03_daily_workflow.md`](../getting-started/03_daily_workflow.md).
 
 ---
 
 ## 3. Directory layout
 
-The generator produces this; the two entries marked ➕ you add by hand.
+The generator produces this tree in full.
 
 ```
 packages/features/profile/
@@ -82,28 +83,23 @@ packages/features/profile/
 ├── lib/
 │   ├── di/
 │   │   ├── module.dart       @InjectableInit.microPackage()
-│   │   └── localization.dart ➕ IFeatureLocalization implementation
+│   │   └── localization.dart IFeatureLocalization implementation
 │   ├── feature_profile.dart  public barrel
 │   └── src/
 │       ├── pages/            *Page / *Screen widgets
 │       ├── widgets/          *Widget / *Card sub-widgets
-│       ├── providers/        controllers (Provider) — see note below
+│       ├── provider/         controllers (Provider) — `bloc/` if you chose BLoC
 │       ├── routing/          route modules + navigator impl
 │       ├── extensions/       l10n extension
 │       ├── gen/language/     generated localisations (do not edit)
-│       └── utils/            ➕ constants owned by this package
+│       └── utils/            constants owned by this package
 └── pubspec.yaml
 ```
 
-> [!WARNING]
-> Two gaps in the generator you must fix by hand:
->
-> - It creates **`src/providers/`** and **`src/blocs/`** (plural), but the shipped features use
->   **`src/provider/`** (`feature_auth`) and **`src/bloc/`** (`feature_home`) — singular. Rename to
->   match the existing convention.
-> - It does **not** create `src/utils/`. Every package must own its constants there
->   ([`../reference/01_rules.md`](../reference/01_rules.md)), so create it and put your route paths
->   in it.
+> [!NOTE]
+> The controller directory is **singular** — `src/provider/` (as in `feature_auth`) or `src/bloc/`
+> (as in `feature_home`). A plural `providers/` / `blocs/` folder is a naming violation; see
+> [`../reference/02_naming.md`](../reference/02_naming.md).
 
 Create your path constants first — everything else references them:
 
@@ -396,7 +392,7 @@ Then **full restart** the app (not hot reload) so the new DI graph is built.
 - [ ] Screen controller is `@injectable`, not a singleton
 - [ ] `IFeatureLocalization` registered — `root_app.dart` untouched
 - [ ] No hardcoded user-facing strings
-- [ ] Sizes use `.w` / `.h` / `.sp` / `.r`
+- [ ] Sizes go through context — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
 - [ ] Navigator interface in `core_di`, implementation local
 - [ ] No import of another feature (no exception — shared widgets come from `core_ui_kit`)
 
@@ -437,9 +433,9 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 > [!NOTE]
 > `injection.dart` naming feature packages is the composition root's **one intentional hard
-> reference** — a composition root must name what it composes. Some shell files still hold direct
-> `feature_auth` / `feature_splash` / `core_ui_kit` imports; check their doc comments before
-> removing those specific features.
+> reference** — a composition root must name what it composes. It is also the only one: no other
+> file under `app/lib/` imports a `feature_*` package. The shell does import `core_ui_kit` in a few
+> places, which is fine — that is a core package, not a removable feature.
 
 ---
 

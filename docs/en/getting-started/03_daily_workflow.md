@@ -37,7 +37,7 @@ Run it whenever you add, remove, or edit any of these:
 | `@JsonSerializable`, `fromJson` / `toJson` | `json_serializable` | `*.g.dart` |
 | `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `app/lib/di/injection.config.dart` |
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
-| `@DriftDatabase`, `@DriftAccessor`, a new table | `drift_dev` | `app_database.g.dart` |
+| `@DriftDatabase`, `@DriftAccessor`, a new table | `drift_dev` | `<name>_database.g.dart`, next to your database (e.g. `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
 | New asset in an `assets/` folder | `flutter_gen_runner` | `gen/assets.gen.dart` |
 

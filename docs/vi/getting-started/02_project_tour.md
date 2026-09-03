@@ -46,13 +46,14 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enum, `AppFailure`, `ErrorHandler`, extension, mixin, `EnvConstants`, `ApiStatusConstants`, module Firebase options |
+| `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enum, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), extension, mixin, `EnvConstants`, `ApiStatusConstants`, module Firebase options |
 | `core_di` | `packages/core/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `packages/core/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
 | `core_ui_kit` | `packages/core/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
 | `core_network` | `packages/core/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
 | `core_storage` | `packages/core/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
-| `core_database` | `packages/core/database` | Drift/SQLite chạy trên isolate nền: `AppDatabase`, connection factory, hợp đồng migration, bảng mẫu `CacheEntries` + DAO |
+| `core_database` | `packages/core/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
+| `core_responsive` | `packages/core/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale |
 | `core_notifications` | `packages/core/notifications` | Service push notification + `NotificationConstants` của riêng nó |
 | `provider_state_management` | `packages/core/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
 | `bloc_state_management` | `packages/core/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
@@ -127,19 +128,21 @@ graph BT
 
 Đọc sơ đồ như sau: **mũi tên chỉ vào thứ bạn được phép phụ thuộc.**
 
-- `Domain` là trung tâm. Nó không phụ thuộc gì ngoài `core_common` và `domain_core`.
+- `Domain` là trung tâm. Ngoài `domain_core` mà các package domain dùng chung, nó không phụ thuộc bất kỳ package nào trong workspace.
 - `Data` hiện thực hợp đồng domain và nói chuyện với `core_network` / `core_storage` / `core_database`.
 - `Features` tiêu thụ use case của domain; chúng không bao giờ nhìn thấy `data_*`.
 - `app/` nằm ngoài cùng và là nơi duy nhất được phép biết tất cả cùng lúc.
 
 ### Core không được phụ thuộc feature
 
-`tools/arch_check/check.dart` cưỡng chế luật này ở mọi PR (Gate 1 của `pr_quality_check.yml`). Có bốn ngoại lệ đã được duyệt:
+`tools/arch_check/check.dart` cưỡng chế luật này ở mọi PR (Gate 1 của `pr_quality_check.yml`). Bốn cạnh `core_* → domain_*` được duyệt — Domain là vòng trong cùng, nên phụ thuộc vào nó là hợp lệ:
 
 | Ngoại lệ được phép | Lý do |
 | :--- | :--- |
 | `core_di → domain_auth` | Agnostic stream phơi ra `UserEntity` cụ thể; trạm DI cần chính type đó |
 | `provider_state_management → domain_core` | `PaginatedEntity<T>` và `Result<T>` được dùng trong base view widget |
+| `bloc_state_management → domain_core` | `BlocViewState.error` mang theo một `AppFailure` |
+| `core_common → domain_core` | `ErrorHandler` sinh ra `AppFailure` |
 
 Kiểm tra bất cứ lúc nào:
 
@@ -183,7 +186,7 @@ Những hệ quả bạn bắt buộc phải biết:
 | Thêm quy tắc nghiệp vụ / use case | `packages/domain/<tên>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
 | Thêm endpoint API | `packages/data/<tên>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Lưu một cặp key/value | Thư mục `utils/*_storage_keys.dart` của package **sở hữu** | [../guides/06_storage.md](../guides/06_storage.md) |
-| Thêm bảng database | `packages/data/core/lib/src/database/tables/` | [../guides/07_database.md](../guides/07_database.md) |
+| Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `packages/data/core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Đổi màu / khoảng cách / typography | `packages/core/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |

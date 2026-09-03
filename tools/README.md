@@ -64,9 +64,10 @@ Chạy trước `flutter analyze` trong CI: nó chỉ đọc import và pubspec 
 và là thứ duy nhất nhìn thấy được phân tầng — `analysis_options.yaml` không biết
 rằng core không được import feature.
 
-R7 cũng nằm ngoài tầm của analyzer: `16.h` và `context.h(16)` trả về cùng một con số
-nên không có gì sai kiểu để báo — nhưng chỉ dạng thứ hai đăng ký dependency
-InheritedWidget nên mới rebuild khi metrics đổi.
+R7 cũng nằm ngoài tầm của analyzer. `core_responsive` không cung cấp extension nào trên
+`num`, nên `16.h` không compile được — nhưng một extension sót lại từ package khác, hoặc do
+ai đó tự thêm, vẫn qua được type-check trong khi đọc một biến global không báo cho ai. Chỉ
+`context.h(16)` mới đăng ký dependency `InheritedWidget` và rebuild khi metrics đổi.
 
 ### 🧹 Sample Cleanup (Gỡ code mẫu)
 ```bash

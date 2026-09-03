@@ -55,9 +55,13 @@ class _WarningDialogState extends OverlayDialogState<WarningDialog> {
               SizedBox(height: context.h(8)),
               Text(
                 widget.content,
-                style: AppTextStyles.bodyMediumStyle(
-                  context,
-                ).copyWith(fontSize: context.sp(13), color: context.colors.textPrimary),
+                style:
+                    AppTextStyles.bodyMediumStyle(
+                      context,
+                    ).copyWith(
+                      fontSize: context.sp(13),
+                      color: context.colors.textPrimary,
+                    ),
               ),
               SizedBox(height: context.h(20)),
               Row(

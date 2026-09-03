@@ -32,7 +32,7 @@ Hai sự thật về Drift quyết định toàn bộ thiết kế:
 1. `@DriftDatabase(tables: [...])` được phân giải ở **compile time**. Không có đăng ký bảng lúc runtime.
 2. DAO buộc phải là **`part of`** thư viện database của nó — Drift sinh `_$XDaoMixin` và `$XTable` vào đúng thư viện đó.
 
-Ghép lại: package nào khai database thì package đó buộc phải gọi tên mọi bảng trên database ấy, và mọi DAO phải nằm cùng thư viện. Một `AppDatabase` dùng chung vì thế sẽ buộc một package phải biết bảng của tất cả package còn lại — đúng kiểu "một object biết mọi thứ" mà `core_storage` và `core_common` vừa loại bỏ.
+Ghép lại: package nào khai database thì package đó buộc phải gọi tên mọi bảng trên database ấy, và mọi DAO phải nằm cùng thư viện. Một `AppDatabase` dùng chung vì thế sẽ buộc một package phải biết bảng của tất cả package còn lại — đúng kiểu "một object biết mọi thứ" mà các luật sở hữu về storage và constants sinh ra để ngăn chặn.
 
 > [!NOTE]
 > Dời `AppDatabase` dùng chung lên `app/` cũng **không** giải quyết được — nó chỉ di chuyển god object, và package sở hữu dữ liệu vẫn không thể giữ một DAO dùng được. Cho mỗi package một database riêng mới thực sự cắt được sự phụ thuộc này.
@@ -152,7 +152,7 @@ class DataCoreConstants {
 ```
 
 > [!CAUTION]
-> Đặt tên file theo **package sở hữu**, không theo tên app. Giờ có nhiều database cùng tồn tại trong thư mục documents; một cái tên chung chung kiểu `app_database.sqlite` sẽ đụng nhau. Đổi chuỗi này sau khi đã phát hành sẽ khiến dữ liệu cũ trên máy người dùng không còn truy cập được.
+> Đặt tên file theo **package sở hữu**, không theo tên app. Nhiều database cùng tồn tại trong thư mục documents; một cái tên chung chung kiểu `app_database.sqlite` sẽ đụng nhau. Đổi chuỗi này sau khi đã phát hành sẽ khiến dữ liệu cũ trên máy người dùng không còn truy cập được.
 
 ### Bước 4 — Khai class database
 
@@ -503,7 +503,7 @@ static bool isCorruptionError(Object error) {
 | `malformed database schema` | `attempt to write a readonly database` |
 | | `access denied` / `permission denied` / `operation not permitted` |
 
-Predicate khớp theo chuỗi thông báo thay vì bắt `SqliteException` có kiểu, vì `sqlite3` không phải dependency được khai của `core_database` — import nó sẽ tái phạm đúng lỗi thiếu-khai-báo-dependency mà repo vừa dọn. Vì khớp chuỗi vốn mong manh, predicate được thiết kế **thiên về không phục hồi**: nếu xuất hiện marker môi trường thì database được để yên, kể cả khi marker hỏng file cũng khớp.
+Predicate khớp theo chuỗi thông báo thay vì bắt `SqliteException` có kiểu, vì `sqlite3` không phải dependency được khai của `core_database` — import nó là thêm một dependency mà package này vốn không cần, trong khi mọi import đều phải được khai báo. Vì khớp chuỗi vốn mong manh, predicate được thiết kế **thiên về không phục hồi**: nếu xuất hiện marker môi trường thì database được để yên, kể cả khi marker hỏng file cũng khớp.
 
 Mất dữ liệu người dùng tệ hơn là báo lỗi lúc khởi động.
 

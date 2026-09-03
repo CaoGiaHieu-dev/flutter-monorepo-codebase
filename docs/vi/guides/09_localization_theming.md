@@ -143,7 +143,7 @@ Token nằm trong `packages/core/base_ui/lib/src/styles/`; màu đến từ mộ
 | `AppShadows` | `app_shadows.dart` | Shadow đổ bóng |
 
 Mọi accessor đều nhận `BuildContext`, vì việc scale được quy đổi qua
-context-aware extension của `flutter_screenutil_plus`:
+extension trên `BuildContext` của `core_responsive`:
 
 ```dart
 Container(
@@ -160,7 +160,7 @@ Container(
 > Tuyệt đối không hardcode `Color`, `fontSize`, số spacing hay `BorderRadius`
 > trong widget. Thiếu token thì thêm vào `core_base_ui` — đừng nhét thẳng giá
 > trị vào chỗ dùng. Và đừng scale lại token đã scale:
-> `AppSpacing.lg(context).w` là scale hai lần.
+> `context.w(AppSpacing.lg(context))` là scale hai lần.
 
 > [!NOTE]
 > **Việc cấu hình design system — đổi bảng màu, đổi font, chỉnh lại thang,
@@ -206,16 +206,16 @@ Giá trị đã lưu được đọc qua `IThemeStorage` — xem [`06_storage.md
 
 # Phần C — Responsive UI
 
-## 9. ScreenUtil là bắt buộc
+## 9. `core_responsive` là bắt buộc
 
-Mọi kích thước đều phải scale:
+Mọi kích thước đều phải scale, và **luôn qua `BuildContext`**:
 
-| Hậu tố | Dùng cho |
+| Lời gọi | Dùng cho |
 |---|---|
-| `.w` | Chiều rộng, padding/margin ngang |
-| `.h` | Chiều cao, khoảng cách dọc |
-| `.sp` | Cỡ chữ |
-| `.r` | Bo góc, kích thước vuông/tròn |
+| `context.w(x)` | Chiều rộng, padding/margin ngang |
+| `context.h(x)` | Chiều cao, khoảng cách dọc |
+| `context.sp(x)` | Cỡ chữ |
+| `context.r(x)` | Bo góc, kích thước vuông/tròn |
 
 ```dart
 // ❌ Sai
@@ -223,7 +223,7 @@ SizedBox(height: 24)
 padding: EdgeInsets.all(16)
 fontSize: 16
 
-// ✅ Đúng — context-aware extension
+// ✅ Đúng — extension trên BuildContext
 SizedBox(height: context.h(24))
 padding: EdgeInsets.all(context.r(16))
 fontSize: context.sp(16)
@@ -233,10 +233,16 @@ SizedBox(height: AppSpacing.lgH(context))
 padding: EdgeInsets.all(AppSpacing.lg(context))
 ```
 
+> [!CAUTION]
+> **Không tồn tại extension trên `num`.** `24.h` không biên dịch được —
+> `core_responsive` cố tình không cung cấp nó. Một con số không mang theo
+> context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, và
+> widget đọc singleton thì không bao giờ biết metrics màn hình đã đổi.
+
 > [!NOTE]
-> `context.edgeInsets(all: 16)` scale bằng `r`, không phải `w` — nên nó không
-> thay thế trực tiếp được cho `EdgeInsets.all(context.w(16))`. Xem bảng trục
-> đầy đủ ở [`11_design_system.md`](11_design_system.md).
+> `context.edgeInsets(all: 16)` scale bằng `w`, nên nó **thay thế trực tiếp
+> được** cho `EdgeInsets.all(context.w(16))`. Xem bảng trục đầy đủ ở
+> [`11_design_system.md`](11_design_system.md).
 
 Những giá trị **không phải** kích thước vật lý thì được miễn: `TextStyle.height` là hệ số giãn dòng, `flex` là tỉ lệ.
 
@@ -250,7 +256,7 @@ Luật này tồn tại vì nó **đã từng bị vi phạm**. `AppBarCustom` t
 ```dart
 // ❌ Chính là bug đã sinh ra luật này (nay đã bỏ)
 @override
-double? get leadingWidth => 64.w;
+double? get leadingWidth => context.w(64);
 ```
 
 Đoạn override đó vừa scale bên trong, **vừa âm thầm vứt bỏ** giá trị `leadingWidth` mà người gọi truyền qua `super.leadingWidth` — tham số trở thành vô dụng. Nay class chỉ đơn giản chuyển tiếp mọi thứ cho `AppBar`:
@@ -270,7 +276,7 @@ class AppBarCustom extends AppBar {
 Nơi gọi mới scale:
 
 ```dart
-AppBarCustom(leadingWidth: 64.w, title: Text(context.l10nHome.home))
+AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 ```
 
 ## 11. Hằng số của `core_ui_kit`
@@ -317,8 +323,8 @@ Builder inline không thể tái sử dụng, không preview được, không te
 - [ ] Feature đăng ký `IFeatureLocalization`; `root_app.dart` không bị đụng tới
 - [ ] `core_ui_kit` dùng chuỗi của `core_base_ui`, không định nghĩa `.arb`
 - [ ] Màu qua `context.colors.*`, typography qua `AppTextStyles.*(context)`
-- [ ] Mọi kích thước đều scale (`.w`/`.h`/`.sp`/`.r`) hoặc lấy từ token
-- [ ] Token không bị scale hai lần (`AppSpacing.lg(context)`, không phải `AppSpacing.lg(context).w`)
+- [ ] Mọi kích thước đều scale qua context (`context.w/h/sp/r`) hoặc lấy từ token
+- [ ] Token không bị scale hai lần (`AppSpacing.lg(context)`, không phải `context.w(AppSpacing.lg(context))`)
 - [ ] Widget dùng lại nhận giá trị thô, không scale gì bên trong
 - [ ] Dialog/bottom sheet đã tách ra file riêng đúng hậu tố
 

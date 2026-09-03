@@ -1,5 +1,5 @@
+import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../utils/base_ui_constants.dart';
 import 'context_extension.dart';

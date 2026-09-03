@@ -115,31 +115,31 @@ The shared widget library every feature may consume. It is **core, not a feature
 
 Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
-It depends on `core_common`, `core_base_ui` and `provider_state_management` — never on a feature or on `data_*`.
+It depends on `core_common`, `core_base_ui`, `core_responsive` and `provider_state_management` — never on a feature or on `data_*`.
 
 > [!NOTE]
 > The dependency runs **one way**: `core_ui_kit -> provider_state_management`. It used to run both ways, which was a cycle inside the core ring; `provider_state_management` now ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones.
 
 ### The UI-agnostic rule
 
-Reusable widgets take **raw, unscaled** numbers and must not apply `flutter_screenutil_plus` internally. Scaling is the caller's job:
+Reusable widgets take **raw, unscaled** numbers and must not scale through `core_responsive` internally. Scaling is the caller's job:
 
 ```dart
 // caller scales
-CustomButton(width: 120.w, height: 44.h)
+CustomButton(width: context.w(120), height: context.h(44))
 
 // widget scales its own parameter -- wrong
-double get _width => width.w;
+double _width(BuildContext context) => context.w(width);
 ```
 
-Applying `.w` inside means a caller who already scaled gets it applied twice, and a caller who wants a literal pixel value cannot get one.
+Scaling inside means a caller who already scaled gets it applied twice, and a caller who wants a literal pixel value cannot get one.
 
 > [!WARNING]
 > **A real bug this rule prevents.** `AppBarCustom` used to carry:
 >
 > ```dart
 > @override
-> double? get leadingWidth => 64.w;
+> double? get leadingWidth => context.w(64);
 > ```
 >
 > Two failures at once: it scaled internally, and -- because it is a getter override -- it **silently discarded the `leadingWidth` a caller passed to the constructor**. The parameter looked supported and did nothing. It has been removed.
@@ -163,7 +163,34 @@ They are defaults, not policy — a caller that needs a different value passes i
 
 ---
 
-## 5. `core_network` — HTTP client
+## 5. `core_responsive` — responsive sizing
+
+The scaling mechanism every widget in the app resolves through. It lives at `packages/core/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package. It replaced the third-party sizing package the template used to carry, which has been removed from the version catalogue and from every pubspec.
+
+| Piece | What it is |
+|:--|:--|
+| `ResponsiveInit` | `StatelessWidget` mounted once above `MaterialApp`. Params: `child`, `designSize` (default 360×690), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
+| `ResponsiveScope` | `InheritedWidget` carrying the metrics — `maybeOf(context)` / `of(context)` |
+| `ResponsiveMetrics` | Immutable value object computing `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin` |
+| `ResponsiveContext` | Extension on `BuildContext` — `context.w/h/r/sp/spMin/dg/dm`, `edgeInsets`, `borderRadius`, `verticalSpace`, `horizontalSpace` |
+| `ResponsiveConstants` | `SPLIT_SCREEN_MIN_HEIGHT = 700`, `DEFAULT_DESIGN_WIDTH = 360`, `DEFAULT_DESIGN_HEIGHT = 690` — in `src/utils/`, like every other package's constants |
+
+`ResponsiveInit` is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. No `WidgetsBindingObserver`, no `setState`.
+
+### There is deliberately no `num` extension
+
+`16.w` **does not compile**. A number carries no context, so such an extension could only read a global singleton — and a widget reading a global never learns the metrics changed. Requiring a `BuildContext` makes the correct thing the only writable thing; `arch_check` rule **R7** rejects the bare form in any file importing `core_responsive`.
+
+There is no global instance, no imperative `init()`, no `setWidth()` helper and no rebuild flag — rebuild targeting is Flutter's job once the metrics live in an `InheritedWidget`.
+
+> [!NOTE]
+> `ResponsiveScope.of(context)` **asserts** — *"No ResponsiveInit found above this context."* — rather than falling back to unscaled values. A silent fallback would ship a layout that is wrong on every device. A widget test that scales must therefore wrap its subject in `ResponsiveInit`.
+
+Configuration (design canvas, `fontSizeResolver`) is documented in [`../guides/11_design_system.md`](../guides/11_design_system.md).
+
+---
+
+## 6. `core_network` — HTTP client
 
 Built on Dio, configured through the `NetworkConfig` contract so the package never touches storage or UI directly.
 
@@ -184,7 +211,7 @@ Full detail on the interceptor chain, the recursion guards around token refresh,
 
 ---
 
-## 6. `core_storage` — encrypted key–value storage
+## 7. `core_storage` — encrypted key–value storage
 
 Provides the **mechanism only**. It defines no keys and no presets.
 
@@ -219,7 +246,7 @@ See [`../guides/06_storage.md`](../guides/06_storage.md) for the step-by-step.
 
 ---
 
-## 7. `core_database` — relational storage (Drift + SQLite)
+## 8. `core_database` — relational storage (Drift + SQLite)
 
 Runs on a background isolate via `NativeDatabase.createInBackground`. Depends on **no other workspace package**.
 
@@ -249,13 +276,13 @@ Connection hardening (`foreign_keys = ON`, WAL journal mode, busy timeout) and t
 
 ---
 
-## 8. `core_notifications` — push and local notifications
+## 9. `core_notifications` — push and local notifications
 
 `PushNotificationService` wraps Firebase Messaging and `flutter_local_notifications`. Channel IDs and payload types live in `src/utils/notification_constants.dart` — moved here from `core_common`, since a chat channel ID has no business being readable by every package in the app.
 
 ---
 
-## 9. State management — two branches, **not at parity**
+## 10. State management — two branches, **not at parity**
 
 The template supports Provider and BLoC. Be aware before choosing: the two are not equally developed.
 
@@ -280,21 +307,22 @@ Practical usage for both branches: [`../guides/03_state_management.md`](../guide
 
 ---
 
-## 10. Dependency map
+## 11. Dependency map
 
 Local (workspace) dependencies only — pub.dev packages omitted.
 
 | Package | Depends on |
 |:--|:--|
 | `core_database` | *(none)* |
+| `core_responsive` | *(none)* |
 | `core_common` | `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
 | `core_di` | `domain_auth` *(approved exception)* |
 | `core_network` | `core_common` |
 | `core_storage` | `core_common` |
 | `core_notifications` | `core_common` |
-| `core_base_ui` | `core_common`, `core_di` |
+| `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
 | `bloc_state_management` | `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `domain_core` *(approved exception)* |
-| `core_ui_kit` | `core_common`, `core_base_ui`, `provider_state_management` |
+| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
 
 No arrow in this table points at `packages/features/*` or `packages/data/*` — that is the invariant to preserve.

@@ -169,7 +169,7 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 ```
 
 > [!CAUTION]
-> Đừng thêm `.sp` ở nơi gọi. Text style **đã được scale** trước khi `AppTextStyles` trả về. Viết `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: 14.sp)` là scale hai lần.
+> Đừng thêm `.sp` ở nơi gọi. Text style **đã được scale** trước khi `AppTextStyles` trả về. Viết `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: context.sp(14))` là scale hai lần.
 
 ---
 
@@ -214,10 +214,10 @@ Mặc định hãy dùng `w` cho spacing. Chỉ dùng `h` khi giá trị thực 
 
 ### Các helper tiện lợi — và một cái bẫy
 
-`flutter_screenutil_plus` có sẵn các dạng viết tắt. Đối chiếu trực tiếp với source của package (`lib/src/extensions/responsive_size_context.dart`, bản 1.6.0), chúng ánh xạ sang các trục như sau:
+`core_responsive` có sẵn các dạng viết tắt. Đối chiếu trực tiếp với source của package (`packages/core/responsive/lib/src/context_extension.dart`), chúng ánh xạ sang các trục như sau:
 
 ```dart
-context.edgeInsets(all: X)          // → EdgeInsets.all(r(X))          ← là .r !
+context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
 context.edgeInsets(horizontal: X)   // → left/right = w(X)
 context.edgeInsets(vertical: X)     // → top/bottom = h(X)
 context.edgeInsets(left: X)         // → w(X)      (right cũng vậy)
@@ -227,8 +227,8 @@ context.verticalSpace(X)            // → SizedBox(height: h(X))
 context.horizontalSpace(X)          // → SizedBox(width: w(X))
 ```
 
-> [!WARNING]
-> **`context.edgeInsets(all:)` scale bằng `r`, không phải `w`.** Nên `EdgeInsets.all(16.w)` **không** tương đương `context.edgeInsets(all: 16)` — đổi nhầm sẽ làm lệch layout trên mọi thiết bị có tỉ lệ khác khung thiết kế. Chỉ thay thế được khi bản gốc dùng `.r`.
+> [!NOTE]
+> **`context.edgeInsets(all:)` scale bằng `w`**, nên nó là bản thay thế trực tiếp cho `EdgeInsets.all(context.w(16))`. Đây là khác biệt có chủ đích so với package cũ, vốn dùng `r` cho `all` — không call site nào trong repo dùng `all:` nên việc đổi không làm lệch giao diện hiện có.
 >
 > Khi không chắc, hãy viết dạng tường minh — `EdgeInsets.all(context.w(16))` — nó luôn nói rõ trục nào đang được scale.
 
@@ -249,10 +249,10 @@ Giá trị này được truyền cho package đúng một lần, ở gốc cây
 
 ```dart
 // app/lib/main_scope.dart
-return ScreenUtilPlusInit(
+return ResponsiveInit(
   designSize: AppConfig.design,
   minTextAdapt: true,
-  fontSizeResolver: (fontSize, instance) {
+  fontSizeResolver: (fontSize, metrics) {
     final display = View.of(context).display;
     final screenSize = display.size / display.devicePixelRatio;
     final scaleWidth = screenSize.width / AppConfig.design.width;
@@ -266,18 +266,23 @@ return ScreenUtilPlusInit(
 
 | Tham số | Ý nghĩa |
 |---|---|
-| `designSize` | Khung tham chiếu. `context.w(16)` nghĩa là "16 logical pixel **trên khung rộng 375**", rồi quy đổi sang thiết bị thật. |
-| `minTextAdapt` | Cho phép chữ co lại chứ không chỉ giãn ra, để chuỗi dài không tràn trên màn hình nhỏ. |
+| `designSize` | Khung tham chiếu. `context.w(16)` nghĩa là "16 logical pixel **trên khung rộng 375**", rồi quy đổi sang thiết bị thật. Mặc định của `ResponsiveInit` là 360×690; app truyền `AppConfig.design`. |
+| `minTextAdapt` | Cho `scaleText` lấy **min** của hệ số rộng và cao, để chuỗi dài không tràn trên màn hình nhỏ. |
 | `fontSizeResolver` | Ghi đè cách tính `sp`. Template này quy đổi font hoàn toàn theo **tỉ lệ chiều rộng**, nên chữ scale cùng hệ số với spacing ngang thay vì lệch đi trên màn hình cao. |
-| `splitScreenMode` | Giữ cho việc scale còn hợp lý khi app chạy ở dạng cửa sổ chia đôi thay vì toàn màn hình. |
+| `splitScreenMode` | Giữ cho việc scale còn hợp lý khi app chạy ở dạng cửa sổ chia đôi: chiều cao dùng để tính hệ số bị chặn dưới bằng `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700). |
+
+> [!WARNING]
+> `fontSizeResolver` **ghi đè hoàn toàn** cách tính `sp`, nên khi nó đang được đặt thì `minTextAdapt: true` nằm im, không có tác dụng. Ghi chú này có sẵn trong `main_scope.dart`. Bỏ resolver đi thì `minTextAdapt` mới thật sự hoạt động — và đó là một thay đổi thị giác, hãy làm có chủ đích.
 
 > [!CAUTION]
 > **Đổi `designSize` là scale lại toàn bộ app cùng lúc.** Mọi lời gọi `context.w/h/r/sp` đều quy chiếu về nó, nên giao diện tinh chỉnh ở 375×812 sẽ không đơn giản là "to ra" khi đổi sang 390×844 — tỉ lệ sẽ dịch chuyển. Chỉ đổi khi nguồn thiết kế gốc thực sự thay đổi, rồi rà lại app trên máy nhỏ, máy cao và tablet.
 
-`ScreenUtilPlusInit` nằm ở ngoài cùng (`_ResponsiveWrapper` trong `main_scope.dart` bọc mọi thứ, kể cả `AppMaterialWrapper`), nên mọi context widget trong app đều dùng được context-aware extension.
+`ResponsiveInit` nằm ở ngoài cùng (`_ResponsiveWrapper` trong `main_scope.dart` bọc mọi thứ, kể cả `AppMaterialWrapper`), nên mọi context widget trong app đều dùng được extension.
 
 > [!NOTE]
-> Template giữ `autoRebuild` ở mặc định (`true`). Package cũng cung cấp `autoRebuild: false` như một lựa chọn tối ưu hiệu năng, nhưng chế độ đó chỉ rebuild những widget dùng context-aware extension — mọi lời gọi kiểu `16.w` còn sót sẽ âm thầm ngừng phản ứng với thay đổi kích thước. Đừng động vào trừ khi bạn đã rà soát toàn bộ nơi gọi.
+> `ResponsiveInit` là `StatelessWidget` và đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — rồi phát `ResponsiveMetrics` xuống qua `ResponsiveScope`, một `InheritedWidget`. Nghĩa là: rebuild khi màn hình đổi kích thước, bỏ qua thay đổi brightness/textScale/padding, và việc rebuild đúng widget do chính Flutter lo. Không có cờ `autoRebuild`, không có singleton toàn cục, và **không có extension trên `num`** — `16.w` không biên dịch được (luật R7 của `arch_check` chặn phần còn sót).
+>
+> `ResponsiveScope.of(context)` assert `"No ResponsiveInit found above this context."` khi không tìm thấy. Vì vậy widget test nào có scale đều phải bọc widget cần test trong `ResponsiveInit`.
 
 ---
 
@@ -289,9 +294,9 @@ Giả sử bạn muốn có `AppElevation`. Hãy theo đúng khuôn mà các cla
 
 ```dart
 import 'package:flutter/widgets.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
+import 'package:core_responsive/core_responsive.dart';
 
-/// Thang elevation, quy đổi qua context-aware extension.
+/// Thang elevation, quy đổi qua extension trên BuildContext.
 class AppElevation {
   AppElevation._();
 
@@ -363,7 +368,7 @@ Các quy tắc này được giữ bằng review, và một phần bằng `dart 
 - **Tuyệt đối không hardcode** `Color`, `fontSize`, số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` — đừng nhét thẳng giá trị vào chỗ dùng.
 - **Mọi kích thước đều phải scale.** `SizedBox(height: 24)` trần là lỗi; phải viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`.
 - **Widget dùng lại trong `core_ui_kit` nhận giá trị RAW và không bao giờ tự scale bên trong.** Caller scale trước khi truyền vào. Widget nào tự scale tham số constructor sẽ scale hai lần với caller đã scale sẵn. Xem [`09_localization_theming.md`](09_localization_theming.md).
-- **Không scale lại giá trị đã scale.** `AppSpacing.lg(context)` là kết quả cuối; `AppSpacing.lg(context).w` là lỗi scale hai lần.
+- **Không scale lại giá trị đã scale.** `AppSpacing.lg(context)` là kết quả cuối; `context.w(AppSpacing.lg(context))` là lỗi scale hai lần.
 - **Sửa `raw*`, đừng sửa accessor** khi muốn chỉnh lại thang.
 
 ---
@@ -381,7 +386,7 @@ Các quy tắc này được giữ bằng review, và một phần bằng `dart 
 | Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
 | Một shadow | `styles/app_shadows.dart` |
 | Khung thiết kế gốc | `packages/core/common/lib/src/config/app_config.dart` → `design` |
-| Cách scale (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ScreenUtilPlusInit` |
+| Cách scale (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ResponsiveInit` |
 | Thêm hẳn một class token mới | file mới trong `styles/`, rồi chạy barrel generator |
 
 ---

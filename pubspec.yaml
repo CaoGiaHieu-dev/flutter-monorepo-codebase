@@ -12,6 +12,7 @@ workspace:
   - packages/core/storage
   - packages/core/database
   - packages/core/provider_state_management
+  - packages/core/responsive
   - packages/core/bloc_state_management
   - packages/core/base_ui
   - packages/core/notifications
@@ -32,3 +33,4 @@ workspace:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
+

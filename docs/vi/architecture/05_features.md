@@ -20,6 +20,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 | `core_di` | Hợp đồng Navigator / action handler / routing / stream |
 | `core_common` | Hằng số, `AppFailure`, helper, các hàm `getIt` |
 | `core_base_ui` | Design token, theme, `ThemeProvider` / `LanguageProvider` |
+| `core_responsive` | Extension scale trên `BuildContext` (`context.w/h/r/sp`) |
 | `provider_state_management` **hoặc** `bloc_state_management` | Tuỳ hướng state feature chọn |
 | `core_ui_kit` | Widget dùng lại (là package **core**, không phải feature) |
 
@@ -169,10 +170,10 @@ Thư viện widget dùng lại là **`core_ui_kit`** tại `packages/core/ui_kit
 
 ```dart
 // widget nhận số thô; feature là nơi scale
-CustomButton(width: 120.w, height: 44.h)
+CustomButton(width: context.w(120), height: context.h(44))
 ```
 
-Widget trong `core_ui_kit` không bao giờ tự áp `flutter_screenutil_plus` bên trong. Nếu bạn truyền vào giá trị đã scale thì nó sẽ bị scale hai lần, nên việc scale luôn được làm ở đây, ngay tại chỗ gọi.
+Widget trong `core_ui_kit` không bao giờ tự scale qua `core_responsive` bên trong. Nếu bạn truyền vào giá trị đã scale thì nó sẽ bị scale hai lần, nên việc scale luôn được làm ở đây, ngay tại chỗ gọi — và luôn qua `BuildContext`, vì `core_responsive` **không có extension trên `num`**: `120.w` không biên dịch được.
 
 ## 6. Vòng đời UI controller
 

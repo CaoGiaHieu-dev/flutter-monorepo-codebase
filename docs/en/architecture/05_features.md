@@ -169,10 +169,10 @@ What matters on the feature side is the **caller's** obligation:
 
 ```dart
 // the widget takes raw numbers; the feature scales them
-CustomButton(width: 120.w, height: 44.h)
+CustomButton(width: context.w(120), height: context.h(44))
 ```
 
-`core_ui_kit` widgets never apply `flutter_screenutil_plus` internally. If you pass an already-scaled value they would double-scale it, so scaling is always done here, at the call site.
+`core_ui_kit` widgets never scale through `core_responsive` internally. If you pass an already-scaled value they would double-scale it, so scaling is always done here, at the call site. Note there is no `num` extension — `120.w` does not compile, only `context.w(120)` does.
 
 ## 6. UI controller lifecycle
 

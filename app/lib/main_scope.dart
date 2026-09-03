@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:core_common/core_common.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import 'presentation/app_material_wrapper.dart';
 
@@ -105,10 +105,19 @@ class _ResponsiveWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ScreenUtilPlusInit(
+    return ResponsiveInit(
       designSize: AppConfig.design,
       minTextAdapt: true,
-      fontSizeResolver: (fontSize, instance) {
+      // Carried over verbatim from the previous package so type scale does not
+      // shift under existing screens.
+      //
+      // > [!NOTE]
+      // > Supplying a resolver overrides text scaling completely, so
+      // > `minTextAdapt: true` above is inert while this is set. Drop the
+      // > resolver to let `minTextAdapt` take effect (text would then scale by
+      // > the smaller axis instead of by width) — that is a visual change, so
+      // > make it deliberately rather than as a side effect.
+      fontSizeResolver: (fontSize, metrics) {
         final display = View.of(context).display;
         final screenSize = display.size / display.devicePixelRatio;
         final scaleWidth = screenSize.width / AppConfig.design.width;

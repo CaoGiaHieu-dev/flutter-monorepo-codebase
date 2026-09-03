@@ -169,7 +169,7 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 ```
 
 > [!CAUTION]
-> Do not add `.sp` at the call site. Text styles are **already scaled** by the time `AppTextStyles` returns them. Writing `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: 14.sp)` scales twice.
+> Do not add `.sp` at the call site. Text styles are **already scaled** by the time `AppTextStyles` returns them. Writing `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: context.sp(14))` scales twice.
 
 ---
 
@@ -214,10 +214,10 @@ Default to `w` for spacing. Reach for `h` only when the value is genuinely verti
 
 ### The convenience helpers — and one trap
 
-`flutter_screenutil_plus` ships shorthands. Verified against the package source (`lib/src/extensions/responsive_size_context.dart` in 1.6.0), they map to these axes:
+`core_responsive` ships shorthands on the same `BuildContext` extension. Verified against `packages/core/responsive/lib/src/context_extension.dart`, they map to these axes:
 
 ```dart
-context.edgeInsets(all: X)          // → EdgeInsets.all(r(X))          ← .r !
+context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
 context.edgeInsets(horizontal: X)   // → left/right = w(X)
 context.edgeInsets(vertical: X)     // → top/bottom = h(X)
 context.edgeInsets(left: X)         // → w(X)      (same for right)
@@ -227,10 +227,10 @@ context.verticalSpace(X)            // → SizedBox(height: h(X))
 context.horizontalSpace(X)          // → SizedBox(width: w(X))
 ```
 
-> [!WARNING]
-> **`context.edgeInsets(all:)` scales with `r`, not `w`.** So `EdgeInsets.all(16.w)` is **not** equivalent to `context.edgeInsets(all: 16)` — swapping one for the other shifts your layout on any device whose aspect ratio differs from the design canvas. The substitution is only safe when the original used `.r`.
+> [!NOTE]
+> **`context.edgeInsets(all:)` scales with `w`**, so it is a true drop-in for `EdgeInsets.all(context.w(16))`. The old package used `r` for `all:`; no call site in this repo passed `all:`, so nothing changed behaviour when the axis was corrected.
 >
-> When in doubt, write the explicit form — `EdgeInsets.all(context.w(16))` — which always states the axis out loud.
+> `borderRadius` still uses `r` — a radius scaled on one axis alone would turn a circle into an ellipse. When in doubt, write the explicit form, which states the axis out loud.
 
 ---
 
@@ -249,10 +249,10 @@ It is handed to the package once, at the root of the tree:
 
 ```dart
 // app/lib/main_scope.dart
-return ScreenUtilPlusInit(
+return ResponsiveInit(
   designSize: AppConfig.design,
   minTextAdapt: true,
-  fontSizeResolver: (fontSize, instance) {
+  fontSizeResolver: (fontSize, metrics) {
     final display = View.of(context).display;
     final screenSize = display.size / display.devicePixelRatio;
     final scaleWidth = screenSize.width / AppConfig.design.width;
@@ -266,18 +266,21 @@ return ScreenUtilPlusInit(
 
 | Parameter | What it does |
 |---|---|
-| `designSize` | The reference canvas. `context.w(16)` means "16 logical pixels **on a 375-wide design**", rescaled to the real device. |
-| `minTextAdapt` | Lets text shrink as well as grow, so long strings do not overflow on small screens. |
-| `fontSizeResolver` | Overrides how `sp` is computed. This template resolves fonts purely against **width ratio**, so text scales with the same factor as horizontal spacing rather than drifting on tall screens. |
-| `splitScreenMode` | Keeps scaling sane when the app is a split-screen pane rather than full-screen. |
+| `designSize` | The reference canvas (`core_responsive` defaults to 360×690; this app passes `AppConfig.design`). `context.w(16)` means "16 logical pixels **on a 375-wide design**", rescaled to the real device. |
+| `minTextAdapt` | Computes `sp` from the **smaller** of the width and height factors, so long strings do not overflow on small screens. |
+| `fontSizeResolver` | Overrides how `sp` is computed, **entirely** — while it is set, `minTextAdapt` is inert. This template resolves fonts purely against **width ratio**, so text scales with the same factor as horizontal spacing rather than drifting on tall screens. |
+| `splitScreenMode` | Floors the height used for scaling at `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), keeping scaling sane when the app is a split-screen pane rather than full-screen. |
 
 > [!CAUTION]
 > **Changing `designSize` re-scales the entire app at once.** Every `context.w/h/r/sp` call resolves against it, so a UI tuned at 375×812 will not simply "look bigger" at 390×844 — proportions shift. Change it only when your design source of truth actually changed, then sweep the app on a small phone, a tall phone and a tablet.
 
-`ScreenUtilPlusInit` sits at the very root (`_ResponsiveWrapper` in `main_scope.dart` wraps everything, including `AppMaterialWrapper`), so every widget context in the app can use the context-aware extensions.
+`ResponsiveInit` sits at the very root (`_ResponsiveWrapper` in `main_scope.dart` wraps everything, including `AppMaterialWrapper`), so every widget context in the app can use the context-aware extensions.
 
 > [!NOTE]
-> The template keeps `autoRebuild` at its default (`true`). The package also offers `autoRebuild: false` as a performance option, but it only rebuilds widgets that use context-aware extensions — any remaining `16.w`-style call would silently stop responding to size changes. Leave it alone unless you have audited every call site.
+> There is no rebuild flag to tune. `ResponsiveInit` is a `StatelessWidget` that reads `MediaQuery.sizeOf(context)` — a size-only dependency — and publishes `ResponsiveMetrics` through the `ResponsiveScope` `InheritedWidget`. Every `context.w/h/r/sp` call registers a dependency on that scope, so Flutter rebuilds exactly the widgets that read a scaled value. This is why there is no `num` extension: `16.w` could only read a global, and a global cannot notify anyone. `arch_check` rule R7 enforces it.
+
+> [!TIP]
+> `ResponsiveScope.of(context)` asserts when no `ResponsiveInit` is above it, rather than silently returning unscaled values. A widget test that scales must wrap its subject in `ResponsiveInit`.
 
 ---
 
@@ -288,8 +291,8 @@ Say you want `AppElevation`. Follow the shape the existing classes use — priva
 **Step 1** — create `packages/core/base_ui/lib/src/styles/app_elevation.dart`:
 
 ```dart
+import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 /// Elevation scale, resolved through the context-aware extensions.
 class AppElevation {
@@ -363,7 +366,7 @@ These are enforced in review, and partly by `dart tools/arch_check/check.dart`. 
 - **Never hard-code** a `Color`, `fontSize`, spacing number or `BorderRadius` in a widget. Missing a token? Add it to `core_base_ui` — do not inline the value.
 - **Every dimension scales.** A bare `SizedBox(height: 24)` is a bug; write `SizedBox(height: context.h(24))` or `context.verticalSpace(24)`.
 - **Reusable widgets in `core_ui_kit` take RAW values and never scale internally.** The caller scales before passing. A widget that scales a constructor argument scales it twice for any caller who already did. See [`09_localization_theming.md`](09_localization_theming.md).
-- **Do not scale an already-scaled value.** `AppSpacing.lg(context)` is final; `AppSpacing.lg(context).w` is a double-scale bug.
+- **Do not scale an already-scaled value.** `AppSpacing.lg(context)` is final; `context.w(AppSpacing.lg(context))` is a double-scale bug.
 - **Edit `raw*`, not the accessor**, when retuning a scale.
 
 ---
@@ -381,7 +384,7 @@ These are enforced in review, and partly by `dart tools/arch_check/check.dart`. 
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
 | The design canvas | `packages/core/common/lib/src/config/app_config.dart` → `design` |
-| Scaling behaviour (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ScreenUtilPlusInit` |
+| Scaling behaviour (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ResponsiveInit` |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
 ---

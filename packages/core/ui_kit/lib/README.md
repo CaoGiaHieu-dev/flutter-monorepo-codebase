@@ -46,7 +46,7 @@ AppOverlay.showToast(content: 'Saved');
 
 ## Rules
 
-- Callers apply `flutter_screenutil` (`.w` / `.h` / `.sp` / `.r`) **before** passing sizes into shared widgets.
+- Callers apply `core_responsive` (`context.w` / `context.h` / `context.sp` / `context.r`) **before** passing sizes into shared widgets.
 - Shared atomic widgets must stay UI-agnostic — do not scale constructor params internally.
 - Prefer `context.colorScheme` / `AppTextStyles` from `core_base_ui` for theming.
 - Feature-specific copy must use the owning feature's l10n; shared widgets that need strings should take them as parameters or use `core_base_ui` global l10n.

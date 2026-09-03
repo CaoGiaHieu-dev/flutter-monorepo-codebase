@@ -206,6 +206,37 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 
 The artifact lands at `app/build/app/outputs/flutter-apk/app-dev-debug.apk`.
 
+### Android: Built-in Kotlin is on
+
+`app/android/gradle.properties` sets `android.builtInKotlin=true`. Leave it on.
+
+Flutter is migrating plugins off the Kotlin Gradle Plugin (KGP) and onto the
+Kotlin support built into the Flutter Gradle plugin. A plugin that has already
+migrated — `google_sign_in_android`, for one — compiles its Java sources against
+classes generated from its own Kotlin sources. With the flag off, those Kotlin
+sources are never compiled, and the build dies on symbols that look like they
+should exist:
+
+```
+GoogleSignInPlugin.java:218: error: cannot find symbol
+  ResultUtilsKt.completeWithValue(...)
+```
+
+The message names the plugin, not the flag, so it reads like a broken
+dependency version. It is not — pinning an older plugin version does not help.
+
+Three plugins have **not** migrated yet and still apply KGP: `firebase_auth`,
+`firebase_core`, `photo_manager`. They build fine today and only emit a warning:
+
+```
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): ...
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+```
+
+That warning is a real deadline, not noise. When a future Flutter release turns
+it into an error, the fix is to upgrade those three plugins to versions that
+support Built-in Kotlin — there is nothing to change in this repo.
+
 ### From VS Code
 
 `.vscode/launch.json` already defines three configurations — **App (Dev)**, **App (Staging)**, **App (Prod)**. Pick one from the Run and Debug panel. Each sets `--flavor` and `--dart-define-from-file` for you (the env path is relative to `app/`, which is where the Dart extension anchors the project).

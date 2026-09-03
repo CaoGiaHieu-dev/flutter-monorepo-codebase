@@ -30,7 +30,7 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
   - `data_language`: RepositoryImpl for multi-language localization.
 - **`packages/features/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `packages/core/ui_kit` as `core_ui_kit`.
   - Feature packages (e.g., `feature_onboarding`, `feature_auth`, `feature_dashboard`, `feature_home`, `feature_settings`, `feature_splash`):
-    - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, and `provider_state_management` or `bloc_state_management`.
+    - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
     - **ABSOLUTELY FORBIDDEN** to directly depend on the `data` layer or on **any** other feature package. There is no exception: shared widgets come from `core_ui_kit`, which is core, not a feature.
     - **One bounded UI concern per feature package**: Do not co-locate unrelated product surfaces in the same feature (e.g. Home tab + Settings tab). `AppRouter` + `IDashboardTabModule` assemble shell branches; `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`), not tab pages. Sample split: `feature_home` vs `feature_settings`.
 
@@ -302,10 +302,36 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ## 📏 14. Responsive UI & Screen Size Scaling
 
-- **Strict usage of `flutter_screenutil_plus`**: All UI sizing, including but not limited to width, height, padding, margins, font sizes, and border radii, **MUST** be scaled using the `flutter_screenutil_plus` extension methods.
-- Specifically, you must use `.w` for widths, `.h` for heights, `.sp` for font sizes, and `.r` for border radii.
-- **ABSOLUTELY FORBIDDEN** to use raw double values (e.g., `SizedBox(height: 24)`, `fontSize: 16`, `padding: EdgeInsets.all(16)`) in UI layout constraints. Always scale them (e.g., `SizedBox(height: 24.h)`, `fontSize: 16.sp`, `padding: EdgeInsets.all(16.r)`).
-- **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They should accept raw, unscaled numerical values in their constructors and **MUST NOT** scale incoming parameter values internally (e.g., no `widget.width.w` or `widget.radius.r`). It is the caller's responsibility to apply `flutter_screenutil_plus` to arguments *before* passing them to these reusable widgets.
+- **Strict usage of `core_responsive`**: All UI sizing — width, height, padding, margins, font sizes, border radii — **MUST** be scaled. `core_responsive` is a first-party package at `packages/core/responsive`; it replaced `flutter_screenutil_plus`, which is gone from the repo.
+- **Scaling MUST go through `BuildContext`**: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (plus `context.spMin`, `context.dg`, `context.dm`).
+
+  **The bare receiver form (`16.h`) does not exist and does not compile.** `core_responsive` deliberately ships **no extension on `num`**. A number carries no context, so such an extension could only read a global — and a widget that reads a global never learns the metrics changed, computing once and never updating. That is a silent stale-value bug, invisible until a device rotates. Reading through `context` registers an **InheritedWidget dependency** (`ResponsiveScope`), so exactly the widgets that scale a value rebuild on rotation, split-screen, or a desktop resize, and the ones that do not are left alone. Requiring the context makes the correct thing the only writable thing.
+
+- **ABSOLUTELY FORBIDDEN** to use raw double values (e.g., `SizedBox(height: 24)`, `fontSize: 16`, `padding: EdgeInsets.all(16)`) in UI layout constraints. Always scale them:
+  ```dart
+  SizedBox(height: context.h(24))
+  TextStyle(fontSize: context.sp(16))
+  Padding(padding: EdgeInsets.all(context.r(16)))
+  ```
+- **No `BuildContext` in scope?** In an `async` method, read the value from context **before the first `await`** and pass it forward — never hold a context across an await. Real example: `packages/core/ui_kit/lib/media/assets_picker/photo_grid_item.dart` (`_loadThumbnail` guards with `if (!mounted) return;`, then reads `context.w(200).toInt()`).
+- **Design tokens take context too.** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter. Their `raw*` constants are the single source of the numbers; edit `raw*`, not the accessors.
+- **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They accept raw, unscaled numerical values in their constructors and **MUST NOT** scale incoming parameter values internally. It is the *caller's* responsibility to scale arguments *before* passing them in.
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `app/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
+- **A widget test that scales must wrap the widget under test in `ResponsiveInit`.** Without it `ResponsiveScope.of` asserts — deliberately. A silent unscaled fallback would ship a layout that is wrong on every device except the design artboard, with nothing pointing at the cause.
+- **Helper scaling axes:**
+
+  | Helper | Scales by |
+  |:--|:--|
+  | `context.edgeInsets(all: x)` | `w` |
+  | `context.edgeInsets(horizontal: x)` | `w` |
+  | `context.edgeInsets(vertical: x)` | `h` |
+  | `context.borderRadius(all: x)` | `r` |
+  | `context.verticalSpace(x)` | `h` |
+  | `context.horizontalSpace(x)` | `w` |
+
+  Each axis is scaled by the axis it belongs to, so padding keeps its proportions rather than tracking one dimension. `context.edgeInsets(all: x)` is therefore a drop-in for `EdgeInsets.all(context.w(x))`.
+
+**Enforced by machine.** `dart tools/arch_check/check.dart` (rule **R7**, Gate 1 of `pr_quality_check.yml`) scans every file importing `core_responsive` and **blocks the build** on any bare sizing extension, printing `file:line`. This rule is not held by review.
 
 ---
 

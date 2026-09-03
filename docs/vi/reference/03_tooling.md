@@ -46,8 +46,11 @@ dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
 | R4 | `static const` public phải nằm trong `utils/` của package |
 | R5 | Mọi `package:` import dùng trong `lib/` phải được khai trong `pubspec.yaml` của chính package đó |
 | R6 | File generated còn giữ header của generator (chỉ cảnh báo) |
+| R7 | Scale responsive phải qua `BuildContext` — cấm `.w` / `.h` / `.sp` / `.r` dạng bare |
 
 Bốn ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ năm nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
+
+R7 bắt các lời gọi scale dạng bare — regex `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — và **chỉ chạy trên file có import `core_responsive`**. Bản thân `core_responsive` không cung cấp extension nào trên `num`, nên `16.h` đã không biên dịch được; R7 là lớp chặn thứ hai, bắt cả trường hợp có ai đó tự khai một extension như vậy trong repo. Chỉ `context.h(16)` mới đọc qua `ResponsiveScope` và đăng ký dependency InheritedWidget, tức mới rebuild khi metrics đổi — `flutter analyze` không có luật nào thấy được khác biệt này.
 
 R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai mà không dùng*, tool này tìm dependency *đang dùng mà không khai*. Pub Workspaces che giấu hoàn toàn loại thứ hai — mọi thứ resolve được cục bộ qua `package_config.json` dùng chung, và chỉ vỡ khi tách package ra hay publish.
 

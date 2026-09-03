@@ -1,11 +1,10 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/di/module.dart';
 import 'package:core_di/core_di.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:core_ui_kit/dialogs/app_dialog.dart';
 import 'package:core_ui_kit/navigation/app_bar_custom.dart';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 import '../../feature_auth.dart';
 

@@ -12,6 +12,7 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.1.1
   flutter_localizations:
     sdk: flutter
   core_responsive:
@@ -25,6 +26,7 @@ dependencies:
   core_common:
     path: ../common
 
+  cupertino_ui: "^1.0.2"
 dev_dependencies:
   build_runner: "^2.16.0"
   flutter_gen_runner: "^5.15.0"

@@ -2,7 +2,7 @@ import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:domain_auth/domain_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../bloc/home_profile_bloc.dart';
 import '../extensions/extensions.dart';

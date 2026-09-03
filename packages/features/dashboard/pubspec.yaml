@@ -10,6 +10,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  material_ui: ^1.1.1
   core_di:
     path: ../../core/di
   core_common:

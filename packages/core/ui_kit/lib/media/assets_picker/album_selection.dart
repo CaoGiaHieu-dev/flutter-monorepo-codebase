@@ -1,5 +1,5 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import 'assets_picker_l10n_extension.dart';

@@ -1,6 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 
 class RetryDialog extends OverlayDialogWidget {
   const RetryDialog({super.key, this.onCancel, this.onRetry});

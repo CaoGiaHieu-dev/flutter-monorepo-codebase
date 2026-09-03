@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:core_common/core_common.dart';
-import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Global application state provider for managing app-wide functionality
 @lazySingleton

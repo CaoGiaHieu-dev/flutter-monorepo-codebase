@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Globally shared [GlobalKey]s for the app's nested / shell navigators.
 ///

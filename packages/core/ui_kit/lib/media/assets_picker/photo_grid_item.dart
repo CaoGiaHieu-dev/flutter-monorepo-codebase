@@ -1,8 +1,8 @@
 import 'package:core_responsive/core_responsive.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:extended_image/extended_image.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 class PhotoGridItem extends StatefulWidget {

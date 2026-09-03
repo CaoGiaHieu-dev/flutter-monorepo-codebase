@@ -1,7 +1,7 @@
 import 'package:core_di/core_di.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
 import '../utils/settings_path.dart';

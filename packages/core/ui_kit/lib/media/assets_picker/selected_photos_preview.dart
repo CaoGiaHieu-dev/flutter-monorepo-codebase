@@ -3,9 +3,9 @@ import 'dart:typed_data';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_responsive/core_responsive.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:extended_image/extended_image.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 class SelectedPhotosPreview extends StatefulWidget {

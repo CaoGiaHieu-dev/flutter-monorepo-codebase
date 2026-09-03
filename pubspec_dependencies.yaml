@@ -49,6 +49,8 @@ dependencies:
   permission_handler: "^13.0.1"
 
   # UI Components & Styling
+  material_ui: "^1.1.1"
+  cupertino_ui: "^1.0.2"
   cupertino_icons: "^1.0.9"
   dotted_line: "^3.3.0"
   flutter_native_splash: "^2.4.8"

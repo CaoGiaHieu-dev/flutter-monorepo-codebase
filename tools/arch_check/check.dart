@@ -237,7 +237,7 @@ void main(List<String> args) {
         }
 
         if (layer == 'domain') {
-          const banned = {'flutter', 'dio', 'retrofit'};
+          const banned = {'flutter', 'dio', 'retrofit', 'material_ui', 'cupertino_ui'};
           if (banned.contains(target)) {
             blocking.add(
               Violation(
@@ -291,12 +291,15 @@ void main(List<String> args) {
       }
     }
 
-    if (layer == 'domain' && declared.contains('flutter')) {
+    if (layer == 'domain' &&
+        (declared.contains('flutter') ||
+            declared.contains('material_ui') ||
+            declared.contains('cupertino_ui'))) {
       blocking.add(
         Violation(
           'R2',
           pubspecRel,
-          'domain package `${pkg.name}` declares `flutter` under '
+          'domain package `${pkg.name}` declares Flutter/UI dependencies under '
               '`dependencies:`. Domain must resolve without the Flutter SDK.',
         ),
       );

@@ -1,5 +1,5 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Widget displayed when there is no content to show
 ///

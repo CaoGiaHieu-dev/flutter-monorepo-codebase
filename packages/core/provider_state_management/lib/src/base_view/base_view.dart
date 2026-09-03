@@ -1,7 +1,7 @@
 // Barrel file for base_view module
 // This file exports all the main components of the base_view module
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 // Auto-generated exports, do not edit manually.
 export 'base_proxy_widget.dart';

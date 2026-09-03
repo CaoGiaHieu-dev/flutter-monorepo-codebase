@@ -1,6 +1,6 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:injectable/injectable.dart';
 
 import '../../core_base_ui.dart';

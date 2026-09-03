@@ -63,7 +63,7 @@ dependencies:
   data_language:
     path: ../packages/data/language
   # external packages
-
+  material_ui: ^1.1.1
   cupertino_icons: ^1.0.9
   core_responsive:
     path: ../packages/core/responsive

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'di/injection.dart';
 import 'main_scope.dart';

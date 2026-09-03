@@ -12,6 +12,7 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.1.1
   provider: "^6.1.5+1"
   get_it: ^9.2.1
   injectable: ^3.0.0

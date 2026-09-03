@@ -3,8 +3,8 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import 'album_selection.dart';

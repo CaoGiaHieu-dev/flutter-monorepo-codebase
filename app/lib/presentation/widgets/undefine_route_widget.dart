@@ -1,8 +1,8 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 import 'package:go_router/go_router.dart';
 
 class UndefineRouteWidget extends StatelessWidget {
@@ -28,7 +28,7 @@ class UndefineRouteWidget extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(context.l10n.page_not_found),
-            SizedBox(height: 16.h),
+            SizedBox(height: context.h(16)),
             ElevatedButton(
               onPressed: () {
                 if (canPop) {

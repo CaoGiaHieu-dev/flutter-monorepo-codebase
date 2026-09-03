@@ -113,31 +113,31 @@ Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là
 
 Cấu trúc phẳng (không có `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
-Nó phụ thuộc `core_common`, `core_base_ui` và `provider_state_management` — không bao giờ phụ thuộc một feature hay `data_*`.
+Nó phụ thuộc `core_common`, `core_base_ui`, `core_responsive` và `provider_state_management` — không bao giờ phụ thuộc một feature hay `data_*`.
 
 > [!NOTE]
 > Phụ thuộc chỉ chạy **một chiều**: `core_ui_kit -> provider_state_management`. Trước đây nó chạy cả hai chiều, tạo thành vòng lặp ngay bên trong vòng core; giờ `provider_state_management` tự có `DefaultLoadingWidget` / `DefaultEmptyWidget` thay vì mượn widget có thương hiệu.
 
 ### Quy tắc UI-agnostic
 
-Widget dùng lại nhận số **thô, chưa scale** và không được tự áp `flutter_screenutil_plus` bên trong. Scale là việc của bên gọi:
+Widget dùng lại nhận số **thô, chưa scale** và không được tự scale qua `core_responsive` bên trong. Scale là việc của bên gọi:
 
 ```dart
 // bên gọi scale
-CustomButton(width: 120.w, height: 44.h)
+CustomButton(width: context.w(120), height: context.h(44))
 
 // widget tự scale tham số của mình -- sai
-double get _width => width.w;
+double _width(BuildContext context) => context.w(width);
 ```
 
-Áp `.w` bên trong nghĩa là bên gọi nào đã scale sẽ bị scale hai lần, còn bên gọi muốn một giá trị pixel nguyên bản thì không cách nào lấy được.
+Scale bên trong nghĩa là bên gọi nào đã scale sẽ bị scale hai lần, còn bên gọi muốn một giá trị pixel nguyên bản thì không cách nào lấy được.
 
 > [!WARNING]
 > **Một bug thật mà luật này ngăn được.** `AppBarCustom` trước đây có:
 >
 > ```dart
 > @override
-> double? get leadingWidth => 64.w;
+> double? get leadingWidth => context.w(64);
 > ```
 >
 > Hai lỗi cùng lúc: nó tự scale bên trong, và — vì là getter override — nó **âm thầm vứt bỏ giá trị `leadingWidth` mà bên gọi truyền vào constructor**. Tham số trông như được hỗ trợ nhưng không làm gì cả. Nó đã được gỡ bỏ.
@@ -253,7 +253,56 @@ Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout)
 
 ---
 
-## 9. State management — hai nhánh, **chưa ngang bằng nhau**
+## 9. `core_responsive` — scale theo khung thiết kế, gắn với `BuildContext`
+
+Package first-party tại `packages/core/responsive`, **không phụ thuộc package nào khác** trong workspace (chỉ cần `flutter`). Nó thay thế hoàn toàn thư viện scale bên thứ ba mà template dùng trước đây; thư viện đó đã bị gỡ khỏi `pubspec_dependencies.yaml` và khỏi mọi pubspec.
+
+| Thành phần export | Đường dẫn | Mục đích |
+|:--|:--|:--|
+| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 360×690), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
+| `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` mang `ResponsiveMetrics`; `maybeOf(context)` trả nullable, `of(context)` assert khi thiếu |
+| `ResponsiveMetrics` | `src/responsive_metrics.dart` | Value object bất biến: `screenSize`, `designSize`, `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` cùng các phép `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin` |
+| `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` |
+| `ResponsiveContext` | `src/context_extension.dart` | Extension trên `BuildContext` — **lối duy nhất** để scale |
+| Constants | `src/utils/responsive_constants.dart` | `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690) |
+
+### Vì sao tự viết thay vì dùng package có sẵn
+
+Thư viện bên thứ ba trước đây (bản 1.6.0) quảng cáo tham số `autoRebuild` trong README; tham số đó có khai trong source nhưng **không chỗ nào trong `lib/` của nó đọc tới** — một tham số chết. Nặng hơn: việc scale của nó treo trên một singleton toàn cục, nên widget đọc `16.w` không bao giờ biết metrics đã đổi.
+
+`core_responsive` phát metrics qua `InheritedWidget`, nên mỗi lần đọc đều **đăng ký dependency** và việc rebuild đúng widget do chính Flutter lo. `ResponsiveInit` là `StatelessWidget` có chủ đích: nó đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — nên rebuild khi resize và bỏ qua thay đổi brightness / textScale / padding. Không cần `WidgetsBindingObserver`, không `setState`.
+
+`ResponsiveScope.of(context)` assert với thông điệp `"No ResponsiveInit found above this context."` khi thiếu. Fail to tiếng là cố ý: một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị.
+
+### Extension trên `BuildContext`
+
+| Lời gọi | Trục |
+|:--|:--|
+| `context.responsive` | trả về `ResponsiveMetrics` |
+| `context.w(n)` | chiều rộng — cũng dùng cho thứ phải giữ vuông |
+| `context.h(n)` | chiều cao |
+| `context.r(n)` | trục nhỏ hơn — bo góc, viền, nét |
+| `context.sp(n)` | cỡ chữ |
+| `context.spMin(n)` | `sp` chặn trên bằng giá trị thiết kế (chữ co được, không phình ra) |
+| `context.dg(n)` | cả hai trục |
+| `context.dm(n)` | trục lớn hơn |
+| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` theo `w`, `vertical` theo `h`, `all` theo `w` |
+| `context.borderRadius({all, topLeft, topRight, bottomLeft, bottomRight})` | `r` |
+| `context.verticalSpace(n)` / `context.horizontalSpace(n)` | `SizedBox` |
+
+> [!CAUTION]
+> **Không có extension trên `num`.** `16.w` không biên dịch được. Một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một biến toàn cục — và widget đọc biến toàn cục thì không bao giờ biết metrics đã đổi. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được. Không còn singleton toàn cục, không còn hàm `init` tĩnh, không còn `.setWidth()`, không còn cờ `autoRebuild`.
+
+Luật **R7** của `dart tools/arch_check/check.dart` chặn mọi dạng bare (`[\d)].(w|h|r|sp|spMin|dg|dm)`) trong file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
+
+> [!NOTE]
+> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Bản thân package có 19 test tại `packages/core/responsive/test/`.
+
+Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `app/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục và đổi khung thiết kế nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md).
+
+---
+
+## 10. State management — hai nhánh, **chưa ngang bằng nhau**
 
 Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: hai nhánh không được đầu tư như nhau.
 
@@ -278,21 +327,22 @@ Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`
 
 ---
 
-## 10. Bản đồ phụ thuộc
+## 11. Bản đồ phụ thuộc
 
 Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package từ pub.dev.
 
 | Package | Phụ thuộc |
 |:--|:--|
 | `core_database` | *(không có)* |
-| `core_common` | `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
+| `core_responsive` | *(không có)* |
+| `core_common` | `core_responsive`, `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
 | `core_di` | `domain_auth` *(ngoại lệ đã duyệt)* |
 | `core_network` | `core_common` |
 | `core_storage` | `core_common` |
 | `core_notifications` | `core_common` |
-| `core_base_ui` | `core_common`, `core_di` |
+| `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
 | `bloc_state_management` | `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `domain_core` *(ngoại lệ đã duyệt)* |
-| `core_ui_kit` | `core_common`, `core_base_ui`, `provider_state_management` |
+| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
 
 Không mũi tên nào trong bảng này trỏ tới `packages/features/*` hay `packages/data/*` — đó là bất biến cần giữ.

@@ -11,7 +11,7 @@ Thư mục này chứa các công cụ CLI dành cho lập trình viên, hỗ tr
 ```text
 tools/
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
-│   └── check.dart                   # R1-R6: hướng phụ thuộc, domain thuần Dart, ranh giới feature…
+│   └── check.dart                   # R1-R7: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
 ├── sample_cleanup/                  # 🧹 Phân loại và gỡ code mẫu an toàn
 │   └── remove_sample.dart           # --list / dry-run / --apply, có rollback
 ├── sample_manifest.yaml             # 📑 Nguồn chân lý: package nào là sample/framework/shell
@@ -53,7 +53,7 @@ tools/
 
 ### 🛡️ Architecture Check (Cưỡng chế luật phân tầng)
 ```bash
-# Kiểm tra 6 luật kiến trúc — exit 1 nếu có vi phạm (dùng được cho CI):
+# Kiểm tra 7 luật kiến trúc — exit 1 nếu có vi phạm (dùng được cho CI):
 dart tools/arch_check/check.dart
 
 # Xem mô tả đầy đủ từng luật:
@@ -63,6 +63,10 @@ dart tools/arch_check/check.dart --help
 Chạy trước `flutter analyze` trong CI: nó chỉ đọc import và pubspec nên xong trong ~200 ms,
 và là thứ duy nhất nhìn thấy được phân tầng — `analysis_options.yaml` không biết
 rằng core không được import feature.
+
+R7 cũng nằm ngoài tầm của analyzer: `16.h` và `context.h(16)` trả về cùng một con số
+nên không có gì sai kiểu để báo — nhưng chỉ dạng thứ hai đăng ký dependency
+InheritedWidget nên mới rebuild khi metrics đổi.
 
 ### 🧹 Sample Cleanup (Gỡ code mẫu)
 ```bash

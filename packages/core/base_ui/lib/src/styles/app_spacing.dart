@@ -1,13 +1,12 @@
+import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_screenutil_plus/flutter_screenutil_plus.dart';
 
 /// Responsive spacing scale.
 ///
-/// Every accessor takes a [BuildContext] and resolves through
-/// `flutter_screenutil_plus`' context-aware extensions (`context.w` /
-/// `context.h`) — the form the package documents as the faster path, since it
-/// scopes rebuilds to the widgets that actually read a value. Taking a context
-/// also lines this up with `AppTextStyles`, which has always required one.
+/// Every accessor takes a [BuildContext] and resolves through `core_responsive`
+/// (`context.w` / `context.h`), which scopes rebuilds to the widgets that
+/// actually read a value. Taking a context also lines this up with
+/// `AppTextStyles`, which has always required one.
 ///
 /// Use [rawXxs] and friends when there is no context to scale against —
 /// canvas painting or tests.

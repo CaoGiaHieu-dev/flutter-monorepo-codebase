@@ -98,7 +98,14 @@ Cả hai đường đều `await Future.wait([initService(), Future.delayed(_min
 
 ### `_ResponsiveWrapper`
 
-Cả hai đường đều bọc cây widget trong `ScreenUtilInit` với `AppConfig.design` (375×812) và một `fontSizeResolver` tuỳ biến co giãn chữ theo chiều rộng màn hình thật. Đây chính là thứ khiến `.w` / `.h` / `.sp` / `.r` hoạt động ở mọi nơi phía dưới.
+Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`) với `AppConfig.design` (375×812), `minTextAdapt: true`, `splitScreenMode: true` và một `fontSizeResolver` tuỳ biến co giãn chữ theo chiều rộng màn hình thật. Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+
+`ResponsiveInit` là `StatelessWidget`: nó đọc `MediaQuery.sizeOf(context)` — dependency **chỉ theo size** — nên tự rebuild khi màn hình đổi kích thước và bỏ qua thay đổi brightness / textScale / padding. Metrics được phát xuống qua `ResponsiveScope`, một `InheritedWidget`. Không có `autoRebuild`, không có singleton toàn cục.
+
+> [!NOTE]
+> `fontSizeResolver` được bê nguyên từ package cũ sang để thang chữ không dịch chuyển. Ghi chú ngay trong `main_scope.dart` nói rõ: khi đã đặt resolver thì nó **ghi đè toàn bộ** cách tính cỡ chữ, nên `minTextAdapt: true` ở trên đang nằm im. Bỏ resolver đi thì `minTextAdapt` mới có tác dụng (chữ sẽ scale theo trục nhỏ hơn thay vì theo chiều rộng) — đó là một thay đổi thị giác, hãy làm có chủ đích chứ đừng để nó xảy ra như tác dụng phụ.
+
+Việc scale vẫn phải đi qua `BuildContext` — `core_responsive` **không có extension trên `num`**, nên `16.h` đơn giản là không biên dịch được. Xem [luật 12](../reference/01_rules.md#12-responsive-ui), và lưu ý luật R7 của `arch_check` chặn mọi dạng bare còn sót ở mọi PR.
 
 ---
 

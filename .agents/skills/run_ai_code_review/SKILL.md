@@ -50,13 +50,18 @@ Use the `run_command` tool to run the commands above. After execution, analyze t
 - UI Controllers (ViewModel, Bloc, Cubit) must be `@injectable`, never singletons.
 - Instantiation happens at the **route** via `ChangeNotifierProvider` / `BlocProvider`; the
   `Page` must not wrap itself a second time.
-- All sizing goes through `flutter_screenutil_plus` (`.w` / `.h` / `.sp` / `.r`); reusable widgets
-  in `core_ui_kit` take **unscaled** values and never scale internally.
+- All sizing goes through `BuildContext`: `context.w(x)` / `context.h(x)` / `context.sp(x)` /
+  `context.r(x)`. The bare receiver form (`16.h`) is forbidden — it returns the same number but
+  skips the InheritedWidget dependency, so it never rebuilds on rotation or resize.
+  `arch_check` rule R7 blocks it, so flag it as a hard error, not a nit.
+- Design tokens take context: `AppSpacing.lg(context)`, `AppRadius.md(context)`,
+  `AppTextStyles.bodyMediumStyle(context)`. Never double-scale an already-scaled token.
+- Reusable widgets in `core_ui_kit` take **unscaled** values and never scale internally.
 
 **Layering**
 - `core/*` must not depend on `feature_*` or `data_*`. Approved exceptions only:
   `core_di → domain_auth`, `provider_state_management → domain_core`,
-  `core_common → domain_core`.
+  `core_common → domain_core`, `bloc_state_management → domain_core`.
 - Domain stays pure — no `flutter` / `dio` / `retrofit` / `drift` import *and* no such entry
   in its pubspec.
 - Feature A never imports Feature B (only `core_ui_kit`).

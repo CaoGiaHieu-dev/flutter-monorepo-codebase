@@ -292,7 +292,45 @@ Cross-feature navigation goes through a Navigator interface declared in `core_di
 
 ## 12. Responsive UI
 
-**Rule.** Every dimension — width, height, padding, margin, font size, border radius — uses `flutter_screenutil_plus`: `.w`, `.h`, `.sp`, `.r`. Raw doubles in layout are forbidden.
+**Rule.** Every dimension — width, height, padding, margin, font size, border radius — is scaled **through `BuildContext`**, using `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (also `context.spMin`, `context.dg`, `context.dm`). Raw doubles in layout are forbidden, and so is the bare receiver form `16.h`.
+
+**Why the bare form is not even available.** `core_responsive` ships **no `num` extension**, so `16.h` does not compile. That is deliberate: a number carries no context, so such an extension could only read a global singleton, and a widget reading a global never learns the metrics changed. `context.h(16)` instead registers an **InheritedWidget dependency** on `ResponsiveScope`, so it rebuilds when screen metrics change: rotation, split-screen, a resized desktop window. Requiring the context makes the correct thing the only writable thing — and `arch_check` rule R7 rejects the bare form in any file importing `core_responsive`, so a leftover from the old package cannot survive review either.
+
+❌ **Wrong** — does not compile, and would go stale if it did:
+```dart
+SizedBox(height: 16.h)
+```
+
+✅ **Right** — subscribes to metric changes:
+```dart
+SizedBox(height: context.h(16))
+```
+
+**Design tokens take context too:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Their numbers live in `raw*` constants — edit `raw*`, never the accessor. Never re-scale an already-scaled token.
+
+**No context in scope?** Inside an `async` method, read from context **before the first `await`** and pass the value forward. Never hold a `BuildContext` across an await. Real example — `packages/core/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
+
+```dart
+if (!mounted) return;
+final thumbnailSide = context.w(200).toInt();   // read before awaiting
+final bytes = await widget.photo.thumbnailDataWithSize(
+  ThumbnailSize.square(thumbnailSide),
+);
+```
+
+**Helper scaling axes** — read from the package source; the published docs do not state them:
+
+| Helper | Scales by |
+|:--|:--|
+| `context.edgeInsets(all: x)` | `r` |
+| `context.edgeInsets(horizontal: x)` | `w` |
+| `context.edgeInsets(vertical: x)` | `h` |
+| `context.borderRadius(all: x)` | `r` |
+| `context.verticalSpace(x)` | `h` |
+| `context.horizontalSpace(x)` | `w` |
+
+> [!WARNING]
+> `context.edgeInsets(all:)` scales with **`r`**, not `w`. It is **not** interchangeable with `EdgeInsets.all(context.w(16))` — swapping them shifts layout on any device whose aspect ratio differs from the design canvas. When in doubt, write the explicit form; it names the axis.
 
 **Reusable widgets take raw, unscaled values and must not scale internally.** Scaling is the caller's job.
 
@@ -300,10 +338,18 @@ Cross-feature navigation goes through a Navigator interface declared in `core_di
 ```dart
 // packages/core/ui_kit/lib/navigation/app_bar_custom.dart
 @override
-double? get leadingWidth => 64.w;   // overrides super.leadingWidth forever
+double? get leadingWidth => context.w(64);   // overrides super.leadingWidth forever
 ```
 
 ✅ **Right** — accept the constructor parameter, let the caller scale it.
+
+**Verify**
+
+```bash
+dart tools/arch_check/check.dart      # rule R7 — blocks on any bare sizing extension
+```
+
+This rule is **enforced by machine**, not by review: R7 runs as Gate 1 of `pr_quality_check.yml` on every PR and prints `file:line` for each violation.
 
 ---
 

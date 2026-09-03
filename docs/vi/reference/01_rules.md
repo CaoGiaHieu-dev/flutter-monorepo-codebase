@@ -292,7 +292,45 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 
 ## 12. Responsive UI
 
-**Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều dùng `flutter_screenutil_plus`: `.w`, `.h`, `.sp`, `.r`. Cấm dùng double thô trong layout.
+**Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều phải scale **qua `BuildContext`** bằng `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (và `context.spMin`, `context.dg`, `context.dm`). Cấm double thô trong layout.
+
+**Không có extension trên `num` — và đó là chủ đích.** `16.h` không biên dịch được: `core_responsive` không cung cấp extension nào trên `num`. Một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, mà widget đọc singleton thì **không bao giờ biết** metrics màn hình đã đổi — xoay máy, split-screen, resize cửa sổ desktop đều trôi qua trong im lặng. Ngược lại, `context.h()` đọc `ResponsiveScope` (một `InheritedWidget`) nên mỗi lần đọc đều **đăng ký dependency** và Flutter tự lo việc rebuild. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được.
+
+❌ **Sai** — không biên dịch được, và trước đây là lỗi cũ giá trị âm thầm:
+```dart
+SizedBox(height: 16.h)
+```
+
+✅ **Đúng** — theo dõi được thay đổi metrics:
+```dart
+SizedBox(height: context.h(16))
+```
+
+**Design token cũng nhận context:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Con số nằm trong các hằng `raw*` — sửa `raw*`, đừng sửa accessor. Không bao giờ scale lại một token đã scale.
+
+**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Ví dụ thật — `packages/core/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
+
+```dart
+if (!mounted) return;
+final thumbnailSide = context.w(200).toInt();   // đọc trước khi await
+final bytes = await widget.photo.thumbnailDataWithSize(
+  ThumbnailSize.square(thumbnailSide),
+);
+```
+
+**Trục scale của các helper** — đọc từ `packages/core/responsive/lib/src/context_extension.dart`:
+
+| Helper | Scale theo |
+|:--|:--|
+| `context.edgeInsets(all: x)` | `w` |
+| `context.edgeInsets(horizontal: x)` | `w` |
+| `context.edgeInsets(vertical: x)` | `h` |
+| `context.borderRadius(all: x)` | `r` |
+| `context.verticalSpace(x)` | `h` |
+| `context.horizontalSpace(x)` | `w` |
+
+> [!NOTE]
+> `context.edgeInsets(all:)` scale bằng **`w`**, nên nó thay thế trực tiếp được `EdgeInsets.all(context.w(16))`. Package cũ dùng `r` cho `all`; không call site nào trong repo dùng `all:` nên việc đổi trục không làm lệch giao diện. Khi không chắc, hãy viết dạng tường minh vì nó nói rõ đang scale theo trục nào.
 
 **Widget dùng lại nhận giá trị RAW và không được tự scale bên trong.** Scale là việc của nơi gọi.
 
@@ -300,10 +338,20 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 ```dart
 // packages/core/ui_kit/lib/navigation/app_bar_custom.dart
 @override
-double? get leadingWidth => 64.w;   // ghi đè super.leadingWidth vĩnh viễn
+double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩnh viễn
 ```
 
 ✅ **Đúng** — nhận tham số qua constructor, để nơi gọi tự scale.
+
+**Widget test có scale phải bọc trong `ResponsiveInit`.** `ResponsiveScope.of(context)` assert `"No ResponsiveInit found above this context."` khi không có scope phía trên — fail to tiếng là cố ý, vì một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị.
+
+**Kiểm chứng**
+
+```bash
+dart tools/arch_check/check.dart      # luật R7 — chặn mọi dạng gọi scale bare
+```
+
+Luật này được **cưỡng chế bằng máy**, không dựa vào review: R7 chạy như Gate 1 của `pr_quality_check.yml` ở mọi PR và in `file:line` cho từng vi phạm.
 
 ---
 

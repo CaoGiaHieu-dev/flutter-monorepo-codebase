@@ -122,6 +122,24 @@ String _layerOf(String packageRoot) {
   return (i >= 0 && i + 1 < parts.length) ? parts[i + 1] : '';
 }
 
+/// Matches a bare sizing extension left over from the old package — a number or a
+/// closing paren followed by `.w`, `.h`, `.sp`, `.r`, `.spMin`, `.dg`, `.dm`.
+///
+/// Anchored on the receiver so ordinary members (`rect.width`, `state.hasData`)
+/// never match, and the trailing boundary keeps `.hour` or `.round()` out.
+final RegExp _bareSizingExtension = RegExp(
+  r'[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()',
+);
+
+/// Drops a trailing `//` comment so commented-out or explanatory text does not
+/// trip a rule. Naive about `//` inside string literals, which is acceptable
+/// here: the cost is a false positive on a line that mentions a URL, and the
+/// message points straight at it.
+String _stripComment(String line) {
+  final i = line.indexOf('//');
+  return i == -1 ? line : line.substring(0, i);
+}
+
 void main(List<String> args) {
   if (args.contains('--help') || args.contains('-h')) {
     _printHelp();
@@ -303,6 +321,35 @@ void main(List<String> args) {
       }
     }
 
+    // --- R7: responsive sizing goes through BuildContext -------------------
+    // `16.w` and `context.w(16)` return the same number, but only the second
+    // registers an InheritedWidget dependency, so only the second rebuilds
+    // when the metrics change (rotation, split-screen, desktop resize). The
+    // bare form is therefore a silent staleness bug, not a style preference.
+    for (final file in files) {
+      final source = File(file).readAsStringSync();
+      if (!source.contains('core_responsive')) continue;
+
+      final lines = source.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        final code = _stripComment(lines[i]);
+        // A numeric or closing-paren receiver followed by a sizing extension.
+        for (final m in _bareSizingExtension.allMatches(code)) {
+          blocking.add(
+            Violation(
+              'R7',
+              '${p.posix.relative(file, from: root)}:${i + 1}',
+              'bare `.${m.group(1)}` sizing extension — use '
+                  '`context.${m.group(1)}(value)` so the widget rebuilds when '
+                  'screen metrics change. If no BuildContext is reachable, '
+                  'read the value from one before the first `await` and pass '
+                  'it in.',
+            ),
+          );
+        }
+      }
+    }
+
     // --- R6: generated files should not be hand-edited (warning) ----------
     for (final file in files) {
       final name = p.posix.basename(file);
@@ -349,6 +396,7 @@ void _report(
     'R4': 'Package constants live in utils/',
     'R5': 'Every import is declared',
     'R6': 'Generated files are not hand-edited',
+    'R7': 'Responsive sizing goes through BuildContext',
   };
 
   if (warnings.isNotEmpty) {
@@ -436,6 +484,11 @@ RULES CHECKED
       undeclared import still compiles locally and only breaks on extraction.
 
   R6  Generated files are not hand-edited  (warning only, never blocks)
+  R7  Responsive sizing goes through BuildContext
+      `16.w` and `context.w(16)` compute the same number, but only the
+      second registers an InheritedWidget dependency, so only the second
+      rebuilds when metrics change (rotation, split-screen, resize).
+      Checked only in files that import core_responsive.
       Files named *.g.dart / *.freezed.dart / *.config.dart / *.module.dart
       should carry their generator header.
 

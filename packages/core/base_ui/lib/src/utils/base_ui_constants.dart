@@ -6,8 +6,9 @@
 /// only collects the loose numbers that used to sit inline inside this
 /// package's extensions and theme builder.
 ///
-/// Values are stored **unscaled**; the call site applies the ScreenUtil
-/// extension (`.h` / `.r` / `.sp`) so scaling stays visible where it happens.
+/// Values are stored **unscaled**; the call site applies the `core_responsive`
+/// context extension (`context.h` / `context.r` / `context.sp`) so scaling stays
+/// visible where it happens.
 class BaseUiConstants {
   BaseUiConstants._();
 

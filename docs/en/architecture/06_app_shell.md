@@ -98,7 +98,12 @@ Both paths await `Future.wait([initService(), Future.delayed(_minimumDelay)])`, 
 
 ### `_ResponsiveWrapper`
 
-Both paths wrap the tree in `ScreenUtilInit` with `AppConfig.design` (375×812) and a custom `fontSizeResolver` that scales text by real screen width. This is what makes `.w` / `.h` / `.sp` / `.r` work everywhere downstream.
+Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`, with `AppConfig.design` (375×812), `minTextAdapt: true`, `splitScreenMode: true` and a custom `fontSizeResolver` that scales text by real screen width. It sits at the very root, so every widget below it can call `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+
+`ResponsiveInit` publishes the metrics through a `ResponsiveScope` `InheritedWidget`, so a widget that reads them subscribes to them — there is no rebuild flag to tune. Sizing must go through `BuildContext`: there is no `num` extension, so `16.h` does not even compile. See [rule 12](../reference/01_rules.md#12-responsive-ui) for the reasoning, and note that `arch_check` rule R7 blocks the bare form on every PR.
+
+> [!NOTE]
+> Supplying a `fontSizeResolver` overrides text scaling completely, so the `minTextAdapt: true` above is inert while the resolver is set. Dropping the resolver is a deliberate visual change, not a cleanup.
 
 ---
 

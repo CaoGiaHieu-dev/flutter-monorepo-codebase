@@ -143,7 +143,7 @@ Tokens live in `packages/core/base_ui/lib/src/styles/`; colours come from a
 | `AppShadows` | `app_shadows.dart` | Elevation shadows |
 
 Every accessor takes a `BuildContext`, because scaling resolves through the
-context-aware extensions of `flutter_screenutil_plus`:
+context-aware extensions of `core_responsive`:
 
 ```dart
 Container(
@@ -159,8 +159,8 @@ Container(
 > [!CAUTION]
 > Never hard-code a `Color`, `fontSize`, spacing number or `BorderRadius` in a
 > widget. If a token is missing, add it to `core_base_ui` — do not inline the
-> value. And never re-scale an already-scaled token: `AppSpacing.lg(context).w`
-> scales twice.
+> value. And never re-scale an already-scaled token:
+> `context.w(AppSpacing.lg(context))` scales twice.
 
 > [!NOTE]
 > **Configuring the design system — swapping the palette, changing the font,
@@ -206,16 +206,20 @@ The persisted preference is read through `IThemeStorage` — see [`06_storage.md
 
 # Part C — Responsive UI
 
-## 9. ScreenUtil is mandatory
+## 9. `core_responsive` is mandatory
 
-Every dimension is scaled:
+Every dimension is scaled, and always through a `BuildContext`:
 
-| Suffix | Use for |
+| Extension | Use for |
 |---|---|
-| `.w` | Widths, horizontal padding/margin |
-| `.h` | Heights, vertical gaps |
-| `.sp` | Font sizes |
-| `.r` | Border radii, square/circular sizes |
+| `context.w(x)` | Widths, horizontal padding/margin |
+| `context.h(x)` | Heights, vertical gaps |
+| `context.sp(x)` | Font sizes |
+| `context.r(x)` | Border radii, square/circular sizes |
+
+There is **no `num` extension**: `24.h` does not compile. A number carries no
+context, so it could only read a global — and a widget reading a global never
+learns the metrics changed. `arch_check` rule R7 rejects the bare form anyway.
 
 ```dart
 // ❌ Wrong
@@ -234,9 +238,10 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 ```
 
 > [!NOTE]
-> `context.edgeInsets(all: 16)` scales with `r`, not `w` — so it is not a
-> drop-in swap for `EdgeInsets.all(context.w(16))`. See
-> [`11_design_system.md`](11_design_system.md) for the full axis table.
+> `context.edgeInsets(all: 16)` scales with `w`, so it *is* a drop-in swap for
+> `EdgeInsets.all(context.w(16))`. `horizontal:` scales with `w`, `vertical:`
+> with `h`. See [`11_design_system.md`](11_design_system.md) for the full axis
+> table.
 
 Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-height multiplier, `flex` is a ratio.
 
@@ -250,7 +255,7 @@ This rule exists because it was broken. `AppBarCustom` used to end with:
 ```dart
 // ❌ The bug that motivated this rule (now removed)
 @override
-double? get leadingWidth => 64.w;
+double? get leadingWidth => context.w(64);
 ```
 
 That override scaled internally **and** silently discarded the `leadingWidth` the caller passed through `super.leadingWidth` — the parameter was dead. The class now simply forwards everything to `AppBar`:
@@ -270,7 +275,7 @@ class AppBarCustom extends AppBar {
 Call sites scale:
 
 ```dart
-AppBarCustom(leadingWidth: 64.w, title: Text(context.l10nHome.home))
+AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 ```
 
 ## 11. `core_ui_kit` constants
@@ -318,7 +323,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 - [ ] `core_ui_kit` uses `core_base_ui` strings, defines no `.arb`
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`
 - [ ] Every dimension scaled (`.w`/`.h`/`.sp`/`.r`) or taken from a token
-- [ ] Tokens not double-scaled (`AppSpacing.lg(context)`, not `AppSpacing.lg(context).w`)
+- [ ] Tokens not double-scaled (`AppSpacing.lg(context)`, not `context.w(AppSpacing.lg(context))`)
 - [ ] Reusable widgets accept raw values and scale nothing internally
 - [ ] Dialogs/bottom sheets extracted into their own suffixed files
 

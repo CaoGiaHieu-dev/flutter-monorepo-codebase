@@ -206,6 +206,36 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 
 File kết quả nằm ở `app/build/app/outputs/flutter-apk/app-dev-debug.apk`.
 
+### Android: Built-in Kotlin đang bật
+
+`app/android/gradle.properties` đặt `android.builtInKotlin=true`. Giữ nguyên, đừng tắt.
+
+Flutter đang chuyển plugin từ Kotlin Gradle Plugin (KGP) sang phần hỗ trợ Kotlin
+tích hợp sẵn trong Flutter Gradle plugin. Plugin nào đã migrate — ví dụ
+`google_sign_in_android` — sẽ biên dịch phần Java của nó dựa trên class sinh ra
+từ chính Kotlin sources của nó. Khi tắt cờ này, phần Kotlin đó không được biên
+dịch, và build chết ở những symbol trông như đáng lẽ phải tồn tại:
+
+```
+GoogleSignInPlugin.java:218: error: cannot find symbol
+  ResultUtilsKt.completeWithValue(...)
+```
+
+Thông báo lỗi chỉ ra tên plugin chứ không nhắc tới cờ, nên rất dễ tưởng nhầm là
+lỗi version dependency. Không phải — ghim plugin về version cũ hơn cũng không cứu được.
+
+Còn ba plugin **chưa** migrate và vẫn dùng KGP: `firebase_auth`, `firebase_core`,
+`photo_manager`. Hiện chúng vẫn build bình thường, chỉ cảnh báo:
+
+```
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): ...
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+```
+
+Cảnh báo này là một deadline thật, không phải nhiễu. Khi một bản Flutter tương lai
+biến nó thành lỗi, cách xử lý là nâng ba plugin đó lên version có hỗ trợ Built-in
+Kotlin — không cần sửa gì trong repo này.
+
 ### Từ VS Code
 
 `.vscode/launch.json` đã định nghĩa sẵn ba cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)**. Chọn một trong panel Run and Debug. Mỗi cấu hình tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `app/`, vì đó là nơi Dart extension neo project).

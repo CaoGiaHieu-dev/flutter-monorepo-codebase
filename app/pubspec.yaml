@@ -65,7 +65,8 @@ dependencies:
   # external packages
 
   cupertino_icons: ^1.0.9
-  flutter_screenutil_plus: "^1.6.0"
+  core_responsive:
+    path: ../packages/core/responsive
   flutter_svg: ^2.3.0
   provider: "^6.1.5+1"
   go_router: "^18.0.0"

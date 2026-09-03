@@ -60,7 +60,7 @@ flutter test test/debounce_test.dart   # a single test file
 # Enforce the layering rules — Gate 1 of pr_quality_check.yml, exits 1 on violation.
 # The only check that can see layering; analysis_options.yaml knows nothing about it.
 dart tools/arch_check/check.dart
-dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R6)
+dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R7)
 
 # Which packages are sample code, and how to delete one safely.
 # Source of truth: tools/sample_manifest.yaml
@@ -152,6 +152,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
 | `core_database` | **Mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener` | **Owns no database/table/DAO**; its DI module registers nothing. Each package declares its own database — see [Database System](#database-system-package-owned-drift--sqlite) |
 | `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
+| `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Replaced `flutter_screenutil_plus`. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
 | `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit` |
 | `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union) | **`BaseBloc`/`BaseCubit` are empty extension points** — no `executeOperation` equivalent; handlers unwrap `Result` by hand |
 
@@ -176,7 +177,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 ### Feature Layer Rules
 
-- **Allowed deps:** `domain_*` and `core_*` — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, and `provider_state_management` **or** `bloc_state_management`
+- **Allowed deps:** `domain_*` and `core_*` — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` **or** `bloc_state_management`
 - **FORBIDDEN:** Direct deps on the `data` layer or on **any** other feature package — no exception. Shared widgets come from `core_ui_kit`, which is core
 - **One bounded UI concern per package** — Home and Settings are separate packages; `feature_dashboard` is shell chrome only
 - Feature-specific assets go in `<feature>/assets/` (images, SVGs, language ARBs)
@@ -433,20 +434,31 @@ abstract class AuthModule {
 
 ---
 
-## Responsive UI (flutter_screenutil_plus — Strict)
+## Responsive UI (core_responsive — Strict)
 
-- **ALL sizing** (width, height, padding, margin, font size, border radius) MUST use ScreenUtil: `.w`, `.h`, `.sp`, `.r`
-- **FORBIDDEN:** Raw doubles in layout (e.g., `SizedBox(height: 24)` → must be `SizedBox(height: 24.h)`)
-- **Reusable widgets** in `core_ui_kit` take **unscaled** values — caller applies ScreenUtil
+- **ALL sizing** (width, height, padding, margin, font size, border radius) MUST be scaled **through `BuildContext`**: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (also `context.spMin`, `context.dg`, `context.dm`)
+- **There is no `num` extension.** `16.h` does not compile — `core_responsive` ships none, on purpose
+  - **Why:** a number carries no context, so such an extension could only read a global, and a widget reading a global never learns the metrics changed — it computes once and never updates (silent stale value). `context.h(16)` registers a `ResponsiveScope` (InheritedWidget) dependency, so exactly the widgets that scale rebuild on rotation / split-screen / resize
+- **FORBIDDEN:** Raw doubles in layout — `SizedBox(height: 24)` → `SizedBox(height: context.h(24))`
+- **No context in an async method?** Read the value *before the first `await`*, then pass it on. See `photo_grid_item.dart` `_loadThumbnail` (`if (!mounted) return;` then `context.w(200).toInt()`)
+- **Reusable widgets** in `core_ui_kit` take **unscaled** values — caller scales before passing in
+- **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `app/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
+- **Widget tests that scale must wrap the subject in `ResponsiveInit`** — otherwise `ResponsiveScope.of` asserts, deliberately, rather than silently falling back to unscaled values
+- **Enforced by machine:** `dart tools/arch_check/check.dart` rule **R7** blocks any bare sizing extension in a file importing `core_responsive`
+- **Enforced:** `dart tools/arch_check/check.dart` rule **R7** blocks the build on any bare sizing extension (Gate 1 of `pr_quality_check.yml`)
 
 ---
 
 ## Design System (core_base_ui)
 
 - **Colors:** `context.colors.textPrimary`, `context.colors.surface`, `context.colors.primary` — auto-switch Light/Dark
-- **Typography:** `AppTextStyles.bodyMediumStyle(context)`, auto-scaled with `.sp`
-- **Spacing:** `AppSpacing.xs`, `.sm`, `.md`, `.lg`, `.xl` (scaled with `.w`)
-- **Radius:** `AppRadius.sm`, `.md`, `.circular` (scaled with `.r`); `AppRadius.smRadius` for `BorderRadius` objects
+- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled; do **not** re-apply `context.sp()` at the call site
+- **Spacing:** `AppSpacing.xs(context)`, `.sm(context)`, `.md(context)`, `.lg(context)`, `.xl(context)` (scaled with `w`); `H` variants (`lgH`) scale with `h`
+- **Radius:** `AppRadius.sm(context)`, `.md(context)`, `.circular(context)` (scaled with `r`); `AppRadius.smRadius(context)` for `BorderRadius` objects
+- **All three take `BuildContext`** — they are methods, not getters. Numbers live in their `raw*` constants: edit `raw*`, never the accessor
+- **Never double-scale:** `AppSpacing.lg(context)` is final. `context.w(AppSpacing.lg(context))` scales twice
+- Full configuration guide (change palette, font, spacing scale, design size): `docs/en/guides/11_design_system.md`
 - **Gradients/Shadows:** `AppGradients`, `AppShadows`
 - **FORBIDDEN:** Hard-coding colors, font sizes, spacings, border radii directly in widgets
 
@@ -638,7 +650,7 @@ Config: copy `app/fastlane/Config.example.yaml` → `app/fastlane/Config.yaml` (
 | Package | Contains | Key Rule |
 |:--------|:---------|:---------|
 | `core_base_ui` | Design tokens, themes, colors, fonts, images, icons, L10n | **Zero Flutter widgets.** Only global assets |
-| `core_ui_kit` | All reusable widgets (atomic + business) | Lives in `packages/core/ui_kit`. Depends on `core_common`, `core_base_ui`, `provider_state_management` — never on a feature |
+| `core_ui_kit` | All reusable widgets (atomic + business) | Lives in `packages/core/ui_kit`. Depends on `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` — never on a feature |
 
 ### Sharing Across Features
 
@@ -679,7 +691,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 
 ## Frequently-Violated Rules (Full List in AGENTS.md)
 
-1. **ScreenUtil:** All UI dimensions use `.w`/`.h`/`.sp`/`.r` — no raw doubles. Reusable widgets in `core_ui_kit` take unscaled values — caller scales.
+1. **Responsive sizing:** All UI dimensions go through `context.w/h/sp/r` from `core_responsive` — no raw doubles, and no bare `16.w` (no `num` extension exists). Reusable widgets in `core_ui_kit` take unscaled values — caller scales. Enforced by arch_check R7.
 2. **Freezed BLoC events:** Private subclasses (`_HomeStarted`) via `part`/`part of`. `on<Event>` handlers must be async `(event, emit)` — never sync closure calling unawaited async.
 3. **Dialogs/BottomSheets:** Always separate widget classes, never inline in `showDialog`/`showModalBottomSheet` builders.
 4. **Naming:** `I` prefix reserved for interfaces. Data source dirs are `data_sources/` (not `datasources/`). Suffixes: `_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `_repository_impl`, etc.
@@ -725,7 +737,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] Dashboard limited to chrome only (`DashboardRouteModule`)
 - [ ] Action Handlers used for cross-feature UI actions
 - [ ] Localization uses `IFeatureLocalization` (NOT editing `root_app.dart`)
-- [ ] ScreenUtil applied to all sizing
+- [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
 - [ ] No `packages/core/*` imports or declares `feature_*` (only `core_di → domain_auth` and `provider_state_management → domain_core` allowed)

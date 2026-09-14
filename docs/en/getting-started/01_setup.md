@@ -10,8 +10,8 @@
 
 | Requirement | Version | Where the version comes from |
 | :--- | :--- | :--- |
-| Flutter SDK | **3.47.2** or newer | `pubspec.yaml` → `environment.flutter: ">=3.47.2"` |
-| Dart SDK | **3.13.1** or newer | `pubspec.yaml` → `environment.sdk: ">=3.13.1 <4.0.0"` |
+| Flutter SDK | **3.47.4** or newer | `pubspec.yaml` → `environment.flutter: ">=3.47.4"` |
+| Dart SDK | **3.13.3** or newer | `pubspec.yaml` → `environment.sdk: ">=3.13.3 <4.0.0"` |
 | JDK | **17** | `app/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `app/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `app/ios/Podfile` |
@@ -23,7 +23,7 @@ The repo pins a Flutter version in `.fvmrc`:
 
 ```json
 {
-  "flutter": "3.47.2"
+  "flutter": "3.47.4"
 }
 ```
 
@@ -33,10 +33,10 @@ You may use either path — pick one and stay consistent:
 # Path A — FVM (recommended for teams, keeps everyone on the pinned version)
 dart pub global activate fvm
 fvm install            # installs the version from .fvmrc
-fvm flutter --version  # should print 3.47.2
+fvm flutter --version  # should print 3.47.4
 
 # Path B — global Flutter SDK
-flutter --version      # must be >= 3.47.2
+flutter --version      # must be >= 3.47.4
 ```
 
 > [!NOTE]

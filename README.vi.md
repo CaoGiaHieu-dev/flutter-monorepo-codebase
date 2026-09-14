@@ -398,8 +398,8 @@ fastlane android build flavor:dev build_type:apk distribute_store:false distribu
 ## 🚀 Hướng Dẫn Khởi Tạo & Phát Triển Cục Bộ
 
 ### 1. Chuẩn Bị Môi Trường
-- **Flutter**: >= 3.47.2 (Stable)
-- **Dart SDK**: >= 3.13.1
+- **Flutter**: >= 3.47.4 (Stable)
+- **Dart SDK**: >= 3.13.3
 - **JDK**: 17
 - **Ruby**: >= 3.0 (cho Fastlane)
 

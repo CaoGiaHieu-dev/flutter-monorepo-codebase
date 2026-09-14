@@ -182,8 +182,8 @@ dart tools/theme_generator/theme_setting.dart
 
 ## 🔑 Prerequisites
 
-- **Dart SDK**: >= 3.13.1
-- **Flutter SDK**: >= 3.47.2
+- **Dart SDK**: >= 3.13.3
+- **Flutter SDK**: >= 3.47.4
 - **Ruby**: >= 3.0 (cho Fastlane, chỉ cần khi build CI/CD)
 - **Gemini API Key**: Chỉ cần cho Code Review Tool
 

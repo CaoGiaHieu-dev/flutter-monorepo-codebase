@@ -1,7 +1,7 @@
 # Source of Truth for shared package versions across the entire monorepo.
 # Running `dart tools/dependency_sync.dart` will synchronize these versions to all pubspec.yaml files.
 #
-# Toolchain baseline: Flutter 3.47.0 / Dart 3.13.0
+# Toolchain baseline: Flutter 3.47.0 / Dart 3.13.3
 
 dependencies:
   # State Management

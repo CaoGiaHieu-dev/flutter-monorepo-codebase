@@ -161,13 +161,14 @@ void main() {
     StorageValue<String> buildLocale() =>
         StorageValue<String>(manager.getStorage(StorageType.pref), 'locale');
 
-    StorageValue<_TestThemeMode> buildThemeMode() => StorageValue<_TestThemeMode>(
-      manager.getStorage(StorageType.pref),
-      'themeMode',
-      reviver: (key, value) => value == null
-          ? _TestThemeMode.system
-          : _TestThemeMode.values.byName(value.toString()),
-    );
+    StorageValue<_TestThemeMode> buildThemeMode() =>
+        StorageValue<_TestThemeMode>(
+          manager.getStorage(StorageType.pref),
+          'themeMode',
+          reviver: (key, value) => value == null
+              ? _TestThemeMode.system
+              : _TestThemeMode.values.byName(value.toString()),
+        );
 
     test(
       'each owner round-trips its own value through its own backend',

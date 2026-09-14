@@ -5,8 +5,8 @@ publish_to: none
 resolution: workspace
 
 environment:
-  sdk: ">=3.13.1 <4.0.0"
-  flutter: ">=3.47.2"
+  sdk: ">=3.13.3 <4.0.0"
+  flutter: ">=3.47.4"
 
 dependencies:
   flutter:

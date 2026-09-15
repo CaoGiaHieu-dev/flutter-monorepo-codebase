@@ -6,7 +6,8 @@ import 'package:material_ui/material_ui.dart';
 
 /// Global application state provider for managing app-wide functionality
 @lazySingleton
-class AppProvider extends ChangeNotifier with LifecycleMixin, NetworkMixin {
+class AppProvider extends ChangeNotifier
+    with LifecycleMixin, NetworkMixin, DisposeGuard {
   AppProvider() {
     // Initialize lifecycle monitoring for app state changes
     startListenOnLifecycleChange();

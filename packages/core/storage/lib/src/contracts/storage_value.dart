@@ -66,7 +66,7 @@ class ObfuscatedString {
 /// print(token.value);            // reads from in-memory cache
 /// await token.readFromStorage(); // hydrates cache from disk
 /// ```
-class StorageValue<T> extends ChangeNotifier {
+class StorageValue<T> extends ChangeNotifier with DisposeGuard {
   /// Creates a storage value bound to [key] in the given [storage] backend.
   ///
   /// [reviver] is an optional function for custom JSON deserialization

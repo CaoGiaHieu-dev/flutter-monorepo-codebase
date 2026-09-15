@@ -35,7 +35,7 @@ import 'package:material_ui/material_ui.dart';
 /// final lastLink = deeplinkProvider.lastProcessedDeepLink;
 /// ```
 @lazySingleton
-class DeeplinkProvider extends ChangeNotifier {
+class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
   /// Creates a DeeplinkProvider with required context.
   ///
   /// This constructor follows the standardized provider pattern by:

@@ -6,7 +6,7 @@ import 'package:injectable/injectable.dart';
 import '../../core_base_ui.dart';
 
 @lazySingleton
-class LanguageProvider extends ChangeNotifier {
+class LanguageProvider extends ChangeNotifier with DisposeGuard {
   final ILanguageStorage _storage;
 
   LanguageProvider(this._storage);

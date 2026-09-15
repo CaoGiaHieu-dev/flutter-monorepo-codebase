@@ -10,14 +10,13 @@ part of '../base/base_provider.dart';
 /// - Stream-based state broadcasting
 /// - Automatic disposal handling
 /// - Thread-safe state updates
-class StateManager<T> extends ChangeNotifier {
+class StateManager<T> extends ChangeNotifier with DisposeGuard {
   StateManager()
     : _viewState = ViewStateModel<T>(state: const ViewState.initial());
 
   final _streamController = StreamController<ViewStateModel<T>>.broadcast();
 
   ViewStateModel<T> _viewState;
-  bool _isDisposed = false;
 
   /// Current view state
   ViewStateModel<T> get viewState => _viewState;
@@ -37,15 +36,12 @@ class StateManager<T> extends ChangeNotifier {
   /// Check if currently in error state
   bool get isError => _viewState.isError;
 
-  /// Check if state manager is disposed
-  bool get isDisposed => _isDisposed;
-
   /// Update the view state with a new ViewStateModel
   ///
   /// This method updates the internal state and notifies all listeners
   /// including both ChangeNotifier listeners and stream subscribers.
   void updateState(ViewStateModel<T> newState) {
-    if (_isDisposed || _viewState == newState) return;
+    if (isDisposed || _viewState == newState) return;
 
     _viewState = newState;
     notifyListeners();
@@ -89,15 +85,7 @@ class StateManager<T> extends ChangeNotifier {
 
   @override
   void dispose() {
-    _isDisposed = true;
     _streamController.close();
     super.dispose();
-  }
-
-  @override
-  void notifyListeners() {
-    if (!_isDisposed) {
-      super.notifyListeners();
-    }
   }
 }

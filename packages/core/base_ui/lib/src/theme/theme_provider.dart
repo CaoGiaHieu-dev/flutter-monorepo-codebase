@@ -1,3 +1,4 @@
+import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -19,7 +20,8 @@ import 'theme_system_extensions.dart';
 /// - Building the light and dark themes.
 /// - Reacting to OS-level Dark/Light changes while [ThemeMode.system] is active.
 @lazySingleton
-class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
+class ThemeProvider extends ChangeNotifier
+    with WidgetsBindingObserver, DisposeGuard {
   final IThemeStorage _themeStorage;
 
   /// Constructor for ThemeProvider.

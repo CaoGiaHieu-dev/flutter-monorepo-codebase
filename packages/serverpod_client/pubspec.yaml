@@ -1,0 +1,12 @@
+name: app_client
+description: "Generated Serverpod client SDK package"
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.13.3 <4.0.0"
+
+resolution: workspace
+
+dependencies:
+  serverpod_client: ^4.0.0

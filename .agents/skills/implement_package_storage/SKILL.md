@@ -23,9 +23,9 @@ Before writing code, answer: **which package owns this value?**
 | :--- | :--- | :--- |
 | Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `packages/data/auth/lib/src/utils/auth_storage_keys.dart` |
 | Locale (business path) | `data_language` → `LanguageRepositoryImpl` | `packages/data/language/lib/src/utils/language_storage_keys.dart` |
-| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `app/lib/di/utils/theme_storage_keys.dart` |
-| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `app/lib/di/utils/language_storage_keys.dart` |
-| Onboarding-seen boot flag | app shell → `AppBootStorage` | `app/lib/di/utils/app_boot_storage_keys.dart` |
+| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `apps/mobile/lib/di/utils/theme_storage_keys.dart` |
+| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `apps/mobile/lib/di/utils/language_storage_keys.dart` |
+| Onboarding-seen boot flag | app shell → `AppBootStorage` | `apps/mobile/lib/di/utils/app_boot_storage_keys.dart` |
 
 The owner is the package whose business logic reads/writes the value. **Never** put a key in
 `core_common`, and never let another package import the owner's key class.
@@ -154,7 +154,7 @@ abstract class IThemeStorage {
   void saveThemeMode(ThemeMode mode);
 }
 
-// 2. Implementation owns the StorageValue (app/lib/di/theme_storage_impl.dart)
+// 2. Implementation owns the StorageValue (apps/mobile/lib/di/theme_storage_impl.dart)
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);
@@ -186,7 +186,7 @@ class ThemeStorageImpl implements IThemeStorage {
 }
 ```
 
-`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `app/lib/di/`, **not** in `core_storage`.
+`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `apps/mobile/lib/di/`, **not** in `core_storage`.
 
 ---
 

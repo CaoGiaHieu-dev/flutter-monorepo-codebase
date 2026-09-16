@@ -33,8 +33,14 @@ flutter pub get
 # Code generation across the whole workspace (injectable, freezed, retrofit, go_router_builder, l10n)
 dart run build_runner build -d --workspace
 
-# Run the app (flavors: dev / staging / prod)
-flutter run -t app/lib/main.dart --flavor dev
+# Run the Mobile app (flavors: dev / staging / prod)
+cd apps/mobile && flutter run -t lib/main.dart --flavor dev
+
+# Run the Web Admin app
+cd apps/admin && flutter run -d chrome
+
+# Run the Serverpod backend server
+cd apps/server && docker compose up -d && dart run bin/main.dart
 
 # Static analysis
 flutter analyze

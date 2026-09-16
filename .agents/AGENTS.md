@@ -8,7 +8,11 @@ This file contains the rules for architectural design, naming conventions, depen
 
 This monorepo uses **Pub Workspaces** and is divided into independent physical layers under the `packages/` directory:
 
-- **`app/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `IDashboardTabModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
+- **`apps/`**: Applications directory:
+  - `apps/mobile/`: Flutter Mobile Host App Shell (Android / iOS). Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `IDashboardTabModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
+  - `apps/admin/`: Flutter Web Admin Dashboard connecting to Serverpod backend RPC via `AppServerClient`.
+  - `apps/server/`: Backend service built with pure Dart (Serverpod 4.0), backed by PostgreSQL 16 + Redis via Docker Compose.
+- **`packages/serverpod_client/`**: Pure Dart network client (`app_client`) shared across `apps/mobile` and `apps/admin`, containing typed RPC endpoints, protocols, and data models.
 - **`packages/core/`**: Infrastructure and utility packages shared across the project:
   - `core_common`: **Genuinely global** constants (`ApiStatusConstants`, `EnvConstants` — all under `lib/src/utils/`), enums, mixins, `ErrorHandler`, `AppConfig`, `AppInitializer`, extensions. **MUST NOT** hold constants owned by a single feature/domain (storage keys, route paths, API endpoints) — those live in the owning package's `utils/`. Note `AppFailure` now lives in `domain_core` (§ 2.1); `core_common` keeps a re-export shim at `lib/src/error/failures.dart` so existing imports keep resolving.
   - `core_di`: Navigation keys, routing contribution contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), and cross-package communication interfaces.

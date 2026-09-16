@@ -1,0 +1,28 @@
+name: admin_app
+description: "Flutter Web Admin Dashboard for the monorepo"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.13.3 <4.0.0"
+  flutter: ">=3.47.4"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.1.1
+  app_client:
+    path: ../../packages/serverpod_client
+  core_base_ui:
+    path: ../../packages/core/base_ui
+  core_di:
+    path: ../../packages/core/di
+  core_ui_kit:
+    path: ../../packages/core/ui_kit
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

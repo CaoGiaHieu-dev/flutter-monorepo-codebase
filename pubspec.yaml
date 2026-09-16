@@ -5,7 +5,9 @@ environment:
   flutter: ">=3.47.4"
 
 workspace:
-  - app
+  - apps/mobile
+  - apps/admin
+  - packages/serverpod_client
   - tools
   - packages/core/common
   - packages/core/network

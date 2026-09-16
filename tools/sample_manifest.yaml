@@ -48,7 +48,7 @@ packages:
   # --- Shell ---------------------------------------------------------------
   app:
     kind: shell
-    path: app
+    path: apps/mobile
     note: >-
       Keep. Its `lib/di/injection.dart` names every feature it composes — that
       is the one intentional hard reference from shell to features, and it is

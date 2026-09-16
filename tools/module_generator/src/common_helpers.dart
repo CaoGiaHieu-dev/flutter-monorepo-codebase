@@ -99,10 +99,15 @@ class CommonHelpers {
   /// registered in the workspace whose directory was never finished building,
   /// which then breaks `pub get` for everyone. Hence the backup-and-restore
   /// around them.
-  static const List<String> sharedMutatedFiles = [
+  static String get appDir =>
+      Directory('apps/mobile').existsSync() ? 'apps/mobile' : 'app';
+  static String get appRelativePathPrefix =>
+      Directory('apps/mobile').existsSync() ? '../../' : '../';
+
+  static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
-    'app/pubspec.yaml',
-    'app/lib/di/injection.dart',
+    '$appDir/pubspec.yaml',
+    '$appDir/lib/di/injection.dart',
   ];
 
   static final Map<String, String?> _sharedFileSnapshots = {};
@@ -233,7 +238,7 @@ class CommonHelpers {
   }
 
   static void registerInAppPubspec(String moduleName, String modulePath) {
-    final appPubspec = File('app/pubspec.yaml');
+    final appPubspec = File('$appDir/pubspec.yaml');
     if (!appPubspec.existsSync()) return;
 
     final lines = appPubspec.readAsLinesSync();
@@ -243,14 +248,17 @@ class CommonHelpers {
       (line) => line.contains('# external packages'),
     );
     if (insertIndex != -1) {
-      lines.insert(insertIndex, '  $moduleName:\n    path: ../$modulePath');
+      lines.insert(
+        insertIndex,
+        '  $moduleName:\n    path: $appRelativePathPrefix$modulePath',
+      );
       appPubspec.writeAsStringSync('${lines.join('\n')}\n');
-      stdout.writeln('  -> Đã thêm $moduleName vào app/pubspec.yaml');
+      stdout.writeln('  -> Đã thêm $moduleName vào $appDir/pubspec.yaml');
     }
   }
 
   static void registerInAppInjection(String moduleName) {
-    final file = File('app/lib/di/injection.dart');
+    final file = File('$appDir/lib/di/injection.dart');
     if (!file.existsSync()) return;
 
     final lines = file.readAsLinesSync();
@@ -501,7 +509,7 @@ class CommonHelpers {
 
   static void registerLocalizationsDelegateInApp(String moduleName) {
     // Không còn cần thiết, GetIt getAll đã đảm nhận.
-    final file = File('app/lib/presentation/root_app.dart');
+    final file = File('$appDir/lib/presentation/root_app.dart');
     if (!file.existsSync()) return;
 
     final lines = file.readAsLinesSync();
@@ -542,7 +550,7 @@ class CommonHelpers {
 
     file.writeAsStringSync('${lines.join('\n')}\n');
     stdout.writeln(
-      '  -> Đã đăng ký $delegateClass.delegate vào app/lib/presentation/root_app.dart',
+      '  -> Đã đăng ký $delegateClass.delegate vào $appDir/lib/presentation/root_app.dart',
     );
   }
 }

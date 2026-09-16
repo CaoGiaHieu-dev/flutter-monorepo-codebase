@@ -1,0 +1,4 @@
+# Serverpod generator configuration
+client_package_path: ../../packages/serverpod_client
+server_package_path: .
+modules: {}

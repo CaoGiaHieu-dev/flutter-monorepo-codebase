@@ -53,7 +53,15 @@ class MonorepoHelper {
       }
     }
 
-    // 1. Scan app/
+    // 1. Scan apps/ (and legacy app/)
+    final appsDir = Directory(p.posix.join(projectRootPosix, 'apps'));
+    if (appsDir.existsSync()) {
+      for (final entity in appsDir.listSync(recursive: false)) {
+        if (entity is Directory) {
+          parsePubspec(entity.path.replaceAll('\\', '/'));
+        }
+      }
+    }
     parsePubspec(p.posix.join(projectRootPosix, 'app'));
 
     // 2. Scan packages/ subdirectories

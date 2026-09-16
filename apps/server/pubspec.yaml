@@ -1,0 +1,12 @@
+name: app_server
+description: "Serverpod backend server for the monorepo"
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.13.3 <4.0.0"
+
+
+dependencies:
+  serverpod: ^4.0.0
+  serverpod_database: ^4.0.0

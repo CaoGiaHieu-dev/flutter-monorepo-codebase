@@ -58,14 +58,43 @@ class HomePage extends StatelessWidget {
                     SizedBox(height: context.h(24)),
                     ElevatedButton.icon(
                       onPressed: () {
-                        getIt<PaymentNavigator>().toPayment(
-                          context,
-                          orderId: 'ORD-SUPERAPP-2026',
-                          amount: 149.99,
-                        );
+                        final paymentNav = getItOrNull<PaymentNavigator>();
+                        if (paymentNav != null) {
+                          paymentNav.toPayment(
+                            context,
+                            orderId: 'ORD-SUPERAPP-2026',
+                            amount: 149.99,
+                          );
+                        } else {
+                          showDialog<void>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.extension_off_outlined,
+                                    color: Colors.amber,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Module Not Loaded'),
+                                ],
+                              ),
+                              content: const Text(
+                                'Tính năng Thanh toán (Payment) chưa được kích hoạt trong bản build này (getItOrNull == null).\n\n'
+                                'Khi submodule feature_payment được nạp, GetIt sẽ tự động nhận diện và mở giao diện thanh toán thật.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('Đóng'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
                       },
                       icon: const Icon(Icons.payment),
-                      label: const Text('Thanh toán (Test Stub Module)'),
+                      label: const Text('Thanh toán (Test getItOrNull)'),
                     ),
                   ],
                 );

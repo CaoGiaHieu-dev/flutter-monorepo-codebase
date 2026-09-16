@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:core_database/core_database.dart';
@@ -26,6 +27,14 @@ class _RecordingMigration implements IDatabaseMigration {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    if (Platform.isWindows) {
+      try {
+        DynamicLibrary.open('sqlite3.dll');
+      } catch (_) {}
+    }
+  });
 
   // Several tests intentionally open more than one CacheDatabase (a file is
   // reopened to prove data persisted). Each uses its own QueryExecutor, so

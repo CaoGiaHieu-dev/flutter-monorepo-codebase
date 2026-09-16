@@ -42,10 +42,7 @@ void main() {
       mainScope.run();
     },
     (error, stack) {
-      // Report errors to Firebase Crashlytics in release mode.
-      if (kReleaseMode) {
-        // FirebaseCrashlytics.instance.recordError(error, stack);
-      }
+      // Report errors to telemetry / crash reporting service in release mode.
 
       // Report errors to Flutter's error handling system.
       FlutterError.reportError(

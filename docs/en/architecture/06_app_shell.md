@@ -1,20 +1,24 @@
-# The App Shell (`app/`)
+# The Applications Layer & Mobile App Shell (`apps/`)
 
 This document answers **"what happens between tapping the icon and seeing the first screen, and who wires everything together?"**. After reading it you should be able to debug a startup failure, add an app-local adapter, and understand why the DI module order in `injection.dart` is not arbitrary.
 
-The app shell is the **composition root**. It is the only place allowed to depend on every layer, and the only place that knows the full list of packages.
+The applications layer (`apps/`) contains:
+- `apps/mobile/`: The Flutter mobile shell (Android / iOS) — the **composition root** for mobile.
+- `apps/admin/`: The Flutter web dashboard connecting to Serverpod RPC.
+- `apps/server/`: The Serverpod backend service (PostgreSQL + Redis).
 
 ---
 
-## 1. What lives here
+## 1. What lives in Mobile Shell (`apps/mobile/`)
 
 ```
-app/lib/
+apps/mobile/lib/
 ├── main.dart                    entry point, error zone
 ├── main_scope.dart              splash → init → root transition
 ├── app.dart                     barrel
 ├── di/
 │   ├── injection.dart           DI assembly (module order matters)
+│   ├── serverpod_client_module.dart  AppServerClient provider
 │   ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
 │   ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
 │   ├── app_boot_storage.dart        boot flags       → StorageValue<bool>

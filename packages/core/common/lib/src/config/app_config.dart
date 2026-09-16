@@ -1,4 +1,3 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' as services;
 import 'package:material_ui/material_ui.dart';
@@ -7,8 +6,8 @@ import '../../core_common.dart';
 
 /// Central configuration class for the application
 ///
-/// This class provides access to environment-specific configurations,
-/// Firebase options, and application constants. It uses the current
+/// This class provides access to environment-specific configurations
+/// and application constants. It uses the current
 /// app flavor to determine which configuration to use.
 ///
 /// The configuration system includes:
@@ -25,7 +24,6 @@ import '../../core_common.dart';
 /// // Access configuration values
 /// final apiUrl = AppConfig.baseUrl;
 /// final flavor = AppConfig.appFlavor;
-/// final firebaseOptions = AppConfig.firebase;
 /// ```
 class AppConfig {
   /// Private constructor to prevent instantiation
@@ -44,12 +42,6 @@ class AppConfig {
     (e) => e.toValue() == services.appFlavor?.toLowerCase(),
     orElse: () => Flavor.dev,
   );
-
-  /// Firebase configuration options based on current flavor
-  /// Resolved dynamically from dependency injection (GetIt)
-  static FirebaseOptions get firebase {
-    return getIt<FirebaseOptions>();
-  }
 
   /// Application title from environment constants
   static String get title => EnvConstants.APP_NAME;

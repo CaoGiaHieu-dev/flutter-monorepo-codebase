@@ -101,7 +101,10 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 ```mermaid
 graph BT
     subgraph Outer
-        App["app/ — host shell"]
+        Apps["apps/* (mobile, admin, server)"]
+    end
+    subgraph RPC
+        Client["packages/serverpod_client/ (app_client)"]
     end
     subgraph UI
         Features["packages/features/*"]
@@ -120,10 +123,11 @@ graph BT
     Data --> Domain
     Features --> Core
     Data --> Core
-    App --> Features
-    App --> Data
-    App --> Domain
-    App --> Core
+    Apps --> Features
+    Apps --> Data
+    Apps --> Domain
+    Apps --> Core
+    Apps --> Client
 ```
 
 Đọc sơ đồ như sau: **mũi tên chỉ vào thứ bạn được phép phụ thuộc.**
@@ -131,7 +135,7 @@ graph BT
 - `Domain` là trung tâm. Ngoài `domain_core` mà các package domain dùng chung, nó không phụ thuộc bất kỳ package nào trong workspace.
 - `Data` hiện thực hợp đồng domain và nói chuyện với `core_network` / `core_storage` / `core_database`.
 - `Features` tiêu thụ use case của domain; chúng không bao giờ nhìn thấy `data_*`.
-- `app/` nằm ngoài cùng và là nơi duy nhất được phép biết tất cả cùng lúc.
+- `apps/*` nằm ngoài cùng và là nơi lắp ráp các ứng dụng (mobile shell, web admin, server).
 
 ### Core không được phụ thuộc feature
 

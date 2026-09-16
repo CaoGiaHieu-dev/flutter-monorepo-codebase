@@ -23,8 +23,8 @@ const String _manifestPath = 'tools/sample_manifest.yaml';
 /// Same contract as `CommonHelpers.sharedMutatedFiles` in the module generator.
 const List<String> _sharedMutatedFiles = [
   'pubspec.yaml',
-  'app/pubspec.yaml',
-  'app/lib/di/injection.dart',
+  'apps/mobile/pubspec.yaml',
+  'apps/mobile/lib/di/injection.dart',
 ];
 
 final Map<String, String?> _snapshots = {};
@@ -326,7 +326,7 @@ List<_FileEdit> _planSharedEdits(List<String> pkgNames, YamlMap packages) {
           drop = true;
         }
 
-        // app/pubspec.yaml: `  feature_auth:` followed by `    path: ...`
+        // apps/mobile/pubspec.yaml: `  feature_auth:` followed by `    path: ...`
         if (RegExp('^\\s{2}$name:\\s*\$').hasMatch(line)) {
           drop = true;
           if (i + 1 < lines.length &&

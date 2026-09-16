@@ -12,7 +12,10 @@ The project follows **Clean Architecture**: dependencies always point *inward*, 
 
 ```mermaid
 graph TD
-    App["<b>App Shell</b><br/><code>app/</code><br/><i>composition root</i>"]
+    App["<b>Mobile App</b><br/><code>apps/mobile/</code><br/><i>mobile shell</i>"]
+    Admin["<b>Admin Portal</b><br/><code>apps/admin/</code><br/><i>web dashboard</i>"]
+    Server["<b>Backend Server</b><br/><code>apps/server/</code><br/><i>Serverpod 4.0</i>"]
+    SharedClient["<b>Serverpod Client</b><br/><code>packages/serverpod_client/</code><br/><i>typed RPC & models</i>"]
     Feature["<b>Feature</b><br/><code>packages/features/*</code><br/><i>UI + state</i>"]
     Domain["<b>Domain</b><br/><code>packages/domain/*</code><br/><i>pure Dart business rules</i>"]
     Data["<b>Data</b><br/><code>packages/data/*</code><br/><i>repository impls, DTOs</i>"]
@@ -26,9 +29,14 @@ graph TD
     App --> Data
     App --> Domain
     App --> Core
+    App -.-> SharedClient
+    Admin -.-> SharedClient
+    SharedClient -.-> Server
 
     style Domain fill:#2d6a4f,color:#fff
     style Core fill:#1d3557,color:#fff
+    style Server fill:#5c2d91,color:#fff
+    style SharedClient fill:#7b1fa2,color:#fff
 ```
 
 Read the arrows as *"may import"*. Note what is **absent**: nothing points *out of* Domain, and nothing points from Core into Feature or Data.

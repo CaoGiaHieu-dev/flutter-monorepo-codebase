@@ -101,7 +101,10 @@ One bounded UI concern per package. A feature may depend on `domain_*`, `core_di
 ```mermaid
 graph BT
     subgraph Outer
-        App["app/ — host shell"]
+        Apps["apps/* (mobile, admin, server)"]
+    end
+    subgraph RPC
+        Client["packages/serverpod_client/ (app_client)"]
     end
     subgraph UI
         Features["packages/features/*"]
@@ -120,10 +123,11 @@ graph BT
     Data --> Domain
     Features --> Core
     Data --> Core
-    App --> Features
-    App --> Data
-    App --> Domain
-    App --> Core
+    Apps --> Features
+    Apps --> Data
+    Apps --> Domain
+    Apps --> Core
+    Apps --> Client
 ```
 
 Read it as: **arrows point at what you are allowed to depend on.**
@@ -131,7 +135,7 @@ Read it as: **arrows point at what you are allowed to depend on.**
 - `Domain` is the centre. Outside `domain_core`, which it shares, it depends on no workspace package at all.
 - `Data` implements domain contracts and talks to `core_network` / `core_storage` / `core_database`.
 - `Features` consume domain use cases; they never see `data_*`.
-- `app/` sits outermost and is the only place allowed to know about everything at once.
+- `apps/*` sits outermost and is where applications (mobile shell, web admin, server) are composed.
 
 ### Core must not depend on features
 

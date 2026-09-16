@@ -324,7 +324,7 @@ class CommonHelpers {
 
     file.writeAsStringSync('${lines.join('\n')}\n');
     stdout.writeln(
-      '  -> Đã đăng ký ${pascalName}PackageModule vào app/lib/di/injection.dart ($targetListName)',
+      '  -> Đã đăng ký ${pascalName}PackageModule vào $appDir/lib/di/injection.dart ($targetListName)',
     );
   }
 

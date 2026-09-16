@@ -230,6 +230,8 @@ void main() async {
         pkgName = rel.split('/')[2];
       } else if (rel.startsWith('packages/domain/')) {
         pkgName = rel.split('/')[2];
+      } else if (rel.startsWith('apps/')) {
+        pkgName = rel.split('/')[1];
       } else if (rel.startsWith('app/')) {
         pkgName = 'app';
       } else if (rel.startsWith('packages/')) {

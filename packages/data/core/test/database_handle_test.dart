@@ -1,3 +1,6 @@
+import 'dart:ffi';
+import 'dart:io';
+
 import 'package:core_database/core_database.dart';
 import 'package:data_core/data_core.dart';
 import 'package:drift/drift.dart' as drift;
@@ -6,6 +9,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   drift.driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  setUpAll(() {
+    if (Platform.isWindows) {
+      try {
+        DynamicLibrary.open('sqlite3.dll');
+      } catch (_) {}
+    }
+  });
 
   late CacheDatabase database;
   late IDatabaseHandle<CacheDatabase> handle;

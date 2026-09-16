@@ -22,26 +22,38 @@ graph TD
     classDef domain fill:#f4faee,stroke:#b5d4a6,stroke-width:2px,color:#333;
     classDef data fill:#fff3e6,stroke:#f5cb99,stroke-width:2px,color:#333;
     classDef app fill:#f0f0f0,stroke:#cccccc,stroke-width:2px,color:#333;
+    classDef serverpod fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#333;
 
-    App["🚀 Host App Shell (app/)<br/>Lắp ráp và khởi động ứng dụng"]:::app
+    subgraph AppsLayer ["📱 / 💻 Applications Layer (apps/*)"]
+        direction LR
+        Mobile["📱 Mobile App (apps/mobile/)<br/>Flutter iOS & Android"]:::app
+        Admin["🖥️ Admin Portal (apps/admin/)<br/>Flutter Web Dashboard"]:::app
+        Server["⚡ Backend Server (apps/server/)<br/>Serverpod 4.0 (Pure Dart)"]:::serverpod
+    end
+
+    SharedClient["📦 Serverpod Client (packages/serverpod_client/)<br/>RPC & Models dùng chung (app_client)"]:::serverpod
 
     subgraph FeatureLayer ["🎨 Feature Presentation Layer (packages/features/*)"]
         direction LR
         FeatSplash["splash"]:::feature
         FeatAuth["auth"]:::feature
+        FeatHome["home"]:::feature
         FeatDash["dashboard"]:::feature
+        FeatSettings["settings"]:::feature
     end
 
     subgraph DataLayer ["🔌 Data Layer (packages/data/*)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
+        DataLang["data_language"]:::data
     end
 
     subgraph DomainLayer ["⚙️ Domain Layer (packages/domain/*)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
+        DomLang["domain_language"]:::domain
     end
 
     subgraph CoreLayer ["🛠️ Core Infrastructure Layer (packages/core/*)"]
@@ -59,11 +71,13 @@ graph TD
         CoreBloc["bloc_state_management"]:::core
     end
 
-    %% Cross-layer Relationships
-    App -->|"Imports & Khởi tạo"| FeatureLayer
-    App -->|"Imports & Khởi tạo"| DataLayer
-    App -->|"Imports & Khởi tạo"| DomainLayer
-    App -->|"Imports & Khởi tạo"| CoreLayer
+    %% Applications wiring
+    Mobile -->|"Lắp ráp"| FeatureLayer
+    Mobile -->|"Khởi tạo DI"| DataLayer
+    Mobile -->|"Khởi tạo DI"| CoreLayer
+    Mobile -.->|"Dùng RPC Client"| SharedClient
+    Admin -.->|"Dùng RPC Client"| SharedClient
+    SharedClient -.->|"RPC Protocols"| Server
 
     FeatureLayer -->|"Kích hoạt UseCases & Entities"| DomainLayer
     DataLayer -->|"Triển khai Repository Contracts"| DomainLayer

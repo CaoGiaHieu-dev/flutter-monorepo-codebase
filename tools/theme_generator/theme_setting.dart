@@ -22,10 +22,11 @@ void main() async {
     // 1. Copy config files to app directory
     stdout.writeln('[!] Copying configuration files to app directory...');
     final rootDir = Directory.current;
-    final appDir = Directory('app');
+    final appPath = Directory('apps/mobile').existsSync() ? 'apps/mobile' : 'app';
+    final appDir = Directory(appPath);
 
     if (!appDir.existsSync()) {
-      stderr.writeln('[ERROR] "app" directory not found.');
+      stderr.writeln('[ERROR] "$appPath" directory not found.');
       exit(1);
     }
 
@@ -41,7 +42,7 @@ void main() async {
 
     for (final file in configFiles) {
       final fileName = file.path.split(Platform.pathSeparator).last;
-      file.copySync('app/$fileName');
+      file.copySync('$appPath/$fileName');
     }
 
     // 2. Running Flutter Native Splash Generator
@@ -52,7 +53,7 @@ void main() async {
       'flutter_native_splash:create',
       '--flavors',
       'dev,staging,prod',
-    ], workingDirectory: 'app');
+    ], workingDirectory: appPath);
 
     // 3. Running Icons Launcher Generator
     stdout.writeln('[!] Running Icons Launcher Generator...');
@@ -62,7 +63,7 @@ void main() async {
       'icons_launcher:create',
       '--flavors',
       'dev,staging,prod',
-    ], workingDirectory: 'app');
+    ], workingDirectory: appPath);
 
     // 4. Cleanup: Remove copied config files from app
     stdout.writeln('[!] Cleaning up temporary configuration files...');

@@ -22,7 +22,6 @@ dependencies:
   go_router: "^18.0.0"
   get_it: ^9.2.1
   injectable: ^3.0.0
-  firebase_core: "^4.13.0"
   http_security_pinning: "^1.0.1"
   internet_connection_checker_plus: "^3.1.1"
   package_info_plus: "^10.2.1"

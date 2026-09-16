@@ -1,20 +1,24 @@
-# App Shell (`app/`)
+# Tầng Applications & Mobile App Shell (`apps/`)
 
 Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cục bộ cho app, và hiểu vì sao thứ tự module trong `injection.dart` không hề tuỳ tiện.
 
-App shell là **điểm lắp ráp (composition root)**. Đây là nơi duy nhất được phép phụ thuộc mọi tầng, và cũng là nơi duy nhất biết danh sách đầy đủ các package.
+Tầng ứng dụng (`apps/`) gồm:
+- `apps/mobile/`: Flutter mobile shell (Android / iOS) — **điểm lắp ráp (composition root)** cho mobile.
+- `apps/admin/`: Web Admin Dashboard kết nối Serverpod RPC.
+- `apps/server/`: Backend service viết bằng Dart (Serverpod 4.0, PostgreSQL, Redis).
 
 ---
 
-## 1. Trong này có gì
+## 1. Cấu trúc Mobile Shell (`apps/mobile/`)
 
 ```
-app/lib/
+apps/mobile/lib/
 ├── main.dart                    điểm khởi động, vùng bắt lỗi
 ├── main_scope.dart              chuyển tiếp splash → init → root
 ├── app.dart                     barrel
 ├── di/
 │   ├── injection.dart           lắp ráp DI (thứ tự module rất quan trọng)
+│   ├── serverpod_client_module.dart  Cung cấp AppServerClient
 │   ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
 │   ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
 │   ├── app_boot_storage.dart        cờ khởi động     → StorageValue<bool>

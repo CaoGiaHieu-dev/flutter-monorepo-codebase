@@ -50,8 +50,11 @@ void main() async {
   for (final file in allDartFiles) {
     final normalized = file.replaceAll('\\', '/');
 
-    // Check if it's the main entry point of the app
-    if (normalized.endsWith('/app/lib/main.dart')) {
+    // Check if it's the main entry point of the apps
+    if (normalized.endsWith('/app/lib/main.dart') ||
+        normalized.endsWith('/apps/mobile/lib/main.dart') ||
+        normalized.endsWith('/apps/admin/lib/main.dart') ||
+        normalized.endsWith('/apps/server/bin/main.dart')) {
       entryPoints.add(file);
       continue;
     }
@@ -126,6 +129,8 @@ void main() async {
         pkgName = rel.split('/')[2];
       } else if (rel.startsWith('packages/domain/')) {
         pkgName = rel.split('/')[2];
+      } else if (rel.startsWith('apps/')) {
+        pkgName = rel.split('/')[1];
       } else if (rel.startsWith('app/')) {
         pkgName = 'app';
       } else if (rel.startsWith('packages/')) {

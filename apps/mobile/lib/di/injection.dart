@@ -16,6 +16,7 @@ import 'package:feature_auth/di/module.module.dart';
 import 'package:feature_dashboard/di/module.module.dart';
 import 'package:feature_home/di/module.module.dart';
 import 'package:feature_onboarding/di/module.module.dart';
+import 'package:feature_payment/di/module.module.dart';
 import 'package:feature_settings/di/module.module.dart';
 import 'package:feature_splash/di/module.module.dart';
 import 'package:injectable/injectable.dart';
@@ -75,6 +76,7 @@ const _featureModules = [
   ExternalModule(FeatureHomePackageModule),
   ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSettingsPackageModule),
+  ExternalModule(FeaturePaymentPackageModule),
   ExternalModule(FeatureSplashPackageModule),
 ];
 

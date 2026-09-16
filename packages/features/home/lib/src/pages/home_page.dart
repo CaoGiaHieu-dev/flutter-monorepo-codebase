@@ -1,5 +1,7 @@
 import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:material_ui/material_ui.dart';
@@ -52,6 +54,18 @@ class HomePage extends StatelessWidget {
                         const HomeProfileEvent.refreshed(),
                       ),
                       child: Text(context.l10nHome.refresh_profile),
+                    ),
+                    SizedBox(height: context.h(24)),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        getIt<PaymentNavigator>().toPayment(
+                          context,
+                          orderId: 'ORD-SUPERAPP-2026',
+                          amount: 149.99,
+                        );
+                      },
+                      icon: const Icon(Icons.payment),
+                      label: const Text('Thanh toán (Test Stub Module)'),
                     ),
                   ],
                 );

@@ -510,3 +510,26 @@ Deleting any `packages/features/*` package must leave the app compiling and boot
   ```
   The build step is **not optional** — it is the only gate that sees generated code.
 - Corollary: when a type consumed by generated code moves package, **import its new home directly**. Do not rely on a `show`-limited re-export.
+
+---
+
+## 🛡️ 24. Multi-Team Super App & Stub / Placeholder Packages
+
+When multiple independent teams collaborate on a Super App (Team A owns Feature A, Team B owns Feature B, with code isolation / Git submodules where Team A has no access to Team B's private repo):
+
+1. **Stub Package Pattern:**
+   - In the main Super App repository, any feature owned by another team can be represented by a lightweight **Stub Package** (e.g. `packages/features/payment`).
+   - The Stub implements the identical `core_di` contracts (`IFeatureRouteModule`, `FeatureNavigator`, and `@InjectableInit.microPackage()` module).
+   - The Stub UI renders `StubFeatureWidget` from `core_ui_kit` with a clean placeholder badge, feature title, and mock action callbacks.
+   - The Stub Navigator safely handles cross-feature navigation (e.g. navigating to the stub page or showing a mock confirmation) so the App Shell never crashes.
+2. **Git Submodule Workflow:**
+   - Default clone of the main repo includes all Stub packages, allowing any developer (even interns or core platform engineers) to `flutter run` the App Shell immediately without compilation errors.
+   - When a specific feature team works on their feature, they check out their real Git Submodule over that feature folder (`git submodule update --init packages/features/<name>`).
+   - CI/CD release pipelines initialize all submodules to compile the final release Super App.
+3. **Stub Generator CLI:**
+   - To scaffold a new Stub Package instantly:
+     ```bash
+     dart tools/stub_generator/generate_stub.dart <feature_name>
+     ```
+   - Reference implementation: `packages/features/payment` and `packages/core/ui_kit/lib/feedback/stub_feature_widget.dart`.
+

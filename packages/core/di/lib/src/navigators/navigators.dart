@@ -2,4 +2,5 @@
 export 'auth_navigator.dart';
 export 'home_navigator.dart';
 export 'onboarding_navigator.dart';
+export 'payment_navigator.dart';
 export 'settings_navigator.dart';

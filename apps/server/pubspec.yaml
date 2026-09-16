@@ -6,6 +6,8 @@ publish_to: none
 environment:
   sdk: ">=3.13.3 <4.0.0"
 
+resolution: workspace
+
 
 dependencies:
   serverpod: ^4.0.0

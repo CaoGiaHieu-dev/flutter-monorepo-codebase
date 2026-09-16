@@ -47,6 +47,8 @@ dependencies:
     path: ../../packages/features/home
   feature_settings:
     path: ../../packages/features/settings
+  feature_payment:
+    path: ../../packages/features/payment
   core_ui_kit:
     path: ../../packages/core/ui_kit
 

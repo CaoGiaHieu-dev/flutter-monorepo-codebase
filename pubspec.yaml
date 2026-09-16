@@ -7,6 +7,7 @@ environment:
 workspace:
   - apps/mobile
   - apps/admin
+  - apps/server
   - packages/serverpod_client
   - tools
   - packages/core/common
@@ -25,6 +26,7 @@ workspace:
   - packages/features/splash
   - packages/features/home
   - packages/features/settings
+  - packages/features/payment
   - packages/core/di
   - packages/domain/core
   - packages/domain/auth
@@ -35,3 +37,6 @@ workspace:
 
 dev_dependencies:
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  sqlparser: ^0.45.0

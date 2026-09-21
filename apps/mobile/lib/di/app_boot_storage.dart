@@ -4,7 +4,7 @@ import 'package:injectable/injectable.dart';
 import 'utils/app_boot_storage_keys.dart';
 
 /// Owns app-shell-level boot flags (e.g. onboarding-viewed) that don't
-/// belong to any single feature/domain. Not exposed outside app/lib.
+/// belong to any single feature/domain. Not exposed outside apps/mobile/lib.
 @singleton
 class AppBootStorage {
   AppBootStorage(this._storageManager);

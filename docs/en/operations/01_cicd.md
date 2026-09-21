@@ -40,23 +40,24 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 ### Steps, in order
 
 1. **Checkout** — `actions/checkout@v4`.
-2. **Set Up Java** — Oracle distribution, **Java 17**. Matches `sourceCompatibility`/`targetCompatibility` in `app/android/app/build.gradle.kts`.
+2. **Set Up Java** — Oracle distribution, **Java 17**. Matches `sourceCompatibility`/`targetCompatibility` in `apps/mobile/android/app/build.gradle.kts`.
 3. **Set Up Flutter** — `subosito/flutter-action@v2`, pinned to **`3.47.4`**, channel `stable`, with cache enabled.
 4. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation and `build_runner` for the whole workspace.
 5. **Decode Env** — `echo -n ${{ secrets.ENV }} | base64 -d > .env` (written to the **repo root**).
-6. **Decode Keystore** — `secrets.KEYSTORE_BASE64` → `app/android/keystore.jks`.
-7. **Create key.properties** — writes `storePassword`, `keyPassword`, `keyAlias` and a fixed `storeFile=../keystore.jks` into `app/android/key.properties`.
-8. **Build APK** — note the `cd app` on its own line first:
+6. **Decode Keystore** — `secrets.KEYSTORE_BASE64` → `apps/mobile/android/keystore.jks`.
+7. **Create key.properties** — writes `storePassword`, `keyPassword`, `keyAlias` and a fixed `storeFile=../keystore.jks` into `apps/mobile/android/key.properties`.
+8. **Build APK** — note the `cd apps/mobile` on its own line first:
    ```bash
-   cd app
+   cd apps/mobile
    flutter build apk --flavor=$FLAVOR --build-name=$VERSION --build-number=$RUN_NUMBER \
-     --dart-define-from-file=../.env --obfuscate --split-debug-info=../obfuscate/ \
+     --dart-define-from-file="$GITHUB_WORKSPACE/.env" \
+     --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" \
      --no-tree-shake-icons --verbose
    ```
-9. **Upload and Distribute** — `nickwph/firebase-app-distribution-action@v1`, uploading `app/build/app/outputs/flutter-apk/app-<flavor>-release.apk`.
+9. **Upload and Distribute** — `nickwph/firebase-app-distribution-action@v1`, uploading `apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk`.
 
 > [!NOTE]
-> **The `cd app` is not optional.** `flutter build apk` run from the repository root fails with a confusing `android/app/build.gradle not found`, because the Flutter project lives in `app/`, not at the workspace root. The same applies when you build locally — see [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+> **The `cd apps/mobile` is not optional.** `flutter build apk` run from the repository root fails with a confusing `android/app/build.gradle not found`, because the Flutter project lives in `apps/mobile/`, not at the workspace root. The same applies when you build locally — see [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 The artifact name interpolates the flavor (`app-${{ inputs.flavor }}-release.apk`), so it stays correct for all three flavors. That is the right pattern; Azure does **not** do this — see [§5](#5-azure-ci-cdyml--azure-devops).
 
@@ -70,7 +71,7 @@ The job runs on `macos-latest` even though it only builds Android. macOS runners
 
 Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart`) and posts results back to the pull request.
 
-**Triggers**: pull requests to `main` / `develop` / `master` touching `app/lib/**/*.dart`, `modules/**/*.dart` or `platform/**/*.dart` (generated files excluded), plus manual dispatch with a scope selector (`changed` / `all` / `domain` / `data` / `presentation`) and a report language (`en` / `vi` / `ja` / `ko` / `zh`).
+**Triggers**: pull requests to `main` / `develop` / `master` touching `apps/mobile/lib/**/*.dart`, `modules/**/*.dart` or `platform/**/*.dart` (generated files excluded), plus manual dispatch with a scope selector (`changed` / `all` / `domain` / `data` / `presentation`) and a report language (`en` / `vi` / `ja` / `ko` / `zh`).
 
 **What it does**: resolves changed files with `tj-actions/changed-files`, runs the reviewer, uploads the Markdown report as an artifact (30-day retention), then parses that report and posts **inline review comments** on the exact lines when they fall inside the PR diff. Findings outside the diff are grouped into a separate per-file comment.
 
@@ -102,10 +103,10 @@ fi
 
 Manual dispatch that hands the whole build over to Fastlane. Sets up Java 17, Ruby 3.3 (skipped on `self-hosted`), Flutter (channel `stable`, **no pinned version**), installs Fastlane and the `firebase_app_distribution` plugin, then invokes a lane.
 
-It invokes the cross-platform lane, `fastlane flutter` (declared in `app/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.4`.
+It invokes the cross-platform lane, `fastlane flutter` (declared in `apps/mobile/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.4`.
 
 > [!WARNING]
-> The invocation passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment app/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
+> The invocation passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment apps/mobile/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
 
 Because the Flutter setup step passes only `channel: stable` without `flutter-version`, the `flutter_version` input never reaches the toolchain; it is forwarded to Fastlane, which uses it to decide whether to drive `fvm`.
 
@@ -116,7 +117,7 @@ Because the Flutter setup step passes only `channel: stable` without `flutter-ve
 
 Two stages on a self-hosted pool named `codebase`. `trigger: none`, so it only runs when started manually or by a release.
 
-**Stage `Build`**: capture the short commit SHA into `commitTag` → install Flutter at `$(flutter-version)` → `flutter clean` → `flutter pub get` → "Flutter Config" → download `key.properties` and `keystore.jks` as Azure *secure files* into `app/android/` → build the prod APK → publish it as artifact `android`.
+**Stage `Build`**: capture the short commit SHA into `commitTag` → install Flutter at `$(flutter-version)` → `flutter clean` → `flutter pub get` → "Flutter Config" → download `key.properties` and `keystore.jks` as Azure *secure files* into `apps/mobile/android/` → build the prod APK → publish it as artifact `android`.
 
 **Stage `Distribute`**: download the artifact, then `firebase appdistribution:distribute` it.
 
@@ -129,7 +130,7 @@ The artefact filename and the `configure.dart` call are consistent: the build pu
 > [!WARNING]
 > **`.env` is never created, but the build requires it.**
 >
-> The build passes `--dart-define-from-file=../.env` (`azure-ci-cd.yml:104`), yet no step in the pipeline produces `.env`. The two `DownloadSecureFile@1` tasks fetch only `key.properties` and `keystore.jks`. Add a third secure file for `.env` and copy it to `$(Build.SourcesDirectory)`, mirroring what `flutter_build.yml` does with `secrets.ENV`. Without it every `String.fromEnvironment` falls back to its empty default.
+> The build passes `--dart-define-from-file=$(Build.SourcesDirectory)/.env` (`azure-ci-cd.yml`), yet no step in the pipeline produces `.env`. The two `DownloadSecureFile@1` tasks fetch only `key.properties` and `keystore.jks`. Add a third secure file for `.env` and copy it to `$(Build.SourcesDirectory)`, mirroring what `flutter_build.yml` does with `secrets.ENV`. Without it every `String.fromEnvironment` falls back to its empty default.
 
 The iOS build and iOS distribute tasks are present but fully commented out.
 
@@ -164,7 +165,7 @@ Gate 3 loops per package because this is a Pub Workspace: tests live under `modu
 
 | Secret | Used by | How to produce it |
 |:---|:---|:---|
-| `ENV` | `flutter_build.yml` | Base64 of the dart-define env file: `base64 -w0 app/env.prod` (macOS: `base64 -i app/env.prod`) |
+| `ENV` | `flutter_build.yml` | Base64 of the dart-define env file: `base64 -w0 apps/mobile/env.prod` (macOS: `base64 -i apps/mobile/env.prod`) |
 | `KEYSTORE_BASE64` | `flutter_build.yml` | Base64 of your release keystore: `base64 -w0 upload-keystore.jks` |
 | `KEYSTORE_PASSWORD` | `flutter_build.yml` | Keystore password |
 | `KEY_PASSWORD` | `flutter_build.yml` | Key password |
@@ -204,14 +205,14 @@ dart tools/dependency_sync.dart --check
 # ...repeat for any package with a test/ directory
 
 # 4. The exact release build CI performs — note the cd
-cd app
+cd apps/mobile
 flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
-  --dart-define-from-file=env.dev --obfuscate --split-debug-info=../obfuscate/ \
+  --dart-define-from-file=env.dev --obfuscate --split-debug-info=../../obfuscate/ \
   --no-tree-shake-icons
 ```
 
 > [!NOTE]
-> Locally the dart-define path is `env.dev` (relative to `app/`), while CI writes its env file to the repo root and therefore passes `../.env`. Same mechanism, different location.
+> Locally the dart-define path is `env.dev` (relative to `apps/mobile/`), while CI writes its env file to the repo root and addresses it absolutely, through `$GITHUB_WORKSPACE` on GitHub and `$(Build.SourcesDirectory)` on Azure. Same mechanism, different location — and absolute on purpose, because counting `../` from the app broke the moment the app moved one directory deeper.
 
 A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files are gitignored and `platform/common/lib/src/firebase/firebase_module.dart` imports all three unconditionally. See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 

@@ -54,7 +54,7 @@ Run it with no arguments to get an interactive prompt instead.
 1. Creates the directory tree and `pubspec.yaml`
 2. Writes `lib/di/module.dart` with `@InjectableInit.microPackage()`
 3. Registers the package in the root `pubspec.yaml` `workspace:` list
-4. Registers it in `app/pubspec.yaml` **and** in `app/lib/di/injection.dart`
+4. Registers it in `apps/mobile/pubspec.yaml` **and** in `apps/mobile/lib/di/injection.dart`
 5. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
    `build_runner build -d --workspace`, then `dart fix --apply`
 
@@ -219,7 +219,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 No `order` — these routes are matched by path, not by index.
 
 > [!CAUTION]
-> Never edit `app/lib/presentation/navigation/app_router.dart` to add your routes. It collects
+> Never edit `apps/mobile/lib/presentation/navigation/app_router.dart` to add your routes. It collects
 > contributions through `getAllOrEmpty<IFeatureRouteModule>()` and
 > `getAllOrEmpty<INavDestinationModule>()`. Hardcoding there breaks feature removability.
 
@@ -401,8 +401,8 @@ Then **full restart** the app (not hot reload) so the new DI graph is built.
 
 The app must keep running when any feature is deleted. Remove in this order:
 
-1. Its `ExternalModule(...)` entry **and** the matching import in `app/lib/di/injection.dart`
-2. Its entry in `app/pubspec.yaml`
+1. Its `ExternalModule(...)` entry **and** the matching import in `apps/mobile/lib/di/injection.dart`
+2. Its entry in `apps/mobile/pubspec.yaml`
 3. Its path in the root `pubspec.yaml` `workspace:` list
 4. The `modules/*/feature/<name>/` directory
 5. `flutter pub get && dart run build_runner build -d --workspace`
@@ -433,7 +433,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > [!NOTE]
 > `injection.dart` naming feature packages is the composition root's **one intentional hard
 > reference** — a composition root must name what it composes. It is also the only one: no other
-> file under `app/lib/` imports a `feature_*` package. The shell does import `core_ui_kit` in a few
+> file under `apps/mobile/lib/` imports a `feature_*` package. The shell does import `core_ui_kit` in a few
 > places, which is fine — that is a core package, not a removable feature.
 
 ---

@@ -29,7 +29,7 @@ bottom after every step.
 | Tier | LOC | Files | Packages |
 |:--|--:|--:|--:|
 | Framework (`core/*`, `domain_core`, `data_core`) | 16,721 | 281 | 13 |
-| App shell (`app/`) | 1,379 | 24 | 1 |
+| App shell (`apps/mobile/`) | 1,379 | 24 | 1 |
 | Sample | 3,617 | 155 | 10 |
 | **Total** | **21,717** | **460** | **24** |
 
@@ -207,11 +207,31 @@ every import in the repository to buy nothing.
 Path dependencies and the root `workspace:` list were **recomputed from where packages actually
 are**, not hand-patched — the same calculation `composer sync` performs, so CI Gate 0 agrees.
 
-⏳ **Still open: `app/` → `apps/mobile/`.** Unlike the rest, that one moves a Flutter project
-root: `android/settings.gradle.kts`, the iOS project, `fastlane/`, the splash and icon configs
-and every `cd app` in CI all resolve relative to it. It is the only part of the relayout whose
-blast radius reaches the native build, so it rides step 7, where a second app forces the
-question anyway.
+✅ **`app/` → `apps/mobile/`.** The last move, and the only one reaching the native build. The
+Flutter project's own files needed nothing: `settings.gradle.kts`, `build.gradle.kts` and the
+Xcode project address everything relative to the app root (`../..`, `../../build`), so they
+travelled intact. Everything pointing *in* did need updating, and three of those were live
+breaks rather than cosmetics:
+
+| Broke | Why |
+|:--|:--|
+| `fastlane` `workspace_root` | `File.expand_path("..", APP_DIR)` resolved to `apps/`, not the repo root. Now walks up to the pubspec declaring `workspace:` |
+| CI `--dart-define-from-file=../.env` | `.env` is written to the repo root; from one directory deeper `../` no longer reaches it. Now absolute, via `$GITHUB_WORKSPACE` / `$(Build.SourcesDirectory)` |
+| `unused_checker` entry point | tested `endsWith('/app/lib/main.dart')`, so the application's own entrypoint became an "orphaned file". Now any `lib/main.dart` |
+
+A fourth was already broken before the move and only surfaced here: fastlane globbed
+`packages/**/l10n.yaml` for translation generation, and `packages/` stopped existing one commit
+earlier. `.rb` was not in that commit's sweep. It now scans from the workspace root.
+
+The app package is still **named** `app`, not `mobile_app`. Renaming is nearly free — nothing
+imports `package:app/` — but injectable writes that name into generated code, and there is no
+toolchain here to confirm the regeneration. It rides step 7, where a second app makes the
+asymmetry concrete and testable.
+
+✅ **`.github/CODEOWNERS`.** The reason `modules/<name>/` exists, written down: one line per
+team, because CODEOWNERS matches paths and cannot express "the auth rows of three sibling
+directories". Handles are placeholders — GitHub silently ignores a team that does not exist, so
+a rule can look enforced and not be.
 
 **Gate:** the app boots with **zero modules** composed. This is the property everything else
 depends on, tested directly.
@@ -314,18 +334,19 @@ Doing neither is the only wrong answer: today it is product code wearing framewo
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
 | 2026-09-21 | 4a | Extracted `platform_kernel` (27 files, 7 deps, no Flutter) from `core_common` (20 → 16 deps). `ErrorHandler` lost its last Flutter import (`kDebugMode` → `dart.vm.product`). Added `arch_check` **R9** — pure-Dart tier checked in the **pubspec** as well as imports. Approved edge `core_common → domain_core` became `platform_kernel → domain_core`. Deleted three stray barrel files outside any `lib/`. | ⚠️ not run |
-| 2026-09-21 | 6a+ | **Repaired a conflict step 5 introduced.** `module_generator` and `sample_cleanup` both hand-patched `app/pubspec.yaml` and `app/lib/di/injection.dart`, which composer now owns — and the generator searched for `externalPackageModulesBefore: [`, a string the rewritten `injection.dart` no longer contains, so it had silently stopped working. Both now edit `app_manifest.yaml` and print the `composer sync` follow-up. Docs corrected in five places that still claimed the generator wires DI. | ⚠️ not run |
+| 2026-09-21 | 6a+ | **Repaired a conflict step 5 introduced.** `module_generator` and `sample_cleanup` both hand-patched `apps/mobile/pubspec.yaml` and `apps/mobile/lib/di/injection.dart`, which composer now owns — and the generator searched for `externalPackageModulesBefore: [`, a string the rewritten `injection.dart` no longer contains, so it had silently stopped working. Both now edit `app_manifest.yaml` and print the `composer sync` follow-up. Docs corrected in five places that still claimed the generator wires DI. | ⚠️ not run |
 | 2026-09-21 | 6a | Made the tooling layout-independent: `arch_check` derives the layer from the package name, `monorepo_helper` discovers packages by scanning, `workspace_setup` scans from the root, both unused-checkers resolve packages by discovery. Fixed `workspace_setup` running `barrel_generator` against the whole `packages/` directory instead of each package's `lib/` — the cause of the three stray barrel files deleted in 4a. | ⚠️ not run |
-| 2026-09-21 | 5 | Built `tools/composer`. `app/app_manifest.yaml` is now the source of truth for the root `workspace:` list, the app's path dependencies and `injection.dart`; all three are generated between `composer:managed` markers. Added CI **Gate 0** (`composer verify`). Two bugs caught by diffing generated output against the hand-written files: the micro-package probe matched `@InjectableInit.microPackage()` with parentheses and silently dropped the three packages that pass arguments, and marker splicing by string offset ate the markers' indentation. | ⚠️ not run |
+| 2026-09-21 | 5 | Built `tools/composer`. `apps/mobile/app_manifest.yaml` is now the source of truth for the root `workspace:` list, the app's path dependencies and `injection.dart`; all three are generated between `composer:managed` markers. Added CI **Gate 0** (`composer verify`). Two bugs caught by diffing generated output against the hand-written files: the micro-package probe matched `@InjectableInit.microPackage()` with parentheses and silently dropped the three packages that pass arguments, and marker splicing by string offset ate the markers' indentation. | ⚠️ not run |
 | 2026-09-21 | 4b | Migrated `core_network`, `core_notifications`, `data_core`, `feature_dashboard` off `core_common` onto `platform_kernel` — each drops 14 inherited deps. Removed a dead `package:flutter/foundation.dart` import from `cache_database.dart` (nothing in the file used it). | ⚠️ not run |
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
+| 2026-09-21 | 6b+7a | **`app/` → `apps/mobile/`, and CODEOWNERS.** Native project files needed no edit (all internally relative). Four live breaks found and fixed: fastlane's `workspace_root` resolved to `apps/`; CI's `--dart-define-from-file=../.env` no longer reached the root-written env file (now absolute via `$GITHUB_WORKSPACE` / `$(Build.SourcesDirectory)`); `unused_checker` classed `lib/main.dart` as orphaned; and fastlane still globbed `packages/**/l10n.yaml`, broken one commit earlier because `.rb` was not in that sweep. `theme_generator` stopped hardcoding `Directory('app')` and now locates the app by its manifest. `.github/CODEOWNERS` gives each module, platform and the apps layer an owner. | ⚠️ not run |
 | 2026-09-21 | 6b | **Relayout complete.** `packages/core/*` → `platform/*` (infra team's ground); `packages/{domain,data,features}/<x>` → `modules/<x>/{domain,data,feature}` (one vertical slice per bounded context); `domain_core` / `data_core` → `platform/`, since layer foundations are framework, not product. `packages/` is gone. All 298 files moved with `git mv`, so history follows. Package **names** unchanged on purpose — the directory tree is what submodules and CODEOWNERS split on, the package name is the import surface. Path deps and the workspace list recomputed from disk, not patched. Two silent failures caught: CI Gate 3's `packages/*/*/` glob would have kept passing while skipping six of eight test suites, and `module_generator`'s pubspec template had hardcoded paths that were **already** wrong before the move (`../../core/core_common` has never existed) — it now resolves every dependency by name. | ⚠️ not run |
 | 2026-09-21 | 2c | **Samples now teach the rules they document.** `splash_page` 107 → 45 lines (107 lines of glassmorphism for a one-line lesson, with two hardcoded English strings beside an *empty* ARB and an unused delegate). `onboarding` and `home` dropped raw `TextStyle(fontSize:)` for `AppTextStyles`, and `context.h(...)` gaps for `AppSpacing`'s `H` variants; `feature_home` no longer depends on `core_responsive`. `settings` stopped using the radius axis for padding. All 26 snake_case ARB keys → lowerCamelCase, because `gen-l10n` copies a key into a getter name and the generated file is excluded from analysis, so nothing ever warned. Convention now written into AGENTS.md, CLAUDE.md and both rules references. | ⚠️ not run |
 | 2026-09-21 | 9 | **Correctness sweep of the nine preceding commits** — no toolchain here, so each refactor was re-checked mechanically instead. Three real breaks found and fixed: `home_page.dart` still read `user.name` after step 3a renamed it to `AuthPrincipal.displayName`; `app_utils.dart` and `download_image.dart` still imported `../enums/app_enums.dart` and `api_status_constants.dart` by relative path after step 4a moved both into `platform_kernel`. Also added the `network_binding_module.dart` export the barrel generator would add on its next run. Clean: 0 dangling relative imports, 0 undeclared package imports, 0 missing l10n keys, 0 stale references to any symbol renamed in steps 2–4. | ⚠️ not run |
-| 2026-09-21 | 9 | **Untracked 163 MB of build output.** 50 files under `app/android/app/build/`, `app/ios/build/` and `tools/build/` were committed — two copies of a 69 MB `kernel_blob.bin` among them. The root ignore said `/build/`, which is anchored to the repo root and so only ever covered Flutter's own output directory inside `app/`; Gradle writes one level deeper. Widened to `build/` at any depth and `git rm --cached`'d the lot. **History still carries the blobs** — every clone pays for them until somebody runs a `git filter-repo` pass, which rewrites shared history and is the repo owner's call. | ⚠️ not run |
-| 2026-09-21 | 9 | **Docs accuracy is now machine-held.** Built `tools/docs_check` (CI **Gate 5**): resolves every repo path the docs name — backticked spans anchored to a real top-level directory, and markdown links resolved relative to their own file. 70 documents, ~1 300 references, 0 dead. Fixed three genuine drifts (`feature_auth` was said to ship `assets/images`, it ships `assets/language/`; a promised `07_backend_boundary.md` that the backend-out-of-scope decision made moot; a `generate.dart:90-101` line citation whose lines now hold unrelated code). 14 correctly-absent paths moved to `tools/docs_check/allowlist.txt`, each with its reason. The audit also surfaced a real hole: `app/env.prod` and `app/android/keystore.jks` — one the setup guide tells every user to create, the other written into the tree by CI — were **not gitignored**; both now are. | ⚠️ not run |
+| 2026-09-21 | 9 | **Untracked 163 MB of build output.** 50 files under `apps/mobile/android/app/build/`, `apps/mobile/ios/build/` and `tools/build/` were committed — two copies of a 69 MB `kernel_blob.bin` among them. The root ignore said `/build/`, which is anchored to the repo root and so only ever covered Flutter's own output directory inside `apps/mobile/`; Gradle writes one level deeper. Widened to `build/` at any depth and `git rm --cached`'d the lot. **History still carries the blobs** — every clone pays for them until somebody runs a `git filter-repo` pass, which rewrites shared history and is the repo owner's call. | ⚠️ not run |
+| 2026-09-21 | 9 | **Docs accuracy is now machine-held.** Built `tools/docs_check` (CI **Gate 5**): resolves every repo path the docs name — backticked spans anchored to a real top-level directory, and markdown links resolved relative to their own file. 70 documents, ~1 300 references, 0 dead. Fixed three genuine drifts (`feature_auth` was said to ship `assets/images`, it ships `assets/language/`; a promised `07_backend_boundary.md` that the backend-out-of-scope decision made moot; a `generate.dart:90-101` line citation whose lines now hold unrelated code). 14 correctly-absent paths moved to `tools/docs_check/allowlist.txt`, each with its reason. The audit also surfaced a real hole: `apps/mobile/env.prod` and `apps/mobile/android/keystore.jks` — one the setup guide tells every user to create, the other written into the tree by CI — were **not gitignored**; both now are. | ⚠️ not run |
 | 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |
 
 ### Accumulated gates — run these before merging
@@ -339,8 +360,8 @@ dart tools/arch_check/check.dart              # R1–R9
 dart tools/composer/composer.dart verify      # Gate 0
 dart tools/docs_check/check.dart              # Gate 5
 flutter analyze
-cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
 Codegen is **required** after step 2a: deleting two packages changes
-`app/lib/di/injection.config.dart`, which is gitignored and therefore not in this commit.
+`apps/mobile/lib/di/injection.config.dart`, which is gitignored and therefore not in this commit.

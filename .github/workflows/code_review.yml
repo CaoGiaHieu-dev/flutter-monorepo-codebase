@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, develop, master]
     paths:
-      - "app/lib/**/*.dart"
+      - "apps/mobile/lib/**/*.dart"
       - "modules/**/*.dart"
       - "platform/**/*.dart"
       - "!**/*.g.dart"
@@ -67,10 +67,10 @@ jobs:
         uses: tj-actions/changed-files@v46.0.1
         with:
           files: |
-            app/lib/**/*.dart
+            apps/mobile/lib/**/*.dart
             modules/**/*.dart
             platform/**/*.dart
-            app/test/**/*.dart
+            apps/mobile/test/**/*.dart
             modules/**/test/**/*.dart
             platform/**/test/**/*.dart
             !**/*.g.dart
@@ -110,7 +110,7 @@ jobs:
           elif [ "$SCOPE" = "platform" ]; then
             dart tools/code_review/code_review.dart --folder platform --language "$LANG" --format markdown
           elif [ "$SCOPE" = "presentation" ]; then
-            dart tools/code_review/code_review.dart --folder app/lib --language "$LANG" --format markdown
+            dart tools/code_review/code_review.dart --folder apps/mobile/lib --language "$LANG" --format markdown
           else
             dart tools/code_review/code_review.dart --changed --language "$LANG" --format markdown
           fi

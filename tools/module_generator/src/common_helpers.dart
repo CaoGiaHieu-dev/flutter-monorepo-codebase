@@ -101,8 +101,8 @@ class CommonHelpers {
   /// around them.
   static const List<String> sharedMutatedFiles = [
     'pubspec.yaml',
-    'app/pubspec.yaml',
-    'app/lib/di/injection.dart',
+    'apps/mobile/pubspec.yaml',
+    'apps/mobile/lib/di/injection.dart',
   ];
 
   static final Map<String, String?> _sharedFileSnapshots = {};
@@ -234,7 +234,7 @@ class CommonHelpers {
 
   /// Adds the new module to every app manifest, then leaves the wiring alone.
   ///
-  /// This used to patch `app/pubspec.yaml` and `app/lib/di/injection.dart`
+  /// This used to patch `apps/mobile/pubspec.yaml` and `apps/mobile/lib/di/injection.dart`
   /// directly. Both now live between `composer:managed` markers, so writing
   /// into them by hand puts the tree straight into the drift that
   /// `composer verify` fails CI on — and the marker text the old code looked
@@ -524,7 +524,7 @@ class CommonHelpers {
 
   static void registerLocalizationsDelegateInApp(String moduleName) {
     // Không còn cần thiết, GetIt getAll đã đảm nhận.
-    final file = File('app/lib/presentation/root_app.dart');
+    final file = File('apps/mobile/lib/presentation/root_app.dart');
     if (!file.existsSync()) return;
 
     final lines = file.readAsLinesSync();
@@ -565,7 +565,7 @@ class CommonHelpers {
 
     file.writeAsStringSync('${lines.join('\n')}\n');
     stdout.writeln(
-      '  -> Đã đăng ký $delegateClass.delegate vào app/lib/presentation/root_app.dart',
+      '  -> Đã đăng ký $delegateClass.delegate vào apps/mobile/lib/presentation/root_app.dart',
     );
   }
 }

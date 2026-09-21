@@ -34,9 +34,10 @@ const _docRoots = <String>['docs', '.agents', 'README.md', 'CLAUDE.md'];
 const _topLevelDirs = <String>[
   'app/',
   'apps/',
-  // Kept after the relayout on purpose: nothing lives under `packages/`
-  // any more, so a document still pointing there is drift, and leaving
-  // the prefix in this list is what makes the gate say so.
+  // `packages/` and a bare `app/` are kept after the relayout on purpose:
+  // nothing lives at either path any more, so a document still pointing
+  // there is drift, and leaving the prefixes in this list is what makes the
+  // gate say so instead of skipping them.
   'packages/',
   'tools/',
   'docs/',
@@ -237,7 +238,7 @@ String? _normalisePath(String raw) {
     ref = ref.substring(0, ref.length - 1);
   }
   if (ref.isEmpty) return null;
-  // A shell line, not a path: `dart tools/foo.dart`, `cd app && flutter test`.
+  // A shell line, not a path: `dart tools/foo.dart`, `cd apps/mobile && flutter test`.
   if (ref.contains(' ')) return null;
   // Brace expansion and globs describe a set, not one file.
   if (ref.contains('*') || ref.contains('{') || ref.contains('<')) return null;

@@ -57,7 +57,7 @@ dart tools/module_generator/generate.dart 2 payment
 | State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, matching `feature_auth` / `feature_home`. |
 | Toolchain detection | Auto-detects FVM: uses it only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise falls back to global `dart` / `flutter`. |
 | Fail-safe | `assertToolchainAvailable()` runs **before any write**; an existing module directory aborts instead of being silently overwritten. |
-| Rollback | The three shared files (root `pubspec.yaml`, `app/pubspec.yaml`, `app/lib/di/injection.dart`) are snapshotted first; any later failure restores them and deletes the new module directory. |
+| Rollback | The three shared files (root `pubspec.yaml`, `apps/mobile/pubspec.yaml`, `apps/mobile/lib/di/injection.dart`) are snapshotted first; any later failure restores them and deletes the new module directory. |
 
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)
 The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_nav_destination.dart` according to `[route_contribution]`.
@@ -109,11 +109,11 @@ Then **hot restart** the app (new DI registrations are not applied by hot reload
 The app must still build after any feature package is deleted. Before finishing, confirm:
 
 - Nothing outside the feature imports `package:feature_<name>/...` except
-  `app/lib/di/injection.dart` (the composition root — an intentional hard reference).
+  `apps/mobile/lib/di/injection.dart` (the composition root — an intentional hard reference).
 - Anything the shell or another feature consumes from you is published as a **contract in
   `core_di`**, resolved with `getItOrNull` / `getAllOrEmpty` and a fallback.
 - Removal procedure (documented in `injection.dart`): drop the `ExternalModule(...)` entry
-  and its import → the `feature_x:` entry in `app/pubspec.yaml` → the path in the root
+  and its import → the `feature_x:` entry in `apps/mobile/pubspec.yaml` → the path in the root
   `pubspec.yaml` `workspace:` list → `flutter pub get` + `build_runner`.
 
 ---

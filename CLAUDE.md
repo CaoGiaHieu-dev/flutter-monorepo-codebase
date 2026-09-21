@@ -34,7 +34,7 @@ flutter pub get
 dart run build_runner build -d --workspace
 
 # Run the app (flavors: dev / staging / prod)
-flutter run -t app/lib/main.dart --flavor dev
+flutter run -t apps/mobile/lib/main.dart --flavor dev
 
 # Static analysis
 flutter analyze
@@ -141,7 +141,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Layer | Path | Responsibility |
 |:------|:-----|:---------------|
-| **App Shell** | `app/` | Entrypoint, flavors, central DI assembly (`injection.dart`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes) |
+| **App Shell** | `apps/mobile/` | Entrypoint, flavors, central DI assembly (`injection.dart`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes) |
 | **Core** | `platform/*` | Infrastructure shared across all layers |
 | **Domain** | `modules/*/domain` | **Pure Dart** business logic — entities, use cases, repository interfaces |
 | **Data** | `modules/*/data` | Repository implementations, DTOs/models, data sources (remote + local) |
@@ -197,7 +197,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 ### Micro-package DI Pattern
 
-Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. The host app assembles all modules in `app/lib/di/injection.dart`:
+Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. The host app assembles all modules in `apps/mobile/lib/di/injection.dart`:
 
 ```dart
 @InjectableInit(
@@ -229,11 +229,11 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 3. Never create monolithic `DomainPackageModule`/`DataPackageModule` — register each micro-package module separately
 4. Categorize new modules into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, or `_otherModules`
 5. When using `ignoreUnregisteredTypes`, use **relative imports** from the package's barrel file
-6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` for exactly this reason (it injects `AuthLocalDataSource` from `data_auth`). `flutter analyze` cannot catch this — verify in generated `app/lib/di/injection.config.dart`
+6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` for exactly this reason (it injects `AuthLocalDataSource` from `data_auth`). `flutter analyze` cannot catch this — verify in generated `apps/mobile/lib/di/injection.config.dart`
 7. **`getAll<T>()` THROWS when `T` is unregistered** — use `getAllOrEmpty<T>()` for optional contributions, and `getItOrNull<T>()` + fallback for single ones
 8. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable even if `InterfaceA implements InterfaceB`. Bind the second type via `@module`:
    ```dart
-   // app/lib/di/network_binding_module.dart
+   // apps/mobile/lib/di/network_binding_module.dart
    @module
    abstract class NetworkBindingModule {
      @lazySingleton
@@ -244,7 +244,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 
 ### App-Shell Storage Adapters
 
-`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `app/lib/di/` and each owns its **own** `StorageValue` (no shared preset object); their keys live in `app/lib/di/utils/`:
+`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `apps/mobile/lib/di/` and each owns its **own** `StorageValue` (no shared preset object); their keys live in `apps/mobile/lib/di/utils/`:
 - `language_storage_impl.dart` → own `StorageValue<String>` @ `LanguageStorageKeys.LOCALE`
 - `theme_storage_impl.dart` → own `StorageValue<ThemeMode>` @ `ThemeStorageKeys.THEME_MODE`
 - `app_boot_storage.dart` → own `StorageValue<bool>` @ `AppBootStorageKeys.VIEWED_ONBOARD`
@@ -313,7 +313,7 @@ Widget build(BuildContext context, GoRouterState state) {
 ### Key Router Components
 
 - **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart` — its own file now, and `homeKey` was deleted as unused. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
-- **`NavigatorWrapperWidget`**: App shell widget at `app/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
+- **`NavigatorWrapperWidget`**: App shell widget at `apps/mobile/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
 - **`UndefineRouteWidget`**: GoRouter's `errorPageBuilder` child — never use inline anonymous widgets
 - **SplashPage**: Manually managed by `MainScope` (`AppMaterialWrapper`), NOT a GoRouter route
 
@@ -451,7 +451,7 @@ abstract class AuthModule {
 - **No context in an async method?** Read the value *before the first `await`*, then pass it on. See `photo_grid_item.dart` `_loadThumbnail` (`if (!mounted) return;` then `context.w(200).toInt()`)
 - **Reusable widgets** in `core_ui_kit` take **unscaled** values — caller scales before passing in
 - **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
-- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `app/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `apps/mobile/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
 - **Widget tests that scale must wrap the subject in `ResponsiveInit`** — otherwise `ResponsiveScope.of` asserts, deliberately, rather than silently falling back to unscaled values
 - **Enforced by machine:** `dart tools/arch_check/check.dart` rule **R7** blocks any bare sizing extension in a file importing `core_responsive`
 - **Enforced:** `dart tools/arch_check/check.dart` rule **R7** blocks the build on any bare sizing extension (Gate 1 of `pr_quality_check.yml`)
@@ -620,7 +620,7 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 - **Staging/Prod:** strict SPKI hash matching
 - > [!CAUTION]
   > Pinning needs **two** things or it silently no-ops (the initializer logs an ERROR in each case):
-  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `app/lib/di/network_binding_module.dart` binds it.
+  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `apps/mobile/lib/di/network_binding_module.dart` binds it.
   > 2. `sslPinningHashes` must be **non-empty**. It currently returns `const []`, i.e. **pinning is off** until you fill it in. See the `openssl` recipe in `network_config_impl.dart`; pin at least two keys (leaf + backup) so cert rotation cannot lock every client out.
 
 ### Data Standardization
@@ -633,7 +633,7 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 
 ## Fastlane CI/CD
 
-CWD-independent architecture — run from monorepo root, no `cd app/` needed:
+CWD-independent architecture — run from monorepo root, no `cd apps/mobile/` needed:
 
 ```bash
 # Android
@@ -649,7 +649,7 @@ fastlane flutter flavor:dev version:1.2.0 build_number:45
 fastlane store version:1.2.0 build_number:45
 ```
 
-Config: copy `app/fastlane/Config.example.yaml` → `app/fastlane/Config.yaml` (gitignored, not in the repo). Modules: `app/fastlane/modules/` (helpers, android_lanes, ios_lanes, flutter_lanes).
+Config: copy `apps/mobile/fastlane/Config.example.yaml` → `apps/mobile/fastlane/Config.yaml` (gitignored, not in the repo). Modules: `apps/mobile/fastlane/modules/` (helpers, android_lanes, ios_lanes, flutter_lanes).
 
 ---
 
@@ -672,16 +672,16 @@ Config: copy `app/fastlane/Config.example.yaml` → `app/fastlane/Config.yaml` (
 
 Deleting any `modules/*/feature` package must leave the app compiling and booting.
 
-**`app/lib/di/injection.dart` is the app shell's only intentional hard reference to features** — as the composition root it must name what it composes. Every other shell file resolves features through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
+**`apps/mobile/lib/di/injection.dart` is the app shell's only intentional hard reference to features** — as the composition root it must name what it composes. Every other shell file resolves features through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
 
-**To drop a feature**: remove it from `app/app_manifest.yaml`, then
+**To drop a feature**: remove it from `apps/mobile/app_manifest.yaml`, then
 
 ```bash
 dart tools/composer/composer.dart sync --app mobile
 flutter pub get && dart run build_runner build -d --workspace
 ```
 
-`injection.dart`, `app/pubspec.yaml`'s path deps and the root `workspace:` list are generated between `composer:managed` markers — never edit them by hand. `composer verify` is Gate 0 in CI.
+`injection.dart`, `apps/mobile/pubspec.yaml`'s path deps and the root `workspace:` list are generated between `composer:managed` markers — never edit them by hand. `composer verify` is Gate 0 in CI.
 
 **A type import defeats `getItOrNull`** — guarding the lookup is useless if the file still imports the feature for the type. When the shell needs something a feature owns, declare a contract in `core_di`:
 
@@ -728,7 +728,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
 26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.
 27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
-28. **Any feature must be removable.** `app/lib/di/injection.dart` is the shell's only intentional hard reference to features; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — declare a contract instead.
+28. **Any feature must be removable.** `apps/mobile/lib/di/injection.dart` is the shell's only intentional hard reference to features; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — declare a contract instead.
 
 ---
 
@@ -789,7 +789,7 @@ dart tools/module_generator/generate.dart 1 payment "" 2 1
 dart run build_runner build -d --workspace
 flutter analyze
 cd modules/payment/data && flutter test && cd -
-cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
 ---

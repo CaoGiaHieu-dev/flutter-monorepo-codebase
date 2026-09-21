@@ -36,7 +36,7 @@ Real case: `NetworkConfigImpl` needs `AuthLocalDataSource` (from `data_auth`, an
 defer construction:
 
 ```dart
-// app/lib/di/network_config_impl.dart
+// apps/mobile/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)   // NOT @Singleton
 class NetworkConfigImpl implements NetworkConfig { ... }
 ```
@@ -47,7 +47,7 @@ Deferring is safe whenever every consumer is itself lazy — nothing resolves it
 > **`flutter analyze` cannot catch this** — it is a runtime ordering fault, not a type error.
 > Verify by reading the generated graph after `build_runner`:
 > ```bash
-> grep -n "YourType" app/lib/di/injection.config.dart
+> grep -n "YourType" apps/mobile/lib/di/injection.config.dart
 > ```
 > Check that everything your eager singleton needs is registered on an *earlier* line.
 
@@ -58,7 +58,7 @@ supertype chain. Registering `@LazySingleton(as: NetworkConfig)` therefore leave
 `getItOrNull<SslPinningConfig>()` returning `null` even though `NetworkConfig implements
 SslPinningConfig` — and certificate pinning then silently no-ops.
 
-Bind the second type explicitly with a `@module` (`app/lib/di/network_binding_module.dart`):
+Bind the second type explicitly with a `@module` (`apps/mobile/lib/di/network_binding_module.dart`):
 
 ```dart
 @module
@@ -146,7 +146,7 @@ UseCase.
 
 ### Step 3: Register the Package Module in Host App (`app`)
 *Note: The `module_generator` tool automates this step.*
-1. Open `app/lib/di/injection.dart`.
+1. Open `apps/mobile/lib/di/injection.dart`.
 2. Import the generated micro-package module (e.g., `import 'package:my_package/di/module.module.dart';`).
 3. Add `ExternalModule(MyPackageModule)` into the **correct** constant list:
 
@@ -178,7 +178,7 @@ UseCase.
 
 App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
 `NetworkConfigImpl`, `NetworkBindingModule`) are registered as local bindings in
-`app/lib/di/` so they exist **before** `_uiModules` run.
+`apps/mobile/lib/di/` so they exist **before** `_uiModules` run.
 
 ### Step 3b: Ordering when a module opens a database
 

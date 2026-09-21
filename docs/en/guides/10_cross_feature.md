@@ -210,7 +210,7 @@ abstract class IThemeStorage {
 `package:flutter/material.dart` type. The domain layer is pure Dart and **cannot import Flutter**,
 so routing theme through it is impossible by construction — not a shortcut, a hard constraint.
 
-The implementation lives in the app shell (`app/lib/di/theme_storage_impl.dart`) because that is
+The implementation lives in the app shell (`apps/mobile/lib/di/theme_storage_impl.dart`) because that is
 where `core_base_ui`'s provider and `core_storage`'s mechanism meet without creating a cycle.
 
 
@@ -293,7 +293,7 @@ Every consumer of a cross-feature contract must tolerate the contract being **ab
 shell already does this for routing:
 
 ```dart
-// app/lib/presentation/navigation/app_router.dart
+// apps/mobile/lib/presentation/navigation/app_router.dart
 List<RouteBase> get _featureRoutes {
   return [
     for (final module in getAllOrEmpty<IFeatureRouteModule>())
@@ -322,13 +322,13 @@ getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
 ```
 
 > [!NOTE]
-> `app/lib/di/injection.dart` naming feature packages is the composition root's one intentional
-> hard reference — it must name what it composes. No other file under `app/lib/` imports a
+> `apps/mobile/lib/di/injection.dart` naming feature packages is the composition root's one intentional
+> hard reference — it must name what it composes. No other file under `apps/mobile/lib/` imports a
 > `feature_*` package; everything else reaches features through `core_di` contracts with
 > `getAllOrEmpty` / `getItOrNull` fallbacks. The `core_ui_kit` imports in the shell are not
 > exceptions — that is a core package, not a removable feature.
 >
-> Verify with `grep -rn "package:feature_" app/lib --include="*.dart"` — every hit should be in
+> Verify with `grep -rn "package:feature_" apps/mobile/lib --include="*.dart"` — every hit should be in
 > `injection.dart` or the generated `injection.config.dart`.
 
 ---

@@ -22,12 +22,8 @@ void main() async {
     // 1. Copy config files to app directory
     stdout.writeln('[!] Copying configuration files to app directory...');
     final rootDir = Directory.current;
-    final appDir = Directory('app');
-
-    if (!appDir.existsSync()) {
-      stderr.writeln('[ERROR] "app" directory not found.');
-      exit(1);
-    }
+    final appDir = _findAppDirectory();
+    final appPath = appDir.path;
 
     final configFiles = rootDir
         .listSync()
@@ -41,7 +37,7 @@ void main() async {
 
     for (final file in configFiles) {
       final fileName = file.path.split(Platform.pathSeparator).last;
-      file.copySync('app/$fileName');
+      file.copySync('$appPath/$fileName');
     }
 
     // 2. Running Flutter Native Splash Generator
@@ -52,7 +48,7 @@ void main() async {
       'flutter_native_splash:create',
       '--flavors',
       'dev,staging,prod',
-    ], workingDirectory: 'app');
+    ], workingDirectory: appPath);
 
     // 3. Running Icons Launcher Generator
     stdout.writeln('[!] Running Icons Launcher Generator...');
@@ -62,7 +58,7 @@ void main() async {
       'icons_launcher:create',
       '--flavors',
       'dev,staging,prod',
-    ], workingDirectory: 'app');
+    ], workingDirectory: appPath);
 
     // 4. Cleanup: Remove copied config files from app
     stdout.writeln('[!] Cleaning up temporary configuration files...');
@@ -109,4 +105,45 @@ Future<void> _runCommand(
     );
     exit(exitCode);
   }
+}
+
+/// Locates the Flutter app this tool should generate assets for.
+///
+/// An app is a directory holding an `app_manifest.yaml` — the same marker
+/// `composer` uses — so this keeps working after a relayout. It used to be the
+/// literal string `'app'`, which stopped existing the day the app moved to
+/// `apps/mobile/`.
+///
+/// With more than one app in the workspace, generating icons for an arbitrary
+/// one would be worse than refusing: say which, and let the caller decide.
+Directory _findAppDirectory() {
+  final manifests = Directory.current
+      .listSync(recursive: true, followLinks: false)
+      .whereType<File>()
+      .where((f) {
+        final path = f.path.replaceAll('\\', '/');
+        return path.endsWith('/app_manifest.yaml') &&
+            !path.contains('/build/') &&
+            !path.contains('/.dart_tool/');
+      })
+      .toList();
+
+  if (manifests.isEmpty) {
+    stderr.writeln(
+      '[ERROR] No app found: nothing in this workspace contains an '
+      'app_manifest.yaml.',
+    );
+    exit(1);
+  }
+  if (manifests.length > 1) {
+    stderr.writeln(
+      '[ERROR] ${manifests.length} apps found; this tool generates for one:',
+    );
+    for (final m in manifests) {
+      stderr.writeln('  - ${File(m.path).parent.path}');
+    }
+    stderr.writeln('Run it from inside the app you mean.');
+    exit(1);
+  }
+  return File(manifests.single.path).parent;
 }

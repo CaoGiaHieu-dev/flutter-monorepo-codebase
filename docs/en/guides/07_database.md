@@ -35,7 +35,7 @@ Two Drift facts drive the whole design:
 Put together: whichever package declares the database must name every table on it, and every DAO must live in that same library. A single shared `AppDatabase` would therefore force one package to know the tables of all the others — the same "one object knows everything" coupling the storage and constants ownership rules exist to prevent.
 
 > [!NOTE]
-> Moving a shared `AppDatabase` up into `app/` does not solve this — it only relocates the god object, and the owning package still could not hold a usable DAO. Giving each package its own database is what actually removes the coupling.
+> Moving a shared `AppDatabase` up into `apps/mobile/` does not solve this — it only relocates the god object, and the owning package still could not hold a usable DAO. Giving each package its own database is what actually removes the coupling.
 
 ### What you gain, and what you pay
 

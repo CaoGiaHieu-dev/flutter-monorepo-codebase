@@ -78,7 +78,7 @@ Pick **one** contribution type:
 | Dashboard scaffold chrome | `DashboardRouteModule` | **Only** in `feature_dashboard`. |
 
 1. Implement the chosen contract with `@LazySingleton(as: …)` (or `@Singleton` for chrome).
-2. Wire package in `app/pubspec.yaml` + `ExternalModule` in `injection.dart` (generator usually does this).
+2. Wire package in `apps/mobile/pubspec.yaml` + `ExternalModule` in `injection.dart` (generator usually does this).
 3. **Never** append `$fooRoute` into `app_router.dart` manually — host already uses `getAllOrEmpty` / `getItOrNull`.
 4. Codegen + **hot restart**:
    ```bash

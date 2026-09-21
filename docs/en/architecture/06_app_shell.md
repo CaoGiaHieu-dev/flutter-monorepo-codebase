@@ -1,4 +1,4 @@
-# The App Shell (`app/`)
+# The App Shell (`apps/mobile/`)
 
 This document answers **"what happens between tapping the icon and seeing the first screen, and who wires everything together?"**. After reading it you should be able to debug a startup failure, add an app-local adapter, and understand why the DI module order in `injection.dart` is not arbitrary.
 
@@ -9,7 +9,7 @@ The app shell is the **composition root**. It is the only place allowed to depen
 ## 1. What lives here
 
 ```
-app/lib/
+apps/mobile/lib/
 ├── main.dart                    entry point, error zone
 ├── main_scope.dart              splash → init → root transition
 ├── app.dart                     barrel
@@ -109,7 +109,7 @@ Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`, with `A
 
 ## 3. DI assembly — and why the order matters
 
-[`app/lib/di/injection.dart`](../../../app/lib/di/injection.dart) declares the module order:
+[`apps/mobile/lib/di/injection.dart`](../../../apps/mobile/lib/di/injection.dart) declares the module order:
 
 ```dart
 @InjectableInit(
@@ -144,7 +144,7 @@ This is the single most important implicit rule in the DI setup, and the source 
 > [!CAUTION]
 > An eager `@Singleton` is constructed **at registration time**. If it depends on a type registered by a module that runs *later*, startup throws `… is not registered`.
 >
-> `flutter analyze` cannot detect this — it is a runtime ordering fault. Verify by reading the generated `app/lib/di/injection.config.dart` and checking that every dependency appears *above* its consumer.
+> `flutter analyze` cannot detect this — it is a runtime ordering fault. Verify by reading the generated `apps/mobile/lib/di/injection.config.dart` and checking that every dependency appears *above* its consumer.
 
 Real example: `NetworkConfigImpl` depends on `AuthLocalDataSource`, which lives in `data_auth` — registered in step 4, after the app-local block in step 2. It is therefore declared `@LazySingleton(as: NetworkConfig)`, which defers construction until first use. Its only consumer, `ApiClient`, is itself lazy, so nothing is lost.
 
@@ -162,7 +162,7 @@ The `GoRouter` — and the `getAllOrEmpty<IFeatureRouteModule>()` calls inside i
 
 ## 4. App-local adapters
 
-The shell implements the contracts that core packages declare but cannot satisfy themselves. Each owns its own `StorageValue` and keeps its keys in `app/lib/di/utils/`.
+The shell implements the contracts that core packages declare but cannot satisfy themselves. Each owns its own `StorageValue` and keeps its keys in `apps/mobile/lib/di/utils/`.
 
 | File | Implements | Owns | Registration |
 |:--|:--|:--|:--|
@@ -192,7 +192,7 @@ The parameter is typed `NetworkConfig`, so the upcast is compiler-checked — no
 
 ## 5. Router assembly
 
-[`app_router.dart`](../../../app/lib/presentation/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
+[`app_router.dart`](../../../apps/mobile/lib/presentation/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [

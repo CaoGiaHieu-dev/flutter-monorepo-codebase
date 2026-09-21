@@ -16,19 +16,19 @@
 # Written by `dart run build_runner build -d --workspace`. The docs cite it
 # constantly because it is the only place an eager-singleton ordering bug
 # (AGENTS.md §18) is visible.
-app/lib/di/injection.config.dart
+apps/mobile/lib/di/injection.config.dart
 # Flutter build output.
-app/build/app/outputs/flutter-apk/app-dev-debug.apk
+apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.apk
 
 # --- (2) Secrets -----------------------------------------------------------
-# Production env values. `app/env.dev` and `app/env.staging` ARE committed;
+# Production env values. `apps/mobile/env.dev` and `apps/mobile/env.staging` ARE committed;
 # prod is not, which is the point the setup guide is making.
-app/env.prod
+apps/mobile/env.prod
 # Android release signing. `01_cicd.md` explains how CI materialises both.
-app/android/keystore.jks
-app/android/key.properties
-# Fastlane credentials. The repo ships `app/fastlane/Config.example.yaml`.
-app/fastlane/Config.yaml
+apps/mobile/android/keystore.jks
+apps/mobile/android/key.properties
+# Fastlane credentials. The repo ships `apps/mobile/fastlane/Config.example.yaml`.
+apps/mobile/fastlane/Config.yaml
 
 # --- (3) Tutorial targets and placeholders ---------------------------------
 # `11_design_system.md` walks the reader through creating this file; it does
@@ -42,9 +42,9 @@ modules/x/domain/lib
 modules/x/data/lib
 
 # --- (3) Target layout, not current layout ---------------------------------
-# `.agents/RESTRUCTURE.md` is the migration plan: these are the directories
-# steps 6b and 7 create. They are removed from this list as each step lands,
-# which is what stops the plan from quietly describing a tree nobody built.
-apps/mobile
+# `.agents/RESTRUCTURE.md` is the migration plan: these are the directories a
+# later step creates. They are removed from this list as each step lands, which
+# is what stops the plan from quietly describing a tree nobody built —
+# `apps/mobile` came off this list the moment step 6b created it.
 apps/admin
 modules/catalog

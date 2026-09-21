@@ -7,6 +7,24 @@ require 'pathname'
 CONFIG_FILE = File.expand_path("../Config.yaml", __dir__)
 APP_DIR = File.expand_path("../..", __dir__)
 
+# The workspace root is found by walking up until a pubspec.yaml declaring a
+# `workspace:` list turns up — not by counting `..` from APP_DIR. The app moved
+# from `app/` to `apps/mobile/` and a hardcoded level made the root resolve to
+# `apps/`, where dependency installation quietly did nothing useful.
+def find_workspace_root(start)
+  dir = start
+  loop do
+    pubspec = File.join(dir, "pubspec.yaml")
+    return dir if File.exist?(pubspec) && File.read(pubspec).match?(/^workspace:/)
+    parent = File.dirname(dir)
+    break if parent == dir
+    dir = parent
+  end
+  UI.user_error!("No pubspec.yaml with a `workspace:` list found above #{start}")
+end
+
+WORKSPACE_ROOT = find_workspace_root(APP_DIR)
+
 UI.user_error!("Configuration file not found at #{CONFIG_FILE}") unless File.exist?(CONFIG_FILE)
 CONFIG = YAML.load_file(CONFIG_FILE)
 
@@ -128,12 +146,15 @@ def install_dependencies(flutter_version)
     sh "#{prefix}flutter clean"
     sh "#{prefix}flutter pub get"
 
-    # Workspace root is one level above APP_DIR
-    workspace_root = File.expand_path("..", APP_DIR)
+    workspace_root = WORKSPACE_ROOT
 
-    # Conditionally run 'flutter gen-l10n' for all features
+    # Conditionally run 'flutter gen-l10n' for all features.
+    # Scanned from the workspace root rather than a `packages/` subtree: that
+    # directory no longer exists, and any assumption about where packages sit
+    # makes this loop silently generate nothing the day they move.
     UI.message("Scanning for l10n.yaml files in workspace to run 'flutter gen-l10n'...")
-    l10n_files = Dir.glob(File.join(workspace_root, "packages", "**", "l10n.yaml"))
+    l10n_files = Dir.glob(File.join(workspace_root, "**", "l10n.yaml"))
+                    .reject { |f| f.include?("/build/") || f.include?("/.dart_tool/") }
     
     if l10n_files.empty?
       UI.message("No l10n.yaml found in workspace, skipping 'flutter gen-l10n'.")
@@ -324,7 +345,7 @@ def run_flutter_build(platform:, flavor:, version:, build_number:, flutter_versi
   dart_define_file = get_dart_define_file(flavor)
   unless File.exist?("../#{dart_define_file}")
     UI.user_error!(
-      "Dart define file 'app/#{dart_define_file}' not found for flavor " \
+      "Dart define file 'apps/mobile/#{dart_define_file}' not found for flavor " \
       "'#{flavor}'. Building without it would ship empty " \
       "String.fromEnvironment values (API base URL, keys), so this is " \
       "a hard failure. Create the file first."

@@ -35,7 +35,7 @@ Run it whenever you add, remove, or edit any of these:
 | :--- | :--- | :--- |
 | `@freezed`, a new union case, a new field | `freezed` | `*.freezed.dart` |
 | `@JsonSerializable`, `fromJson` / `toJson` | `json_serializable` | `*.g.dart` |
-| `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `app/lib/di/injection.config.dart` |
+| `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `apps/mobile/lib/di/injection.config.dart` |
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
 | `@DriftDatabase`, `@DriftAccessor`, a new table | `drift_dev` | `<name>_database.g.dart`, next to your database (e.g. `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
@@ -90,7 +90,7 @@ dart tools/dependency_sync.dart --check
 The tool also repairs broken local `path:` entries for workspace packages.
 
 > [!NOTE]
-> Native Android dependencies in `app/android/app/build.gradle.kts` are **outside** this catalog. Bumping `play-services-auth` or `androidx.window` is a manual Gradle edit.
+> Native Android dependencies in `apps/mobile/android/app/build.gradle.kts` are **outside** this catalog. Bumping `play-services-auth` or `androidx.window` is a manual Gradle edit.
 
 ---
 
@@ -98,7 +98,7 @@ The tool also repairs broken local `path:` entries for workspace packages.
 
 | Tool | Command | Use it when |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [dir] [SM] [route]` | Scaffolding a new Feature / Domain / Data / Core package. It also registers the package in the root workspace, `app/pubspec.yaml` and `app/lib/di/injection.dart`. Run with no arguments for interactive mode. |
+| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [dir] [SM] [route]` | Scaffolding a new Feature / Domain / Data / Core package. It also registers the package in the root workspace, `apps/mobile/pubspec.yaml` and `apps/mobile/lib/di/injection.dart`. Run with no arguments for interactive mode. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session — lists what pub.dev has newer. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key in `tools/code_review/code_review_config.json`. Also supports `--all`, `--file <path>`, `--focus architecture,security`. |
@@ -147,14 +147,14 @@ dart tools/unused_checker/check_unused_packages.dart
 Tests live at `<package>/test/`, wherever the package lives. Only the six packages above ship tests today; add yours next to the code you write.
 
 > [!CAUTION]
-> `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, open the generated `app/lib/di/injection.config.dart` and check the order. See [../guides/05_di.md](../guides/05_di.md).
+> `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, open the generated `apps/mobile/lib/di/injection.config.dart` and check the order. See [../guides/05_di.md](../guides/05_di.md).
 
 ### Optional: prove the app still builds
 
 Static analysis passing does not mean the Android build passes (Gradle/Kotlin errors live outside Dart):
 
 ```bash
-cd app
+cd apps/mobile
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
@@ -168,7 +168,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Forgot the barrel generator after adding a file | New class invisible outside its package | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Hand-edited a generated file | Change vanishes on next codegen | Edit the annotated source |
 | Ran `pub get` inside a sub-package | Stray `pubspec.lock` files | Delete them, run `flutter pub get` at the root |
-| Ran `flutter build apk` from the repo root | `Target file "lib\main.dart" not found` | `cd app` first |
+| Ran `flutter build apk` from the repo root | `Target file "lib\main.dart" not found` | `cd apps/mobile` first |
 | Hardcoded a version in a package pubspec | `dependency_sync --check` fails | Move it to `pubspec_dependencies.yaml`, re-sync |
 | Imported a package without declaring it | Compiles locally (workspace shares `package_config.json`), breaks when extracted | Declare it in that package's `pubspec.yaml`; verify with the unused checker |
 | Registered a screen controller as a singleton | State leaks between screen visits | Feature controllers are `@injectable` (factory) — see [../guides/05_di.md](../guides/05_di.md) |

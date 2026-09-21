@@ -50,8 +50,11 @@ void main() async {
   for (final file in allDartFiles) {
     final normalized = file.replaceAll('\\', '/');
 
-    // Check if it's the main entry point of the app
-    if (normalized.endsWith('/app/lib/main.dart')) {
+    // Any `lib/main.dart` is an entry point — that is what the name means.
+    // This used to test for `/app/lib/main.dart`, which stopped matching when
+    // the app moved to `apps/mobile/`, and the checker would then have
+    // reported the application's own entrypoint as an orphaned file.
+    if (normalized.endsWith('/lib/main.dart')) {
       entryPoints.add(file);
       continue;
     }

@@ -1,0 +1,72 @@
+# Code ownership, expressed against the directory layout.
+#
+# This file is the reason `modules/<name>/` exists. Under the old layout a
+# team's work was spread across `packages/features/auth`,
+# `packages/domain/auth` and `packages/data/auth`, and CODEOWNERS cannot say
+# "the auth rows of three sibling directories" — it matches paths. One
+# directory per bounded context makes ownership one line per team.
+#
+# Replace the placeholder handles below with real GitHub teams. A team that
+# does not exist is silently ignored by GitHub, which means the rule looks
+# enforced and is not — so do this before relying on it.
+#
+# Later rules win, so the order here is deliberate: broad defaults first,
+# specific ownership after.
+
+# ---------------------------------------------------------------------------
+# Default — anything not claimed below
+# ---------------------------------------------------------------------------
+*                               @your-org/maintainers
+
+# ---------------------------------------------------------------------------
+# Platform — the infra team's ground.
+#
+# Every module depends on this, so a breaking change here breaks everyone at
+# once. That asymmetry, not seniority, is why it has a dedicated owner.
+# ---------------------------------------------------------------------------
+/platform/                      @your-org/infra
+
+# `platform/di` holds every cross-module contract. Changing one is a
+# negotiation between modules, not a unilateral edit, so it gets its own rule.
+/platform/di/                   @your-org/infra @your-org/architects
+
+# ---------------------------------------------------------------------------
+# Modules — one vertical slice, one owning team.
+#
+# A module owns all three of its layers. The team that changes the UI is the
+# team that changes the use case behind it.
+# ---------------------------------------------------------------------------
+/modules/auth/                  @your-org/team-auth
+/modules/home/                  @your-org/team-home
+/modules/settings/              @your-org/team-home
+/modules/dashboard/             @your-org/team-shell
+/modules/onboarding/            @your-org/team-shell
+/modules/splash/                @your-org/team-shell
+
+# ---------------------------------------------------------------------------
+# Apps — the composition layer, owned by tech leads.
+#
+# An app decides which modules ship together and in what order they
+# initialise. That is a release decision, not a feature decision.
+# ---------------------------------------------------------------------------
+/apps/                          @your-org/tech-leads
+
+# The manifest IS the composition. Adding a module here changes what the
+# product is, so it is reviewed separately from the rest of the app shell.
+/apps/*/app_manifest.yaml       @your-org/tech-leads @your-org/architects
+
+# ---------------------------------------------------------------------------
+# Build, CI and the rules themselves
+# ---------------------------------------------------------------------------
+/tools/                         @your-org/infra
+/.github/                       @your-org/infra
+/pubspec.yaml                   @your-org/infra
+/pubspec_dependencies.yaml      @your-org/infra
+/analysis_options.yaml          @your-org/infra
+/fastlane/                      @your-org/release
+/apps/*/fastlane/               @your-org/release
+
+# The architecture rules and the plan that produced them.
+/.agents/                       @your-org/architects
+/CLAUDE.md                      @your-org/architects
+/docs/                          @your-org/architects

@@ -23,7 +23,7 @@ graph TD
     classDef data fill:#fff3e6,stroke:#f5cb99,stroke-width:2px,color:#333;
     classDef app fill:#f0f0f0,stroke:#cccccc,stroke-width:2px,color:#333;
 
-    App["🚀 Host App Shell (app/)<br/>Lắp ráp và khởi động ứng dụng"]:::app
+    App["🚀 Host App Shell (apps/mobile/)<br/>Lắp ráp và khởi động ứng dụng"]:::app
 
     subgraph FeatureLayer ["🎨 Feature Presentation Layer (modules/*/feature)"]
         direction LR
@@ -99,7 +99,7 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 ├── .github/                       # Luồng tích hợp liên tục (CI Workflows)
 │   └── workflows/
 │       └── fastlane.yml           # CI Github Action chạy Fastlane tự động
-├── app/                           # Host Application (Vỏ ứng dụng chính)
+├── apps/mobile/                           # Host Application (Vỏ ứng dụng chính)
 │   ├── android/                   # Dự án Android bản địa
 │   ├── ios/                       # Dự án iOS bản địa
 │   ├── lib/
@@ -264,7 +264,7 @@ import 'package:injectable/injectable.dart';
 void initMicroPackage() {}
 ```
 
-### Tổng hợp tại Host App (`app/lib/di/injection.dart`):
+### Tổng hợp tại Host App (`apps/mobile/lib/di/injection.dart`):
 ```dart
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
@@ -332,11 +332,11 @@ Future<void> configureDependencies({String? environment}) async {
 > [!CAUTION]
 > **`@Singleton` eager KHÔNG được phụ thuộc type đăng ký ở module chạy sau** — sẽ ném
 > *"not registered"* ngay lúc boot. `flutter analyze` không bắt được lỗi này; phải kiểm chứng ở file
-> sinh ra `app/lib/di/injection.config.dart`. Dùng `@LazySingleton` khi phụ thuộc nằm ở module sau.
+> sinh ra `apps/mobile/lib/di/injection.config.dart`. Dùng `@LazySingleton` khi phụ thuộc nằm ở module sau.
 >
 > **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
 > không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
-> qua `@module` (xem `app/lib/di/network_binding_module.dart`).
+> qua `@module` (xem `apps/mobile/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -351,7 +351,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)
-`app/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
+`apps/mobile/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
@@ -364,8 +364,8 @@ không giữ kiểu dữ liệu nào của feature — đó chính là điều k
 
 ### Gỡ một feature
 
-1. Xóa `ExternalModule(...)` và dòng import tương ứng trong `app/lib/di/injection.dart`.
-2. Xóa `feature_x:` trong `app/pubspec.yaml`.
+1. Xóa `ExternalModule(...)` và dòng import tương ứng trong `apps/mobile/lib/di/injection.dart`.
+2. Xóa `feature_x:` trong `apps/mobile/pubspec.yaml`.
 3. Xóa đường dẫn của nó khỏi danh sách `workspace:` trong `pubspec.yaml` gốc.
 4. `flutter pub get && dart run build_runner build -d --workspace`.
 
@@ -419,12 +419,12 @@ dart run build_runner build -d --workspace
 
 ### 5. Chạy Ứng Dụng
 ```bash
-flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
+flutter run -t apps/mobile/lib/main.dart --flavor dev --dart-define-from-file=apps/mobile/env.dev
 ```
 
 ### 6. Build APK
 ```bash
-cd app   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu
+cd apps/mobile   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 

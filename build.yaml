@@ -6,7 +6,7 @@ targets:
           # `auto_register` lets each package's `@InjectableInit.microPackage()`
           # pick up its own annotations. No `generate_for` here on purpose: this
           # is the root workspace package, it has no `lib/`, and every real
-          # entry point (`app/lib/di/injection.dart`, each package's
+          # entry point (`apps/mobile/lib/di/injection.dart`, each package's
           # `lib/di/module.dart`) is discovered by the builder itself.
           auto_register: true
       retrofit_generator:

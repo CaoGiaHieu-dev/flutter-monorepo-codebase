@@ -243,8 +243,8 @@ bundles:
 # ---------------------------------------------------------------------------
 shared_files:
   - pubspec.yaml # workspace: entry per package
-  - app/pubspec.yaml # dependency entry per package
-  - app/lib/di/injection.dart # import + ExternalModule entry per feature
+  - apps/mobile/pubspec.yaml # dependency entry per package
+  - apps/mobile/lib/di/injection.dart # import + ExternalModule entry per feature
 
 # Contracts that survive every removal: they are generic mechanisms, not
 # feature-specific. Do not delete these while chasing orphans.

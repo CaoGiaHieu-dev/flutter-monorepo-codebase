@@ -191,7 +191,7 @@ The two refresh getters default to `null`, so in an app with no refresh endpoint
 The implementation delegates each value to whoever actually owns it, rather than reading storage itself:
 
 ```dart
-// app/lib/di/network_config_impl.dart
+// apps/mobile/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(
@@ -215,7 +215,7 @@ class NetworkConfigImpl implements NetworkConfig {
 ```
 
 > [!IMPORTANT]
-> `NetworkConfigImpl` is `@LazySingleton`, not `@Singleton`. It depends on `AuthLocalDataSource`, which lives in `data_auth` — a module initialised *after* the app-local DI block. An eager singleton would resolve during `configureDependencies()` and throw "not registered". `flutter analyze` cannot catch this; verify against generated `app/lib/di/injection.config.dart`. See [`05_di.md`](05_di.md).
+> `NetworkConfigImpl` is `@LazySingleton`, not `@Singleton`. It depends on `AuthLocalDataSource`, which lives in `data_auth` — a module initialised *after* the app-local DI block. An eager singleton would resolve during `configureDependencies()` and throw "not registered". `flutter analyze` cannot catch this; verify against generated `apps/mobile/lib/di/injection.config.dart`. See [`05_di.md`](05_di.md).
 
 ---
 
@@ -224,7 +224,7 @@ class NetworkConfigImpl implements NetworkConfig {
 `_refreshSession` runs the domain use case, then re-reads the token from its owner — the config never persists anything itself:
 
 ```dart
-// app/lib/di/network_config_impl.dart
+// apps/mobile/lib/di/network_config_impl.dart
 Future<String?> _refreshSession() async {
   final result = await _refreshTokenUseCase(const NoParams());
   if (!result.isSuccess) return null;
@@ -322,7 +322,7 @@ if (hashes != null && hashes.isNotEmpty) {
 `NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. Without a second binding, `getItOrNull<SslPinningConfig>()` returns `null` and pinning is skipped on every flavour, production included. The binding that prevents it:
 
 ```dart
-// app/lib/di/network_binding_module.dart
+// apps/mobile/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
 /// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`

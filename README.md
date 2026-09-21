@@ -23,7 +23,7 @@ graph TD
     classDef data fill:#fff3e6,stroke:#f5cb99,stroke-width:2px,color:#333;
     classDef app fill:#f0f0f0,stroke:#cccccc,stroke-width:2px,color:#333;
 
-    App["🚀 Host App Shell (app/)<br/>Assembles the application"]:::app
+    App["🚀 Host App Shell (apps/mobile/)<br/>Assembles the application"]:::app
 
     subgraph FeatureLayer ["🎨 Feature Presentation Layer (modules/*/feature)"]
         direction LR
@@ -100,7 +100,7 @@ Below is the complete physical organization structure of the Workspace:
 ├── .github/                       # Continuous Integration workflows (CI Workflows)
 │   └── workflows/
 │       └── fastlane.yml           # CI Github Action running Fastlane automatically
-├── app/                           # Host Application (Main App Shell)
+├── apps/mobile/                           # Host Application (Main App Shell)
 │   ├── android/                   # Native Android project
 │   ├── ios/                       # Native iOS project
 │   ├── lib/
@@ -265,7 +265,7 @@ import 'package:injectable/injectable.dart';
 void initMicroPackage() {}
 ```
 
-### Assembly at Host App (`app/lib/di/injection.dart`):
+### Assembly at Host App (`apps/mobile/lib/di/injection.dart`):
 ```dart
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
@@ -333,11 +333,11 @@ Future<void> configureDependencies({String? environment}) async {
 > [!CAUTION]
 > **An eager `@Singleton` must not depend on a type registered by a later module** — it throws
 > *"not registered"* at boot. `flutter analyze` cannot catch this; verify against the generated
-> `app/lib/di/injection.config.dart`. Use `@LazySingleton` when the dependency lands later.
+> `apps/mobile/lib/di/injection.config.dart`. Use `@LazySingleton` when the dependency lands later.
 >
 > **GetIt does not resolve supertypes.** Registering `Impl as InterfaceA` leaves
 > `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB` — bind the second
-> interface explicitly through an `@module` (see `app/lib/di/network_binding_module.dart`).
+> interface explicitly through an `@module` (see `apps/mobile/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -352,7 +352,7 @@ Each Feature Package owns its own routing structure and files:
 - Routes inherit from `GoRouteDataCustom` to inherently possess automatic screen tracking and smooth cross-platform transitions.
 
 ### Runtime Assembly (Assembly)
-`app/lib/presentation/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeShellRoute` lists. It collects:
+`apps/mobile/lib/presentation/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeShellRoute` lists. It collects:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list
@@ -365,8 +365,8 @@ holds no feature type at all, which is what makes `feature_auth` removable.
 
 ### Removing a feature
 
-1. Delete its `ExternalModule(...)` entry and matching import in `app/lib/di/injection.dart`.
-2. Delete its `feature_x:` entry in `app/pubspec.yaml`.
+1. Delete its `ExternalModule(...)` entry and matching import in `apps/mobile/lib/di/injection.dart`.
+2. Delete its `feature_x:` entry in `apps/mobile/pubspec.yaml`.
 3. Delete its path from the `workspace:` list in the root `pubspec.yaml`.
 4. `flutter pub get && dart run build_runner build -d --workspace`.
 
@@ -420,12 +420,12 @@ dart run build_runner build -d --workspace
 
 ### 5. Run Application
 ```bash
-flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
+flutter run -t apps/mobile/lib/main.dart --flavor dev --dart-define-from-file=apps/mobile/env.dev
 ```
 
 ### 6. Build an APK
 ```bash
-cd app   # required — building from the workspace root fails with a misleading Gradle error
+cd apps/mobile   # required — building from the workspace root fails with a misleading Gradle error
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 

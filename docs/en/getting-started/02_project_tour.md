@@ -10,7 +10,7 @@
 
 ```text
 flutter-monorepo-codebase/
-├── app/                    # Host app shell — entrypoint, DI assembly, router, flavors
+├── apps/mobile/                    # Host app shell — entrypoint, DI assembly, router, flavors
 │   ├── lib/                #   main.dart, main_scope.dart, di/, presentation/
 │   ├── android/            #   Gradle project (build APK from HERE, not from root)
 │   ├── ios/                #   Xcode project
@@ -118,7 +118,7 @@ One bounded UI concern per package. A feature may depend on `domain_*`, `core_di
 ```mermaid
 graph BT
     subgraph Outer
-        App["app/ — host shell"]
+        App["apps/mobile/ — host shell"]
     end
     subgraph UI
         Features["modules/*/feature"]
@@ -148,7 +148,7 @@ Read it as: **arrows point at what you are allowed to depend on.**
 - `Domain` is the centre. Outside `domain_core`, which it shares, it depends on no workspace package at all.
 - `Data` implements domain contracts and talks to `core_network` / `core_storage` / `core_database`.
 - `Features` consume domain use cases; they never see `data_*`.
-- `app/` sits outermost and is the only place allowed to know about everything at once.
+- `apps/mobile/` sits outermost and is the only place allowed to know about everything at once.
 
 ### Core must not depend on features
 

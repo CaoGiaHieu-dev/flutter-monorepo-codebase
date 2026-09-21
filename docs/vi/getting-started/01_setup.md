@@ -12,9 +12,9 @@
 | :--- | :--- | :--- |
 | Flutter SDK | **3.47.4** trở lên | `pubspec.yaml` → `environment.flutter: ">=3.47.4"` |
 | Dart SDK | **3.13.3** trở lên | `pubspec.yaml` → `environment.sdk: ">=3.13.3 <4.0.0"` |
-| JDK | **17** | `app/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` |
-| Android SDK | compileSdk **37**, NDK `28.2.13676358` | `app/android/app/build.gradle.kts` |
-| Xcode + CocoaPods | iOS deployment target **15.0** | `app/ios/Podfile` |
+| JDK | **17** | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` |
+| Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
+| Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
 | Ruby ≥ 3.0 | chỉ cần cho Fastlane | xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 
 ### FVM là tuỳ chọn
@@ -135,17 +135,17 @@ Script đa nền tảng này chạy tuần tự: kích hoạt `flutterfire_cli` 
 
 ## 5. File môi trường và flavor
 
-Template có sẵn ba flavor: `dev`, `staging`, `prod`. Giá trị đi vào Dart qua `--dart-define-from-file`, và đi vào Android qua đoạn giải mã `dart-defines` trong `app/android/app/build.gradle.kts`.
+Template có sẵn ba flavor: `dev`, `staging`, `prod`. Giá trị đi vào Dart qua `--dart-define-from-file`, và đi vào Android qua đoạn giải mã `dart-defines` trong `apps/mobile/android/app/build.gradle.kts`.
 
 | Flavor | File env | Hậu tố applicationId | Trạng thái |
 | :--- | :--- | :--- | :--- |
-| `dev` | `app/env.dev` | `.dev` | ✅ có sẵn |
-| `staging` | `app/env.stg` | `.stg` | ✅ có sẵn |
-| `prod` | `app/env.prod` | *(không có)* | ❌ **bạn phải tự tạo** |
+| `dev` | `apps/mobile/env.dev` | `.dev` | ✅ có sẵn |
+| `staging` | `apps/mobile/env.stg` | `.stg` | ✅ có sẵn |
+| `prod` | `apps/mobile/env.prod` | *(không có)* | ❌ **bạn phải tự tạo** |
 
-### Tạo `app/env.prod`
+### Tạo `apps/mobile/env.prod`
 
-File này không nằm trong repo — secret production là của bạn. Chép danh sách **tên key** dưới đây (giá trị đã ẩn; xem `app/env.dev` để biết định dạng):
+File này không nằm trong repo — secret production là của bạn. Chép danh sách **tên key** dưới đây (giá trị đã ẩn; xem `apps/mobile/env.dev` để biết định dạng):
 
 ```properties
 GOOGLE_MAP_API=
@@ -175,10 +175,10 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `APP_SCHEMA` và `APP_LINK_MODE` **không** được khai trong `EnvConstants`. Riêng `APP_SCHEMA` chỉ được phía Android dùng, dưới dạng `resValue` string trong `app/android/app/build.gradle.kts`. Vẫn phải giữ chúng trong file env dù Dart không đọc trực tiếp.
+> `APP_SCHEMA` và `APP_LINK_MODE` **không** được khai trong `EnvConstants`. Riêng `APP_SCHEMA` chỉ được phía Android dùng, dưới dạng `resValue` string trong `apps/mobile/android/app/build.gradle.kts`. Vẫn phải giữ chúng trong file env dù Dart không đọc trực tiếp.
 
 > [!WARNING]
-> `app/env.dev` và `app/env.stg` hiện **đang được git theo dõi** — mẫu `*.env` trong `.gitignore` không khớp với tên file `env.dev`. Hãy coi nội dung của chúng là giá trị mẫu không bí mật, và đừng đặt credential production thật vào `app/env.prod` cho tới khi bạn xác nhận file đó đã được ignore.
+> `apps/mobile/env.dev` và `apps/mobile/env.stg` hiện **đang được git theo dõi** — mẫu `*.env` trong `.gitignore` không khớp với tên file `env.dev`. Hãy coi nội dung của chúng là giá trị mẫu không bí mật, và đừng đặt credential production thật vào `apps/mobile/env.prod` cho tới khi bạn xác nhận file đó đã được ignore.
 
 ---
 
@@ -187,13 +187,13 @@ class EnvConstants {
 ### Từ dòng lệnh
 
 ```bash
-flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
+flutter run -t apps/mobile/lib/main.dart --flavor dev --dart-define-from-file=apps/mobile/env.dev
 ```
 
-### Build APK — bắt buộc `cd app` trước
+### Build APK — bắt buộc `cd apps/mobile` trước
 
 ```bash
-cd app
+cd apps/mobile
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
@@ -201,14 +201,14 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 > Chạy `flutter build apk` từ thư mục gốc sẽ báo lỗi rất khó hiểu, ví dụ
 > `Target file "lib\main.dart" not found`, hoặc
 > `Flutter failed to read a file at ".../android/app/build.gradle"`.
-> Project Android nằm ở `app/android`, nên lệnh build phải gọi từ trong `app/`.
-> Lưu ý đường dẫn env cũng đổi theo: `env.dev` (tương đối với `app/`), không phải `app/env.dev`.
+> Project Android nằm ở `apps/mobile/android`, nên lệnh build phải gọi từ trong `apps/mobile/`.
+> Lưu ý đường dẫn env cũng đổi theo: `env.dev` (tương đối với `apps/mobile/`), không phải `apps/mobile/env.dev`.
 
-File kết quả nằm ở `app/build/app/outputs/flutter-apk/app-dev-debug.apk`.
+File kết quả nằm ở `apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.apk`.
 
 ### Android: Built-in Kotlin đang bật
 
-`app/android/gradle.properties` đặt `android.builtInKotlin=true`. Giữ nguyên, đừng tắt.
+`apps/mobile/android/gradle.properties` đặt `android.builtInKotlin=true`. Giữ nguyên, đừng tắt.
 
 Flutter đang chuyển plugin từ Kotlin Gradle Plugin (KGP) sang phần hỗ trợ Kotlin
 tích hợp sẵn trong Flutter Gradle plugin. Plugin nào đã migrate — ví dụ
@@ -238,7 +238,7 @@ Kotlin — không cần sửa gì trong repo này.
 
 ### Từ VS Code
 
-`.vscode/launch.json` đã định nghĩa sẵn ba cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)**. Chọn một trong panel Run and Debug. Mỗi cấu hình tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `app/`, vì đó là nơi Dart extension neo project).
+`.vscode/launch.json` đã định nghĩa sẵn ba cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)**. Chọn một trong panel Run and Debug. Mỗi cấu hình tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `apps/mobile/`, vì đó là nơi Dart extension neo project).
 
 ---
 

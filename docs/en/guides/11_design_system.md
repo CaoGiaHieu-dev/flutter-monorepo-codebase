@@ -158,7 +158,7 @@ Every size in the `TextTheme` is re-scaled through the context-aware extension:
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
-That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `app/lib/presentation/app_material_wrapper.dart`, which has one.
+That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `apps/mobile/lib/presentation/app_material_wrapper.dart`, which has one.
 
 `AppTextStyles` then just reads the finished theme:
 
@@ -248,7 +248,7 @@ static Size get design => const Size(375, 812);
 It is handed to the package once, at the root of the tree:
 
 ```dart
-// app/lib/main_scope.dart
+// apps/mobile/lib/main_scope.dart
 return ResponsiveInit(
   designSize: AppConfig.design,
   minTextAdapt: true,
@@ -384,7 +384,7 @@ These are enforced in review, and partly by `dart tools/arch_check/check.dart`. 
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
 | The design canvas | `platform/common/lib/src/config/app_config.dart` → `design` |
-| Scaling behaviour (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ResponsiveInit` |
+| Scaling behaviour (`minTextAdapt`, `fontSizeResolver`) | `apps/mobile/lib/main_scope.dart` → `ResponsiveInit` |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
 ---

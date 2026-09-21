@@ -3,7 +3,7 @@
 Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế nào, có những lane nào và nhận tham số gì, app được ký ra sao, và quy trình phát hành đầy đủ gồm những bước nào.** Đọc xong bạn cấu hình được `Config.yaml`, chạy được mọi lane từ thư mục gốc, và đưa được bản build lên Firebase App Distribution, Google Play hoặc TestFlight.
 
 > [!IMPORTANT]
-> Có hai cái bẫy trong thiết lập này, được mô tả bên dưới — cơ chế **âm thầm lùi về keystore dev đã commit sẵn** ([§4](#4-ký-ứng-dụng)) và **file `app/env.prod` bắt buộc phải có**, thiếu nó thì build prod fail cứng ([§6](#6-flavor-và-file-env)). Đọc cả hai trước lần upload store đầu tiên.
+> Có hai cái bẫy trong thiết lập này, được mô tả bên dưới — cơ chế **âm thầm lùi về keystore dev đã commit sẵn** ([§4](#4-ký-ứng-dụng)) và **file `apps/mobile/env.prod` bắt buộc phải có**, thiếu nó thì build prod fail cứng ([§6](#6-flavor-và-file-env)). Đọc cả hai trước lần upload store đầu tiên.
 
 ---
 
@@ -13,36 +13,36 @@ Fastlane vốn bắt bạn phải đứng đúng thư mục chứa `Fastfile`. R
 
 ```
 fastlane/Fastfile              ← proxy ở gốc
-app/fastlane/Fastfile          ← entry point thật
-app/fastlane/modules/
+apps/mobile/fastlane/Fastfile          ← entry point thật
+apps/mobile/fastlane/modules/
     helpers.rb                 ← nạp config + toàn bộ logic dùng chung
     android_lanes.rb           ← platform :android
     ios_lanes.rb               ← platform :ios
     flutter_lanes.rb           ← lane cross-platform
-app/fastlane/Config.yaml       ← config CỦA BẠN (gitignore, tự tạo)
-app/fastlane/Config.example.yaml
+apps/mobile/fastlane/Config.yaml       ← config CỦA BẠN (gitignore, tự tạo)
+apps/mobile/fastlane/Config.example.yaml
 ```
 
 `fastlane/Fastfile` ở gốc làm đúng hai việc:
 
 ```ruby
-# Change directory to app/fastlane to align working directories with the app configuration
-Dir.chdir("../app/fastlane")
+# Change directory to apps/mobile/fastlane to align working directories with the app configuration
+Dir.chdir("../apps/mobile/fastlane")
 
-import "../app/fastlane/modules/helpers.rb"
-import "../app/fastlane/modules/ios_lanes.rb"
-import "../app/fastlane/modules/android_lanes.rb"
-import "../app/fastlane/modules/flutter_lanes.rb"
+import "../apps/mobile/fastlane/modules/helpers.rb"
+import "../apps/mobile/fastlane/modules/ios_lanes.rb"
+import "../apps/mobile/fastlane/modules/android_lanes.rb"
+import "../apps/mobile/fastlane/modules/flutter_lanes.rb"
 ```
 
-Đường dẫn bên trong các module sau đó được giải **tuyệt đối theo vị trí của chính file**, không phụ thuộc CWD của người gọi (`app/fastlane/modules/helpers.rb`):
+Đường dẫn bên trong các module sau đó được giải **tuyệt đối theo vị trí của chính file**, không phụ thuộc CWD của người gọi (`apps/mobile/fastlane/modules/helpers.rb`):
 
 ```ruby
 CONFIG_FILE = File.expand_path("../Config.yaml", __dir__)
 APP_DIR     = File.expand_path("../..", __dir__)
 ```
 
-Chính điều đó khiến `fastlane android build …` chạy giống hệt nhau dù bạn đứng ở thư mục gốc hay trong `app/`.
+Chính điều đó khiến `fastlane android build …` chạy giống hệt nhau dù bạn đứng ở thư mục gốc hay trong `apps/mobile/`.
 
 ---
 
@@ -57,10 +57,10 @@ UI.user_error!("Configuration file not found at #{CONFIG_FILE}") unless File.exi
 Tạo một lần:
 
 ```bash
-cp app/fastlane/Config.example.yaml app/fastlane/Config.yaml
+cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 ```
 
-`app/fastlane/.gitignore` bỏ qua `*.yaml` kèm ngoại lệ `!Config.example.yaml`, nên `Config.yaml` bạn điền — và mọi file credential `*.json` bên cạnh — đều nằm ngoài git.
+`apps/mobile/fastlane/.gitignore` bỏ qua `*.yaml` kèm ngoại lệ `!Config.example.yaml`, nên `Config.yaml` bạn điền — và mọi file credential `*.json` bên cạnh — đều nằm ngoài git.
 
 ### Các trường cần điền
 
@@ -93,7 +93,7 @@ fastlane add_plugin firebase_app_distribution
 
 Mọi lane đều tương tác: tham số nào bạn không truyền thì nó sẽ hỏi. Truyền sẵn trên dòng lệnh sẽ bỏ qua câu hỏi — đó là điều khiến các lane này dùng được trong CI.
 
-### Android — `app/fastlane/modules/android_lanes.rb`
+### Android — `apps/mobile/fastlane/modules/android_lanes.rb`
 
 | Lane | Làm gì | Tham số |
 |:---|:---|:---|
@@ -101,7 +101,7 @@ Mọi lane đều tương tác: tham số nào bạn không truyền thì nó s�
 | `android upload` | Upload artifact **đã build sẵn** lên Play. Ép `skip_build:true`, `skip_setup:true`, `flutter_version:stable`, `distribute_store:true`, `distribute_firebase:false` | `flavor`, `build_type`, `version`, `track` |
 | `android store` | Phát hành prod lên Play. Ép `flavor:prod`, `build_type:aab`, `distribute_store:true`, `distribute_firebase:false` | `version`, `build_number`, `track` |
 
-### iOS — `app/fastlane/modules/ios_lanes.rb`
+### iOS — `apps/mobile/fastlane/modules/ios_lanes.rb`
 
 | Lane | Làm gì | Tham số |
 |:---|:---|:---|
@@ -109,7 +109,7 @@ Mọi lane đều tương tác: tham số nào bạn không truyền thì nó s�
 | `ios upload` | Upload IPA có sẵn lên TestFlight, không build lại | `flavor`, `version` |
 | `ios store` | Phát hành prod lên TestFlight. Ép `flavor:prod`, `distribute_store:true` | `version`, `build_number` |
 
-### Cross-platform — `app/fastlane/modules/flutter_lanes.rb`
+### Cross-platform — `apps/mobile/fastlane/modules/flutter_lanes.rb`
 
 | Lane | Làm gì | Tham số |
 |:---|:---|:---|
@@ -150,20 +150,20 @@ fastlane store version:1.2.0 build_number:auto track:internal
 
 `build_number` nhận một con số hoặc chuỗi `auto`. Với `auto`, `determine_build_number` lấy số cao nhất hiện tại rồi cộng một — từ **TestFlight** (iOS + store), **Google Play** theo track đã chọn (Android + store), hoặc **Firebase App Distribution** trong các trường hợp còn lại. Nếu bạn chọn `auto` mà không đặt đích phân phối nào, nó lùi về hỏi Firebase.
 
-`versionCode` và `versionName` **không** lấy từ `app/pubspec.yaml` khi build qua Fastlane. `app/android/app/build.gradle.kts` gắn chúng vào Flutter:
+`versionCode` và `versionName` **không** lấy từ `apps/mobile/pubspec.yaml` khi build qua Fastlane. `apps/mobile/android/app/build.gradle.kts` gắn chúng vào Flutter:
 
 ```kotlin
 versionCode = flutter.versionCode
 versionName = flutter.versionName
 ```
 
-nghĩa là `--build-number` / `--build-name` mà lane truyền vào sẽ quyết định. Dòng `version: 1.0.0+1` trong `app/pubspec.yaml` chỉ là giá trị dự phòng khi chạy `flutter build` trần không kèm cờ.
+nghĩa là `--build-number` / `--build-name` mà lane truyền vào sẽ quyết định. Dòng `version: 1.0.0+1` trong `apps/mobile/pubspec.yaml` chỉ là giá trị dự phòng khi chạy `flutter build` trần không kèm cờ.
 
 ---
 
 ## 4. Ký ứng dụng
 
-`app/android/app/build.gradle.kts` khai ba signing config, mỗi cái đọc một file properties khác nhau trong `app/android/`:
+`apps/mobile/android/app/build.gradle.kts` khai ba signing config, mỗi cái đọc một file properties khác nhau trong `apps/mobile/android/`:
 
 | Config | File properties | Flavor sử dụng |
 |:---|:---|:---|
@@ -190,12 +190,12 @@ if (keystorePropertiesFile.exists()) {
 >
 > Trước mọi lần build production, hãy kiểm tra file có tồn tại và trỏ đúng chỗ không:
 > ```bash
-> test -f app/android/key.properties && echo OK || echo "THIẾU — prod sẽ dùng key dev"
+> test -f apps/mobile/android/key.properties && echo OK || echo "THIẾU — prod sẽ dùng key dev"
 > ```
 
 ### Keystore dev đang nằm trong git
 
-`app/android/key-dev.properties` và `app/android/keystore-dev.jks` **được track trong git** để clone về là build chạy ngay không cần cấu hình. Với một template thì đó là chủ đích, và dùng cho `dev` thì không sao.
+`apps/mobile/android/key-dev.properties` và `apps/mobile/android/keystore-dev.jks` **được track trong git** để clone về là build chạy ngay không cần cấu hình. Với một template thì đó là chủ đích, và dùng cho `dev` thì không sao.
 
 > [!CAUTION]
 > **Tuyệt đối không phát hành production bằng keystore dev.** Nó công khai trong repo — bất kỳ ai clone được cũng ký được một APK mà hệ điều hành coi là bản cập nhật của app bạn.
@@ -207,7 +207,7 @@ keytool -genkey -v -keystore ~/upload-keystore.jks \
   -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 ```
 
-Rồi tạo `app/android/key.properties` (đã được `.gitignore` che):
+Rồi tạo `apps/mobile/android/key.properties` (đã được `.gitignore` che):
 
 ```properties
 storePassword=<mật khẩu store của bạn>
@@ -258,9 +258,9 @@ create("staging") {
 
 | Flavor | Hậu tố applicationId | File dart-define Fastlane mong đợi | Có sẵn |
 |:---|:---|:---|:---|
-| `dev` | `.dev` | `app/env.dev` | ✅ |
-| `staging` | `.stg` | `app/env.stg` | ✅ |
-| `prod` | *(không có)* | `app/env.prod` | ❌ **bạn phải tự tạo** |
+| `dev` | `.dev` | `apps/mobile/env.dev` | ✅ |
+| `staging` | `.stg` | `apps/mobile/env.stg` | ✅ |
+| `prod` | *(không có)* | `apps/mobile/env.prod` | ❌ **bạn phải tự tạo** |
 
 `helpers.rb` ánh xạ flavor sang file:
 
@@ -279,16 +279,16 @@ và từ chối build khi file đó không tồn tại:
 ```ruby
 unless File.exist?("../#{dart_define_file}")
   UI.user_error!(
-    "Dart define file 'app/#{dart_define_file}' not found for flavor "     "'#{flavor}'. Building without it would ship empty "     "String.fromEnvironment values (API base URL, keys), so this is "     "a hard failure. Create the file first."
+    "Dart define file 'apps/mobile/#{dart_define_file}' not found for flavor "     "'#{flavor}'. Building without it would ship empty "     "String.fromEnvironment values (API base URL, keys), so this is "     "a hard failure. Create the file first."
   )
 end
 build_command += " --dart-define-from-file=#{dart_define_file}"
 ```
 
 > [!IMPORTANT]
-> **Không build được bản prod cho tới khi bạn tạo `app/env.prod`.** Đó là có chủ đích. Phương án còn lại — bỏ qua cờ này kèm một cảnh báo — sẽ khiến build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `platform/kernel/lib/src/utils/env_constants.dart` rơi về giá trị rỗng, cho ra một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
+> **Không build được bản prod cho tới khi bạn tạo `apps/mobile/env.prod`.** Đó là có chủ đích. Phương án còn lại — bỏ qua cờ này kèm một cảnh báo — sẽ khiến build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `platform/kernel/lib/src/utils/env_constants.dart` rơi về giá trị rỗng, cho ra một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
 >
-> Sao chép danh sách key từ `app/env.dev`; `.vscode/launch.json` vốn đã trỏ cấu hình Prod vào `env.prod`.
+> Sao chép danh sách key từ `apps/mobile/env.dev`; `.vscode/launch.json` vốn đã trỏ cấu hình Prod vào `env.prod`.
 
 > [!WARNING]
 > Mẫu `*.env` trong `.gitignore` **không** khớp `env.dev` / `env.stg` / `env.prod` — dấu chấm nằm sai phía — nên `env.dev` và `env.stg` hiện đang bị track trong git. Hãy thêm dòng ignore tường minh trước khi đặt credential thật vào `env.prod`.
@@ -316,8 +316,8 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 ## 8. Quy trình phát hành
 
 1. **Chốt version.** Quyết định `version` (build name). Dùng `build_number:auto` trừ khi bạn cần một số cụ thể.
-2. **Kiểm tra ký ứng dụng.** `test -f app/android/key.properties` — xem cảnh báo ở [§4](#4-ký-ứng-dụng).
-3. **Kiểm tra file env của flavor tương ứng có tồn tại không** — xem [§6](#6-flavor-và-file-env). Với prod bạn phải tạo `app/env.prod` trước; thiếu nó lane fail cứng.
+2. **Kiểm tra ký ứng dụng.** `test -f apps/mobile/android/key.properties` — xem cảnh báo ở [§4](#4-ký-ứng-dụng).
+3. **Kiểm tra file env của flavor tương ứng có tồn tại không** — xem [§6](#6-flavor-và-file-env). Với prod bạn phải tạo `apps/mobile/env.prod` trước; thiếu nó lane fail cứng.
 4. **Xác nhận `Config.yaml` đã điền đủ**, đặc biệt `firebase.app_ids`, `app_store_connect.apple_ids` và các đường dẫn credential.
 5. **Chạy thử ở local**, không phân phối:
    ```bash
@@ -337,9 +337,9 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 
 ### Checklist trước khi phát hành
 
-- [ ] `app/android/key.properties` tồn tại và trỏ tới keystore **release** của bạn
+- [ ] `apps/mobile/android/key.properties` tồn tại và trỏ tới keystore **release** của bạn
 - [ ] Keystore release đã được sao lưu ngoài repo
-- [ ] File env của flavor đích đã có (`app/env.prod` cho prod — xem [§6](#6-flavor-và-file-env))
+- [ ] File env của flavor đích đã có (`apps/mobile/env.prod` cho prod — xem [§6](#6-flavor-và-file-env))
 - [ ] `Config.yaml` đầy đủ; các file JSON/`.p8` credential có mặt đúng đường dẫn đã cấu hình
 - [ ] `flutter analyze` sạch và test các package pass — `pr_quality_check.yml` chặn ở PR, nhưng các pipeline phát hành thì không (xem [`01_cicd.md`](01_cicd.md#6-quality-gate))
 - [ ] `sslPinningHashes` đã điền nếu bản build này chạy với traffic production — mặc định nó là `const []`, tức tắt hoàn toàn pinning

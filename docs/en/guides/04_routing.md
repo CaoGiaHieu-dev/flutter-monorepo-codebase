@@ -8,7 +8,7 @@
 
 ## 1. The core idea: routing is decentralised
 
-`app/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
+`apps/mobile/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
 
 ```dart
 List<INavDestinationModule> get _dashboardTabs {

@@ -93,7 +93,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 ## 6. Dependency injection
 
 - [ ] New package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`
-- [ ] Its module is registered in the right group in `app/lib/di/injection.dart`
+- [ ] Its module is registered in the right group in `apps/mobile/lib/di/injection.dart`
 - [ ] Screen-scoped controllers are `@injectable` — **never** `@singleton` / `@lazySingleton`
 - [ ] Global controllers that are singletons are genuinely app-wide
 - [ ] No eager `@Singleton` depends on a type registered by a later module ([rule 5](01_rules.md#5-di-registration-order))
@@ -103,7 +103,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 **Verify** — after any DI change, read the generated assembly and confirm each eager registration's dependencies appear earlier in `init()`:
 
 ```bash
-grep -n "PackageModule().init\|gh.singleton<" app/lib/di/injection.config.dart
+grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
 ```
 
 ---

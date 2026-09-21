@@ -213,11 +213,11 @@ The fields are `private` + `late final`: nobody outside the class can reach the 
 | Owner | Package | Key(s) | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `ThemeStorageImpl` | app shell (`app/lib/di/`) | `themeMode` | `pref` |
-| `LanguageStorageImpl` | app shell (`app/lib/di/`) | `locale` | `pref` |
-| `AppBootStorage` | app shell (`app/lib/di/`) | `viewed_onboard` | `pref` |
+| `ThemeStorageImpl` | app shell (`apps/mobile/lib/di/`) | `themeMode` | `pref` |
+| `LanguageStorageImpl` | app shell (`apps/mobile/lib/di/`) | `locale` | `pref` |
+| `AppBootStorage` | app shell (`apps/mobile/lib/di/`) | `viewed_onboard` | `pref` |
 
-App-shell key classes live in `app/lib/di/utils/`.
+App-shell key classes live in `apps/mobile/lib/di/utils/`.
 
 
 ---
@@ -229,7 +229,7 @@ App-shell key classes live in `app/lib/di/utils/`.
 **Enum:**
 
 ```dart
-// app/lib/di/theme_storage_impl.dart
+// apps/mobile/lib/di/theme_storage_impl.dart
 late final _themeMode = StorageValue<ThemeMode>(
   _storageManager.getStorage(StorageType.pref),
   ThemeStorageKeys.THEME_MODE,
@@ -243,7 +243,7 @@ late final _themeMode = StorageValue<ThemeMode>(
 **Bool with an explicit default:**
 
 ```dart
-// app/lib/di/app_boot_storage.dart
+// apps/mobile/lib/di/app_boot_storage.dart
 late final viewedOnboard = StorageValue<bool>(
   _storageManager.getStorage(StorageType.pref),
   AppBootStorageKeys.VIEWED_ONBOARD,
@@ -294,7 +294,7 @@ abstract class IThemeStorage {
 ```
 
 ```dart
-// app/lib/di/theme_storage_impl.dart — the owner implements it
+// apps/mobile/lib/di/theme_storage_impl.dart — the owner implements it
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);

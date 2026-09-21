@@ -54,7 +54,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 1. Tạo cây thư mục và `pubspec.yaml`
 2. Ghi `lib/di/module.dart` với `@InjectableInit.microPackage()`
 3. Đăng ký package vào danh sách `workspace:` ở `pubspec.yaml` gốc
-4. Đăng ký vào `app/pubspec.yaml` **và** `app/lib/di/injection.dart`
+4. Đăng ký vào `apps/mobile/pubspec.yaml` **và** `apps/mobile/lib/di/injection.dart`
 5. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
    `build_runner build -d --workspace`, rồi `dart fix --apply`
 
@@ -219,7 +219,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 Không có `order` — nhóm route này khớp theo path chứ không theo chỉ số.
 
 > [!CAUTION]
-> Tuyệt đối không sửa `app/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
+> Tuyệt đối không sửa `apps/mobile/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
 > gom các đóng góp qua `getAllOrEmpty<IFeatureRouteModule>()` và
 > `getAllOrEmpty<INavDestinationModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
 
@@ -399,8 +399,8 @@ Sau đó **restart hoàn toàn** app (không phải hot reload) để đồ th�
 
 App phải chạy được khi xoá bất kỳ feature nào. Gỡ theo đúng thứ tự:
 
-1. Mục `ExternalModule(...)` **và** dòng import tương ứng trong `app/lib/di/injection.dart`
-2. Mục khai trong `app/pubspec.yaml`
+1. Mục `ExternalModule(...)` **và** dòng import tương ứng trong `apps/mobile/lib/di/injection.dart`
+2. Mục khai trong `apps/mobile/pubspec.yaml`
 3. Đường dẫn trong danh sách `workspace:` ở `pubspec.yaml` gốc
 4. Thư mục `modules/*/feature/<tên>/`
 5. `flutter pub get && dart run build_runner build -d --workspace`
@@ -430,7 +430,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > [!NOTE]
 > Việc `injection.dart` gọi tên các package feature là **tham chiếu cứng có chủ đích duy nhất** của
 > composition root — nơi lắp ráp thì buộc phải biết nó lắp cái gì. Đó cũng là chỗ duy nhất: không
-> file nào khác dưới `app/lib/` import một package `feature_*`. Shell có import `core_ui_kit` ở vài
+> file nào khác dưới `apps/mobile/lib/` import một package `feature_*`. Shell có import `core_ui_kit` ở vài
 > nơi, và điều đó hoàn toàn ổn — đó là package core, không phải feature có thể gỡ.
 
 ---

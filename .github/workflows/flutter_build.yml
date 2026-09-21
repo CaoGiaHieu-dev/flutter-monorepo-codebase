@@ -58,20 +58,24 @@ jobs:
         #6 Setup Keystore
       - name: Decode Keystore
         run: |
-          echo -n ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > app/android/keystore.jks
+          echo -n ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > apps/mobile/android/keystore.jks
 
       - name: Create key.properties
         run: |
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > app/android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> app/android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> app/android/key.properties
-          echo "storeFile=../keystore.jks" >> app/android/key.properties
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > apps/mobile/android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> apps/mobile/android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> apps/mobile/android/key.properties
+          echo "storeFile=../keystore.jks" >> apps/mobile/android/key.properties
 
         #7 Building APK
+      # `.env` and the obfuscation map live at the repository root, and the
+      # build runs from the app directory — which is now two levels down, not
+      # one. `$GITHUB_WORKSPACE` says root without counting `..`, so moving
+      # the app again cannot silently point these at the wrong place.
       - name: Build APK
         run: |
-          cd app
-          flutter build apk --flavor=${{ inputs.flavor }} --build-name=${{ inputs.version }} --build-number=${{ github.run_number }} --dart-define-from-file=../.env --obfuscate --split-debug-info=../obfuscate/ --no-tree-shake-icons --verbose
+          cd apps/mobile
+          flutter build apk --flavor=${{ inputs.flavor }} --build-name=${{ inputs.version }} --build-number=${{ github.run_number }} --dart-define-from-file="$GITHUB_WORKSPACE/.env" --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" --no-tree-shake-icons --verbose
 
       #   #7 Building App Bundle (aab)
       # - name: Build appBundle
@@ -92,7 +96,7 @@ jobs:
         with:
           credentials: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
           app: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-          file: "app/build/app/outputs/flutter-apk/app-${{ inputs.flavor}}-release.apk"
+          file: "apps/mobile/build/app/outputs/flutter-apk/app-${{ inputs.flavor}}-release.apk"
           release-notes: |
             Build version: ${{ inputs.version }}+${{ github.run_number }}
             Flavor: ${{ inputs.flavor }}

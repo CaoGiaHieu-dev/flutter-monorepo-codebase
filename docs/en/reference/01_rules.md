@@ -156,7 +156,7 @@ Full walkthrough: [`../guides/06_storage.md`](../guides/06_storage.md).
 
 **Rule.** An eager `@Singleton` must never depend on a type registered by a module that initialises **later** in `configureDependencies()`. Use `@LazySingleton` when the dependency comes from a later module.
 
-**Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `app/lib/di/injection.dart`: `externalPackageModulesBefore` → app-local registrations → `externalPackageModulesAfter`.
+**Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`: `externalPackageModulesBefore` → app-local registrations → `externalPackageModulesAfter`.
 
 Reference: `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it injects `AuthLocalDataSource` from `data_auth`, whose module runs after the app-local block. Its only consumer (`ApiClient`) is itself lazy, so deferring is safe.
 
@@ -167,7 +167,7 @@ Reference: `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it
 
 ```bash
 dart run build_runner build -d --workspace
-grep -n "PackageModule().init\|gh.singleton<" app/lib/di/injection.config.dart
+grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
 ```
 
 `@PostConstruct(preResolve: true)` on a `@lazySingleton` is awaited during module init and re-registered as a plain sync lazy singleton, so later `gh<T>()` sync lookups are safe.
@@ -199,10 +199,10 @@ dart tools/arch_check/check.dart      # rule R8 — Gate 1 of pr_quality_check.y
 
 This is not a style rule. The throwing lookup **compiles**: the calling package depends on `core_di`, not on the feature that implements the contract, so `flutter analyze` sees nothing wrong. It fails at runtime, in a build without that feature, on whichever screen happens to call it. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; a feature is exempt from its own contract.
 
-**Removing a feature** — the four steps documented in `app/lib/di/injection.dart`:
+**Removing a feature** — the four steps documented in `apps/mobile/lib/di/injection.dart`:
 
-1. its `ExternalModule(...)` entry and the matching import in `app/lib/di/injection.dart`;
-2. its `feature_x:` entry in `app/pubspec.yaml`;
+1. its `ExternalModule(...)` entry and the matching import in `apps/mobile/lib/di/injection.dart`;
+2. its `feature_x:` entry in `apps/mobile/pubspec.yaml`;
 3. its path in the root `pubspec.yaml` `workspace:` list;
 4. `flutter pub get` + `dart run build_runner build -d --workspace`.
 
@@ -280,7 +280,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 
 ## 11. Routing
 
-**Rule.** Never edit `app/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
+**Rule.** Never edit `apps/mobile/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
 
 | Contract | Purpose | Ordered? |
 |---|---|---|
@@ -362,7 +362,7 @@ This rule is **enforced by machine**, not by review: R7 runs as Gate 1 of `pr_qu
 
 **Rule.** All user-facing text is translated — hardcoded UI strings are forbidden. Each feature owns its `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI. Access through the feature extension: `context.l10nAuth.someKey`.
 
-Features **must not** edit `app/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
+Features **must not** edit `apps/mobile/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
 
 Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own `.arb` files — it uses `core_base_ui`'s.
 
@@ -403,7 +403,7 @@ abstract class AuthModule {
 This lets the owner inject the concrete type through its constructor while every other feature sees only the interface.
 
 > [!NOTE]
-> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `app/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
+> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `apps/mobile/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
 
 Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-only logic (use a UseCase).
 
@@ -432,7 +432,7 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | Unused assets, files, translations | `dart tools/unused_checker/check_script.dart` |
 | Static analysis | `flutter analyze` |
 | Codegen up to date | `dart run build_runner build -d --workspace` |
-| DI order safety | read `app/lib/di/injection.config.dart` |
+| DI order safety | read `apps/mobile/lib/di/injection.config.dart` |
 | core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |

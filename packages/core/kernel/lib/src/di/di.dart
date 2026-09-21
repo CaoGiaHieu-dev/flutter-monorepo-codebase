@@ -1,2 +1,2 @@
 // Auto-generated exports, do not edit manually.
-export 'database/database.dart';
+export 'service_locator.dart';

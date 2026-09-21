@@ -11,7 +11,7 @@ Thư mục này chứa các công cụ CLI dành cho lập trình viên, hỗ tr
 ```text
 tools/
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
-│   └── check.dart                   # R1-R8: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
+│   └── check.dart                   # R1-R9: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
 ├── sample_cleanup/                  # 🧹 Phân loại và gỡ code mẫu an toàn
 │   └── remove_sample.dart           # --list / dry-run / --apply, có rollback
 ├── sample_manifest.yaml             # 📑 Nguồn chân lý: package nào là sample/framework/shell

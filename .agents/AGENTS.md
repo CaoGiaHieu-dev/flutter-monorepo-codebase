@@ -10,7 +10,9 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
 
 - **`app/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
 - **`packages/core/`**: Infrastructure and utility packages shared across the project:
-  - `core_common`: **Genuinely global** constants (`ApiStatusConstants`, `EnvConstants` — all under `lib/src/utils/`), enums, mixins, `ErrorHandler`, `AppConfig`, `AppInitializer`, extensions. **MUST NOT** hold constants owned by a single feature/domain (storage keys, route paths, API endpoints) — those live in the owning package's `utils/`. Note `AppFailure` now lives in `domain_core` (§ 2.1); `core_common` keeps a re-export shim at `lib/src/error/failures.dart` so existing imports keep resolving.
+  - `platform_kernel`: **Pure Dart, no `flutter` dependency.** Service locator (`getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`), `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, and the genuinely global constants (`ApiStatusConstants`, `EnvConstants`). This is the one package every other package may depend on, so its dependency list is everyone's — 7 entries, none Flutter-bound. Enforced by `arch_check` rule **R9**.
+  - `core_common`: The **Flutter side** of the old `core_common` — `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` and page transitions, `AppUtils`, the dialog controller, input formatters, Firebase options. Re-exports `platform_kernel` wholesale, so an existing `package:core_common/core_common.dart` import keeps resolving everything. **New code that needs only the pure-Dart foundation should import `platform_kernel` directly** rather than pulling Flutter, Firebase and go_router in with it.
+
   - `core_di`: Navigation keys, routing contribution contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), and cross-package communication interfaces.
   - `core_base_ui`: Design system resources (typography, color palette, icons, assets, and L10n translations). **Contains zero Flutter widgets.**
   - `core_ui_kit`: Unified library for all reusable widgets (atomic components like buttons/inputs, plus dialogs, feedback, layout, media and navigation widgets). Depends only on `core_common`, `core_base_ui` and `provider_state_management` — never on a feature. It lives under `packages/core/` because it is a shared UI library every feature may consume, **not** a removable feature.
@@ -31,7 +33,6 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
     - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
     - **ABSOLUTELY FORBIDDEN** to directly depend on the `data` layer or on **any** other feature package. There is no exception: shared widgets come from `core_ui_kit`, which is core, not a feature.
     - **One bounded UI concern per feature package**: Do not co-locate unrelated product surfaces in the same feature (e.g. Home tab + Settings tab). `AppRouter` + `INavDestinationModule` assemble shell branches; `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`), not tab pages. Sample split: `feature_home` vs `feature_settings`.
-
 ---
 
 ## 🧱 2. Strict Layer Isolation
@@ -45,7 +46,7 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
    - Currently **three** core → domain edges exist, and no `core → data` or `core → feature` edge may ever be added:
      - `provider_state_management → domain_core` — needs `Result<T>` / `PaginatedEntity<T>`.
      - `bloc_state_management → domain_core` — needs `AppFailure` for `BlocViewState.error`. It must import `domain_core` **directly**, not via `core_common`'s re-export shim: the shim's `show` clause cannot carry the Freezed-generated `$AppFailureCopyWith`, and the resulting breakage is invisible to `flutter analyze` (§ 21).
-     - `core_common → domain_core` — `ErrorHandler` produces `AppFailure`, which now lives in Domain.
+     - `platform_kernel → domain_core` — `ErrorHandler` produces `AppFailure`, which now lives in Domain.
    - If a core package needs a fallback widget, **define it inside that core package**. Do not borrow one from `core_ui_kit`. Reference: `provider_state_management` ships `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` for exactly this reason.
    - Dependencies flow **one way**: `core_ui_kit → provider_state_management` is correct; the reverse is a genuine cycle **inside** the core ring and is forbidden. (This is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` instead of reaching into the widget library for them — that would close the loop.)
 1. **Domain Layer must be Pure Dart** — enforced by the package graph, not just by review:

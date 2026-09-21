@@ -55,7 +55,7 @@ Steps are sequenced so each one leaves the repo building. Do not batch them.
 | 1 | Machine-enforce removability (**done**) | — | yes |
 | 2 | Shrink the samples (**done**) | 1 | no (deletes code) |
 | 3 | Empty `core_di` of product names (**done**) | 2 | yes |
-| 4 | Split `core_common` | — | yes |
+| 4 | Split `core_common` *(4a done)* | — | yes |
 | 5 | Rename + relayout to `platform/` + `modules/` | 3, 4 | no |
 | 6 | Manifest + `composer` | 5 | yes |
 | 7 | Second app (`admin`) | 6 | yes |
@@ -139,21 +139,29 @@ Cross-Feature tables · `docs/{en,vi}/architecture/02_core.md` §2 ·
 `docs/{en,vi}/guides/04_routing.md` · `docs/{en,vi}/guides/10_cross_feature.md` ·
 `docs/{en,vi}/reference/01_rules.md`.
 
-### Step 4 — Split `core_common`
+### Step 4 — Split `core_common`  *(4a done)*
 
 One package with 20 dependencies becomes three with a defensible boundary each.
 
 | New package | Holds | Flutter? |
 |:--|:--|:--|
-| `platform_kernel` | `getIt` helpers, `ErrorHandler`, exceptions, `TypeHelper`, `ValidationHelper`, enums, `EnvConstants`, `ApiStatusConstants` | no |
-| `platform_flutter` | `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, page transitions, `AppUtils`, dialog controller, formatters | yes |
-| `platform_firebase` | `FirebaseModule` and the generated options | yes |
+| ✅ `platform_kernel` | `getIt` helpers, `ErrorHandler`, exceptions, primitive extensions, `TypeHelper`, `ValidationHelper`, enums, `EnvConstants`, `ApiStatusConstants` | no — **7 deps** |
+| ✅ `core_common` (kept the name) | `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, page transitions, `AppUtils`, dialog controller, formatters, Firebase | yes — 16 deps, was 20 |
+| ⏳ `platform_firebase` | `FirebaseModule` and the generated options — still inside `core_common` | deferred |
+
+**4a shipped with a full re-export**, so not one consumer import changed: `core_common.dart`
+re-exports `platform_kernel` wholesale and `core_common/di/module.dart` re-exports the four
+service-locator helpers. Only two import paths into `core_common` exist in the whole repo, which
+is what made this safe to do blind.
+
+**4b (deferred)** migrates consumers to import `platform_kernel` directly. Until that happens the
+dependency weight is unchanged at the consumer end — the win so far is structural: the pure files
+now live somewhere that *cannot* import Flutter, and R9 keeps it that way.
 
 `ErrorHandler` loses its only Flutter dependency by swapping `kDebugMode` for
 `bool.fromEnvironment('dart.vm.product')`.
 
-**Gate:** `platform_kernel/pubspec.yaml` declares no `flutter:` and no UI package. Full verify
-chain passes.
+**Gate:** `arch_check` R9 clean. Full verify chain passes.
 
 ### Step 5 — Relayout
 
@@ -229,6 +237,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 |:--|:--|:--|:--|
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
+| 2026-09-21 | 4a | Extracted `platform_kernel` (27 files, 7 deps, no Flutter) from `core_common` (20 → 16 deps). `ErrorHandler` lost its last Flutter import (`kDebugMode` → `dart.vm.product`). Added `arch_check` **R9** — pure-Dart tier checked in the **pubspec** as well as imports. Approved edge `core_common → domain_core` became `platform_kernel → domain_core`. Deleted three stray barrel files outside any `lib/`. | ⚠️ not run |
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |

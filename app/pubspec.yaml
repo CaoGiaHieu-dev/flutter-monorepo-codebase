@@ -17,6 +17,8 @@ dependencies:
   intl: "^0.20.3"
 
   # local packages
+  platform_kernel:
+    path: ../packages/core/kernel
   core_common:
     path: ../packages/core/common
   core_network:

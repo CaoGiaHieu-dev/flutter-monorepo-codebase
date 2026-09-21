@@ -47,10 +47,13 @@ dart tools/arch_check/check.dart --help   # full rule descriptions
 | R5 | Every `package:` import used in `lib/` is declared in that package's `pubspec.yaml` |
 | R6 | Generated files still carry their generator header (advisory) |
 | R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file using `core_responsive` |
+| R8 | A `core_di` contract implemented only by a feature is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll` |
 
 The four approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fifth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
 
 R7 exists because `flutter analyze` cannot see the difference. `core_responsive` ships no `num` extension, so `16.h` cannot resolve against it — but an extension declared in another package, or one someone adds locally, would type-check fine while reading a global that never notifies anyone. Only `context.h(16)` registers an `InheritedWidget` dependency on `ResponsiveScope` and therefore rebuilds when metrics change. The bare form is a silent stale-value bug, and a linter has no rule for it. The check only runs on files that reference `core_responsive`, and matches a numeric or closing-paren receiver followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
+
+R8 exists because removability is a property the app shell depends on, and nothing was holding it. The tool derives the set at run time: every type declared in `core_di`, narrowed to those whose only `implements` / `extends` / `as:` binding sits in a `packages/features/*` package. A throwing lookup against one of those compiles — the calling package depends on `core_di`, not on the feature — and then crashes at runtime in any build without that feature. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered, so they are deliberately outside the set. The owning feature is exempt from its own contract: if the package is in the build, so is its registration.
 
 R5 is the mirror image of `unused_checker`: that tool finds dependencies *declared but unused*, this one finds them *used but undeclared*. Pub Workspaces hide the second kind entirely — everything resolves locally through the shared `package_config.json` and only breaks when a package is extracted or published.
 

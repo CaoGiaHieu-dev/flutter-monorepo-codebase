@@ -435,6 +435,12 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
    - **MANDATORY**: every optional multi-instance contribution (`IFeatureRouteModule`, `IDashboardTabModule`, `IFeatureLocalization`, `IAppTreeWrapper`, `IDatabaseMigration`) MUST be collected with `getAllOrEmpty`.
    - Real bug: `app_material_wrapper.dart` used `getIt.getAll<IFeatureLocalization>()`; with no feature contributing one, `MaterialApp` construction threw and the app died at boot.
    - Same rule for single instances: `getItOrNull<T>()` + a fallback, never bare `getIt<T>()`, whenever `T` is owned by a removable feature.
+   - **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R8** derives every `core_di`
+     contract whose only implementer lives in `packages/features/*`, then blocks a throwing
+     `getIt<T>()` / `getAll<T>()` against one. Contracts implemented in the app shell
+     (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; the owning
+     feature is exempt from its own contract. `flutter analyze` cannot see this class of bug —
+     the lookup type-checks against `core_di` and only crashes at runtime.
 
 2. **GetIt does NOT resolve supertypes.** Registering `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB`.
    - Real bug: `NetworkConfigImpl` was registered only `as NetworkConfig`, so `getItOrNull<SslPinningConfig>()` in `AppInitializer._setupHttpOverrides` returned `null` and **certificate pinning was silently skipped on staging and production**.

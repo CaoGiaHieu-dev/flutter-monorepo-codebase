@@ -144,6 +144,72 @@ String _stripComment(String line) {
   return i == -1 ? line : line.substring(0, i);
 }
 
+/// A type declared at the top level of a file — `class`, `mixin` or the Dart 3
+/// class modifiers. Used to enumerate what `core_di` publishes.
+final _typeDeclaration = RegExp(
+  r'^\s*(?:abstract\s+|sealed\s+|final\s+|base\s+|interface\s+|mixin\s+)*'
+  r'(?:class|mixin)\s+([A-Z]\w*)',
+  multiLine: true,
+);
+
+/// A type named as a supertype or as an Injectable binding target:
+/// `implements X`, `extends X`, `with X`, `@LazySingleton(as: X)`.
+///
+/// Comma lists are captured whole (`implements A, B`) and split by the caller,
+/// which is what makes a dual-registering controller like `AuthProvider` —
+/// `implements IAuthSessionState, IAuthRefreshListenable` — register both.
+final _supertypeRef = RegExp(
+  r'(?:implements|extends|with|as:)\s*([A-Z]\w*(?:\s*,\s*[A-Z]\w*)*)',
+);
+
+/// A DI lookup that throws when the type is unregistered.
+///
+/// `getItOrNull<` and `getAllOrEmpty<` do not match: the literal `getIt<` /
+/// `getAll<` requires the `<` immediately after, and those two identifiers
+/// carry more characters before theirs.
+final _throwingLookup = RegExp(r'\bget(?:It|All)<([A-Z]\w*)>');
+
+/// Every type `core_di` declares.
+Set<String> _typesDeclaredIn(String packageRoot) {
+  final out = <String>{};
+  for (final file in _dartFilesUnderLib(packageRoot)) {
+    if (_isGenerated(file)) continue;
+    for (final m in _typeDeclaration.allMatches(File(file).readAsStringSync())) {
+      out.add(m.group(1)!);
+    }
+  }
+  return out;
+}
+
+/// Maps each contract type to the feature packages that implement it.
+///
+/// A contract implemented only by a feature is a contract whose registration
+/// disappears with that feature — which is exactly the set R8 governs. A
+/// contract implemented in the app shell (`IThemeStorage`) is always present,
+/// so it is deliberately not in this map and never trips the rule.
+Map<String, Set<String>> _featureImplementers(
+  Iterable<MonorepoPackage> packages,
+  Set<String> contractTypes,
+) {
+  final out = <String, Set<String>>{};
+  for (final pkg in packages) {
+    if (_layerOf(pkg.rootPath) != 'features') continue;
+    for (final file in _dartFilesUnderLib(pkg.rootPath)) {
+      if (_isGenerated(file)) continue;
+      final content = File(file).readAsStringSync();
+      for (final m in _supertypeRef.allMatches(content)) {
+        for (final raw in m.group(1)!.split(',')) {
+          final name = raw.trim();
+          if (contractTypes.contains(name)) {
+            (out[name] ??= <String>{}).add(pkg.name);
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
 void main(List<String> args) {
   if (args.contains('--help') || args.contains('-h')) {
     _printHelp();
@@ -178,6 +244,25 @@ void main(List<String> args) {
 
   final blocking = <Violation>[];
   final warnings = <Violation>[];
+
+  // R8 needs a repo-wide view before the per-package pass: which `core_di`
+  // contracts are implemented *only* by a feature, and therefore vanish when
+  // that feature is removed.
+  // No `firstOrNull` here: it is a `package:collection` extension and this
+  // tool deliberately depends only on `dart:io` and `package:path`.
+  MonorepoPackage? coreDi;
+  for (final pkg in packages.values) {
+    if (pkg.name == 'core_di') {
+      coreDi = pkg;
+      break;
+    }
+  }
+  final removableContracts = coreDi == null
+      ? const <String, Set<String>>{}
+      : _featureImplementers(
+          packages.values,
+          _typesDeclaredIn(coreDi.rootPath),
+        );
 
   for (final pkg in packages.values) {
     final layer = _layerOf(pkg.rootPath);
@@ -357,6 +442,40 @@ void main(List<String> args) {
       }
     }
 
+    // --- R8: removable contracts resolve optionally ------------------------
+    // `getAll<T>()` throws when `T` is unregistered and `getIt<T>()` throws
+    // when nothing implements it. For a contract whose only implementer is a
+    // feature package, that is a crash the moment the feature is removed —
+    // and features are removable by design (AGENTS §22). The failure is
+    // invisible to `flutter analyze` because the lookup type-checks fine; it
+    // surfaces at runtime, on whichever screen happens to call it.
+    for (final file in files) {
+      if (_isGenerated(file)) continue;
+      final lines = File(file).readAsStringSync().split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        final code = _stripComment(lines[i]);
+        for (final m in _throwingLookup.allMatches(code)) {
+          final type = m.group(1)!;
+          final owners = removableContracts[type];
+          if (owners == null) continue;
+          // The owning feature may resolve its own contract eagerly: if the
+          // package is in the build at all, so is its registration.
+          if (owners.contains(pkg.name)) continue;
+
+          blocking.add(
+            Violation(
+              'R8',
+              '${p.posix.relative(file, from: root)}:${i + 1}',
+              '`$type` is implemented only by ${owners.join(', ')}, which is '
+                  'a removable feature — a throwing lookup here crashes any '
+                  'build without it. Use `getItOrNull<$type>()` (or '
+                  '`getAllOrEmpty`) and handle the null case.',
+            ),
+          );
+        }
+      }
+    }
+
     // --- R6: generated files should not be hand-edited (warning) ----------
     for (final file in files) {
       final name = p.posix.basename(file);
@@ -404,6 +523,7 @@ void _report(
     'R5': 'Every import is declared',
     'R6': 'Generated files are not hand-edited',
     'R7': 'Responsive sizing goes through BuildContext',
+    'R8': 'Removable contracts resolve optionally',
   };
 
   if (warnings.isNotEmpty) {
@@ -491,6 +611,15 @@ RULES CHECKED
       undeclared import still compiles locally and only breaks on extraction.
 
   R6  Generated files are not hand-edited  (warning only, never blocks)
+  R8  Removable contracts resolve optionally
+      A `core_di` contract whose only implementer lives in packages/features/*
+      disappears when that feature is removed. `getIt<T>()` and `getAll<T>()`
+      throw in that case, so such a type must be resolved with
+      `getItOrNull<T>()` / `getAllOrEmpty<T>()` and a fallback. The owning
+      feature may still resolve its own contract eagerly.
+      Invisible to `flutter analyze`: the lookup type-checks, then crashes at
+      runtime on whichever screen calls it.
+
   R7  Responsive sizing goes through BuildContext
       `16.w` and `context.w(16)` compute the same number, but only the
       second registers an InheritedWidget dependency, so only the second

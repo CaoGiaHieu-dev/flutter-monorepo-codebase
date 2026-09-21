@@ -35,6 +35,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // `getItOrNull`, not `getIt`: [IAuthActionHandler] is declared in `core_di`
+    // but implemented by `feature_auth`, which is removable. A throwing lookup
+    // here compiles fine — this package depends on `core_di`, not on the auth
+    // feature — and then crashes at runtime in a build without it. With no auth
+    // feature there is no session to end, so the row is simply not offered.
+    //
+    // Enforced by `dart tools/arch_check/check.dart` rule R8.
+    final authActions = getItOrNull<IAuthActionHandler>();
+
     return Scaffold(
       appBar: AppBar(title: Text(context.l10nSettings.settings)),
       body: ListView(
@@ -53,13 +62,12 @@ class _SettingsPageState extends State<SettingsPage> {
               getIt<ThemeProvider>().toggleTheme();
             },
           ),
-          ListTile(
-            title: Text(context.l10nSettings.logout),
-            trailing: const Icon(Icons.logout),
-            onTap: () {
-              getIt<IAuthActionHandler>().logout(context);
-            },
-          ),
+          if (authActions != null)
+            ListTile(
+              title: Text(context.l10nSettings.logout),
+              trailing: const Icon(Icons.logout),
+              onTap: () => authActions.logout(context),
+            ),
         ],
       ),
     );

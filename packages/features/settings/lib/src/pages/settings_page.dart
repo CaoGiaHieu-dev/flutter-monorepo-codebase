@@ -1,11 +1,13 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:core_common/di/module.dart';
+import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
 
+/// SAMPLE — a second nav destination, and the one screen that *consumes*
+/// another module's contract without depending on that module.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -47,7 +49,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10nSettings.settings)),
       body: ListView(
-        padding: EdgeInsets.all(context.r(16)),
+        padding: context.edgeInsets(all: 16),
         children: [
           ListTile(
             key: languageButtonKey,

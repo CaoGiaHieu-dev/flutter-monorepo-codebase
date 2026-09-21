@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "settings": "Settings Screen (Skeleton)",
+  "settings": "Settings",
   "tabLabel": "Settings",
   "changeLanguage": "Change Language",
   "changeTheme": "Change Theme",

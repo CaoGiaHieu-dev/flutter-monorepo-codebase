@@ -80,7 +80,7 @@ class ImageUtils {
     if (totalFileSize > 20) {
       if (context.mounted) {
         AppOverlay.showToast(
-          content: context.l10n.file_size_exceeded,
+          content: context.l10n.fileSizeExceeded,
           duration: SharedUiConstants.MEDIA_ERROR_TOAST_DURATION,
         );
       }
@@ -127,7 +127,7 @@ class ImageUtils {
       if (getFileSizeInMb(totalFileSize) > 20) {
         if (context.mounted) {
           AppOverlay.showToast(
-            content: context.l10n.file_size_exceeded,
+            content: context.l10n.fileSizeExceeded,
             duration: SharedUiConstants.MEDIA_ERROR_TOAST_DURATION,
           );
         }
@@ -156,7 +156,7 @@ class ImageUtils {
         permissionStatus[permission] == PermissionStatus.limited;
     if (!context.mounted) throw Exception('Context is not mounted');
     if (!isGranted)
-      throw Exception(context.l10n.permission_denied(permission.toString()));
+      throw Exception(context.l10n.permissionDenied(permission.toString()));
 
     final selectedAssets = await AssetsPicker.pickAssets(
       context,

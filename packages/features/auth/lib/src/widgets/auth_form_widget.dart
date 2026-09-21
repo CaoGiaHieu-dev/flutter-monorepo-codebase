@@ -41,19 +41,19 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {
-      return context.l10nAuth.email_is_required;
+      return context.l10nAuth.emailIsRequired;
     }
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-      return context.l10nAuth.invalid_email;
+      return context.l10nAuth.invalidEmail;
     }
     return null;
   }
 
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
-      return context.l10nAuth.password_is_required;
+      return context.l10nAuth.passwordIsRequired;
     }
-    if (value.length < 6) return context.l10nAuth.password_too_short;
+    if (value.length < 6) return context.l10nAuth.passwordTooShort;
     return null;
   }
 
@@ -102,7 +102,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
             validator: _validateEmail,
             decoration: _decoration(
               label: context.l10nAuth.email,
-              hint: context.l10nAuth.enter_your_email,
+              hint: context.l10nAuth.enterYourEmail,
               icon: Icons.email_outlined,
             ),
           ),
@@ -115,7 +115,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
             onFieldSubmitted: (_) => _onSubmit(),
             decoration: _decoration(
               label: context.l10nAuth.password,
-              hint: context.l10nAuth.enter_your_password,
+              hint: context.l10nAuth.enterYourPassword,
               icon: Icons.lock_outline,
               suffix: IconButton(
                 icon: Icon(

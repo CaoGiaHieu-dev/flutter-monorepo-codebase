@@ -1,3 +1,5 @@
 {
-  "@@locale": "vi"
+  "@@locale": "vi",
+  "appName": "Template",
+  "tagline": "Clean Architecture cho Flutter"
 }

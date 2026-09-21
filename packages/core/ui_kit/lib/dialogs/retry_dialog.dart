@@ -15,8 +15,8 @@ class _RetryDialogState extends OverlayDialogState<RetryDialog> {
   @override
   Widget build(BuildContext context) {
     return CupertinoAlertDialog(
-      title: Text(context.l10n.error_occurred),
-      content: Text(context.l10n.try_again),
+      title: Text(context.l10n.errorOccurred),
+      content: Text(context.l10n.tryAgain),
       actions: [
         CupertinoDialogAction(
           isDestructiveAction: true,

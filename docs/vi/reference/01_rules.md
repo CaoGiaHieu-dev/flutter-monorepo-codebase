@@ -366,6 +366,8 @@ Feature **không được** sửa `app/lib/presentation/root_app.dart` để th�
 
 Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** định nghĩa `.arb` riêng — nó dùng của `core_base_ui`.
 
+**Khóa ARB dùng `lowerCamelCase`.** `flutter gen-l10n` biến mỗi khóa thành getter Dart nguyên văn, nên khóa `snake_case` sinh ra `context.l10nAuth.welcome_back` — một định danh phá vỡ quy ước đặt tên của chính Dart ở mọi nơi gọi. File sinh ra bị loại khỏi analysis, nên sẽ không có linter nào báo cho bạn. Hãy chọn kiểu viết ngay trong `.arb`; đó là nơi duy nhất bạn chọn được.
+
 ---
 
 ## 14. Dialog và bottom sheet

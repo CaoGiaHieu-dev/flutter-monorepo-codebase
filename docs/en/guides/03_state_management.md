@@ -174,7 +174,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
     if (error is AuthErrorState) {
       error.maybeWhen(
         invalidCredentials: () =>
-            AppOverlay.showToast(content: context.l10nAuth.invalid_credentials),
+            AppOverlay.showToast(content: context.l10n.invalidCredentials),
         orElse: () => AppOverlay.showToast(content: message ?? ''),
       );
     }

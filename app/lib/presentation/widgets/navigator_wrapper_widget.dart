@@ -140,10 +140,10 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
 
     final l10n = context.l10n;
     final content = switch (failure) {
-      AuthInvalidCredentialsFailure() => l10n.invalid_credentials,
-      AuthUserNotFoundFailure() => l10n.user_not_found,
+      AuthInvalidCredentialsFailure() => l10n.invalidCredentials,
+      AuthUserNotFoundFailure() => l10n.userNotFound,
       AuthServerFailure(:final message) => message,
-      AuthUnknownFailure() => l10n.something_went_wrong,
+      AuthUnknownFailure() => l10n.somethingWentWrong,
     };
 
     AppOverlay.showToast(content: content);

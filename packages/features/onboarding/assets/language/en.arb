@@ -1,5 +1,5 @@
 {
   "@@locale": "en",
-  "welcome_to_onboarding": "Welcome to Codebase",
-  "get_started": "Get Started"
+  "welcomeToOnboarding": "Welcome to Codebase",
+  "getStarted": "Get Started"
 }

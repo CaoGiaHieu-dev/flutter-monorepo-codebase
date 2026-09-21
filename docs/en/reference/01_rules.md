@@ -366,6 +366,8 @@ Features **must not** edit `app/lib/presentation/root_app.dart` to add delegates
 
 Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own `.arb` files — it uses `core_base_ui`'s.
 
+**ARB keys are `lowerCamelCase`.** `flutter gen-l10n` turns each key into a Dart getter verbatim, so a `snake_case` key produces `context.l10nAuth.welcome_back` — an identifier that breaks Dart's own naming convention at every call site. The generated file is excluded from analysis, so no linter will ever tell you. Pick the casing in the `.arb`; it is the only place you can.
+
 ---
 
 ## 14. Dialogs and bottom sheets

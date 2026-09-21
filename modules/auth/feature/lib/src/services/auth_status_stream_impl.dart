@@ -7,9 +7,9 @@ import 'package:injectable/injectable.dart';
 /// Implementation of [IAuthStatusStream] provided by `feature_auth`.
 ///
 /// This is the boundary where the auth feature's own [UserEntity] becomes the
-/// shared [AuthPrincipal]. Nothing outside this package sees the entity, so
-/// fields like `bankAccount` and `fcmToken` stay where they belong and the
-/// entity can change shape without a cross-module release.
+/// shared [AuthPrincipal]. Nothing outside this module sees the entity, so it
+/// can grow whatever fields this module needs without a cross-module release,
+/// and none of them leak to consumers that only asked who is signed in.
 @singleton
 class AuthStatusStreamImpl implements IAuthStatusStream {
   final _controller = StreamController<AuthPrincipal?>.broadcast();

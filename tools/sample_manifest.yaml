@@ -110,9 +110,9 @@ packages:
     kind: sample
     path: modules/auth/data
     demonstrates: >-
-      Freezed models with .toEntity(), a package-owned storage key, and a
-      Firebase-backed repository. Also ships an unused Retrofit data source as
-      a REST reference.
+      A Retrofit data source, Freezed models with .toEntity(), a
+      package-owned storage key, and a repository wrapping both in execute()
+      so nothing throws past the data layer.
 
 # ---------------------------------------------------------------------------
 # Samples living inside framework packages

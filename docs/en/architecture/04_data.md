@@ -320,84 +320,68 @@ REST endpoints follow the same ownership rule — `modules/auth/data/lib/src/uti
 
 ## 6. `data_auth` — read this before copying it
 
-`AuthRepositoryImpl` is the most-copied file in the template. Every collaborator arrives through the constructor — including the three third-party SDKs:
+`AuthRepositoryImpl` is the most-copied file in the template, so it is written exactly the way this document describes the layer: a Retrofit data source for the network, a `StorageValue` data source for the session, `execute()` around both, and a model-to-entity mapping at the boundary.
 
 ```dart
-@Injectable(as: IAuthRepository)
+@LazySingleton(as: IAuthRepository)
 class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
-  AuthRepositoryImpl(
-    this._googleSignIn,
-    this._localDataSource,
-    this._firebaseAuth,
-    this._firestore,
-    this._facebookAuth,
-  );
+  AuthRepositoryImpl(this._remote, this._local);
 
-  final GoogleSignIn _googleSignIn;
-  final AuthLocalDataSource _localDataSource;
-  final FirebaseAuth _firebaseAuth;
-  final FirebaseFirestore _firestore;
-  final FacebookAuth _facebookAuth;
+  final AuthRemoteDataSource _remote;
+  final AuthLocalDataSource _local;
 ```
 
-The SDK singletons are bound once in [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart):
+The Retrofit client is built once in [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart) from the shared `Dio`, so the data source inherits the whole interceptor chain — auth header, 401 refresh, retry, logging — without knowing any of it exists:
 
 ```dart
 @module
 abstract class RegisterModule {
-  @preResolve
-  Future<GoogleSignIn> get googleSignIn async { … }
-
   @lazySingleton
-  FirebaseAuth get firebaseAuth => FirebaseAuth.instance;
-
-  @lazySingleton
-  FirebaseFirestore get firestore => FirebaseFirestore.instance;
-
-  @lazySingleton
-  FacebookAuth get facebookAuth => FacebookAuth.instance;
+  AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
+      AuthRemoteDataSource(dio);
 }
 ```
 
-Reaching for `.instance` inside the repository would hide those dependencies from the container and leave no seam to pass a fake through, which is why they are registered here instead.
+Constructing it here rather than inside the repository keeps the dependency visible to the container, which is what leaves a seam for a fake in tests.
 
-> [!IMPORTANT]
-> **It calls the Firebase SDK directly, not `AuthRemoteDataSource`.**
+> [!NOTE]
+> **This used to call Firebase directly.**
 >
-> `AuthRemoteDataSource` (Retrofit, in `data_sources/remote/`) is fully written but **not wired into the live flow** — it is kept as a reference for a REST backend. If you are building on Firebase, follow `AuthRepositoryImpl`. If you are building on REST, follow `AuthRemoteDataSource` and inject it.
+> Until recently `AuthRepositoryImpl` used `FirebaseAuth`, `GoogleSignIn` and `FacebookAuth`, and never touched `AuthRemoteDataSource` at all — the template shipped the pattern it teaches, unused, beside an implementation that ignored it. Five of its eight methods (`registerWithEmail`, `loginWithGoogle`, `loginWithFacebook`, `getCurrentUser`, `updateUserProfile`) had no caller anywhere in the workspace.
 >
-> Do not assume both are active: they are two parallel examples, and only the Firebase one runs.
+> It also meant every auth error surfaced as *"Unknown error occurred"*, because `ErrorHandler` has no Firebase branch (§4). If your product authenticates through Firebase, swap the transport back — but add that branch first, and keep the shape below.
 
 ### Session persistence
 
-Every successful authentication funnels through one helper:
+Both endpoints funnel through one helper, because they do the same four things:
 
 ```dart
-/// Persists the session through its owner, [AuthLocalDataSource].
-///
-/// Every successful authentication funnels through here so the Firebase ID
-/// token reaches local storage. Without it `NetworkConfig.getToken()` stays
-/// null, no `Authorization` header is ever sent, and the 401 refresh flow in
-/// `core_network` can never trigger.
-Future<UserModel> _persistSession(
-  User firebaseUser,
-  UserModel model, {
-  bool forceRefreshToken = false,
-}) async {
-  final token = await firebaseUser.getIdToken(forceRefreshToken);
-  _localDataSource.saveUserToken(token);
-  _localDataSource.saveUserData(model);
-  return model;
+Future<Result<UserEntity>> _authenticate(
+  Future<BaseEntity<UserModel>> Function() request,
+) {
+  return execute<BaseEntity<UserModel>, UserEntity>(
+    request,
+    successCondition: (response) =>
+        response.isSuccess && response.data != null,
+    onSuccess: (response) {
+      final user = response.data!;
+      _local.saveUserToken(user.token);
+      _local.saveUserData(user);
+    },
+    mapper: (response) => response.data!.toEntity(),
+  );
 }
 ```
 
-The three connected behaviours:
+Three details carry the weight:
 
-| Method | Behaviour |
+| Detail | Why it matters |
 |:---|:---|
-| `login` / `registerWithEmail` / `loginWithGoogle` / `loginWithFacebook` / `getCurrentUser` | call `_persistSession` → token reaches storage |
-| `logout` | also calls `_localDataSource.clearAllAuthData()` — signing out of the SDKs alone would leave a stale token that `getToken()` keeps attaching |
-| `refreshToken` | calls `_persistSession(..., forceRefreshToken: true)` — reusing the cached token would loop, since the caller is here *because* that token was rejected |
+| `successCondition` | Without it, `execute` treats **any** response that did not throw as a success. An API that reports failure inside a 200 body would log the user in |
+| `onSuccess` saves the token | `NetworkConfig.getToken()` reads it from `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger |
+| `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward — there is a test asserting exactly that |
+
+`logout` is `executeSync`, not `execute`: it only clears storage, and there is nothing to await.
 
 This is what closes the loop with `core_network`'s 401 refresh interceptor. See [the networking guide](../guides/08_networking.md).
 

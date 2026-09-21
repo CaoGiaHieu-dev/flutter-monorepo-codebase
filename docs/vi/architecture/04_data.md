@@ -318,88 +318,72 @@ Endpoint REST cũng theo đúng quy tắc sở hữu này — `modules/auth/data
 
 ---
 
-## 6. `data_auth` — đọc kỹ trước khi sao chép
+## 6. `data_auth` — đọc phần này trước khi copy
 
-`AuthRepositoryImpl` là file bị copy nhiều nhất trong template. Mọi cộng tác viên đều đi qua constructor — kể cả ba SDK bên thứ ba:
+`AuthRepositoryImpl` là file bị copy nhiều nhất trong template, nên nó được viết đúng như tài liệu này mô tả về tầng data: một Retrofit data source cho mạng, một `StorageValue` data source cho phiên đăng nhập, `execute()` bọc cả hai, và ánh xạ model → entity ngay tại ranh giới.
 
 ```dart
-@Injectable(as: IAuthRepository)
+@LazySingleton(as: IAuthRepository)
 class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
-  AuthRepositoryImpl(
-    this._googleSignIn,
-    this._localDataSource,
-    this._firebaseAuth,
-    this._firestore,
-    this._facebookAuth,
-  );
+  AuthRepositoryImpl(this._remote, this._local);
 
-  final GoogleSignIn _googleSignIn;
-  final AuthLocalDataSource _localDataSource;
-  final FirebaseAuth _firebaseAuth;
-  final FirebaseFirestore _firestore;
-  final FacebookAuth _facebookAuth;
+  final AuthRemoteDataSource _remote;
+  final AuthLocalDataSource _local;
 ```
 
-Các singleton SDK được bind một lần duy nhất trong [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart):
+Retrofit client được dựng một lần trong [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart) từ `Dio` dùng chung, nên data source thừa hưởng toàn bộ chuỗi interceptor — header auth, refresh 401, retry, logging — mà không cần biết chúng tồn tại:
 
 ```dart
 @module
 abstract class RegisterModule {
-  @preResolve
-  Future<GoogleSignIn> get googleSignIn async { … }
-
   @lazySingleton
-  FirebaseAuth get firebaseAuth => FirebaseAuth.instance;
-
-  @lazySingleton
-  FirebaseFirestore get firestore => FirebaseFirestore.instance;
-
-  @lazySingleton
-  FacebookAuth get facebookAuth => FacebookAuth.instance;
+  AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
+      AuthRemoteDataSource(dio);
 }
 ```
 
-Gọi thẳng `.instance` bên trong repository sẽ giấu những phụ thuộc đó khỏi container và không chừa lại khe nào để truyền fake vào, đó là lý do chúng được đăng ký ở đây.
+Dựng ở đây thay vì bên trong repository giữ cho dependency hiển lộ với container — đó chính là khe hở để test truyền một fake vào.
 
-> [!IMPORTANT]
-> **Nó gọi thẳng Firebase SDK, không đi qua `AuthRemoteDataSource`.**
+> [!NOTE]
+> **Trước đây file này gọi thẳng Firebase.**
 >
-> `AuthRemoteDataSource` (Retrofit, trong `data_sources/remote/`) được viết đầy đủ nhưng **không nối vào luồng chạy thật** — nó được giữ làm tài liệu tham khảo cho backend REST. Nếu bạn xây trên Firebase, hãy theo `AuthRepositoryImpl`. Nếu bạn xây trên REST, hãy theo `AuthRemoteDataSource` và inject nó vào.
+> Cho tới gần đây `AuthRepositoryImpl` dùng `FirebaseAuth`, `GoogleSignIn` và `FacebookAuth`, và hoàn toàn không đụng tới `AuthRemoteDataSource` — template ship đúng cái pattern nó dạy, nhưng bỏ không, bên cạnh một implementation phớt lờ nó. Năm trong tám method (`registerWithEmail`, `loginWithGoogle`, `loginWithFacebook`, `getCurrentUser`, `updateUserProfile`) không có nơi nào gọi trong cả workspace.
 >
-> Đừng tưởng cả hai đều đang hoạt động: chúng là hai ví dụ song song, và chỉ bản Firebase thực sự chạy.
+> Nó cũng khiến mọi lỗi auth hiện ra thành *"Unknown error occurred"*, vì `ErrorHandler` không có nhánh Firebase (§4). Nếu sản phẩm của bạn xác thực qua Firebase, cứ đổi transport lại — nhưng hãy thêm nhánh đó trước, và giữ nguyên hình dạng bên dưới.
 
-### Lưu trữ phiên đăng nhập
+### Lưu giữ phiên đăng nhập
 
-Mọi lần xác thực thành công đều dồn qua một helper duy nhất:
+Cả hai endpoint đều đi qua một helper, vì chúng làm cùng bốn việc:
 
 ```dart
-/// Persists the session through its owner, [AuthLocalDataSource].
-///
-/// Every successful authentication funnels through here so the Firebase ID
-/// token reaches local storage. Without it `NetworkConfig.getToken()` stays
-/// null, no `Authorization` header is ever sent, and the 401 refresh flow in
-/// `core_network` can never trigger.
-Future<UserModel> _persistSession(
-  User firebaseUser,
-  UserModel model, {
-  bool forceRefreshToken = false,
-}) async {
-  final token = await firebaseUser.getIdToken(forceRefreshToken);
-  _localDataSource.saveUserToken(token);
-  _localDataSource.saveUserData(model);
-  return model;
+Future<Result<UserEntity>> _authenticate(
+  Future<BaseEntity<UserModel>> Function() request,
+) {
+  return execute<BaseEntity<UserModel>, UserEntity>(
+    request,
+    successCondition: (response) =>
+        response.isSuccess && response.data != null,
+    onSuccess: (response) {
+      final user = response.data!;
+      _local.saveUserToken(user.token);
+      _local.saveUserData(user);
+    },
+    mapper: (response) => response.data!.toEntity(),
+  );
 }
 ```
 
-Ba hành vi liên kết với nhau:
+Ba chi tiết gánh toàn bộ sức nặng:
 
-| Method | Hành vi |
+| Chi tiết | Vì sao quan trọng |
 |:---|:---|
-| `login` / `registerWithEmail` / `loginWithGoogle` / `loginWithFacebook` / `getCurrentUser` | gọi `_persistSession` → token vào storage |
-| `logout` | gọi thêm `_localDataSource.clearAllAuthData()` — chỉ `signOut()` các SDK sẽ để lại token cũ mà `getToken()` vẫn tiếp tục gắn vào request |
-| `refreshToken` | gọi `_persistSession(..., forceRefreshToken: true)` — dùng lại token đã cache sẽ gây vòng lặp, vì ta ở đây *chính vì* token đó vừa bị từ chối |
+| `successCondition` | Thiếu nó, `execute` coi **mọi** response không ném exception là thành công. Một API báo lỗi trong body 200 sẽ cho người dùng đăng nhập được |
+| `onSuccess` lưu token | `NetworkConfig.getToken()` đọc token từ `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt |
+| `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên — có hẳn một test khẳng định điều đó |
 
-Đây là mắt xích khép kín với interceptor refresh 401 của `core_network`. Xem [hướng dẫn networking](../guides/08_networking.md).
+`logout` dùng `executeSync` chứ không phải `execute`: nó chỉ xoá storage, không có gì để await.
+
+Đây chính là mắt xích khép vòng với interceptor refresh 401 của `core_network`. Xem [hướng dẫn networking](../guides/08_networking.md).
 
 ## 7. Viết một repository mới
 

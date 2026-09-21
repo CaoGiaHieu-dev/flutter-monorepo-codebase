@@ -339,7 +339,6 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `core_database` | *(không có)* |
 | `core_responsive` | *(không có)* |
 | `core_common` | `core_responsive`, `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
-| `core_di` | `domain_auth` *(ngoại lệ đã duyệt)* |
 | `core_network` | `core_common` |
 | `core_storage` | `core_common` |
 | `core_notifications` | `core_common` |

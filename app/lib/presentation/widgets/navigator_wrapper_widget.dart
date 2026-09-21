@@ -4,7 +4,6 @@ import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/di/module.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_ui_kit/dialogs/app_overlay.dart';
-import 'package:domain_auth/domain_auth.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../di/app_boot_storage.dart';
@@ -37,7 +36,7 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   final _session = getItOrNull<IAuthSessionState>();
   final deeplinkProvider = getIt<DeeplinkProvider>();
 
-  StreamSubscription<UserEntity?>? _sessionSubscription;
+  StreamSubscription<AuthPrincipal?>? _sessionSubscription;
   StreamSubscription<AuthSessionFailure>? _failureSubscription;
 
   /// Boot redirect owns the first navigation. The listeners below handle later
@@ -121,7 +120,7 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// Ignored until the boot redirect has run and the first session restore has
   /// finished — otherwise the restore's own emission would navigate a second
   /// time, on top of the destination boot just chose.
-  void _onSessionChanged(UserEntity? user) {
+  void _onSessionChanged(AuthPrincipal? user) {
     if (!mounted || !_bootCompleted) return;
     if (!(_session?.hasRestoredSession ?? false)) return;
 

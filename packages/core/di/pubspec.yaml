@@ -13,8 +13,6 @@ dependencies:
   flutter:
     sdk: flutter
   material_ui: ^1.1.1
-  domain_auth:
-    path: ../../domain/auth
   go_router: "^18.0.0"
   get_it: ^9.2.1
   injectable: ^3.0.0

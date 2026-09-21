@@ -171,7 +171,7 @@ class HomeProfileBloc
   StreamSubscription<UserEntity?>? _subscription;
 ```
 
-`feature_home` depends on `core_di` and `domain_auth` — never on `feature_auth`.
+`feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either: the contract carries `AuthPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
 
 > [!CAUTION]
 > Always cancel the subscription in `close()` / `dispose()`. A broadcast stream will happily keep a

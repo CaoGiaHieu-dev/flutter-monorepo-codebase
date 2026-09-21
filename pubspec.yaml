@@ -7,18 +7,6 @@ environment:
 workspace:
   # composer:managed:workspace — generated from app_manifest.yaml
   - app
-  - packages/core/base_ui
-  - packages/core/bloc_state_management
-  - packages/core/common
-  - packages/core/database
-  - packages/core/di
-  - packages/core/kernel
-  - packages/core/network
-  - packages/core/notifications
-  - packages/core/provider_state_management
-  - packages/core/responsive
-  - packages/core/storage
-  - packages/core/ui_kit
   - packages/data/auth
   - packages/data/core
   - packages/domain/auth
@@ -29,6 +17,18 @@ workspace:
   - packages/features/onboarding
   - packages/features/settings
   - packages/features/splash
+  - platform/base_ui
+  - platform/bloc_state_management
+  - platform/common
+  - platform/database
+  - platform/di
+  - platform/kernel
+  - platform/network
+  - platform/notifications
+  - platform/provider_state_management
+  - platform/responsive
+  - platform/storage
+  - platform/ui_kit
   - tools
   # composer:end:workspace
 

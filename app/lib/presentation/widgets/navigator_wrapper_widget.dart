@@ -21,7 +21,7 @@ import '../providers/deeplink_provider.dart';
 /// entry location instead of throwing.
 ///
 /// (`core_ui_kit` is still imported for [AppOverlay]; it lives under
-/// `packages/core/` because it is a shared UI library, not a removable
+/// `platform/` because it is a shared UI library, not a removable
 /// feature.)
 class NavigatorWrapperWidget extends StatefulWidget {
   final Widget child;

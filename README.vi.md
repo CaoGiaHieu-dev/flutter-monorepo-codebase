@@ -44,7 +44,7 @@ graph TD
         DomAuth["domain_auth"]:::domain
     end
 
-    subgraph CoreLayer ["🛠️ Core Infrastructure Layer (packages/core/*)"]
+    subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
         direction LR
         CoreUI["core_base_ui"]:::core
         CoreCom["core_common"]:::core
@@ -85,7 +85,7 @@ graph TD
 > Core được phép phụ thuộc Domain — Domain là vòng trong cùng nên hướng đó là đúng. Có đúng
 > **ba** cạnh như vậy được duyệt: `platform_kernel → domain_core`,
 > `provider_state_management → domain_core`, `bloc_state_management → domain_core`. Chúng được
-> hard-code trong `tools/arch_check/check.dart` và in ra ở mỗi lần chạy kèm lý do; cạnh thứ năm sẽ
+> hard-code trong `tools/arch_check/check.dart` và in ra ở mỗi lần chạy kèm lý do; cạnh thứ tư sẽ
 > làm fail build. Xem [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
 
 ---
@@ -228,7 +228,7 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
    - Hiển thị UI và quản lý trạng thái (Provider hoặc BLoC).
    - **Chỉ giao tiếp với Domain thông qua UseCases**, tuyệt đối không gọi trực tiếp API.
    - **CẤM phụ thuộc vào tầng `data`** hoặc bất kỳ feature package nào khác — không ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit`.
-4. **Tầng Core (`packages/core/*`)**:
+4. **Tầng Core (`platform/*`)**:
    - Chỉ cung cấp cơ chế. **CẤM phụ thuộc bất kỳ package `feature_*` hoặc `data_*` nào.**
    - Được phép phụ thuộc `domain_*` (Domain là tâm): `platform_kernel → domain_core`,
      `provider_state_management → domain_core`, `bloc_state_management → domain_core`.
@@ -410,7 +410,7 @@ flutter pub get
 *Nhờ Pub Workspaces, toàn bộ phụ thuộc của Host App và tất cả packages con được tải đồng thời và tạo duy nhất một `pubspec.lock`.*
 
 ### 3. Sinh Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
-`packages/core/common/lib/src/firebase/firebase_module.dart` import cả ba file
+`platform/common/lib/src/firebase/firebase_module.dart` import cả ba file
 `firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Phải
 chạy `flutterfire configure` một lần cho mỗi flavor trước lần build đầu tiên — xem
 [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md).

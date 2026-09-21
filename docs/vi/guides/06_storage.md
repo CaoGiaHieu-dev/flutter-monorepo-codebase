@@ -11,7 +11,7 @@
 `core_storage` cố ý khai báo **zero key**. Nó chỉ cấp bộ máy; mỗi package tự khai giá trị của mình.
 
 ```dart
-// packages/core/storage/lib/core_storage.dart
+// platform/storage/lib/core_storage.dart
 /// Core Storage — encrypted key-value persistence layer.
 ///
 /// Provides only the storage MECHANISM — no package/feature-specific keys
@@ -38,7 +38,7 @@
 ## 2. Chọn backend nào?
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_type.dart
+// platform/storage/lib/src/contracts/storage_type.dart
 enum StorageType {
   /// SharedPreferences storage (plain text with software-level encryption).
   pref,
@@ -63,7 +63,7 @@ enum StorageType {
 **Lớp 1 — AES-256-CBC phần mềm, IV ngẫu nhiên mỗi lần ghi.** Cài đặt một lần trên `StorageInterface` nên cả hai backend đều thừa hưởng:
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_interface.dart
+// platform/storage/lib/src/contracts/storage_interface.dart
 /// Encrypt [data] using AES-CBC with a random IV.
 ///
 /// Returns `"iv_base64:ciphertext_base64"`.
@@ -89,7 +89,7 @@ IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần
 **Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới key `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
 
 ```dart
-// packages/core/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
   final newKey = encrypter.Key.fromSecureRandom(32).base64;
@@ -101,7 +101,7 @@ if (masterKey == null) {
 **Lớp 3 (ít nơi nhắc tới) — che trong RAM.** Cả master key lẫn giá trị đã cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Chúng bị XOR với mask ngẫu nhiên, và chỉ lộ ra đúng khoảnh khắc được dùng:
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_interface.dart
+// platform/storage/lib/src/contracts/storage_interface.dart
 /// Container that obfuscates bytes in RAM using dynamic XOR masking.
 class ObfuscatedBytes {
   ObfuscatedBytes(Uint8List originalBytes)
@@ -120,7 +120,7 @@ class ObfuscatedBytes {
 KeyStore/Keychain hỏng vốn sẽ làm app chết ở mọi lần khởi động. `SecureStorageImpl` phát hiện và reset thay vì lặp vô hạn:
 
 ```dart
-// packages/core/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
 try {
   masterKey = await _storage.read(key: masterKeyId);
 } catch (e) {
@@ -325,7 +325,7 @@ Bên tiêu thụ (ở đây là `ThemeProvider` trong `core_base_ui`) chỉ ph�
 `StorageInterface` từ chối những key mà tầng storage dùng cho chính nó:
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_interface.dart
+// platform/storage/lib/src/contracts/storage_interface.dart
 static const _reservedKeys = {
   '_internal_master_key',
   '_internal_pref_master_key',

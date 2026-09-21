@@ -82,7 +82,7 @@ BLoC. Không bên nào được import bên kia, và cũng không nên biết b�
 ### Bước 1 — interface trung lập ở `core_di`
 
 Code thật từ
-[`packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart):
+[`platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart):
 
 ```dart
 abstract class IAuthStatusStream {
@@ -191,7 +191,7 @@ ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  
 ```
 
 Interface — code thật từ
-[`packages/core/di/lib/src/theme/i_theme_storage.dart`](../../../packages/core/di/lib/src/theme/i_theme_storage.dart):
+[`platform/di/lib/src/theme/i_theme_storage.dart`](../../../platform/di/lib/src/theme/i_theme_storage.dart):
 
 ```dart
 import 'package:flutter/material.dart';
@@ -224,7 +224,7 @@ Implementation nằm ở app shell (`app/lib/di/theme_storage_impl.dart`) vì đ
 Khai hợp đồng builder ở `core_di`:
 
 ```dart
-// packages/core/di/lib/src/builders/i_profile_card_builder.dart
+// platform/di/lib/src/builders/i_profile_card_builder.dart
 import 'package:flutter/widgets.dart';
 
 abstract class IProfileCardBuilder {
@@ -249,7 +249,7 @@ logout là ví dụ kinh điển.
 **Không dùng cho** điều hướng thuần (dùng Navigator interface) hay logic domain (dùng UseCase).
 
 Interface — code thật từ
-[`packages/core/di/lib/src/actions/i_auth_action_handler.dart`](../../../packages/core/di/lib/src/actions/i_auth_action_handler.dart):
+[`platform/di/lib/src/actions/i_auth_action_handler.dart`](../../../platform/di/lib/src/actions/i_auth_action_handler.dart):
 
 ```dart
 import 'package:flutter/widgets.dart';

@@ -64,7 +64,7 @@ Every package exposes its public API through barrel files (`src.dart`, `<package
 ```bash
 dart tools/barrel_generator/generate.dart packages/features/auth/lib
 dart tools/barrel_generator/generate.dart packages/domain/auth/lib
-dart tools/barrel_generator/generate.dart packages/core/storage/lib
+dart tools/barrel_generator/generate.dart platform/storage/lib
 ```
 
 The tool skips generated files (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`) and `part of` files, then formats what it wrote.
@@ -130,11 +130,11 @@ dart tools/module_generator/generate.dart 3 payment
 flutter analyze
 
 # 2. Tests — they live per package, so run them per package
-cd packages/core/common                  && flutter test && cd -
-cd packages/core/database                && flutter test && cd -
-cd packages/core/network                 && flutter test && cd -
-cd packages/core/provider_state_management && flutter test && cd -
-cd packages/core/storage                 && flutter test && cd -
+cd platform/common                  && flutter test && cd -
+cd platform/database                && flutter test && cd -
+cd platform/network                 && flutter test && cd -
+cd platform/provider_state_management && flutter test && cd -
+cd platform/storage                 && flutter test && cd -
 cd packages/data/auth                    && flutter test && cd -
 
 # 3. Version catalog is in sync

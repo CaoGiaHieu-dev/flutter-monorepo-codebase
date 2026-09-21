@@ -147,7 +147,7 @@ await _isBioLocked.readFromStorage();   // Re-hydrate from disk
 **Never** hand another package your `StorageValue` or your keys class. Publish a narrow interface on `core_di`, implement it in the owner, and let the consumer depend on the interface only — the pattern already used for theme and language:
 
 ```dart
-// 1. Interface in core_di (packages/core/di/lib/src/theme/i_theme_storage.dart)
+// 1. Interface in core_di (platform/di/lib/src/theme/i_theme_storage.dart)
 abstract class IThemeStorage {
   ThemeMode getThemeMode();
   void saveThemeMode(ThemeMode mode);

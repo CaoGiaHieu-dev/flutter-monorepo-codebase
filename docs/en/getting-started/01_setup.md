@@ -65,7 +65,7 @@ If you see per-package `pubspec.lock` files appear, something ran `pub get` from
 > [!CAUTION]
 > **A fresh clone will not compile.** This is the single most common first-run failure.
 
-`packages/core/common/lib/src/firebase/firebase_module.dart` imports three files by name:
+`platform/common/lib/src/firebase/firebase_module.dart` imports three files by name:
 
 ```dart
 import 'firebase_options_dev.dart' as dev;
@@ -73,7 +73,7 @@ import 'firebase_options_prod.dart' as prod;
 import 'firebase_options_staging.dart' as stg;
 ```
 
-Those three files are **generated per-project and git-ignored** (`packages/core/common/.gitignore` ignores `firebase_options_*.dart`), because they carry your own Firebase project identifiers. Until you generate them you will get:
+Those three files are **generated per-project and git-ignored** (`platform/common/.gitignore` ignores `firebase_options_*.dart`), because they carry your own Firebase project identifiers. Until you generate them you will get:
 
 ```
 Target of URI doesn't exist: 'firebase_options_dev.dart'
@@ -88,15 +88,15 @@ dart pub global activate flutterfire_cli
 # Repeat for each flavor, writing into core_common with the matching file name:
 flutterfire configure \
   --project=<your-dev-firebase-project> \
-  --out=packages/core/common/lib/src/firebase/firebase_options_dev.dart
+  --out=platform/common/lib/src/firebase/firebase_options_dev.dart
 
 flutterfire configure \
   --project=<your-staging-firebase-project> \
-  --out=packages/core/common/lib/src/firebase/firebase_options_staging.dart
+  --out=platform/common/lib/src/firebase/firebase_options_staging.dart
 
 flutterfire configure \
   --project=<your-prod-firebase-project> \
-  --out=packages/core/common/lib/src/firebase/firebase_options_prod.dart
+  --out=platform/common/lib/src/firebase/firebase_options_prod.dart
 ```
 
 There is also a helper script: `dart tools/firebase/firebase_config.dart`.
@@ -161,7 +161,7 @@ APP_SCHEMA_VERSION=
 APP_NAME=
 ```
 
-Most of these surface in Dart through `EnvConstants` (`packages/core/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
+Most of these surface in Dart through `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
@@ -247,7 +247,7 @@ support Built-in Kotlin — there is nothing to change in this repo.
 
 ```bash
 flutter analyze                     # expect: No issues found!
-cd packages/core/storage && flutter test && cd ../../..
+cd platform/storage && flutter test && cd ../../..
 ```
 
 If `flutter analyze` reports missing `firebase_options_*.dart`, go back to [step 3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it).

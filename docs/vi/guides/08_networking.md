@@ -11,7 +11,7 @@
 `core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (§3), do app shell implement.
 
 ```dart
-// packages/core/network/lib/src/api_client.dart
+// platform/network/lib/src/api_client.dart
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
@@ -54,7 +54,7 @@ Dio chạy interceptor theo **đúng thứ tự được thêm vào** — cho c�
 ```
 
 ```dart
-// packages/core/network/lib/src/api_client.dart
+// platform/network/lib/src/api_client.dart
 dio.interceptors.add(
   AuthInterceptor(
     getToken: _config.getToken,
@@ -96,7 +96,7 @@ Auth chạy trước để token được gắn trước mọi thứ; refresh đ
 Cả hai cờ nằm trong `RequestOptions.extra` và mặc định là `true`:
 
 ```dart
-// packages/core/network/lib/src/utils/network_constants.dart
+// platform/network/lib/src/utils/network_constants.dart
 /// Set `false` to stop [AuthInterceptor] attaching the bearer token.
 static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
@@ -109,7 +109,7 @@ static const String EXTRA_CAN_RETRY = 'canRetry';
 Gắn header `language` viết hoa (fallback về locale thiết bị, rồi về `vi`), và bearer token khi request cần auth:
 
 ```dart
-// packages/core/network/lib/src/interceptors/auth_interceptor.dart
+// platform/network/lib/src/interceptors/auth_interceptor.dart
 if (needAuthentication) {
   final token = getToken() ?? '';
   if (token.isNotEmpty) {
@@ -129,7 +129,7 @@ if (needAuthentication) {
 Chỉ lỗi tầng vận chuyển mới được retry — **không** retry theo HTTP status code:
 
 ```dart
-// packages/core/network/lib/src/handlers/retry_handler.dart
+// platform/network/lib/src/handlers/retry_handler.dart
 bool retryWhen(DioExceptionType type) {
   return type == DioExceptionType.receiveTimeout ||
       type == DioExceptionType.sendTimeout ||
@@ -145,7 +145,7 @@ Nhiều request lỗi đồng thời được gom vào một hàng đợi và ch
 Cả ba hook đều nằm sau `kDebugMode`, và header chứa thông tin đăng nhập bị che **ngay cả ở bản debug**:
 
 ```dart
-// packages/core/network/lib/src/interceptors/logging_interceptor.dart
+// platform/network/lib/src/interceptors/logging_interceptor.dart
 Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
   const redactedKeys = {
     HttpHeaders.authorizationHeader,
@@ -168,7 +168,7 @@ Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
 ## 3. `NetworkConfig` — app shell cung cấp chi tiết
 
 ```dart
-// packages/core/network/lib/src/network_config.dart
+// platform/network/lib/src/network_config.dart
 abstract class NetworkConfig implements SslPinningConfig {
   String? Function() get getToken;
   String? Function() get getLocale;
@@ -238,7 +238,7 @@ Future<String?> _refreshSession() async {
 `RefreshTokenHandler` xếp hàng mọi thứ sau một `Completer`. Request 401 đầu tiên thực hiện refresh; những cái còn lại chờ trên cùng future đó:
 
 ```dart
-// packages/core/network/lib/src/handlers/refresh_token_handler.dart
+// platform/network/lib/src/handlers/refresh_token_handler.dart
 // If a refresh is already in progress, wait for it to complete.
 if (_completer != null) {
   final String? newToken = await _completer!.future;
@@ -266,7 +266,7 @@ Body dạng `FormData` được dựng lại trước khi replay, vì stream c�
 ### Ba lớp chống đệ quy vô hạn
 
 ```dart
-// packages/core/network/lib/src/interceptors/refresh_token_interceptor.dart
+// platform/network/lib/src/interceptors/refresh_token_interceptor.dart
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
 ///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) are ignored, so
@@ -300,7 +300,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 Initializer **không im lặng bỏ qua** chuyện này:
 
 ```dart
-// packages/core/common/lib/src/config/app_initializer.dart
+// platform/common/lib/src/config/app_initializer.dart
 if (hashes != null && hashes.isNotEmpty) {
   HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
 } else {

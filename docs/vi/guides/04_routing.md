@@ -41,7 +41,7 @@ GoRouter (navigatorKey: NavigatorKeys.rootKey)
 
 ## 2. Bốn contract routing
 
-Tất cả nằm ở `packages/core/di/lib/src/routing/`.
+Tất cả nằm ở `platform/di/lib/src/routing/`.
 
 | Contract | Dùng cho | Có thứ tự? | Ai implement |
 |---|---|---|---|
@@ -233,7 +233,7 @@ Route của màn hình dùng controller **toàn cục** (ví dụ `LoginPage` v�
 
 Feature A không bao giờ được import Feature B. Điều hướng vượt ranh giới thông qua interface đặt ở `core_di`.
 
-**1. Khai báo** — `packages/core/di/lib/src/navigators/auth_navigator.dart`:
+**1. Khai báo** — `platform/di/lib/src/navigators/auth_navigator.dart`:
 
 ```dart
 abstract class AuthNavigator {
@@ -271,7 +271,7 @@ getItOrNull<AuthNavigator>()?.toLogin(context);
 
 ## 6. `NavigatorKeys` — vì sao đặt ở DI Hub
 
-`packages/core/di/lib/src/routing/navigator_keys.dart`:
+`platform/di/lib/src/routing/navigator_keys.dart`:
 
 ```dart
 class NavigatorKeys {

@@ -65,7 +65,7 @@ Nếu bạn thấy các file `pubspec.lock` xuất hiện trong package con, t�
 > [!CAUTION]
 > **Repo vừa clone về sẽ KHÔNG compile được.** Đây là lỗi thường gặp nhất ở lần chạy đầu tiên.
 
-File `packages/core/common/lib/src/firebase/firebase_module.dart` import thẳng ba file theo tên:
+File `platform/common/lib/src/firebase/firebase_module.dart` import thẳng ba file theo tên:
 
 ```dart
 import 'firebase_options_dev.dart' as dev;
@@ -73,7 +73,7 @@ import 'firebase_options_prod.dart' as prod;
 import 'firebase_options_staging.dart' as stg;
 ```
 
-Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** (`packages/core/common/.gitignore` có dòng `firebase_options_*.dart`), vì chúng chứa định danh Firebase project của riêng bạn. Chưa sinh thì bạn sẽ gặp:
+Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** (`platform/common/.gitignore` có dòng `firebase_options_*.dart`), vì chúng chứa định danh Firebase project của riêng bạn. Chưa sinh thì bạn sẽ gặp:
 
 ```
 Target of URI doesn't exist: 'firebase_options_dev.dart'
@@ -88,15 +88,15 @@ dart pub global activate flutterfire_cli
 # Lặp lại cho từng flavor, xuất vào core_common đúng tên file:
 flutterfire configure \
   --project=<firebase-project-dev-cua-ban> \
-  --out=packages/core/common/lib/src/firebase/firebase_options_dev.dart
+  --out=platform/common/lib/src/firebase/firebase_options_dev.dart
 
 flutterfire configure \
   --project=<firebase-project-staging-cua-ban> \
-  --out=packages/core/common/lib/src/firebase/firebase_options_staging.dart
+  --out=platform/common/lib/src/firebase/firebase_options_staging.dart
 
 flutterfire configure \
   --project=<firebase-project-prod-cua-ban> \
-  --out=packages/core/common/lib/src/firebase/firebase_options_prod.dart
+  --out=platform/common/lib/src/firebase/firebase_options_prod.dart
 ```
 
 Ngoài ra còn có một script hỗ trợ: `dart tools/firebase/firebase_config.dart`.
@@ -161,7 +161,7 @@ APP_SCHEMA_VERSION=
 APP_NAME=
 ```
 
-Phần lớn các key này xuất hiện trong Dart qua `EnvConstants` (`packages/core/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
+Phần lớn các key này xuất hiện trong Dart qua `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
@@ -246,7 +246,7 @@ Kotlin — không cần sửa gì trong repo này.
 
 ```bash
 flutter analyze                     # kỳ vọng: No issues found!
-cd packages/core/storage && flutter test && cd ../../..
+cd platform/storage && flutter test && cd ../../..
 ```
 
 Nếu `flutter analyze` báo thiếu `firebase_options_*.dart`, quay lại [bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được).

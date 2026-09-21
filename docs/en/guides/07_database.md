@@ -11,7 +11,7 @@
 `core_database` provides the **mechanism** only. It declares no database, no table and no DAO — its DI module registers literally nothing:
 
 ```dart
-// packages/core/database/lib/di/module.dart
+// platform/database/lib/di/module.dart
 /// `core_database` registers nothing on its own.
 ///
 /// It provides the persistence MECHANISM — [DriftDatabaseOpener],
@@ -333,7 +333,7 @@ dart run build_runner build -d --workspace
 You never edit another package's database file to change your schema. You implement one contract and register it.
 
 ```dart
-// packages/core/database/lib/src/migration/i_database_migration.dart
+// platform/database/lib/src/migration/i_database_migration.dart
 abstract class IDatabaseMigration {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   int get version;
@@ -374,7 +374,7 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration {
 ### How the runner replays
 
 ```dart
-// packages/core/database/lib/src/migration/database_migration_runner.dart
+// platform/database/lib/src/migration/database_migration_runner.dart
 Future<void> run(Migrator m, int from, int to) async {
   if (from == to) return;
 
@@ -413,7 +413,7 @@ Validation happens once, at construction — not mid-migration. Discovering a wi
 `PRAGMA` settings are **per-connection and are not stored in the file**, so they must be reapplied on every open. That is why they live in `beforeOpen`:
 
 ```dart
-// packages/core/database/lib/src/migration/drift_migration_strategy.dart
+// platform/database/lib/src/migration/drift_migration_strategy.dart
 beforeOpen: (OpeningDetails details) async {
   // SQLite ships with foreign key enforcement OFF. Without this any
   // `references()` declared on a table is silently ignored, so broken
@@ -449,7 +449,7 @@ Opening is registered with `@preResolve`, so anything thrown there aborts `confi
 `DriftDatabaseOpener.open` handles this — and the design leans hard towards *not* touching user data:
 
 ```dart
-// packages/core/database/lib/src/opening/drift_database_opener.dart
+// platform/database/lib/src/opening/drift_database_opener.dart
 static Future<T> open<T extends GeneratedDatabase>(
   DriftDatabaseBuilder<T> build, {
   required String fileName,
@@ -471,7 +471,7 @@ Three deliberate decisions:
 **The file is renamed, never deleted.**
 
 ```dart
-// packages/core/database/lib/src/connection/database_connection_factory.dart
+// platform/database/lib/src/connection/database_connection_factory.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
 /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;

@@ -79,7 +79,7 @@ Note `AuthProvider` is `@lazySingleton` because it is a **global** controller (s
 
 ### 2.2 `OperationConfig`
 
-`packages/core/provider_state_management/lib/src/management/operation_config.dart`:
+`platform/provider_state_management/lib/src/management/operation_config.dart`:
 
 ```dart
 class OperationConfig<R, T> {
@@ -114,7 +114,7 @@ class OperationConfig<R, T> {
 
 ### 2.3 `ViewState` vs `ViewStateModel<T>`
 
-Two distinct types in `packages/core/provider_state_management/lib/src/base/view_state_model.dart`:
+Two distinct types in `platform/provider_state_management/lib/src/base/view_state_model.dart`:
 
 ```dart
 @freezed
@@ -160,7 +160,7 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 > [!WARNING]
 > **Omit `emptyWidget` and you get a blank screen.** The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()`.
 >
-> They are intentionally minimal: `provider_state_management` is a **core** package, and core must never depend on a feature package — so it cannot reach for the branded widgets in `core_ui_kit`. See `packages/core/provider_state_management/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
+> They are intentionally minimal: `provider_state_management` is a **core** package, and core must never depend on a feature package — so it cannot reach for the branded widgets in `core_ui_kit`. See `platform/provider_state_management/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
 
 ### 2.5 Side effects with `ProviderStateListener`
 
@@ -297,7 +297,7 @@ Three non-negotiable rules:
 
 ### 3.3 `BlocViewState<T>`
 
-`packages/core/bloc_state_management/lib/src/bloc_view_state.dart`:
+`platform/bloc_state_management/lib/src/bloc_view_state.dart`:
 
 ```dart
 @freezed

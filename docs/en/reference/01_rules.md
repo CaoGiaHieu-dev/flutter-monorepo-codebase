@@ -26,7 +26,7 @@ This is the **lookup** copy. For step-by-step instructions see [`../guides/`](..
 
 ### Approved upward exceptions
 
-Only these three exist. Adding a fifth requires updating `AGENTS.md` and the allow-list in `tools/arch_check/check.dart` — the checker fails the build otherwise.
+Only these three exist. Adding a fourth requires updating `AGENTS.md` and the allow-list in `tools/arch_check/check.dart` — the checker fails the build otherwise.
 
 | Exception | Reason |
 |---|---|
@@ -41,8 +41,8 @@ Only these three exist. Adding a fifth requires updating `AGENTS.md` and the all
 
 ```bash
 # core must never name a feature or data package
-grep -rn "package:feature_\|package:data_" packages/core/*/lib
-grep -l "feature_\|data_" packages/core/*/pubspec.yaml
+grep -rn "package:feature_\|package:data_" platform/*/lib
+grep -l "feature_\|data_" platform/*/pubspec.yaml
 
 # domain must never touch Flutter
 grep -rn "package:flutter" packages/domain/*/lib
@@ -52,7 +52,7 @@ All four commands must return nothing.
 
 ❌ **Wrong** — a core package borrowing a feature widget:
 ```dart
-// packages/core/provider_state_management/lib/src/base_view/base_view_widget.dart
+// platform/provider_state_management/lib/src/base_view/base_view_widget.dart
 import 'package:feature_auth/feature_auth.dart';   // core → feature
 ```
 
@@ -104,7 +104,7 @@ class AuthStorageKeys {
 ```
 
 > [!NOTE]
-> **Approved exception — design tokens.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` stay in `packages/core/base_ui/lib/src/styles/`, *not* in `utils/`.
+> **Approved exception — design tokens.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` stay in `platform/base_ui/lib/src/styles/`, *not* in `utils/`.
 >
 > They are the public API of the design system, and `styles/` carries that meaning where `utils/` reads as "miscellaneous". Moving them would break every doc reference for no gain. **Do not "fix" this in a future audit.**
 
@@ -313,7 +313,7 @@ SizedBox(height: context.h(16))
 
 **Design tokens take context too:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Their numbers live in `raw*` constants — edit `raw*`, never the accessor. Never re-scale an already-scaled token.
 
-**No context in scope?** Inside an `async` method, read from context **before the first `await`** and pass the value forward. Never hold a `BuildContext` across an await. Real example — `packages/core/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
+**No context in scope?** Inside an `async` method, read from context **before the first `await`** and pass the value forward. Never hold a `BuildContext` across an await. Real example — `platform/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
 
 ```dart
 if (!mounted) return;
@@ -323,7 +323,7 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 );
 ```
 
-**Helper scaling axes** — defined in `packages/core/responsive/lib/src/context_extension.dart`:
+**Helper scaling axes** — defined in `platform/responsive/lib/src/context_extension.dart`:
 
 | Helper | Scales by |
 |:--|:--|
@@ -341,7 +341,7 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 
 ❌ **Wrong** — an internal override silently discards the caller's value:
 ```dart
-// packages/core/ui_kit/lib/navigation/app_bar_custom.dart
+// platform/ui_kit/lib/navigation/app_bar_custom.dart
 @override
 double? get leadingWidth => context.w(64);   // overrides super.leadingWidth forever
 ```
@@ -374,7 +374,7 @@ Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own
 
 **Rule.** Every dialog and bottom sheet is its own widget class in its own file. Writing an inline widget tree inside `showDialog()` / `showModalBottomSheet()` is forbidden.
 
-Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Real examples: `packages/core/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
+Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Real examples: `platform/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
 
 ---
 
@@ -433,7 +433,7 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | Static analysis | `flutter analyze` |
 | Codegen up to date | `dart run build_runner build -d --workspace` |
 | DI order safety | read `app/lib/di/injection.config.dart` |
-| core ⇏ feature | `grep -rn "package:feature_" packages/core/*/lib` |
+| core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
 | Domain purity | `grep -rn "package:flutter" packages/domain/*/lib` |
 

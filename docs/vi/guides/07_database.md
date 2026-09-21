@@ -11,7 +11,7 @@
 `core_database` chỉ cấp **cơ chế**. Nó không khai database, không khai bảng, không khai DAO — module DI của nó đăng ký đúng nghĩa là rỗng:
 
 ```dart
-// packages/core/database/lib/di/module.dart
+// platform/database/lib/di/module.dart
 /// `core_database` registers nothing on its own.
 ///
 /// It provides the persistence MECHANISM — [DriftDatabaseOpener],
@@ -333,7 +333,7 @@ dart run build_runner build -d --workspace
 Bạn không bao giờ sửa file database của package khác để đổi schema của mình. Bạn implement một hợp đồng và đăng ký nó.
 
 ```dart
-// packages/core/database/lib/src/migration/i_database_migration.dart
+// platform/database/lib/src/migration/i_database_migration.dart
 abstract class IDatabaseMigration {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   int get version;
@@ -374,7 +374,7 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration {
 ### Runner replay thế nào
 
 ```dart
-// packages/core/database/lib/src/migration/database_migration_runner.dart
+// platform/database/lib/src/migration/database_migration_runner.dart
 Future<void> run(Migrator m, int from, int to) async {
   if (from == to) return;
 
@@ -413,7 +413,7 @@ Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải gi�
 `PRAGMA` là thiết lập **theo từng kết nối và không được lưu trong file**, nên phải áp lại mỗi lần mở. Đó là lý do chúng nằm trong `beforeOpen`:
 
 ```dart
-// packages/core/database/lib/src/migration/drift_migration_strategy.dart
+// platform/database/lib/src/migration/drift_migration_strategy.dart
 beforeOpen: (OpeningDetails details) async {
   // SQLite ships with foreign key enforcement OFF. Without this any
   // `references()` declared on a table is silently ignored, so broken
@@ -449,7 +449,7 @@ Việc mở database được đăng ký với `@preResolve`, nên bất cứ th
 `DriftDatabaseOpener.open` xử lý việc này — và thiết kế nghiêng hẳn về phía *không* đụng vào dữ liệu người dùng:
 
 ```dart
-// packages/core/database/lib/src/opening/drift_database_opener.dart
+// platform/database/lib/src/opening/drift_database_opener.dart
 static Future<T> open<T extends GeneratedDatabase>(
   DriftDatabaseBuilder<T> build, {
   required String fileName,
@@ -471,7 +471,7 @@ Ba quyết định có chủ đích:
 **File được đổi tên, không bao giờ bị xoá.**
 
 ```dart
-// packages/core/database/lib/src/connection/database_connection_factory.dart
+// platform/database/lib/src/connection/database_connection_factory.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
 /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;

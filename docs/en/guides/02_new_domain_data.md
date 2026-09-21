@@ -368,7 +368,7 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 
 > [!WARNING]
 > **`ErrorHandler` has no Firebase branch today.** Reading
-> [`error_handler.dart:50-88`](../../../packages/core/kernel/lib/src/error/error_handler.dart):
+> [`error_handler.dart:50-88`](../../../platform/kernel/lib/src/error/error_handler.dart):
 > it handles `AppException`, `DioException`, `SocketException`, `HttpException` and
 > `FormatException` — but not `FirebaseException`, `FirebaseAuthException` or `PlatformException`.
 > Every Firebase error therefore lands on the fallback:

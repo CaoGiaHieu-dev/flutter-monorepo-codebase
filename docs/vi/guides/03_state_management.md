@@ -79,7 +79,7 @@ class AuthProvider extends BaseProvider<UserEntity> {
 
 ### 2.2 `OperationConfig`
 
-`packages/core/provider_state_management/lib/src/management/operation_config.dart`:
+`platform/provider_state_management/lib/src/management/operation_config.dart`:
 
 ```dart
 class OperationConfig<R, T> {
@@ -114,7 +114,7 @@ class OperationConfig<R, T> {
 
 ### 2.3 `ViewState` và `ViewStateModel<T>`
 
-Hai kiểu khác nhau trong `packages/core/provider_state_management/lib/src/base/view_state_model.dart`:
+Hai kiểu khác nhau trong `platform/provider_state_management/lib/src/base/view_state_model.dart`:
 
 ```dart
 @freezed
@@ -160,7 +160,7 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 > [!WARNING]
 > **Bỏ qua `emptyWidget` là bạn nhận màn hình trắng.** Fallback mặc định là `DefaultEmptyWidget`, trả về `SizedBox.shrink()`. Còn `DefaultLoadingWidget` trả về `CircularProgressIndicator.adaptive()`.
 >
-> Chúng cố ý tối giản: `provider_state_management` là package **core**, mà core tuyệt đối không được phụ thuộc package feature — nên nó không thể dùng widget đã thiết kế trong `core_ui_kit`. Xem `packages/core/provider_state_management/lib/src/base_view/default_state_widgets.dart`. **Hãy luôn truyền `emptyWidget` / `loadingWidget` của riêng bạn trên màn hình người dùng thấy.**
+> Chúng cố ý tối giản: `provider_state_management` là package **core**, mà core tuyệt đối không được phụ thuộc package feature — nên nó không thể dùng widget đã thiết kế trong `core_ui_kit`. Xem `platform/provider_state_management/lib/src/base_view/default_state_widgets.dart`. **Hãy luôn truyền `emptyWidget` / `loadingWidget` của riêng bạn trên màn hình người dùng thấy.**
 
 ### 2.5 Side effect với `ProviderStateListener`
 
@@ -297,7 +297,7 @@ Ba quy tắc bắt buộc:
 
 ### 3.3 `BlocViewState<T>`
 
-`packages/core/bloc_state_management/lib/src/bloc_view_state.dart`:
+`platform/bloc_state_management/lib/src/bloc_view_state.dart`:
 
 ```dart
 @freezed

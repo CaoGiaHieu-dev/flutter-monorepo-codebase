@@ -112,7 +112,7 @@ switch (result) {
 ```
 
 > [!NOTE]
-> **`None` và `Cancel` là hai nhánh dự phòng chưa dùng.** Grep toàn repo: không repository hay use case nào từng trả về `Result.none()` hoặc `Result.cancel()` — chúng chỉ xuất hiện trong `packages/core/provider_state_management/test/base_provider_test.dart`.
+> **`None` và `Cancel` là hai nhánh dự phòng chưa dùng.** Grep toàn repo: không repository hay use case nào từng trả về `Result.none()` hoặc `Result.cancel()` — chúng chỉ xuất hiện trong `platform/provider_state_management/test/base_provider_test.dart`.
 >
 > Nên câu trả lời trung thực cho *"khi nào `Cancel` xảy ra?"* là: **hiện tại không bao giờ.** Chúng tồn tại để union có thể mở rộng sau này mà không gây breaking change. Cái giá phải trả là bạn vẫn phải xử lý chúng trong `switch` / `whenAsync` vét cạn.
 

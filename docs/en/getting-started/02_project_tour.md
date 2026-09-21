@@ -40,23 +40,23 @@ flutter-monorepo-codebase/
 
 The authoritative list is the `workspace:` block in the root `pubspec.yaml`.
 
-### Core — `packages/core/*`
+### Core — `platform/*`
 
 Infrastructure shared by all layers. **Core must never depend on a feature or on the data layer.**
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enums, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), extensions, mixins, `EnvConstants`, `ApiStatusConstants`, Firebase options module |
-| `core_di` | `packages/core/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
-| `core_base_ui` | `packages/core/base_ui` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
-| `core_ui_kit` | `packages/core/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
-| `core_network` | `packages/core/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
-| `core_storage` | `packages/core/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
-| `core_database` | `packages/core/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
-| `core_responsive` | `packages/core/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through |
-| `core_notifications` | `packages/core/notifications` | Push notification service + its own `NotificationConstants` |
-| `provider_state_management` | `packages/core/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
-| `bloc_state_management` | `packages/core/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
+| `core_common` | `platform/common` | `AppConfig`, `AppInitializer`, enums, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), extensions, mixins, `EnvConstants`, `ApiStatusConstants`, Firebase options module |
+| `core_di` | `platform/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
+| `core_base_ui` | `platform/base_ui` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
+| `core_ui_kit` | `platform/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
+| `core_network` | `platform/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
+| `core_storage` | `platform/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
+| `core_database` | `platform/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
+| `core_responsive` | `platform/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through |
+| `core_notifications` | `platform/notifications` | Push notification service + its own `NotificationConstants` |
+| `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
+| `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
 ### Domain — `packages/domain/*`
 
@@ -111,7 +111,7 @@ graph BT
         Data["packages/data/*"]
     end
     subgraph Infra
-        Core["packages/core/*"]
+        Core["platform/*"]
     end
 
     Features --> Domain
@@ -144,7 +144,7 @@ Read it as: **arrows point at what you are allowed to depend on.**
 Verify at any time:
 
 ```bash
-grep -rl "package:feature_" packages/core/*/lib    # must print nothing
+grep -rl "package:feature_" platform/*/lib    # must print nothing
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
@@ -158,7 +158,7 @@ The root `pubspec.yaml` declares every member:
 workspace:
   - app
   - tools
-  - packages/core/common
+  - platform/common
   # … 20 more
 ```
 
@@ -186,9 +186,9 @@ Consequences you must know:
 | Add a database table | The owning package's own `src/database/tables/` (reference: `packages/data/core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
-| Change colors / spacing / typography | `packages/core/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Change colors / spacing / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Add a translated string | `packages/features/<name>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Share a widget between features | `packages/core/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
+| Share a widget between features | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Let feature A trigger something in feature B | `core_di/src/actions/` or `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Bump a dependency version | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
 | Change the CI pipeline | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |

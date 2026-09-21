@@ -11,7 +11,7 @@
 `core_storage` deliberately declares **zero keys**. It ships the machinery; every package declares its own values.
 
 ```dart
-// packages/core/storage/lib/core_storage.dart
+// platform/storage/lib/core_storage.dart
 /// Core Storage — encrypted key-value persistence layer.
 ///
 /// Provides only the storage MECHANISM — no package/feature-specific keys
@@ -38,7 +38,7 @@
 ## 2. Which backend?
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_type.dart
+// platform/storage/lib/src/contracts/storage_type.dart
 enum StorageType {
   /// SharedPreferences storage (plain text with software-level encryption).
   pref,
@@ -63,7 +63,7 @@ enum StorageType {
 **Layer 1 — software AES-256-CBC with a fresh IV per write.** Implemented once on `StorageInterface` so both backends inherit it:
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_interface.dart
+// platform/storage/lib/src/contracts/storage_interface.dart
 /// Encrypt [data] using AES-CBC with a random IV.
 ///
 /// Returns `"iv_base64:ciphertext_base64"`.
@@ -89,7 +89,7 @@ A random IV per write means writing the same value twice produces different ciph
 **Layer 2 — hardware.** The 256-bit master key lives in Keychain/KeyStore under `_internal_master_key`, generated on first launch:
 
 ```dart
-// packages/core/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
   final newKey = encrypter.Key.fromSecureRandom(32).base64;
@@ -101,7 +101,7 @@ if (masterKey == null) {
 **Layer 3 (not advertised elsewhere) — RAM masking.** Neither the master key nor a cached value sits in memory as readable bytes. Both are XOR-masked with a random mask, and revealed only for the instant they are used:
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_interface.dart
+// platform/storage/lib/src/contracts/storage_interface.dart
 /// Container that obfuscates bytes in RAM using dynamic XOR masking.
 class ObfuscatedBytes {
   ObfuscatedBytes(Uint8List originalBytes)
@@ -120,7 +120,7 @@ class ObfuscatedBytes {
 A corrupted KeyStore/Keychain would otherwise brick the app on every launch. `SecureStorageImpl` detects it and resets rather than looping:
 
 ```dart
-// packages/core/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
 try {
   masterKey = await _storage.read(key: masterKeyId);
 } catch (e) {
@@ -325,7 +325,7 @@ Consumers (here `ThemeProvider` in `core_base_ui`) depend on `IThemeStorage` onl
 `StorageInterface` refuses keys the storage layer uses for itself:
 
 ```dart
-// packages/core/storage/lib/src/contracts/storage_interface.dart
+// platform/storage/lib/src/contracts/storage_interface.dart
 static const _reservedKeys = {
   '_internal_master_key',
   '_internal_pref_master_key',

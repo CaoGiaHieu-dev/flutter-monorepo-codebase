@@ -199,8 +199,8 @@ flutter analyze
 dart tools/dependency_sync.dart --check
 
 # 3. Tests, per package (gate 3 — see §6)
-(cd packages/core/storage && flutter test)
-(cd packages/core/database && flutter test)
+(cd platform/storage && flutter test)
+(cd platform/database && flutter test)
 # ...repeat for any package with a test/ directory
 
 # 4. The exact release build CI performs — note the cd
@@ -213,7 +213,7 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 > [!NOTE]
 > Locally the dart-define path is `env.dev` (relative to `app/`), while CI writes its env file to the repo root and therefore passes `../.env`. Same mechanism, different location.
 
-A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files are gitignored and `packages/core/common/lib/src/firebase/firebase_module.dart` imports all three unconditionally. See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files are gitignored and `platform/common/lib/src/firebase/firebase_module.dart` imports all three unconditionally. See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 

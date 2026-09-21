@@ -25,11 +25,11 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `packages/data/core/lib/src/models/cache_entry_model.dart` |
 | Request DTO | `_request.dart` | `Request` | `packages/data/core/lib/src/models/base_request.dart` |
 | Data source | `_data_source.dart` | `DataSource` | `packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart` |
-| Interface navigator | `<name>_navigator.dart` | `Navigator` | `packages/core/di/lib/src/navigators/auth_navigator.dart` |
+| Interface navigator | `<name>_navigator.dart` | `Navigator` | `platform/di/lib/src/navigators/auth_navigator.dart` |
 | Impl navigator | `_navigator_impl.dart` | `NavigatorImpl` | `packages/features/auth/lib/src/routing/auth_navigator_impl.dart` |
-| Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `packages/core/di/lib/src/actions/i_auth_action_handler.dart` |
+| Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `platform/di/lib/src/actions/i_auth_action_handler.dart` |
 | Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart` |
-| Dialog | `_dialog.dart` | `Dialog` | `packages/core/ui_kit/lib/dialogs/error_dialog.dart` |
+| Dialog | `_dialog.dart` | `Dialog` | `platform/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
 | Route module | `_route_module.dart` | `RouteModule` | `packages/features/home/lib/src/routing/home_route_module.dart` |
 | Route path | `<feature>_path.dart` | `Path` | `packages/features/home/lib/src/utils/home_path.dart` |
@@ -95,14 +95,14 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 
 | Tầng | Tiền tố | Đường dẫn | Ví dụ |
 |---|---|---|---|
-| Core | `core_` | `packages/core/<name>/` | `core_storage` |
+| Core | `core_` | `platform/<name>/` | `core_storage` |
 | Domain | `domain_` | `packages/domain/<name>/` | `domain_auth` |
 | Data | `data_` | `packages/data/<name>/` | `data_auth` |
 | Feature | `feature_` | `packages/features/<name>/` | `feature_home` |
 
 Thư mục mang tên trần; tên package mới mang tiền tố. `packages/features/home/` → `name: feature_home`.
 
-Hai package cố ý phá vỡ quy tắc tiền tố: `provider_state_management` và `bloc_state_management` (đều nằm trong `packages/core/`).
+Hai package cố ý phá vỡ quy tắc tiền tố: `provider_state_management` và `bloc_state_management` (đều nằm trong `platform/`).
 
 ---
 

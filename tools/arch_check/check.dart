@@ -662,7 +662,7 @@ so it can gate CI.
 
 RULES CHECKED
   R1  Dependency direction
-      No packages/core/* package may import or declare a feature_*, data_* or
+      No platform/* package may import or declare a feature_*, data_* or
       domain_* package, except for the approved edges listed at the top of the
       run. Checked in both lib/ imports and pubspec.yaml.
 

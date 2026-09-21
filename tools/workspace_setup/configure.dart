@@ -63,8 +63,8 @@ void main() async {
   //
   // This used to pass `packages` as a single argument. The generator emits a
   // barrel for whatever directory it is handed, so that produced
-  // `packages/packages.dart`, `packages/core/core.dart` and
-  // `packages/core/database/database.dart` — files sitting outside every
+  // `packages/packages.dart`, `platform/core.dart` and
+  // `platform/database/database.dart` — files sitting outside every
   // `lib/`, which nothing can import and which nobody noticed. They were
   // deleted; this is what stops them coming back.
   stdout.writeln('[!] Generating barrel files per package...');

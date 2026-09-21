@@ -15,7 +15,7 @@ Two different things live in `core_base_ui`, and mixing them up is the most comm
 | | **Tokens** | **Theme** |
 |---|---|---|
 | What | The raw design values | The wiring that hands those values to Material |
-| Where | [`lib/src/styles/`](../../../packages/core/base_ui/lib/src/styles/) | [`lib/src/theme/`](../../../packages/core/base_ui/lib/src/theme/) |
+| Where | [`lib/src/styles/`](../../../platform/base_ui/lib/src/styles/) | [`lib/src/theme/`](../../../platform/base_ui/lib/src/theme/) |
 | Reached by | `AppSpacing.lg(context)` | `context.colors.surface`, `Theme.of(context)` |
 | Change it to… | resize a gap, add a shadow | recolour the brand, change the font |
 
@@ -42,10 +42,10 @@ Colours are delivered as a Flutter [`ThemeExtension`](https://api.flutter.dev/fl
 
 ### Step 1 — decide whether you need a new slot
 
-Open [`theme/theme_system_interface.dart`](../../../packages/core/base_ui/lib/src/theme/theme_system_interface.dart). It declares every colour slot the app can ask for:
+Open [`theme/theme_system_interface.dart`](../../../platform/base_ui/lib/src/theme/theme_system_interface.dart). It declares every colour slot the app can ask for:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_system_interface.dart
+// platform/base_ui/lib/src/theme/theme_system_interface.dart
 abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
     extends ThemeExtension<T> {
   // Core colors
@@ -81,10 +81,10 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
 
 ### Step 2 — edit the values
 
-Both palettes are plain static fields in [`theme/theme_system_extensions.dart`](../../../packages/core/base_ui/lib/src/theme/theme_system_extensions.dart):
+Both palettes are plain static fields in [`theme/theme_system_extensions.dart`](../../../platform/base_ui/lib/src/theme/theme_system_extensions.dart):
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_system_extensions.dart
+// platform/base_ui/lib/src/theme/theme_system_extensions.dart
 /// Light theme extension
 static ThemeSystemExtension light = ThemeSystemExtension(
   primary: const Color(0xff0A7E8C),          // Customer teal accent
@@ -112,7 +112,7 @@ The colour names shipped with the template (`chatMe`, `liquidOnboardingColors`, 
 ### Step 3 — read them in a widget
 
 ```dart
-// via the extension in packages/core/base_ui/lib/src/extensions/context_extension.dart
+// via the extension in platform/base_ui/lib/src/extensions/context_extension.dart
 Container(
   color: context.colors.surface,
   child: Text('Hi', style: TextStyle(color: context.colors.textPrimary)),
@@ -126,14 +126,14 @@ Container(
 
 ## 3. Change the typeface
 
-Typography is built once per theme in [`theme/theme_provider.dart`](../../../packages/core/base_ui/lib/src/theme/theme_provider.dart), then scaled.
+Typography is built once per theme in [`theme/theme_provider.dart`](../../../platform/base_ui/lib/src/theme/theme_provider.dart), then scaled.
 
 ### Swap the font family
 
 The template uses Google Fonts:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_provider.dart
+// platform/base_ui/lib/src/theme/theme_provider.dart
 final defaultTheme = switch (mode) {
   ThemeMode.dark => GoogleFonts.plusJakartaSansTextTheme(
     ThemeData.dark().textTheme,
@@ -147,14 +147,14 @@ final defaultTheme = switch (mode) {
 
 **Another Google font:** replace `plusJakartaSansTextTheme` with any `GoogleFonts.<name>TextTheme` in all branches.
 
-**A bundled font:** declare it under `flutter: fonts:` in [`packages/core/base_ui/pubspec.yaml`](../../../packages/core/base_ui/pubspec.yaml), then swap the call for `ThemeData.light().textTheme.apply(fontFamily: 'YourFont')`. Drop the `google_fonts` dependency once nothing uses it — `dart tools/arch_check/check.dart` will flag it as declared-but-unused.
+**A bundled font:** declare it under `flutter: fonts:` in [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), then swap the call for `ThemeData.light().textTheme.apply(fontFamily: 'YourFont')`. Drop the `google_fonts` dependency once nothing uses it — `dart tools/arch_check/check.dart` will flag it as declared-but-unused.
 
 ### How font scaling works
 
 Every size in the `TextTheme` is re-scaled through the context-aware extension:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_provider.dart
+// platform/base_ui/lib/src/theme/theme_provider.dart
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
@@ -163,7 +163,7 @@ That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take 
 `AppTextStyles` then just reads the finished theme:
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_text_styles.dart
+// platform/base_ui/lib/src/styles/app_text_styles.dart
 static TextStyle bodyMediumStyle(BuildContext context) =>
     context.bodyMediumStyle;
 ```
@@ -178,7 +178,7 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 Both classes follow the same shape: a **context-taking accessor** for use in widgets, and a **`raw*` constant** that is the single source of the number.
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_spacing.dart
+// platform/base_ui/lib/src/styles/app_spacing.dart
 static double lg(BuildContext context) => context.w(rawLg);
 // …
 static const double rawLg = 16;
@@ -187,7 +187,7 @@ static const double rawLg = 16;
 To retune the scale, edit the `raw*` constant — every accessor derives from it, so you change one number, not two.
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_radius.dart
+// platform/base_ui/lib/src/styles/app_radius.dart
 static double md(BuildContext context) => context.r(rawMd);
 
 static BorderRadius mdRadius(BuildContext context) =>
@@ -214,7 +214,7 @@ Default to `w` for spacing. Reach for `h` only when the value is genuinely verti
 
 ### The convenience helpers — and one trap
 
-`core_responsive` ships shorthands on the same `BuildContext` extension. Verified against `packages/core/responsive/lib/src/context_extension.dart`, they map to these axes:
+`core_responsive` ships shorthands on the same `BuildContext` extension. Verified against `platform/responsive/lib/src/context_extension.dart`, they map to these axes:
 
 ```dart
 context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
@@ -239,7 +239,7 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 Everything above scales *relative to a reference canvas*: the screen size your designer worked at.
 
 ```dart
-// packages/core/common/lib/src/config/app_config.dart
+// platform/common/lib/src/config/app_config.dart
 /// Design size used for responsive UI calculations
 /// Based on iPhone X dimensions (375x812)
 static Size get design => const Size(375, 812);
@@ -288,7 +288,7 @@ return ResponsiveInit(
 
 Say you want `AppElevation`. Follow the shape the existing classes use — private constructor, `raw*` constants, context-taking accessors.
 
-**Step 1** — create `packages/core/base_ui/lib/src/styles/app_elevation.dart`:
+**Step 1** — create `platform/base_ui/lib/src/styles/app_elevation.dart`:
 
 ```dart
 import 'package:core_responsive/core_responsive.dart';
@@ -310,7 +310,7 @@ class AppElevation {
 **Step 2** — regenerate the barrel so it is exported:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/core/base_ui/lib
+dart tools/barrel_generator/generate.dart platform/base_ui/lib
 ```
 
 `styles/styles.dart` is auto-generated — never hand-edit it; the generator strips manual `export` lines on the next run.
@@ -328,7 +328,7 @@ Material(elevation: AppElevation.raised(context), child: …)
 `AppGradients` reads live theme colours, so gradients recolour with the palette automatically:
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_gradients.dart
+// platform/base_ui/lib/src/styles/app_gradients.dart
 static LinearGradient primaryGradient(BuildContext context) {
   final colors = Theme.of(context).extension<ThemeSystemExtension>()!;
   return LinearGradient(
@@ -344,7 +344,7 @@ To change a gradient, edit the colour **list** in the palette (`primaryGradientC
 `AppShadows` is the odd one out — it hard-codes black with an alpha and is **not** theme-aware:
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_shadows.dart
+// platform/base_ui/lib/src/styles/app_shadows.dart
 static List<BoxShadow> get sm => [
   BoxShadow(
     color: Colors.black.withValues(alpha: 0.05),
@@ -383,7 +383,7 @@ These are enforced in review, and partly by `dart tools/arch_check/check.dart`. 
 | A corner radius | `styles/app_radius.dart` → the `raw*` constant |
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
-| The design canvas | `packages/core/common/lib/src/config/app_config.dart` → `design` |
+| The design canvas | `platform/common/lib/src/config/app_config.dart` → `design` |
 | Scaling behaviour (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ResponsiveInit` |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 

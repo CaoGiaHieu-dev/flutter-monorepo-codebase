@@ -25,19 +25,19 @@
 
 packages:
   # --- Framework: core infrastructure -------------------------------------
-  platform_kernel: { kind: framework, path: packages/core/kernel }
-  core_common: { kind: framework, path: packages/core/common }
-  core_di: { kind: framework, path: packages/core/di }
-  core_base_ui: { kind: framework, path: packages/core/base_ui }
-  core_network: { kind: framework, path: packages/core/network }
-  core_storage: { kind: framework, path: packages/core/storage }
-  core_database: { kind: framework, path: packages/core/database }
-  core_notifications: { kind: framework, path: packages/core/notifications }
-  core_ui_kit: { kind: framework, path: packages/core/ui_kit }
+  platform_kernel: { kind: framework, path: platform/kernel }
+  core_common: { kind: framework, path: platform/common }
+  core_di: { kind: framework, path: platform/di }
+  core_base_ui: { kind: framework, path: platform/base_ui }
+  core_network: { kind: framework, path: platform/network }
+  core_storage: { kind: framework, path: platform/storage }
+  core_database: { kind: framework, path: platform/database }
+  core_notifications: { kind: framework, path: platform/notifications }
+  core_ui_kit: { kind: framework, path: platform/ui_kit }
   provider_state_management:
-    { kind: framework, path: packages/core/provider_state_management }
+    { kind: framework, path: platform/provider_state_management }
   bloc_state_management:
-    { kind: framework, path: packages/core/bloc_state_management }
+    { kind: framework, path: platform/bloc_state_management }
 
   # --- Framework: layer foundations ---------------------------------------
   # These carry the base contracts every domain/data package builds on
@@ -170,14 +170,14 @@ bundles:
     # Contracts declared in core_di purely so this feature could publish state
     # across the boundary. They become dead declarations once it is gone.
     orphaned_contracts:
-      - packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart
-      - packages/core/di/lib/src/agnostic_streams/i_auth_session_state.dart
-      - packages/core/di/lib/src/agnostic_streams/i_auth_refresh_listenable.dart
-      - packages/core/di/lib/src/agnostic_streams/auth_session_failure.dart
-      - packages/core/di/lib/src/actions/i_auth_action_handler.dart
-      - packages/core/di/lib/src/navigators/auth_navigator.dart
+      - platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart
+      - platform/di/lib/src/agnostic_streams/i_auth_session_state.dart
+      - platform/di/lib/src/agnostic_streams/i_auth_refresh_listenable.dart
+      - platform/di/lib/src/agnostic_streams/auth_session_failure.dart
+      - platform/di/lib/src/actions/i_auth_action_handler.dart
+      - platform/di/lib/src/navigators/auth_navigator.dart
     orphaned_keys:
-      - "NavigatorKeys.nested('auth') in packages/core/di/lib/src/routing/navigator_keys.dart"
+      - "NavigatorKeys.nested('auth') in platform/di/lib/src/routing/navigator_keys.dart"
     breaks:
       - sample: feature_settings
         at: packages/features/settings/lib/src/pages/settings_page.dart:60
@@ -197,7 +197,7 @@ bundles:
   home:
     packages: [feature_home]
     orphaned_contracts:
-      - packages/core/di/lib/src/navigators/home_navigator.dart
+      - platform/di/lib/src/navigators/home_navigator.dart
     breaks: []
     safe_couplings:
       - "feature_auth -> HomeNavigator (getItOrNull + fallback, degrades quietly)"
@@ -208,13 +208,13 @@ bundles:
   settings:
     packages: [feature_settings]
     orphaned_contracts:
-      - packages/core/di/lib/src/navigators/settings_navigator.dart
+      - platform/di/lib/src/navigators/settings_navigator.dart
     breaks: []
 
   onboarding:
     packages: [feature_onboarding]
     orphaned_contracts:
-      - packages/core/di/lib/src/navigators/onboarding_navigator.dart
+      - platform/di/lib/src/navigators/onboarding_navigator.dart
     breaks: []
     note: >-
       This is the only IAppEntryLocation. Without it the cold-start route falls
@@ -223,7 +223,7 @@ bundles:
   dashboard:
     packages: [feature_dashboard]
     orphaned_contracts:
-      - packages/core/di/lib/src/routing/dashboard_route_module.dart
+      - platform/di/lib/src/routing/dashboard_route_module.dart
     breaks: []
     note: >-
       Tabs registered by other features have nothing to render into. Remove the
@@ -232,7 +232,7 @@ bundles:
   splash:
     packages: [feature_splash]
     orphaned_contracts:
-      - packages/core/di/lib/src/app/i_app_splash_screen.dart
+      - platform/di/lib/src/app/i_app_splash_screen.dart
     breaks: []
     note: >-
       main.dart resolves it with getItOrNull, so the app simply keeps the
@@ -249,11 +249,11 @@ shared_files:
 # Contracts that survive every removal: they are generic mechanisms, not
 # feature-specific. Do not delete these while chasing orphans.
 framework_contracts:
-  - packages/core/di/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
-  - packages/core/di/lib/src/routing/i_nav_destination_module.dart
-  - packages/core/di/lib/src/routing/i_app_entry_location.dart
-  - packages/core/di/lib/src/routing/navigator_keys.dart
-  - packages/core/di/lib/src/feature_localization.dart
-  - packages/core/di/lib/src/theme/i_theme_storage.dart
-  - packages/core/di/lib/src/language/i_language_storage.dart
-  - packages/core/di/lib/src/app/i_app_tree_wrapper.dart
+  - platform/di/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
+  - platform/di/lib/src/routing/i_nav_destination_module.dart
+  - platform/di/lib/src/routing/i_app_entry_location.dart
+  - platform/di/lib/src/routing/navigator_keys.dart
+  - platform/di/lib/src/feature_localization.dart
+  - platform/di/lib/src/theme/i_theme_storage.dart
+  - platform/di/lib/src/language/i_language_storage.dart
+  - platform/di/lib/src/app/i_app_tree_wrapper.dart

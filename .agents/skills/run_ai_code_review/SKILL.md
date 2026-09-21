@@ -60,8 +60,8 @@ Use the `run_command` tool to run the commands above. After execution, analyze t
 
 **Layering**
 - `core/*` must not depend on `feature_*` or `data_*`. Approved exceptions only:
-  `core_di → domain_auth`, `provider_state_management → domain_core`,
-  `platform_kernel → domain_core`, `bloc_state_management → domain_core`.
+  `platform_kernel → domain_core`, `provider_state_management → domain_core`,
+  `bloc_state_management → domain_core`. Three, and nothing else.
 - Domain stays pure — no `flutter` / `dio` / `retrofit` / `drift` import *and* no such entry
   in its pubspec.
 - Feature A never imports Feature B (only `core_ui_kit`).

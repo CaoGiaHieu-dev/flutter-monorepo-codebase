@@ -112,7 +112,7 @@ switch (result) {
 ```
 
 > [!NOTE]
-> **`None` and `Cancel` are unused reserve variants.** Grep the repo: no repository or use case ever returns `Result.none()` or `Result.cancel()` — they appear only in `packages/core/provider_state_management/test/base_provider_test.dart`. So the honest answer to *"when does `Cancel` happen?"* is: **it does not, today.** They exist so the union can grow without a breaking change. You still have to handle them in exhaustive `switch` / `whenAsync`, which is the cost of keeping them.
+> **`None` and `Cancel` are unused reserve variants.** Grep the repo: no repository or use case ever returns `Result.none()` or `Result.cancel()` — they appear only in `platform/provider_state_management/test/base_provider_test.dart`. So the honest answer to *"when does `Cancel` happen?"* is: **it does not, today.** They exist so the union can grow without a breaking change. You still have to handle them in exhaustive `switch` / `whenAsync`, which is the cost of keeping them.
 
 #### API surface
 

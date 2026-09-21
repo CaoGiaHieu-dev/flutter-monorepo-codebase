@@ -26,7 +26,7 @@ Use this skill when requested to: "call logout from settings without importing a
 ## 📋 Detailed Steps
 
 ### Step 1: Declare the Interface in `core_di`
-Create `packages/core/di/lib/src/actions/i_<feature>_action_handler.dart`:
+Create `platform/di/lib/src/actions/i_<feature>_action_handler.dart`:
 ```dart
 import 'package:flutter/widgets.dart';
 
@@ -34,7 +34,7 @@ abstract class IAuthActionHandler {
   void logout(BuildContext context);
 }
 ```
-Export it from `packages/core/di/lib/src/actions/actions.dart` (barrel will pick it up via generator).
+Export it from `platform/di/lib/src/actions/actions.dart` (barrel will pick it up via generator).
 
 ### Step 2: Implement in the Owning Feature
 Create `packages/features/<owner>/lib/src/handlers/<feature>_action_handler_impl.dart`:
@@ -73,7 +73,7 @@ The consumer MUST NOT import the owning feature package.
 
 ### Step 4: Barrel + Code Gen
 ```bash
-dart tools/barrel_generator/generate.dart packages/core/di/lib
+dart tools/barrel_generator/generate.dart platform/di/lib
 dart tools/barrel_generator/generate.dart packages/features/<owner>/lib
 dart run build_runner build -d --workspace
 ```

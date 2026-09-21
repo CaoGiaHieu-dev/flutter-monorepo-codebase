@@ -71,7 +71,7 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
 >   _stateManager.setState(state: const ViewState.loading());
 > }
 > ```
-> (`packages/core/provider_state_management/lib/src/management/operation_executor.dart`)
+> (`platform/provider_state_management/lib/src/management/operation_executor.dart`)
 >
 > So a **refresh** on an already-populated screen shows no spinner, and there is no flag to
 > override that. When you do need one, set it yourself before the call — this is exactly

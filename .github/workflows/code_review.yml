@@ -6,6 +6,7 @@ on:
     paths:
       - "app/lib/**/*.dart"
       - "packages/**/*.dart"
+      - "platform/**/*.dart"
       - "!**/*.g.dart"
       - "!**/*.freezed.dart"
       - "!**/*.module.dart"
@@ -21,6 +22,7 @@ on:
           - all
           - domain
           - data
+          - platform
           - presentation
       language:
         description: "Report language"
@@ -67,8 +69,10 @@ jobs:
           files: |
             app/lib/**/*.dart
             packages/**/*.dart
+            platform/**/*.dart
             app/test/**/*.dart
             packages/**/test/**/*.dart
+            platform/**/test/**/*.dart
             !**/*.g.dart
             !**/*.freezed.dart
             !**/*.module.dart
@@ -103,6 +107,8 @@ jobs:
             dart tools/code_review/code_review.dart --folder packages/domain --language "$LANG" --format markdown
           elif [ "$SCOPE" = "data" ]; then
             dart tools/code_review/code_review.dart --folder packages/data --language "$LANG" --format markdown
+          elif [ "$SCOPE" = "platform" ]; then
+            dart tools/code_review/code_review.dart --folder platform --language "$LANG" --format markdown
           elif [ "$SCOPE" = "presentation" ]; then
             dart tools/code_review/code_review.dart --folder app/lib --language "$LANG" --format markdown
           else

@@ -163,7 +163,7 @@ Chỉ dùng `INavDestinationModule` cho **điểm đến chính của bottom-nav
 
 ## 5. Widget dùng chung nằm ở core, không phải ở đây
 
-Thư viện widget dùng lại là **`core_ui_kit`** tại `packages/core/ui_kit` — một package core, không phải feature. Nó nằm ngoài `packages/features/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
+Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui_kit` — một package core, không phải feature. Nó nằm ngoài `packages/features/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
 
 Điều quan trọng ở phía feature là nghĩa vụ của **bên gọi**:
 

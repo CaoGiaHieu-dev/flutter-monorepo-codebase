@@ -336,7 +336,7 @@ cd packages/features/profile && flutter gen-l10n
 Feature khác không được import `feature_profile`. Khai hợp đồng ở `core_di`:
 
 ```dart
-// packages/core/di/lib/src/navigators/profile_navigator.dart
+// platform/di/lib/src/navigators/profile_navigator.dart
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
@@ -345,7 +345,7 @@ abstract class ProfileNavigator {
 ```
 
 Đúng hình dạng của
-[`home_navigator.dart`](../../../packages/core/di/lib/src/navigators/home_navigator.dart).
+[`home_navigator.dart`](../../../platform/di/lib/src/navigators/home_navigator.dart).
 
 Cài đặt nó ngay trong `routing/` của bạn — code thật từ
 [`home_navigator_impl.dart`](../../../packages/features/home/lib/src/routing/home_navigator_impl.dart):

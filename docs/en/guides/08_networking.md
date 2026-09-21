@@ -11,7 +11,7 @@
 `core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (§3), which the app shell implements.
 
 ```dart
-// packages/core/network/lib/src/api_client.dart
+// platform/network/lib/src/api_client.dart
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
@@ -54,7 +54,7 @@ Dio runs interceptors in the order they were added — for `onRequest` **and** f
 ```
 
 ```dart
-// packages/core/network/lib/src/api_client.dart
+// platform/network/lib/src/api_client.dart
 dio.interceptors.add(
   AuthInterceptor(
     getToken: _config.getToken,
@@ -96,7 +96,7 @@ Auth runs first so the token is attached before anything else; refresh sits ahea
 Both flags live in `RequestOptions.extra` and default to `true`:
 
 ```dart
-// packages/core/network/lib/src/utils/network_constants.dart
+// platform/network/lib/src/utils/network_constants.dart
 /// Set `false` to stop [AuthInterceptor] attaching the bearer token.
 static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
@@ -109,7 +109,7 @@ static const String EXTRA_CAN_RETRY = 'canRetry';
 Adds an upper-cased `language` header (falling back to the device locale, then to `vi`), and the bearer token when the request wants auth:
 
 ```dart
-// packages/core/network/lib/src/interceptors/auth_interceptor.dart
+// platform/network/lib/src/interceptors/auth_interceptor.dart
 if (needAuthentication) {
   final token = getToken() ?? '';
   if (token.isNotEmpty) {
@@ -129,7 +129,7 @@ if (needAuthentication) {
 Only transport failures qualify — **not** HTTP status codes:
 
 ```dart
-// packages/core/network/lib/src/handlers/retry_handler.dart
+// platform/network/lib/src/handlers/retry_handler.dart
 bool retryWhen(DioExceptionType type) {
   return type == DioExceptionType.receiveTimeout ||
       type == DioExceptionType.sendTimeout ||
@@ -145,7 +145,7 @@ Concurrent failures are collected into one queue and a **single** retry dialog i
 All three hooks are behind `kDebugMode`, and credential headers are masked even in debug:
 
 ```dart
-// packages/core/network/lib/src/interceptors/logging_interceptor.dart
+// platform/network/lib/src/interceptors/logging_interceptor.dart
 Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
   const redactedKeys = {
     HttpHeaders.authorizationHeader,
@@ -168,7 +168,7 @@ Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
 ## 3. `NetworkConfig` — the app shell supplies the details
 
 ```dart
-// packages/core/network/lib/src/network_config.dart
+// platform/network/lib/src/network_config.dart
 abstract class NetworkConfig implements SslPinningConfig {
   String? Function() get getToken;
   String? Function() get getLocale;
@@ -238,7 +238,7 @@ Future<String?> _refreshSession() async {
 `RefreshTokenHandler` serialises everything behind a `Completer`. The first 401 performs the refresh; the rest wait on the same future:
 
 ```dart
-// packages/core/network/lib/src/handlers/refresh_token_handler.dart
+// platform/network/lib/src/handlers/refresh_token_handler.dart
 // If a refresh is already in progress, wait for it to complete.
 if (_completer != null) {
   final String? newToken = await _completer!.future;
@@ -266,7 +266,7 @@ return await _retryRequest(err, handler);
 ### Three guards against infinite recursion
 
 ```dart
-// packages/core/network/lib/src/interceptors/refresh_token_interceptor.dart
+// platform/network/lib/src/interceptors/refresh_token_interceptor.dart
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
 ///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) are ignored, so
@@ -300,7 +300,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 The initializer refuses to fail silently about it:
 
 ```dart
-// packages/core/common/lib/src/config/app_initializer.dart
+// platform/common/lib/src/config/app_initializer.dart
 if (hashes != null && hashes.isNotEmpty) {
   HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
 } else {

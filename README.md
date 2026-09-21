@@ -44,7 +44,7 @@ graph TD
         DomAuth["domain_auth"]:::domain
     end
 
-    subgraph CoreLayer ["🛠️ Core Infrastructure Layer (packages/core/*)"]
+    subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
         direction LR
         CoreUI["core_base_ui"]:::core
         CoreCom["core_common"]:::core
@@ -86,7 +86,7 @@ graph TD
 > correct. Exactly **three** such edges are approved: `platform_kernel → domain_core`,
 > `provider_state_management → domain_core`
 > `bloc_state_management → domain_core`. They are hard-coded in
-> `tools/arch_check/check.dart` and printed on every run, each with its reason; a fifth fails the
+> `tools/arch_check/check.dart` and printed on every run, each with its reason; a fourth fails the
 > build. See [`reference/01_rules.md`](docs/en/reference/01_rules.md).
 
 ---
@@ -229,7 +229,7 @@ All tools can be run from the root directory.
    - Renders UI and manages state (Provider or BLoC).
    - **Only communicates with Domain through UseCases**, absolutely no direct API calls.
    - **FORBIDDEN to depend on the `data` layer** or on any other feature package — no exception; shared widgets come from the core package `core_ui_kit`.
-4. **Core Layer (`packages/core/*`)**:
+4. **Core Layer (`platform/*`)**:
    - Supplies mechanism only. **FORBIDDEN to depend on any `feature_*` or `data_*` package.**
    - May depend on `domain_*` (Domain is the centre): `platform_kernel → domain_core`,
      `provider_state_management → domain_core`, `bloc_state_management → domain_core`.
@@ -411,7 +411,7 @@ flutter pub get
 *Thanks to Pub Workspaces, all dependencies of the Host App and all sub-packages are fetched concurrently and create a single `pubspec.lock`.*
 
 ### 3. Generate Firebase Options (required — the repo will not compile without it)
-`packages/core/common/lib/src/firebase/firebase_module.dart` imports all three
+`platform/common/lib/src/firebase/firebase_module.dart` imports all three
 `firebase_options_{dev,staging,prod}.dart` files unconditionally, and they are git-ignored. Run
 `flutterfire configure` once per flavor before the first build — see
 [`getting-started/01_setup.md`](docs/en/getting-started/01_setup.md).

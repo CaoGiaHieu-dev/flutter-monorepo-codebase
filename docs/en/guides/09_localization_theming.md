@@ -26,7 +26,7 @@ Each feature owns its translations. The app shell never learns their names.
 ## 2. The contract
 
 ```dart
-// packages/core/di/lib/src/feature_localization.dart
+// platform/di/lib/src/feature_localization.dart
 /// Interface for feature localization delegates.
 /// Enables safe registration and retrieval via getIt.getAll<IFeatureLocalization>() in the root app.
 abstract class IFeatureLocalization {
@@ -131,7 +131,7 @@ Text(context.l10nHome.userLoggedIn)
 
 ## 6. Design tokens and colours
 
-Tokens live in `packages/core/base_ui/lib/src/styles/`; colours come from a
+Tokens live in `platform/base_ui/lib/src/styles/`; colours come from a
 `ThemeExtension` so they flip with light/dark automatically.
 
 | Token class | File | Purpose |
@@ -173,7 +173,7 @@ Container(
 `ThemeMode.system` resolves against OS brightness, which can change while the app is running. `ThemeProvider` observes it:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_provider.dart
+// platform/base_ui/lib/src/theme/theme_provider.dart
 /// Called by the framework when the OS switches between Light and Dark.
 ///
 /// Only [ThemeMode.system] derives its appearance from the platform, so an
@@ -261,7 +261,7 @@ double? get leadingWidth => context.w(64);
 That override scales internally **and** silently discards the `leadingWidth` the caller passed through `super.leadingWidth` — the parameter is dead. `AppBarCustom` instead forwards everything to `AppBar`:
 
 ```dart
-// packages/core/ui_kit/lib/navigation/app_bar_custom.dart
+// platform/ui_kit/lib/navigation/app_bar_custom.dart
 class AppBarCustom extends AppBar {
   AppBarCustom({
     super.key,
@@ -283,7 +283,7 @@ AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 Non-size defaults for shared widgets live in the package's own `utils/`:
 
 ```dart
-// packages/core/ui_kit/lib/utils/shared_ui_constants.dart
+// platform/ui_kit/lib/utils/shared_ui_constants.dart
 /// Timing and overlay constants owned by `core_ui_kit`.
 ///
 /// Package-internal by convention: these are defaults for the reusable
@@ -309,7 +309,7 @@ class SharedUiConstants {
 | Dialog | `_dialog.dart` | `Dialog` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` |
 
-Existing examples in `packages/core/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
+Existing examples in `platform/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
 
 Inline builders cannot be reused, previewed, or tested in isolation — and they invariably end up with hard-coded strings and sizes.
 

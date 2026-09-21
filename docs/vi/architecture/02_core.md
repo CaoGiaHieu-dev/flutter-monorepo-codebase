@@ -1,6 +1,6 @@
 # Tầng Core
 
-Tài liệu này trả lời câu hỏi **"trong `packages/core/*` có gì, và khi nào thì dùng package nào?"**. Đọc xong bạn sẽ chọn đúng core package cho từng việc — và nhận ra khi nào thứ bạn định thêm vào thực ra *không* thuộc về core.
+Tài liệu này trả lời câu hỏi **"trong `platform/*` có gì, và khi nào thì dùng package nào?"**. Đọc xong bạn sẽ chọn đúng core package cho từng việc — và nhận ra khi nào thứ bạn định thêm vào thực ra *không* thuộc về core.
 
 Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp vụ, và không biết feature nào tồn tại.
 
@@ -8,7 +8,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 ## 0. Ba luật chi phối mọi package core
 
-**Core không được phụ thuộc feature hay data.** Có bốn ngoại lệ đã duyệt, liệt kê ở [phần tổng quan](01_overview.md#các-ngoại-lệ-đã-được-duyệt). `tools/arch_check/check.dart` cưỡng chế danh sách này ở mọi PR.
+**Core không được phụ thuộc feature hay data.** Có ba ngoại lệ đã duyệt, liệt kê ở [phần tổng quan](01_overview.md#các-ngoại-lệ-đã-được-duyệt). `tools/arch_check/check.dart` cưỡng chế danh sách này ở mọi PR.
 
 **Core cấp cơ chế, không cấp chính sách.** `core_storage` cho bạn `StorageValue<T>`; nó không quyết định rằng tồn tại một key tên `token`. `core_database` cho bạn kết nối và hợp đồng migration; nó không biết ý nghĩa nghiệp vụ của bảng. Hễ một package core bắt đầu gọi tên một khái niệm domain cụ thể, cái tên đó thuộc về chỗ khác.
 
@@ -60,7 +60,7 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 | Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
 
-**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
+**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/di/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
 
 Một `ShellRoute` và các route con phải dùng **cùng một** instance `GlobalKey`, nhưng shell do app shell dựng còn route con khai bên trong feature. Đặt key ở bên nào cũng tạo chu trình, nên Hub — nơi cả hai đều đã phụ thuộc — giữ nó.
 
@@ -111,7 +111,7 @@ Observer được gỡ trong `dispose()`, và hàm này gắn `@disposeMethod` �
 
 ## 4. `core_ui_kit` — widget dùng lại
 
-Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `packages/core/ui_kit` để `packages/features/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
+Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `platform/ui_kit` để `packages/features/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
 
 Cấu trúc phẳng (không có `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
@@ -146,7 +146,7 @@ Scale bên trong nghĩa là bên gọi nào đã scale sẽ bị scale hai lần
 
 ### Hằng số
 
-Giá trị mặc định của các widget này nằm ở `packages/core/ui_kit/lib/utils/shared_ui_constants.dart`:
+Giá trị mặc định của các widget này nằm ở `platform/ui_kit/lib/utils/shared_ui_constants.dart`:
 
 ```dart
 class SharedUiConstants {
@@ -260,7 +260,7 @@ Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout)
 
 ## 9. `core_responsive` — scale theo khung thiết kế, gắn với `BuildContext`
 
-Cơ chế scale mà mọi widget trong app đều đi qua. Nó nằm tại `packages/core/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, cũng không package bên thứ ba nào.
+Cơ chế scale mà mọi widget trong app đều đi qua. Nó nằm tại `platform/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, cũng không package bên thứ ba nào.
 
 | Thành phần export | Đường dẫn | Mục đích |
 |:--|:--|:--|
@@ -301,7 +301,7 @@ Cơ chế scale mà mọi widget trong app đều đi qua. Nó nằm tại `pack
 Luật **R7** của `dart tools/arch_check/check.dart` chặn mọi dạng bare (`[\d)].(w|h|r|sp|spMin|dg|dm)`) trong file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
 
 > [!NOTE]
-> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Bản thân package có 19 test tại `packages/core/responsive/test/`.
+> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Bản thân package có 19 test tại `platform/responsive/test/`.
 
 Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `app/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục và đổi khung thiết kế nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md).
 

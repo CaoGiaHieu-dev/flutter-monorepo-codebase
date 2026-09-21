@@ -39,7 +39,7 @@ How the system is laid out and why. Read these to place a new file correctly, or
 | Page | Answers |
 |---|---|
 | [`01_overview.md`](architecture/01_overview.md) | How is this monorepo laid out, and which package may depend on which? |
-| [`02_core.md`](architecture/02_core.md) | What is inside `packages/core/*`, and which package should I reach for? |
+| [`02_core.md`](architecture/02_core.md) | What is inside `platform/*`, and which package should I reach for? |
 | [`03_domain.md`](architecture/03_domain.md) | What business rules live in `packages/domain/*`, why is that code forbidden from touching Flutter, and what does `Result<T>` give you? |
 | [`04_data.md`](architecture/04_data.md) | How does `packages/data/*` fulfil the repository contracts Domain declares — and which boundaries must it not leak across? |
 | [`05_features.md`](architecture/05_features.md) | How is a screen-owning package organised, and how do features stay isolated while still composing into one app? |

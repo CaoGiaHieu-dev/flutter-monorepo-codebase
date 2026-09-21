@@ -41,7 +41,7 @@ GoRouter (navigatorKey: NavigatorKeys.rootKey)
 
 ## 2. The four routing contracts
 
-All live in `packages/core/di/lib/src/routing/`.
+All live in `platform/di/lib/src/routing/`.
 
 | Contract | Use for | Ordered? | Implemented by |
 |---|---|---|---|
@@ -233,7 +233,7 @@ Routes for screens backed by a **global** controller (e.g. `LoginPage` with the 
 
 Feature A must never import Feature B. Navigation crosses the boundary through an interface in `core_di`.
 
-**1. Declare** — `packages/core/di/lib/src/navigators/auth_navigator.dart`:
+**1. Declare** — `platform/di/lib/src/navigators/auth_navigator.dart`:
 
 ```dart
 abstract class AuthNavigator {
@@ -271,7 +271,7 @@ getItOrNull<AuthNavigator>()?.toLogin(context);
 
 ## 6. `NavigatorKeys` — why they live in the DI Hub
 
-`packages/core/di/lib/src/routing/navigator_keys.dart`:
+`platform/di/lib/src/routing/navigator_keys.dart`:
 
 ```dart
 class NavigatorKeys {

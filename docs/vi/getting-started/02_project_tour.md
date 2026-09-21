@@ -40,23 +40,23 @@ flutter-monorepo-codebase/
 
 Danh sách chuẩn nằm ở khối `workspace:` trong `pubspec.yaml` gốc.
 
-### Core — `packages/core/*`
+### Core — `platform/*`
 
 Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được phụ thuộc feature hay tầng data.**
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enum, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), extension, mixin, `EnvConstants`, `ApiStatusConstants`, module Firebase options |
-| `core_di` | `packages/core/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
-| `core_base_ui` | `packages/core/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
-| `core_ui_kit` | `packages/core/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
-| `core_network` | `packages/core/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
-| `core_storage` | `packages/core/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
-| `core_database` | `packages/core/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
-| `core_responsive` | `packages/core/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale |
-| `core_notifications` | `packages/core/notifications` | Service push notification + `NotificationConstants` của riêng nó |
-| `provider_state_management` | `packages/core/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
-| `bloc_state_management` | `packages/core/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
+| `core_common` | `platform/common` | `AppConfig`, `AppInitializer`, enum, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), extension, mixin, `EnvConstants`, `ApiStatusConstants`, module Firebase options |
+| `core_di` | `platform/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
+| `core_base_ui` | `platform/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
+| `core_ui_kit` | `platform/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
+| `core_network` | `platform/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
+| `core_storage` | `platform/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
+| `core_database` | `platform/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
+| `core_responsive` | `platform/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale |
+| `core_notifications` | `platform/notifications` | Service push notification + `NotificationConstants` của riêng nó |
+| `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
+| `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
 ### Domain — `packages/domain/*`
 
@@ -111,7 +111,7 @@ graph BT
         Data["packages/data/*"]
     end
     subgraph Infra
-        Core["packages/core/*"]
+        Core["platform/*"]
     end
 
     Features --> Domain
@@ -144,7 +144,7 @@ graph BT
 Kiểm tra bất cứ lúc nào:
 
 ```bash
-grep -rl "package:feature_" packages/core/*/lib    # phải không in ra gì
+grep -rl "package:feature_" platform/*/lib    # phải không in ra gì
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
@@ -158,7 +158,7 @@ dart tools/unused_checker/check_unused_packages.dart
 workspace:
   - app
   - tools
-  - packages/core/common
+  - platform/common
   # … và 20 package nữa
 ```
 
@@ -186,9 +186,9 @@ Những hệ quả bạn bắt buộc phải biết:
 | Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `packages/data/core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
-| Đổi màu / khoảng cách / typography | `packages/core/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Đổi màu / khoảng cách / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Thêm chuỗi cần dịch | `packages/features/<tên>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Chia sẻ widget giữa các feature | `packages/core/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
+| Chia sẻ widget giữa các feature | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Cho feature A kích hoạt hành động ở feature B | `core_di/src/actions/` hoặc `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Nâng version một thư viện | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
 | Sửa pipeline CI | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |

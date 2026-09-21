@@ -176,7 +176,7 @@ All files and class names must strictly adhere to the following naming conventio
   ```
 - ⚠️ **The generator DELETES every hand-written `export '...';` line in a barrel.** It strips all lines starting with `export '` and re-emits its own sorted list (`tools/barrel_generator/generate.dart`, the `line.trim().startsWith("export '")` filter).
   - **ABSOLUTELY FORBIDDEN** to hand-add an `export` to a barrel file — it will silently vanish on the next run.
-  - Need a deliberate re-export? Put it in a **normal source file**, which the generator then picks up. Reference: `packages/core/common/lib/src/error/failures.dart` is a plain file whose whole body is the `AppFailure` compatibility re-export.
+  - Need a deliberate re-export? Put it in a **normal source file**, which the generator then picks up. Reference: `packages/core/kernel/lib/src/error/failures.dart` is a plain file whose whole body is the `AppFailure` compatibility re-export.
 - The generator also skips `part of` files and generated output (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`). Run it **before** `build_runner`, one package at a time.
 
 ---
@@ -336,7 +336,9 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ## 🖼️ 15. Feature-Scoped Assets & Resources
 
-- **Decentralized Assets**: All UI assets (images, svgs, animations, Lottie) that are specific to a feature MUST be placed in that feature's package (e.g., `packages/features/auth/assets/images`).
+- **Decentralized Assets**: All UI assets (images, svgs, animations, Lottie) that are specific to a feature MUST be placed in that feature's own `assets/` folder — the shipped example is
+  `packages/features/auth/assets/language/`, and images belong beside it in an `assets/images/`
+  folder the feature creates when it first needs one.
 - **Global Assets Only**: The `core_base_ui` package is strictly reserved ONLY for globally shared assets (like the app logo, global icons, or global background patterns) and global fallback strings.
 - **Do not** dump all images into `core_base_ui` as it creates massive coupling. Feature modules should be standalone and encapsulate their own assets.
 

@@ -62,6 +62,12 @@ flutter test test/debounce_test.dart   # a single test file
 dart tools/arch_check/check.dart
 dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R9)
 
+# Verify every repo path the docs name actually exists — Gate 5 of
+# pr_quality_check.yml. Known-absent paths (generated / secret / "create this
+# file yourself") live in tools/docs_check/allowlist.txt with their reason.
+dart tools/docs_check/check.dart
+dart tools/docs_check/check.dart --verbose   # + copy-paste allowlist block
+
 # Which packages are sample code, and how to delete one safely.
 # Source of truth: tools/sample_manifest.yaml
 dart tools/sample_cleanup/remove_sample.dart --list

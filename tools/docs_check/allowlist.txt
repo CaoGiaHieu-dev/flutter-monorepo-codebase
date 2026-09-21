@@ -1,0 +1,50 @@
+# Paths the documentation names that are CORRECTLY absent from a fresh clone.
+#
+# One repo-rooted path per line. A `#` starts a comment, and an entry without
+# a reason is not allowed — the moment this file becomes a list of paths
+# somebody silenced, the check stops being worth running. There are exactly
+# three legitimate reasons, and a new entry must fit one of them:
+#
+#   (1) GENERATED  — build_runner or a tool writes it; it is gitignored.
+#   (2) SECRET     — credentials, deliberately never committed.
+#   (3) TUTORIAL   — a file the reader is told to CREATE, or a placeholder
+#                    name standing in for "your module here".
+#
+# Anything else is drift: fix the document instead.
+
+# --- (1) Generated ---------------------------------------------------------
+# Written by `dart run build_runner build -d --workspace`. The docs cite it
+# constantly because it is the only place an eager-singleton ordering bug
+# (AGENTS.md §18) is visible.
+app/lib/di/injection.config.dart
+# Flutter build output.
+app/build/app/outputs/flutter-apk/app-dev-debug.apk
+
+# --- (2) Secrets -----------------------------------------------------------
+# Production env values. `app/env.dev` and `app/env.staging` ARE committed;
+# prod is not, which is the point the setup guide is making.
+app/env.prod
+# Android release signing. `01_cicd.md` explains how CI materialises both.
+app/android/keystore.jks
+app/android/key.properties
+# Fastlane credentials. The repo ships `app/fastlane/Config.example.yaml`.
+app/fastlane/Config.yaml
+
+# --- (3) Tutorial targets and placeholders ---------------------------------
+# `11_design_system.md` walks the reader through creating this file; it does
+# not exist until they do.
+packages/core/base_ui/lib/src/styles/app_elevation.dart
+# `01_new_feature.md` builds `profile` end to end as the worked example.
+packages/features/profile
+packages/features/profile/l10n.yaml
+# `x` is the stand-in for the reader's module name in the barrel skill.
+packages/domain/x/lib
+packages/data/x/lib
+
+# --- (3) Target layout, not current layout ---------------------------------
+# `.agents/RESTRUCTURE.md` is the migration plan: these are the directories
+# steps 6b and 7 create. They are removed from this list as each step lands,
+# which is what stops the plan from quietly describing a tree nobody built.
+apps/mobile
+apps/admin
+modules/catalog

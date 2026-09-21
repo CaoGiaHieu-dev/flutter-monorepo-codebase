@@ -158,7 +158,7 @@ by `ErrorHandler.handleError(e)` — **never** call `AppFailure.fromException()`
 exist) and never let an exception escape the Data layer.
 
 > [!WARNING]
-> **`ErrorHandler` has no Firebase branch.** `packages/core/common/lib/src/error/error_handler.dart`
+> **`ErrorHandler` has no Firebase branch.** `packages/core/kernel/lib/src/error/error_handler.dart`
 > recognises `AppException`, `DioException`, `SocketException`, `HttpException` and
 > `FormatException`; everything else — including `FirebaseException`,
 > `FirebaseAuthException` and `PlatformException` — falls through to:

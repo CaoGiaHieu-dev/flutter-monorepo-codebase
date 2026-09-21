@@ -161,7 +161,7 @@ APP_SCHEMA_VERSION=
 APP_NAME=
 ```
 
-Phần lớn các key này xuất hiện trong Dart qua `EnvConstants` (`packages/core/common/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
+Phần lớn các key này xuất hiện trong Dart qua `EnvConstants` (`packages/core/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {

@@ -115,6 +115,15 @@ jobs:
       - name: Dependency catalog in sync
         run: dart tools/dependency_sync.dart --check
 
+      # Gate 5 — the documentation describes this tree, not a previous one.
+      # Prose rots silently: a package gets renamed and every guide pointing at
+      # it keeps the old name, which `flutter analyze` can never see. This
+      # resolves every repo path the docs name and fails on the first dead one.
+      # Paths that are correctly absent (generated, secret, or a file the
+      # reader is told to create) live in tools/docs_check/allowlist.txt.
+      - name: Documentation accuracy
+        run: dart tools/docs_check/check.dart
+
       # Advisory: undeclared/unused package dependencies. Not a hard gate
       # because the checker cannot see intentional scaffolding — see
       # .agents/skills/run_unused_checker/SKILL.md for what is deliberately

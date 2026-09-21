@@ -22,7 +22,7 @@ bottom after every step.
 | **Changing** | Root `pubspec.yaml` + each app's `injection.dart`: hand-written → **generated** from an app manifest. |
 | **Changing** | Samples: 6 feature packages + 2 domain/data pairs → **2 reference modules**, deliberately small. |
 | **Not changing** | Clean Architecture, the DI model (GetIt + Injectable), Freezed/BLoC rules, the responsive mandate, the barrel/codegen workflow. |
-| **Not in scope** | The backend. It lives in another repo, owned by the backend team. Only the SDK boundary is our concern — see `docs/en/architecture/07_backend_boundary.md` (step 6). |
+| **Not in scope** | The backend. It lives in another repo, owned by the backend team. The only surface we own is `core_network`, which talks to it over HTTP like any other client. |
 
 ### Baseline (measured 2026-09, before any step)
 
@@ -274,6 +274,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
+| 2026-09-21 | 9 | **Docs accuracy is now machine-held.** Built `tools/docs_check` (CI **Gate 5**): resolves every repo path the docs name — backticked spans anchored to a real top-level directory, and markdown links resolved relative to their own file. 70 documents, ~1 300 references, 0 dead. Fixed three genuine drifts (`feature_auth` was said to ship `assets/images`, it ships `assets/language/`; a promised `07_backend_boundary.md` that the backend-out-of-scope decision made moot; a `generate.dart:90-101` line citation whose lines now hold unrelated code). 14 correctly-absent paths moved to `tools/docs_check/allowlist.txt`, each with its reason. The audit also surfaced a real hole: `app/env.prod` and `app/android/keystore.jks` — one the setup guide tells every user to create, the other written into the tree by CI — were **not gitignored**; both now are. | ⚠️ not run |
 | 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |
 
 ### Accumulated gates — run these before merging
@@ -283,7 +284,9 @@ dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
 # NOTE: `data_core` no longer imports Flutter anywhere in lib/. Its pubspec still
 # declares `flutter: sdk: flutter`; confirm whether drift/core_database still need
 # it before removing — this was not verifiable without a toolchain.
-dart tools/arch_check/check.dart              # R1–R8
+dart tools/arch_check/check.dart              # R1–R9
+dart tools/composer/composer.dart verify      # Gate 0
+dart tools/docs_check/check.dart              # Gate 5
 flutter analyze
 cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```

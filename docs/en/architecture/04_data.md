@@ -110,7 +110,7 @@ Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `core_c
 
 ### What `ErrorHandler` actually recognises
 
-`packages/core/common/lib/src/error/error_handler.dart` branches on, in order: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → fallback.
+`packages/core/kernel/lib/src/error/error_handler.dart` branches on, in order: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → fallback.
 
 > [!WARNING]
 > **There is no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch.** Since `AuthRepositoryImpl` talks to the Firebase SDK directly (§6), every Firebase error — wrong password, user-not-found, network-request-failed — falls through to the generic tail:

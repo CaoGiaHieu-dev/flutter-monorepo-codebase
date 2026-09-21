@@ -13,6 +13,7 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 | Problem | Command |
 |---|---|
 | **Check the layering rules hold** | `dart tools/arch_check/check.dart` |
+| **Check the docs still describe this tree** | `dart tools/docs_check/check.dart` |
 | **Which packages are sample code I can delete?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
 | **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <name>` |
 | Create a new feature / domain / data / core package | `dart tools/module_generator/generate.dart …` |
@@ -75,6 +76,39 @@ Three things had to agree and were maintained by hand: the root `workspace:` lis
 Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No directory is encoded anywhere, so moving packages needs no change to the tool or to any manifest. Module packages are matched under either naming convention — `domain_auth` and `auth_domain` both resolve.
 
 `--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find and says loudly what it skipped — which is what lets a developer work with only their own module checked out. CI runs strict, so that mode can never reach a release.
+
+---
+
+## `docs_check`
+
+**Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names and fails on the first one that is not there.
+
+```bash
+dart tools/docs_check/check.dart            # exits 1 on any dead reference
+dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block
+```
+
+Two kinds of reference are checked across `docs/`, `.agents/`, `README.md` and `CLAUDE.md`:
+
+| Kind | Example | How it is resolved |
+|---|---|---|
+| Backticked path | `` `packages/core/kernel/lib/platform_kernel.dart` `` | Repo-rooted, but only when the span starts with a real top-level directory |
+| Markdown link | `[…](../../../tools/arch_check/check.dart)` | Relative to the **file containing the link**, not the working directory |
+
+The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `packages/`, `app/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
+
+Spans containing a space, a `*`, a `{` or a `<` are skipped too: they are shell lines, globs or placeholders, and each describes a *set* rather than one file.
+
+Paths that are correctly absent live in `tools/docs_check/allowlist.txt`, one per line, each with the reason it is not on disk. Exactly three reasons qualify:
+
+1. **Generated** — `app/lib/di/injection.config.dart`, build output.
+2. **Secret** — `app/env.prod`, `app/android/key.properties`; never committed.
+3. **Tutorial** — a file the reader is *told to create* (`app_elevation.dart` in the design-system guide), or a placeholder standing in for the reader's own module (`packages/features/profile`).
+
+Anything else is drift, and the fix is to correct the document. An entry without a stated reason is not allowed — the moment the allowlist becomes a list of paths somebody silenced, the gate stops being worth running.
+
+> [!NOTE]
+> The check deliberately says nothing about whether a document is *correct*, only whether the things it points at exist. That is a low bar, and it is the only bar a machine can hold. Line-number citations (`generate.dart:90-101`) fail it by design — they are the fastest-rotting reference there is, and naming the symbol instead survives every edit above it.
 
 ---
 

@@ -1,110 +1,35 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
-import 'package:core_ui_kit/core_ui_kit.dart';
+import 'package:core_ui_kit/buttons/custom_button.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
 
-/// Authentication form widget with comprehensive input validation and user experience
+/// SAMPLE — demonstrates a feature-owned form widget:
+/// feature-scoped translations (`context.l10nAuth`), `core_responsive` scaling
+/// through `BuildContext`, and a `core_ui_kit` button taking *unscaled* values.
 ///
-/// This widget provides a complete authentication form with email and password
-/// fields, including optional password confirmation for registration flows.
-/// It features comprehensive validation, secure password handling, and
-/// accessibility support.
-///
-/// The form is designed to provide excellent user experience with:
-/// - Real-time validation feedback
-/// - Secure password visibility toggling
-/// - Proper keyboard navigation and input actions
-/// - Loading states during form submission
-/// - Responsive design that adapts to different screen sizes
-/// - Theme-aware styling with consistent visual design
-///
-/// Key features:
-/// - Email validation with regex pattern matching
-/// - Password strength requirements (minimum 6 characters)
-/// - Password confirmation matching for registration
-/// - Secure text input with visibility toggle
-/// - Form validation with user-friendly error messages
-/// - Loading state management with disabled submit button
-/// - Keyboard navigation support (Next/Done actions)
-/// - Accessibility labels and semantic structure
-///
-/// Example usage:
-/// ```dart
-/// // Login form
-/// AuthFormWidget(
-///   emailController: emailController,
-///   passwordController: passwordController,
-///   submitButtonText: 'Sign In',
-///   isLoading: authProvider.isLoading,
-///   onSubmit: () => handleLogin(),
-/// )
-///
-/// // Registration form with password confirmation
-/// AuthFormWidget(
-///   emailController: emailController,
-///   passwordController: passwordController,
-///   confirmPasswordController: confirmPasswordController,
-///   showConfirmPassword: true,
-///   submitButtonText: 'Create Account',
-///   isLoading: authProvider.isLoading,
-///   onSubmit: () => handleRegistration(),
-/// )
-/// ```
+/// The widget owns validation and nothing else — submitting is the caller's
+/// job, so the page keeps the `AuthProvider` call and this stays reusable.
 class AuthFormWidget extends StatefulWidget {
   const AuthFormWidget({
     super.key,
     required this.emailController,
     required this.passwordController,
-    this.confirmPasswordController,
+    required this.submitButtonText,
     this.onSubmit,
     this.isLoading = false,
-    this.showConfirmPassword = false,
-    this.submitButtonText = 'Submit',
   });
 
-  /// Text editing controller for the email input field
-  ///
-  /// This controller manages the email input state and should be provided
-  /// by the parent widget to access the entered email value.
   final TextEditingController emailController;
-
-  /// Text editing controller for the password input field
-  ///
-  /// This controller manages the password input state and should be provided
-  /// by the parent widget to access the entered password value.
   final TextEditingController passwordController;
+  final String submitButtonText;
 
-  /// Text editing controller for the password confirmation field
-  ///
-  /// This optional controller is only used when [showConfirmPassword] is true,
-  /// typically for registration flows where password confirmation is required.
-  final TextEditingController? confirmPasswordController;
-
-  /// Callback function invoked when the form is submitted
-  ///
-  /// This function is called after successful form validation when the user
-  /// taps the submit button or presses the done key on the keyboard.
+  /// Called only after validation passes.
   final VoidCallback? onSubmit;
 
-  /// Whether the form is currently in a loading state
-  ///
-  /// When true, the submit button shows a loading indicator and is disabled
-  /// to prevent multiple submissions during authentication processing.
+  /// Swaps the button label for a spinner and swallows taps.
   final bool isLoading;
-
-  /// Whether to display the password confirmation field
-  ///
-  /// Set to true for registration flows where users need to confirm their
-  /// password. When true, [confirmPasswordController] must also be provided.
-  final bool showConfirmPassword;
-
-  /// The text displayed on the submit button
-  ///
-  /// This should clearly indicate the action being performed, such as
-  /// "Sign In", "Create Account", or "Reset Password".
-  final String submitButtonText;
 
   @override
   State<AuthFormWidget> createState() => _AuthFormWidgetState();
@@ -113,7 +38,6 @@ class AuthFormWidget extends StatefulWidget {
 class _AuthFormWidgetState extends State<AuthFormWidget> {
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
 
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) {
@@ -129,34 +53,40 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
     if (value == null || value.isEmpty) {
       return context.l10nAuth.password_is_required;
     }
-    if (value.length < 6) {
-      return context.l10nAuth.password_too_short;
-    }
-    return null;
-  }
-
-  String? _validateConfirmPassword(String? value) {
-    if (!widget.showConfirmPassword) return null;
-
-    if (value == null || value.isEmpty) {
-      return context.l10nAuth.confirm_password_required;
-    }
-    if (value != widget.passwordController.text) {
-      return context.l10nAuth.passwords_do_not_match;
-    }
+    if (value.length < 6) return context.l10nAuth.password_too_short;
     return null;
   }
 
   void _onSubmit() {
-    if (_formKey.currentState?.validate() ?? false) {
-      widget.onSubmit?.call();
-    }
+    if (_formKey.currentState?.validate() ?? false) widget.onSubmit?.call();
   }
 
-  /// Clears validation error messages across all form fields without resetting their text values.
-  /// Uses the new clearError() API introduced in Flutter 3.44.0.
-  void clearValidationErrors() {
-    _formKey.currentState?.clearError();
+  /// One decoration for both fields — the three copies this replaced drifted
+  /// apart the moment any one of them was edited.
+  InputDecoration _decoration({
+    required String label,
+    required String hint,
+    required IconData icon,
+    Widget? suffix,
+  }) {
+    final radius = context.borderRadius(all: 12);
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffix,
+      border: OutlineInputBorder(borderRadius: radius),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(
+          color: context.colorScheme.outline.withValues(alpha: 0.5),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: context.colorScheme.primary, width: 2),
+      ),
+    );
   }
 
   @override
@@ -165,129 +95,38 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
       key: _formKey,
       child: Column(
         children: [
-          // Email field
           TextFormField(
             controller: widget.emailController,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
             validator: _validateEmail,
-            decoration: InputDecoration(
-              labelText: context.l10nAuth.email,
-              hintText: context.l10nAuth.enter_your_email,
-              prefixIcon: const Icon(Icons.email_outlined),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(context.r(12)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(context.r(12)),
-                borderSide: BorderSide(
-                  color: context.colorScheme.outline.withValues(alpha: 0.5),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(context.r(12)),
-                borderSide: BorderSide(
-                  color: context.colorScheme.primary,
-                  width: 2,
-                ),
-              ),
+            decoration: _decoration(
+              label: context.l10nAuth.email,
+              hint: context.l10nAuth.enter_your_email,
+              icon: Icons.email_outlined,
             ),
           ),
-
-          SizedBox(height: context.h(16)),
-
-          // Password field
+          context.verticalSpace(16),
           TextFormField(
             controller: widget.passwordController,
             obscureText: _obscurePassword,
-            textInputAction: widget.showConfirmPassword
-                ? TextInputAction.next
-                : TextInputAction.done,
+            textInputAction: TextInputAction.done,
             validator: _validatePassword,
-            onFieldSubmitted: widget.showConfirmPassword
-                ? null
-                : (_) => _onSubmit(),
-            decoration: InputDecoration(
-              labelText: context.l10nAuth.password,
-              hintText: context.l10nAuth.enter_your_password,
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
+            onFieldSubmitted: (_) => _onSubmit(),
+            decoration: _decoration(
+              label: context.l10nAuth.password,
+              hint: context.l10nAuth.enter_your_password,
+              icon: Icons.lock_outline,
+              suffix: IconButton(
                 icon: Icon(
                   _obscurePassword ? Icons.visibility : Icons.visibility_off,
                 ),
-                onPressed: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(context.r(12)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(context.r(12)),
-                borderSide: BorderSide(
-                  color: context.colorScheme.outline.withValues(alpha: 0.5),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(context.r(12)),
-                borderSide: BorderSide(
-                  color: context.colorScheme.primary,
-                  width: 2,
-                ),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
           ),
-
-          // Confirm password field (if needed)
-          if (widget.showConfirmPassword) ...[
-            SizedBox(height: context.h(16)),
-            TextFormField(
-              controller: widget.confirmPasswordController,
-              obscureText: _obscureConfirmPassword,
-              textInputAction: TextInputAction.done,
-              validator: _validateConfirmPassword,
-              onFieldSubmitted: (_) => _onSubmit(),
-              decoration: InputDecoration(
-                labelText: context.l10nAuth.confirm_password,
-                hintText: context.l10nAuth.confirm_password_required,
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureConfirmPassword
-                        ? Icons.visibility
-                        : Icons.visibility_off,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _obscureConfirmPassword = !_obscureConfirmPassword;
-                    });
-                  },
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(context.r(12)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(context.r(12)),
-                  borderSide: BorderSide(
-                    color: context.colorScheme.outline.withValues(alpha: 0.5),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(context.r(12)),
-                  borderSide: BorderSide(
-                    color: context.colorScheme.primary,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-          ],
-
-          SizedBox(height: context.h(24)),
-
-          // Submit button
+          context.verticalSpace(24),
           CustomButton.rectangle(
             onPressed: () {
               if (widget.isLoading) return;
@@ -297,12 +136,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
                 ? SizedBox(
                     width: context.w(20),
                     height: context.h(20),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        context.colorScheme.onPrimary,
-                      ),
-                    ),
+                    child: const CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Text(
                     widget.submitButtonText,

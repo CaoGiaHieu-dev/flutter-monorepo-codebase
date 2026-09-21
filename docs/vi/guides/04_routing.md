@@ -161,8 +161,8 @@ class AuthPath {
 @TypedShellRoute<AuthShellRoute>(
   routes: [
     TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN),
-    TypedGoRoute<RegisterRoute>(path: AuthPath.REGISTER),
-    TypedGoRoute<ForgotPasswordRoute>(path: AuthPath.FORGOT_PASSWORD),
+    // Siblings go here, one `TypedGoRoute` each. They share the shell's
+    // nested Navigator, so they share one back stack.
   ],
 )
 class AuthShellRoute extends ShellRouteData {
@@ -239,8 +239,7 @@ Feature A không bao giờ được import Feature B. Điều hướng vượt r
 ```dart
 abstract class AuthNavigator {
   void toLogin(BuildContext context);
-  void toRegister(BuildContext context);
-  void toForgotPassword(BuildContext context);
+  // One method per route this feature owns — and only routes it owns.
 }
 ```
 
@@ -250,16 +249,7 @@ abstract class AuthNavigator {
 @Singleton(as: AuthNavigator)
 class AuthNavigatorImpl implements AuthNavigator {
   @override
-  void toLogin(BuildContext context) {
-    const LoginRoute().go(context);
-  }
-
-  @override
-  void toRegister(BuildContext context) => const RegisterRoute().go(context);
-
-  @override
-  void toForgotPassword(BuildContext context) =>
-      const ForgotPasswordRoute().go(context);
+  void toLogin(BuildContext context) => const LoginRoute().go(context);
 }
 ```
 

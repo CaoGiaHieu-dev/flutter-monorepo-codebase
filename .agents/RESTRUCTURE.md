@@ -85,7 +85,29 @@ which had already leaked once, in the template's own sample code.
 
 **Gate:** `dart tools/arch_check/check.dart` exits 0 and prints R8 among its rules.
 
-### Step 2 — Empty `core_di` of product names
+### Step 2 — Shrink the samples  *(2a, 2b done; 2c pending)*
+
+Sample code is documentation written in Dart. Six overlapping features is not documentation,
+it is a second product to maintain. Two reference modules demonstrate every mechanism.
+
+| Today | After | Why |
+|:--|:--|:--|
+| ~~`feature_auth` (1,731 LOC)~~ **→ 739 LOC, 2b** | login only ✅ | Provider + stack route + agnostic stream + action handler. Register / forgot-password add no new mechanism; delete them. |
+| `feature_home` (291) | `modules/catalog` | BLoC + private Freezed events + nav destination + consuming another module's contract. |
+| `feature_settings` (195) | fold into `catalog` | Its only unique role is *consuming* an action handler; one screen can show that. |
+| `feature_dashboard` (129) | → app shell | Chrome belongs to the app, not to a removable feature. |
+| `feature_splash` (182) | → app shell | Same. |
+| `feature_onboarding` (158) | → app shell | Same; keep `IAppEntryLocation` as the contract it demonstrates. |
+| ~~`domain_language` + `data_language` (183)~~ **deleted 2a** | — | Dead by the repo's own admission: the Settings UI uses `LanguageProvider`, never `SetLanguageUseCase`. |
+| `cache_chain` inside `data_core` | move to `modules/catalog` | It is a sample; it must not sit inside a framework package. |
+
+Target: **~2 modules, well under 1,000 LOC of sample**, each file stating in one line which
+mechanism it exists to show.
+
+**Gate:** `dart tools/sample_cleanup/remove_sample.dart --list` agrees with the table above,
+and removing either module leaves the app building and booting.
+
+### Step 3 — Empty `core_di` of product names
 
 `core_di` becomes generic-only. Per-module contracts move to their own package.
 
@@ -112,7 +134,7 @@ Cross-Feature tables · `docs/{en,vi}/architecture/02_core.md` §2 ·
 `docs/{en,vi}/guides/04_routing.md` · `docs/{en,vi}/guides/10_cross_feature.md` ·
 `docs/{en,vi}/reference/01_rules.md`.
 
-### Step 3 — Split `core_common`
+### Step 4 — Split `core_common`
 
 One package with 20 dependencies becomes three with a defensible boundary each.
 
@@ -127,28 +149,6 @@ One package with 20 dependencies becomes three with a defensible boundary each.
 
 **Gate:** `platform_kernel/pubspec.yaml` declares no `flutter:` and no UI package. Full verify
 chain passes.
-
-### Step 4 — Shrink the samples
-
-Sample code is documentation written in Dart. Six overlapping features is not documentation,
-it is a second product to maintain. Two reference modules demonstrate every mechanism.
-
-| Today | After | Why |
-|:--|:--|:--|
-| `feature_auth` (1,731 LOC) | `modules/account` — **login only** | Provider + stack route + agnostic stream + action handler. Register / forgot-password add no new mechanism; delete them. |
-| `feature_home` (291) | `modules/catalog` | BLoC + private Freezed events + nav destination + consuming another module's contract. |
-| `feature_settings` (195) | fold into `catalog` | Its only unique role is *consuming* an action handler; one screen can show that. |
-| `feature_dashboard` (129) | → app shell | Chrome belongs to the app, not to a removable feature. |
-| `feature_splash` (182) | → app shell | Same. |
-| `feature_onboarding` (158) | → app shell | Same; keep `IAppEntryLocation` as the contract it demonstrates. |
-| `domain_language` + `data_language` (183) | **delete** | Dead by the repo's own admission: the Settings UI uses `LanguageProvider`, never `SetLanguageUseCase`. |
-| `cache_chain` inside `data_core` | move to `modules/catalog` | It is a sample; it must not sit inside a framework package. |
-
-Target: **~2 modules, well under 1,000 LOC of sample**, each file stating in one line which
-mechanism it exists to show.
-
-**Gate:** `dart tools/sample_cleanup/remove_sample.dart --list` agrees with the table above,
-and removing either module leaves the app building and booting.
 
 ### Step 5 — Relayout
 
@@ -224,6 +224,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 |:--|:--|:--|:--|
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
+| 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
 | 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |
 
 ### Accumulated gates — run these before merging

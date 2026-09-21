@@ -27,7 +27,7 @@ class UndefineRouteWidget extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(context.l10n.page_not_found),
+            Text(context.l10n.pageNotFound),
             SizedBox(height: context.h(16)),
             ElevatedButton(
               onPressed: () {
@@ -38,7 +38,7 @@ class UndefineRouteWidget extends StatelessWidget {
                 }
               },
               child: Text(
-                canPop ? context.l10n.go_back : context.l10n.go_to_home,
+                canPop ? context.l10n.goBack : context.l10n.goToHome,
               ),
             ),
           ],

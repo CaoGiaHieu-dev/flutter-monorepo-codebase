@@ -2,7 +2,7 @@
   "@@locale": "vi",
   "home": "Trang chủ",
   "tabLabel": "Trang chủ",
-  "user_logged_in": "Người dùng đã đăng nhập",
-  "user_logged_out": "Người dùng đã đăng xuất",
-  "refresh_profile": "Làm mới hồ sơ"
+  "userLoggedIn": "Người dùng đã đăng nhập",
+  "userLoggedOut": "Người dùng đã đăng xuất",
+  "refreshProfile": "Làm mới hồ sơ"
 }

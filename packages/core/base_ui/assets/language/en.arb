@@ -1,17 +1,17 @@
 {
   "@@locale": "en",
-  "language_en": "English",
-  "language_vi": "Tiếng Việt",
+  "languageEn": "English",
+  "languageVi": "Tiếng Việt",
   "cancel": "Cancel",
   "retry": "Retry",
-  "error_occurred": "An error occurred",
-  "try_again": "Please try again",
-  "invalid_credentials": "Invalid credentials",
-  "user_not_found": "User not found",
-  "something_went_wrong": "Something went wrong",
-  "page_not_found": "Page not found",
-  "go_back": "Go back",
-  "go_to_home": "Go to home",
+  "errorOccurred": "An error occurred",
+  "tryAgain": "Please try again",
+  "invalidCredentials": "Invalid credentials",
+  "userNotFound": "User not found",
+  "somethingWentWrong": "Something went wrong",
+  "pageNotFound": "Page not found",
+  "goBack": "Go back",
+  "goToHome": "Go to home",
   "ok": "OK",
   "edit": "Edit",
   "duplicate": "Duplicate",
@@ -44,9 +44,9 @@
   "smartAlbumUnableToUpload": "Unable to Upload",
   "smartAlbumRAW": "RAW",
   "smartAlbumCinematic": "Cinematic",
-  "file_size_exceeded": "Total file size cannot exceed 20MB. Please try again.",
-  "permission_denied": "Permission denied: {permission}",
-  "@permission_denied": {
+  "fileSizeExceeded": "Total file size cannot exceed 20MB. Please try again.",
+  "permissionDenied": "Permission denied: {permission}",
+  "@permissionDenied": {
     "placeholders": {
       "permission": {
         "type": "String"

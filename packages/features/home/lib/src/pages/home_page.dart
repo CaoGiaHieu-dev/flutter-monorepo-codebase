@@ -1,7 +1,6 @@
 import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_di/core_di.dart';
-import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../bloc/home_profile_bloc.dart';
@@ -26,32 +25,31 @@ class HomePage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(context.l10nHome.home),
-                    SizedBox(height: context.h(16)),
+                    SizedBox(height: AppSpacing.mdH(context)),
                     Text(
                       isLoggedIn
-                          ? context.l10nHome.user_logged_in
-                          : context.l10nHome.user_logged_out,
-                      style: TextStyle(
+                          ? context.l10nHome.userLoggedIn
+                          : context.l10nHome.userLoggedOut,
+                      style: AppTextStyles.bodyMediumStyle(context).copyWith(
                         color: isLoggedIn
                             ? context.colorScheme.primary
                             : context.colorScheme.error,
                         fontWeight: FontWeight.bold,
-                        fontSize: context.sp(14),
                       ),
                     ),
                     if (user?.displayName != null) ...[
-                      SizedBox(height: context.h(8)),
+                      SizedBox(height: AppSpacing.smH(context)),
                       Text(
                         user!.displayName!,
-                        style: TextStyle(fontSize: context.sp(12)),
+                        style: AppTextStyles.bodySmallStyle(context),
                       ),
                     ],
-                    SizedBox(height: context.h(16)),
+                    SizedBox(height: AppSpacing.mdH(context)),
                     TextButton(
                       onPressed: () => context.read<HomeProfileBloc>().add(
                         const HomeProfileEvent.refreshed(),
                       ),
-                      child: Text(context.l10nHome.refresh_profile),
+                      child: Text(context.l10nHome.refreshProfile),
                     ),
                   ],
                 );

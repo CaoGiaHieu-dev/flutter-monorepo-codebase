@@ -61,14 +61,14 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   context.verticalSpace(40),
                   AuthHeaderWidget(
-                    title: context.l10nAuth.welcome_back,
-                    subtitle: context.l10nAuth.sign_in_subtitle,
+                    title: context.l10nAuth.welcomeBack,
+                    subtitle: context.l10nAuth.signInSubtitle,
                   ),
                   context.verticalSpace(40),
                   AuthFormWidget(
                     emailController: _emailController,
                     passwordController: _passwordController,
-                    submitButtonText: context.l10nAuth.sign_in,
+                    submitButtonText: context.l10nAuth.signIn,
                     isLoading: authProvider.isLoading,
                     onSubmit: _onLoginPressed,
                   ),

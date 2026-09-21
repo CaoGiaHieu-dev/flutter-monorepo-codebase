@@ -20,8 +20,8 @@ extension LocaleExtension on Locale {
   /// Returns the localized language name or language tag as fallback
   String languageName(BuildContext context) {
     return switch (languageCode) {
-      'vi' => context.l10n.language_vi,
-      'en' => context.l10n.language_en,
+      'vi' => context.l10n.languageVi,
+      'en' => context.l10n.languageEn,
       _ => toLanguageTag(),
     };
   }

@@ -115,7 +115,7 @@ extension ContextHomeExtension on BuildContext {
 ### Step 6 — use it
 
 ```dart
-Text(context.l10nHome.user_logged_in)
+Text(context.l10nHome.userLoggedIn)
 ```
 
 ## 5. Rules

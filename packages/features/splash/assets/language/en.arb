@@ -1,3 +1,5 @@
 {
-  "@@locale": "en"
+  "@@locale": "en",
+  "appName": "Template",
+  "tagline": "Clean Architecture for Flutter"
 }

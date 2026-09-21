@@ -18,10 +18,10 @@
 ///
 /// ```dart
 /// final message = switch (failure) {
-///   AuthInvalidCredentialsFailure() => l10n.invalid_credentials,
-///   AuthUserNotFoundFailure()       => l10n.user_not_found,
+///   AuthInvalidCredentialsFailure() => l10n.invalidCredentials,
+///   AuthUserNotFoundFailure()       => l10n.userNotFound,
 ///   AuthServerFailure(:final message) => message,
-///   AuthUnknownFailure()            => l10n.something_went_wrong,
+///   AuthUnknownFailure()            => l10n.somethingWentWrong,
 /// };
 /// ```
 sealed class AuthSessionFailure {

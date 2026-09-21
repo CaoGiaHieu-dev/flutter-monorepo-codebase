@@ -22,7 +22,7 @@ class SettingsNavDestination extends INavDestinationModule {
 
   @override
   NavDestination destination(BuildContext context) => NavDestination(
-    label: context.l10nSettings.settings,
+    label: context.l10nSettings.tabLabel,
     icon: Icons.settings_outlined,
     selectedIcon: Icons.settings,
   );

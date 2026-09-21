@@ -1,17 +1,17 @@
 {
   "@@locale": "vi",
-  "language_en": "English",
-  "language_vi": "Tiếng Việt",
+  "languageEn": "English",
+  "languageVi": "Tiếng Việt",
   "cancel": "Hủy",
   "retry": "Thử lại",
-  "error_occurred": "Đã xảy ra lỗi",
-  "try_again": "Vui lòng thử lại",
-  "invalid_credentials": "Thông tin xác thực không hợp lệ",
-  "user_not_found": "Không tìm thấy người dùng",
-  "something_went_wrong": "Đã có lỗi xảy ra",
-  "page_not_found": "Không tìm thấy trang",
-  "go_back": "Quay lại",
-  "go_to_home": "Về trang chủ",
+  "errorOccurred": "Đã xảy ra lỗi",
+  "tryAgain": "Vui lòng thử lại",
+  "invalidCredentials": "Thông tin xác thực không hợp lệ",
+  "userNotFound": "Không tìm thấy người dùng",
+  "somethingWentWrong": "Đã có lỗi xảy ra",
+  "pageNotFound": "Không tìm thấy trang",
+  "goBack": "Quay lại",
+  "goToHome": "Về trang chủ",
   "ok": "Đồng ý",
   "edit": "Sửa",
   "duplicate": "Nhân bản",
@@ -44,9 +44,9 @@
   "smartAlbumUnableToUpload": "Không thể tải lên",
   "smartAlbumRAW": "RAW",
   "smartAlbumCinematic": "Điện ảnh",
-  "file_size_exceeded": "Tổng dung lượng file không được vượt quá 20MB. Vui lòng thử lại.",
-  "permission_denied": "Từ chối quyền: {permission}",
-  "@permission_denied": {
+  "fileSizeExceeded": "Tổng dung lượng file không được vượt quá 20MB. Vui lòng thử lại.",
+  "permissionDenied": "Từ chối quyền: {permission}",
+  "@permissionDenied": {
     "placeholders": {
       "permission": {
         "type": "String"

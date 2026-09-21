@@ -434,6 +434,7 @@ abstract class AuthModule {
 ## Localization (Decentralized)
 
 - **ALL user-facing text MUST be translated** — hardcoded UI strings are FORBIDDEN
+- **ARB keys are `lowerCamelCase`** — `gen-l10n` copies the key into the getter name, so `welcome_back` becomes `context.l10nAuth.welcome_back`. Generated files are excluded from analysis; no linter catches it
 - **Feature-scoped:** Each feature owns `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI
 - **Global strings only** in `core_base_ui`; `core_ui_kit` uses `core_base_ui` translations, does NOT define its own ARBs
 - Access via feature extension: `context.l10nAuth.translationKey`

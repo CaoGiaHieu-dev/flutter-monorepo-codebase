@@ -22,9 +22,14 @@ class ToastOverlayWidget extends StatelessWidget {
           padding: context.edgeInsets(horizontal: 28, vertical: 12),
           child: Text(
             content,
-            style: AppTextStyles.bodyMediumStyle(
-              context,
-            ).copyWith(fontWeight: FontWeight.w500, color: Colors.white),
+            // `surface`, not `Colors.white`. The pill's background is
+            // `textPrimary`, which inverts with the theme — so the label has
+            // to invert with it, or dark mode puts white text on a light
+            // pill.
+            style: AppTextStyles.bodyMediumStyle(context).copyWith(
+              fontWeight: FontWeight.w500,
+              color: context.colors.surface,
+            ),
             textAlign: TextAlign.center,
           ),
         ),

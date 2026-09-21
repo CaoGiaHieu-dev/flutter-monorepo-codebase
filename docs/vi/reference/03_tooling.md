@@ -48,8 +48,9 @@ dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
 | R6 | File generated còn giữ header của generator (chỉ cảnh báo) |
 | R7 | Scale responsive phải qua `BuildContext` — cấm receiver trần `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`, trong mọi file dùng `core_responsive` |
 | R8 | Contract của `core_di` mà chỉ feature implement thì phải resolve bằng `getItOrNull` / `getAllOrEmpty`, cấm `getIt` / `getAll` (dạng ném lỗi) |
+| R9 | `platform_kernel` và mọi package `*_contracts` không import **và không khai** package kéo theo Flutter |
 
-Bốn ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ năm nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
+Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ năm nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
 
 R7 tồn tại vì `flutter analyze` không thấy được khác biệt này. Bản thân `core_responsive` không cung cấp extension nào trên `num`, nên `16.h` không phân giải được về nó — nhưng một extension khai ở package khác, hoặc do ai đó tự thêm cục bộ, vẫn type-check sạch trong khi đọc một biến toàn cục chẳng báo cho ai. Chỉ `context.h(16)` mới đăng ký dependency `InheritedWidget` lên `ResponsiveScope`, tức mới rebuild khi metrics đổi. Dạng trần là một lỗi giá trị cũ âm thầm, và không linter nào có luật cho nó. Check chỉ chạy trên file có tham chiếu `core_responsive`, và khớp receiver là số hoặc dấu đóng ngoặc theo sau bởi `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 

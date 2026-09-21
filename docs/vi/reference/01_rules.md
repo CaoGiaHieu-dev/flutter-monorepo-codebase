@@ -31,7 +31,7 @@ Chỉ có đúng ba. Thêm cái thứ năm bắt buộc phải cập nhật `AGE
 | Ngoại lệ | Lý do |
 |---|---|
 | `provider_state_management → domain_core` | Cần `Result<T>` và `PaginatedEntity<T>` cho `executeOperation` / `PaginatedViewWidget`. |
-| `core_common → domain_core` | `ErrorHandler` sinh ra `AppFailure`, class nằm ở `domain_core` như một phần của hợp đồng `Result`. Core→Domain là chiều **đúng** của Clean Architecture. |
+| `platform_kernel → domain_core` | `ErrorHandler` sinh ra `AppFailure`, class nằm ở `domain_core` như một phần của hợp đồng `Result`. Core→Domain là chiều **đúng** của Clean Architecture. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` mang thẳng `AppFailure`, nên kiểu state cơ sở cần nó. |
 
 > [!NOTE]

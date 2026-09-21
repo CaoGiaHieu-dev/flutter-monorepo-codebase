@@ -25,6 +25,7 @@
 
 packages:
   # --- Framework: core infrastructure -------------------------------------
+  platform_kernel: { kind: framework, path: packages/core/kernel }
   core_common: { kind: framework, path: packages/core/common }
   core_di: { kind: framework, path: packages/core/di }
   core_base_ui: { kind: framework, path: packages/core/base_ui }

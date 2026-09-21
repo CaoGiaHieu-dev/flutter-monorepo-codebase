@@ -31,7 +31,7 @@ Only these three exist. Adding a fifth requires updating `AGENTS.md` and the all
 | Exception | Reason |
 |---|---|
 | `provider_state_management → domain_core` | Needs `Result<T>` and `PaginatedEntity<T>` for `executeOperation` / `PaginatedViewWidget`. |
-| `core_common → domain_core` | `ErrorHandler` produces `AppFailure`, which lives in `domain_core` as part of the `Result` contract. Core→Domain is the *correct* Clean Architecture direction. |
+| `platform_kernel → domain_core` | `ErrorHandler` produces `AppFailure`, which lives in `domain_core` as part of the `Result` contract. Core→Domain is the *correct* Clean Architecture direction. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries `AppFailure` directly, so the base state type needs it. |
 
 > [!NOTE]

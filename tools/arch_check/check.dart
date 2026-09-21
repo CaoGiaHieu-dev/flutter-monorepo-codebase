@@ -23,11 +23,36 @@ const _approvedUpwardEdges = <String, String>{
   'provider_state_management -> domain_core':
       'Needs Result<T> and PaginatedEntity<T> for executeOperation / '
           'PaginatedViewWidget.',
-  'core_common -> domain_core':
+  'platform_kernel -> domain_core':
       'ErrorHandler produces AppFailure, which lives in domain_core. '
           'Core -> Domain is the correct Clean Architecture direction.',
   'bloc_state_management -> domain_core':
       'BlocViewState.error carries AppFailure directly.',
+};
+
+/// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
+/// binding anywhere in their dependency closure.
+///
+/// `platform_kernel` is the foundation every other package may depend on, so
+/// its dependency list becomes everyone's — the reason it is held to a harder
+/// line than `core_*`. A `*_contracts` package is the public surface between
+/// two modules and stays here for the same reason: an interface that cannot
+/// import `BuildContext` cannot quietly become a widget API.
+///
+/// `packages/domain/*` is covered by R2 instead, which predates this rule.
+bool _isPureDartTier(String packageName) =>
+    packageName == 'platform_kernel' || packageName.endsWith('_contracts');
+
+/// Anything that drags a Flutter binding in.
+const _flutterBound = <String>{
+  'flutter',
+  'flutter_localizations',
+  'flutter_web_plugins',
+  'material_ui',
+  'cupertino_ui',
+  'go_router',
+  'provider',
+  'flutter_bloc',
 };
 
 /// Packages every Dart package may import without declaring: they ship with
@@ -439,6 +464,45 @@ void main(List<String> args) {
       }
     }
 
+    // --- R9: the pure-Dart tier stays pure ---------------------------------
+    // Checked in the pubspec as well as the imports. R2 checks imports only,
+    // which is how `data_auth` kept a clean bill of health while declaring
+    // firebase_auth and google_sign_in — Flutter plugins that cannot run on a
+    // Dart VM — without a single `package:flutter` import in its source.
+    if (_isPureDartTier(pkg.name)) {
+      for (final dep in declared) {
+        if (_flutterBound.contains(dep)) {
+          blocking.add(
+            Violation(
+              'R9',
+              p.posix.relative(
+                p.posix.join(pkg.rootPath, 'pubspec.yaml'),
+                from: root,
+              ),
+              '`${pkg.name}` is pure-Dart tier but declares `$dep`. '
+                  'Move whatever needs it into a Flutter-side package.',
+            ),
+          );
+        }
+      }
+      for (final file in files) {
+        if (_isGenerated(file)) continue;
+        final content = File(file).readAsStringSync();
+        for (final ref in _packageRefsIn(content)) {
+          if (_flutterBound.contains(ref.package)) {
+            blocking.add(
+              Violation(
+                'R9',
+                '${p.posix.relative(file, from: root)}:${ref.line}',
+                '`${pkg.name}` is pure-Dart tier and must not import '
+                    '`${ref.package}`.',
+              ),
+            );
+          }
+        }
+      }
+    }
+
     // --- R8: removable contracts resolve optionally ------------------------
     // `getAll<T>()` throws when `T` is unregistered and `getIt<T>()` throws
     // when nothing implements it. For a contract whose only implementer is a
@@ -521,6 +585,7 @@ void _report(
     'R6': 'Generated files are not hand-edited',
     'R7': 'Responsive sizing goes through BuildContext',
     'R8': 'Removable contracts resolve optionally',
+    'R9': 'The pure-Dart tier stays pure',
   };
 
   if (warnings.isNotEmpty) {
@@ -608,6 +673,12 @@ RULES CHECKED
       undeclared import still compiles locally and only breaks on extraction.
 
   R6  Generated files are not hand-edited  (warning only, never blocks)
+  R9  The pure-Dart tier stays pure
+      `platform_kernel` and every `*_contracts` package must neither import a
+      Flutter-bound package nor declare one in `pubspec.yaml`. The pubspec half
+      matters: a package can declare a Flutter plugin and never write
+      `import 'package:flutter/...'`, which R2 would pass.
+
   R8  Removable contracts resolve optionally
       A `core_di` contract whose only implementer lives in packages/features/*
       disappears when that feature is removed. `getIt<T>()` and `getAll<T>()`

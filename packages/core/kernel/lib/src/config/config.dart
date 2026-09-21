@@ -1,2 +1,2 @@
 // Auto-generated exports, do not edit manually.
-export 'test/test.dart';
+export 'ssl_pinning_config.dart';

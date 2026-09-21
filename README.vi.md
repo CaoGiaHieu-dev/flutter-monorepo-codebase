@@ -83,7 +83,7 @@ graph TD
 > **Domain không phụ thuộc bất cứ thứ gì.** `domain_core` khai báo **0** workspace dependency và
 > không package domain nào khai Flutter SDK — `AppFailure` nằm trong `domain_core` cạnh `Result<T>`.
 > Core được phép phụ thuộc Domain — Domain là vòng trong cùng nên hướng đó là đúng. Có đúng
-> **bốn** cạnh như vậy được duyệt: `core_common → domain_core`, `core_di → domain_auth`,
+> **ba** cạnh như vậy được duyệt: `platform_kernel → domain_core`,
 > `provider_state_management → domain_core`, `bloc_state_management → domain_core`. Chúng được
 > hard-code trong `tools/arch_check/check.dart` và in ra ở mỗi lần chạy kèm lý do; cạnh thứ năm sẽ
 > làm fail build. Xem [`reference/01_rules.md`](docs/vi/reference/01_rules.md).
@@ -230,8 +230,8 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
    - **CẤM phụ thuộc vào tầng `data`** hoặc bất kỳ feature package nào khác — không ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit`.
 4. **Tầng Core (`packages/core/*`)**:
    - Chỉ cung cấp cơ chế. **CẤM phụ thuộc bất kỳ package `feature_*` hoặc `data_*` nào.**
-   - Được phép phụ thuộc `domain_*` (Domain là tâm): `core_common → domain_core`,
-     `core_di → domain_auth`, `provider_state_management → domain_core`.
+   - Được phép phụ thuộc `domain_*` (Domain là tâm): `platform_kernel → domain_core`,
+     `provider_state_management → domain_core`, `bloc_state_management → domain_core`.
 
 > [!IMPORTANT]
 > **Gỡ bất kỳ feature nào app vẫn khởi động bình thường.** Mọi thứ app shell tiêu thụ lúc runtime

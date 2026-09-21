@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 import 'exceptions.dart';
 import 'failures.dart';
@@ -32,6 +31,11 @@ import 'failures.dart';
 ///   return Failure(ErrorHandler.handleError(e));
 /// }
 /// ```
+/// `kDebugMode` without importing Flutter: the VM defines `dart.vm.product`
+/// in a release build and leaves it false otherwise, which is exactly what
+/// `kDebugMode` reports.
+const bool _isDebug = !bool.fromEnvironment('dart.vm.product');
+
 class ErrorHandler {
   /// Private constructor to prevent instantiation
   ErrorHandler._();
@@ -82,7 +86,7 @@ class ErrorHandler {
 
     // Handle generic exceptions
     return ServerFailure(
-      message: kDebugMode ? error.toString() : 'Unknown error occurred',
+      message: _isDebug ? error.toString() : 'Unknown error occurred',
       code: 9999,
     );
   }

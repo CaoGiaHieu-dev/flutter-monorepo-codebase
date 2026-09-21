@@ -48,8 +48,9 @@ dart tools/arch_check/check.dart --help   # full rule descriptions
 | R6 | Generated files still carry their generator header (advisory) |
 | R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file using `core_responsive` |
 | R8 | A `core_di` contract implemented only by a feature is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll` |
+| R9 | `platform_kernel` and every `*_contracts` package neither import nor **declare** a Flutter-bound package |
 
-The four approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fifth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
+The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fifth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
 
 R7 exists because `flutter analyze` cannot see the difference. `core_responsive` ships no `num` extension, so `16.h` cannot resolve against it — but an extension declared in another package, or one someone adds locally, would type-check fine while reading a global that never notifies anyone. Only `context.h(16)` registers an `InheritedWidget` dependency on `ResponsiveScope` and therefore rebuilds when metrics change. The bare form is a silent stale-value bug, and a linter has no rule for it. The check only runs on files that reference `core_responsive`, and matches a numeric or closing-paren receiver followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 

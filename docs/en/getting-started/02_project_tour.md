@@ -137,10 +137,9 @@ Read it as: **arrows point at what you are allowed to depend on.**
 
 | Allowed exception | Why |
 | :--- | :--- |
-| `core_di → domain_auth` | Agnostic streams expose a concrete `UserEntity`; the DI hub needs the type |
 | `provider_state_management → domain_core` | `PaginatedEntity<T>` and `Result<T>` are used in base view widgets |
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries an `AppFailure` |
-| `core_common → domain_core` | `ErrorHandler` produces an `AppFailure` |
+| `platform_kernel → domain_core` | `ErrorHandler` produces an `AppFailure` |
 
 Verify at any time:
 

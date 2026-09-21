@@ -137,10 +137,9 @@ graph BT
 
 | Ngoại lệ được phép | Lý do |
 | :--- | :--- |
-| `core_di → domain_auth` | Agnostic stream phơi ra `UserEntity` cụ thể; trạm DI cần chính type đó |
 | `provider_state_management → domain_core` | `PaginatedEntity<T>` và `Result<T>` được dùng trong base view widget |
 | `bloc_state_management → domain_core` | `BlocViewState.error` mang theo một `AppFailure` |
-| `core_common → domain_core` | `ErrorHandler` sinh ra `AppFailure` |
+| `platform_kernel → domain_core` | `ErrorHandler` sinh ra `AppFailure` |
 
 Kiểm tra bất cứ lúc nào:
 

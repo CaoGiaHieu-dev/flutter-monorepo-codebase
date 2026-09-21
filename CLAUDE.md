@@ -60,7 +60,7 @@ flutter test test/debounce_test.dart   # a single test file
 # Enforce the layering rules — Gate 1 of pr_quality_check.yml, exits 1 on violation.
 # The only check that can see layering; analysis_options.yaml knows nothing about it.
 dart tools/arch_check/check.dart
-dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R8)
+dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R9)
 
 # Which packages are sample code, and how to delete one safely.
 # Source of truth: tools/sample_manifest.yaml
@@ -145,6 +145,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Package | Purpose | Key Notes |
 |:--------|:--------|:----------|
+| `platform_kernel` | **Pure Dart, zero Flutter.** `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `ApiStatusConstants`, `EnvConstants` | 7 dependencies, none Flutter-bound — enforced by arch_check **R9**. Everything else may depend on it |
 | `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` lives in `domain_core`; a re-export shim at `src/error/failures.dart` re-exports it for convenience |
 | `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
@@ -707,7 +708,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files.
 15. **Build runner flag:** Use `-d` (replaces deprecated `--delete-conflicting-outputs`).
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
-17. **Core never depends on features or data.** No `packages/core/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `core_common → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" packages/core/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
+17. **Core never depends on features or data.** No `packages/core/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" packages/core/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
 19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead — e.g. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it depends on `AuthLocalDataSource` from `data_auth`. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.

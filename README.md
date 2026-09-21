@@ -83,8 +83,8 @@ graph TD
 > **Domain depends on nothing.** `domain_core` declares **zero** workspace dependencies and no
 > domain package declares the Flutter SDK — `AppFailure` lives in `domain_core` alongside
 > `Result<T>`. Core may depend on Domain — Domain is the innermost ring, so that direction is
-> correct. Exactly **four** such edges are approved: `core_common → domain_core`,
-> `core_di → domain_auth`, `provider_state_management → domain_core`,
+> correct. Exactly **three** such edges are approved: `platform_kernel → domain_core`,
+> `provider_state_management → domain_core`
 > `bloc_state_management → domain_core`. They are hard-coded in
 > `tools/arch_check/check.dart` and printed on every run, each with its reason; a fifth fails the
 > build. See [`reference/01_rules.md`](docs/en/reference/01_rules.md).
@@ -231,8 +231,8 @@ All tools can be run from the root directory.
    - **FORBIDDEN to depend on the `data` layer** or on any other feature package — no exception; shared widgets come from the core package `core_ui_kit`.
 4. **Core Layer (`packages/core/*`)**:
    - Supplies mechanism only. **FORBIDDEN to depend on any `feature_*` or `data_*` package.**
-   - May depend on `domain_*` (Domain is the centre): `core_common → domain_core`,
-     `core_di → domain_auth`, `provider_state_management → domain_core`.
+   - May depend on `domain_*` (Domain is the centre): `platform_kernel → domain_core`,
+     `provider_state_management → domain_core`, `bloc_state_management → domain_core`.
 
 > [!IMPORTANT]
 > **Any feature can be deleted and the app still boots.** Everything the shell consumes at runtime

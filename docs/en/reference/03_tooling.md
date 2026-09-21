@@ -121,7 +121,10 @@ dart tools/module_generator/generate.dart 3 payment          # data micro-packag
 
 Run with fewer arguments and it prompts interactively.
 
-**What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the package to the root `workspace:` list and `app/pubspec.yaml`, registers the DI module in `app/lib/di/injection.dart`, then runs dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply`.
+**What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the module to every `app_manifest.yaml`, then runs dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply`.
+
+> [!IMPORTANT]
+> It no longer edits `app/pubspec.yaml`, the root `workspace:` list or `app/lib/di/injection.dart`. Those three sit between `composer:managed` markers — run `dart tools/composer/composer.dart sync` to regenerate them. Editing them by hand puts the tree into the drift CI Gate 0 fails on.
 
 **Safety behaviour**
 

@@ -121,7 +121,10 @@ dart tools/module_generator/generate.dart 3 payment          # data micro-packag
 
 Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 
-**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm package vào danh sách `workspace:` gốc và `app/pubspec.yaml`, đăng ký module DI vào `app/lib/di/injection.dart`, rồi chạy dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply`.
+**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, rồi chạy dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply`.
+
+> [!IMPORTANT]
+> Nó **không còn** sửa `app/pubspec.yaml`, danh sách `workspace:` ở root hay `app/lib/di/injection.dart`. Ba file đó nằm giữa marker `composer:managed` — chạy `dart tools/composer/composer.dart sync` để sinh lại. Sửa tay sẽ tạo drift mà CI Gate 0 chặn.
 
 **Hành vi an toàn**
 

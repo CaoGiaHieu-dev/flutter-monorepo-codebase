@@ -112,7 +112,7 @@ dart tools/module_generator/generate.dart 4 logging
 dart tools/module_generator/generate.dart
 ```
 
-CLI đăng ký workspace + `app` pubspec + `injection.dart` và scaffold stub DI route.
+CLI thêm module vào mọi `app_manifest.yaml` và scaffold stub DI route. Chạy `dart tools/composer/composer.dart sync` sau đó để sinh lại workspace list, dependency của app và `injection.dart`.
 **Không** cần (và **không** nên) sửa list `$…Route` trong `app_router.dart` — host thu thập bằng DI.
 
 ### 📦 Barrel Files Generator

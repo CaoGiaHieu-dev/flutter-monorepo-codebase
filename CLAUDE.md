@@ -706,7 +706,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 10. **Features must not edit `root_app.dart`** for delegates — use `IFeatureLocalization` DI.
 11. **Error handling:** Use `ErrorHandler.handleError(e)` — never `AppFailure.fromException()`.
 12. **No `throw` from Data layer to UI** — wrap in `Result.failure(AppFailure)`.
-13. **Module generator** auto-handles workspace + DI registration — verify before manual edits.
+13. **Module generator** adds the new module to every `app_manifest.yaml`; run `dart tools/composer/composer.dart sync` afterwards to regenerate the workspace list, the app's dependencies and `injection.dart`. Never hand-edit those three — they sit between `composer:managed` markers and CI Gate 0 fails on drift.
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files.
 15. **Build runner flag:** Use `-d` (replaces deprecated `--delete-conflicting-outputs`).
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.

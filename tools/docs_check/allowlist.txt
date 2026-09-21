@@ -48,3 +48,5 @@ modules/x/data/lib
 # `apps/mobile` came off this list the moment step 6b created it.
 apps/admin
 modules/catalog
+# The shell package step 7b extracts; see RESTRUCTURE.md §7b for the file split.
+platform/app_shell

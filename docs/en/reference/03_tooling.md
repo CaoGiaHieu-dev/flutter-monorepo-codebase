@@ -71,7 +71,7 @@ dart tools/composer/composer.dart verify            # CI gate 0 — fails on dri
 
 Three things had to agree and were maintained by hand: the root `workspace:` list, an app's path dependencies, and its `lib/di/injection.dart`. Adding a module meant editing all three in step, and getting it wrong fails at boot with `"<Type> is not registered"` — invisible to `flutter analyze`.
 
-`composer` generates all three from `app/app_manifest.yaml`, but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
+`composer` generates all three from `apps/mobile/app_manifest.yaml`, but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
 
 Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No directory is encoded anywhere, so moving packages needs no change to the tool or to any manifest. Module packages are matched under either naming convention — `domain_auth` and `auth_domain` both resolve.
 
@@ -95,14 +95,14 @@ Two kinds of reference are checked across `docs/`, `.agents/`, `README.md` and `
 | Backticked path | `` `platform/kernel/lib/platform_kernel.dart` `` | Repo-rooted, but only when the span starts with a real top-level directory |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Relative to the **file containing the link**, not the working directory |
 
-The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `app/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
+The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/mobile/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
 
 Spans containing a space, a `*`, a `{` or a `<` are skipped too: they are shell lines, globs or placeholders, and each describes a *set* rather than one file.
 
 Paths that are correctly absent live in `tools/docs_check/allowlist.txt`, one per line, each with the reason it is not on disk. Exactly three reasons qualify:
 
-1. **Generated** — `app/lib/di/injection.config.dart`, build output.
-2. **Secret** — `app/env.prod`, `app/android/key.properties`; never committed.
+1. **Generated** — `apps/mobile/lib/di/injection.config.dart`, build output.
+2. **Secret** — `apps/mobile/env.prod`, `apps/mobile/android/key.properties`; never committed.
 3. **Tutorial** — a file the reader is *told to create* (`app_elevation.dart` in the design-system guide), or a placeholder standing in for the reader's own module (`modules/profile/feature`).
 
 Anything else is drift, and the fix is to correct the document. An entry without a stated reason is not allowed — the moment the allowlist becomes a list of paths somebody silenced, the gate stops being worth running.
@@ -124,7 +124,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 Its source of truth is [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), which classifies every package as `framework`, `sample` or `shell`, and additionally records `embedded_samples` — sample code living *inside* a framework package, like the cache chain in `data_core`.
 
-The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from `pubspec.yaml`, `app/pubspec.yaml` and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** — for example `feature_settings` calls `getIt<IAuthActionHandler>()` (the throwing lookup) so logout throws at runtime, while `HomeProfileBloc` takes `IAuthStatusStream` through its constructor so DI cannot build it at all.
+The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from `pubspec.yaml`, `apps/mobile/pubspec.yaml` and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** — for example `feature_settings` calls `getIt<IAuthActionHandler>()` (the throwing lookup) so logout throws at runtime, while `HomeProfileBloc` takes `IAuthStatusStream` through its constructor so DI cannot build it at all.
 
 Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back.
 
@@ -158,13 +158,13 @@ Run with fewer arguments and it prompts interactively.
 **What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the module to every `app_manifest.yaml`, then runs dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply`.
 
 > [!IMPORTANT]
-> It no longer edits `app/pubspec.yaml`, the root `workspace:` list or `app/lib/di/injection.dart`. Those three sit between `composer:managed` markers — run `dart tools/composer/composer.dart sync` to regenerate them. Editing them by hand puts the tree into the drift CI Gate 0 fails on.
+> It no longer edits `apps/mobile/pubspec.yaml`, the root `workspace:` list or `apps/mobile/lib/di/injection.dart`. Those three sit between `composer:managed` markers — run `dart tools/composer/composer.dart sync` to regenerate them. Editing them by hand puts the tree into the drift CI Gate 0 fails on.
 
 **Safety behaviour**
 
 - **Toolchain is verified first.** `assertToolchainAvailable()` runs before anything shared is touched, so a missing SDK fails immediately instead of at step 8.
 - **Existing directories are refused.** It will not silently overwrite a package.
-- **Rollback on failure.** The three shared files (root `pubspec.yaml`, `app/pubspec.yaml`, `app/lib/di/injection.dart`) are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
+- **Rollback on failure.** The three shared files (root `pubspec.yaml`, `apps/mobile/pubspec.yaml`, `apps/mobile/lib/di/injection.dart`) are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
 - **FVM is auto-detected**, requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
 > [!NOTE]
@@ -199,7 +199,7 @@ dart tools/dependency_sync.dart --check  # verify only; exits 1 on drift
 Also repairs broken local `path:` entries. Use `--check` in CI and pre-commit.
 
 > [!NOTE]
-> It parses line-by-line rather than with a YAML parser, so `dependency_overrides` and multi-line/anchor syntax are not handled. Native Gradle dependencies (e.g. `play-services-auth` in `app/android/app/build.gradle.kts`) are outside its scope entirely — they have no single source of truth.
+> It parses line-by-line rather than with a YAML parser, so `dependency_overrides` and multi-line/anchor syntax are not handled. Native Gradle dependencies (e.g. `play-services-auth` in `apps/mobile/android/app/build.gradle.kts`) are outside its scope entirely — they have no single source of truth.
 
 ---
 
@@ -287,7 +287,7 @@ Checks native `.so` libraries for Android 15+ 16 KB page-size alignment. The onl
 ```bash
 dart tools/code_review/code_review.dart --all
 dart tools/code_review/code_review.dart --changed
-dart tools/code_review/code_review.dart --file app/lib/main.dart
+dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --all --focus architecture,security
 ```
 

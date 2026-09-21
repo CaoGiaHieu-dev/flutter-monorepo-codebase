@@ -10,7 +10,7 @@
 
 ```text
 flutter-monorepo-codebase/
-├── app/                    # Host app shell — entrypoint, lắp DI, router, flavor
+├── apps/mobile/                    # Host app shell — entrypoint, lắp DI, router, flavor
 │   ├── lib/                #   main.dart, main_scope.dart, di/, presentation/
 │   ├── android/            #   Project Gradle (build APK TỪ ĐÂY, không phải từ root)
 │   ├── ios/                #   Project Xcode
@@ -118,7 +118,7 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 ```mermaid
 graph BT
     subgraph Outer
-        App["app/ — host shell"]
+        App["apps/mobile/ — host shell"]
     end
     subgraph UI
         Features["modules/*/feature"]
@@ -148,7 +148,7 @@ graph BT
 - `Domain` là trung tâm. Ngoài `domain_core` mà các package domain dùng chung, nó không phụ thuộc bất kỳ package nào trong workspace.
 - `Data` hiện thực hợp đồng domain và nói chuyện với `core_network` / `core_storage` / `core_database`.
 - `Features` tiêu thụ use case của domain; chúng không bao giờ nhìn thấy `data_*`.
-- `app/` nằm ngoài cùng và là nơi duy nhất được phép biết tất cả cùng lúc.
+- `apps/mobile/` nằm ngoài cùng và là nơi duy nhất được phép biết tất cả cùng lúc.
 
 ### Core không được phụ thuộc feature
 

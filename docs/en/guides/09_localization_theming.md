@@ -21,7 +21,7 @@ Each feature owns its translations. The app shell never learns their names.
 | `core_base_ui` | Global / fallback strings shared by everyone |
 
 > [!CAUTION]
-> A feature must **never** edit `app/lib/presentation/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI — see §3.
+> A feature must **never** edit `apps/mobile/lib/presentation/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI — see §3.
 
 ## 2. The contract
 
@@ -37,7 +37,7 @@ abstract class IFeatureLocalization {
 ## 3. How the shell collects delegates
 
 ```dart
-// app/lib/presentation/app_material_wrapper.dart
+// apps/mobile/lib/presentation/app_material_wrapper.dart
 // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
 // registers `IFeatureLocalization`. Every feature package is removable, so
 // an app built without any of them must still resolve its delegates —

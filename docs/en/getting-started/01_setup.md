@@ -12,9 +12,9 @@
 | :--- | :--- | :--- |
 | Flutter SDK | **3.47.4** or newer | `pubspec.yaml` → `environment.flutter: ">=3.47.4"` |
 | Dart SDK | **3.13.3** or newer | `pubspec.yaml` → `environment.sdk: ">=3.13.3 <4.0.0"` |
-| JDK | **17** | `app/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` |
-| Android SDK | compileSdk **37**, NDK `28.2.13676358` | `app/android/app/build.gradle.kts` |
-| Xcode + CocoaPods | iOS deployment target **15.0** | `app/ios/Podfile` |
+| JDK | **17** | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` |
+| Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
+| Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
 | Ruby ≥ 3.0 | only for Fastlane | see [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 
 ### FVM is optional
@@ -135,17 +135,17 @@ This cross-platform script runs: activate `flutterfire_cli` → `flutter clean` 
 
 ## 5. Environment files and flavors
 
-Three flavors ship with the template: `dev`, `staging`, `prod`. Values reach Dart through `--dart-define-from-file` and reach Android through Gradle's `dart-defines` decoding in `app/android/app/build.gradle.kts`.
+Three flavors ship with the template: `dev`, `staging`, `prod`. Values reach Dart through `--dart-define-from-file` and reach Android through Gradle's `dart-defines` decoding in `apps/mobile/android/app/build.gradle.kts`.
 
 | Flavor | Env file | Application ID suffix | Status |
 | :--- | :--- | :--- | :--- |
-| `dev` | `app/env.dev` | `.dev` | ✅ present |
-| `staging` | `app/env.stg` | `.stg` | ✅ present |
-| `prod` | `app/env.prod` | *(none)* | ❌ **you must create it** |
+| `dev` | `apps/mobile/env.dev` | `.dev` | ✅ present |
+| `staging` | `apps/mobile/env.stg` | `.stg` | ✅ present |
+| `prod` | `apps/mobile/env.prod` | *(none)* | ❌ **you must create it** |
 
-### Creating `app/env.prod`
+### Creating `apps/mobile/env.prod`
 
-It is not in the repo — production secrets are yours to supply. Copy the **key names** below (values redacted; read `app/env.dev` for the shape):
+It is not in the repo — production secrets are yours to supply. Copy the **key names** below (values redacted; read `apps/mobile/env.dev` for the shape):
 
 ```properties
 GOOGLE_MAP_API=
@@ -175,10 +175,10 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `APP_SCHEMA` and `APP_LINK_MODE` are **not** declared in `EnvConstants`. `APP_SCHEMA` is consumed on the Android side only, as a `resValue` string in `app/android/app/build.gradle.kts`. Keep them in the env file even though Dart never reads them directly.
+> `APP_SCHEMA` and `APP_LINK_MODE` are **not** declared in `EnvConstants`. `APP_SCHEMA` is consumed on the Android side only, as a `resValue` string in `apps/mobile/android/app/build.gradle.kts`. Keep them in the env file even though Dart never reads them directly.
 
 > [!WARNING]
-> `app/env.dev` and `app/env.stg` are currently **tracked by git** — the `.gitignore` pattern `*.env` does not match a file named `env.dev`. Treat their contents as non-secret sample values, and do not put real production credentials in `app/env.prod` until you have confirmed it is ignored.
+> `apps/mobile/env.dev` and `apps/mobile/env.stg` are currently **tracked by git** — the `.gitignore` pattern `*.env` does not match a file named `env.dev`. Treat their contents as non-secret sample values, and do not put real production credentials in `apps/mobile/env.prod` until you have confirmed it is ignored.
 
 ---
 
@@ -187,13 +187,13 @@ class EnvConstants {
 ### From the CLI
 
 ```bash
-flutter run -t app/lib/main.dart --flavor dev --dart-define-from-file=app/env.dev
+flutter run -t apps/mobile/lib/main.dart --flavor dev --dart-define-from-file=apps/mobile/env.dev
 ```
 
-### Building an APK — you must `cd app` first
+### Building an APK — you must `cd apps/mobile` first
 
 ```bash
-cd app
+cd apps/mobile
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
@@ -201,14 +201,14 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 > Running `flutter build apk` from the repo root fails with a confusing message such as
 > `Target file "lib\main.dart" not found`, or
 > `Flutter failed to read a file at ".../android/app/build.gradle"`.
-> The Android project lives at `app/android`, so the build must be invoked from `app/`.
-> Note the env path also changes: `env.dev` (relative to `app/`), not `app/env.dev`.
+> The Android project lives at `apps/mobile/android`, so the build must be invoked from `apps/mobile/`.
+> Note the env path also changes: `env.dev` (relative to `apps/mobile/`), not `apps/mobile/env.dev`.
 
-The artifact lands at `app/build/app/outputs/flutter-apk/app-dev-debug.apk`.
+The artifact lands at `apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.apk`.
 
 ### Android: Built-in Kotlin is on
 
-`app/android/gradle.properties` sets `android.builtInKotlin=true`. Leave it on.
+`apps/mobile/android/gradle.properties` sets `android.builtInKotlin=true`. Leave it on.
 
 Flutter is migrating plugins off the Kotlin Gradle Plugin (KGP) and onto the
 Kotlin support built into the Flutter Gradle plugin. A plugin that has already
@@ -239,7 +239,7 @@ support Built-in Kotlin — there is nothing to change in this repo.
 
 ### From VS Code
 
-`.vscode/launch.json` already defines three configurations — **App (Dev)**, **App (Staging)**, **App (Prod)**. Pick one from the Run and Debug panel. Each sets `--flavor` and `--dart-define-from-file` for you (the env path is relative to `app/`, which is where the Dart extension anchors the project).
+`.vscode/launch.json` already defines three configurations — **App (Dev)**, **App (Staging)**, **App (Prod)**. Pick one from the Run and Debug panel. Each sets `--flavor` and `--dart-define-from-file` for you (the env path is relative to `apps/mobile/`, which is where the Dart extension anchors the project).
 
 ---
 

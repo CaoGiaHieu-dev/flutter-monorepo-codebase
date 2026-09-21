@@ -12,7 +12,7 @@ The project follows **Clean Architecture**: dependencies always point *inward*, 
 
 ```mermaid
 graph TD
-    App["<b>App Shell</b><br/><code>app/</code><br/><i>composition root</i>"]
+    App["<b>App Shell</b><br/><code>apps/mobile/</code><br/><i>composition root</i>"]
     Feature["<b>Feature</b><br/><code>modules/*/feature</code><br/><i>UI + state</i>"]
     Domain["<b>Domain</b><br/><code>modules/*/domain</code><br/><i>pure Dart business rules</i>"]
     Data["<b>Data</b><br/><code>modules/*/data</code><br/><i>repository impls, DTOs</i>"]
@@ -45,7 +45,7 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 
 | Layer | Path | Responsibility | May import | Must **never** import |
 |:--|:--|:--|:--|:--|
-| **App Shell** | `app/` | Entry point, flavors, DI assembly, router assembly | everything | — |
+| **App Shell** | `apps/mobile/` | Entry point, flavors, DI assembly, router assembly | everything | — |
 | **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, one state-management package | `data_*`, another feature package |
 | **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
@@ -94,7 +94,33 @@ Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `w
 
 ---
 
-## 4. Architectural decisions and their rationale
+## 4. Who owns what
+
+The directory layout is an ownership boundary, not a filing convention. It is shaped the way it
+is so that [`.github/CODEOWNERS`](../../../.github/CODEOWNERS) can express it in one line per
+team:
+
+| Directory | Owner | What changing it means |
+|:--|:--|:--|
+| `platform/` | Infra | Every module depends on it, so a breaking change breaks everyone at once |
+| `platform/di/` | Infra + architects | Cross-module contracts — changing one is a negotiation, not a unilateral edit |
+| `modules/<name>/` | That module's team | All three layers together: the team changing the UI is the team changing the use case behind it |
+| `apps/` | Tech leads | Which modules ship together, and in what order they initialise — a release decision |
+| `apps/*/app_manifest.yaml` | Tech leads + architects | The composition itself. Adding a module here changes what the product *is* |
+
+This is why a module is `modules/auth/{domain,data,feature}` rather than the auth rows of three
+sibling directories. CODEOWNERS matches **paths**; under a layer-first layout it has no way to say "the auth parts
+of the domain, data and features directories" — those are three unrelated paths that happen to
+share a last segment. One directory per bounded context makes ownership expressible, and a git
+submodule per module possible.
+
+> [!WARNING]
+> The handles in `CODEOWNERS` are placeholders. GitHub **silently ignores** a team that does not
+> exist, so an unreplaced rule reads as enforced and is not. Replace them before relying on it.
+
+---
+
+## 5. Architectural decisions and their rationale
 
 | Decision | Alternative rejected | Why |
 |:--|:--|:--|
@@ -107,7 +133,7 @@ Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `w
 
 ---
 
-## 5. Where to go next
+## 6. Where to go next
 
 | If you want to… | Read |
 |:--|:--|

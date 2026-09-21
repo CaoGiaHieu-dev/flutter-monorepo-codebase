@@ -29,7 +29,7 @@ The practical test: *if this screen were cut from the product, would the package
 > [!CAUTION]
 > - **Never import `data_*`.** A feature talks to Domain interfaces; the app shell binds the implementations.
 > - **Never import another feature package.** There is no exception — shared widgets come from `core_ui_kit`, which lives in core. Cross-feature needs go through a contract in `core_di` — see [cross-feature communication](../guides/10_cross_feature.md).
-> - **Never edit `app/lib/presentation/navigation/app_router.dart`** to add your routes, and never edit `root_app.dart` to add a localization delegate. Both are assembled from DI contributions.
+> - **Never edit `apps/mobile/lib/presentation/navigation/app_router.dart`** to add your routes, and never edit `root_app.dart` to add a localization delegate. Both are assembled from DI contributions.
 
 The pubspec enforces most of this: `feature_dashboard` declares only `core_di` and `core_common`, so it *physically cannot* import another feature.
 
@@ -270,7 +270,7 @@ All user-facing text is translated; hardcoded strings are forbidden. See [locali
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-The generator creates the package and adds it to every `app_manifest.yaml`. It no longer touches `app/pubspec.yaml`, the root workspace list or `app/lib/di/injection.dart`. Then:
+The generator creates the package and adds it to every `app_manifest.yaml`. It no longer touches `apps/mobile/pubspec.yaml`, the root workspace list or `apps/mobile/lib/di/injection.dart`. Then:
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib

@@ -8,7 +8,7 @@ This file contains the rules for architectural design, naming conventions, depen
 
 This monorepo uses **Pub Workspaces** and is divided into two top-level territories: `platform/` (infrastructure, owned by the infra team) and `modules/` (one vertical slice per bounded context, one owner each):
 
-- **`app/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
+- **`apps/mobile/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
 - **`platform/`**: Infrastructure and utility packages shared across the project:
   - `platform_kernel`: **Pure Dart, no `flutter` dependency.** Service locator (`getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`), `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, and the genuinely global constants (`ApiStatusConstants`, `EnvConstants`). This is the one package every other package may depend on, so its dependency list is everyone's — 7 entries, none Flutter-bound. Enforced by `arch_check` rule **R9**.
   - **Which of the two to depend on:** if a package uses only the service locator, `ErrorHandler`, a primitive extension or a global constant, depend on `platform_kernel` — `core_network`, `core_notifications`, `data_core` and `feature_dashboard` already do. Reach for `core_common` only when you need something Flutter-bound from it (`AppConfig`, `AppInitializer`, a mixin, `GoRouteDataCustom`, `AppUtils`, the dialog controller, a formatter).
@@ -85,8 +85,8 @@ This monorepo uses **Pub Workspaces** and is divided into two top-level territor
      - Consumers call `getIt<I*ActionHandler>().method(context)`. Do **not** use Action Handlers for pure route navigation (use Navigators) or Domain-only logic (use UseCases).
 4. **UI vs. Business State Workflows (Bypassing Domain)**:
    - **Pure UI State (e.g., ThemeMode, Locale)**: Cannot pass through the Domain layer because Domain must be Pure Dart (cannot import `flutter/material.dart`). UI Providers bypass Domain and persist via a DI storage Interface implemented in the App Shell:
-     - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`app/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`app/lib/di/utils/theme_storage_keys.dart`)
-     - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`app/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`app/lib/di/utils/language_storage_keys.dart`)
+     - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`apps/mobile/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`apps/mobile/lib/di/utils/theme_storage_keys.dart`)
+     - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`apps/mobile/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`apps/mobile/lib/di/utils/language_storage_keys.dart`)
 
 ---
 
@@ -247,7 +247,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
 - **ARB keys MUST be `lowerCamelCase`.** `flutter gen-l10n` copies each key straight through into a Dart getter, so `welcome_back` yields `context.l10nAuth.welcome_back` at every call site — an identifier that breaks Dart's naming convention. Generated files are excluded from `analysis_options.yaml`, so nothing will warn you; the `.arb` is the only place the casing is decided.
-- **Decentralized Delegation**: Feature packages MUST NOT modify `app/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The root app dynamically collects all delegates using `getIt.getAll<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
+- **Decentralized Delegation**: Feature packages MUST NOT modify `apps/mobile/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The root app dynamically collects all delegates using `getIt.getAll<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
 
 ---
 
@@ -316,7 +316,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - **No `BuildContext` in scope?** In an `async` method, read the value from context **before the first `await`** and pass it forward — never hold a context across an await. Real example: `platform/ui_kit/lib/media/assets_picker/photo_grid_item.dart` (`_loadThumbnail` guards with `if (!mounted) return;`, then reads `context.w(200).toInt()`).
 - **Design tokens take context too.** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter. Their `raw*` constants are the single source of the numbers; edit `raw*`, not the accessors.
 - **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They accept raw, unscaled numerical values in their constructors and **MUST NOT** scale incoming parameter values internally. It is the *caller's* responsibility to scale arguments *before* passing them in.
-- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `app/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `apps/mobile/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
 - **A widget test that scales must wrap the widget under test in `ResponsiveInit`.** Without it `ResponsiveScope.of` asserts — deliberately. A silent unscaled fallback would ship a layout that is wrong on every device except the design artboard, with nothing pointing at the cause.
 - **Helper scaling axes:**
 
@@ -347,7 +347,7 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ## 🗂️ 16. Mandatory `utils/` Folder for Package Constants
 
-- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `app/lib/di/utils/`.
+- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `apps/mobile/lib/di/utils/`.
 - **ABSOLUTELY FORBIDDEN** to create a shared cross-domain constants file that many packages import. A constant belongs to exactly one owner.
 - `core_common/lib/src/utils/` is reserved for constants that are **genuinely global** — today only `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
 - **Precedent — constants that were evicted from `core_common`,** so nobody re-adds them:
@@ -407,10 +407,10 @@ class AuthLocalDataSource {
 
 ## 🧨 18. DI Registration Order & Eager Singletons
 
-- `configureDependencies()` initializes modules **in the order declared** in `app/lib/di/injection.dart` (`externalPackageModulesBefore` → app-local registrations → `externalPackageModulesAfter`).
+- `configureDependencies()` initializes modules **in the order declared** in `apps/mobile/lib/di/injection.dart` (`externalPackageModulesBefore` → app-local registrations → `externalPackageModulesAfter`).
 - **ABSOLUTELY FORBIDDEN** for an eager `@Singleton` to depend on a type registered by a module that runs **later** — GetIt throws `"<Type> is not registered"` during boot.
 - Use `@LazySingleton` whenever a dependency comes from a later module. Reference: `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it injects `AuthLocalDataSource` from `data_auth`, whose module initializes after the app-local block. Its only consumer (`ApiClient`) is itself lazy, so deferring construction is safe.
-- `flutter analyze` **cannot** detect this class of bug — it only appears at runtime. After changing any DI annotation or constructor, **verify the generated `app/lib/di/injection.config.dart`**: confirm each eager registration's dependencies appear earlier in `init()`.
+- `flutter analyze` **cannot** detect this class of bug — it only appears at runtime. After changing any DI annotation or constructor, **verify the generated `apps/mobile/lib/di/injection.config.dart`**: confirm each eager registration's dependencies appear earlier in `init()`.
 - `@PostConstruct(preResolve: true)` on a `@lazySingleton` is awaited during module init and then re-registered as a plain sync lazy singleton, so downstream `gh<T>()` sync lookups are safe.
 
 ---
@@ -448,7 +448,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
    - Real bug: `NetworkConfigImpl` was registered only `as NetworkConfig`, so `getItOrNull<SslPinningConfig>()` in `AppInitializer._setupHttpOverrides` returned `null` and **certificate pinning was silently skipped on staging and production**.
    - Fix pattern — bind the second type through a `@module`, typed so the compiler checks the upcast (no `as`):
      ```dart
-     // app/lib/di/network_binding_module.dart
+     // apps/mobile/lib/di/network_binding_module.dart
      @module
      abstract class NetworkBindingModule {
        @lazySingleton
@@ -478,13 +478,13 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 
 Deleting any `modules/*/feature` package must leave the app compiling and booting.
 
-- **The app shell's only intentional hard reference to features is `app/lib/di/injection.dart`** — as the composition root it must name what it composes. Every *other* shell file resolves features through `core_di` contracts.
-- To drop a feature, delete its entry from `app/app_manifest.yaml` and run:
+- **The app shell's only intentional hard reference to features is `apps/mobile/lib/di/injection.dart`** — as the composition root it must name what it composes. Every *other* shell file resolves features through `core_di` contracts.
+- To drop a feature, delete its entry from `apps/mobile/app_manifest.yaml` and run:
   ```bash
   dart tools/composer/composer.dart sync --app mobile
   flutter pub get && dart run build_runner build -d --workspace
   ```
-  `composer` regenerates the three artifacts that previously had to be edited by hand and kept in step — `app/lib/di/injection.dart`, `app/pubspec.yaml`'s path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
+  `composer` regenerates the three artifacts that previously had to be edited by hand and kept in step — `apps/mobile/lib/di/injection.dart`, `apps/mobile/pubspec.yaml`'s path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
   **Only the manifest is edited by hand.**
 - **A type import defeats `getItOrNull`.** Guarding the *lookup* is useless if the file still imports the feature for the *type* — it fails at compile time. When the shell needs something a feature owns, declare a contract in `core_di` and have the feature implement + register it:
 
@@ -512,7 +512,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   dart run build_runner build -d --workspace
   flutter analyze
   cd modules/<module>/<layer> && flutter test      # per package
-  cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+  cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
   ```
   The build step is **not optional** — it is the only gate that sees generated code.
 - Corollary: when a type consumed by generated code moves package, **import its new home directly**. Do not rely on a `show`-limited re-export.

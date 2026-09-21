@@ -213,11 +213,11 @@ Các field là `private` + `late final`: bên ngoài class không chạm đượ
 | Owner | Package | Key | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `ThemeStorageImpl` | app shell (`app/lib/di/`) | `themeMode` | `pref` |
-| `LanguageStorageImpl` | app shell (`app/lib/di/`) | `locale` | `pref` |
-| `AppBootStorage` | app shell (`app/lib/di/`) | `viewed_onboard` | `pref` |
+| `ThemeStorageImpl` | app shell (`apps/mobile/lib/di/`) | `themeMode` | `pref` |
+| `LanguageStorageImpl` | app shell (`apps/mobile/lib/di/`) | `locale` | `pref` |
+| `AppBootStorage` | app shell (`apps/mobile/lib/di/`) | `viewed_onboard` | `pref` |
 
-Class key của app shell nằm ở `app/lib/di/utils/`.
+Class key của app shell nằm ở `apps/mobile/lib/di/utils/`.
 
 
 ---
@@ -229,7 +229,7 @@ Class key của app shell nằm ở `app/lib/di/utils/`.
 **Enum:**
 
 ```dart
-// app/lib/di/theme_storage_impl.dart
+// apps/mobile/lib/di/theme_storage_impl.dart
 late final _themeMode = StorageValue<ThemeMode>(
   _storageManager.getStorage(StorageType.pref),
   ThemeStorageKeys.THEME_MODE,
@@ -243,7 +243,7 @@ late final _themeMode = StorageValue<ThemeMode>(
 **Bool có giá trị mặc định rõ ràng:**
 
 ```dart
-// app/lib/di/app_boot_storage.dart
+// apps/mobile/lib/di/app_boot_storage.dart
 late final viewedOnboard = StorageValue<bool>(
   _storageManager.getStorage(StorageType.pref),
   AppBootStorageKeys.VIEWED_ONBOARD,
@@ -294,7 +294,7 @@ abstract class IThemeStorage {
 ```
 
 ```dart
-// app/lib/di/theme_storage_impl.dart — owner implement nó
+// apps/mobile/lib/di/theme_storage_impl.dart — owner implement nó
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);

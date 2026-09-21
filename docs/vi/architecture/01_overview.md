@@ -12,7 +12,7 @@ Dự án theo **Clean Architecture**: phụ thuộc luôn hướng *vào trong*,
 
 ```mermaid
 graph TD
-    App["<b>App Shell</b><br/><code>app/</code><br/><i>điểm lắp ráp</i>"]
+    App["<b>App Shell</b><br/><code>apps/mobile/</code><br/><i>điểm lắp ráp</i>"]
     Feature["<b>Feature</b><br/><code>modules/*/feature</code><br/><i>UI + state</i>"]
     Domain["<b>Domain</b><br/><code>modules/*/domain</code><br/><i>nghiệp vụ Dart thuần</i>"]
     Data["<b>Data</b><br/><code>modules/*/data</code><br/><i>repository impl, DTO</i>"]
@@ -45,7 +45,7 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 
 | Tầng | Đường dẫn | Trách nhiệm | Được import | **Cấm** import |
 |:--|:--|:--|:--|:--|
-| **App Shell** | `app/` | Điểm khởi động, flavor, lắp ráp DI và router | tất cả | — |
+| **App Shell** | `apps/mobile/` | Điểm khởi động, flavor, lắp ráp DI và router | tất cả | — |
 | **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, một package state-management | `data_*`, feature package khác |
 | **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
 | **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |
@@ -94,7 +94,32 @@ Mọi package đều là thành viên trong danh sách `workspace:` của [`pubs
 
 ---
 
-## 4. Các quyết định kiến trúc và lý do
+## 4. Ai sở hữu cái gì
+
+Cấu trúc thư mục là một ranh giới sở hữu, không phải quy ước xếp file. Nó được định hình đúng như
+vậy để [`.github/CODEOWNERS`](../../../.github/CODEOWNERS) diễn đạt được bằng một dòng cho mỗi team:
+
+| Thư mục | Chủ sở hữu | Thay đổi nó nghĩa là gì |
+|:--|:--|:--|
+| `platform/` | Infra | Mọi module đều phụ thuộc, nên một thay đổi phá vỡ sẽ phá vỡ tất cả cùng lúc |
+| `platform/di/` | Infra + architect | Hợp đồng liên module — sửa một cái là một cuộc thương lượng, không phải chỉnh sửa đơn phương |
+| `modules/<name>/` | Team của module đó | Cả ba tầng đi cùng nhau: team sửa UI cũng chính là team sửa use case phía sau |
+| `apps/` | Tech lead | Những module nào ship cùng nhau, và khởi tạo theo thứ tự nào — đó là quyết định phát hành |
+| `apps/*/app_manifest.yaml` | Tech lead + architect | Chính là bản thân phép lắp ráp. Thêm một module ở đây là thay đổi sản phẩm *là gì* |
+
+Đây là lý do một module nằm ở `modules/auth/{domain,data,feature}` thay vì là các dòng auth rải
+trong ba thư mục anh em. CODEOWNERS khớp theo **đường dẫn**; với bố cục chia theo tầng, nó không có cách nào nói "phần auth
+của thư mục domain, data và features" — đó là ba đường dẫn không liên quan, chỉ tình cờ trùng đoạn
+cuối. Mỗi bounded context một thư mục khiến quyền sở hữu diễn đạt được, và khiến mỗi module một git
+submodule trở nên khả thi.
+
+> [!WARNING]
+> Các handle trong `CODEOWNERS` chỉ là placeholder. GitHub **âm thầm bỏ qua** một team không tồn tại,
+> nên một rule chưa thay tên đọc thì tưởng đang có hiệu lực mà thực ra không. Hãy thay trước khi dựa vào nó.
+
+---
+
+## 5. Các quyết định kiến trúc và lý do
 
 | Quyết định | Phương án bị loại | Vì sao |
 |:--|:--|:--|
@@ -107,7 +132,7 @@ Mọi package đều là thành viên trong danh sách `workspace:` của [`pubs
 
 ---
 
-## 5. Đi tiếp từ đâu
+## 6. Đi tiếp từ đâu
 
 | Nếu bạn muốn… | Đọc |
 |:--|:--|

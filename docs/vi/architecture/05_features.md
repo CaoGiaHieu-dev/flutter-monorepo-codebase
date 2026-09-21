@@ -29,7 +29,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 > [!CAUTION]
 > - **Không bao giờ import `data_*`.** Feature nói chuyện với interface của Domain; app shell mới là nơi bind implementation.
 > - **Không bao giờ import feature package khác.** Không có ngoại lệ — widget dùng chung lấy từ `core_ui_kit`, vốn nằm ở core. Nhu cầu liên feature phải đi qua hợp đồng ở `core_di` — xem [giao tiếp giữa các feature](../guides/10_cross_feature.md).
-> - **Không bao giờ sửa `app/lib/presentation/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
+> - **Không bao giờ sửa `apps/mobile/lib/presentation/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
 
 Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ khai `core_di` và `core_common`, nên nó *về mặt vật lý không thể* import một feature khác.
 
@@ -270,7 +270,7 @@ Mọi văn bản hiển thị cho người dùng đều phải dịch; hardcode 
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó không còn đụng `app/pubspec.yaml`, danh sách workspace ở root hay `app/lib/di/injection.dart`. Sau đó:
+Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó không còn đụng `apps/mobile/pubspec.yaml`, danh sách workspace ở root hay `apps/mobile/lib/di/injection.dart`. Sau đó:
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib

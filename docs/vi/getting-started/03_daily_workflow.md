@@ -35,7 +35,7 @@ Chạy mỗi khi bạn thêm, xoá hoặc sửa bất kỳ thứ nào sau đây:
 | :--- | :--- | :--- |
 | `@freezed`, thêm union case, thêm field | `freezed` | `*.freezed.dart` |
 | `@JsonSerializable`, `fromJson` / `toJson` | `json_serializable` | `*.g.dart` |
-| `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `app/lib/di/injection.config.dart` |
+| `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `apps/mobile/lib/di/injection.config.dart` |
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
 | `@DriftDatabase`, `@DriftAccessor`, thêm bảng | `drift_dev` | `<tên>_database.g.dart` (ví dụ `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
@@ -90,7 +90,7 @@ dart tools/dependency_sync.dart --check
 Tool cũng tự sửa các mục `path:` bị gãy của package trong workspace.
 
 > [!NOTE]
-> Dependency native của Android trong `app/android/app/build.gradle.kts` nằm **ngoài** catalog này. Nâng `play-services-auth` hay `androidx.window` là việc sửa Gradle thủ công.
+> Dependency native của Android trong `apps/mobile/android/app/build.gradle.kts` nằm **ngoài** catalog này. Nâng `play-services-auth` hay `androidx.window` là việc sửa Gradle thủ công.
 
 ---
 
@@ -98,7 +98,7 @@ Tool cũng tự sửa các mục `path:` bị gãy của package trong workspace
 
 | Tool | Lệnh | Dùng khi |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [thư_mục] [SM] [route]` | Dựng khung package Feature / Domain / Data / Core mới. Nó tự đăng ký package vào workspace gốc, `app/pubspec.yaml` và `app/lib/di/injection.dart`. Chạy không tham số để vào chế độ tương tác. |
+| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [thư_mục] [SM] [route]` | Dựng khung package Feature / Domain / Data / Core mới. Nó tự đăng ký package vào workspace gốc, `apps/mobile/pubspec.yaml` và `apps/mobile/lib/di/injection.dart`. Chạy không tham số để vào chế độ tương tác. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Dọn dẹp định kỳ. Có lệnh con riêng cho asset, file, package, translation. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Trước một đợt nâng version — liệt kê thứ pub.dev đã có bản mới. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Rà soát tuỳ chọn trước khi mở PR. Cần Gemini API key trong `tools/code_review/code_review_config.json`. Hỗ trợ thêm `--all`, `--file <đường_dẫn>`, `--focus architecture,security`. |
@@ -147,14 +147,14 @@ dart tools/unused_checker/check_unused_packages.dart
 Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Hiện chỉ sáu package trên có test; hãy viết test của bạn ngay cạnh code bạn viết.
 
 > [!CAUTION]
-> `flutter analyze` **không** bắt được lỗi thứ tự DI. Một `@Singleton` eager phụ thuộc type được đăng ký ở module chạy *sau* vẫn compile bình thường rồi ném `not registered` lúc khởi động. Sau khi đổi đăng ký DI, hãy mở file sinh ra `app/lib/di/injection.config.dart` và kiểm tra thứ tự. Xem [../guides/05_di.md](../guides/05_di.md).
+> `flutter analyze` **không** bắt được lỗi thứ tự DI. Một `@Singleton` eager phụ thuộc type được đăng ký ở module chạy *sau* vẫn compile bình thường rồi ném `not registered` lúc khởi động. Sau khi đổi đăng ký DI, hãy mở file sinh ra `apps/mobile/lib/di/injection.config.dart` và kiểm tra thứ tự. Xem [../guides/05_di.md](../guides/05_di.md).
 
 ### Tuỳ chọn: chứng minh app vẫn build được
 
 Phân tích tĩnh sạch không có nghĩa là build Android sạch (lỗi Gradle/Kotlin nằm ngoài Dart):
 
 ```bash
-cd app
+cd apps/mobile
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
@@ -168,7 +168,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Quên barrel generator sau khi thêm file | Class mới vô hình bên ngoài package | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Sửa tay file sinh ra | Thay đổi biến mất ở lần codegen kế tiếp | Sửa file nguồn có annotation |
 | Chạy `pub get` bên trong package con | Xuất hiện `pubspec.lock` lạc chỗ | Xoá chúng đi, chạy `flutter pub get` tại root |
-| Chạy `flutter build apk` từ gốc repo | `Target file "lib\main.dart" not found` | `cd app` trước |
+| Chạy `flutter build apk` từ gốc repo | `Target file "lib\main.dart" not found` | `cd apps/mobile` trước |
 | Hardcode version trong pubspec của package | `dependency_sync --check` báo lỗi | Đưa version về `pubspec_dependencies.yaml`, sync lại |
 | Import package mà không khai báo | Compile được cục bộ (workspace dùng chung `package_config.json`), gãy khi tách package | Khai vào `pubspec.yaml` của package đó; kiểm tra bằng unused checker |
 | Đăng ký controller màn hình là singleton | State rò rỉ giữa các lần mở màn hình | Controller của feature phải là `@injectable` (factory) — xem [../guides/05_di.md](../guides/05_di.md) |

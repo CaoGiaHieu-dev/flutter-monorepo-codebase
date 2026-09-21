@@ -71,7 +71,7 @@ dart tools/composer/composer.dart verify            # gate 0 của CI — fail k
 
 Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `workspace:` ở root, dependency dạng path của app, và `lib/di/injection.dart` của nó. Thêm một module nghĩa là sửa cả ba cho khớp, và sai thì vỡ lúc boot với `"<Type> is not registered"` — thứ `flutter analyze` không thấy được.
 
-`composer` sinh cả ba từ `app/app_manifest.yaml`, nhưng **chỉ** phần nằm giữa marker `composer:managed:<region>` và `composer:end:<region>`. Dependency ngoài, flavor và khai báo asset vẫn viết tay.
+`composer` sinh cả ba từ `apps/mobile/app_manifest.yaml`, nhưng **chỉ** phần nằm giữa marker `composer:managed:<region>` và `composer:end:<region>`. Dependency ngoài, flavor và khai báo asset vẫn viết tay.
 
 Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.yaml`. Không chỗ nào mã hoá đường dẫn, nên di chuyển package không phải sửa tool hay manifest. Package của module khớp được cả hai quy ước đặt tên — `domain_auth` và `auth_domain` đều nhận.
 
@@ -95,14 +95,14 @@ Hai loại tham chiếu được kiểm tra trên `docs/`, `.agents/`, `README.m
 | Path trong backtick | `` `platform/kernel/lib/platform_kernel.dart` `` | Tính từ gốc repo, nhưng chỉ khi chuỗi bắt đầu bằng một thư mục top-level có thật |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Tương đối với **file chứa link**, không phải thư mục đang chạy lệnh |
 
-Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `app/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 300 tham chiếu thật — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
+Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `apps/mobile/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 300 tham chiếu thật — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
 
 Chuỗi có khoảng trắng, `*`, `{` hoặc `<` cũng bị bỏ qua: đó là lệnh shell, glob hoặc placeholder, mỗi thứ mô tả một *tập hợp* chứ không phải một file.
 
 Những path vắng mặt một cách chính đáng nằm trong `tools/docs_check/allowlist.txt`, mỗi dòng một path kèm lý do. Chỉ đúng ba lý do được chấp nhận:
 
-1. **Sinh tự động** — `app/lib/di/injection.config.dart`, build output.
-2. **Bí mật** — `app/env.prod`, `app/android/key.properties`; không bao giờ commit.
+1. **Sinh tự động** — `apps/mobile/lib/di/injection.config.dart`, build output.
+2. **Bí mật** — `apps/mobile/env.prod`, `apps/mobile/android/key.properties`; không bao giờ commit.
 3. **Hướng dẫn** — file mà người đọc *được bảo là hãy tạo ra* (`app_elevation.dart` trong guide design system), hoặc placeholder đại diện cho module của chính người đọc (`modules/profile/feature`).
 
 Mọi trường hợp khác là drift, và cách sửa là sửa tài liệu. Một entry không kèm lý do là không hợp lệ — khoảnh khắc allowlist trở thành danh sách những path ai đó bịt miệng, gate này hết đáng chạy.
@@ -124,7 +124,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 Nguồn chân lý của nó là [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), phân loại mọi package thành `framework`, `sample` hay `shell`, và ghi thêm mục `embedded_samples` — code mẫu nằm *bên trong* một package framework, như chuỗi cache trong `data_core`.
 
-Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml`, `app/pubspec.yaml` và `injection.dart`, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** — ví dụ `feature_settings` gọi `getIt<IAuthActionHandler>()` (bản ném lỗi) nên bấm logout sẽ crash, còn `HomeProfileBloc` nhận `IAuthStatusStream` qua constructor nên DI không dựng nổi.
+Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml`, `apps/mobile/pubspec.yaml` và `injection.dart`, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** — ví dụ `feature_settings` gọi `getIt<IAuthActionHandler>()` (bản ném lỗi) nên bấm logout sẽ crash, còn `HomeProfileBloc` nhận `IAuthStatusStream` qua constructor nên DI không dựng nổi.
 
 Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được.
 
@@ -158,13 +158,13 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 **Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, rồi chạy dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply`.
 
 > [!IMPORTANT]
-> Nó **không còn** sửa `app/pubspec.yaml`, danh sách `workspace:` ở root hay `app/lib/di/injection.dart`. Ba file đó nằm giữa marker `composer:managed` — chạy `dart tools/composer/composer.dart sync` để sinh lại. Sửa tay sẽ tạo drift mà CI Gate 0 chặn.
+> Nó **không còn** sửa `apps/mobile/pubspec.yaml`, danh sách `workspace:` ở root hay `apps/mobile/lib/di/injection.dart`. Ba file đó nằm giữa marker `composer:managed` — chạy `dart tools/composer/composer.dart sync` để sinh lại. Sửa tay sẽ tạo drift mà CI Gate 0 chặn.
 
 **Hành vi an toàn**
 
 - **Kiểm tra toolchain trước tiên.** `assertToolchainAvailable()` chạy trước khi động vào bất cứ file dùng chung nào, nên thiếu SDK là fail ngay lập tức thay vì chết ở bước 8.
 - **Từ chối thư mục đã tồn tại.** Nó sẽ không âm thầm ghi đè lên package có sẵn.
-- **Rollback khi thất bại.** Ba file dùng chung (`pubspec.yaml` gốc, `app/pubspec.yaml`, `app/lib/di/injection.dart`) được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
+- **Rollback khi thất bại.** Ba file dùng chung (`pubspec.yaml` gốc, `apps/mobile/pubspec.yaml`, `apps/mobile/lib/di/injection.dart`) được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
 - **Tự phát hiện FVM**, yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
 > [!NOTE]
@@ -199,7 +199,7 @@ dart tools/dependency_sync.dart --check  # chỉ kiểm tra; exit 1 nếu lệch
 Nó cũng sửa các mục `path:` cục bộ bị gãy. Dùng `--check` trong CI và pre-commit.
 
 > [!NOTE]
-> Nó parse theo từng dòng chứ không dùng YAML parser, nên `dependency_overrides` và cú pháp multi-line/anchor không được xử lý. Dependency native của Gradle (ví dụ `play-services-auth` trong `app/android/app/build.gradle.kts`) hoàn toàn nằm ngoài phạm vi của nó — chúng không có nguồn chân lý tập trung nào.
+> Nó parse theo từng dòng chứ không dùng YAML parser, nên `dependency_overrides` và cú pháp multi-line/anchor không được xử lý. Dependency native của Gradle (ví dụ `play-services-auth` trong `apps/mobile/android/app/build.gradle.kts`) hoàn toàn nằm ngoài phạm vi của nó — chúng không có nguồn chân lý tập trung nào.
 
 ---
 
@@ -287,7 +287,7 @@ Kiểm tra các thư viện native `.so` xem có căn chỉnh 16 KB page-size ch
 ```bash
 dart tools/code_review/code_review.dart --all
 dart tools/code_review/code_review.dart --changed
-dart tools/code_review/code_review.dart --file app/lib/main.dart
+dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --all --focus architecture,security
 ```
 

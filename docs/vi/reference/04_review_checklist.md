@@ -93,7 +93,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 ## 6. Dependency injection
 
 - [ ] Package mới khai `@InjectableInit.microPackage()` tại `lib/di/module.dart`
-- [ ] Module của nó được khai đúng nhóm trong `app/app_manifest.yaml`, và `composer verify` sạch
+- [ ] Module của nó được khai đúng nhóm trong `apps/mobile/app_manifest.yaml`, và `composer verify` sạch
 - [ ] Controller gắn màn hình là `@injectable` — **không bao giờ** `@singleton` / `@lazySingleton`
 - [ ] Controller singleton phải thực sự dùng toàn app
 - [ ] Không `@Singleton` eager nào phụ thuộc type đăng ký ở module chạy sau ([luật 5](01_rules.md#5-thứ-tự-đăng-ký-di))
@@ -103,7 +103,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 **Kiểm chứng** — sau bất kỳ thay đổi DI nào, đọc file lắp ráp sinh ra và xác nhận phụ thuộc của mỗi đăng ký eager xuất hiện trước nó trong `init()`:
 
 ```bash
-grep -n "PackageModule().init\|gh.singleton<" app/lib/di/injection.config.dart
+grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
 ```
 
 ---

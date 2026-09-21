@@ -27,13 +27,13 @@ import 'injection.config.dart';
 /// Dependency injection for the `mobile` app.
 ///
 /// **The module lists below are generated.** They are derived from
-/// `app/app_manifest.yaml` by:
+/// `apps/mobile/app_manifest.yaml` by:
 ///
 /// ```bash
 /// dart tools/composer/composer.dart sync --app mobile
 /// ```
 ///
-/// Adding or removing a module used to mean editing this file, `app/pubspec.yaml`
+/// Adding or removing a module used to mean editing this file, `apps/mobile/pubspec.yaml`
 /// and the root `workspace:` list by hand, keeping all three in step. Getting it
 /// wrong fails at boot with `"<Type> is not registered"` — which `flutter
 /// analyze` cannot see. Edit the manifest instead; `composer verify` fails CI if

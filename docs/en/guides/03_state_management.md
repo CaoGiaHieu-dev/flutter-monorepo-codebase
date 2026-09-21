@@ -190,7 +190,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-That is the real pattern from `app/lib/presentation/widgets/navigator_wrapper_widget.dart` — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md).
+That is the real pattern from `apps/mobile/lib/presentation/widgets/navigator_wrapper_widget.dart` — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md).
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 

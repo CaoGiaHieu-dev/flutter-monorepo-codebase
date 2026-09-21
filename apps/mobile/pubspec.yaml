@@ -18,56 +18,56 @@ dependencies:
 
   # composer:managed:deps — generated from app_manifest.yaml
   core_common:
-    path: ../platform/common
+    path: ../../platform/common
   core_network:
-    path: ../platform/network
+    path: ../../platform/network
   core_notifications:
-    path: ../platform/notifications
+    path: ../../platform/notifications
   core_storage:
-    path: ../platform/storage
+    path: ../../platform/storage
   core_database:
-    path: ../platform/database
+    path: ../../platform/database
   core_di:
-    path: ../platform/di
+    path: ../../platform/di
   core_base_ui:
-    path: ../platform/base_ui
+    path: ../../platform/base_ui
   domain_core:
-    path: ../platform/domain_core
+    path: ../../platform/domain_core
   domain_auth:
-    path: ../modules/auth/domain
+    path: ../../modules/auth/domain
   data_core:
-    path: ../platform/data_core
+    path: ../../platform/data_core
   data_auth:
-    path: ../modules/auth/data
+    path: ../../modules/auth/data
   feature_auth:
-    path: ../modules/auth/feature
+    path: ../../modules/auth/feature
   feature_home:
-    path: ../modules/home/feature
+    path: ../../modules/home/feature
   feature_settings:
-    path: ../modules/settings/feature
+    path: ../../modules/settings/feature
   feature_onboarding:
-    path: ../modules/onboarding/feature
+    path: ../../modules/onboarding/feature
   feature_splash:
-    path: ../modules/splash/feature
+    path: ../../modules/splash/feature
   feature_dashboard:
-    path: ../modules/dashboard/feature
+    path: ../../modules/dashboard/feature
   provider_state_management:
-    path: ../platform/provider_state_management
+    path: ../../platform/provider_state_management
   bloc_state_management:
-    path: ../platform/bloc_state_management
+    path: ../../platform/bloc_state_management
   platform_kernel:
-    path: ../platform/kernel
+    path: ../../platform/kernel
   core_responsive:
-    path: ../platform/responsive
+    path: ../../platform/responsive
   core_ui_kit:
-    path: ../platform/ui_kit
+    path: ../../platform/ui_kit
   # composer:end:deps
 
   # external packages
   material_ui: ^1.1.1
   cupertino_icons: ^1.0.9
   core_responsive:
-    path: ../platform/responsive
+    path: ../../platform/responsive
   flutter_svg: ^2.3.0
   provider: "^6.1.5+1"
   go_router: "^18.0.0"

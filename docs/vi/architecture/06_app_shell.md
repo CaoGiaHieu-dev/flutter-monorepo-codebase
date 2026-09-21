@@ -1,4 +1,4 @@
-# App Shell (`app/`)
+# App Shell (`apps/mobile/`)
 
 Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cục bộ cho app, và hiểu vì sao thứ tự module trong `injection.dart` không hề tuỳ tiện.
 
@@ -9,7 +9,7 @@ App shell là **điểm lắp ráp (composition root)**. Đây là nơi duy nh�
 ## 1. Trong này có gì
 
 ```
-app/lib/
+apps/mobile/lib/
 ├── main.dart                    điểm khởi động, vùng bắt lỗi
 ├── main_scope.dart              chuyển tiếp splash → init → root
 ├── app.dart                     barrel
@@ -111,7 +111,7 @@ Việc scale vẫn phải đi qua `BuildContext` — `core_responsive` **không 
 
 ## 3. Lắp ráp DI — và vì sao thứ tự quan trọng
 
-[`app/lib/di/injection.dart`](../../../app/lib/di/injection.dart) khai báo thứ tự module:
+[`apps/mobile/lib/di/injection.dart`](../../../apps/mobile/lib/di/injection.dart) khai báo thứ tự module:
 
 ```dart
 @InjectableInit(
@@ -146,7 +146,7 @@ Thứ tự phân giải trong file sinh ra `injection.config.dart`:
 > [!CAUTION]
 > Một `@Singleton` eager được dựng **ngay lúc đăng ký**. Nếu nó phụ thuộc một kiểu do module chạy *sau* đăng ký, khởi động sẽ ném `… is not registered`.
 >
-> `flutter analyze` không thể phát hiện lỗi này — đây là lỗi thứ tự lúc chạy. Hãy kiểm chứng bằng cách đọc file sinh ra `app/lib/di/injection.config.dart` và xác nhận mọi phụ thuộc xuất hiện *phía trên* nơi tiêu thụ nó.
+> `flutter analyze` không thể phát hiện lỗi này — đây là lỗi thứ tự lúc chạy. Hãy kiểm chứng bằng cách đọc file sinh ra `apps/mobile/lib/di/injection.config.dart` và xác nhận mọi phụ thuộc xuất hiện *phía trên* nơi tiêu thụ nó.
 
 Ví dụ thật: `NetworkConfigImpl` phụ thuộc `AuthLocalDataSource` nằm trong `data_auth` — đăng ký ở bước 4, sau khối cục bộ ở bước 2. Vì vậy nó được khai `@LazySingleton(as: NetworkConfig)` để hoãn việc dựng tới lần dùng đầu tiên. Nơi tiêu thụ duy nhất của nó là `ApiClient` cũng lazy, nên không mất gì.
 
@@ -164,7 +164,7 @@ late final GoRouter router = GoRouter( … );
 
 ## 4. Adapter cục bộ của app
 
-Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `app/lib/di/utils/`.
+Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `apps/mobile/lib/di/utils/`.
 
 | File | Hiện thực | Sở hữu | Cách đăng ký |
 |:--|:--|:--|:--|
@@ -194,7 +194,7 @@ Tham số khai kiểu `NetworkConfig` nên phép upcast được trình biên d�
 
 ## 5. Lắp ráp router
 
-[`app_router.dart`](../../../app/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
+[`app_router.dart`](../../../apps/mobile/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [

@@ -28,9 +28,9 @@ const String _manifestPath = 'tools/sample_manifest.yaml';
 /// package that no longer exists until someone runs the generator.
 const List<String> _sharedMutatedFiles = [
   'pubspec.yaml',
-  'app/app_manifest.yaml',
-  'app/pubspec.yaml',
-  'app/lib/di/injection.dart',
+  'apps/mobile/app_manifest.yaml',
+  'apps/mobile/pubspec.yaml',
+  'apps/mobile/lib/di/injection.dart',
 ];
 
 final Map<String, String?> _snapshots = {};
@@ -341,7 +341,7 @@ List<_FileEdit> _planSharedEdits(
         // `extra_dependencies`.
         if (RegExp('^\\s+-\\s+$name\\s*\$').hasMatch(line)) drop = true;
 
-        // app/pubspec.yaml: `  feature_auth:` followed by `    path: ...`
+        // apps/mobile/pubspec.yaml: `  feature_auth:` followed by `    path: ...`
         if (RegExp('^\\s{2}$name:\\s*\$').hasMatch(line)) {
           drop = true;
           if (i + 1 < lines.length &&

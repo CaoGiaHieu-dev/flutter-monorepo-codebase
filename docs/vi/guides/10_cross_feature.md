@@ -210,7 +210,7 @@ abstract class IThemeStorage {
 `package:flutter/material.dart`. Tầng domain là Dart thuần và **không thể import Flutter**, nên đưa
 theme đi qua nó là bất khả thi về mặt cấu trúc — đây là ràng buộc cứng, không phải đường tắt.
 
-Implementation nằm ở app shell (`app/lib/di/theme_storage_impl.dart`) vì đó là nơi provider của
+Implementation nằm ở app shell (`apps/mobile/lib/di/theme_storage_impl.dart`) vì đó là nơi provider của
 `core_base_ui` và cơ chế của `core_storage` gặp nhau mà không tạo thành vòng phụ thuộc.
 
 
@@ -292,7 +292,7 @@ Mọi bên tiêu thụ một hợp đồng cross-feature đều phải chịu đ
 App shell đã làm đúng như vậy cho routing:
 
 ```dart
-// app/lib/presentation/navigation/app_router.dart
+// apps/mobile/lib/presentation/navigation/app_router.dart
 List<RouteBase> get _featureRoutes {
   return [
     for (final module in getAllOrEmpty<IFeatureRouteModule>())
@@ -321,13 +321,13 @@ getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
 ```
 
 > [!NOTE]
-> Việc `app/lib/di/injection.dart` gọi tên các package feature là tham chiếu cứng có chủ đích duy
+> Việc `apps/mobile/lib/di/injection.dart` gọi tên các package feature là tham chiếu cứng có chủ đích duy
 > nhất của composition root — nơi lắp ráp buộc phải biết nó lắp cái gì. Không file nào khác dưới
-> `app/lib/` import package `feature_*`; tất cả phần còn lại chạm tới feature qua hợp đồng ở
+> `apps/mobile/lib/` import package `feature_*`; tất cả phần còn lại chạm tới feature qua hợp đồng ở
 > `core_di` cùng fallback `getAllOrEmpty` / `getItOrNull`. Các import `core_ui_kit` trong shell
 > không phải ngoại lệ — đó là package core, không phải feature gỡ được.
 >
-> Kiểm chứng bằng `grep -rn "package:feature_" app/lib --include="*.dart"` — mọi kết quả đều phải
+> Kiểm chứng bằng `grep -rn "package:feature_" apps/mobile/lib --include="*.dart"` — mọi kết quả đều phải
 > nằm trong `injection.dart` hoặc file sinh ra `injection.config.dart`.
 
 ---

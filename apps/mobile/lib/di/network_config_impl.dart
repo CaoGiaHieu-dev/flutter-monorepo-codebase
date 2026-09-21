@@ -2,13 +2,8 @@ import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_network/core_network.dart';
 import 'package:core_ui_kit/core_ui_kit.dart';
-import 'package:data_auth/data_auth.dart';
-import 'package:domain_auth/domain_auth.dart';
-import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
-
-import '../presentation/navigation/app_router.dart';
 
 /// Concrete implementation of NetworkConfig for the main application shell.
 ///
@@ -16,51 +11,53 @@ import '../presentation/navigation/app_router.dart';
 /// overlay dialogs, without creating circular package dependencies.
 ///
 /// Credentials are never read from a shared storage object — this delegates
-/// to the actual owners of each value ([AuthLocalDataSource] for the token,
+/// to the actual owners of each value ([IAuthSessionGateway] for the session,
 /// [ILanguageStorage] for the locale) so no cross-domain storage key leaks.
 ///
-/// Registered lazily (not eager `@Singleton`) because [AuthLocalDataSource]
-/// lives in `data_auth`, whose module is initialized after this app-local DI
-/// block runs. Its only consumer, `ApiClient`, is itself `@lazySingleton`,
-/// so deferring construction here is safe and avoids a "not registered"
-/// error during `configureDependencies()`.
+/// **This file imports no module.** It used to pull `AuthLocalDataSource` and
+/// `RefreshTokenUseCase` straight out of `data_auth` / `domain_auth`, which
+/// meant a build without the auth module did not compile — the composition
+/// root was the one place breaking the removability the rest of the shell is
+/// careful to preserve. A `getItOrNull` guard cannot fix that on its own: an
+/// unresolved import fails at compile time, before any lookup happens.
+/// Enforced now by `arch_check` rule **R10**.
+///
+/// The gateway is resolved at call time rather than injected, so this class
+/// constructs fine whether or not an auth module is in the build, and no
+/// module-initialisation ordering matters.
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
-  /// Constructor – receives the credential owners and [AppRouter] through DI.
-  NetworkConfigImpl(
-    this._authLocalDataSource,
-    this._languageStorage,
-    this._refreshTokenUseCase,
-  );
+  NetworkConfigImpl(this._languageStorage);
 
-  final AuthLocalDataSource _authLocalDataSource;
   final ILanguageStorage _languageStorage;
-  final RefreshTokenUseCase _refreshTokenUseCase;
+
+  /// Null in a build that composes no auth module.
+  IAuthSessionGateway? get _session => getItOrNull<IAuthSessionGateway>();
 
   @override
-  String? Function() get getToken => _authLocalDataSource.getUserToken;
+  String? Function() get getToken => () => _session?.readToken();
 
   @override
   String? Function() get getLocale =>
       () => _languageStorage.getLanguage().languageCode;
 
+  /// Returning null here is load-bearing: `ApiClient` adds
+  /// `RefreshTokenInterceptor` **only** when this is non-null. With no auth
+  /// module there is no session to renew, so a 401 should fail outright
+  /// rather than pass through an interceptor that can never succeed.
   @override
-  Future<String?> Function()? get onRefreshToken => _refreshSession;
+  Future<String?> Function()? get onRefreshToken =>
+      _session == null ? null : _refreshSession;
 
   @override
-  Future<void> Function()? get onRefreshFailed => _clearSession;
+  Future<void> Function()? get onRefreshFailed =>
+      _session == null ? null : _clearSession;
 
   /// Renews the session and hands the transport layer the refreshed token.
   ///
-  /// The use case delegates to the repository, which is what persists the new
-  /// credentials; this only re-reads the value from its owner
-  /// ([AuthLocalDataSource]) afterwards rather than storing anything itself.
-  Future<String?> _refreshSession() async {
-    final result = await _refreshTokenUseCase(const NoParams());
-    if (!result.isSuccess) return null;
-
-    return _authLocalDataSource.getUserToken();
-  }
+  /// Persisting the new credentials is the gateway's job, not this class's.
+  Future<String?> _refreshSession() async =>
+      await _session?.refreshToken();
 
   /// Drops the local session after an unrecoverable refresh failure.
   ///
@@ -68,9 +65,7 @@ class NetworkConfigImpl implements NetworkConfig {
   /// enough, because the auth shell listener in `NavigatorWrapperWidget`
   /// reacts to the session change and routes to login. Doing it here would
   /// need a `BuildContext`, which the transport layer has no business holding.
-  Future<void> _clearSession() async {
-    _authLocalDataSource.clearAllAuthData();
-  }
+  Future<void> _clearSession() async => _session?.clearSession();
 
   @override
   void onRetryCallback({

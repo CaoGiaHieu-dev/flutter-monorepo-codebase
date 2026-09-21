@@ -40,6 +40,26 @@ const _approvedUpwardEdges = <String, String>{
 /// import `BuildContext` cannot quietly become a widget API.
 ///
 /// `modules/*/domain` is covered by R2 instead, which predates this rule.
+/// The one file in an app that is allowed to name the modules it composes.
+///
+/// Matched by basename rather than path so it keeps working wherever apps
+/// live. Injectable generates `injection.config.dart` beside it, which
+/// `_isGenerated` already skips.
+const _compositionRoot = 'injection.dart';
+
+/// A package belonging to a product module rather than to the platform.
+///
+/// Derived from the name, like [_layerOf], so moving packages changes nothing
+/// here. `domain_core` and `data_core` are layer foundations that live under
+/// `platform/` and every app may depend on them directly; the check is for a
+/// *named product* module.
+bool _isModulePackage(String packageName) =>
+    (packageName.startsWith('domain_') ||
+        packageName.startsWith('data_') ||
+        packageName.startsWith('feature_')) &&
+    packageName != 'domain_core' &&
+    packageName != 'data_core';
+
 bool _isPureDartTier(String packageName) =>
     packageName == 'platform_kernel' || packageName.endsWith('_contracts');
 
@@ -552,6 +572,40 @@ void main(List<String> args) {
       }
     }
 
+    // --- R10: the app shell composes modules, it does not import them ------
+    // Removability is the property the whole composition design exists to
+    // protect, and exactly one file is allowed to break it: the composition
+    // root, which must name what it composes.
+    //
+    // Everywhere else in an app, a module import is fatal in a way no
+    // `getItOrNull` guard can soften — an unresolved import fails at compile
+    // time, before any lookup runs. `network_config_impl.dart` imported
+    // `data_auth` and `domain_auth` for exactly this reason and made the auth
+    // module unremovable while every document claimed otherwise.
+    if (_layerOf(pkg) == 'app') {
+      for (final file in files) {
+        if (_isGenerated(file)) continue;
+        final rel = p.posix.relative(file, from: root);
+        if (p.posix.basename(file) == _compositionRoot) continue;
+
+        final content = File(file).readAsStringSync();
+        for (final ref in _packageRefsIn(content)) {
+          if (!_isModulePackage(ref.package)) continue;
+          blocking.add(
+            Violation(
+              'R10',
+              '$rel:${ref.line}',
+              'the app shell imports `${ref.package}`. Only '
+                  '`$_compositionRoot` may name a module; everywhere else '
+                  'declare a contract in `core_di` and resolve it with '
+                  '`getItOrNull`. A type import cannot be guarded — it fails '
+                  'the build the moment that module is removed.',
+            ),
+          );
+        }
+      }
+    }
+
     // --- R6: generated files should not be hand-edited (warning) ----------
     for (final file in files) {
       final name = p.posix.basename(file);
@@ -601,6 +655,7 @@ void _report(
     'R7': 'Responsive sizing goes through BuildContext',
     'R8': 'Removable contracts resolve optionally',
     'R9': 'The pure-Dart tier stays pure',
+    'R10': 'The app shell composes modules, it does not import them',
   };
 
   if (warnings.isNotEmpty) {
@@ -689,6 +744,8 @@ RULES CHECKED
 
   R6  Generated files are not hand-edited  (warning only, never blocks)
   R9  The pure-Dart tier stays pure
+  R10 The app shell composes modules, it does not import them — only
+      the composition root may name one
       `platform_kernel` and every `*_contracts` package must neither import a
       Flutter-bound package nor declare one in `pubspec.yaml`. The pubspec half
       matters: a package can declare a Flutter plugin and never write

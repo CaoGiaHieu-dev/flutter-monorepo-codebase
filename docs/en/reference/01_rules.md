@@ -180,6 +180,8 @@ grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.confi
 
 **Why.** A template whose features cannot be deleted is not a template. Removability is also the practical proof that the boundaries are real.
 
+**Enforced by machine.** `arch_check` **R8** blocks a throwing `getIt` / `getAll` on a contract only a module implements, and **R10** blocks a module *import* anywhere in an app except `injection.dart`. R10 exists because R8 alone was not enough: `getItOrNull` guards a lookup, while an unresolved import fails at compile time, before any lookup runs. `network_config_impl.dart` imported `data_auth` and `domain_auth` for exactly that reason, and made the auth module unremovable while this section said otherwise.
+
 Everything the shell consumes at runtime resolves through a `core_di` contract with a fallback:
 
 | Lookup | Behaviour when nothing is registered |
@@ -435,6 +437,7 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | DI order safety | read `apps/mobile/lib/di/injection.config.dart` |
 | core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
+| The app shell imports no module | `dart tools/arch_check/check.dart` (R10) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

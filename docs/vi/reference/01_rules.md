@@ -180,6 +180,8 @@ grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.confi
 
 **Vì sao.** Một template mà không xoá được feature thì không phải template. Khả năng gỡ bỏ cũng chính là bằng chứng thực tế rằng ranh giới là có thật.
 
+**Được máy cưỡng chế.** `arch_check` **R8** chặn `getIt` / `getAll` kiểu ném lỗi trên một hợp đồng chỉ do module hiện thực, còn **R10** chặn việc *import* một module ở bất cứ đâu trong app trừ `injection.dart`. R10 tồn tại vì riêng R8 là chưa đủ: `getItOrNull` canh một lookup, còn một import không giải được thì hỏng ngay ở khâu biên dịch, trước khi có lookup nào chạy. `network_config_impl.dart` import `data_auth` và `domain_auth` đúng vì lý do đó, và khiến module auth không thể gỡ bỏ trong khi mục này nói ngược lại.
+
 Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng `core_di` kèm fallback:
 
 | Cách tra cứu | Hành vi khi không có gì đăng ký |
@@ -435,6 +437,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | An toàn thứ tự DI | đọc `apps/mobile/lib/di/injection.config.dart` |
 | core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
+| App shell không import module nào | `dart tools/arch_check/check.dart` (R10) |
 | Domain thuần Dart | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

@@ -60,7 +60,7 @@ flutter test test/debounce_test.dart   # a single test file
 # Enforce the layering rules — Gate 1 of pr_quality_check.yml, exits 1 on violation.
 # The only check that can see layering; analysis_options.yaml knows nothing about it.
 dart tools/arch_check/check.dart
-dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R9)
+dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R10)
 
 # Verify every repo path the docs name actually exists — Gate 5 of
 # pr_quality_check.yml. Known-absent paths (generated / secret / "create this

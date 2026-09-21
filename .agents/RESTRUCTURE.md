@@ -436,9 +436,12 @@ real gate** — nothing here substitutes for them.
 
 ```bash
 dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
-# NOTE: `data_core` no longer imports Flutter anywhere in lib/. Its pubspec still
-# declares `flutter: sdk: flutter`; confirm whether drift/core_database still need
-# it before removing — this was not verifiable without a toolchain.
+# NOTE: `data_core` declares `flutter: sdk: flutter` and imports no `package:flutter`
+# anywhere in lib/ — checked. Removing it looks right, and is deliberately NOT done
+# here: the Flutter binding arrives anyway through core_database -> sqlite3_flutter_libs,
+# so nothing is gained at runtime, and the one thing that could break it is generated
+# code emitting a Flutter import (drift and freezed both can, depending on options).
+# That needs a build to settle. If `flutter analyze` is clean after codegen, drop it.
 dart tools/arch_check/check.dart              # R1–R10
 dart tools/composer/composer.dart verify      # Gate 0
 dart tools/docs_check/check.dart              # Gate 5

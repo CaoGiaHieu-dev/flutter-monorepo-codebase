@@ -23,11 +23,9 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
 - **`packages/domain/*` (Micro-packages)**: Business logic core. **MUST be pure Dart (100% decoupled from Flutter UI, Dio, Retrofit, or any platform-specific dependencies)**. Current micro-packages:
   - `domain_core`: Defines `Result<T>`, `BaseEntity<T>`, and shared primitive types.
   - `domain_auth`: Entities, use cases, and repository interfaces for authentication.
-  - `domain_language`: Entities and use cases for multi-language localization.
 - **`packages/data/*` (Micro-packages)**: Data access layer (remotes, local caching, models/DTOs). Depends on `domain` packages. Current micro-packages:
   - `data_core`: `IBaseRepository` with `execute()` and `executeSync()` wrappers to automatically handle error conversion.
   - `data_auth`: Models/DTOs, Remote DataSources (Retrofit), and RepositoryImpl for authentication.
-  - `data_language`: RepositoryImpl for multi-language localization.
 - **`packages/features/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `packages/core/ui_kit` as `core_ui_kit`.
   - Feature packages (e.g., `feature_onboarding`, `feature_auth`, `feature_dashboard`, `feature_home`, `feature_settings`, `feature_splash`):
     - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
@@ -53,7 +51,7 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
    - Dependencies flow **one way**: `core_ui_kit → provider_state_management` is correct; the reverse is a genuine cycle **inside** the core ring and is forbidden. (This is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` instead of reaching into the widget library for them — that would close the loop.)
 1. **Domain Layer must be Pure Dart** — enforced by the package graph, not just by review:
    - Do not import: `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, or any UI/Network framework library.
-   - **`domain_core` has ZERO workspace dependencies** and no `flutter` entry in `dependencies`. `domain_auth` / `domain_language` depend only on `domain_core`. Keep it that way.
+   - **`domain_core` has ZERO workspace dependencies** and no `flutter` entry in `dependencies`. `domain_auth` depends only on `domain_core`. Keep it that way.
    - **ABSOLUTELY FORBIDDEN** for a domain package to depend on `core_common` (or any `core_*` package). `core_common` imports `flutter/material.dart`, so depending on it would drag Flutter into Domain. `AppFailure` lives in `domain_core` for exactly this reason — it is part of the `Result` contract and belongs at the centre.
    - Allowed to import: `dart:*`, `domain_core` (`Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`, `get_it`.
    - Domain-owned constants live in that package's own `utils/` (§ 16) — e.g. `domain_core`'s `DomainConstants`. Never reach into `core_common` for them.
@@ -88,7 +86,6 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
    - **Pure UI State (e.g., ThemeMode, Locale)**: Cannot pass through the Domain layer because Domain must be Pure Dart (cannot import `flutter/material.dart`). UI Providers bypass Domain and persist via a DI storage Interface implemented in the App Shell:
      - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`app/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`app/lib/di/utils/theme_storage_keys.dart`)
      - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`app/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`app/lib/di/utils/language_storage_keys.dart`)
-   - **`domain_language`**: Retained for API/business locale needs if required later; the Settings UI currently uses `LanguageProvider`, not `SetLanguageUseCase`.
 
 ---
 
@@ -142,7 +139,7 @@ All files and class names must strictly adhere to the following naming conventio
 | **UI Controller (Cubit)** | `_cubit.dart` | `Cubit` | Only when events are unnecessary |
 | **Use Case** | `_usecase.dart` | `UseCase` | `LoginUseCase` |
 | **Entity** | `_entity.dart` | `Entity` | `UserEntity` |
-| **Repository Interface** | `_repository.dart` | Prefix `I` | `IAuthRepository` |
+| **Repository Interface** | `i_<name>_repository.dart` | Prefix `I` | `IAuthRepository` |
 | **Repository Implementation** | `_repository_impl.dart` | `RepositoryImpl` | `AuthRepositoryImpl` |
 | **API Response DTO** | `_response.dart` / `_model.dart` | `Response` / `Model` | `UserResponse`, `UserModel` |
 | **API Request DTO** | `_request.dart` | `Request` | `LoginRequest` |

@@ -66,7 +66,6 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | :--- | :--- | :--- |
 | `domain_core` | `packages/domain/core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, entity/usecase cache |
 | `domain_auth` | `packages/domain/auth` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
-| `domain_language` | `packages/domain/language` | `ILanguageRepository`, `GetLanguageUseCase`, `SetLanguageUseCase` |
 
 ### Data — `packages/data/*`
 
@@ -76,7 +75,6 @@ Hiện thực hợp đồng của domain. Data source trả về **Model**, khô
 | :--- | :--- | :--- |
 | `data_core` | `packages/data/core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, data source + repository cache |
 | `data_auth` | `packages/data/auth` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
-| `data_language` | `packages/data/language` | `LanguageRepositoryImpl` (sở hữu key `locale`), `LanguageStorageKeys` |
 
 ### Features — `packages/features/*`
 

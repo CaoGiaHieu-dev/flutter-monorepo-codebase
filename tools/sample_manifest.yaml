@@ -110,14 +110,6 @@ packages:
       Freezed models with .toEntity(), a package-owned storage key, and a
       Firebase-backed repository. Also ships an unused Retrofit data source as
       a REST reference.
-  domain_language:
-    kind: sample
-    path: packages/domain/language
-    demonstrates: A minimal domain package. Not wired to the Settings UI.
-  data_language:
-    kind: sample
-    path: packages/data/language
-    demonstrates: A minimal repository implementation over package-owned storage.
 
 # ---------------------------------------------------------------------------
 # Samples living inside framework packages
@@ -242,14 +234,6 @@ bundles:
     note: >-
       main.dart resolves it with getItOrNull, so the app simply keeps the
       native splash until the first frame.
-
-  language:
-    packages: [domain_language, data_language]
-    orphaned_contracts: []
-    breaks: []
-    note: >-
-      Already unused by the UI — Settings changes locale through
-      LanguageProvider, which bypasses Domain entirely.
 
 # ---------------------------------------------------------------------------
 # Shared files every bundle removal edits

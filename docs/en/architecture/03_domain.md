@@ -252,39 +252,7 @@ enum UserRole {
 ```
 
 `unknown` carries no `@JsonValue`; it is the landing slot for `@JsonKey(unknownEnumValue: UserRole.unknown)` in `UserModel`, so a role the server adds later deserialises instead of throwing.
-
----
-
-## 5. `domain_language` — a stub, and why it stays
-
-`domain_language` is complete but **not wired to any screen**:
-
-| File | Contents |
-|:---|:---|
-| `repositories/i_language_repository.dart` | `ILanguageRepository` — `getLanguage()`, `setLanguage()` |
-| `params/set_language_params.dart` | `SetLanguageParams` |
-| `usecases/get_language_usecase.dart` | `GetLanguageUseCase` |
-| `usecases/set_language_usecase.dart` | `SetLanguageUseCase` |
-
-```dart
-abstract class ILanguageRepository {
-  Result<void> setLanguage(String languageCode);
-  Result<String> getLanguage();
-}
-```
-
-> [!IMPORTANT]
-> **The Settings screen does not call these use cases.** Language switching goes through `LanguageProvider` in `core_base_ui`, which persists via `ILanguageStorage` — bypassing Domain entirely.
->
-> That is not an oversight. `Locale` is a Flutter type, so a pure-Dart domain package cannot express "the current locale" without inventing a parallel `String` representation and translating at every boundary. For a value that never leaves the UI, the ceremony buys nothing.
->
-> `domain_language` is kept as the template for the day locale becomes a *business* concern — user preference synced to a server, per-tenant defaults — at which point the use cases already exist. Until then, read it as reference, and do not add screens that depend on it.
-
-Note it has no entity: it exchanges a plain `String` language code.
-
----
-
-## 6. Package layout and naming
+## 5. Package layout and naming
 
 ```
 packages/domain/<name>/
@@ -335,7 +303,7 @@ The `const Class._()` line is mandatory. Without it Freezed cannot generate a cl
 
 ---
 
-## 7. Adding to the Domain layer
+## 6. Adding to the Domain layer
 
 ```bash
 # 1. Scaffold the package (creates dirs + registers the workspace member)

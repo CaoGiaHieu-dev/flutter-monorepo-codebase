@@ -54,7 +54,6 @@ Các package hiện có:
 |:---|:---|
 | `data_core` | `IBaseRepository`, `BaseModel`, request model, ví dụ cache |
 | `data_auth` | `UserModel`, data source auth, `AuthRepositoryImpl` |
-| `data_language` | `LanguageRepositoryImpl` (mẫu, xem §7) |
 
 ---
 
@@ -402,46 +401,7 @@ Ba hành vi liên kết với nhau:
 
 Đây là mắt xích khép kín với interceptor refresh 401 của `core_network`. Xem [hướng dẫn networking](../guides/08_networking.md).
 
----
-
-## 7. `data_language` — chỉ là mẫu
-
-```dart
-@LazySingleton(as: ILanguageRepository)
-class LanguageRepositoryImpl extends IBaseRepository
-    implements ILanguageRepository {
-  LanguageRepositoryImpl(this._storageManager);
-
-  final StorageManager _storageManager;
-
-  late final _locale = StorageValue<String>(
-    _storageManager.getStorage(StorageType.pref),
-    LanguageStorageKeys.LOCALE,
-  );
-
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async => _locale.readFromStorage();
-
-  @override
-  Result<String> getLanguage() {
-    return executeSync<String, String>(() {
-      final language = _locale.value;
-      if (language != null) return language;
-      return AppConfig.defaultLanguage.languageCode;
-    });
-  }
-  // …
-}
-```
-
-Hai điều đáng chú ý:
-
-1. **`executeSync`, không phải `execute`** — đọc một `StorageValue` đã nạp sẵn là thao tác đồng bộ, nên `Result<String>` trả về ngay không cần `Future`.
-2. **Nó dùng chung key vật lý `'locale'` với `LanguageStorageImpl` ở app shell**, và trong file có ghi chú rõ điều đó. Bản ở app shell mới là bản mà UI Settings thực sự dùng; repository này là nhánh domain chưa dùng tới (xem [Tầng Domain §5](03_domain.md#5-domain_language--một-stub-và-vì-sao-vẫn-giữ)). Hai instance `StorageValue` độc lập trên cùng một key **không** được đồng bộ với nhau — chỉ chấp nhận được vì một trong hai là code chết.
-
----
-
-## 8. Viết một repository mới
+## 7. Viết một repository mới
 
 ```dart
 @LazySingleton(as: IPaymentRepository)

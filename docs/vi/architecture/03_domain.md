@@ -254,39 +254,7 @@ enum UserRole {
 ```
 
 `unknown` không mang `@JsonValue`; nó là điểm rơi cho `@JsonKey(unknownEnumValue: UserRole.unknown)` trong `UserModel`, nhờ đó một role mà server thêm sau này vẫn deserialize được thay vì ném lỗi.
-
----
-
-## 5. `domain_language` — một stub, và vì sao vẫn giữ
-
-`domain_language` hoàn chỉnh nhưng **không được nối vào màn hình nào**:
-
-| File | Nội dung |
-|:---|:---|
-| `repositories/i_language_repository.dart` | `ILanguageRepository` — `getLanguage()`, `setLanguage()` |
-| `params/set_language_params.dart` | `SetLanguageParams` |
-| `usecases/get_language_usecase.dart` | `GetLanguageUseCase` |
-| `usecases/set_language_usecase.dart` | `SetLanguageUseCase` |
-
-```dart
-abstract class ILanguageRepository {
-  Result<void> setLanguage(String languageCode);
-  Result<String> getLanguage();
-}
-```
-
-> [!IMPORTANT]
-> **Màn hình Settings KHÔNG gọi các use case này.** Việc đổi ngôn ngữ đi qua `LanguageProvider` trong `core_base_ui`, lưu trữ qua `ILanguageStorage` — bỏ qua hoàn toàn tầng Domain.
->
-> Đây không phải sơ suất. `Locale` là kiểu của Flutter, nên một domain package thuần Dart không thể biểu đạt "locale hiện tại" mà không phải bịa ra một biểu diễn `String` song song rồi dịch qua lại ở mọi ranh giới. Với một giá trị không bao giờ rời khỏi UI, thủ tục đó không mang lại gì.
->
-> `domain_language` được giữ làm khuôn mẫu cho ngày locale trở thành mối quan tâm *nghiệp vụ* — tuỳ chọn người dùng đồng bộ lên server, mặc định theo tenant — khi đó use case đã có sẵn. Từ giờ tới lúc đó, hãy đọc nó như tài liệu tham khảo và **đừng viết màn hình phụ thuộc vào nó**.
-
-Lưu ý nó không có entity: nó trao đổi trực tiếp một `String` mã ngôn ngữ.
-
----
-
-## 6. Bố cục package và quy tắc đặt tên
+## 5. Bố cục package và quy tắc đặt tên
 
 ```
 packages/domain/<name>/
@@ -337,7 +305,7 @@ Dòng `const Class._()` là bắt buộc. Thiếu nó, Freezed không sinh đư�
 
 ---
 
-## 7. Thêm mới vào tầng Domain
+## 6. Thêm mới vào tầng Domain
 
 ```bash
 # 1. Sinh khung package (tạo thư mục + đăng ký workspace member)

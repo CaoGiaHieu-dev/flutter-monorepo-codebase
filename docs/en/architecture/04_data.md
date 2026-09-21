@@ -54,7 +54,6 @@ Current packages:
 |:---|:---|
 | `data_core` | `IBaseRepository`, `BaseModel`, request models, the cache sample |
 | `data_auth` | `UserModel`, auth data sources, `AuthRepositoryImpl` |
-| `data_language` | `LanguageRepositoryImpl` (sample, see §7) |
 
 ---
 
@@ -402,46 +401,7 @@ The three connected behaviours:
 
 This is what closes the loop with `core_network`'s 401 refresh interceptor. See [the networking guide](../guides/08_networking.md).
 
----
-
-## 7. `data_language` — sample only
-
-```dart
-@LazySingleton(as: ILanguageRepository)
-class LanguageRepositoryImpl extends IBaseRepository
-    implements ILanguageRepository {
-  LanguageRepositoryImpl(this._storageManager);
-
-  final StorageManager _storageManager;
-
-  late final _locale = StorageValue<String>(
-    _storageManager.getStorage(StorageType.pref),
-    LanguageStorageKeys.LOCALE,
-  );
-
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async => _locale.readFromStorage();
-
-  @override
-  Result<String> getLanguage() {
-    return executeSync<String, String>(() {
-      final language = _locale.value;
-      if (language != null) return language;
-      return AppConfig.defaultLanguage.languageCode;
-    });
-  }
-  // …
-}
-```
-
-Two things to notice:
-
-1. **`executeSync`, not `execute`** — reading a hydrated `StorageValue` is synchronous, so `Result<String>` comes back without a `Future`.
-2. **It shares the physical key `'locale'` with `LanguageStorageImpl` in the app shell**, and the file says so in a comment. The app shell's copy is the one the Settings UI actually uses; this repository is the unused domain path (see [Domain layer §5](03_domain.md#5-domain_language--a-stub-and-why-it-stays)). Two independent `StorageValue` instances over one key are not kept in sync — acceptable only because one of them is dead code.
-
----
-
-## 8. Writing a new repository
+## 7. Writing a new repository
 
 ```dart
 @LazySingleton(as: IPaymentRepository)

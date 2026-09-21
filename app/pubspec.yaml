@@ -58,10 +58,6 @@ dependencies:
     path: ../packages/data/core
   data_auth:
     path: ../packages/data/auth
-  domain_language:
-    path: ../packages/domain/language
-  data_language:
-    path: ../packages/data/language
   # external packages
   material_ui: ^1.1.1
   cupertino_icons: ^1.0.9

@@ -213,15 +213,12 @@ The fields are `private` + `late final`: nobody outside the class can reach the 
 | Owner | Package | Key(s) | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `LanguageRepositoryImpl` | `data_language` | `locale` | `pref` |
 | `ThemeStorageImpl` | app shell (`app/lib/di/`) | `themeMode` | `pref` |
 | `LanguageStorageImpl` | app shell (`app/lib/di/`) | `locale` | `pref` |
 | `AppBootStorage` | app shell (`app/lib/di/`) | `viewed_onboard` | `pref` |
 
 App-shell key classes live in `app/lib/di/utils/`.
 
-> [!NOTE]
-> `locale` appears twice on purpose. `LanguageRepositoryImpl` is the Domain-path sample (`domain_language`), while `LanguageStorageImpl` is what the live Settings UI actually uses via `LanguageProvider`. They read the same physical key but are independent instances; see [`10_cross_feature.md`](10_cross_feature.md) for why the UI path bypasses Domain.
 
 ---
 

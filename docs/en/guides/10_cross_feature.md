@@ -213,10 +213,6 @@ so routing theme through it is impossible by construction — not a shortcut, a 
 The implementation lives in the app shell (`app/lib/di/theme_storage_impl.dart`) because that is
 where `core_base_ui`'s provider and `core_storage`'s mechanism meet without creating a cycle.
 
-> [!NOTE]
-> `domain_language` exists and defines language use cases, but the Settings UI does **not** use
-> them — it uses `LanguageProvider` through this bypass, for exactly the reason above.
-> `domain_language` is kept as a reference for a future API-backed locale, not as live code.
 
 ---
 

@@ -12,7 +12,7 @@ Use this skill when requested to: "create a new business flow/API call to displa
 ## 🧭 Layer rules you must not break
 
 - **Domain is the centre and depends on nothing.** `domain_core` has **zero** workspace
-  dependencies and no `flutter` entry in its pubspec; `domain_auth` / `domain_language`
+  dependencies and no `flutter` entry in its pubspec; `domain_auth`
   depend only on `domain_core`. Never add `flutter`, `dio`, `retrofit`, `drift` or a `core_*`
   package to a domain pubspec.
 - `AppFailure` lives in **`domain_core`** (`packages/domain/core/lib/src/failures/`). It is

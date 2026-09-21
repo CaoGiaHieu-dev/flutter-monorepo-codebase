@@ -213,15 +213,12 @@ Các field là `private` + `late final`: bên ngoài class không chạm đượ
 | Owner | Package | Key | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `LanguageRepositoryImpl` | `data_language` | `locale` | `pref` |
 | `ThemeStorageImpl` | app shell (`app/lib/di/`) | `themeMode` | `pref` |
 | `LanguageStorageImpl` | app shell (`app/lib/di/`) | `locale` | `pref` |
 | `AppBootStorage` | app shell (`app/lib/di/`) | `viewed_onboard` | `pref` |
 
 Class key của app shell nằm ở `app/lib/di/utils/`.
 
-> [!NOTE]
-> `locale` xuất hiện hai lần là **có chủ đích**. `LanguageRepositoryImpl` là mẫu đi theo đường Domain (`domain_language`), còn `LanguageStorageImpl` mới là thứ UI Settings đang dùng thật qua `LanguageProvider`. Chúng đọc cùng một key vật lý nhưng là hai instance độc lập; xem [`10_cross_feature.md`](10_cross_feature.md) để hiểu vì sao đường UI bỏ qua Domain.
 
 ---
 

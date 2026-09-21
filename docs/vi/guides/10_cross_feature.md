@@ -213,11 +213,6 @@ theme đi qua nó là bất khả thi về mặt cấu trúc — đây là ràng
 Implementation nằm ở app shell (`app/lib/di/theme_storage_impl.dart`) vì đó là nơi provider của
 `core_base_ui` và cơ chế của `core_storage` gặp nhau mà không tạo thành vòng phụ thuộc.
 
-> [!NOTE]
-> `domain_language` có tồn tại và có định nghĩa use case ngôn ngữ, nhưng UI Settings **không** dùng
-> chúng — nó dùng `LanguageProvider` qua đường bypass này, đúng vì lý do nêu trên.
-> `domain_language` được giữ như tài liệu tham khảo cho trường hợp locale lấy từ API sau này, không
-> phải code đang chạy.
 
 ---
 

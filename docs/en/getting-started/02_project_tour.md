@@ -66,7 +66,6 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | :--- | :--- | :--- |
 | `domain_core` | `packages/domain/core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, cache entry entity/usecases |
 | `domain_auth` | `packages/domain/auth` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
-| `domain_language` | `packages/domain/language` | `ILanguageRepository`, `GetLanguageUseCase`, `SetLanguageUseCase` |
 
 ### Data — `packages/data/*`
 
@@ -76,7 +75,6 @@ Implements the domain contracts. Data sources return **Models**, never entities,
 | :--- | :--- | :--- |
 | `data_core` | `packages/data/core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, cache data source + repository |
 | `data_auth` | `packages/data/auth` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
-| `data_language` | `packages/data/language` | `LanguageRepositoryImpl` (owns the `locale` key), `LanguageStorageKeys` |
 
 ### Features — `packages/features/*`
 

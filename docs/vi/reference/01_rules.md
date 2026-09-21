@@ -23,7 +23,6 @@
 |---|---|---|
 | `domain_core` | **không có** | không |
 | `domain_auth` | `domain_core` | không |
-| `domain_language` | `domain_core` | không |
 
 ### Ngoại lệ hướng lên được duyệt
 
@@ -146,7 +145,6 @@ Các owner hiện có:
 | Owner | Package | Key | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `LanguageRepositoryImpl` | `data_language` | `locale` | pref |
 | `ThemeStorageImpl` | app shell | `themeMode` | pref |
 | `LanguageStorageImpl` | app shell | `locale` | pref |
 | `AppBootStorage` | app shell | `viewed_onboard` | pref |

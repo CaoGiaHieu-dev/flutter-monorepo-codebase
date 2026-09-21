@@ -53,13 +53,18 @@ Steps are sequenced so each one leaves the repo building. Do not batch them.
 | Step | Name | Blocked by | Reversible? |
 |:--|:--|:--|:--|
 | 1 | Machine-enforce removability (**done**) | — | yes |
-| 2 | Empty `core_di` of product names | 1 | yes |
-| 3 | Split `core_common` | — | yes |
-| 4 | Shrink the samples | 2 | no (deletes code) |
+| 2 | Shrink the samples (**done**) | 1 | no (deletes code) |
+| 3 | Empty `core_di` of product names | 2 | yes |
+| 4 | Split `core_common` | — | yes |
 | 5 | Rename + relayout to `platform/` + `modules/` | 3, 4 | no |
 | 6 | Manifest + `composer` | 5 | yes |
 | 7 | Second app (`admin`) | 6 | yes |
 | 8 | Submodules + CODEOWNERS | 7 | no |
+
+> **Revised after step 1.** Shrinking the samples now comes *before* emptying `core_di`.
+> The original order had step 3 carefully migrating contracts —
+> `OnboardingNavigator`, `IAppSplashScreen`, `DashboardRouteModule` — that step 2 then
+> deletes. Deleting first makes the contract cleanup a much smaller job.
 
 ---
 
@@ -217,4 +222,18 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 
 | Date | Step | What landed | Gate run? |
 |:--|:--|:--|:--|
-| 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run — no Flutter toolchain in the authoring environment. **Run `dart tools/arch_check/check.dart` before merging.** |
+| 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
+| 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
+| 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |
+
+### Accumulated gates — run these before merging
+
+```bash
+dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
+dart tools/arch_check/check.dart              # R1–R8
+flutter analyze
+cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+```
+
+Codegen is **required** after step 2a: deleting two packages changes
+`app/lib/di/injection.config.dart`, which is gitignored and therefore not in this commit.

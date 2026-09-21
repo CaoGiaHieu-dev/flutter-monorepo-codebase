@@ -22,7 +22,6 @@ Before writing code, answer: **which package owns this value?**
 | Value | Owner | Keys file |
 | :--- | :--- | :--- |
 | Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `packages/data/auth/lib/src/utils/auth_storage_keys.dart` |
-| Locale (business path) | `data_language` → `LanguageRepositoryImpl` | `packages/data/language/lib/src/utils/language_storage_keys.dart` |
 | Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `app/lib/di/utils/theme_storage_keys.dart` |
 | Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `app/lib/di/utils/language_storage_keys.dart` |
 | Onboarding-seen boot flag | app shell → `AppBootStorage` | `app/lib/di/utils/app_boot_storage_keys.dart` |

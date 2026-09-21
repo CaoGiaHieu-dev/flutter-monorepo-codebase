@@ -23,7 +23,6 @@ This is the **lookup** copy. For step-by-step instructions see [`../guides/`](..
 |---|---|---|
 | `domain_core` | **none** | no |
 | `domain_auth` | `domain_core` | no |
-| `domain_language` | `domain_core` | no |
 
 ### Approved upward exceptions
 
@@ -146,7 +145,6 @@ Current owners:
 | Owner | Package | Keys | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `LanguageRepositoryImpl` | `data_language` | `locale` | pref |
 | `ThemeStorageImpl` | app shell | `themeMode` | pref |
 | `LanguageStorageImpl` | app shell | `locale` | pref |
 | `AppBootStorage` | app shell | `viewed_onboard` | pref |

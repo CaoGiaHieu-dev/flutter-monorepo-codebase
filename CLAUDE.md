@@ -160,7 +160,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 - **FORBIDDEN imports:** `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, **and any `core_*` package**
 - **Allowed imports:** `dart:*`, `domain_core` (`Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`, `get_it`
-- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth`/`domain_language` depend only on `domain_core`. Verify: `grep -rn "package:flutter" packages/domain/*/lib` must print nothing
+- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth` depends only on `domain_core`. Verify: `grep -rn "package:flutter" packages/domain/*/lib` must print nothing
 - `AppFailure` lives in `domain_core` (`lib/src/failures/`) — it is part of the `Result` contract. Moving it there is what let Domain drop `core_common`
 - Domain constants live in the domain package's own `utils/` (e.g. `DomainConstants`) — never in `core_common`
 - Components: `entities/` (Freezed immutable), `params/`, `repositories/` (interfaces), `usecases/` (`@injectable`, returns `Result<T>`), `utils/`, `services/` (optional)
@@ -197,8 +197,8 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
   externalPackageModulesBefore: [..._coreModules],  // core_common, network, notifications, storage, di
   externalPackageModulesAfter: [
     ..._uiModules,       // CoreBaseUiPackageModule (depends on app-local storage interfaces)
-    ..._domainModules,   // domain_core, domain_auth, domain_language
-    ..._dataModules,     // data_core, data_auth, data_language
+    ..._domainModules,   // domain_core, domain_auth
+    ..._dataModules,     // data_core, data_auth
     ..._featureModules,  // feature_auth, feature_dashboard, feature_home, etc.
     ..._otherModules,    // ProviderStateManagementPackageModule, BlocStateManagementPackageModule
   ],

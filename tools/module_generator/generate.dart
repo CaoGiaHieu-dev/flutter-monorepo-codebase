@@ -151,8 +151,11 @@ void main(List<String> args) async {
 
     // 7. Register in App shell
     stdout.writeln('[!] Đang đăng ký vào app shell...');
-    CommonHelpers.registerInAppPubspec(config.moduleName, config.modulePath);
-    CommonHelpers.registerInAppInjection(config.moduleName);
+    CommonHelpers.registerInAppManifests(
+      config.moduleName,
+      config.type,
+      config.nameInput,
+    );
 
     // 8. Run dependency_sync.dart
     stdout.writeln('[!] Đang đồng bộ dependencies với dependency_sync...');

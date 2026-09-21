@@ -232,92 +232,115 @@ class CommonHelpers {
     File('$modulePath/.gitignore').writeAsStringSync(content);
   }
 
-  static void registerInAppPubspec(String moduleName, String modulePath) {
-    final appPubspec = File('app/pubspec.yaml');
-    if (!appPubspec.existsSync()) return;
-
-    final lines = appPubspec.readAsLinesSync();
-    if (lines.any((line) => line.trim().startsWith('$moduleName:'))) return;
-
-    final insertIndex = lines.indexWhere(
-      (line) => line.contains('# external packages'),
-    );
-    if (insertIndex != -1) {
-      lines.insert(insertIndex, '  $moduleName:\n    path: ../$modulePath');
-      appPubspec.writeAsStringSync('${lines.join('\n')}\n');
-      stdout.writeln('  -> Đã thêm $moduleName vào app/pubspec.yaml');
+  /// Adds the new module to every app manifest, then leaves the wiring alone.
+  ///
+  /// This used to patch `app/pubspec.yaml` and `app/lib/di/injection.dart`
+  /// directly. Both now live between `composer:managed` markers, so writing
+  /// into them by hand puts the tree straight into the drift that
+  /// `composer verify` fails CI on — and the marker text the old code looked
+  /// for (`externalPackageModulesBefore: [`) no longer exists, so it had
+  /// silently stopped working.
+  ///
+  /// The manifest is the only hand-edited input now; `composer sync`
+  /// regenerates the rest.
+  static void registerInAppManifests(
+    String packageName,
+    ModuleType moduleType,
+    String moduleName,
+  ) {
+    final manifests = _findManifests(Directory('.'));
+    if (manifests.isEmpty) {
+      stdout.writeln(
+        '  !! Không tìm thấy app_manifest.yaml — bỏ qua bước ghép vào app.',
+      );
+      return;
     }
+
+    // `feature` / `domain` / `data` are layers of a module; a core or custom
+    // package is a platform package that joins a DI group directly.
+    final layer = switch (moduleType) {
+      ModuleType.feature => 'feature',
+      ModuleType.domain => 'domain',
+      ModuleType.data => 'data',
+      ModuleType.core || ModuleType.custom => null,
+    };
+
+    for (final manifest in manifests) {
+      final lines = manifest.readAsLinesSync();
+      if (lines.any((l) => l.contains(packageName))) continue;
+
+      if (layer != null) {
+        _addModuleLayer(lines, moduleName, layer);
+      } else {
+        _addPlatformPackage(lines, packageName);
+      }
+      manifest.writeAsStringSync('${lines.join('\n')}\n');
+      stdout.writeln('  -> Đã thêm vào ${manifest.path}');
+    }
+
+    stdout.writeln('');
+    stdout.writeln('  Chạy tiếp để sinh lại phần ghép nối:');
+    stdout.writeln('    dart tools/composer/composer.dart sync');
   }
 
-  static void registerInAppInjection(String moduleName) {
-    final file = File('app/lib/di/injection.dart');
-    if (!file.existsSync()) return;
-
-    final lines = file.readAsLinesSync();
-    final pascalName = toPascalCase(moduleName);
-
-    if (lines.any((line) => line.contains('${pascalName}PackageModule')))
-      return;
-
-    final importLine = "import 'package:$moduleName/di/module.module.dart';";
-    final lastPackageImportIndex = lines.lastIndexWhere(
-      (line) => line.startsWith("import 'package:"),
+  /// `- { id: <name>, layers: [...] }` — appended, or extended if present.
+  static void _addModuleLayer(
+    List<String> lines,
+    String moduleName,
+    String layer,
+  ) {
+    final existing = lines.indexWhere(
+      (l) => l.trimLeft().startsWith('- { id: $moduleName,'),
     );
-    if (lastPackageImportIndex != -1) {
-      lines.insert(lastPackageImportIndex + 1, importLine);
-    } else {
-      lines.insert(0, importLine);
-    }
-
-    String targetListName = '_otherModules';
-    if (moduleName.startsWith('feature_'))
-      targetListName = '_featureModules';
-    else if (moduleName.startsWith('domain_'))
-      targetListName = '_domainModules';
-    else if (moduleName.startsWith('data_'))
-      targetListName = '_dataModules';
-    else if (moduleName.startsWith('core_'))
-      targetListName = '_coreModules';
-
-    final listStartIndex = lines.indexWhere(
-      (line) => line.contains('const $targetListName = ['),
-    );
-
-    if (listStartIndex != -1) {
-      int insertIndex = listStartIndex + 1;
-      while (insertIndex < lines.length && !lines[insertIndex].contains('];')) {
-        insertIndex++;
-      }
-      lines.insert(
-        insertIndex,
-        '  ExternalModule(${pascalName}PackageModule),',
-      );
-    } else {
-      final initIndex = lines.indexWhere(
-        (line) => line.contains('@InjectableInit('),
-      );
-      if (initIndex != -1) {
-        lines.insertAll(initIndex, [
-          'const $targetListName = [',
-          '  ExternalModule(${pascalName}PackageModule),',
-          '];',
-          '',
-        ]);
-
-        final externalIndex = lines.indexWhere(
-          (line) => line.contains('externalPackageModulesBefore: ['),
-          initIndex,
+    if (existing != -1) {
+      if (!lines[existing].contains(layer)) {
+        lines[existing] = lines[existing].replaceFirst(
+          'layers: [',
+          'layers: [$layer, ',
         );
-        if (externalIndex != -1) {
-          lines.insert(externalIndex + 1, '    ...$targetListName,');
+      }
+      return;
+    }
+    final modulesIndex = lines.indexWhere((l) => l.trimRight() == 'modules:');
+    if (modulesIndex == -1) return;
+    var insertAt = modulesIndex + 1;
+    while (insertAt < lines.length &&
+        lines[insertAt].trimLeft().startsWith('- ')) {
+      insertAt++;
+    }
+    lines.insert(insertAt, '  - { id: $moduleName, layers: [$layer] }');
+  }
+
+  /// A platform package joins the `core` DI group, or `extra_dependencies`
+  /// when it ships no `@InjectableInit.microPackage()`.
+  static void _addPlatformPackage(List<String> lines, String packageName) {
+    final anchor = lines.indexWhere((l) => l.trimRight() == '    packages:');
+    if (anchor == -1) return;
+    var insertAt = anchor + 1;
+    while (insertAt < lines.length &&
+        lines[insertAt].trimLeft().startsWith('- ')) {
+      insertAt++;
+    }
+    lines.insert(insertAt, '      - $packageName');
+  }
+
+  static List<File> _findManifests(Directory dir) {
+    final out = <File>[];
+    const skip = {'.git', '.dart_tool', 'build', 'packages', 'modules'};
+    void walk(Directory d) {
+      for (final e in d.listSync(followLinks: false)) {
+        final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
+        if (e is Directory) {
+          if (skip.contains(name) || name.startsWith('.')) continue;
+          walk(e);
+        } else if (e is File && name == 'app_manifest.yaml') {
+          out.add(e);
         }
       }
     }
 
-    file.writeAsStringSync('${lines.join('\n')}\n');
-    stdout.writeln(
-      '  -> Đã đăng ký ${pascalName}PackageModule vào app/lib/di/injection.dart ($targetListName)',
-    );
+    walk(dir);
+    return out;
   }
 
   static void createL10nScaffold(

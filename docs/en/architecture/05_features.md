@@ -270,7 +270,7 @@ All user-facing text is translated; hardcoded strings are forbidden. See [locali
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-The generator creates the package, adds it to the workspace, and registers its DI module in `app/lib/di/injection.dart`. Then:
+The generator creates the package and adds it to every `app_manifest.yaml`. It no longer touches `app/pubspec.yaml`, the root workspace list or `app/lib/di/injection.dart`. Then:
 
 ```bash
 dart tools/barrel_generator/generate.dart packages/features/profile/lib

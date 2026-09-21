@@ -21,8 +21,14 @@ const String _manifestPath = 'tools/sample_manifest.yaml';
 /// Snapshotted before the first mutation so a failure partway through restores
 /// them rather than leaving a workspace that references a deleted package.
 /// Same contract as `CommonHelpers.sharedMutatedFiles` in the module generator.
+/// `app_manifest.yaml` is the one that matters now: the other three are
+/// generated between `composer:managed` markers, so removing lines from them
+/// only holds until the next `composer sync`. They stay in the list so the tree
+/// is consistent the moment this tool finishes, rather than referencing a
+/// package that no longer exists until someone runs the generator.
 const List<String> _sharedMutatedFiles = [
   'pubspec.yaml',
+  'app/app_manifest.yaml',
   'app/pubspec.yaml',
   'app/lib/di/injection.dart',
 ];
@@ -185,7 +191,7 @@ Future<void> _removeBundle({
   // --- 2. Shared file edits ------------------------------------------------
   stdout.writeln('');
   stdout.writeln('Sửa file dùng chung:');
-  final edits = _planSharedEdits(pkgNames, packages);
+  final edits = _planSharedEdits(pkgNames, packages, bundleName: bundleName);
   if (edits.isEmpty) {
     stdout.writeln('  (không có dòng nào khớp)');
   }
@@ -273,6 +279,7 @@ Future<void> _removeBundle({
 
   stdout.writeln('');
   stdout.writeln('Xong. Bước tiếp theo:');
+  stdout.writeln('  dart tools/composer/composer.dart sync');
   stdout.writeln('  flutter pub get');
   stdout.writeln('  dart run build_runner build -d --workspace');
   stdout.writeln('  flutter analyze');
@@ -292,7 +299,11 @@ class _FileEdit {
 /// Line-oriented rather than YAML/AST-aware on purpose: these files carry
 /// comments and grouping that a re-serialise would flatten, and the module
 /// generator already edits them the same way.
-List<_FileEdit> _planSharedEdits(List<String> pkgNames, YamlMap packages) {
+List<_FileEdit> _planSharedEdits(
+  List<String> pkgNames,
+  YamlMap packages, {
+  required String bundleName,
+}) {
   final edits = <_FileEdit>[];
 
   final paths = <String, String>{};
@@ -326,6 +337,10 @@ List<_FileEdit> _planSharedEdits(List<String> pkgNames, YamlMap packages) {
           drop = true;
         }
 
+        // app_manifest.yaml: `      - core_foo` in a di_group or
+        // `extra_dependencies`.
+        if (RegExp('^\\s+-\\s+$name\\s*\$').hasMatch(line)) drop = true;
+
         // app/pubspec.yaml: `  feature_auth:` followed by `    path: ...`
         if (RegExp('^\\s{2}$name:\\s*\$').hasMatch(line)) {
           drop = true;
@@ -335,6 +350,11 @@ List<_FileEdit> _planSharedEdits(List<String> pkgNames, YamlMap packages) {
             i++; // consume the path line with it
           }
         }
+      }
+
+      // app_manifest.yaml: `  - { id: auth, layers: [domain, data, feature] }`
+      if (RegExp('^\\s*-\\s*\\{\\s*id:\\s*$bundleName\\s*,').hasMatch(line)) {
+        drop = true;
       }
 
       if (drop) {

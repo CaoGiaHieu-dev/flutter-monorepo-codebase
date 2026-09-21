@@ -270,7 +270,7 @@ Mọi văn bản hiển thị cho người dùng đều phải dịch; hardcode 
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-Generator tạo package, thêm vào workspace, và đăng ký DI module của nó trong `app/lib/di/injection.dart`. Sau đó:
+Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó không còn đụng `app/pubspec.yaml`, danh sách workspace ở root hay `app/lib/di/injection.dart`. Sau đó:
 
 ```bash
 dart tools/barrel_generator/generate.dart packages/features/profile/lib

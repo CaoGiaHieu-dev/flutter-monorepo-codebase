@@ -248,13 +248,49 @@ is what CI runs, so a release can never silently drop a module.
 
 **Gate:** `generate module demo && composer sync` produces a running app with zero hand edits.
 
-### Step 7 — Second app
+### Step 7 — Second app  *(7a done: ownership; 7b blocked on the shell extraction)*
 
-`apps/admin` (Flutter Web, sidebar shell) from the same modules. `AppConfig.appFlavor` — a
-global reading `services.appFlavor` — becomes an injected `IAppEnvironment`. CI becomes a
-matrix.
+`apps/admin` composing a **different subset** of the same modules is the only real test of the
+composition design — and the direct answer to whether a team can detach and reattach modules
+freely. An admin app with auth + settings and no dashboard, splash or onboarding exercises every
+`getItOrNull` / `getAllOrEmpty` fallback at once, permanently, in-repo.
 
-**Gate:** one workspace builds both `mobile` and `admin` from one set of modules.
+#### 7b — extract the shell first (prerequisite)
+
+A second app today means copying **1,369 lines across 24 files**. That is not a second app, it is
+a fork. The shell has to become a package before `apps/admin` is worth writing.
+
+The good news, measured rather than assumed: after step 3c the shell imports **no module at all**
+outside `injection.dart`, and only two files reference `configureDependencies`. The split is
+therefore clean:
+
+| Stays in `apps/<id>/lib/` | Moves to `platform/app_shell/` |
+|:--|:--|
+| `main.dart` — entrypoint and flavor | `main_scope.dart`, `app.dart` |
+| `di/injection.dart` — `@InjectableInit`, must live in the app package so `injection.config.dart` is generated for it | all of `presentation/` (router, material wrapper, root app, the two providers, the two widgets) |
+| | `di/` storage adapters + `network_config_impl.dart` + `network_binding_module.dart` + `di/utils/` keys |
+
+Keeping the same folder layout inside the package leaves every relative import untouched; only
+`main.dart`'s four imports become `package:platform_app_shell/...`.
+
+Two things the move must get right:
+
+1. **Its own `@InjectableInit.microPackage()`.** The storage adapters are `@LazySingleton`, so
+   without a module nothing registers them.
+2. **DI group order.** `core_base_ui` depends on `ILanguageStorage` / `IThemeStorage`, so the new
+   group sits between `core` and `ui` in each `app_manifest.yaml`. Get this wrong and boot throws
+   `"<Type> is not registered"` — invisible to `flutter analyze` (AGENTS §18).
+
+#### 7c — then the app itself
+
+`AppConfig.appFlavor` — a global reading `services.appFlavor` — becomes an injected
+`IAppEnvironment`, because two apps cannot share one global flavor. CI becomes a matrix. The app
+package is also renamed `mobile_app` at this point: nothing imports `package:app/`, so the rename
+is nearly free, but injectable writes the package name into generated code and that wants a
+toolchain to confirm.
+
+**Gate:** one workspace builds both `mobile` and `admin` from one set of modules, and the admin
+build contains no `feature_dashboard`, `feature_splash` or `feature_onboarding`.
 
 ### Step 8 — Submodules
 
@@ -351,6 +387,28 @@ Doing neither is the only wrong answer: today it is product code wearing framewo
 | 2026-09-21 | 9 | **Docs accuracy is now machine-held.** Built `tools/docs_check` (CI **Gate 5**): resolves every repo path the docs name — backticked spans anchored to a real top-level directory, and markdown links resolved relative to their own file. 70 documents, ~1 300 references, 0 dead. Fixed three genuine drifts (`feature_auth` was said to ship `assets/images`, it ships `assets/language/`; a promised `07_backend_boundary.md` that the backend-out-of-scope decision made moot; a `generate.dart:90-101` line citation whose lines now hold unrelated code). 14 correctly-absent paths moved to `tools/docs_check/allowlist.txt`, each with its reason. The audit also surfaced a real hole: `apps/mobile/env.prod` and `apps/mobile/android/keystore.jks` — one the setup guide tells every user to create, the other written into the tree by CI — were **not gitignored**; both now are. | ⚠️ not run |
 | 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |
 
+### What was verified here, and what was not
+
+There is no Dart or Flutter toolchain in the environment these changes were made in, so every
+claim below is the result of a mechanical check over the tree, not a build. Nine checks, all
+clean at the last commit:
+
+| # | Check | Catches |
+|--:|:--|:--|
+| 1 | every `path:` dependency resolves, and the package there has the declared name | a move that missed a pubspec |
+| 2 | every relative `import` / `export` / `part` target exists | a file moved without its referrers |
+| 3 | every `package:` import is declared in that package's pubspec | the failure Pub Workspaces hide until extraction |
+| 4 | no `platform/*` declares a product module (R1) | the dependency direction inverting |
+| 5 | no domain package imports Flutter, Dio, Retrofit or a `core_*` (R2) | the pure-Dart mandate |
+| 6 | no feature imports another feature or a data package (R3) | module isolation |
+| 7 | no app file outside `injection.dart` imports a module (R10) | removability silently becoming false |
+| 8 | every `context.l10nX.key` exists in that package's ARB | a rename that missed a call site |
+| 9 | the root `workspace:` list matches disk exactly, both directions | a package that resolves but is not a member |
+
+What they cannot see is everything a type-checker would: a wrong argument type, a missing
+`@override`, a Freezed companion that no longer exists. **The four commands below are still the
+real gate** — nothing here substitutes for them.
+
 ### Accumulated gates — run these before merging
 
 ```bash
@@ -358,12 +416,17 @@ dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
 # NOTE: `data_core` no longer imports Flutter anywhere in lib/. Its pubspec still
 # declares `flutter: sdk: flutter`; confirm whether drift/core_database still need
 # it before removing — this was not verifiable without a toolchain.
-dart tools/arch_check/check.dart              # R1–R9
+dart tools/arch_check/check.dart              # R1–R10
 dart tools/composer/composer.dart verify      # Gate 0
 dart tools/docs_check/check.dart              # Gate 5
 flutter analyze
 cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
+
+Codegen is **required** before analyze: several packages changed shape (`UserEntity` lost three
+fields, `UserModel` gained one, `AuthRepositoryImpl` changed its constructor, a new
+`IAuthSessionGateway` implementation appeared), and all of those live in `.freezed.dart` /
+`.config.dart` files that are gitignored and therefore not in any commit here.
 
 Codegen is **required** after step 2a: deleting two packages changes
 `apps/mobile/lib/di/injection.config.dart`, which is gitignored and therefore not in this commit.

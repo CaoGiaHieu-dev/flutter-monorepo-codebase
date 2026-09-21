@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-
-import 'api_status_constants.dart';
+// `ApiStatusConstants` moved to platform_kernel.
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// Utility class for downloading images from URLs.
 class DownloadImage {

@@ -39,10 +39,10 @@ class HomePage extends StatelessWidget {
                         fontSize: context.sp(14),
                       ),
                     ),
-                    if (user?.name != null) ...[
+                    if (user?.displayName != null) ...[
                       SizedBox(height: context.h(8)),
                       Text(
-                        user!.name!,
+                        user!.displayName!,
                         style: TextStyle(fontSize: context.sp(12)),
                       ),
                     ],

@@ -41,52 +41,43 @@ void main() async {
 
   // 4. Generating localization
   stdout.writeln('[!] Generating localization for all packages...');
-  final packagesDir = Directory('packages');
-  if (packagesDir.existsSync()) {
-    final l10nFiles = packagesDir
-        .listSync(recursive: true)
-        .where((e) => e is File && e.path.endsWith('l10n.yaml'));
+  // Scanned from the repository root, not from a hardcoded `packages/`: a
+  // package that lives anywhere else still needs its ARBs generated, and
+  // missing one fails later with an unresolved `AppLocalizations`.
+  final l10nFiles = _findFiles(Directory('.'), 'l10n.yaml');
 
-    if (l10nFiles.isEmpty) {
-      stdout.writeln('    - No l10n.yaml found in packages.');
-    } else {
-      for (final file in l10nFiles) {
-        final pkgDir = file.parent.path;
-        stdout.writeln('    - Generating for: $pkgDir');
-        await _runCommand(flutterCmd, [
-          ...flutterArgs,
-          'gen-l10n',
-        ], workingDirectory: pkgDir);
-      }
+  if (l10nFiles.isEmpty) {
+    stdout.writeln('    - No l10n.yaml found.');
+  } else {
+    for (final file in l10nFiles) {
+      final pkgDir = file.parent.path;
+      stdout.writeln('    - Generating for: $pkgDir');
+      await _runCommand(flutterCmd, [
+        ...flutterArgs,
+        'gen-l10n',
+      ], workingDirectory: pkgDir);
     }
   }
 
-  // 5. Building code generation
-  stdout.writeln('[!] Building code generation...');
-  final buildRunnerArgs = hasFvmConfig
-      ? [
-          'dart',
-          'run',
-          'build_runner',
-          'build',
-          '--delete-conflicting-outputs',
-          '--workspace',
-        ]
-      : [
-          'run',
-          'build_runner',
-          'build',
-          '--delete-conflicting-outputs',
-          '--workspace',
-        ];
-  await _runCommand(dartCmd, buildRunnerArgs);
-
-  // 6. Generate barrel file
-  await _runCommand(dartCmd, [
-    ...dartArgs,
-    'tools/barrel_generator/generate.dart',
-    'packages',
-  ]);
+  // 6. Generate barrel files — one package at a time.
+  //
+  // This used to pass `packages` as a single argument. The generator emits a
+  // barrel for whatever directory it is handed, so that produced
+  // `packages/packages.dart`, `packages/core/core.dart` and
+  // `packages/core/database/database.dart` — files sitting outside every
+  // `lib/`, which nothing can import and which nobody noticed. They were
+  // deleted; this is what stops them coming back.
+  stdout.writeln('[!] Generating barrel files per package...');
+  for (final pubspec in _findFiles(Directory('.'), 'pubspec.yaml')) {
+    final pkgDir = pubspec.parent.path;
+    final lib = Directory('$pkgDir/lib');
+    if (!lib.existsSync()) continue;
+    await _runCommand(dartCmd, [
+      ...dartArgs,
+      'tools/barrel_generator/generate.dart',
+      lib.path,
+    ]);
+  }
 
   stdout.writeln('==========================================');
   stdout.writeln('[V] Configuration completed successfully!');
@@ -113,4 +104,36 @@ Future<void> _runCommand(
     );
     exit(exitCode);
   }
+}
+
+/// Every file named [fileName] under [dir], skipping build output and
+/// platform folders.
+List<File> _findFiles(Directory dir, String fileName) {
+  final out = <File>[];
+  const skip = {
+    '.git',
+    '.dart_tool',
+    'build',
+    'ios',
+    'android',
+    'macos',
+    'windows',
+    'linux',
+    'web',
+    'node_modules',
+  };
+  void walk(Directory d) {
+    for (final e in d.listSync(followLinks: false)) {
+      final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
+      if (e is Directory) {
+        if (skip.contains(name) || name.startsWith('.')) continue;
+        walk(e);
+      } else if (e is File && name == fileName) {
+        out.add(e);
+      }
+    }
+  }
+
+  walk(dir);
+  return out;
 }

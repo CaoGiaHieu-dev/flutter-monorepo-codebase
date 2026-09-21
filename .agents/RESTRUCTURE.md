@@ -178,12 +178,26 @@ dependencies, not leftovers.
 
 **Gate:** `arch_check` R9 clean. Full verify chain passes.
 
-### Step 6 — Relayout
+### Step 6 — Relayout  *(6a done)*
 
-Physical move, no behaviour change. `packages/core/*` → `platform/*`;
-`packages/{domain,data,features}/<name>` → `modules/<name>/<name>_{domain,data,feature}`;
-`app/` → `apps/mobile/`. Update `tools/barrel_generator`, `tools/unused_checker`,
-`tools/workspace_setup` — all three scan a hard-coded `packages/` today.
+✅ **6a — the tooling stopped caring where packages live.** Prerequisite, and worth more than
+the move itself:
+
+| Tool | Was | Now |
+|:--|:--|:--|
+| `arch_check` `_layerOf` | split the path on `packages` | derived from the **package name** |
+| `monorepo_helper` | four hardcoded directories | recursive scan for `pubspec.yaml` |
+| `workspace_setup` | scanned `packages/` for `l10n.yaml` | scans from the repository root |
+| `unused_checker` ×2 | classified by path prefix | resolves against the discovered package list |
+
+`arch_check` was the dangerous one: a package outside `packages/` resolved to layer `''`, so
+R1, R2 and R3 **silently passed** for it. A guardrail that switches itself off when files move
+is worse than none, because the report still reads clean.
+
+⏳ **6b — the move itself** (`packages/core/*` → `platform/*`,
+`packages/{domain,data,features}/<x>` → `modules/<x>/{domain,data,feature}`,
+`app/` → `apps/mobile/`) is now a pure `git mv` plus `composer sync`: nothing in the tooling,
+and nothing in any manifest, encodes a directory any more.
 
 **Gate:** the app boots with **zero modules** composed. This is the property everything else
 depends on, tested directly.
@@ -253,6 +267,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
 | 2026-09-21 | 4a | Extracted `platform_kernel` (27 files, 7 deps, no Flutter) from `core_common` (20 → 16 deps). `ErrorHandler` lost its last Flutter import (`kDebugMode` → `dart.vm.product`). Added `arch_check` **R9** — pure-Dart tier checked in the **pubspec** as well as imports. Approved edge `core_common → domain_core` became `platform_kernel → domain_core`. Deleted three stray barrel files outside any `lib/`. | ⚠️ not run |
+| 2026-09-21 | 6a | Made the tooling layout-independent: `arch_check` derives the layer from the package name, `monorepo_helper` discovers packages by scanning, `workspace_setup` scans from the root, both unused-checkers resolve packages by discovery. Fixed `workspace_setup` running `barrel_generator` against the whole `packages/` directory instead of each package's `lib/` — the cause of the three stray barrel files deleted in 4a. | ⚠️ not run |
 | 2026-09-21 | 5 | Built `tools/composer`. `app/app_manifest.yaml` is now the source of truth for the root `workspace:` list, the app's path dependencies and `injection.dart`; all three are generated between `composer:managed` markers. Added CI **Gate 0** (`composer verify`). Two bugs caught by diffing generated output against the hand-written files: the micro-package probe matched `@InjectableInit.microPackage()` with parentheses and silently dropped the three packages that pass arguments, and marker splicing by string offset ate the markers' indentation. | ⚠️ not run |
 | 2026-09-21 | 4b | Migrated `core_network`, `core_notifications`, `data_core`, `feature_dashboard` off `core_common` onto `platform_kernel` — each drops 14 inherited deps. Removed a dead `package:flutter/foundation.dart` import from `cache_database.dart` (nothing in the file used it). | ⚠️ not run |
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |

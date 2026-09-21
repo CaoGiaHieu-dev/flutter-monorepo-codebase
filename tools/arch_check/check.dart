@@ -138,10 +138,25 @@ List<String> _dartFilesUnderLib(String packageRoot) {
   return out;
 }
 
-String _layerOf(String packageRoot) {
-  final parts = p.posix.split(packageRoot);
-  final i = parts.indexOf('packages');
-  return (i >= 0 && i + 1 < parts.length) ? parts[i + 1] : '';
+/// The architectural layer a package belongs to, derived from its **name**.
+///
+/// Deliberately not from its path. The previous version split the directory on
+/// `packages` and returned the next segment, so a package moved anywhere else
+/// resolved to the empty string — and R1, R2 and R3 all silently passed for it.
+/// A guardrail that turns itself off when files move is worse than no
+/// guardrail, because the report still says clean.
+///
+/// Naming is already enforced (§4), so the name is the more reliable signal,
+/// and it survives any relayout.
+String _layerOf(MonorepoPackage pkg) {
+  final name = pkg.name;
+  if (name.startsWith('domain_')) return 'domain';
+  if (name.startsWith('data_')) return 'data';
+  if (name.startsWith('feature_')) return 'features';
+  if (name == 'app' || name.startsWith('app_')) return 'app';
+  if (name == 'core_tools') return 'tools';
+  // platform_kernel, core_*, *_state_management: the infrastructure ring.
+  return 'core';
 }
 
 /// Matches a bare sizing extension — a number or a closing paren followed by
@@ -215,7 +230,7 @@ Map<String, Set<String>> _featureImplementers(
 ) {
   final out = <String, Set<String>>{};
   for (final pkg in packages) {
-    if (_layerOf(pkg.rootPath) != 'features') continue;
+    if (_layerOf(pkg) != 'features') continue;
     for (final file in _dartFilesUnderLib(pkg.rootPath)) {
       if (_isGenerated(file)) continue;
       final content = File(file).readAsStringSync();
@@ -287,7 +302,7 @@ void main(List<String> args) {
         );
 
   for (final pkg in packages.values) {
-    final layer = _layerOf(pkg.rootPath);
+    final layer = _layerOf(pkg);
     final files = _dartFilesUnderLib(pkg.rootPath);
     // Parsed from YAML by MonorepoHelper — a hand-rolled line scanner
     // silently drops entries after a blank line inside the block.

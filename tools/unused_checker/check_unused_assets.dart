@@ -221,19 +221,18 @@ void main() async {
 
     for (final assetPath in reportablePathsAfterExclusions) {
       final rel = p.posix.relative(assetPath, from: projectRootPosix);
-      String pkgName = 'unknown';
-      if (rel.startsWith('packages/features/')) {
-        pkgName = rel.split('/')[2];
-      } else if (rel.startsWith('packages/core/')) {
-        pkgName = rel.split('/')[2];
-      } else if (rel.startsWith('packages/data/')) {
-        pkgName = rel.split('/')[2];
-      } else if (rel.startsWith('packages/domain/')) {
-        pkgName = rel.split('/')[2];
-      } else if (rel.startsWith('app/')) {
-        pkgName = 'app';
-      } else if (rel.startsWith('packages/')) {
-        pkgName = rel.split('/')[1];
+      // Resolved against the discovered package list rather than by matching
+      // a path prefix: prefixes hardcode a layout, and a package that moves
+      // then reports as `unknown` instead of by name.
+      var pkgName = 'unknown';
+      var bestLen = -1;
+      for (final pkg in MonorepoHelper.getPackages(projectRootPosix).values) {
+        final pkgRel = p.posix.relative(pkg.rootPath, from: projectRootPosix);
+        if ((rel == pkgRel || rel.startsWith('$pkgRel/')) &&
+            pkgRel.length > bestLen) {
+          pkgName = pkg.name;
+          bestLen = pkgRel.length;
+        }
       }
 
       if (nonExistentDeclaredPaths.contains(assetPath)) {

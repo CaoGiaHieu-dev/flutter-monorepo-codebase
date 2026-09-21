@@ -1,6 +1,6 @@
 /// Constants owned exclusively by `core_notifications`.
 ///
-/// These live here — not in `core_common` — so no other package can read or
+/// These live here — not in `platform_kernel` — so no other package can read or
 /// depend on this package's channel configuration. Every value is the
 /// physical identifier registered with the OS: changing a channel id or group
 /// id orphans the channel already created on a user's device, so treat these

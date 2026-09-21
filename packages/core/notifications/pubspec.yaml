@@ -17,8 +17,8 @@ dependencies:
   flutter_local_notifications: "^22.3.0"
   get_it: ^9.2.1
   injectable: ^3.0.0
-  core_common:
-    path: ../common
+  platform_kernel:
+    path: ../kernel
   dynamic_logger: "^0.5.0"
 
 dev_dependencies:

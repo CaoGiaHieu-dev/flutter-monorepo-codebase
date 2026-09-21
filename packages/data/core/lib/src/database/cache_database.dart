@@ -14,7 +14,6 @@
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:flutter/foundation.dart';
 
 import '../utils/data_core_constants.dart';
 import 'tables/cache_entries_table.dart';
@@ -30,7 +29,7 @@ part 'dao/cache_entries_dao.dart';
 /// DAO to be a `part of` its database library. A single shared database would
 /// therefore force the package declaring it to name every other package's
 /// tables — the same "one object knows everything" coupling that was removed
-/// from `core_storage` and `core_common`.
+/// from `core_storage` and `platform_kernel`.
 ///
 /// So each package that owns persisted data declares its own database and
 /// keeps its tables, DAO and data source together. `core_database` supplies

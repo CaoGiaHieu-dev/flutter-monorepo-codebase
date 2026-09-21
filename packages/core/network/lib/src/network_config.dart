@@ -1,5 +1,5 @@
-import 'package:core_common/core_common.dart';
 import 'package:flutter/foundation.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// Configuration interface for network services.
 /// This allows the core_network package to remain fully decoupled from

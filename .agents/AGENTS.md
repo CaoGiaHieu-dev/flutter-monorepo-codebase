@@ -486,7 +486,9 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   ```
   `composer` regenerates the three artifacts that previously had to be edited by hand and kept in step — `apps/mobile/lib/di/injection.dart`, `apps/mobile/pubspec.yaml`'s path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
   **Only the manifest is edited by hand.**
-- **A type import defeats `getItOrNull`.** Guarding the *lookup* is useless if the file still imports the feature for the *type* — it fails at compile time. When the shell needs something a feature owns, declare a contract in `core_di` and have the feature implement + register it:
+- **A type import defeats `getItOrNull`.** Guarding the *lookup* is useless if the file still imports the feature for the *type* — an unresolved import fails at compile time, before any lookup runs. When the shell needs something a module owns, declare a contract in `core_di` and have the module implement + register it:
+
+  **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R10** fails the build when any file in an app imports a `feature_*`, `data_*` or product `domain_*` package, with `injection.dart` as the single exception. It was added after `network_config_impl.dart` was found importing `data_auth` and `domain_auth` to read and refresh the session token — this section promised removability while the composition root broke it. Review had not caught it in the entire life of the file.
 
   | Contract (`core_di`) | Replaces the shell's direct use of |
   | :--- | :--- |

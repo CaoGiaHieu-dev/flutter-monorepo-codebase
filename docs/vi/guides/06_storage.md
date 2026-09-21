@@ -150,7 +150,7 @@ Ba bước. Ví dụ minh hoạ là auth token — có thật trong repo.
 Không bao giờ đặt ở `core_common`, không bao giờ ở `core_storage`.
 
 ```dart
-// packages/data/auth/lib/src/utils/auth_storage_keys.dart
+// modules/auth/data/lib/src/utils/auth_storage_keys.dart
 /// Physical storage keys owned exclusively by `feature_auth`'s data layer.
 ///
 /// Package-internal by convention — no other package's pubspec declares a
@@ -172,7 +172,7 @@ Quy ước: private constructor, `UPPER_SNAKE_CASE`, mỗi package sở hữu m�
 Inject `StorageManager`, chọn backend, trỏ vào key của bạn:
 
 ```dart
-// packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart
+// modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart
 @lazySingleton
 class AuthLocalDataSource {
   AuthLocalDataSource(this._storageManager);

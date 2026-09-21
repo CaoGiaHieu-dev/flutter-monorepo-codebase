@@ -12,29 +12,29 @@ Every example below is a real path in this repository — open it to see the con
 
 | Component | File suffix | Class suffix | Real example |
 |---|---|---|---|
-| Screen | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `packages/features/auth/lib/src/pages/login_page.dart` |
-| Sub-widget | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `packages/features/auth/lib/src/widgets/auth_header_widget.dart` |
-| Controller (Provider) | `_provider.dart` | `Provider` | `packages/features/auth/lib/src/provider/auth_provider.dart` |
-| Controller (BLoC) | `_bloc.dart` | `Bloc` | `packages/features/home/lib/src/bloc/home_profile_bloc.dart` |
+| Screen | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `modules/auth/feature/lib/src/pages/login_page.dart` |
+| Sub-widget | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `modules/auth/feature/lib/src/widgets/auth_header_widget.dart` |
+| Controller (Provider) | `_provider.dart` | `Provider` | `modules/auth/feature/lib/src/provider/auth_provider.dart` |
+| Controller (BLoC) | `_bloc.dart` | `Bloc` | `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` |
 | Controller (Cubit) | `_cubit.dart` | `Cubit` | *only when events are unnecessary* |
-| BLoC events | `_event.dart` | `Event` | `packages/features/home/lib/src/bloc/home_profile_event.dart` |
-| Use case | `_usecase.dart` | `UseCase` | `packages/domain/auth/lib/src/usecases/auth/login_usecase.dart` |
-| Entity | `_entity.dart` | `Entity` | `packages/domain/auth/lib/src/entities/user/user_entity.dart` |
-| Repository interface | `i_<name>_repository.dart` | prefix `I` | `packages/domain/auth/lib/src/repositories/i_auth_repository.dart` |
-| Repository impl | `_repository_impl.dart` | `RepositoryImpl` | `packages/data/auth/lib/src/repositories_impl/auth_repository_impl.dart` |
-| Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `packages/data/core/lib/src/models/cache_entry_model.dart` |
-| Request DTO | `_request.dart` | `Request` | `packages/data/core/lib/src/models/base_request.dart` |
-| Data source | `_data_source.dart` | `DataSource` | `packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart` |
+| BLoC events | `_event.dart` | `Event` | `modules/home/feature/lib/src/bloc/home_profile_event.dart` |
+| Use case | `_usecase.dart` | `UseCase` | `modules/auth/domain/lib/src/usecases/auth/login_usecase.dart` |
+| Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user/user_entity.dart` |
+| Repository interface | `i_<name>_repository.dart` | prefix `I` | `modules/auth/domain/lib/src/repositories/i_auth_repository.dart` |
+| Repository impl | `_repository_impl.dart` | `RepositoryImpl` | `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart` |
+| Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `platform/data_core/lib/src/models/cache_entry_model.dart` |
+| Request DTO | `_request.dart` | `Request` | `platform/data_core/lib/src/models/base_request.dart` |
+| Data source | `_data_source.dart` | `DataSource` | `modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart` |
 | Navigator interface | `<name>_navigator.dart` | `Navigator` | `platform/di/lib/src/navigators/auth_navigator.dart` |
-| Navigator impl | `_navigator_impl.dart` | `NavigatorImpl` | `packages/features/auth/lib/src/routing/auth_navigator_impl.dart` |
+| Navigator impl | `_navigator_impl.dart` | `NavigatorImpl` | `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart` |
 | Action handler interface | `i_<name>_action_handler.dart` | prefix `I` | `platform/di/lib/src/actions/i_auth_action_handler.dart` |
-| Action handler impl | `_action_handler_impl.dart` | `ActionHandlerImpl` | `packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart` |
+| Action handler impl | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
-| Route module | `_route_module.dart` | `RouteModule` | `packages/features/home/lib/src/routing/home_route_module.dart` |
-| Route paths | `<feature>_path.dart` | `Path` | `packages/features/home/lib/src/utils/home_path.dart` |
-| Storage keys | `<owner>_storage_keys.dart` | `StorageKeys` | `packages/data/auth/lib/src/utils/auth_storage_keys.dart` |
-| API endpoints | `<owner>_api_constants.dart` | `ApiConstants` | `packages/data/auth/lib/src/utils/auth_api_constants.dart` |
+| Route module | `_route_module.dart` | `RouteModule` | `modules/home/feature/lib/src/routing/home_route_module.dart` |
+| Route paths | `<feature>_path.dart` | `Path` | `modules/home/feature/lib/src/utils/home_path.dart` |
+| Storage keys | `<owner>_storage_keys.dart` | `StorageKeys` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
+| API endpoints | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
 
 ---
 
@@ -55,7 +55,7 @@ Every example below is a real path in this repository — open it to see the con
 `UPPER_SNAKE_CASE`, in a class with a private constructor, inside the owning package's `utils/`:
 
 ```dart
-// packages/features/home/lib/src/utils/home_path.dart
+// modules/home/feature/lib/src/utils/home_path.dart
 class HomePath {
   HomePath._();
 
@@ -76,8 +76,8 @@ The private constructor is what prevents `HomePath()` from ever being instantiat
 | `data_sources/local/` | storage / database |
 | `repositories/` | interfaces (Domain) |
 | `repositories_impl/` | implementations (Data) |
-| `provider/` | **singular** — `packages/features/auth/lib/src/provider/` |
-| `bloc/` | **singular** — `packages/features/home/lib/src/bloc/` |
+| `provider/` | **singular** — `modules/auth/feature/lib/src/provider/` |
+| `bloc/` | **singular** — `modules/home/feature/lib/src/bloc/` |
 | `utils/` | constants owned by this package |
 | `routing/` | route modules, navigator impls |
 | `handlers/` | action handler impls |
@@ -96,11 +96,11 @@ The private constructor is what prevents `HomePath()` from ever being instantiat
 | Layer | Prefix | Path | Example |
 |---|---|---|---|
 | Core | `core_` | `platform/<name>/` | `core_storage` |
-| Domain | `domain_` | `packages/domain/<name>/` | `domain_auth` |
-| Data | `data_` | `packages/data/<name>/` | `data_auth` |
-| Feature | `feature_` | `packages/features/<name>/` | `feature_home` |
+| Domain | `domain_` | `modules/*/domain/<name>/` | `domain_auth` |
+| Data | `data_` | `modules/*/data/<name>/` | `data_auth` |
+| Feature | `feature_` | `modules/*/feature/<name>/` | `feature_home` |
 
-The directory is the bare name; the package name carries the prefix. `packages/features/home/` → `name: feature_home`.
+The directory is the bare name; the package name carries the prefix. `modules/home/feature/` → `name: feature_home`.
 
 Two packages break the prefix pattern by design: `provider_state_management` and `bloc_state_management` (both under `platform/`).
 

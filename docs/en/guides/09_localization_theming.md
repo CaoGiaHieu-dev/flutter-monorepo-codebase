@@ -14,10 +14,10 @@ Each feature owns its translations. The app shell never learns their names.
 
 | Where | What lives there |
 |---|---|
-| `packages/features/<f>/assets/language/*.arb` | The feature's translation files |
-| `packages/features/<f>/l10n.yaml` | Codegen config for that feature |
-| `packages/features/<f>/lib/src/gen/language/` | Generated delegate + classes |
-| `packages/features/<f>/lib/di/localization.dart` | `IFeatureLocalization` implementation |
+| `modules/*/feature/<f>/assets/language/*.arb` | The feature's translation files |
+| `modules/*/feature/<f>/l10n.yaml` | Codegen config for that feature |
+| `modules/*/feature/<f>/lib/src/gen/language/` | Generated delegate + classes |
+| `modules/*/feature/<f>/lib/di/localization.dart` | `IFeatureLocalization` implementation |
 | `core_base_ui` | Global / fallback strings shared by everyone |
 
 > [!CAUTION]
@@ -55,7 +55,7 @@ final delegates = [
 ### Step 1 — edit the `.arb` files
 
 ```json
-// packages/features/home/assets/language/en.arb
+// modules/home/feature/assets/language/en.arb
 {
   "@@locale": "en",
   "home": "Home",
@@ -71,7 +71,7 @@ Add the same key to **every** locale file (`vi.arb`, …). The template file is 
 ### Step 2 — check the feature's `l10n.yaml`
 
 ```yaml
-# packages/features/home/l10n.yaml
+# modules/home/feature/l10n.yaml
 arb-dir: assets/language
 template-arb-file: en.arb
 output-localization-file: app_localizations.dart
@@ -94,7 +94,7 @@ Missing translations are reported in `untranslated-messages.txt`.
 ### Step 4 — register the delegate (once per feature)
 
 ```dart
-// packages/features/home/lib/di/localization.dart
+// modules/home/feature/lib/di/localization.dart
 @Injectable(as: IFeatureLocalization)
 class HomeLocalizationImpl implements IFeatureLocalization {
   @override
@@ -106,7 +106,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 ### Step 5 — expose a typed extension
 
 ```dart
-// packages/features/home/lib/src/extensions/l10n_home_extension.dart
+// modules/home/feature/lib/src/extensions/l10n_home_extension.dart
 extension ContextHomeExtension on BuildContext {
   FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 }

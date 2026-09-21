@@ -26,8 +26,8 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 It creates:
 
 ```
-packages/domain/payment/lib/src/     entities/  usecases/  repositories/
-packages/data/payment/lib/src/       models/    data_sources/  repositories_impl/
+modules/payment/domain/lib/src/     entities/  usecases/  repositories/
+modules/payment/data/lib/src/       models/    data_sources/  repositories_impl/
 ```
 
 Add `utils/` to each yourself — every package owns its constants there
@@ -51,7 +51,7 @@ Each step only depends on the ones above it, so nothing needs rework:
 
 > [!CAUTION]
 > The domain layer is **pure Dart**. Importing `package:flutter/...`, `package:dio/...` or
-> `package:retrofit/...` anywhere under `packages/domain/` is forbidden — and so is any `core_*`
+> `package:retrofit/...` anywhere under `modules/*/domain/` is forbidden — and so is any `core_*`
 > package. Allowed: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`,
 > `injectable`, `get_it`.
 
@@ -61,7 +61,7 @@ Each step only depends on the ones above it, so nothing needs rework:
 
 Freezed, immutable, with the `const Class._()` private constructor so you can add methods later.
 Real code from
-[`packages/domain/auth/lib/src/entities/user/user_entity.dart`](../../../packages/domain/auth/lib/src/entities/user/user_entity.dart):
+[`modules/auth/domain/lib/src/entities/user/user_entity.dart`](../../../modules/auth/domain/lib/src/entities/user/user_entity.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -96,7 +96,7 @@ Entities carry **business** fields only — no `statusCode`, no `message`, no tr
 ## 4. Params
 
 Also Freezed. Real code from
-[`login_params.dart`](../../../packages/domain/auth/lib/src/params/auth_params/login_params.dart):
+[`login_params.dart`](../../../modules/auth/domain/lib/src/params/auth_params/login_params.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -121,7 +121,7 @@ Use `NoParams` from `domain_core` when a use case takes no input.
 Named `i_<name>_repository.dart`, class prefixed `I`. Every method returns `Result<T>`:
 
 ```dart
-// packages/domain/payment/lib/src/repositories/i_payment_repository.dart
+// modules/payment/domain/lib/src/repositories/i_payment_repository.dart
 import 'package:domain_core/domain_core.dart';
 
 import '../entities/payment/payment_entity.dart';
@@ -140,7 +140,7 @@ keeps domain free of Dio, Firebase and Drift.
 ## 6. UseCase
 
 `@injectable`, extends `BaseUseCase<ReturnType, Params>`, returns `Result<T>`. Real code from
-[`packages/domain/auth/lib/src/usecases/auth/login_usecase.dart`](../../../packages/domain/auth/lib/src/usecases/auth/login_usecase.dart):
+[`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`](../../../modules/auth/domain/lib/src/usecases/auth/login_usecase.dart):
 
 ```dart
 import 'package:domain_core/domain_core.dart';
@@ -165,7 +165,7 @@ class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
 ```
 
 `BaseUseCase` is a single-method contract
-([`base_use_case.dart`](../../../packages/domain/core/lib/src/usecases/base_use_case.dart)) —
+([`base_use_case.dart`](../../../platform/domain_core/lib/src/usecases/base_use_case.dart)) —
 one use case, one operation. Dependencies come through the constructor; never call `getIt<T>()`
 inside a use case.
 
@@ -175,7 +175,7 @@ inside a use case.
 
 Freezed + `json_serializable`, `implements BaseModel<Entity>`, with a `toEntity()` mapper. Real
 code from
-[`packages/data/auth/lib/src/models/user/user_model.dart`](../../../packages/data/auth/lib/src/models/user/user_model.dart):
+[`modules/auth/data/lib/src/models/user/user_model.dart`](../../../modules/auth/data/lib/src/models/user/user_model.dart):
 
 ```dart
 import 'package:data_core/data_core.dart';
@@ -262,7 +262,7 @@ If your package persists key-value data, it declares its **own** `StorageValue` 
 `StorageManager`. `core_storage` provides the mechanism only; it defines no keys.
 
 Keys go in `utils/` — real code from
-[`packages/data/auth/lib/src/utils/auth_storage_keys.dart`](../../../packages/data/auth/lib/src/utils/auth_storage_keys.dart):
+[`modules/auth/data/lib/src/utils/auth_storage_keys.dart`](../../../modules/auth/data/lib/src/utils/auth_storage_keys.dart):
 
 ```dart
 /// Physical storage keys owned exclusively by `feature_auth`'s data layer.
@@ -275,7 +275,7 @@ class AuthStorageKeys {
 ```
 
 The owner then builds its values and hydrates them at boot
-([`auth_local_data_source.dart`](../../../packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart)):
+([`auth_local_data_source.dart`](../../../modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart)):
 
 ```dart
 @lazySingleton
@@ -312,7 +312,7 @@ class AuthLocalDataSource {
 
 Extends `IBaseRepository` from `data_core` and wraps every call in `execute()` (async) or
 `executeSync()` (sync). Real code from
-[`packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
+[`platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
 @LazySingleton(as: ICacheEntryRepository)
@@ -360,7 +360,7 @@ return execute<UserModel, UserEntity>(
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see
-[`i_base_repository.dart:57-59`](../../../packages/data/core/lib/src/base/i_base_repository.dart).
+[`i_base_repository.dart:57-59`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
 
 > [!CAUTION]
 > Use `ErrorHandler.handleError(e)`. **Never** `AppFailure.fromException()`. And never let a
@@ -391,7 +391,7 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 Declare dependencies explicitly in both `pubspec.yaml` files:
 
 ```yaml
-# packages/data/payment/pubspec.yaml
+# modules/payment/data/pubspec.yaml
 dependencies:
   core_common:
     path: ../../core/common
@@ -415,8 +415,8 @@ dependencies:
 Then regenerate:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
-dart tools/barrel_generator/generate.dart packages/data/payment/lib
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
+dart tools/barrel_generator/generate.dart modules/payment/data/lib
 dart run build_runner build -d --workspace
 flutter analyze
 ```

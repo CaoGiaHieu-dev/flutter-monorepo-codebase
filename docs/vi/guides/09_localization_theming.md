@@ -14,10 +14,10 @@ Mỗi feature tự sở hữu bản dịch của mình. App shell không hề bi
 
 | Ở đâu | Chứa gì |
 |---|---|
-| `packages/features/<f>/assets/language/*.arb` | File dịch của feature |
-| `packages/features/<f>/l10n.yaml` | Cấu hình codegen cho feature đó |
-| `packages/features/<f>/lib/src/gen/language/` | Delegate + class được sinh ra |
-| `packages/features/<f>/lib/di/localization.dart` | Phần implement `IFeatureLocalization` |
+| `modules/*/feature/<f>/assets/language/*.arb` | File dịch của feature |
+| `modules/*/feature/<f>/l10n.yaml` | Cấu hình codegen cho feature đó |
+| `modules/*/feature/<f>/lib/src/gen/language/` | Delegate + class được sinh ra |
+| `modules/*/feature/<f>/lib/di/localization.dart` | Phần implement `IFeatureLocalization` |
 | `core_base_ui` | Chuỗi global / fallback dùng chung |
 
 > [!CAUTION]
@@ -55,7 +55,7 @@ Chính `getAllOrEmpty` là thứ khiến feature có thể gỡ bỏ được: x
 ### Bước 1 — sửa các file `.arb`
 
 ```json
-// packages/features/home/assets/language/en.arb
+// modules/home/feature/assets/language/en.arb
 {
   "@@locale": "en",
   "home": "Home",
@@ -71,7 +71,7 @@ Phải thêm cùng một key vào **mọi** file ngôn ngữ (`vi.arb`, …). Fi
 ### Bước 2 — kiểm tra `l10n.yaml` của feature
 
 ```yaml
-# packages/features/home/l10n.yaml
+# modules/home/feature/l10n.yaml
 arb-dir: assets/language
 template-arb-file: en.arb
 output-localization-file: app_localizations.dart
@@ -94,7 +94,7 @@ Chuỗi còn thiếu bản dịch sẽ được liệt kê trong `untranslated-m
 ### Bước 4 — đăng ký delegate (một lần cho mỗi feature)
 
 ```dart
-// packages/features/home/lib/di/localization.dart
+// modules/home/feature/lib/di/localization.dart
 @Injectable(as: IFeatureLocalization)
 class HomeLocalizationImpl implements IFeatureLocalization {
   @override
@@ -106,7 +106,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 ### Bước 5 — phơi ra một extension có kiểu
 
 ```dart
-// packages/features/home/lib/src/extensions/l10n_home_extension.dart
+// modules/home/feature/lib/src/extensions/l10n_home_extension.dart
 extension ContextHomeExtension on BuildContext {
   FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 }

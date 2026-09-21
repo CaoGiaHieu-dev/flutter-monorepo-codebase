@@ -32,25 +32,25 @@ dependencies:
   core_base_ui:
     path: ../platform/base_ui
   domain_core:
-    path: ../packages/domain/core
+    path: ../platform/domain_core
   domain_auth:
-    path: ../packages/domain/auth
+    path: ../modules/auth/domain
   data_core:
-    path: ../packages/data/core
+    path: ../platform/data_core
   data_auth:
-    path: ../packages/data/auth
+    path: ../modules/auth/data
   feature_auth:
-    path: ../packages/features/auth
+    path: ../modules/auth/feature
   feature_home:
-    path: ../packages/features/home
+    path: ../modules/home/feature
   feature_settings:
-    path: ../packages/features/settings
+    path: ../modules/settings/feature
   feature_onboarding:
-    path: ../packages/features/onboarding
+    path: ../modules/onboarding/feature
   feature_splash:
-    path: ../packages/features/splash
+    path: ../modules/splash/feature
   feature_dashboard:
-    path: ../packages/features/dashboard
+    path: ../modules/dashboard/feature
   provider_state_management:
     path: ../platform/provider_state_management
   bloc_state_management:

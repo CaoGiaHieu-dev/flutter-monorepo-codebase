@@ -23,7 +23,7 @@ When a task involves "review code", "audit codebase", "verify architecture", etc
 
 3. To review a **folder** (use `--folder`, not `--file`):
    ```bash
-   dart tools/code_review/code_review.dart --folder packages/features/home/lib
+   dart tools/code_review/code_review.dart --folder modules/home/feature/lib
    ```
 
 4. To review only what is staged for commit:

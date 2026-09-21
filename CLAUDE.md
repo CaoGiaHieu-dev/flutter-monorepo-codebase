@@ -46,7 +46,7 @@ dart tools/workspace_setup/configure.dart
 
 ### Tests
 
-Tests live per-package under `packages/<layer>/<pkg>/test/`. Run from the package directory:
+Tests live per-package under `modules/<module>/<layer>/test/`. Run from the package directory:
 
 ```bash
 cd platform/common
@@ -86,7 +86,7 @@ dart tools/module_generator/generate.dart 3 payment            # Data micro-pack
 dart tools/module_generator/generate.dart 4 analytics          # Core package
 
 # Regenerate barrel files after adding/renaming/deleting files in a package's lib/
-dart tools/barrel_generator/generate.dart packages/<layer>/<package_name>/lib
+dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 
 # Sync dependency versions from the version catalog (pubspec_dependencies.yaml)
 dart tools/dependency_sync.dart          # --check for dry run (CI/pre-commit)
@@ -143,9 +143,9 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 |:------|:-----|:---------------|
 | **App Shell** | `app/` | Entrypoint, flavors, central DI assembly (`injection.dart`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes) |
 | **Core** | `platform/*` | Infrastructure shared across all layers |
-| **Domain** | `packages/domain/*` | **Pure Dart** business logic — entities, use cases, repository interfaces |
-| **Data** | `packages/data/*` | Repository implementations, DTOs/models, data sources (remote + local) |
-| **Features** | `packages/features/*` | UI + state management — one bounded UI concern per package |
+| **Domain** | `modules/*/domain` | **Pure Dart** business logic — entities, use cases, repository interfaces |
+| **Data** | `modules/*/data` | Repository implementations, DTOs/models, data sources (remote + local) |
+| **Features** | `modules/*/feature` | UI + state management — one bounded UI concern per package |
 
 ### Core Packages Detail
 
@@ -167,7 +167,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 - **FORBIDDEN imports:** `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, **and any `core_*` package**
 - **Allowed imports:** `dart:*`, `domain_core` (`Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`, `get_it`
-- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth` depends only on `domain_core`. Verify: `grep -rn "package:flutter" packages/domain/*/lib` must print nothing
+- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth` depends only on `domain_core`. Verify: `grep -rn "package:flutter" modules/*/domain/lib` must print nothing
 - `AppFailure` lives in `domain_core` (`lib/src/failures/`) — it is part of the `Result` contract. Moving it there is what let Domain drop `core_common`
 - Domain constants live in the domain package's own `utils/` (e.g. `DomainConstants`) — never in `core_common`
 - Components: `entities/` (Freezed immutable), `params/`, `repositories/` (interfaces), `usecases/` (`@injectable`, returns `Result<T>`), `utils/`, `services/` (optional)
@@ -492,7 +492,7 @@ declare `data_auth` in its pubspec simply cannot reach `AuthStorageKeys`.
 ### Adding a New Storage Key
 
 1. Add the key to the **owning package's** `utils/` keys class (create it if absent), e.g.
-   `packages/data/auth/lib/src/utils/auth_storage_keys.dart`. Never put it in `core_common`.
+   `modules/auth/data/lib/src/utils/auth_storage_keys.dart`. Never put it in `core_common`.
 2. In the owning class, inject `StorageManager` and declare a `late final StorageValue<T>`.
 3. Register the owner as a **singleton** (`@singleton` / `@lazySingleton` / `@Singleton(as: IFoo)`)
    with `@PostConstruct(preResolve: true)` to hydrate at startup.
@@ -501,14 +501,14 @@ declare `data_auth` in its pubspec simply cannot reach `AuthStorageKeys`.
 5. Run `dart run build_runner build -d --workspace`.
 
 ```dart
-// packages/data/auth/lib/src/utils/auth_storage_keys.dart
+// modules/auth/data/lib/src/utils/auth_storage_keys.dart
 class AuthStorageKeys {
   AuthStorageKeys._();
   static const String TOKEN = 'token';
   static const String AUTH_USER = 'auth_user';
 }
 
-// packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart
+// modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart
 @lazySingleton
 class AuthLocalDataSource {
   AuthLocalDataSource(this._storageManager);
@@ -549,7 +549,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 
 **Why:** Drift resolves `@DriftDatabase(tables:, daos:)` at compile time, and a DAO must be `part of` its database library. One shared database therefore forces whichever package declares it to own *every* table — the same god-object coupling the storage rules forbid.
 
-**Rule:** a package needing relational storage declares **its own database** next to its own tables and DAO. Reference: `packages/data/core/lib/src/database/` → `cache_database.dart`, `tables/cache_entries_table.dart`, `dao/cache_entries_dao.dart`.
+**Rule:** a package needing relational storage declares **its own database** next to its own tables and DAO. Reference: `platform/data_core/lib/src/database/` → `cache_database.dart`, `tables/cache_entries_table.dart`, `dao/cache_entries_dao.dart`.
 
 `core_database` supplies:
 
@@ -573,7 +573,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 
 ### Adding a New Table
 
-1. Create the table class in **your package**, e.g. `packages/<layer>/<pkg>/lib/src/database/tables/`
+1. Create the table class in **your package**, e.g. `modules/<module>/<layer>/lib/src/database/tables/`
 2. Create the DAO as `part of` **your** database library (not someone else's)
 3. Register table + DAO in **your** `@DriftDatabase` annotation
 4. Bump your `schemaVersion` and contribute an `IDatabaseMigration` implementation
@@ -670,7 +670,7 @@ Config: copy `app/fastlane/Config.example.yaml` → `app/fastlane/Config.yaml` (
 
 ## Feature Removability
 
-Deleting any `packages/features/*` package must leave the app compiling and booting.
+Deleting any `modules/*/feature` package must leave the app compiling and booting.
 
 **`app/lib/di/injection.dart` is the app shell's only intentional hard reference to features** — as the composition root it must name what it composes. Every other shell file resolves features through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
 
@@ -695,7 +695,7 @@ flutter pub get && dart run build_runner build -d --workspace
 Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `AuthSessionFailure`) — `core_di` runs no codegen.
 
 > [!NOTE]
-> The shared widget library is **not** a removable feature, which is why it lives at `platform/ui_kit` as `core_ui_kit` rather than under `packages/features/`. Everything remaining in `packages/features/` is a genuinely removable product surface.
+> The shared widget library is **not** a removable feature, which is why it lives at `platform/ui_kit` as `core_ui_kit` rather than under `modules/*/feature/`. Everything remaining in `modules/*/feature/` is a genuinely removable product surface.
 
 ---
 
@@ -759,7 +759,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] Optional contributions use `getAllOrEmpty` / `getItOrNull` — no bare `getAll`/`getIt` for a removable feature's type
 - [ ] A second interface on the same impl is bound via `@module` (GetIt does not resolve supertypes)
 - [ ] No hand-written `export` added to a barrel file
-- [ ] Domain packages still declare zero `core_*` deps and no `flutter` — `grep -rn "package:flutter" packages/domain/*/lib` is empty
+- [ ] Domain packages still declare zero `core_*` deps and no `flutter` — `grep -rn "package:flutter" modules/*/domain/lib` is empty
 - [ ] New tables/DAOs live in the **owning package's** database, not a shared one; DataSource returns a Model, not a Drift row
 - [ ] The feature is still removable — shell touches it only via `core_di` contracts
 - [ ] **`flutter build apk --flavor dev --debug` passes** — a clean `flutter analyze` does not cover generated code
@@ -776,8 +776,8 @@ dart tools/module_generator/generate.dart 3 payment
 # 2. Implement: Entities → Repository Interfaces → UseCases → Models → DataSources → RepositoryImpl
 
 # 3. Generate barrel files:
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
-dart tools/barrel_generator/generate.dart packages/data/payment/lib
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
+dart tools/barrel_generator/generate.dart modules/payment/data/lib
 
 # 4. Generate DI code:
 dart run build_runner build -d --workspace
@@ -788,7 +788,7 @@ dart tools/module_generator/generate.dart 1 payment "" 2 1
 # 6. Verify — all four steps; analyze alone does not cover generated code:
 dart run build_runner build -d --workspace
 flutter analyze
-cd packages/data/payment && flutter test && cd -
+cd modules/payment/data && flutter test && cd -
 cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 

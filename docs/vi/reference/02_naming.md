@@ -12,29 +12,29 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 
 | Thành phần | Hậu tố file | Hậu tố class | Ví dụ thật |
 |---|---|---|---|
-| Màn hình | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `packages/features/auth/lib/src/pages/login_page.dart` |
-| Widget con | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `packages/features/auth/lib/src/widgets/auth_header_widget.dart` |
-| Controller (Provider) | `_provider.dart` | `Provider` | `packages/features/auth/lib/src/provider/auth_provider.dart` |
-| Controller (BLoC) | `_bloc.dart` | `Bloc` | `packages/features/home/lib/src/bloc/home_profile_bloc.dart` |
+| Màn hình | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `modules/auth/feature/lib/src/pages/login_page.dart` |
+| Widget con | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `modules/auth/feature/lib/src/widgets/auth_header_widget.dart` |
+| Controller (Provider) | `_provider.dart` | `Provider` | `modules/auth/feature/lib/src/provider/auth_provider.dart` |
+| Controller (BLoC) | `_bloc.dart` | `Bloc` | `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` |
 | Controller (Cubit) | `_cubit.dart` | `Cubit` | *chỉ khi không cần event* |
-| Event của BLoC | `_event.dart` | `Event` | `packages/features/home/lib/src/bloc/home_profile_event.dart` |
-| Use case | `_usecase.dart` | `UseCase` | `packages/domain/auth/lib/src/usecases/auth/login_usecase.dart` |
-| Entity | `_entity.dart` | `Entity` | `packages/domain/auth/lib/src/entities/user/user_entity.dart` |
-| Interface repository | `i_<name>_repository.dart` | tiền tố `I` | `packages/domain/auth/lib/src/repositories/i_auth_repository.dart` |
-| Impl repository | `_repository_impl.dart` | `RepositoryImpl` | `packages/data/auth/lib/src/repositories_impl/auth_repository_impl.dart` |
-| Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `packages/data/core/lib/src/models/cache_entry_model.dart` |
-| Request DTO | `_request.dart` | `Request` | `packages/data/core/lib/src/models/base_request.dart` |
-| Data source | `_data_source.dart` | `DataSource` | `packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart` |
+| Event của BLoC | `_event.dart` | `Event` | `modules/home/feature/lib/src/bloc/home_profile_event.dart` |
+| Use case | `_usecase.dart` | `UseCase` | `modules/auth/domain/lib/src/usecases/auth/login_usecase.dart` |
+| Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user/user_entity.dart` |
+| Interface repository | `i_<name>_repository.dart` | tiền tố `I` | `modules/auth/domain/lib/src/repositories/i_auth_repository.dart` |
+| Impl repository | `_repository_impl.dart` | `RepositoryImpl` | `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart` |
+| Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `platform/data_core/lib/src/models/cache_entry_model.dart` |
+| Request DTO | `_request.dart` | `Request` | `platform/data_core/lib/src/models/base_request.dart` |
+| Data source | `_data_source.dart` | `DataSource` | `modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart` |
 | Interface navigator | `<name>_navigator.dart` | `Navigator` | `platform/di/lib/src/navigators/auth_navigator.dart` |
-| Impl navigator | `_navigator_impl.dart` | `NavigatorImpl` | `packages/features/auth/lib/src/routing/auth_navigator_impl.dart` |
+| Impl navigator | `_navigator_impl.dart` | `NavigatorImpl` | `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart` |
 | Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `platform/di/lib/src/actions/i_auth_action_handler.dart` |
-| Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart` |
+| Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
-| Route module | `_route_module.dart` | `RouteModule` | `packages/features/home/lib/src/routing/home_route_module.dart` |
-| Route path | `<feature>_path.dart` | `Path` | `packages/features/home/lib/src/utils/home_path.dart` |
-| Storage key | `<owner>_storage_keys.dart` | `StorageKeys` | `packages/data/auth/lib/src/utils/auth_storage_keys.dart` |
-| API endpoint | `<owner>_api_constants.dart` | `ApiConstants` | `packages/data/auth/lib/src/utils/auth_api_constants.dart` |
+| Route module | `_route_module.dart` | `RouteModule` | `modules/home/feature/lib/src/routing/home_route_module.dart` |
+| Route path | `<feature>_path.dart` | `Path` | `modules/home/feature/lib/src/utils/home_path.dart` |
+| Storage key | `<owner>_storage_keys.dart` | `StorageKeys` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
+| API endpoint | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
 
 ---
 
@@ -55,7 +55,7 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 `UPPER_SNAKE_CASE`, đặt trong class có private constructor, nằm trong `utils/` của package sở hữu:
 
 ```dart
-// packages/features/home/lib/src/utils/home_path.dart
+// modules/home/feature/lib/src/utils/home_path.dart
 class HomePath {
   HomePath._();
 
@@ -76,8 +76,8 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 | `data_sources/local/` | storage / database |
 | `repositories/` | interface (Domain) |
 | `repositories_impl/` | bản cài đặt (Data) |
-| `provider/` | **số ít** — `packages/features/auth/lib/src/provider/` |
-| `bloc/` | **số ít** — `packages/features/home/lib/src/bloc/` |
+| `provider/` | **số ít** — `modules/auth/feature/lib/src/provider/` |
+| `bloc/` | **số ít** — `modules/home/feature/lib/src/bloc/` |
 | `utils/` | hằng số do package này sở hữu |
 | `routing/` | route module, navigator impl |
 | `handlers/` | action handler impl |
@@ -96,11 +96,11 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 | Tầng | Tiền tố | Đường dẫn | Ví dụ |
 |---|---|---|---|
 | Core | `core_` | `platform/<name>/` | `core_storage` |
-| Domain | `domain_` | `packages/domain/<name>/` | `domain_auth` |
-| Data | `data_` | `packages/data/<name>/` | `data_auth` |
-| Feature | `feature_` | `packages/features/<name>/` | `feature_home` |
+| Domain | `domain_` | `modules/*/domain/<name>/` | `domain_auth` |
+| Data | `data_` | `modules/*/data/<name>/` | `data_auth` |
+| Feature | `feature_` | `modules/*/feature/<name>/` | `feature_home` |
 
-Thư mục mang tên trần; tên package mới mang tiền tố. `packages/features/home/` → `name: feature_home`.
+Thư mục mang tên trần; tên package mới mang tiền tố. `modules/home/feature/` → `name: feature_home`.
 
 Hai package cố ý phá vỡ quy tắc tiền tố: `provider_state_management` và `bloc_state_management` (đều nằm trong `platform/`).
 

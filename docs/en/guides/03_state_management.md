@@ -38,7 +38,7 @@ Both branches are registered in DI and can coexist in the same app — `feature_
 
 ### 2.1 A real controller
 
-`packages/features/auth/lib/src/provider/auth_provider.dart`:
+`modules/auth/feature/lib/src/provider/auth_provider.dart`:
 
 ```dart
 @lazySingleton
@@ -216,7 +216,7 @@ Future<void> initialize() async {
 
 ### 3.1 A real BLoC
 
-`packages/features/home/lib/src/bloc/home_profile_bloc.dart`:
+`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`:
 
 ```dart
 @injectable
@@ -257,7 +257,7 @@ Note the `close()` override cancelling the subscription — with no base-class h
 
 ### 3.2 Freezed event rules
 
-`packages/features/home/lib/src/bloc/home_profile_event.dart`:
+`modules/home/feature/lib/src/bloc/home_profile_event.dart`:
 
 ```dart
 part of 'home_profile_bloc.dart';
@@ -370,7 +370,7 @@ Future<void> _onStarted(
 > [!CAUTION]
 > **Never register a screen-scoped controller as `@singleton` / `@lazySingleton`.** GetIt would hold the instance forever, so popping the screen leaks it and the next visit shows stale state.
 
-Controllers are instantiated **at the route**, not inside the page. From `packages/features/home/lib/src/routing/home_route_module.dart`:
+Controllers are instantiated **at the route**, not inside the page. From `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {

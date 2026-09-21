@@ -38,7 +38,7 @@ The pubspec enforces most of this: `feature_dashboard` declares only `core_di` a
 ## 2. Package layout
 
 ```
-packages/features/<name>/
+modules/*/feature/<name>/
 ├── assets/
 │   └── language/            # <name>_en.arb, <name>_vi.arb
 ├── lib/
@@ -67,7 +67,7 @@ packages/features/<name>/
 > Every package keeps its constants in its own `utils/` directory, and route paths are constants. `feature_auth` holds `src/utils/auth_path.dart`; `feature_home` holds `src/utils/home_path.dart`. The route *modules* stay in `src/routing/` and import the path from `../utils/`.
 
 ```dart
-// packages/features/auth/lib/src/utils/auth_path.dart
+// modules/auth/feature/lib/src/utils/auth_path.dart
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
@@ -101,7 +101,7 @@ class AuthPath {
 The dashboard owns the `Scaffold` and the `BottomNavigationBar` — nothing else. It builds both from whatever tabs are registered in DI:
 
 ```dart
-// packages/features/dashboard/lib/src/pages/dashboard_page.dart
+// modules/dashboard/feature/lib/src/pages/dashboard_page.dart
 @override
 Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
@@ -134,7 +134,7 @@ Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab a
 A feature registers one implementation and gets a branch plus a nav item:
 
 ```dart
-// packages/features/home/lib/src/routing/home_nav_destination.dart
+// modules/home/feature/lib/src/routing/home_nav_destination.dart
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
@@ -163,7 +163,7 @@ Use `INavDestinationModule` **only** for primary bottom-nav destinations that ne
 
 ## 5. Shared widgets live in core, not here
 
-The reusable widget library is **`core_ui_kit`** at `platform/ui_kit` — a core package, not a feature. It sits outside `packages/features/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
+The reusable widget library is **`core_ui_kit`** at `platform/ui_kit` — a core package, not a feature. It sits outside `modules/*/feature/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
 
 What matters on the feature side is the **caller's** obligation:
 
@@ -189,7 +189,7 @@ CustomButton(width: context.w(120), height: context.h(44))
 Controllers are created in the route's `build`, not inside the page:
 
 ```dart
-// packages/features/home/lib/src/routing/home_route_module.dart
+// modules/home/feature/lib/src/routing/home_route_module.dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   const HomeRoute();
 
@@ -273,7 +273,7 @@ dart tools/module_generator/generate.dart 1 profile "" 1 1
 The generator creates the package and adds it to every `app_manifest.yaml`. It no longer touches `app/pubspec.yaml`, the root workspace list or `app/lib/di/injection.dart`. Then:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/features/profile/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 dart run build_runner build -d --workspace
 ```
 

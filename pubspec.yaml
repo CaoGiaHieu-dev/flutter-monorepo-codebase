@@ -7,21 +7,21 @@ environment:
 workspace:
   # composer:managed:workspace — generated from app_manifest.yaml
   - app
-  - packages/data/auth
-  - packages/data/core
-  - packages/domain/auth
-  - packages/domain/core
-  - packages/features/auth
-  - packages/features/dashboard
-  - packages/features/home
-  - packages/features/onboarding
-  - packages/features/settings
-  - packages/features/splash
+  - modules/auth/data
+  - modules/auth/domain
+  - modules/auth/feature
+  - modules/dashboard/feature
+  - modules/home/feature
+  - modules/onboarding/feature
+  - modules/settings/feature
+  - modules/splash/feature
   - platform/base_ui
   - platform/bloc_state_management
   - platform/common
+  - platform/data_core
   - platform/database
   - platform/di
+  - platform/domain_core
   - platform/kernel
   - platform/network
   - platform/notifications

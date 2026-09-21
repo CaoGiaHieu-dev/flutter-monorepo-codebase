@@ -35,11 +35,11 @@ app/fastlane/Config.yaml
 # not exist until they do.
 platform/base_ui/lib/src/styles/app_elevation.dart
 # `01_new_feature.md` builds `profile` end to end as the worked example.
-packages/features/profile
-packages/features/profile/l10n.yaml
+modules/profile/feature
+modules/profile/feature/l10n.yaml
 # `x` is the stand-in for the reader's module name in the barrel skill.
-packages/domain/x/lib
-packages/data/x/lib
+modules/x/domain/lib
+modules/x/data/lib
 
 # --- (3) Target layout, not current layout ---------------------------------
 # `.agents/RESTRUCTURE.md` is the migration plan: these are the directories

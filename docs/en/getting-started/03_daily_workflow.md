@@ -62,8 +62,8 @@ dart run build_runner watch -d --workspace
 Every package exposes its public API through barrel files (`src.dart`, `<package>.dart`, and one per folder). They are generated, not hand-maintained.
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/features/auth/lib
-dart tools/barrel_generator/generate.dart packages/domain/auth/lib
+dart tools/barrel_generator/generate.dart modules/auth/feature/lib
+dart tools/barrel_generator/generate.dart modules/auth/domain/lib
 dart tools/barrel_generator/generate.dart platform/storage/lib
 ```
 
@@ -135,7 +135,7 @@ cd platform/database                && flutter test && cd -
 cd platform/network                 && flutter test && cd -
 cd platform/provider_state_management && flutter test && cd -
 cd platform/storage                 && flutter test && cd -
-cd packages/data/auth                    && flutter test && cd -
+cd modules/auth/data                    && flutter test && cd -
 
 # 3. Version catalog is in sync
 dart tools/dependency_sync.dart --check
@@ -144,7 +144,7 @@ dart tools/dependency_sync.dart --check
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `packages/<layer>/<package>/test/`. Only the six packages above ship tests today; add yours next to the code you write.
+Tests live at `<package>/test/`, wherever the package lives. Only the six packages above ship tests today; add yours next to the code you write.
 
 > [!CAUTION]
 > `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, open the generated `app/lib/di/injection.config.dart` and check the order. See [../guides/05_di.md](../guides/05_di.md).

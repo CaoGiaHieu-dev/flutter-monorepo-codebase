@@ -12,7 +12,7 @@ Use this skill when requested to: "implement UI logic using BLoC", "create a blo
 - **Default: `BaseBloc` + Freezed `Event`** (event-driven). Follow AGENTS §13 (private event subclasses, `part` / `part of`, async `on<_Event>` handlers).
 - **`BaseCubit` only when truly necessary** — e.g. a tiny local UI toggle with no meaningful events, no stream fan-in, and no multi-step workflows. Do **not** default new feature controllers to Cubit.
 
-Reference sample in the template: `packages/features/home/lib/src/bloc/home_profile_bloc.dart`.
+Reference sample in the template: `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`.
 
 > [!WARNING]
 > **The BLoC branch is not at parity with the Provider branch.**
@@ -67,7 +67,7 @@ declare a Freezed state in the feature and use `BaseBloc<Event, YourState>`.
 
 ### 2. BaseBloc + Freezed Events (preferred)
 
-Real sample — `packages/features/home/lib/src/bloc/home_profile_bloc.dart`:
+Real sample — `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`:
 
 ```dart
 import 'dart:async';

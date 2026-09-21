@@ -118,10 +118,10 @@ CLI thêm module vào mọi `app_manifest.yaml` và scaffold stub DI route. Ch�
 ### 📦 Barrel Files Generator
 ```bash
 # Sinh cho 1 package cụ thể:
-dart tools/barrel_generator/generate.dart packages/features/profile/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 
 # Sinh cho domain micro-package:
-dart tools/barrel_generator/generate.dart packages/domain/auth/lib
+dart tools/barrel_generator/generate.dart modules/auth/domain/lib
 ```
 
 ### 📦 Dependency Sync (Version Catalog)
@@ -200,8 +200,8 @@ dart tools/module_generator/generate.dart 3 payment
 # 2. Triển khai code (Entities → Repository Interfaces → UseCases → Models → DataSources → RepositoryImpl)
 
 # 3. Sinh barrel files:
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
-dart tools/barrel_generator/generate.dart packages/data/payment/lib
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
+dart tools/barrel_generator/generate.dart modules/payment/data/lib
 
 # 4. Sinh mã DI:
 dart run build_runner build -d --workspace

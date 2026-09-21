@@ -39,7 +39,7 @@ const _approvedUpwardEdges = <String, String>{
 /// two modules and stays here for the same reason: an interface that cannot
 /// import `BuildContext` cannot quietly become a widget API.
 ///
-/// `packages/domain/*` is covered by R2 instead, which predates this rule.
+/// `modules/*/domain` is covered by R2 instead, which predates this rule.
 bool _isPureDartTier(String packageName) =>
     packageName == 'platform_kernel' || packageName.endsWith('_contracts');
 
@@ -667,7 +667,7 @@ RULES CHECKED
       run. Checked in both lib/ imports and pubspec.yaml.
 
   R2  Domain is pure Dart
-      No packages/domain/*/lib file may import flutter, dio or retrofit, and no
+      No modules/*/domain/lib file may import flutter, dio or retrofit, and no
       domain pubspec may declare `flutter` under `dependencies:`
       (dev_dependencies is fine).
 
@@ -695,7 +695,7 @@ RULES CHECKED
       `import 'package:flutter/...'`, which R2 would pass.
 
   R8  Removable contracts resolve optionally
-      A `core_di` contract whose only implementer lives in packages/features/*
+      A `core_di` contract whose only implementer lives in modules/*/feature
       disappears when that feature is removed. `getIt<T>()` and `getAll<T>()`
       throw in that case, so such a type must be resolved with
       `getItOrNull<T>()` / `getAllOrEmpty<T>()` and a fallback. The owning

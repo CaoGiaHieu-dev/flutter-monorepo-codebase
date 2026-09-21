@@ -21,7 +21,7 @@ Năm tham số vị trí được đọc bởi
 | Vị trí | Giá trị | Ý nghĩa |
 | :-- | :-- | :-- |
 | 1 | `1` | Loại module — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
-| 2 | `profile` | Tên module (snake_case). Package thành `feature_profile` tại `packages/features/profile` |
+| 2 | `profile` | Tên module (snake_case). Package thành `feature_profile` tại `modules/profile/feature` |
 | 3 | `""` | Thư mục tuỳ chỉnh — chỉ dùng khi loại là `5`. Truyền `""` cho loại 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` không dùng |
 | 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` không sinh |
@@ -29,7 +29,7 @@ Năm tham số vị trí được đọc bởi
 Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 
 > [!CAUTION]
-> Nếu `packages/features/profile` đã tồn tại, tool hỏi ghi đè và **xoá đệ quy toàn bộ thư mục**
+> Nếu `modules/profile/feature` đã tồn tại, tool hỏi ghi đè và **xoá đệ quy toàn bộ thư mục**
 > khi bạn gõ `y`. Kiểm tra kỹ đường dẫn trước khi trả lời.
 
 ### Chọn tham số 5 — quyết định hình dạng routing của bạn
@@ -77,7 +77,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 Generator sinh ra trọn vẹn cây thư mục dưới đây.
 
 ```
-packages/features/profile/
+modules/profile/feature/
 ├── assets/language/          en.arb, vi.arb  — bản dịch riêng của feature
 ├── l10n.yaml                 cấu hình gen-l10n (tên class, thư mục output)
 ├── lib/
@@ -104,7 +104,7 @@ packages/features/profile/
 Tạo hằng số path trước — mọi thứ khác đều tham chiếu tới nó:
 
 ```dart
-// packages/features/profile/lib/src/utils/profile_path.dart
+// modules/profile/feature/lib/src/utils/profile_path.dart
 class ProfilePath {
   ProfilePath._();
 
@@ -113,7 +113,7 @@ class ProfilePath {
 ```
 
 Đây là bản sao nguyên mẫu của
-[`packages/features/home/lib/src/utils/home_path.dart`](../../../packages/features/home/lib/src/utils/home_path.dart).
+[`modules/home/feature/lib/src/utils/home_path.dart`](../../../modules/home/feature/lib/src/utils/home_path.dart).
 
 ---
 
@@ -122,7 +122,7 @@ class ProfilePath {
 ### Phương án A — tab bottom-nav (`INavDestinationModule`)
 
 Hai file. Trước hết là bản thân các route — code thật từ
-[`packages/features/home/lib/src/routing/home_route_module.dart`](../../../packages/features/home/lib/src/routing/home_route_module.dart):
+[`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
 
 ```dart
 import 'package:core_common/core_common.dart';
@@ -162,7 +162,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 ```
 
 Rồi tới phần đóng góp qua DI — code thật từ
-[`home_nav_destination.dart`](../../../packages/features/home/lib/src/routing/home_nav_destination.dart):
+[`home_nav_destination.dart`](../../../modules/home/feature/lib/src/routing/home_nav_destination.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -200,7 +200,7 @@ sắp xếp theo nó để dựng danh sách `StatefulShellBranch`.
 ### Phương án B — chồng màn hình push (`IFeatureRouteModule`)
 
 Nhỏ hơn nhiều. Code thật từ
-[`packages/features/auth/lib/src/routing/auth_feature_route_module.dart`](../../../packages/features/auth/lib/src/routing/auth_feature_route_module.dart):
+[`modules/auth/feature/lib/src/routing/auth_feature_route_module.dart`](../../../modules/auth/feature/lib/src/routing/auth_feature_route_module.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -261,8 +261,8 @@ màn hình thành singleton sẽ rò rỉ nó suốt vòng đời tiến trình.
 
 Bản dịch của feature nằm trong chính feature. Không thêm gì vào app shell.
 
-`packages/features/profile/l10n.yaml` — sao chép hình dạng từ
-[`packages/features/home/l10n.yaml`](../../../packages/features/home/l10n.yaml):
+`modules/profile/feature/l10n.yaml` — sao chép hình dạng từ
+[`modules/home/feature/l10n.yaml`](../../../modules/home/feature/l10n.yaml):
 
 ```yaml
 arb-dir: assets/language
@@ -285,7 +285,7 @@ output-dir: lib/src/gen/language
 ```
 
 Lộ ra ngoài qua extension — code thật từ
-[`l10n_home_extension.dart`](../../../packages/features/home/lib/src/extensions/l10n_home_extension.dart):
+[`l10n_home_extension.dart`](../../../modules/home/feature/lib/src/extensions/l10n_home_extension.dart):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -300,7 +300,7 @@ extension ContextHomeExtension on BuildContext {
 ```
 
 Đăng ký delegate qua DI — code thật từ
-[`packages/features/home/lib/di/localization.dart`](../../../packages/features/home/lib/di/localization.dart):
+[`modules/home/feature/lib/di/localization.dart`](../../../modules/home/feature/lib/di/localization.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -322,7 +322,7 @@ Root app tự gom mọi `IFeatureLocalization` đã đăng ký, nên **không s�
 Sinh lại sau mỗi lần đổi `.arb`:
 
 ```bash
-cd packages/features/profile && flutter gen-l10n
+cd modules/profile/feature && flutter gen-l10n
 ```
 
 > [!WARNING]
@@ -348,7 +348,7 @@ abstract class ProfileNavigator {
 [`home_navigator.dart`](../../../platform/di/lib/src/navigators/home_navigator.dart).
 
 Cài đặt nó ngay trong `routing/` của bạn — code thật từ
-[`home_navigator_impl.dart`](../../../packages/features/home/lib/src/routing/home_navigator_impl.dart):
+[`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -372,7 +372,7 @@ Bên gọi dùng `getIt<ProfileNavigator>().toProfile(context)` — không hardc
 ## 8. Hoàn tất và kiểm chứng
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/features/profile/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 dart run build_runner build -d --workspace
 flutter analyze
 ```
@@ -402,7 +402,7 @@ App phải chạy được khi xoá bất kỳ feature nào. Gỡ theo đúng th
 1. Mục `ExternalModule(...)` **và** dòng import tương ứng trong `app/lib/di/injection.dart`
 2. Mục khai trong `app/pubspec.yaml`
 3. Đường dẫn trong danh sách `workspace:` ở `pubspec.yaml` gốc
-4. Thư mục `packages/features/<tên>/`
+4. Thư mục `modules/*/feature/<tên>/`
 5. `flutter pub get && dart run build_runner build -d --workspace`
 
 **Hãy để tool làm.** `remove_sample.dart` thực hiện cả năm bước trên, và quan trọng hơn là nó

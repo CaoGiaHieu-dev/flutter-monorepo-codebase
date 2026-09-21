@@ -19,7 +19,7 @@ dependencies:
   core_common:
     path: ../common
   domain_core:
-    path: ../../packages/domain/core
+    path: ../domain_core
   freezed_annotation: "^3.1.0"
   json_annotation: "^4.12.0"
 

@@ -16,9 +16,9 @@ dependencies:
   flutter:
     sdk: flutter
   domain_core:
-    path: ../../domain/core
+    path: ../../../platform/domain_core
   domain_auth:
-    path: ../../domain/auth
+    path: ../domain
   core_common:
     path: ../../../platform/common
   core_base_ui:

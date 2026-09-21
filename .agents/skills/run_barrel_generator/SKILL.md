@@ -15,14 +15,14 @@ When a developer adds, deletes, or renames files under a package's `lib` directo
    ```bash
    dart tools/barrel_generator/generate.dart <path_to_lib_directory>
    ```
-   *Example: `dart tools/barrel_generator/generate.dart packages/features/home/lib`*
+   *Example: `dart tools/barrel_generator/generate.dart modules/home/feature/lib`*
 
 Use the `run_command` tool to execute the command and report the status.
 
 ## Notes
 
 - Pass the package's **`lib` directory**, one package per run. Re-run for every package you
-  touched (e.g. both `packages/domain/x/lib` and `packages/data/x/lib`).
+  touched (e.g. both `modules/x/domain/lib` and `modules/x/data/lib`).
 - The generator skips generated and non-public files: `*.g.dart`, `*.freezed.dart`,
   `*.mocks.dart`, `*_test.dart`, and any file declaring `part of`.
 - It rewrites the `export` lines of each barrel. **Hand-written `export` statements in a

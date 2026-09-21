@@ -74,7 +74,7 @@ Làm trọn vẹn theo đúng wiring thật của `data_core`. Thay tên package
 Class kế thừa `Table` là độc lập: nó không tham chiếu database nào, nên nằm ở package của bạn được.
 
 ```dart
-// packages/data/core/lib/src/database/tables/cache_entries_table.dart
+// platform/data_core/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
 /// Example table — stores arbitrary string payloads keyed by a unique id.
@@ -98,7 +98,7 @@ class CacheEntries extends Table {
 ### Bước 2 — Định nghĩa DAO dưới dạng `part of` database
 
 ```dart
-// packages/data/core/lib/src/database/dao/cache_entries_dao.dart
+// platform/data_core/lib/src/database/dao/cache_entries_dao.dart
 part of '../cache_database.dart';
 
 /// Data access object for [CacheEntries].
@@ -137,7 +137,7 @@ Dòng `part of` là bắt buộc — đó là yêu cầu của Drift, và là l�
 Theo luật chung của repo, constants nằm ở `utils/` của package sở hữu:
 
 ```dart
-// packages/data/core/lib/src/utils/data_core_constants.dart
+// platform/data_core/lib/src/utils/data_core_constants.dart
 class DataCoreConstants {
   DataCoreConstants._();
 
@@ -157,7 +157,7 @@ class DataCoreConstants {
 ### Bước 4 — Khai class database
 
 ```dart
-// packages/data/core/lib/src/database/cache_database.dart
+// platform/data_core/lib/src/database/cache_database.dart
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
@@ -208,7 +208,7 @@ Hai điểm cần copy nguyên xi:
 ### Bước 5 — Đăng ký trong module DI của bạn
 
 ```dart
-// packages/data/core/lib/di/module.dart
+// platform/data_core/lib/di/module.dart
 @module
 abstract class DataCoreDiModule {
   @preResolve
@@ -241,7 +241,7 @@ Cái guard `isRegistered` rất quan trọng: `getAll<T>()` **ném lỗi** khi c
 ### Bước 6 — Dùng qua `IDatabaseHandle`, không dùng thẳng database
 
 ```dart
-// packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -275,7 +275,7 @@ await _handle.transaction(() async {
 ### Bước 7 — Trả về Model, không bao giờ trả row của Drift
 
 ```dart
-// packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
   Future<String?> get(String key);
@@ -288,7 +288,7 @@ abstract class ICacheEntryLocalDataSource {
 `CacheEntry` — class Drift sinh cho một row — không xuất hiện trong bất kỳ chữ ký nào. Việc chuyển đổi diễn ra ngay tại biên:
 
 ```dart
-// packages/data/core/lib/src/models/cache_entry_model.dart
+// platform/data_core/lib/src/models/cache_entry_model.dart
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -322,7 +322,7 @@ Nó cố ý **không** dùng `json_serializable`: dữ liệu đến từ SQLite
 ### Bước 8 — Chạy codegen và barrel
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/data/core/lib
+dart tools/barrel_generator/generate.dart platform/data_core/lib
 dart run build_runner build -d --workspace
 ```
 

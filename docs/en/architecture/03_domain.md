@@ -1,6 +1,6 @@
 # Domain Layer
 
-**What this answers:** what business rules live in `packages/domain/*`, why that code is forbidden from touching Flutter, and what `Result<T>` actually gives you.
+**What this answers:** what business rules live in `modules/*/domain`, why that code is forbidden from touching Flutter, and what `Result<T>` actually gives you.
 
 **After reading you can:** read any use case in the repo, know which types you may import inside a domain package, and add a new entity / params / use case without breaking the layer boundary.
 
@@ -23,7 +23,7 @@ A domain package holds four things and nothing else:
 | **Repository interfaces** | `repositories/` | Contracts the Data layer must satisfy |
 | **Use cases** | `usecases/` | One business operation each, returns `Result<T>` |
 
-No widgets, no HTTP, no SQL, no `SharedPreferences`. If a use case needs any of that, it declares an *interface* and lets `packages/data/*` implement it.
+No widgets, no HTTP, no SQL, no `SharedPreferences`. If a use case needs any of that, it declares an *interface* and lets `modules/*/data` implement it.
 
 ---
 
@@ -53,7 +53,7 @@ The rule holds in the source. Run it yourself:
 
 ```bash
 grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit" \
-  --include="*.dart" packages/domain/
+  --include="*.dart" modules/*/domain/
 # → no output
 ```
 
@@ -61,7 +61,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 > **The package graph enforces this, not just review.** No domain pubspec lists `flutter` under `dependencies`, and none declares a `core_*` package:
 >
 > ```yaml
-> # packages/domain/auth/pubspec.yaml
+> # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
 >     path: ../core
@@ -83,11 +83,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ## 3. `domain_core` — the shared vocabulary
 
-`packages/domain/core/` is depended on by every other domain package.
+`platform/domain_core/` is depended on by every other domain package.
 
 ### `Result<T>` — the return type of every use case
 
-Defined in `packages/domain/core/lib/src/repositories/result.dart`, with `AppFailure` alongside it in `src/failures/`:
+Defined in `platform/domain_core/lib/src/repositories/result.dart`, with `AppFailure` alongside it in `src/failures/`:
 
 ```dart
 @freezed
@@ -148,7 +148,7 @@ typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 
 ### `BaseEntity<T>` — standard server envelope
 
-`packages/domain/core/lib/src/entities/base/base_entity.dart`:
+`platform/domain_core/lib/src/entities/base/base_entity.dart`:
 
 ```dart
 @Freezed(genericArgumentFactories: true)
@@ -167,7 +167,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 
-`packages/domain/core/lib/src/entities/base/paginate_entity.dart` — items land in `data` (JSON key `items`), page info in `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
+`platform/domain_core/lib/src/entities/base/paginate_entity.dart` — items land in `data` (JSON key `items`), page info in `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
 
 ### `BaseUseCase<RType, Params>`
 
@@ -200,7 +200,7 @@ Use `NoParams()` when an operation takes no input.
 
 ### A use case, in full
 
-`packages/domain/auth/lib/src/usecases/auth/login_usecase.dart`:
+`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`:
 
 ```dart
 @injectable
@@ -255,7 +255,7 @@ enum UserRole {
 ## 5. Package layout and naming
 
 ```
-packages/domain/<name>/
+modules/*/domain/<name>/
 ├── lib/
 │   ├── domain_<name>.dart          # public barrel
 │   ├── di/
@@ -312,7 +312,7 @@ dart tools/module_generator/generate.dart 2 payment
 # 2. Write entity → params → repository interface → use case
 
 # 3. Refresh the barrel files
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 
 # 4. Generate Freezed + injectable code
 dart run build_runner build -d --workspace

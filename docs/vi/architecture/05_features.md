@@ -38,7 +38,7 @@ Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ
 ## 2. Bố cục package
 
 ```
-packages/features/<name>/
+modules/*/feature/<name>/
 ├── assets/
 │   └── language/            # <name>_en.arb, <name>_vi.arb
 ├── lib/
@@ -67,7 +67,7 @@ packages/features/<name>/
 > Mọi package giữ hằng số của mình trong thư mục `utils/` riêng, mà đường dẫn route chính là hằng số. `feature_auth` có `src/utils/auth_path.dart`; `feature_home` có `src/utils/home_path.dart`. Các *route module* vẫn ở `src/routing/` và import đường dẫn từ `../utils/`.
 
 ```dart
-// packages/features/auth/lib/src/utils/auth_path.dart
+// modules/auth/feature/lib/src/utils/auth_path.dart
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
@@ -101,7 +101,7 @@ class AuthPath {
 Dashboard sở hữu `Scaffold` và `BottomNavigationBar` — không gì khác. Nó dựng cả hai từ những tab được đăng ký trong DI:
 
 ```dart
-// packages/features/dashboard/lib/src/pages/dashboard_page.dart
+// modules/dashboard/feature/lib/src/pages/dashboard_page.dart
 @override
 Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
@@ -134,7 +134,7 @@ Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app 
 Feature đăng ký một implementation là có ngay branch và nav item:
 
 ```dart
-// packages/features/home/lib/src/routing/home_nav_destination.dart
+// modules/home/feature/lib/src/routing/home_nav_destination.dart
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
@@ -163,7 +163,7 @@ Chỉ dùng `INavDestinationModule` cho **điểm đến chính của bottom-nav
 
 ## 5. Widget dùng chung nằm ở core, không phải ở đây
 
-Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui_kit` — một package core, không phải feature. Nó nằm ngoài `packages/features/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
+Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui_kit` — một package core, không phải feature. Nó nằm ngoài `modules/*/feature/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
 
 Điều quan trọng ở phía feature là nghĩa vụ của **bên gọi**:
 
@@ -189,7 +189,7 @@ Widget trong `core_ui_kit` không bao giờ tự scale qua `core_responsive` bê
 Controller được tạo trong `build` của route, không phải bên trong page:
 
 ```dart
-// packages/features/home/lib/src/routing/home_route_module.dart
+// modules/home/feature/lib/src/routing/home_route_module.dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   const HomeRoute();
 
@@ -273,7 +273,7 @@ dart tools/module_generator/generate.dart 1 profile "" 1 1
 Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó không còn đụng `app/pubspec.yaml`, danh sách workspace ở root hay `app/lib/di/injection.dart`. Sau đó:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/features/profile/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 dart run build_runner build -d --workspace
 ```
 

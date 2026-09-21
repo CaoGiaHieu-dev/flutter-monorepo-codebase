@@ -15,11 +15,11 @@ dependencies:
   core_storage:
     path: ../../../platform/storage
   domain_core:
-    path: ../../domain/core
+    path: ../../../platform/domain_core
   domain_auth:
-    path: ../../domain/auth
+    path: ../domain
   data_core:
-    path: ../core
+    path: ../../../platform/data_core
   firebase_auth: "^6.5.7"
   cloud_firestore: "^6.8.0"
   google_sign_in: "^7.2.0"

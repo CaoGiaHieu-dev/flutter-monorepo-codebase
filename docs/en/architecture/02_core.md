@@ -39,7 +39,7 @@ The bottom of the infrastructure stack. It declares two workspace dependencies �
 | Kind of constant | Where it belongs | Why not here |
 |:--|:--|:--|
 | Storage keys (`TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | with the class that owns the value — see [the storage guide](../guides/06_storage.md) | Listed together, every package can read and overwrite every other feature's storage key. |
-| REST endpoints (`/user/login`, `/user/register`, `/user/refresh-token`…) | the owning data package — [`packages/data/auth/lib/src/utils/auth_api_constants.dart`](../../../packages/data/auth/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
+| REST endpoints (`/user/login`, `/user/register`, `/user/refresh-token`…) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
 Exactly two constants files live here, and both are genuinely global: `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Both sit in `src/utils/`, the one place this package keeps such values.
@@ -113,7 +113,7 @@ The observer is removed in `dispose()`, which is annotated `@disposeMethod` so G
 
 ## 4. `core_ui_kit` — reusable widgets
 
-The shared widget library every feature may consume. It is **core, not a feature**: it lives at `platform/ui_kit` precisely so `packages/features/` contains only removable product surfaces.
+The shared widget library every feature may consume. It is **core, not a feature**: it lives at `platform/ui_kit` precisely so `modules/*/feature/` contains only removable product surfaces.
 
 Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
@@ -251,7 +251,7 @@ See [`../guides/06_storage.md`](../guides/06_storage.md) for the step-by-step.
 
 Runs on a background isolate via `NativeDatabase.createInBackground`. Depends on **no other workspace package**.
 
-This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing. Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. `data_core`'s `CacheDatabase` (`packages/data/core/lib/src/database/`) is the reference wiring.
+This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing. Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. `data_core`'s `CacheDatabase` (`platform/data_core/lib/src/database/`) is the reference wiring.
 
 | Area | Path | Contents |
 |:--|:--|:--|
@@ -329,4 +329,4 @@ Local (workspace) dependencies only — pub.dev packages omitted.
 | `provider_state_management` | `core_common`, `domain_core` *(approved exception)* |
 | `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
 
-No arrow in this table points at `packages/features/*` or `packages/data/*` — that is the invariant to preserve.
+No arrow in this table points at `modules/*/feature` or `modules/*/data` — that is the invariant to preserve.

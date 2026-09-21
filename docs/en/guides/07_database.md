@@ -74,7 +74,7 @@ Worked end-to-end from the real `data_core` wiring. Substitute your package name
 A `Table` subclass is standalone: it references no database, so it lives in your package.
 
 ```dart
-// packages/data/core/lib/src/database/tables/cache_entries_table.dart
+// platform/data_core/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
 /// Example table — stores arbitrary string payloads keyed by a unique id.
@@ -98,7 +98,7 @@ class CacheEntries extends Table {
 ### Step 2 — Define the DAO as a `part of` your database
 
 ```dart
-// packages/data/core/lib/src/database/dao/cache_entries_dao.dart
+// platform/data_core/lib/src/database/dao/cache_entries_dao.dart
 part of '../cache_database.dart';
 
 /// Data access object for [CacheEntries].
@@ -137,7 +137,7 @@ The `part of` is mandatory — that is Drift's requirement, and the reason the D
 Per the repo-wide rule, constants live in the owning package's `utils/`:
 
 ```dart
-// packages/data/core/lib/src/utils/data_core_constants.dart
+// platform/data_core/lib/src/utils/data_core_constants.dart
 class DataCoreConstants {
   DataCoreConstants._();
 
@@ -157,7 +157,7 @@ class DataCoreConstants {
 ### Step 4 — Declare the database class
 
 ```dart
-// packages/data/core/lib/src/database/cache_database.dart
+// platform/data_core/lib/src/database/cache_database.dart
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
@@ -208,7 +208,7 @@ Two things to copy exactly:
 ### Step 5 — Register it in your DI module
 
 ```dart
-// packages/data/core/lib/di/module.dart
+// platform/data_core/lib/di/module.dart
 @module
 abstract class DataCoreDiModule {
   @preResolve
@@ -241,7 +241,7 @@ The `isRegistered` guard matters: `getAll<T>()` **throws** when nothing is regis
 ### Step 6 — Consume it through `IDatabaseHandle`, not the database
 
 ```dart
-// packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -275,7 +275,7 @@ await _handle.transaction(() async {
 ### Step 7 — Return a Model, never a Drift row
 
 ```dart
-// packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
   Future<String?> get(String key);
@@ -288,7 +288,7 @@ abstract class ICacheEntryLocalDataSource {
 `CacheEntry` — the class Drift generates for a row — never appears in a signature. The conversion happens at the boundary:
 
 ```dart
-// packages/data/core/lib/src/models/cache_entry_model.dart
+// platform/data_core/lib/src/models/cache_entry_model.dart
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -322,7 +322,7 @@ It is deliberately **not** `json_serializable`: rows come from SQLite, not from 
 ### Step 8 — Run codegen and barrels
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/data/core/lib
+dart tools/barrel_generator/generate.dart platform/data_core/lib
 dart run build_runner build -d --workspace
 ```
 

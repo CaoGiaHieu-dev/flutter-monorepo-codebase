@@ -18,12 +18,31 @@ flutter-monorepo-codebase/
 │   ├── env.dev / env.stg   #   Flavor env files (env.prod is NOT in the repo)
 │   └── pubspec.yaml
 │
-├── packages/
-│   ├── core/               # Infrastructure — usable by every layer
-│   ├── domain/             # Pure-Dart business logic (no Flutter, no Dio)
-│   ├── data/               # Repository implementations, models, data sources
-│   └── features/           # UI modules, one bounded concern per package
-│
+├── platform/                      # Infra team's ground — every module may depend on it
+│   ├── kernel/                    # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
+│   ├── base_ui/                   # Theme, LanguageProvider, design tokens & l10n (zero widgets)
+│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
+│   ├── common/                    # AppConfig, AppInitializer, Flutter-bound helpers
+│   ├── database/                  # Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
+│   ├── di/                        # DI Hub — every cross-module contract lives here
+│   ├── network/                   # Dio + Retrofit factory, interceptor chain, SSL pinning
+│   ├── notifications/             # Push Notification management module
+│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   ├── responsive/                # Design-size scaling bound to BuildContext
+│   ├── storage/                   # StorageManager + StorageValue<T> (defines NO keys)
+│   ├── ui_kit/                    # core_ui_kit — reusable widgets every module may use
+│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   └── data_core/                 # IBaseRepository + CacheDatabase (owns its own tables/DAO)
+├── modules/                       # One vertical slice per bounded context, one per team
+│   ├── auth/                      # Sample: the full three-layer slice
+│   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
+│   │   ├── data/                  # Models, DataSources, RepositoryImpl
+│   │   └── feature/               # UI + Provider, login only
+│   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
+│   ├── settings/feature/          # Sample: consuming another module's contract
+│   ├── dashboard/feature/         # Sample: shell chrome only (bottom-bar host)
+│   ├── onboarding/feature/        # Sample: IAppEntryLocation, the cold-start location
+│   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── tools/                  # Dart CLI tooling (generators, checkers, sync)
 ├── docs/                   # This documentation (en/ + vi/)
 ├── .agents/                # AGENTS.md rules + skills for AI agents
@@ -58,36 +77,36 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
 | `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
-### Domain — `packages/domain/*`
+### Domain — `modules/*/domain`
 
 **100% pure Dart.** No `package:flutter`, no `dio`, no `retrofit`.
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `domain_core` | `packages/domain/core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, cache entry entity/usecases |
-| `domain_auth` | `packages/domain/auth` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
+| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, cache entry entity/usecases |
+| `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
-### Data — `packages/data/*`
+### Data — `modules/*/data`
 
 Implements the domain contracts. Data sources return **Models**, never entities, and never leak Drift/Dio types.
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `data_core` | `packages/data/core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, cache data source + repository |
-| `data_auth` | `packages/data/auth` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
+| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, cache data source + repository |
+| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
-### Features — `packages/features/*`
+### Features — `modules/*/feature`
 
 One bounded UI concern per package. A feature may depend on `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, and a state-management package — **never on `data_*` and never on another feature**.
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `feature_auth` | `packages/features/auth` | Login / Register / Forgot-password pages, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
-| `feature_home` | `packages/features/home` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination` |
-| `feature_settings` | `packages/features/settings` | Settings tab, `SettingsNavDestination` |
-| `feature_onboarding` | `packages/features/onboarding` | Onboarding flow, `IAppEntryLocation` implementation |
-| `feature_dashboard` | `packages/features/dashboard` | **Shell chrome only** — the `Scaffold` + bottom navigation bar. Builds tabs from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
-| `feature_splash` | `packages/features/splash` | Splash page shown by `MainScope` before the router exists |
+| `feature_auth` | `modules/auth/feature` | Login / Register / Forgot-password pages, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
+| `feature_home` | `modules/home/feature` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination` |
+| `feature_settings` | `modules/settings/feature` | Settings tab, `SettingsNavDestination` |
+| `feature_onboarding` | `modules/onboarding/feature` | Onboarding flow, `IAppEntryLocation` implementation |
+| `feature_dashboard` | `modules/dashboard/feature` | **Shell chrome only** — the `Scaffold` + bottom navigation bar. Builds tabs from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
+| `feature_splash` | `modules/splash/feature` | Splash page shown by `MainScope` before the router exists |
 
 > [!NOTE]
 > Everything under `domain/`, `data/`, and `features/` is **sample / reference code**. It demonstrates the wiring, not production business rules. Copy the patterns, then delete or replace the samples.
@@ -102,13 +121,13 @@ graph BT
         App["app/ — host shell"]
     end
     subgraph UI
-        Features["packages/features/*"]
+        Features["modules/*/feature"]
     end
     subgraph Business
-        Domain["packages/domain/*<br/>(pure Dart)"]
+        Domain["modules/*/domain<br/>(pure Dart)"]
     end
     subgraph IO
-        Data["packages/data/*"]
+        Data["modules/*/data"]
     end
     subgraph Infra
         Core["platform/*"]
@@ -179,15 +198,15 @@ Consequences you must know:
 
 | I want to… | Package / file | Guide |
 | :--- | :--- | :--- |
-| Add a new screen + its state | `packages/features/<name>/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
-| Add a business rule / use case | `packages/domain/<name>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
-| Add an API endpoint | `packages/data/<name>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
+| Add a new screen + its state | `modules/*/feature/<name>/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
+| Add a business rule / use case | `modules/*/domain/<name>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
+| Add an API endpoint | `modules/*/data/<name>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Persist a key/value | The **owning** package's `utils/*_storage_keys.dart` | [../guides/06_storage.md](../guides/06_storage.md) |
-| Add a database table | The owning package's own `src/database/tables/` (reference: `packages/data/core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
+| Add a database table | The owning package's own `src/database/tables/` (reference: `platform/data_core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Change colors / spacing / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Add a translated string | `packages/features/<name>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Add a translated string | `modules/*/feature/<name>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Share a widget between features | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Let feature A trigger something in feature B | `core_di/src/actions/` or `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Bump a dependency version | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |

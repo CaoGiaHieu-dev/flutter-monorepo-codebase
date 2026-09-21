@@ -356,7 +356,7 @@ Flavor `dev` bỏ qua kiểm tra certificate hoàn toàn (phục vụ server t�
 ## 6. Khai API service bằng Retrofit
 
 ```dart
-// packages/data/auth/lib/src/data_sources/remote/auth_remote_data_source.dart
+// modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
 @RestApi()
 abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
@@ -380,7 +380,7 @@ Các bước: khai abstract class → thêm `part 'x.g.dart';` → chạy `dart 
 ### Endpoint thuộc về package sở hữu
 
 ```dart
-// packages/data/auth/lib/src/utils/auth_api_constants.dart
+// modules/auth/data/lib/src/utils/auth_api_constants.dart
 class AuthApiConstants {
   AuthApiConstants._();
 
@@ -400,7 +400,7 @@ Hằng số endpoint nằm cùng package sở hữu chúng, không bao giờ ở
 `BaseEntity<T>` bao một response chuẩn của server:
 
 ```dart
-// packages/domain/core/lib/src/entities/base/base_entity.dart
+// platform/domain_core/lib/src/entities/base/base_entity.dart
 const factory BaseEntity({
   @JsonKey(name: 'statusCode') @Default(200) int statusCode,
   @JsonKey(name: 'data') T? data,
@@ -414,7 +414,7 @@ bool get hasError => !isSuccess;
 `PaginatedEntity<T>` mang theo trang dữ liệu cộng metadata:
 
 ```dart
-// packages/domain/core/lib/src/entities/base/paginate_entity.dart
+// platform/domain_core/lib/src/entities/base/paginate_entity.dart
 typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
 
 const factory PaginatedEntity({
@@ -428,7 +428,7 @@ const factory PaginatedEntity({
 `BaseRequest<T>` là bộ dựng request phân trang:
 
 ```dart
-// packages/data/core/lib/src/models/base_request.dart
+// platform/data_core/lib/src/models/base_request.dart
 const factory BaseRequest({
   @JsonKey(name: 'page') @Default(1) int page,
   @JsonKey(name: 'pageSize') @Default(25) int pageSize,

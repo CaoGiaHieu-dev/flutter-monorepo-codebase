@@ -13,9 +13,9 @@ The project follows **Clean Architecture**: dependencies always point *inward*, 
 ```mermaid
 graph TD
     App["<b>App Shell</b><br/><code>app/</code><br/><i>composition root</i>"]
-    Feature["<b>Feature</b><br/><code>packages/features/*</code><br/><i>UI + state</i>"]
-    Domain["<b>Domain</b><br/><code>packages/domain/*</code><br/><i>pure Dart business rules</i>"]
-    Data["<b>Data</b><br/><code>packages/data/*</code><br/><i>repository impls, DTOs</i>"]
+    Feature["<b>Feature</b><br/><code>modules/*/feature</code><br/><i>UI + state</i>"]
+    Domain["<b>Domain</b><br/><code>modules/*/domain</code><br/><i>pure Dart business rules</i>"]
+    Data["<b>Data</b><br/><code>modules/*/data</code><br/><i>repository impls, DTOs</i>"]
     Core["<b>Core</b><br/><code>platform/*</code><br/><i>infrastructure</i>"]
 
     Feature --> Domain
@@ -34,7 +34,7 @@ graph TD
 Read the arrows as *"may import"*. Note what is **absent**: nothing points *out of* Domain, and nothing points from Core into Feature or Data.
 
 > [!IMPORTANT]
-> **Core must never depend on a feature.** `platform/*` sits underneath everything; if it reaches back up into `packages/features/*`, the dependency graph gains a cycle and a package can no longer be extracted or tested in isolation.
+> **Core must never depend on a feature.** `platform/*` sits underneath everything; if it reaches back up into `modules/*/feature`, the dependency graph gains a cycle and a package can no longer be extracted or tested in isolation.
 >
 > The same reasoning applies inside the core ring. A state-management base needs an empty/loading placeholder, and `core_ui_kit` already has branded ones — but `core_ui_kit` depends on `provider_state_management`, so borrowing them back would close a cycle. `provider_state_management` therefore ships its own minimal
 > [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../platform/provider_state_management/lib/src/base_view/default_state_widgets.dart). When core needs a widget, core defines it.
@@ -46,17 +46,17 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 | Layer | Path | Responsibility | May import | Must **never** import |
 |:--|:--|:--|:--|:--|
 | **App Shell** | `app/` | Entry point, flavors, DI assembly, router assembly | everything | — |
-| **Feature** | `packages/features/*` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, one state-management package | `data_*`, another feature package |
-| **Domain** | `packages/domain/*` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
-| **Data** | `packages/data/*` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `packages/features/*` |
-| **Core** | `platform/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `packages/features/*`, `packages/data/*` |
+| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, one state-management package | `data_*`, another feature package |
+| **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
+| **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
+| **Core** | `platform/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `modules/*/feature`, `modules/*/data` |
 
 Each layer has a dedicated page:
 [Core](02_core.md) · [Domain](03_domain.md) · [Data](04_data.md) · [Features](05_features.md) · [App Shell](06_app_shell.md).
 
 ### The Domain purity mandate
 
-`packages/domain/*` is **100% pure Dart**. No `package:flutter/...`, no `package:dio/...`, no `package:drift/...`. This is what makes the business layer unit-testable without a device or a widget tree.
+`modules/*/domain` is **100% pure Dart**. No `package:flutter/...`, no `package:dio/...`, no `package:drift/...`. This is what makes the business layer unit-testable without a device or a widget tree.
 
 When domain logic needs something that *looks* UI-shaped — a colour, an icon, a screen size — it must be expressed as a primitive or an enum defined inside the domain package itself, and the feature layer decides how to render it.
 
@@ -118,4 +118,4 @@ Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `w
 | Check a rule before a PR | [`../reference/01_rules.md`](../reference/01_rules.md) · [`../reference/04_review_checklist.md`](../reference/04_review_checklist.md) |
 
 > [!NOTE]
-> The packages under `packages/domain/*`, `packages/data/*` and `packages/features/*` (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language) ship as **sample implementations**. They demonstrate the wiring, not production business rules — copy the shape, then replace or delete them.
+> The packages under `modules/*/domain`, `modules/*/data` and `modules/*/feature` (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language) ship as **sample implementations**. They demonstrate the wiring, not production business rules — copy the shape, then replace or delete them.

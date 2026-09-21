@@ -13,11 +13,11 @@ dependencies:
   flutter:
     sdk: flutter
   platform_kernel:
-    path: ../../../platform/kernel
+    path: ../kernel
   core_database:
-    path: ../../../platform/database
+    path: ../database
   domain_core:
-    path: ../../domain/core
+    path: ../domain_core
   drift: "^2.34.3"
   get_it: ^9.2.1
   injectable: ^3.0.0

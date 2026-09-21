@@ -691,6 +691,7 @@ flutter pub get && dart run build_runner build -d --workspace
 | `IAuthRefreshListenable` (`implements Listenable`) | `AuthProvider` as GoRouter's `refreshListenable` |
 | `IAuthSessionState` + `AuthSessionFailure` | `AuthProvider`/`AuthErrorState`/`context.l10nAuth` in `NavigatorWrapperWidget` |
 | `IAppTreeWrapper` | `ChangeNotifierProvider<AuthProvider>` in `app_material_wrapper.dart` |
+| `IAuthSessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` |
 
 Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `AuthSessionFailure`) — `core_di` runs no codegen.
 
@@ -728,7 +729,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
 26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.
 27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
-28. **Any feature must be removable.** `apps/mobile/lib/di/injection.dart` is the shell's only intentional hard reference to features; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — declare a contract instead.
+28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10**, added after `network_config_impl.dart` was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
 
 ---
 
@@ -749,6 +750,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] Localization uses `IFeatureLocalization` (NOT editing `root_app.dart`)
 - [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
 - [ ] Contracts owned by a removable feature resolve with `getItOrNull` / `getAllOrEmpty` — arch_check R8 is clean
+- [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R10 is clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
 - [ ] No `platform/*` imports or declares `feature_*` or `domain_*` outside the three approved `→ domain_core` edges — `arch_check` R1 is clean

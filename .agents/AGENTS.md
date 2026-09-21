@@ -494,6 +494,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   | `IAuthRefreshListenable` (`implements Listenable`) | `AuthProvider` as GoRouter's `refreshListenable` |
   | `IAuthSessionState` + `AuthSessionFailure` | `AuthProvider` / `AuthErrorState` / `context.l10nAuth` in `NavigatorWrapperWidget` |
   | `IAppTreeWrapper` | `ChangeNotifierProvider<AuthProvider>` in `app_material_wrapper.dart` |
+  | `IAuthSessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` |
 
 - Contracts in `core_di` MUST stay state-management agnostic: `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature can return `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other.
 - Prefer a plain Dart 3 `sealed class` over Freezed for `core_di` contracts (see `AuthSessionFailure`) — `core_di` runs no codegen, and adding a `part` would make every consumer wait on `build_runner`.

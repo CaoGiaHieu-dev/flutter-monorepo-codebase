@@ -12,6 +12,8 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
+  core_di:
+    path: ../../../platform/di
   core_storage:
     path: ../../../platform/storage
   domain_core:

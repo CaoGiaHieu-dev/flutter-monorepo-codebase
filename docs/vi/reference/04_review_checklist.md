@@ -129,9 +129,9 @@ flutter pub get && dart analyze app
 ## 8. Routing
 
 - [ ] `app_router.dart` **không** bị sửa để thêm route
-- [ ] Feature đăng ký `IFeatureRouteModule` và/hoặc `IDashboardTabModule` (kèm `IAppEntryLocation` tuỳ chọn)
-- [ ] `IDashboardTabModule.order` khớp đúng index bottom-nav mong muốn
-- [ ] `IDashboardTabModule` chỉ dùng cho điểm đến bottom-nav thật, không dùng cho màn hình chỉ push
+- [ ] Feature đăng ký `IFeatureRouteModule` và/hoặc `INavDestinationModule` (kèm `IAppEntryLocation` tuỳ chọn)
+- [ ] `INavDestinationModule.order` khớp đúng index bottom-nav mong muốn
+- [ ] `INavDestinationModule` chỉ dùng cho điểm đến bottom-nav thật, không dùng cho màn hình chỉ push
 - [ ] `feature_dashboard` vẫn chỉ là chrome — không có page của tab, không hardcode danh sách nav item
 - [ ] Hằng số route path nằm ở `lib/src/utils/<feature>_path.dart`
 - [ ] Controller được tạo tại route; widget `Page` **không** bọc lại lần nữa

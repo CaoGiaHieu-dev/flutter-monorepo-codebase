@@ -11,39 +11,47 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// Putting the keys in either side would create a cycle: the app shell already
 /// depends on every feature package, so a feature cannot depend back on the app
-/// shell to read a key. Hosting them here in `core_di` — which both sides
-/// already depend on — breaks that cycle.
+/// shell to read a key. Hosting them here — which both sides already depend
+/// on — breaks that cycle.
 ///
-/// ## Why a feature-named key ([authKey]) is allowed here
+/// ## Nested keys are requested by id, not declared here
 ///
-/// [authKey] names a specific feature, which normally would be a layering
-/// smell. It is permitted because this class is *routing plumbing*, not
-/// business logic: the key is only an identity token handed to GoRouter. The
-/// DI Hub never imports `feature_auth`, and `feature_auth` never imports the
-/// app shell — they meet on this neutral key.
+/// This class used to expose `authKey`, naming one specific feature from an
+/// infra package. Every feature that wanted its own back stack had to open a PR
+/// against the DI Hub, and the DI Hub's public surface grew a product vocabulary
+/// it has no business knowing.
 ///
-/// Add a key here only when a feature genuinely needs its own nested
-/// [Navigator] (its own back stack). Tabs that live in the dashboard
-/// `StatefulShellRoute` get their branch navigator from GoRouter and do **not**
-/// need an entry.
+/// [nested] replaces that: a module asks for a key by id and gets the same
+/// instance every time, so the shell and its children agree without anyone
+/// declaring anything centrally.
 ///
-/// Consumers:
-/// - [rootKey] — `AppRouter`'s top-level `GoRouter.navigatorKey`
-/// - [appKey] — the app `ShellRoute`; parent of `feature_auth` /
-///   `feature_onboarding` top-level routes
-/// - [authKey] — `feature_auth`'s own nested navigator (login / register /
-///   forgot-password share one back stack)
+/// ```dart
+/// class AuthShellRoute extends ShellRouteData {
+///   static final $navigatorKey = NavigatorKeys.nested('auth');
+/// }
+/// ```
+///
+/// Ask for one only when a module genuinely needs its own [Navigator] — its own
+/// back stack. Destinations inside the app's `StatefulShellRoute` get a branch
+/// navigator from GoRouter and need no key.
 class NavigatorKeys {
   NavigatorKeys._();
 
   /// Navigator for the app [ShellRoute] that wraps all in-app routes.
-  static final appKey = GlobalKey<NavigatorState>();
+  static final appKey = GlobalKey<NavigatorState>(debugLabel: 'app');
 
   /// Root navigator owned by `GoRouter` itself — used for full-screen routes
   /// that must escape the app shell.
-  static final rootKey = GlobalKey<NavigatorState>();
+  static final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
-  /// Nested navigator owned by `feature_auth`, giving the auth flow its own
-  /// back stack.
-  static final authKey = GlobalKey<NavigatorState>();
+  static final _nested = <String, GlobalKey<NavigatorState>>{};
+
+  /// The nested navigator key registered under [id], created on first use.
+  ///
+  /// Returns the *same* instance for the same id — which is the whole
+  /// requirement, since a shell route and its children must share one.
+  static GlobalKey<NavigatorState> nested(String id) => _nested.putIfAbsent(
+    id,
+    () => GlobalKey<NavigatorState>(debugLabel: 'nested:$id'),
+  );
 }

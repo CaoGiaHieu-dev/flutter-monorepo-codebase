@@ -102,11 +102,11 @@ void main(List<String> args) async {
             FeatureRouteContribution.dashboardTab) {
           final tpl = Template(
             File(
-              'tools/module_generator/templates/feature/routing/dashboard_tab_module.dart.mustache',
+              'tools/module_generator/templates/feature/routing/nav_destination.dart.mustache',
             ).readAsStringSync(),
           );
           File(
-            '${config.modulePath}/lib/src/routing/${snakeName}_dashboard_tab_module.dart',
+            '${config.modulePath}/lib/src/routing/${snakeName}_nav_destination.dart',
           ).writeAsStringSync(tpl.renderString(routeValues));
         }
 
@@ -204,7 +204,7 @@ void main(List<String> args) async {
           break;
         case FeatureRouteContribution.dashboardTab:
           stdout.writeln(
-            '2. Điền order/path/routes/nav item vào *DashboardTabModule (IDashboardTabModule)',
+            '2. Điền order/path/routes/destination vào *NavDestination (INavDestinationModule)',
           );
           stdout.writeln(
             '   ⚠ Chỉ dùng cho tab Bottom Nav chính. Không nhét màn push (login/detail) vào đây.',
@@ -215,7 +215,7 @@ void main(List<String> args) async {
           break;
         case FeatureRouteContribution.none:
           stdout.writeln(
-            '2. Nếu cần lộ diện route: đăng ký IFeatureRouteModule hoặc IDashboardTabModule qua DI',
+            '2. Nếu cần lộ diện route: đăng ký IFeatureRouteModule hoặc INavDestinationModule qua DI',
           );
           break;
       }

@@ -11,8 +11,8 @@
 `app/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
 
 ```dart
-List<IDashboardTabModule> get _dashboardTabs {
-  return getAllOrEmpty<IDashboardTabModule>().toList()
+List<INavDestinationModule> get _dashboardTabs {
+  return getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
 }
 
@@ -34,7 +34,7 @@ GoRouter (navigatorKey: NavigatorKeys.rootKey)
 └── ShellRoute (navigatorKey: appKey)  →  NavigatorWrapperWidget
     ├── ...IFeatureRouteModule routes        ← auth, onboarding, …
     └── StatefulShellRoute.indexedStack      →  DashboardRouteModule.builder
-        └── one StatefulShellBranch per IDashboardTabModule (sorted by order)
+        └── one StatefulShellBranch per INavDestinationModule (sorted by order)
 ```
 
 ---
@@ -46,7 +46,7 @@ All live in `packages/core/di/lib/src/routing/`.
 | Contract | Use for | Ordered? | Implemented by |
 |---|---|---|---|
 | `IFeatureRouteModule` | Top-level / stack routes under the app shell | No — GoRouter matches by path | auth, onboarding, … |
-| `IDashboardTabModule` | One bottom-nav tab + its `StatefulShellBranch` | **Yes** — `order` must match nav index | home, settings, … |
+| `INavDestinationModule` | One primary destination + its `StatefulShellBranch` | **Yes** — ascending `order` | home, settings, … |
 | `IAppEntryLocation` | Cold-start location (`initialLocation`) | n/a | usually onboarding |
 | `DashboardRouteModule` | Dashboard chrome (scaffold + bottom bar host) | n/a | **only** `feature_dashboard` |
 
@@ -76,23 +76,23 @@ class OnboardingAppEntryLocation implements IAppEntryLocation {
 
 Use unique paths and avoid overlapping catch-alls — sibling order between modules is not guaranteed.
 
-### 2.2 `IDashboardTabModule`
+### 2.2 `INavDestinationModule`
 
 ```dart
-abstract class IDashboardTabModule {
+abstract class INavDestinationModule {
   int get order;                    // 0 = first tab
   String get path;                  // canonical path, used for fallbacks
   List<RouteBase> get routes;       // mounted in one StatefulShellBranch
   void onRestore();                 // re-tap on the active tab
-  BottomNavigationBarItem navigationBarItem(BuildContext context);
+  NavDestination destination(BuildContext context);
 }
 ```
 
-`packages/features/home/lib/src/routing/home_dashboard_tab_module.dart`:
+`packages/features/home/lib/src/routing/home_nav_destination.dart`:
 
 ```dart
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
   @override
   int get order => 0;
 
@@ -103,24 +103,23 @@ class HomeDashboardTabModule extends IDashboardTabModule {
   List<RouteBase> get routes => [$homeShellRoute];
 
   @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
 }
 ```
 
 > [!NOTE]
-> Use `IDashboardTabModule` **only** for real bottom-nav destinations that need their own persistent back stack. A screen you merely push onto the stack belongs in `IFeatureRouteModule`.
+> Use `INavDestinationModule` **only** for real bottom-nav destinations that need their own persistent back stack. A screen you merely push onto the stack belongs in `IFeatureRouteModule`.
 
 ### 2.3 Dashboard is chrome only
 
 `feature_dashboard` depends on just `core_di` and `core_common` — it physically **cannot** import another feature. Its page builds the bar from DI (`packages/features/dashboard/lib/src/pages/dashboard_page.dart`):
 
 ```dart
-final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
+final tabs = getAllOrEmpty<INavDestinationModule>().toList()
   ..sort((a, b) => a.order.compareTo(b.order));
 return Scaffold(
   body: navigationShell,
@@ -131,8 +130,8 @@ return Scaffold(
 The dashboard **must not**:
 - import `feature_home` / `feature_settings` or embed their pages
 - own tab pages or business BLoCs
-- hardcode a `BottomNavigationBarItem` list instead of reading DI
-- register `IDashboardTabModule` itself for a "fake" tab
+- hardcode a destination list instead of reading DI
+- register `INavDestinationModule` itself for a "fake" tab
 
 Note `tabs.length < 2` hides the bar entirely when fewer than two tabs are registered — part of the graceful-degradation story in §6.
 
@@ -168,7 +167,7 @@ class AuthPath {
 class AuthShellRoute extends ShellRouteData {
   const AuthShellRoute();
 
-  static final $navigatorKey = NavigatorKeys.authKey;
+  static final $navigatorKey = NavigatorKeys.nested('auth');
   static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
@@ -179,7 +178,7 @@ class AuthShellRoute extends ShellRouteData {
 
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
+  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const LoginPage();
@@ -278,17 +277,24 @@ getItOrNull<AuthNavigator>()?.toLogin(context);
 class NavigatorKeys {
   NavigatorKeys._();
 
-  static final appKey = GlobalKey<NavigatorState>();
-  static final rootKey = GlobalKey<NavigatorState>();
-  static final authKey = GlobalKey<NavigatorState>();
+  static final appKey = GlobalKey<NavigatorState>(debugLabel: 'app');
+  static final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+  static final _nested = <String, GlobalKey<NavigatorState>>{};
+
+  /// Same instance for the same id, created on first use.
+  static GlobalKey<NavigatorState> nested(String id) => _nested.putIfAbsent(
+    id,
+    () => GlobalKey<NavigatorState>(debugLabel: 'nested:$id'),
+  );
 }
 ```
 
 A `ShellRoute` and its child routes must reference the **same** `GlobalKey` instance. The shell is assembled by the app shell; the child routes are declared inside feature packages. Putting the keys on either side creates a cycle — the app shell already depends on every feature, so a feature cannot depend back on the shell. `core_di`, which both sides already depend on, is the neutral home.
 
-`authKey` names a feature, which would normally be a layering smell. It is allowed because this is **routing plumbing, not business logic**: the key is only an identity token handed to GoRouter, and `core_di` never imports `feature_auth`.
+The DI Hub declares no feature-named key. `nested(id)` hands back the same instance for the same id, so a shell route and its children agree without anything central being declared — and `core_di`'s public surface never grows a product vocabulary.
 
-Add a key **only** when a feature genuinely needs its own nested navigator (its own back stack). Dashboard tabs get their branch navigator from GoRouter's `StatefulShellRoute` and need no entry.
+Ask for a key **only** when a module genuinely needs its own nested navigator — its own back stack. Destinations inside `StatefulShellRoute` get a branch navigator from GoRouter and need none.
 
 ---
 
@@ -320,7 +326,7 @@ builder: (context, state, navigationShell) {
 | Missing | Result |
 |---|---|
 | All `IFeatureRouteModule` | No stack routes; app still builds |
-| All `IDashboardTabModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
+| All `INavDestinationModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
 | `DashboardRouteModule` | Dashboard renders `SizedBox.shrink()` |
 | `IAppEntryLocation` | Falls back to the first tab's path, then `/` |
 
@@ -332,7 +338,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 
 1. **Path constant** → `lib/src/utils/<feature>_path.dart`.
 2. **Route class** → `lib/src/routing/<feature>_route_module.dart` with `@TypedGoRoute` / `@TypedShellRoute`; create the controller in `build()`.
-3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `IDashboardTabModule` for a tab, annotated `@LazySingleton(as: ...)`.
+3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
 4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`.
 5. **Generate** → `dart run build_runner build -d --workspace`.
 6. **Barrels** → `dart tools/barrel_generator/generate.dart packages/features/<name>/lib`.
@@ -342,7 +348,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 - [ ] `app_router.dart` untouched
 - [ ] Path constants under `src/utils/`, not `routing/`
 - [ ] Controller created in the route's `build()`, page does not re-wrap
-- [ ] `IDashboardTabModule.order` matches the intended tab index
+- [ ] `INavDestinationModule.order` matches the intended tab index
 - [ ] Cross-feature navigation goes through a `core_di` Navigator interface
 - [ ] `BuildContext` passed from the UI, never taken from `NavigatorKeys`
 - [ ] `build_runner` re-run after touching route annotations

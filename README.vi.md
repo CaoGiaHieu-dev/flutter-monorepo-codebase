@@ -357,7 +357,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 `app/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
-- `getAllOrEmpty<IDashboardTabModule>()` sort theo `order` → list `StatefulShellBranch`
+- `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
 - `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (không có thì tab đầu / `/`)
 - `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`

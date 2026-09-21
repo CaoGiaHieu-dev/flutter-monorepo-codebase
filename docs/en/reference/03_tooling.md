@@ -91,7 +91,7 @@ dart tools/module_generator/generate.dart <type> <name> [<dir>] [<sm>] [<route>]
 | `<name>` | bare directory name (`profile`) — the package becomes `feature_profile` |
 | `<dir>` | only for type `5` |
 | `<sm>` | feature only — `1` Provider · `2` BLoC · `3` none |
-| `<route>` | feature only — `1` `IFeatureRouteModule` · `2` `IDashboardTabModule` · `3` none |
+| `<route>` | feature only — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none |
 
 ```bash
 dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provider + stack route

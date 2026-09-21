@@ -7,7 +7,7 @@ enum FeatureRouteContribution {
   /// Standalone / stack routes via [IFeatureRouteModule] (auth, onboarding, …).
   featureRoute,
 
-  /// Bottom-nav tab via [IDashboardTabModule] (home, settings, …).
+  /// Primary destination via [INavDestinationModule] (home, settings, …).
   dashboardTab,
 
   /// No route DI stub (rare).

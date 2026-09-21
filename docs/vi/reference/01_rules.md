@@ -285,13 +285,13 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 | Hợp đồng | Mục đích | Có thứ tự? |
 |---|---|---|
 | `IFeatureRouteModule` | route dạng stack dưới `ShellRoute` của app | không (khớp theo path) |
-| `IDashboardTabModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` phải khớp index nav |
+| `INavDestinationModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` phải khớp index nav |
 | `IAppEntryLocation` | `initialLocation` lúc cold-start | không áp dụng |
 | `DashboardRouteModule` | chỉ phần chrome của dashboard | chỉ `feature_dashboard` |
 
 Điều hướng xuyên feature đi qua interface Navigator khai ở `core_di`, implement trong `routing/` của feature sở hữu. Cấm hardcode path hoặc gọi `GoRouter.of(context).go(...)` sang feature khác. **`BuildContext` phải được truyền trực tiếp từ nơi gọi ở UI** — đừng với lấy `NavigatorKeys.*.currentContext`.
 
-`feature_dashboard` **chỉ là chrome**: không được import feature tab, không sở hữu page của tab, không hardcode danh sách `BottomNavigationBarItem`, và không tự đăng ký `IDashboardTabModule`.
+`feature_dashboard` **chỉ là chrome**: không được import feature tab, không sở hữu page của tab, không hardcode danh sách destination, và không tự đăng ký `INavDestinationModule`.
 
 ---
 

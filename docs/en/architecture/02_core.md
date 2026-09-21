@@ -56,18 +56,20 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 | Contract group | Path | Purpose |
 |:--|:--|:--|
 | Navigators | `src/navigators/` | `AuthNavigator`, `HomeNavigator`, `OnboardingNavigator`, `SettingsNavigator` — declared here, implemented in the owning feature |
-| Routing | `src/routing/` | `IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
+| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
 | Action handlers | `src/actions/` | `IAuthActionHandler` — cross-feature UI actions (e.g. logout) |
 | Agnostic streams | `src/agnostic_streams/` | `IAuthStatusStream` — state sharing between a Provider feature and a BLoC feature |
 | Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 
-**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey` and `authKey`.
+**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
 
-`authKey` names a specific feature, which would normally be a layering smell. It is allowed because the class is *routing plumbing*: a `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside `feature_auth`. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it. The Hub never imports `feature_auth`.
+A `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside a feature. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it.
+
+Keys are requested by id rather than declared: `NavigatorKeys.nested('auth')` returns the same instance every time. The DI Hub therefore names no feature, and a module needing its own back stack adds nothing here.
 
 > [!NOTE]
-> `core_di` depends on `go_router`. That is not a leak: `IFeatureRouteModule` returns `List<RouteBase>` and `IDashboardTabModule` returns `BottomNavigationBarItem`. These *are* routing contracts, so they must speak GoRouter's vocabulary. Abstracting them further would add an adapter layer with no benefit.
+> `core_di` depends on `go_router`. That is not a leak: `IFeatureRouteModule` returns `List<RouteBase>` and `INavDestinationModule` returns `List<RouteBase>` too. These *are* routing contracts, so they must speak GoRouter's vocabulary — but note `INavDestinationModule` describes its destination with the Hub's own `NavDestination`, never a `BottomNavigationBarItem`, so the contract does not commit to a bottom bar. Abstracting them further would add an adapter layer with no benefit.
 
 **Not here:** anything with an implementation. If you write a `class …Impl` in `core_di`, it is in the wrong package.
 

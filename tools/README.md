@@ -90,13 +90,13 @@ gỡ feature thủ công không có.
 # Cú pháp: dart tools/module_generator/generate.dart <loại> <tên> [<thư_mục>] [<SM>] [<route>]
 # <loại>: 1=Feature, 2=Domain, 3=Data, 4=Core, 5=Custom
 # <SM> (chỉ Feature): 1=Provider, 2=BLoC, 3=None
-# <route> (chỉ Feature): 1=IFeatureRouteModule, 2=IDashboardTabModule (tab Bottom Nav), 3=none
+# <route> (chỉ Feature): 1=IFeatureRouteModule, 2=INavDestinationModule (tab Bottom Nav), 3=none
 # Chon 2 chi khi feature la tab chinh sau login - xem docs/{en,vi}/guides/04_routing.md.
 
 # Feature 'profile' + Provider + stack routes (IFeatureRouteModule):
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 
-# Feature 'chat' + BLoC + tab Bottom Nav (IDashboardTabModule):
+# Feature 'chat' + BLoC + tab Bottom Nav (INavDestinationModule):
 dart tools/module_generator/generate.dart 1 chat "" 2 2
 
 # Domain micro-package 'payment':

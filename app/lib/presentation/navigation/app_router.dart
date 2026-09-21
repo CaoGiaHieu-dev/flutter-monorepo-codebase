@@ -12,7 +12,7 @@ import '../widgets/undefine_route_widget.dart';
 ///
 /// Assembles GoRouter from DI contributions:
 /// - [IFeatureRouteModule] — top-level feature routes (onboarding, auth, …)
-/// - [IDashboardTabModule] — dashboard shell branches + bottom-nav tabs
+/// - [INavDestinationModule] — primary destinations + their shell branches
 /// - [DashboardRouteModule] — dashboard chrome (optional)
 /// - [IAppEntryLocation] — cold-start path (optional)
 ///
@@ -40,8 +40,8 @@ class AppRouter {
     return route.name ?? route.path;
   }
 
-  List<IDashboardTabModule> get _dashboardTabs {
-    return getAllOrEmpty<IDashboardTabModule>().toList()
+  List<INavDestinationModule> get _destinations {
+    return getAllOrEmpty<INavDestinationModule>().toList()
       ..sort((a, b) => a.order.compareTo(b.order));
   }
 
@@ -53,7 +53,7 @@ class AppRouter {
   }
 
   List<StatefulShellBranch> get _dashboardBranches {
-    final tabs = _dashboardTabs;
+    final tabs = _destinations;
     if (tabs.isEmpty) {
       return [
         StatefulShellBranch(
@@ -74,7 +74,7 @@ class AppRouter {
   String get _fallbackLocation {
     final entry = getItOrNull<IAppEntryLocation>()?.path;
     if (entry != null) return entry;
-    final tabs = _dashboardTabs;
+    final tabs = _destinations;
     if (tabs.isNotEmpty) return tabs.first.path;
     return '/';
   }

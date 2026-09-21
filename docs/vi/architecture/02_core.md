@@ -54,18 +54,20 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 | Nhóm hợp đồng | Đường dẫn | Mục đích |
 |:--|:--|:--|
 | Navigator | `src/navigators/` | `AuthNavigator`, `HomeNavigator`, `OnboardingNavigator`, `SettingsNavigator` — khai ở đây, hiện thực trong feature sở hữu |
-| Routing | `src/routing/` | `IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
+| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
 | Action handler | `src/actions/` | `IAuthActionHandler` — hành động UI xuyên feature (vd đăng xuất) |
 | Agnostic stream | `src/agnostic_streams/` | `IAuthStatusStream` — chia sẻ state giữa feature Provider và feature BLoC |
 | Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
 
-**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey` và `authKey`.
+**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
 
-`authKey` mang tên một feature cụ thể — bình thường đây là dấu hiệu sai phân tầng. Nó được chấp nhận vì class này là *hạ tầng routing*: một `ShellRoute` và các route con phải dùng **cùng một** instance `GlobalKey`, nhưng shell do app shell dựng còn route con khai bên trong `feature_auth`. Đặt key ở bên nào cũng tạo chu trình, nên Hub — nơi cả hai đều đã phụ thuộc — giữ nó. Hub không bao giờ import `feature_auth`.
+Một `ShellRoute` và các route con phải dùng **cùng một** instance `GlobalKey`, nhưng shell do app shell dựng còn route con khai bên trong feature. Đặt key ở bên nào cũng tạo chu trình, nên Hub — nơi cả hai đều đã phụ thuộc — giữ nó.
+
+Key được *yêu cầu theo id* chứ không khai sẵn: `NavigatorKeys.nested('auth')` luôn trả về cùng một instance. Nhờ vậy DI Hub không gọi tên feature nào, và module cần back stack riêng không phải thêm gì vào đây.
 
 > [!NOTE]
-> `core_di` phụ thuộc `go_router`. Đây không phải rò rỉ: `IFeatureRouteModule` trả về `List<RouteBase>`, `IDashboardTabModule` trả về `BottomNavigationBarItem`. Đây *chính là* hợp đồng routing nên buộc phải nói ngôn ngữ của GoRouter. Trừu tượng thêm một lớp nữa chỉ tạo adapter vô ích.
+> `core_di` phụ thuộc `go_router`. Đây không phải rò rỉ: `IFeatureRouteModule` trả về `List<RouteBase>`, `INavDestinationModule` cũng trả về `List<RouteBase>`. Đây *chính là* hợp đồng routing nên buộc phải nói ngôn ngữ của GoRouter — nhưng `INavDestinationModule` mô tả điểm đến bằng `NavDestination` của chính Hub, không phải `BottomNavigationBarItem`, nên hợp đồng không cam kết vào thanh bottom bar. Trừu tượng thêm một lớp nữa chỉ tạo adapter vô ích.
 
 **Không thuộc về đây:** bất cứ thứ gì có phần hiện thực. Nếu bạn viết `class …Impl` trong `core_di`, nó đang nằm sai package.
 

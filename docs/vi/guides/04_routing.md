@@ -11,8 +11,8 @@
 `app/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
 
 ```dart
-List<IDashboardTabModule> get _dashboardTabs {
-  return getAllOrEmpty<IDashboardTabModule>().toList()
+List<INavDestinationModule> get _dashboardTabs {
+  return getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
 }
 
@@ -34,7 +34,7 @@ GoRouter (navigatorKey: NavigatorKeys.rootKey)
 └── ShellRoute (navigatorKey: appKey)  →  NavigatorWrapperWidget
     ├── ...route từ IFeatureRouteModule        ← auth, onboarding, …
     └── StatefulShellRoute.indexedStack        →  DashboardRouteModule.builder
-        └── mỗi IDashboardTabModule một StatefulShellBranch (sắp theo order)
+        └── mỗi INavDestinationModule một StatefulShellBranch (sắp theo order)
 ```
 
 ---
@@ -46,7 +46,7 @@ Tất cả nằm ở `packages/core/di/lib/src/routing/`.
 | Contract | Dùng cho | Có thứ tự? | Ai implement |
 |---|---|---|---|
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
-| `IDashboardTabModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
+| `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
 | `IAppEntryLocation` | Vị trí lúc khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
 | `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar) | n/a | **chỉ** `feature_dashboard` |
 
@@ -76,23 +76,23 @@ class OnboardingAppEntryLocation implements IAppEntryLocation {
 
 Hãy dùng path duy nhất và tránh catch-all chồng lấn — thứ tự giữa các module không được đảm bảo.
 
-### 2.2 `IDashboardTabModule`
+### 2.2 `INavDestinationModule`
 
 ```dart
-abstract class IDashboardTabModule {
+abstract class INavDestinationModule {
   int get order;                    // 0 = tab đầu tiên
   String get path;                  // path chuẩn, dùng cho fallback
   List<RouteBase> get routes;       // mount trong một StatefulShellBranch
   void onRestore();                 // bấm lại vào tab đang active
-  BottomNavigationBarItem navigationBarItem(BuildContext context);
+  NavDestination destination(BuildContext context);
 }
 ```
 
-`packages/features/home/lib/src/routing/home_dashboard_tab_module.dart`:
+`packages/features/home/lib/src/routing/home_nav_destination.dart`:
 
 ```dart
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
   @override
   int get order => 0;
 
@@ -103,24 +103,23 @@ class HomeDashboardTabModule extends IDashboardTabModule {
   List<RouteBase> get routes => [$homeShellRoute];
 
   @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
 }
 ```
 
 > [!NOTE]
-> Chỉ dùng `IDashboardTabModule` cho **đích đến bottom-nav thật sự** cần back stack riêng bền vững. Màn hình chỉ push lên stack thì thuộc về `IFeatureRouteModule`.
+> Chỉ dùng `INavDestinationModule` cho **đích đến bottom-nav thật sự** cần back stack riêng bền vững. Màn hình chỉ push lên stack thì thuộc về `IFeatureRouteModule`.
 
 ### 2.3 Dashboard chỉ là chrome
 
 `feature_dashboard` chỉ phụ thuộc `core_di` và `core_common` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`packages/features/dashboard/lib/src/pages/dashboard_page.dart`):
 
 ```dart
-final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
+final tabs = getAllOrEmpty<INavDestinationModule>().toList()
   ..sort((a, b) => a.order.compareTo(b.order));
 return Scaffold(
   body: navigationShell,
@@ -131,8 +130,8 @@ return Scaffold(
 Dashboard **không được**:
 - import `feature_home` / `feature_settings` hay nhúng page của chúng
 - sở hữu page của tab hoặc BLoC nghiệp vụ của tab
-- hardcode danh sách `BottomNavigationBarItem` thay vì đọc DI
-- tự đăng ký `IDashboardTabModule` để tạo tab "giả"
+- hardcode danh sách destination thay vì đọc DI
+- tự đăng ký `INavDestinationModule` để tạo tab "giả"
 
 Chú ý `tabs.length < 2` ẩn hẳn thanh bar khi có ít hơn hai tab — một phần của cơ chế suy giảm mềm ở §6.
 
@@ -168,7 +167,7 @@ class AuthPath {
 class AuthShellRoute extends ShellRouteData {
   const AuthShellRoute();
 
-  static final $navigatorKey = NavigatorKeys.authKey;
+  static final $navigatorKey = NavigatorKeys.nested('auth');
   static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
@@ -179,7 +178,7 @@ class AuthShellRoute extends ShellRouteData {
 
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
+  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return const LoginPage();
@@ -278,17 +277,24 @@ getItOrNull<AuthNavigator>()?.toLogin(context);
 class NavigatorKeys {
   NavigatorKeys._();
 
-  static final appKey = GlobalKey<NavigatorState>();
-  static final rootKey = GlobalKey<NavigatorState>();
-  static final authKey = GlobalKey<NavigatorState>();
+  static final appKey = GlobalKey<NavigatorState>(debugLabel: 'app');
+  static final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+  static final _nested = <String, GlobalKey<NavigatorState>>{};
+
+  /// Same instance for the same id, created on first use.
+  static GlobalKey<NavigatorState> nested(String id) => _nested.putIfAbsent(
+    id,
+    () => GlobalKey<NavigatorState>(debugLabel: 'nested:$id'),
+  );
 }
 ```
 
 Một `ShellRoute` và các route con của nó phải tham chiếu **cùng một** instance `GlobalKey`. Shell do app shell lắp ráp; route con lại khai bên trong feature package. Đặt key ở một trong hai phía sẽ tạo vòng phụ thuộc — app shell vốn đã phụ thuộc mọi feature, nên feature không thể phụ thuộc ngược lại app shell để lấy key. `core_di`, thứ mà cả hai phía đều đã phụ thuộc, là nơi trung lập.
 
-`authKey` mang tên một feature, bình thường sẽ là mùi phân tầng sai. Nó được chấp nhận vì đây là **hạ tầng routing, không phải business logic**: key chỉ là token định danh trao cho GoRouter, và `core_di` không hề import `feature_auth`.
+DI Hub không khai key nào mang tên feature. `nested(id)` trả về đúng cùng một instance cho cùng một id, nên shell route và route con khớp nhau mà không cần khai báo tập trung — và bề mặt công khai của `core_di` không phình thêm từ vựng sản phẩm.
 
-Chỉ thêm key mới **khi** một feature thực sự cần navigator lồng riêng (back stack riêng). Tab trong dashboard đã có branch navigator từ `StatefulShellRoute` của GoRouter nên không cần.
+Chỉ xin key **khi** một module thực sự cần navigator lồng riêng (back stack riêng). Destination bên trong `StatefulShellRoute` đã có branch navigator từ GoRouter nên không cần.
 
 ---
 
@@ -320,7 +326,7 @@ builder: (context, state, navigationShell) {
 | Thiếu gì | Kết quả |
 |---|---|
 | Toàn bộ `IFeatureRouteModule` | Không có route stack; app vẫn dựng được |
-| Toàn bộ `IDashboardTabModule` | Một branch giữ chỗ `/_empty_dashboard` giữ `StatefulShellRoute` hợp lệ |
+| Toàn bộ `INavDestinationModule` | Một branch giữ chỗ `/_empty_dashboard` giữ `StatefulShellRoute` hợp lệ |
 | `DashboardRouteModule` | Dashboard render `SizedBox.shrink()` |
 | `IAppEntryLocation` | Rơi về path của tab đầu tiên, rồi tới `/` |
 
@@ -332,7 +338,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 
 1. **Hằng số path** → `lib/src/utils/<feature>_path.dart`.
 2. **Class route** → `lib/src/routing/<feature>_route_module.dart` với `@TypedGoRoute` / `@TypedShellRoute`; tạo controller trong `build()`.
-3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `IDashboardTabModule` cho tab, gắn `@LazySingleton(as: ...)`.
+3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
 4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`.
 5. **Sinh code** → `dart run build_runner build -d --workspace`.
 6. **Barrel** → `dart tools/barrel_generator/generate.dart packages/features/<name>/lib`.
@@ -342,7 +348,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 - [ ] Không đụng `app_router.dart`
 - [ ] Hằng số path nằm ở `src/utils/`, không phải `routing/`
 - [ ] Controller tạo trong `build()` của route, page không bọc lại
-- [ ] `IDashboardTabModule.order` khớp đúng vị trí tab mong muốn
+- [ ] `INavDestinationModule.order` khớp đúng vị trí tab mong muốn
 - [ ] Điều hướng xuyên feature đi qua Navigator interface ở `core_di`
 - [ ] `BuildContext` truyền từ UI, không lấy từ `NavigatorKeys`
 - [ ] Đã chạy lại `build_runner` sau khi sửa annotation route

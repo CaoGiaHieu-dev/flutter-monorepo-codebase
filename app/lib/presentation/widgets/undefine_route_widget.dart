@@ -12,7 +12,7 @@ class UndefineRouteWidget extends StatelessWidget {
   String get _fallbackLocation {
     final entry = getItOrNull<IAppEntryLocation>()?.path;
     if (entry != null) return entry;
-    final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
+    final tabs = getAllOrEmpty<INavDestinationModule>().toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     if (tabs.isNotEmpty) return tabs.first.path;
     return '/';

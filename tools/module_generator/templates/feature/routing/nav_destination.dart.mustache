@@ -1,0 +1,38 @@
+import 'package:core_di/core_di.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:injectable/injectable.dart';
+
+import '../extensions/extensions.dart';
+import '../utils/{{snakeNameInput}}_path.dart';
+import '{{snakeNameInput}}_route_module.dart';
+
+/// Contributes one primary navigation destination and its
+/// [StatefulShellBranch] routes.
+///
+/// `extends` (not `implements`) so [INavDestinationModule.onRestore] keeps its
+/// default body. The app shell collects every registration with
+/// `getAllOrEmpty<INavDestinationModule>()` sorted by [order], so removing this
+/// package simply drops the destination.
+///
+/// Returns a [NavDestination] rather than a widget: this module works the same
+/// whether the app renders a bottom bar, a rail or a sidebar.
+@LazySingleton(as: INavDestinationModule)
+class {{pascalName}}NavDestination extends INavDestinationModule {
+  /// Ascending order among destinations.
+  @override
+  int get order => 10;
+
+  @override
+  String get path => {{pascalNameInput}}Path.{{screamingNameInput}};
+
+  @override
+  List<RouteBase> get routes => [${{camelNameInput}}Route];
+
+  @override
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10n{{pascalNameInput}}.title,
+    icon: Icons.star_border,
+    selectedIcon: Icons.star,
+  );
+}

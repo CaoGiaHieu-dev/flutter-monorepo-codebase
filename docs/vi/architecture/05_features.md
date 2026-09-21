@@ -85,8 +85,8 @@ class AuthPath {
 | `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Đăng nhập / đăng ký / quên mật khẩu | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthActionHandler` |
 | `feature_dashboard` | Khung chrome bottom-nav | không | `DashboardRouteModule` |
-| `feature_home` | Tab Home | **BLoC** | `IDashboardTabModule` (order 0), `HomeNavigator` |
-| `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `IDashboardTabModule` (order 1), `SettingsNavigator` |
+| `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
+| `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1), `SettingsNavigator` |
 | `feature_splash` | Màn hình splash | không | chỉ `IFeatureLocalization` — **không phải route** |
 
 `feature_auth` và `feature_home` được xây trên **hai** hướng state khác nhau một cách có chủ đích, để template minh hoạ cả hai. Xem [state management](../guides/03_state_management.md) — và hãy đọc phần so sánh trung thực ở đó trước khi chọn, vì hai nhánh **không** được trang bị ngang nhau.
@@ -105,7 +105,7 @@ Dashboard sở hữu `Scaffold` và `BottomNavigationBar` — không gì khác. 
 @override
 Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
-  final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
+  final tabs = getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
   return Scaffold(
     body: navigationShell,
@@ -114,7 +114,7 @@ Widget build(BuildContext context) {
         : BottomNavigationBar(
             currentIndex: index.clamp(0, tabs.length - 1),
             onTap: (tabIndex) => _onTap(context, tabIndex, tabs[tabIndex].onRestore),
-            items: [for (final tab in tabs) tab.navigationBarItem(context)],
+            items: [for (final tab in tabs) tab.destination(context)],
           ),
   );
 }
@@ -126,17 +126,17 @@ Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app 
 
 - Import `feature_home` / `feature_settings`, hoặc nhúng page của chúng
 - Sở hữu `HomePage` / `SettingsPage`, hay bất kỳ BLoC nghiệp vụ nào của tab
-- Hardcode danh sách `BottomNavigationBarItem` thay vì đọc từ DI
-- Tự đăng ký `IDashboardTabModule` để tạo tab "giả"
+- Hardcode danh sách destination thay vì đọc từ DI
+- Tự đăng ký `INavDestinationModule` để tạo tab "giả"
 
 ### Đóng góp một tab
 
 Feature đăng ký một implementation là có ngay branch và nav item:
 
 ```dart
-// packages/features/home/lib/src/routing/home_dashboard_tab_module.dart
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
+// packages/features/home/lib/src/routing/home_nav_destination.dart
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
   @override
   int get order => 0;                       // phải khớp vị trí tab mong muốn
 
@@ -147,18 +147,17 @@ class HomeDashboardTabModule extends IDashboardTabModule {
   List<RouteBase> get routes => [$homeShellRoute];
 
   @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
 }
 ```
 
-`IDashboardTabModule` còn cung cấp `onRestore()` dạng virtual — được gọi khi người dùng bấm vào chính tab đang mở (thao tác quen thuộc "cuộn lên đầu / pop về gốc"). Override nếu tab của bạn cần phản ứng.
+`INavDestinationModule` còn cung cấp `onRestore()` dạng virtual — được gọi khi người dùng bấm vào chính tab đang mở (thao tác quen thuộc "cuộn lên đầu / pop về gốc"). Override nếu tab của bạn cần phản ứng.
 
-Chỉ dùng `IDashboardTabModule` cho **điểm đến chính của bottom-nav** cần `StatefulShellBranch` riêng. Màn hình push chồng lên một tab chỉ là route thường bên trong branch đó.
+Chỉ dùng `INavDestinationModule` cho **điểm đến chính của bottom-nav** cần `StatefulShellBranch` riêng. Màn hình push chồng lên một tab chỉ là route thường bên trong branch đó.
 
 ---
 
@@ -212,7 +211,7 @@ Controller toàn cục thì không cần bọc gì cả. `AuthProvider` là `@la
 ```dart
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
+  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
@@ -281,7 +280,7 @@ dart run build_runner build -d --workspace
 Checklist:
 
 - [ ] Có `resolution: workspace` trong pubspec; không có `data_*` và không có feature khác trong dependencies
-- [ ] Route đăng ký qua `IFeatureRouteModule` hoặc `IDashboardTabModule` — không đụng `app_router.dart`
+- [ ] Route đăng ký qua `IFeatureRouteModule` hoặc `INavDestinationModule` — không đụng `app_router.dart`
 - [ ] Localization đăng ký qua `IFeatureLocalization` — không đụng `root_app.dart`
 - [ ] Controller theo màn hình là `@injectable`, tạo ở route, không bọc lại trong page
 - [ ] Hằng số đường dẫn nằm ở `src/utils/<name>_path.dart`

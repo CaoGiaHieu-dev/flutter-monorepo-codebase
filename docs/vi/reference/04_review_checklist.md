@@ -145,6 +145,7 @@ flutter pub get && dart analyze app
 - [ ] Event của BLoC là subclass private dùng `part` / `part of`
 - [ ] Mọi handler `on<Event>` đều `async` và nhận `(event, emit)`
 - [ ] Dùng đúng loại `ViewState` — `BlocViewState<T>` cho nhánh BLoC, `ViewState` cho nhánh Provider
+- [ ] Contract do feature removable sở hữu được resolve bằng `getItOrNull` / `getAllOrEmpty` — `arch_check` R8 sạch
 - [ ] Mọi kích thước đi qua `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; không double thô, không dạng bare `16.h` (`arch_check` R7 chặn)
 - [ ] Design token gọi kèm context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, không dùng getter trần, không scale hai lần
 - [ ] Giá trị cần dùng sau `await` được đọc từ context **trước** đó, không giữ context xuyên qua

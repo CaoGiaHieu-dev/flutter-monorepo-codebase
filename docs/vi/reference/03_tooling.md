@@ -47,10 +47,13 @@ dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
 | R5 | Mọi `package:` import dùng trong `lib/` phải được khai trong `pubspec.yaml` của chính package đó |
 | R6 | File generated còn giữ header của generator (chỉ cảnh báo) |
 | R7 | Scale responsive phải qua `BuildContext` — cấm receiver trần `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`, trong mọi file dùng `core_responsive` |
+| R8 | Contract của `core_di` mà chỉ feature implement thì phải resolve bằng `getItOrNull` / `getAllOrEmpty`, cấm `getIt` / `getAll` (dạng ném lỗi) |
 
 Bốn ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ năm nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
 
 R7 tồn tại vì `flutter analyze` không thấy được khác biệt này. Bản thân `core_responsive` không cung cấp extension nào trên `num`, nên `16.h` không phân giải được về nó — nhưng một extension khai ở package khác, hoặc do ai đó tự thêm cục bộ, vẫn type-check sạch trong khi đọc một biến toàn cục chẳng báo cho ai. Chỉ `context.h(16)` mới đăng ký dependency `InheritedWidget` lên `ResponsiveScope`, tức mới rebuild khi metrics đổi. Dạng trần là một lỗi giá trị cũ âm thầm, và không linter nào có luật cho nó. Check chỉ chạy trên file có tham chiếu `core_responsive`, và khớp receiver là số hoặc dấu đóng ngoặc theo sau bởi `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
+
+R8 tồn tại vì khả năng tháo module là tính chất mà app shell dựa vào, nhưng trước đó không có gì giữ nó. Tool tự suy ra tập hợp lúc chạy: mọi type khai trong `core_di`, thu hẹp lại còn những type mà ràng buộc `implements` / `extends` / `as:` duy nhất nằm trong một package `packages/features/*`. Một lookup ném lỗi lên các type đó vẫn compile — package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature — rồi crash lúc runtime ở bản build không có feature đó. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký, nên cố ý nằm ngoài tập hợp này. Feature sở hữu được miễn trừ với chính contract của nó: package đã có trong build thì đăng ký của nó cũng có.
 
 R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai mà không dùng*, tool này tìm dependency *đang dùng mà không khai*. Pub Workspaces che giấu hoàn toàn loại thứ hai — mọi thứ resolve được cục bộ qua `package_config.json` dùng chung, và chỉ vỡ khi tách package ra hay publish.
 

@@ -60,7 +60,7 @@ flutter test test/debounce_test.dart   # a single test file
 # Enforce the layering rules — Gate 1 of pr_quality_check.yml, exits 1 on violation.
 # The only check that can see layering; analysis_options.yaml knows nothing about it.
 dart tools/arch_check/check.dart
-dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R7)
+dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R8)
 
 # Which packages are sample code, and how to delete one safely.
 # Source of truth: tools/sample_manifest.yaml
@@ -738,6 +738,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] Action Handlers used for cross-feature UI actions
 - [ ] Localization uses `IFeatureLocalization` (NOT editing `root_app.dart`)
 - [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
+- [ ] Contracts owned by a removable feature resolve with `getItOrNull` / `getAllOrEmpty` — arch_check R8 is clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
 - [ ] No `packages/core/*` imports or declares `feature_*` (only `core_di → domain_auth` and `provider_state_management → domain_core` allowed)

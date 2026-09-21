@@ -145,6 +145,7 @@ flutter pub get && dart analyze app
 - [ ] BLoC events are private subclasses using `part` / `part of`
 - [ ] Every `on<Event>` handler is `async` and takes `(event, emit)`
 - [ ] The right `ViewState` is used — `BlocViewState<T>` on the BLoC side, `ViewState` on the Provider side
+- [ ] A contract owned by a removable feature is resolved with `getItOrNull` / `getAllOrEmpty` — `arch_check` R8 is clean
 - [ ] All sizing goes through `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; no raw doubles, no bare `16.h` form (`arch_check` R7 blocks it)
 - [ ] Design tokens called with context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, never a bare getter, never double-scaled
 - [ ] Values needed after an `await` were read from context **before** it, not across it

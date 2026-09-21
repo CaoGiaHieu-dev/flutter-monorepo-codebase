@@ -194,6 +194,14 @@ Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng
 > [!WARNING]
 > `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. `getAll` ném lỗi khi type chưa đăng ký, nên một lệnh `getAll<IFeatureLocalization>()` trần sẽ làm app crash ngay lúc dựng `MaterialApp` ở bất kỳ bản build nào không có feature nào đóng góp.
 
+**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` mà implementer duy nhất nằm trong một package `packages/features/*`, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
+
+```bash
+dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_check.yml
+```
+
+Đây không phải luật về phong cách. Lookup ném lỗi vẫn **compile được**: package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature implement contract đó, nên `flutter analyze` không thấy gì sai. Nó chỉ vỡ lúc runtime, ở bản build không có feature đó, trên đúng màn hình nào gọi tới. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký nên nằm ngoài tập hợp này; feature được miễn trừ với chính contract của nó.
+
 **Gỡ một feature** — bốn bước được ghi ngay trong `app/lib/di/injection.dart`:
 
 1. mục `ExternalModule(...)` và dòng import tương ứng trong `app/lib/di/injection.dart`;
@@ -427,6 +435,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | Code sinh đã cập nhật chưa | `dart run build_runner build -d --workspace` |
 | An toàn thứ tự DI | đọc `app/lib/di/injection.config.dart` |
 | core ⇏ feature | `grep -rn "package:feature_" packages/core/*/lib` |
+| Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
 | Domain thuần Dart | `grep -rn "package:flutter" packages/domain/*/lib` |
 
 ---

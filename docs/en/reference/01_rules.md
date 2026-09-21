@@ -194,6 +194,14 @@ Everything the shell consumes at runtime resolves through a `core_di` contract w
 > [!WARNING]
 > `getAll<T>()` and `getAllOrEmpty<T>()` differ exactly here. `getAll` throws on an unregistered type, so a bare `getAll<IFeatureLocalization>()` crashes during `MaterialApp` construction in any build where no feature contributes one.
 
+**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract whose only implementer lives in a `packages/features/*` package, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
+
+```bash
+dart tools/arch_check/check.dart      # rule R8 — Gate 1 of pr_quality_check.yml
+```
+
+This is not a style rule. The throwing lookup **compiles**: the calling package depends on `core_di`, not on the feature that implements the contract, so `flutter analyze` sees nothing wrong. It fails at runtime, in a build without that feature, on whichever screen happens to call it. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; a feature is exempt from its own contract.
+
 **Removing a feature** — the four steps documented in `app/lib/di/injection.dart`:
 
 1. its `ExternalModule(...)` entry and the matching import in `app/lib/di/injection.dart`;
@@ -427,6 +435,7 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | Codegen up to date | `dart run build_runner build -d --workspace` |
 | DI order safety | read `app/lib/di/injection.config.dart` |
 | core ⇏ feature | `grep -rn "package:feature_" packages/core/*/lib` |
+| Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
 | Domain purity | `grep -rn "package:flutter" packages/domain/*/lib` |
 
 ---

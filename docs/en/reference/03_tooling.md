@@ -78,7 +78,9 @@ Three things had to agree and were maintained by hand: the root `workspace:` lis
 
 Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No directory is encoded anywhere, so moving packages needs no change to the tool or to any manifest. Module packages are matched under either naming convention — `domain_auth` and `auth_domain` both resolve.
 
-`--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find and says loudly what it skipped — which is what lets a developer work with only their own module checked out. CI runs strict, so that mode can never reach a release.
+`--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find — which is what lets a developer work with only their own module checked out.
+
+A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block: the three committed files it just rewrote, and the `git checkout --` line that restores them. The composition it wrote is correct locally and wrong to commit, and CI Gate 0 catches it either way, because `verify` regenerates from the manifest on a runner where every module is present. See [`12_module_isolation.md`](../guides/12_module_isolation.md).
 
 ---
 

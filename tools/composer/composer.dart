@@ -495,7 +495,52 @@ void _sync(
       '${selected.length} app(s) composed, '
       '${ordered.length} workspace members.',
     );
+    if (missingCount > 0) {
+      _warnPartialComposition(root, selected, missingCount);
+    }
   }
+}
+
+/// Says, loudly, that the files just written describe a *partial* workspace.
+///
+/// This is the expected state while working on one module in a submodule
+/// checkout — and it edits three files that are committed. Committing them
+/// would drop everyone else's modules from the app. CI catches it (Gate 0
+/// regenerates from the manifest, where every module *is* present, and fails
+/// on the difference), but finding out in CI is worse than being told here,
+/// with the command to undo it.
+void _warnPartialComposition(
+  String root,
+  List<AppManifest> selected,
+  int missingCount,
+) {
+  final touched = <String>[p.posix.relative(p.posix.join(root, 'pubspec.yaml'),
+      from: root)];
+  for (final app in selected) {
+    touched.add(p.posix.relative(p.posix.join(app.dir, 'pubspec.yaml'),
+        from: root));
+    touched.add(p.posix.relative(
+        p.posix.join(app.dir, 'lib', 'di', 'injection.dart'),
+        from: root));
+  }
+
+  stdout.writeln('');
+  OutputFormatter.printWarning(
+    'PARTIAL COMPOSITION — $missingCount declared package(s) are not on disk.',
+  );
+  stdout.writeln(
+    '  What was just written composes only what is present, which is exactly '
+    'right\n'
+    '  for working on one module. It is wrong to commit: it would drop the '
+    'other\n'
+    '  modules from the app for everyone.\n',
+  );
+  stdout.writeln('  Files changed:');
+  for (final t in touched) {
+    stdout.writeln('    $t');
+  }
+  stdout.writeln('\n  Restore them before you commit:');
+  stdout.writeln('    git checkout -- ${touched.join(' ')}\n');
 }
 
 void _write(

@@ -61,7 +61,9 @@ packages:
     demonstrates: >-
       Provider state management, a global @lazySingleton controller, Firebase
       auth via the data layer, cross-feature contracts (agnostic streams,
-      action handlers), and route-level DI.
+      action handlers), and route-level DI. One screen only (login) — register
+      and forgot-password were removed because they repeated the same
+      mechanisms with different strings.
 
   feature_home:
     kind: sample

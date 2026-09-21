@@ -350,7 +350,7 @@ Chúng ta sử dụng `go_router` kết hợp với `go_router_builder` để đ
 ### Quyền Sở Hữu Tuyến Đường (Route Ownership)
 Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến của riêng mình:
 - `SplashPage` được `MainScope` host lúc boot và **không** đăng ký trong GoRouter.
-- Gói `feature_auth` sở hữu nhóm tuyến `AuthShellRoute`, `LoginRoute`, `RegisterRoute`, `ForgotPasswordRoute`.
+- Gói `feature_auth` sở hữu nhóm tuyến `AuthShellRoute`, `LoginRoute`.
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)

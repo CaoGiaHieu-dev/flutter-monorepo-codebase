@@ -351,7 +351,7 @@ We use `go_router` combined with `go_router_builder` to ensure type-safe routing
 ### Route Ownership
 Each Feature Package owns its own routing structure and files:
 - `SplashPage` is hosted by `MainScope` during boot and is **not** registered in GoRouter.
-- The `feature_auth` package owns the route group `AuthShellRoute`, `LoginRoute`, `RegisterRoute`, `ForgotPasswordRoute`.
+- The `feature_auth` package owns the route group `AuthShellRoute`, `LoginRoute`.
 - Routes inherit from `GoRouteDataCustom` to inherently possess automatic screen tracking and smooth cross-platform transitions.
 
 ### Runtime Assembly (Assembly)

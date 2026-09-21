@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:go_router/go_router.dart';
@@ -9,12 +7,13 @@ import '../../feature_auth.dart';
 
 part 'auth_route_module.g.dart';
 
+/// SAMPLE — a feature contributing top-level routes.
+///
+/// The shell route gives the auth flow its own nested [Navigator] (its own back
+/// stack) via [NavigatorKeys.authKey]. One child route is enough to show the
+/// shape; add siblings as `TypedGoRoute` entries here.
 @TypedShellRoute<AuthShellRoute>(
-  routes: [
-    TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN),
-    TypedGoRoute<RegisterRoute>(path: AuthPath.REGISTER),
-    TypedGoRoute<ForgotPasswordRoute>(path: AuthPath.FORGOT_PASSWORD),
-  ],
+  routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
 )
 class AuthShellRoute extends ShellRouteData {
   const AuthShellRoute();
@@ -28,29 +27,14 @@ class AuthShellRoute extends ShellRouteData {
   }
 }
 
+/// Controllers are instantiated at the route, not inside the page — AGENTS §3.1.
+/// Here `AuthProvider` is a global `@lazySingleton` mounted by `AuthTreeWrapper`,
+/// so this route builds the page directly. A screen-scoped controller would wrap
+/// it in `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
   static final $parentNavigatorKey = NavigatorKeys.authKey;
-  @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const LoginPage();
-  }
-}
 
-class RegisterRoute extends GoRouteDataCustom with $RegisterRoute {
-  const RegisterRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const RegisterPage();
-  }
-}
-
-class ForgotPasswordRoute extends GoRouteDataCustom with $ForgotPasswordRoute {
-  const ForgotPasswordRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
-  @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const ForgotPasswordPage();
-  }
+  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
 }

@@ -64,6 +64,8 @@ Thực hành, từng bước, có code chạy được. Đây là phần "how to
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | Một feature tự mang bản dịch của nó ra sao, và màu/font/kích thước giữ nhất quán thế nào? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A cần thứ gì đó từ feature B — làm sao, mà không import nó? |
 | [`11_design_system.md`](guides/11_design_system.md) | Mọi màu, font, bước spacing và bo góc định nghĩa ở đâu — và sửa file nào để đổi nhận diện cho app? |
+| Tách một module thành repository riêng | [`guides/12_module_isolation.md`](guides/12_module_isolation.md) | [`architecture/01_overview.md`](architecture/01_overview.md) |
+| [`12_module_isolation.md`](guides/12_module_isolation.md) | Làm sao để một team chỉ checkout module của mình, build được cả app từ đó, và không bao giờ thấy source của team khác? |
 
 ---
 

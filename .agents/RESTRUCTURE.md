@@ -292,11 +292,32 @@ toolchain to confirm.
 **Gate:** one workspace builds both `mobile` and `admin` from one set of modules, and the admin
 build contains no `feature_dashboard`, `feature_splash` or `feature_onboarding`.
 
-### Step 8 — Submodules
+### Step 8 — Submodules  *(8a done: the mechanism and the guide; 8b needs real remotes)*
 
-Split `contracts/` and each `modules/<name>/` into their own repositories, mount as submodules,
-add CODEOWNERS (`platform/` + `tools/` → infra; `apps/` + `contracts/` → tech leads;
-`modules/<x>/` → team x).
+✅ **8a — everything that does not require a second git remote.**
+
+The mechanism was already finished by earlier steps and had simply never been written down:
+`composer` resolves packages by name, `arch_check` derives layers from names, `MonorepoHelper`
+scans — so a module that is absent is just not found, and `sync` composes whatever is present.
+R8 (optional lookups) and R10 (no module import in the shell) are what let the app boot without
+it.
+
+What was missing was the *procedure*, and one sharp edge in it. `composer sync` edits three
+**committed** files, so a partial checkout leaves a partial composition in the working tree.
+That is right locally and wrong to commit — it would drop every other team's module from the
+app. `sync` now prints a `PARTIAL COMPOSITION` block naming the three files and the exact
+`git checkout --` line to undo it, and CI Gate 0 catches it regardless, because `verify`
+regenerates from the manifest on a runner where every submodule is present.
+
+[`docs/{en,vi}/guides/12_module_isolation.md`](../docs/en/guides/12_module_isolation.md) covers
+extraction with `git filter-repo`, the partial-checkout workflow, that hazard and its net, why a
+private pub registry is the wrong trade here, and the three things isolation explicitly does not
+buy (it is not a security boundary, it does not remove the contract discipline, and every
+guardrail stops working the moment someone adds a direct import).
+
+⏳ **8b — the extraction itself.** Splitting `modules/<name>/` into real repositories needs git
+remotes that do not exist in the environment these changes were made in. The commands are in the
+guide and were reasoned through rather than executed; run them against one module first.
 
 **Gate:** a machine that can clone only one module still runs `apps/mobile`; the same command
 with `--strict` fails.
@@ -377,6 +398,7 @@ Doing neither is the only wrong answer: today it is product code wearing framewo
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
+| 2026-09-21 | 8a | **The submodule story, written down and de-fanged.** The mechanism was already complete — name-based resolution, R8, R10 — but undocumented, and it had one sharp edge: `composer sync` edits three committed files, so a partial checkout leaves a partial composition in the tree that would drop other teams' modules if committed. `sync` now prints the files and the `git checkout --` line to undo it; CI Gate 0 was already the net. New guide `12_module_isolation.md` in both locales: extraction with `git filter-repo`, the partial-checkout workflow, why a private registry is the wrong trade, and what isolation does *not* buy. | ⚠️ not run |
 | 2026-09-21 | 3c | **Removability was false, and is now machine-held.** `network_config_impl.dart` imported `data_auth` and `domain_auth` to read and refresh the session token, so deleting the auth module broke the app shell at compile time — while four documents promised modules were removable. `getItOrNull` cannot guard an import. Declared `IAuthSessionGateway` in `core_di` (read / refresh / clear — only what `NetworkConfig` asks for), implemented it in `data_auth`, and rewrote `NetworkConfigImpl` to resolve it at call time. `onRefreshToken` now returns null with no gateway present, so `ApiClient` installs no refresh interceptor in a build with no auth. Added `arch_check` **R10**: an app may import a module package in exactly one file, `injection.dart`. The app shell is now module-free apart from its composition root. | ⚠️ not run |
 | 2026-09-21 | 2d | **The auth sample now follows the template's own documented pattern.** `AuthRepositoryImpl` called `FirebaseAuth`, `GoogleSignIn` and `FacebookAuth` directly and never touched `AuthRemoteDataSource` — the repo shipped the Retrofit pattern it teaches, unused, beside an implementation that ignored it, and every auth error arrived as `ServerFailure(9999)` because `ErrorHandler` has no Firebase branch. Five of eight repository methods (`registerWithEmail`, `loginWithGoogle`, `loginWithFacebook`, `getCurrentUser`, `updateUserProfile`) had zero callers. Rewritten onto the Retrofit + `StorageValue` + `execute()` path: 243 → 68 LOC, four SDK dependencies dropped. `UserEntity` lost `bankName`, `bankAccount` and `fcmToken`; `UserModel` gained `token`, which the mapper deliberately drops, with a test asserting it. Dead `CompleteLoginFlowParams` and five unrouted API constants deleted. Catalog pruned of six pins nothing declared. Docs rewritten in both locales: `04_data.md` §6, `05_di.md`'s third-party section, two agent skills, `sample_manifest.yaml`. | ⚠️ not run |
 | 2026-09-21 | 6b+7a | **`app/` → `apps/mobile/`, and CODEOWNERS.** Native project files needed no edit (all internally relative). Four live breaks found and fixed: fastlane's `workspace_root` resolved to `apps/`; CI's `--dart-define-from-file=../.env` no longer reached the root-written env file (now absolute via `$GITHUB_WORKSPACE` / `$(Build.SourcesDirectory)`); `unused_checker` classed `lib/main.dart` as orphaned; and fastlane still globbed `packages/**/l10n.yaml`, broken one commit earlier because `.rb` was not in that sweep. `theme_generator` stopped hardcoding `Directory('app')` and now locates the app by its manifest. `.github/CODEOWNERS` gives each module, platform and the apps layer an owner. | ⚠️ not run |

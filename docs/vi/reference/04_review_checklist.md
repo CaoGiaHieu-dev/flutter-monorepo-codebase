@@ -37,7 +37,7 @@ flutter analyze                                      # phân tích tĩnh
 ## 2. Hướng phụ thuộc
 
 - [ ] Không package `core/*` nào import hay khai `feature_*` / `data_*`
-- [ ] Mọi phụ thuộc hướng lên mới đều nằm trong bốn ngoại lệ đã duyệt, hoặc `AGENTS.md` được cập nhật trong cùng PR
+- [ ] Mọi phụ thuộc hướng lên mới đều nằm trong ba ngoại lệ đã duyệt, hoặc `AGENTS.md` được cập nhật trong cùng PR
 - [ ] Mọi `package:` import trong `lib/` đều có mục tương ứng trong `pubspec.yaml`
 - [ ] Import phục vụ production nằm ở `dependencies`, không phải `dev_dependencies`
 - [ ] Code bị xoá thì dependency không còn dùng cũng được gỡ theo
@@ -45,7 +45,7 @@ flutter analyze                                      # phân tích tĩnh
 **Kiểm chứng**
 
 ```bash
-grep -rn "package:feature_\|package:data_" packages/core/*/lib   # phải rỗng
+grep -rn "package:feature_\|package:data_" platform/*/lib   # phải rỗng
 dart tools/unused_checker/check_unused_packages.dart
 ```
 

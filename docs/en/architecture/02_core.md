@@ -1,6 +1,6 @@
 # The Core Layer
 
-This document answers **"what is inside `packages/core/*`, and which package should I reach for?"**. After reading it you should be able to pick the right core package for a task — and recognise when what you are about to add does *not* belong in core at all.
+This document answers **"what is inside `platform/*`, and which package should I reach for?"**. After reading it you should be able to pick the right core package for a task — and recognise when what you are about to add does *not* belong in core at all.
 
 Core packages are **infrastructure**. They provide mechanisms; they never encode business rules, and they never know a feature exists.
 
@@ -62,7 +62,7 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 | Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 
-**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../packages/core/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
+**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
 
 A `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside a feature. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it.
 
@@ -113,7 +113,7 @@ The observer is removed in `dispose()`, which is annotated `@disposeMethod` so G
 
 ## 4. `core_ui_kit` — reusable widgets
 
-The shared widget library every feature may consume. It is **core, not a feature**: it lives at `packages/core/ui_kit` precisely so `packages/features/` contains only removable product surfaces.
+The shared widget library every feature may consume. It is **core, not a feature**: it lives at `platform/ui_kit` precisely so `packages/features/` contains only removable product surfaces.
 
 Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
@@ -148,7 +148,7 @@ Scaling inside means a caller who already scaled gets it applied twice, and a ca
 
 ### Constants
 
-Defaults for these widgets live in `packages/core/ui_kit/lib/utils/shared_ui_constants.dart`:
+Defaults for these widgets live in `platform/ui_kit/lib/utils/shared_ui_constants.dart`:
 
 ```dart
 class SharedUiConstants {
@@ -167,7 +167,7 @@ They are defaults, not policy — a caller that needs a different value passes i
 
 ## 5. `core_responsive` — responsive sizing
 
-The scaling mechanism every widget in the app resolves through. It lives at `packages/core/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package.
+The scaling mechanism every widget in the app resolves through. It lives at `platform/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package.
 
 | Piece | What it is |
 |:--|:--|

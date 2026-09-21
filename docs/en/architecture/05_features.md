@@ -163,7 +163,7 @@ Use `INavDestinationModule` **only** for primary bottom-nav destinations that ne
 
 ## 5. Shared widgets live in core, not here
 
-The reusable widget library is **`core_ui_kit`** at `packages/core/ui_kit` — a core package, not a feature. It sits outside `packages/features/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
+The reusable widget library is **`core_ui_kit`** at `platform/ui_kit` — a core package, not a feature. It sits outside `packages/features/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
 
 What matters on the feature side is the **caller's** obligation:
 

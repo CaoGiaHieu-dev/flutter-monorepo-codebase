@@ -198,8 +198,8 @@ flutter analyze
 dart tools/dependency_sync.dart --check
 
 # 3. Test theo từng package (gate 3 — xem §6)
-(cd packages/core/storage && flutter test)
-(cd packages/core/database && flutter test)
+(cd platform/storage && flutter test)
+(cd platform/database && flutter test)
 # ...lặp cho mọi package có thư mục test/
 
 # 4. Đúng lệnh build release mà CI chạy — chú ý cd
@@ -212,7 +212,7 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 > [!NOTE]
 > Ở local đường dẫn dart-define là `env.dev` (tương đối so với `app/`), còn CI ghi file env ra thư mục gốc nên truyền `../.env`. Cùng cơ chế, khác vị trí.
 
-Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configure` — các file `firebase_options_*.dart` sinh ra bị gitignore, mà `packages/core/common/lib/src/firebase/firebase_module.dart` import cả ba file đó vô điều kiện. Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configure` — các file `firebase_options_*.dart` sinh ra bị gitignore, mà `platform/common/lib/src/firebase/firebase_module.dart` import cả ba file đó vô điều kiện. Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 

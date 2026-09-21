@@ -18,7 +18,7 @@ class InputActions {
       stdout.writeln('1. Feature Package (packages/features/)');
       stdout.writeln('2. Domain Micro-Package (packages/domain/)');
       stdout.writeln('3. Data Micro-Package (packages/data/)');
-      stdout.writeln('4. Core Package (packages/core/)');
+      stdout.writeln('4. Core Package (platform/)');
       stdout.writeln('5. Custom Package (custom name)');
       stdout.write('Nhập lựa chọn: ');
       typeInput = stdin.readLineSync()?.trim();
@@ -42,7 +42,7 @@ class InputActions {
       typeName = 'data';
     } else if (typeInput == '4') {
       type = ModuleType.core;
-      typeDir = 'packages/core';
+      typeDir = 'platform';
       typeName = 'core';
     } else if (typeInput == '5') {
       type = ModuleType.custom;

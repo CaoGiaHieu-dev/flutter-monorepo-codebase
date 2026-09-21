@@ -35,7 +35,7 @@ jobs:
           channel: "stable"
           cache: true
 
-      # `packages/core/common/lib/src/firebase/firebase_module.dart`
+      # `platform/common/lib/src/firebase/firebase_module.dart`
       # imports three generated `firebase_options_*.dart` files that are
       # gitignored, so a clean checkout does not compile. Analysis and
       # unit tests never reach Firebase, so a stub is enough to build —
@@ -43,7 +43,7 @@ jobs:
       # that does restore real options keeps them.
       - name: Stub Firebase options (compile only)
         run: |
-          dir="packages/core/common/lib/src/firebase"
+          dir="platform/common/lib/src/firebase"
           for env in dev staging prod; do
             file="$dir/firebase_options_$env.dart"
             if [ -f "$file" ]; then
@@ -97,18 +97,33 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      # Gate 3 — tests, per package (tests live in packages/<layer>/<pkg>/test).
+      # Gate 3 — tests, per package.
+      #
+      # Discovered, not globbed. A pattern like `packages/*/*/` encodes today's
+      # directory depth, so the day packages move it keeps passing while
+      # testing nothing — the worst failure a gate can have. Any directory
+      # holding both a pubspec.yaml and a test/ is a package with tests,
+      # wherever it lives. The count is asserted for the same reason: a
+      # discovery bug that finds zero packages must fail, not succeed quietly.
       - name: Test
         run: |
           set -e
           failed=0
-          for dir in packages/*/*/; do
-            if [ -d "${dir}test" ]; then
-              echo "::group::flutter test ${dir}"
-              ( cd "$dir" && flutter test ) || failed=1
-              echo "::endgroup::"
-            fi
-          done
+          found=0
+          while IFS= read -r pubspec; do
+            dir=$(dirname "$pubspec")
+            [ -d "$dir/test" ] || continue
+            found=$((found + 1))
+            echo "::group::flutter test $dir"
+            ( cd "$dir" && flutter test ) || failed=1
+            echo "::endgroup::"
+          done < <(find . -name pubspec.yaml -not -path './.git/*' \
+                        -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort)
+          echo "ran tests in $found package(s)"
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No package with a test/ directory was found."
+            exit 1
+          fi
           exit $failed
 
       # Gate 4 — the version catalog is the single source of truth.

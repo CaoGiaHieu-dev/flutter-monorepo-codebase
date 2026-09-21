@@ -26,7 +26,7 @@ Mỗi feature tự sở hữu bản dịch của mình. App shell không hề bi
 ## 2. Hợp đồng
 
 ```dart
-// packages/core/di/lib/src/feature_localization.dart
+// platform/di/lib/src/feature_localization.dart
 /// Interface for feature localization delegates.
 /// Enables safe registration and retrieval via getIt.getAll<IFeatureLocalization>() in the root app.
 abstract class IFeatureLocalization {
@@ -131,7 +131,7 @@ Text(context.l10nHome.userLoggedIn)
 
 ## 6. Design token và màu sắc
 
-Token nằm trong `packages/core/base_ui/lib/src/styles/`; màu đến từ một
+Token nằm trong `platform/base_ui/lib/src/styles/`; màu đến từ một
 `ThemeExtension` nên tự đổi theo light/dark.
 
 | Class token | File | Nhiệm vụ |
@@ -173,7 +173,7 @@ Container(
 `ThemeMode.system` phân giải theo độ sáng của OS, mà giá trị này có thể đổi khi app đang chạy. `ThemeProvider` lắng nghe điều đó:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_provider.dart
+// platform/base_ui/lib/src/theme/theme_provider.dart
 /// Called by the framework when the OS switches between Light and Dark.
 ///
 /// Only [ThemeMode.system] derives its appearance from the platform, so an
@@ -262,7 +262,7 @@ double? get leadingWidth => context.w(64);
 Đoạn override đó vừa scale bên trong, **vừa âm thầm vứt bỏ** giá trị `leadingWidth` mà người gọi truyền qua `super.leadingWidth` — tham số trở thành vô dụng. `AppBarCustom` thay vào đó chuyển tiếp mọi thứ cho `AppBar`:
 
 ```dart
-// packages/core/ui_kit/lib/navigation/app_bar_custom.dart
+// platform/ui_kit/lib/navigation/app_bar_custom.dart
 class AppBarCustom extends AppBar {
   AppBarCustom({
     super.key,
@@ -284,7 +284,7 @@ AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 Các giá trị mặc định không phải kích thước nằm trong `utils/` của chính package:
 
 ```dart
-// packages/core/ui_kit/lib/utils/shared_ui_constants.dart
+// platform/ui_kit/lib/utils/shared_ui_constants.dart
 /// Timing and overlay constants owned by `core_ui_kit`.
 ///
 /// Package-internal by convention: these are defaults for the reusable
@@ -310,7 +310,7 @@ class SharedUiConstants {
 | Dialog | `_dialog.dart` | `Dialog` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` |
 
-Ví dụ có sẵn trong `packages/core/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
+Ví dụ có sẵn trong `platform/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
 
 Builder inline không thể tái sử dụng, không preview được, không test riêng được — và hầu như luôn kết thúc bằng chuỗi cứng và kích thước cứng.
 

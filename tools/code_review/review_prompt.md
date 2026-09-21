@@ -71,7 +71,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 - **`core_ui_kit` widgets take unscaled values**: a shared widget must not scale its own constructor parameters — the caller scales before passing in.
 
 ### 💅 Clean Code & Shared Assets
-- **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `packages/core/ui_kit`?
+- **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `platform/ui_kit`?
 - **Extensions**: Is the developer using `Theme.of(context)` instead of `context.themeExtension`?
 - **Logging**: Use `DynamicLogger` instead of `print()`.
 - **DI Ordering**: Is `CoreBaseUiPackageModule` registered in `externalPackageModulesAfter` (via `_uiModules`) so `ILanguageStorage` / `IThemeStorage` exist first?

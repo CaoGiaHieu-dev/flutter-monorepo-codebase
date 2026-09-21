@@ -37,7 +37,7 @@ flutter analyze                                      # static analysis
 ## 2. Dependency direction
 
 - [ ] No `core/*` package imports or declares `feature_*` / `data_*`
-- [ ] Any new upward dependency is one of the four approved exceptions, or `AGENTS.md` was updated in the same PR
+- [ ] Any new upward dependency is one of the three approved exceptions, or `AGENTS.md` was updated in the same PR
 - [ ] Every `package:` import under `lib/` has a matching `pubspec.yaml` entry
 - [ ] Production imports are in `dependencies`, not `dev_dependencies`
 - [ ] Removed code also removed its now-unused dependency entries
@@ -45,7 +45,7 @@ flutter analyze                                      # static analysis
 **Verify**
 
 ```bash
-grep -rn "package:feature_\|package:data_" packages/core/*/lib   # must be empty
+grep -rn "package:feature_\|package:data_" platform/*/lib   # must be empty
 dart tools/unused_checker/check_unused_packages.dart
 ```
 

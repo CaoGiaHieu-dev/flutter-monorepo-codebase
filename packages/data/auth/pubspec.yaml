@@ -13,7 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   core_storage:
-    path: ../../core/storage
+    path: ../../../platform/storage
   domain_core:
     path: ../../domain/core
   domain_auth:

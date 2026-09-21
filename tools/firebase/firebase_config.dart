@@ -119,7 +119,7 @@ void main() async {
         'config',
         '--yes',
         '--project=$projectId',
-        '--out=../packages/core/common/lib/src/firebase/firebase_options_$flavor.dart',
+        '--out=../platform/common/lib/src/firebase/firebase_options_$flavor.dart',
         '--ios-bundle-id=$bundleId',
         '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
         '--ios-build-config=$buildMode-$flavor',

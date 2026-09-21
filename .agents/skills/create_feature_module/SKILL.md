@@ -68,8 +68,8 @@ The tool generates the basic directory structure (including `assets/language` an
 - **`feature_dashboard` is chrome only** (`DashboardRouteModule`). It does **not** own tab pages. Tabs register `INavDestinationModule`; `AppRouter` assembles branches.
 - Cross-feature UI actions use Action Handlers / Navigators in `core_di` — never import another feature package.
 - **core packages must never depend on your feature.** The only approved inward exceptions are
-  `core_di → domain_auth`, `provider_state_management → domain_core` and
-  `platform_kernel → domain_core`.
+  `platform_kernel → domain_core`, `provider_state_management → domain_core` and
+  `bloc_state_management → domain_core`. Three, and nothing else.
 
 For Features, complete the TypedGoRoute file (e.g. `lib/src/routing/*_route_module.dart`) and fill the DI contribution stub:
 

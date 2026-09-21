@@ -337,7 +337,7 @@ cd packages/features/profile && flutter gen-l10n
 Other features must never import `feature_profile`. Declare the contract in `core_di`:
 
 ```dart
-// packages/core/di/lib/src/navigators/profile_navigator.dart
+// platform/di/lib/src/navigators/profile_navigator.dart
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
@@ -346,7 +346,7 @@ abstract class ProfileNavigator {
 ```
 
 That is exactly the shape of
-[`home_navigator.dart`](../../../packages/core/di/lib/src/navigators/home_navigator.dart).
+[`home_navigator.dart`](../../../platform/di/lib/src/navigators/home_navigator.dart).
 
 Implement it inside your own `routing/` — real code from
 [`home_navigator_impl.dart`](../../../packages/features/home/lib/src/routing/home_navigator_impl.dart):

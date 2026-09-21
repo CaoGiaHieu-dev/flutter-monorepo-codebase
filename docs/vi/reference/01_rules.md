@@ -26,7 +26,7 @@
 
 ### Ngoại lệ hướng lên được duyệt
 
-Chỉ có đúng ba. Thêm cái thứ năm bắt buộc phải cập nhật `AGENTS.md` và danh sách cho phép trong `tools/arch_check/check.dart` — nếu không, tool sẽ làm fail build.
+Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật `AGENTS.md` và danh sách cho phép trong `tools/arch_check/check.dart` — nếu không, tool sẽ làm fail build.
 
 | Ngoại lệ | Lý do |
 |---|---|
@@ -41,8 +41,8 @@ Chỉ có đúng ba. Thêm cái thứ năm bắt buộc phải cập nhật `AGE
 
 ```bash
 # core tuyệt đối không được nhắc tên package feature hay data
-grep -rn "package:feature_\|package:data_" packages/core/*/lib
-grep -l "feature_\|data_" packages/core/*/pubspec.yaml
+grep -rn "package:feature_\|package:data_" platform/*/lib
+grep -l "feature_\|data_" platform/*/pubspec.yaml
 
 # domain tuyệt đối không chạm Flutter
 grep -rn "package:flutter" packages/domain/*/lib
@@ -52,7 +52,7 @@ Cả bốn lệnh phải không trả về gì.
 
 ❌ **Sai** — package core mượn widget của feature:
 ```dart
-// packages/core/provider_state_management/lib/src/base_view/base_view_widget.dart
+// platform/provider_state_management/lib/src/base_view/base_view_widget.dart
 import 'package:feature_auth/feature_auth.dart';   // core → feature
 ```
 
@@ -104,7 +104,7 @@ class AuthStorageKeys {
 ```
 
 > [!NOTE]
-> **Ngoại lệ được duyệt — design token.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` ở nguyên `packages/core/base_ui/lib/src/styles/`, *không* chuyển vào `utils/`.
+> **Ngoại lệ được duyệt — design token.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` ở nguyên `platform/base_ui/lib/src/styles/`, *không* chuyển vào `utils/`.
 >
 > Chúng là API công khai của design system, và `styles/` mang đúng ngữ nghĩa đó trong khi `utils/` đọc lên là "linh tinh". Di chuyển sẽ làm hỏng mọi tham chiếu trong docs mà chẳng được gì. **Đừng "sửa" chỗ này ở lần audit sau.**
 
@@ -313,7 +313,7 @@ SizedBox(height: context.h(16))
 
 **Design token cũng nhận context:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Con số nằm trong các hằng `raw*` — sửa `raw*`, đừng sửa accessor. Không bao giờ scale lại một token đã scale.
 
-**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Ví dụ thật — `packages/core/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
+**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Ví dụ thật — `platform/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
 
 ```dart
 if (!mounted) return;
@@ -323,7 +323,7 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 );
 ```
 
-**Trục scale của các helper** — đọc từ `packages/core/responsive/lib/src/context_extension.dart`:
+**Trục scale của các helper** — đọc từ `platform/responsive/lib/src/context_extension.dart`:
 
 | Helper | Scale theo |
 |:--|:--|
@@ -341,7 +341,7 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 
 ❌ **Sai** — một lệnh ghi đè bên trong âm thầm vứt bỏ giá trị của caller:
 ```dart
-// packages/core/ui_kit/lib/navigation/app_bar_custom.dart
+// platform/ui_kit/lib/navigation/app_bar_custom.dart
 @override
 double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩnh viễn
 ```
@@ -374,7 +374,7 @@ Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** 
 
 **Luật.** Mỗi dialog và bottom sheet là một class widget riêng trong file riêng. Cấm viết cây widget inline bên trong `showDialog()` / `showModalBottomSheet()`.
 
-Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Ví dụ thật: `packages/core/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
+Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Ví dụ thật: `platform/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
 
 ---
 
@@ -433,7 +433,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | Phân tích tĩnh | `flutter analyze` |
 | Code sinh đã cập nhật chưa | `dart run build_runner build -d --workspace` |
 | An toàn thứ tự DI | đọc `app/lib/di/injection.config.dart` |
-| core ⇏ feature | `grep -rn "package:feature_" packages/core/*/lib` |
+| core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
 | Domain thuần Dart | `grep -rn "package:flutter" packages/domain/*/lib` |
 

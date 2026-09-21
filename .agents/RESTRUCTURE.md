@@ -18,7 +18,7 @@ bottom after every step.
 | | |
 |:--|:--|
 | **Changing** | Top-level axis: horizontal layers → **vertical slices** (`modules/<name>/`), one per bounded context, one per team, one git submodule. |
-| **Changing** | `platform/` (today `packages/core/*`) must stop naming any product concept. |
+| **Changing** | `platform/` (today `platform/*`) must stop naming any product concept. |
 | **Changing** | Root `pubspec.yaml` + each app's `injection.dart`: hand-written → **generated** from an app manifest. |
 | **Changing** | Samples: 6 feature packages + 2 domain/data pairs → **2 reference modules**, deliberately small. |
 | **Not changing** | Clean Architecture, the DI model (GetIt + Injectable), Freezed/BLoC rules, the responsive mandate, the barrel/codegen workflow. |
@@ -194,7 +194,7 @@ the move itself:
 R1, R2 and R3 **silently passed** for it. A guardrail that switches itself off when files move
 is worse than none, because the report still reads clean.
 
-⏳ **6b — the move itself** (`packages/core/*` → `platform/*`,
+⏳ **6b — the move itself** (`platform/*` → `platform/*`,
 `packages/{domain,data,features}/<x>` → `modules/<x>/{domain,data,feature}`,
 `app/` → `apps/mobile/`) is now a pure `git mv` plus `composer sync`: nothing in the tooling,
 and nothing in any manifest, encodes a directory any more.
@@ -264,7 +264,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 
 ### The asset picker in `core_ui_kit`
 
-`packages/core/ui_kit/lib/media/assets_picker/` is **1,003 lines across six files that nothing
+`platform/ui_kit/lib/media/assets_picker/` is **1,003 lines across six files that nothing
 in this template imports**. Its only reference is the barrel that exports it.
 
 It costs more than its line count:

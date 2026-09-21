@@ -15,7 +15,7 @@ Có hai thứ khác nhau nằm trong `core_base_ui`, và nhầm lẫn giữa ch�
 | | **Token** | **Theme** |
 |---|---|---|
 | Là gì | Giá trị thiết kế thô | Phần nối các giá trị đó vào Material |
-| Nằm ở | [`lib/src/styles/`](../../../packages/core/base_ui/lib/src/styles/) | [`lib/src/theme/`](../../../packages/core/base_ui/lib/src/theme/) |
+| Nằm ở | [`lib/src/styles/`](../../../platform/base_ui/lib/src/styles/) | [`lib/src/theme/`](../../../platform/base_ui/lib/src/theme/) |
 | Truy cập qua | `AppSpacing.lg(context)` | `context.colors.surface`, `Theme.of(context)` |
 | Sửa khi muốn… | đổi kích thước một khoảng cách, thêm shadow | đổi màu thương hiệu, đổi font |
 
@@ -42,10 +42,10 @@ Màu được cung cấp dưới dạng [`ThemeExtension`](https://api.flutter.d
 
 ### Bước 1 — xác định có cần ô màu mới không
 
-Mở [`theme/theme_system_interface.dart`](../../../packages/core/base_ui/lib/src/theme/theme_system_interface.dart). File này khai báo mọi ô màu mà app có thể yêu cầu:
+Mở [`theme/theme_system_interface.dart`](../../../platform/base_ui/lib/src/theme/theme_system_interface.dart). File này khai báo mọi ô màu mà app có thể yêu cầu:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_system_interface.dart
+// platform/base_ui/lib/src/theme/theme_system_interface.dart
 abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
     extends ThemeExtension<T> {
   // Core colors
@@ -81,10 +81,10 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
 
 ### Bước 2 — sửa giá trị
 
-Cả hai bảng màu là static field thuần trong [`theme/theme_system_extensions.dart`](../../../packages/core/base_ui/lib/src/theme/theme_system_extensions.dart):
+Cả hai bảng màu là static field thuần trong [`theme/theme_system_extensions.dart`](../../../platform/base_ui/lib/src/theme/theme_system_extensions.dart):
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_system_extensions.dart
+// platform/base_ui/lib/src/theme/theme_system_extensions.dart
 /// Light theme extension
 static ThemeSystemExtension light = ThemeSystemExtension(
   primary: const Color(0xff0A7E8C),          // Customer teal accent
@@ -112,7 +112,7 @@ Các tên màu đi kèm template (`chatMe`, `liquidOnboardingColors`, `liquidCus
 ### Bước 3 — đọc màu trong widget
 
 ```dart
-// qua extension ở packages/core/base_ui/lib/src/extensions/context_extension.dart
+// qua extension ở platform/base_ui/lib/src/extensions/context_extension.dart
 Container(
   color: context.colors.surface,
   child: Text('Hi', style: TextStyle(color: context.colors.textPrimary)),
@@ -126,14 +126,14 @@ Container(
 
 ## 3. Đổi font chữ
 
-Typography được dựng một lần cho mỗi theme trong [`theme/theme_provider.dart`](../../../packages/core/base_ui/lib/src/theme/theme_provider.dart), rồi mới được scale.
+Typography được dựng một lần cho mỗi theme trong [`theme/theme_provider.dart`](../../../platform/base_ui/lib/src/theme/theme_provider.dart), rồi mới được scale.
 
 ### Đổi font family
 
 Template đang dùng Google Fonts:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_provider.dart
+// platform/base_ui/lib/src/theme/theme_provider.dart
 final defaultTheme = switch (mode) {
   ThemeMode.dark => GoogleFonts.plusJakartaSansTextTheme(
     ThemeData.dark().textTheme,
@@ -147,14 +147,14 @@ final defaultTheme = switch (mode) {
 
 **Dùng font Google khác:** thay `plusJakartaSansTextTheme` bằng `GoogleFonts.<tên>TextTheme` bất kỳ, ở tất cả các nhánh.
 
-**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`packages/core/base_ui/pubspec.yaml`](../../../packages/core/base_ui/pubspec.yaml), rồi thay lời gọi bằng `ThemeData.light().textTheme.apply(fontFamily: 'YourFont')`. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/arch_check/check.dart` sẽ báo nếu bạn khai mà không dùng.
+**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), rồi thay lời gọi bằng `ThemeData.light().textTheme.apply(fontFamily: 'YourFont')`. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/arch_check/check.dart` sẽ báo nếu bạn khai mà không dùng.
 
 ### Cơ chế scale font
 
 Mọi kích thước trong `TextTheme` đều được scale lại qua context-aware extension:
 
 ```dart
-// packages/core/base_ui/lib/src/theme/theme_provider.dart
+// platform/base_ui/lib/src/theme/theme_provider.dart
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
@@ -163,7 +163,7 @@ double? scaleFont(double? size) => size == null ? null : context.sp(size);
 `AppTextStyles` sau đó chỉ việc đọc lại theme đã dựng xong:
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_text_styles.dart
+// platform/base_ui/lib/src/styles/app_text_styles.dart
 static TextStyle bodyMediumStyle(BuildContext context) =>
     context.bodyMediumStyle;
 ```
@@ -178,7 +178,7 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 Cả hai class theo cùng một khuôn: một **accessor nhận context** để dùng trong widget, và một **hằng số `raw*`** là nguồn duy nhất của con số.
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_spacing.dart
+// platform/base_ui/lib/src/styles/app_spacing.dart
 static double lg(BuildContext context) => context.w(rawLg);
 // …
 static const double rawLg = 16;
@@ -187,7 +187,7 @@ static const double rawLg = 16;
 Muốn chỉnh lại thang, hãy sửa hằng số `raw*` — mọi accessor đều dẫn xuất từ nó, nên bạn chỉ đổi một con số chứ không phải hai.
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_radius.dart
+// platform/base_ui/lib/src/styles/app_radius.dart
 static double md(BuildContext context) => context.r(rawMd);
 
 static BorderRadius mdRadius(BuildContext context) =>
@@ -214,7 +214,7 @@ Mặc định hãy dùng `w` cho spacing. Chỉ dùng `h` khi giá trị thực 
 
 ### Các helper tiện lợi — và một cái bẫy
 
-`core_responsive` cung cấp các dạng viết tắt trên cùng extension của `BuildContext`. Đối chiếu trực tiếp với `packages/core/responsive/lib/src/context_extension.dart`, chúng ánh xạ sang các trục như sau:
+`core_responsive` cung cấp các dạng viết tắt trên cùng extension của `BuildContext`. Đối chiếu trực tiếp với `platform/responsive/lib/src/context_extension.dart`, chúng ánh xạ sang các trục như sau:
 
 ```dart
 context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
@@ -239,7 +239,7 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 Mọi thứ ở trên đều scale *tương đối so với một khung tham chiếu*: kích thước màn hình mà designer đã thiết kế trên đó.
 
 ```dart
-// packages/core/common/lib/src/config/app_config.dart
+// platform/common/lib/src/config/app_config.dart
 /// Design size used for responsive UI calculations
 /// Based on iPhone X dimensions (375x812)
 static Size get design => const Size(375, 812);
@@ -288,7 +288,7 @@ return ResponsiveInit(
 
 Giả sử bạn muốn có `AppElevation`. Hãy theo đúng khuôn mà các class hiện có đang dùng — private constructor, hằng số `raw*`, accessor nhận context.
 
-**Bước 1** — tạo `packages/core/base_ui/lib/src/styles/app_elevation.dart`:
+**Bước 1** — tạo `platform/base_ui/lib/src/styles/app_elevation.dart`:
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -310,7 +310,7 @@ class AppElevation {
 **Bước 2** — sinh lại barrel để nó được export:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/core/base_ui/lib
+dart tools/barrel_generator/generate.dart platform/base_ui/lib
 ```
 
 `styles/styles.dart` là file tự sinh — tuyệt đối không sửa tay; generator sẽ xoá mọi dòng `export` viết thủ công ở lần chạy sau.
@@ -328,7 +328,7 @@ Material(elevation: AppElevation.raised(context), child: …)
 `AppGradients` đọc màu trực tiếp từ theme đang chạy, nên gradient tự đổi màu theo bảng màu:
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_gradients.dart
+// platform/base_ui/lib/src/styles/app_gradients.dart
 static LinearGradient primaryGradient(BuildContext context) {
   final colors = Theme.of(context).extension<ThemeSystemExtension>()!;
   return LinearGradient(
@@ -344,7 +344,7 @@ Muốn đổi gradient, hãy sửa **danh sách màu** trong bảng màu (`prima
 `AppShadows` là ngoại lệ — nó hardcode màu đen kèm alpha và **không** theo theme:
 
 ```dart
-// packages/core/base_ui/lib/src/styles/app_shadows.dart
+// platform/base_ui/lib/src/styles/app_shadows.dart
 static List<BoxShadow> get sm => [
   BoxShadow(
     color: Colors.black.withValues(alpha: 0.05),
@@ -383,7 +383,7 @@ Các quy tắc này được giữ bằng review, và một phần bằng `dart 
 | Một mức bo góc | `styles/app_radius.dart` → hằng số `raw*` |
 | Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
 | Một shadow | `styles/app_shadows.dart` |
-| Khung thiết kế gốc | `packages/core/common/lib/src/config/app_config.dart` → `design` |
+| Khung thiết kế gốc | `platform/common/lib/src/config/app_config.dart` → `design` |
 | Cách scale (`minTextAdapt`, `fontSizeResolver`) | `app/lib/main_scope.dart` → `ResponsiveInit` |
 | Thêm hẳn một class token mới | file mới trong `styles/`, rồi chạy barrel generator |
 

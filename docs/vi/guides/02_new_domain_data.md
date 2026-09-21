@@ -368,7 +368,7 @@ Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handle
 
 > [!WARNING]
 > **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc
-> [`error_handler.dart:50-88`](../../../packages/core/kernel/lib/src/error/error_handler.dart):
+> [`error_handler.dart:50-88`](../../../platform/kernel/lib/src/error/error_handler.dart):
 > nó xử lý `AppException`, `DioException`, `SocketException`, `HttpException` và `FormatException`
 > — nhưng **không** có `FirebaseException`, `FirebaseAuthException` hay `PlatformException`. Mọi
 > lỗi Firebase vì thế rơi vào nhánh mặc định:

@@ -83,7 +83,7 @@ state-management tool.
 ### Step 1 — neutral interface in `core_di`
 
 Real code from
-[`packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../packages/core/di/lib/src/agnostic_streams/i_auth_status_stream.dart):
+[`platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart):
 
 ```dart
 abstract class IAuthStatusStream {
@@ -191,7 +191,7 @@ ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  
 ```
 
 The interface — real code from
-[`packages/core/di/lib/src/theme/i_theme_storage.dart`](../../../packages/core/di/lib/src/theme/i_theme_storage.dart):
+[`platform/di/lib/src/theme/i_theme_storage.dart`](../../../platform/di/lib/src/theme/i_theme_storage.dart):
 
 ```dart
 import 'package:flutter/material.dart';
@@ -224,7 +224,7 @@ where `core_base_ui`'s provider and `core_storage`'s mechanism meet without crea
 Declare the builder contract in `core_di`:
 
 ```dart
-// packages/core/di/lib/src/builders/i_profile_card_builder.dart
+// platform/di/lib/src/builders/i_profile_card_builder.dart
 import 'package:flutter/widgets.dart';
 
 abstract class IProfileCardBuilder {
@@ -249,7 +249,7 @@ the canonical case.
 **Don't use for** plain navigation (use a Navigator interface) or for domain logic (use a UseCase).
 
 The interface — real code from
-[`packages/core/di/lib/src/actions/i_auth_action_handler.dart`](../../../packages/core/di/lib/src/actions/i_auth_action_handler.dart):
+[`platform/di/lib/src/actions/i_auth_action_handler.dart`](../../../platform/di/lib/src/actions/i_auth_action_handler.dart):
 
 ```dart
 import 'package:flutter/widgets.dart';

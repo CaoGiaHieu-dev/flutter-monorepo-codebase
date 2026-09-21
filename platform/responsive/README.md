@@ -103,4 +103,4 @@ Việc assert là chủ đích. Âm thầm fallback về giá trị chưa scale 
 
 `dart tools/arch_check/check.dart` — rule **R7**, Gate 1 của `pr_quality_check.yml` — quét mọi file có import `core_responsive` và **chặn build** khi gặp bất kỳ bare sizing extension nào, in ra `file:line`. Rule này không phụ thuộc vào review.
 
-Test của package nằm ở `packages/core/responsive/test/`.
+Test của package nằm ở `platform/responsive/test/`.

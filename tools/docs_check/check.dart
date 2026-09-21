@@ -11,7 +11,7 @@ import 'package:path/path.dart' as p;
 ///
 /// Two classes of reference are verified:
 ///
-///   1. **Backticked repo paths** — `` `packages/core/kernel/lib/...` `` — any
+///   1. **Backticked repo paths** — `` `platform/kernel/lib/...` `` — any
 ///      backtick span that starts with a real top-level directory of this
 ///      repo. A span that does not (`utils/`, `routing/`, `ViewState`) is a
 ///      convention or a symbol, not a path, and is ignored.
@@ -229,7 +229,7 @@ bool _isExternal(String target) =>
 /// span is plainly not a path at all.
 String? _normalisePath(String raw) {
   var ref = raw;
-  // `packages/core/kernel/` and `packages/core/kernel` are the same thing.
+  // `platform/kernel/` and `platform/kernel` are the same thing.
   while (ref.endsWith('/')) {
     ref = ref.substring(0, ref.length - 1);
   }

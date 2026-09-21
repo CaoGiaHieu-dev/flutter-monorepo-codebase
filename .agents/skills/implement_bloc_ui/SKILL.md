@@ -25,7 +25,7 @@ Reference sample in the template: `packages/features/home/lib/src/bloc/home_prof
 >
 > If that automation matters more than BLoC's event modelling, use
 > `implement_provider_ui` instead. Read the doc comments on
-> `packages/core/bloc_state_management/lib/src/base_bloc.dart` before choosing.
+> `platform/bloc_state_management/lib/src/base_bloc.dart` before choosing.
 
 ---
 
@@ -38,7 +38,7 @@ Reference sample in the template: `packages/features/home/lib/src/bloc/home_prof
 > its own, semantically different `ViewState`; both barrels are public, so sharing the name
 > would collide in any file importing both.
 
-`packages/core/bloc_state_management/lib/src/bloc_view_state.dart`:
+`platform/bloc_state_management/lib/src/bloc_view_state.dart`:
 
 ```dart
 @freezed

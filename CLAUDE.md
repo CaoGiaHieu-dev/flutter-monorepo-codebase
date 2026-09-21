@@ -49,7 +49,7 @@ dart tools/workspace_setup/configure.dart
 Tests live per-package under `packages/<layer>/<pkg>/test/`. Run from the package directory:
 
 ```bash
-cd packages/core/common
+cd platform/common
 flutter test                           # all tests in the package
 flutter test test/debounce_test.dart   # a single test file
 ```
@@ -142,7 +142,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | Layer | Path | Responsibility |
 |:------|:-----|:---------------|
 | **App Shell** | `app/` | Entrypoint, flavors, central DI assembly (`injection.dart`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes) |
-| **Core** | `packages/core/*` | Infrastructure shared across all layers |
+| **Core** | `platform/*` | Infrastructure shared across all layers |
 | **Domain** | `packages/domain/*` | **Pure Dart** business logic — entities, use cases, repository interfaces |
 | **Data** | `packages/data/*` | Repository implementations, DTOs/models, data sources (remote + local) |
 | **Features** | `packages/features/*` | UI + state management — one bounded UI concern per package |
@@ -606,7 +606,7 @@ abstract class RegisterModule {
 
 ### Interceptors Chain
 
-Registration order in `ApiClient.createClient()` (`packages/core/network/lib/src/api_client.dart`):
+Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_client.dart`):
 
 1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it from its owner, `AuthLocalDataSource` — `core_network` never touches storage). Also sends the locale under the non-standard header key `language`
 2. **RefreshTokenInterceptor**: added **only when `NetworkConfig.onRefreshToken != null`**; catches 401 and replays. Sits **before** Retry so a 401 is never retried with a dead token. `RefreshTokenHandler` serialises concurrent 401s behind one `Completer`, and marks a replayed request so `dio.fetch` re-entering the same interceptor cannot recurse
@@ -658,7 +658,7 @@ Config: copy `app/fastlane/Config.example.yaml` → `app/fastlane/Config.yaml` (
 | Package | Contains | Key Rule |
 |:--------|:---------|:---------|
 | `core_base_ui` | Design tokens, themes, colors, fonts, images, icons, L10n | **Zero Flutter widgets.** Only global assets |
-| `core_ui_kit` | All reusable widgets (atomic + business) | Lives in `packages/core/ui_kit`. Depends on `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` — never on a feature |
+| `core_ui_kit` | All reusable widgets (atomic + business) | Lives in `platform/ui_kit`. Depends on `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` — never on a feature |
 
 ### Sharing Across Features
 
@@ -695,7 +695,7 @@ flutter pub get && dart run build_runner build -d --workspace
 Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `AuthSessionFailure`) — `core_di` runs no codegen.
 
 > [!NOTE]
-> The shared widget library is **not** a removable feature, which is why it lives at `packages/core/ui_kit` as `core_ui_kit` rather than under `packages/features/`. Everything remaining in `packages/features/` is a genuinely removable product surface.
+> The shared widget library is **not** a removable feature, which is why it lives at `platform/ui_kit` as `core_ui_kit` rather than under `packages/features/`. Everything remaining in `packages/features/` is a genuinely removable product surface.
 
 ---
 
@@ -717,7 +717,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files.
 15. **Build runner flag:** Use `-d` (replaces deprecated `--delete-conflicting-outputs`).
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
-17. **Core never depends on features or data.** No `packages/core/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" packages/core/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
+17. **Core never depends on features or data.** No `platform/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
 19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead — e.g. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it depends on `AuthLocalDataSource` from `data_auth`. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.
@@ -751,7 +751,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] Contracts owned by a removable feature resolve with `getItOrNull` / `getAllOrEmpty` — arch_check R8 is clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
-- [ ] No `packages/core/*` imports or declares `feature_*` or `domain_*` outside the three approved `→ domain_core` edges — `arch_check` R1 is clean
+- [ ] No `platform/*` imports or declares `feature_*` or `domain_*` outside the three approved `→ domain_core` edges — `arch_check` R1 is clean
 - [ ] Package constants live in that package's `utils/` folder — no shared cross-domain constants file
 - [ ] New `StorageValue` is owned by its consumer (keys in `utils/`), registered as a singleton with `@PostConstruct(preResolve: true)` — never `@injectable`
 - [ ] No eager `@Singleton` depends on a type registered by a later module (check generated `injection.config.dart`)

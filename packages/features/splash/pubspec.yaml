@@ -14,13 +14,13 @@ dependencies:
   flutter:
     sdk: flutter
   core_base_ui:
-    path: ../../core/base_ui
+    path: ../../../platform/base_ui
   core_di:
-    path: ../../core/di
+    path: ../../../platform/di
   get_it: ^9.2.1
   injectable: ^3.0.0
   core_responsive:
-    path: ../../core/responsive
+    path: ../../../platform/responsive
 dev_dependencies:
   build_runner: "^2.16.0"
   go_router_builder: "^4.4.0"

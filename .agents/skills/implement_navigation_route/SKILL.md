@@ -14,7 +14,7 @@ Use this skill when requested to: "create a new screen/page and link navigation"
 ## 📋 Detailed Steps
 
 ### Step 1: Declare Navigator Interface in `core_di`
-Navigation across features must not be performed directly via path strings. Declare a Navigator interface under `packages/core/di/lib/src/navigators/`:
+Navigation across features must not be performed directly via path strings. Declare a Navigator interface under `platform/di/lib/src/navigators/`:
 ```dart
 import 'package:flutter/widgets.dart';
 
@@ -90,7 +90,7 @@ Pick **one** contribution type:
 
 ## 🔑 `NavigatorKeys`
 
-Lives at `packages/core/di/lib/src/routing/navigator_keys.dart` (moved out of
+Lives at `platform/di/lib/src/routing/navigator_keys.dart` (moved out of
 `routing_interfaces.dart`, which now holds only `IFeatureRouteModule`):
 
 ```dart

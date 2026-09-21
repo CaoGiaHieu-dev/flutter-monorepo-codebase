@@ -64,7 +64,7 @@ Mỗi package phơi public API qua các file barrel (`src.dart`, `<package>.dart
 ```bash
 dart tools/barrel_generator/generate.dart packages/features/auth/lib
 dart tools/barrel_generator/generate.dart packages/domain/auth/lib
-dart tools/barrel_generator/generate.dart packages/core/storage/lib
+dart tools/barrel_generator/generate.dart platform/storage/lib
 ```
 
 Tool tự bỏ qua file sinh ra (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`) và các file `part of`, sau đó format lại phần vừa ghi.
@@ -130,11 +130,11 @@ dart tools/module_generator/generate.dart 3 payment
 flutter analyze
 
 # 2. Test — test nằm theo từng package, nên chạy theo từng package
-cd packages/core/common                  && flutter test && cd -
-cd packages/core/database                && flutter test && cd -
-cd packages/core/network                 && flutter test && cd -
-cd packages/core/provider_state_management && flutter test && cd -
-cd packages/core/storage                 && flutter test && cd -
+cd platform/common                  && flutter test && cd -
+cd platform/database                && flutter test && cd -
+cd platform/network                 && flutter test && cd -
+cd platform/provider_state_management && flutter test && cd -
+cd platform/storage                 && flutter test && cd -
 cd packages/data/auth                    && flutter test && cd -
 
 # 3. Catalog version đang đồng bộ

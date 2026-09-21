@@ -13,9 +13,9 @@ dependencies:
   flutter:
     sdk: flutter
   platform_kernel:
-    path: ../../core/kernel
+    path: ../../../platform/kernel
   core_database:
-    path: ../../core/database
+    path: ../../../platform/database
   domain_core:
     path: ../../domain/core
   drift: "^2.34.3"

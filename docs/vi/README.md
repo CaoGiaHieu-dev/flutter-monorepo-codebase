@@ -39,7 +39,7 @@ Hệ thống được bố trí thế nào và vì sao. Đọc để đặt file
 | Trang | Trả lời |
 |---|---|
 | [`01_overview.md`](architecture/01_overview.md) | Monorepo này được bố trí ra sao, package nào được phép phụ thuộc package nào? |
-| [`02_core.md`](architecture/02_core.md) | Bên trong `packages/core/*` có gì, và tôi nên dùng package nào? |
+| [`02_core.md`](architecture/02_core.md) | Bên trong `platform/*` có gì, và tôi nên dùng package nào? |
 | [`03_domain.md`](architecture/03_domain.md) | Nghiệp vụ nào nằm ở `packages/domain/*`, vì sao code đó bị cấm chạm vào Flutter, và `Result<T>` cho ta cái gì? |
 | [`04_data.md`](architecture/04_data.md) | `packages/data/*` hiện thực hợp đồng repository của Domain thế nào — và không được rò rỉ qua những ranh giới nào? |
 | [`05_features.md`](architecture/05_features.md) | Một package sở hữu màn hình được tổ chức ra sao, và các feature giữ độc lập thế nào mà vẫn ghép thành một app? |

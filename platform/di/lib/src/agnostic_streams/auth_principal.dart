@@ -8,10 +8,11 @@
 /// import fails at compile time, not at lookup time, so the dependency was real
 /// and the auth feature was not actually removable.
 ///
-/// It also over-shared. `UserEntity` carries `bankName`, `bankAccount` and
-/// `fcmToken`; a module that only wants to know whether someone is signed in
-/// had read access to all three. The contract is smaller than the entity on
-/// purpose — that is the feature, not a limitation.
+/// It also over-shares by construction. An entity grows whatever fields its
+/// owning module needs — a payout account, a device token, an internal flag —
+/// and a contract that re-exports it hands every consumer each of those the
+/// moment it is added, without anyone deciding to share it. The contract being
+/// smaller than the entity is the feature, not a limitation.
 ///
 /// The owning feature maps `UserEntity → AuthPrincipal` at its boundary, and is
 /// free to reshape its entity afterwards without anyone rebuilding.

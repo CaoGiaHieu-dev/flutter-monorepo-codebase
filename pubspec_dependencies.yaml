@@ -5,7 +5,9 @@
 
 dependencies:
   # State Management
-  equatable: "^2.1.0"
+  #
+  # No `equatable`: every value type here is Freezed, which generates `==` and
+  # `hashCode` itself. The pin sat in this file with no package declaring it.
   flutter_bloc: "^9.1.1"
   provider: "^6.1.5+1"
 
@@ -27,15 +29,15 @@ dependencies:
   json_annotation: "^4.12.0"
 
   # Firebase & Push Notifications
-  cloud_firestore: "^6.8.0"
-  firebase_auth: "^6.5.7"
+  #
+  # `cloud_firestore`, `firebase_auth`, `flutter_facebook_auth` and
+  # `google_sign_in` were pinned here for an auth sample that no longer uses
+  # them. A catalog entry nothing declares is a version this repo claims to
+  # manage and never resolves — `check_outdated.dart` reports on it forever.
+  # Add the pin back alongside the dependency, not ahead of it.
   firebase_core: "^4.13.0"
   firebase_messaging: "^16.5.0"
   flutter_local_notifications: "^22.3.0"
-
-  # Authentication Providers
-  flutter_facebook_auth: "^7.2.0"
-  google_sign_in: "^7.2.0"
 
   # Media & Image Processing
   cached_network_image_ce: "^4.10.0"

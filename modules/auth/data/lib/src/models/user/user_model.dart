@@ -14,9 +14,13 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
     @JsonKey(name: 'email') String? email,
     @JsonKey(name: 'name') String? name,
     @JsonKey(name: 'role', unknownEnumValue: UserRole.unknown) UserRole? role,
-    @JsonKey(name: 'bankName') String? bankName,
-    @JsonKey(name: 'bankAccount') String? bankAccount,
-    @JsonKey(name: 'fcmToken') String? fcmToken,
+
+    /// Session credential from the login/refresh response.
+    ///
+    /// Deliberately absent from [UserEntity]: a token is something the
+    /// transport hands back, not part of who the user is. It is read once
+    /// here, handed to the local data source, and never travels upward.
+    @JsonKey(name: 'token') String? token,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -29,9 +33,6 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
       email: email,
       name: name,
       role: role,
-      bankName: bankName,
-      bankAccount: bankAccount,
-      fcmToken: fcmToken,
     );
   }
 
@@ -41,9 +42,6 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
       email: entity.email,
       name: entity.name,
       role: entity.role,
-      bankName: entity.bankName,
-      bankAccount: entity.bankAccount,
-      fcmToken: entity.fcmToken,
     );
   }
 }

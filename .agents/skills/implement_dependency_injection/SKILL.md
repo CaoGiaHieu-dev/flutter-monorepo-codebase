@@ -81,25 +81,25 @@ parameter. `modules/auth/data/lib/di/register_module.dart`:
 ```dart
 @module
 abstract class RegisterModule {
-  @preResolve
-  Future<GoogleSignIn> get googleSignIn async {
-    final instance = GoogleSignIn.instance;
-    await GoogleSignIn.instance.initialize();
-    return instance;
-  }
-
   @lazySingleton
-  FirebaseAuth get firebaseAuth => FirebaseAuth.instance;
-
-  @lazySingleton
-  FirebaseFirestore get firestore => FirebaseFirestore.instance;
-
-  @lazySingleton
-  FacebookAuth get facebookAuth => FacebookAuth.instance;
+  AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
+      AuthRemoteDataSource(dio);
 }
 ```
 
-Use `@preResolve` only for an SDK that needs async initialisation; the rest are plain
+And where construction is genuinely async, `platform/storage/lib/di/module.dart`:
+
+```dart
+@module
+abstract class CoreStorageDiModule {
+  @preResolve
+  Future<SharedPreferences> getSharedPreferences() async {
+    return SharedPreferences.getInstance();
+  }
+}
+```
+
+Use `@preResolve` only where construction is genuinely async; the rest are plain
 `@lazySingleton` getters.
 
 ## ⚠️ Trap 3 — `getAll` throws when nothing is registered

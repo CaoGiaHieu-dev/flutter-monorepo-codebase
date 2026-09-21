@@ -38,6 +38,4 @@ Use the `run_command` tool to execute the scripts. After completion, present a s
   - the sample cache chain (`CacheEntriesDao` → `CacheEntryLocalDataSource` →
     `CacheEntryRepositoryImpl` → the three cache use cases) is reference/test scaffolding with
     no production caller;
-  - `AuthRemoteDataSource` is a Retrofit reference that the live Firebase-backed
-    `AuthRepositoryImpl` does not call.
 - Run it before a release and after removing a feature package.

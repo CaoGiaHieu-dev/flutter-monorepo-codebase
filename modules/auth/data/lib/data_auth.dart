@@ -2,8 +2,9 @@
 ///
 /// This package is a reference implementation shipped with the template,
 /// not product code. It demonstrates:
-/// Freezed models with `.toEntity()`, a package-owned storage key, and a
-/// Firebase-backed repository.
+/// a Retrofit data source, Freezed models with `.toEntity()`, a package-owned
+/// storage key, and a repository that wraps both in `execute()` so nothing
+/// throws past this layer.
 ///
 /// To remove it and everything that travels with it:
 ///

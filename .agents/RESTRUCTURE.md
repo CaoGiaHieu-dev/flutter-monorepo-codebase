@@ -260,7 +260,40 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 
 ---
 
-## 5. Progress log
+## 5. Open decisions — for the repo owner, not for me
+
+### The asset picker in `core_ui_kit`
+
+`packages/core/ui_kit/lib/media/assets_picker/` is **1,003 lines across six files that nothing
+in this template imports**. Its only reference is the barrel that exports it.
+
+It costs more than its line count:
+
+| Cost | Detail |
+|:--|:--|
+| Four dependencies | `photo_manager`, `image_picker`, `extended_image`, `cached_network_image_ce` — every app composed from this template resolves and ships them |
+| 24 global strings | `smartAlbumLivePhotos`, `noPhotosAvailable`, `albumSyncedFaces` … all in `core_base_ui`'s ARB, the file documented as *global strings only*. They describe one product's photo library, not any app's shared vocabulary |
+| A framework classification | `sample_manifest.yaml` calls `core_ui_kit` **framework**, so `remove_sample.dart` will never offer to delete it |
+
+It is plainly residue from the application this template was extracted from. But it sits in a
+framework package, and four documents cite `photo_grid_item.dart` as *the* worked example of
+the "read from context before the first `await`" rule — so removing it is not cleanup, it is a
+decision about what the UI kit is for.
+
+**Two coherent answers, both cheap:**
+
+1. **Delete it.** `core_ui_kit` sheds 1,003 LOC, four dependencies and 24 global ARB keys. The
+   four docs move their async-context example to a widget that survives — or state the rule
+   without a file reference, which is how the other responsive rules are written.
+2. **Keep it and reclassify.** Move it to its own `feature_media` sample package with its own
+   ARB, so it stops being framework, stops polluting the global strings, and shows up in
+   `remove_sample.dart --list` like every other sample.
+
+Doing neither is the only wrong answer: today it is product code wearing framework clothes.
+
+---
+
+## 6. Progress log
 
 | Date | Step | What landed | Gate run? |
 |:--|:--|:--|:--|
@@ -274,7 +307,8 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
-| 2026-09-21 | 9 | **Untracked 163 MB of build output.** 50 files under `app/android/app/build/`, `app/ios/build/` and `tools/build/` were committed — two copies of a 69 MB `kernel_blob.bin` among them. The root ignore said `/build/`, which is anchored and only ever covered `app/build/`; Gradle writes one level deeper. Widened to `build/` at any depth and `git rm --cached`'d the lot. **History still carries the blobs** — every clone pays for them until somebody runs a `git filter-repo` pass, which rewrites shared history and is the repo owner's call. | ⚠️ not run |
+| 2026-09-21 | 9 | **Correctness sweep of the nine preceding commits** — no toolchain here, so each refactor was re-checked mechanically instead. Three real breaks found and fixed: `home_page.dart` still read `user.name` after step 3a renamed it to `AuthPrincipal.displayName`; `app_utils.dart` and `download_image.dart` still imported `../enums/app_enums.dart` and `api_status_constants.dart` by relative path after step 4a moved both into `platform_kernel`. Also added the `network_binding_module.dart` export the barrel generator would add on its next run. Clean: 0 dangling relative imports, 0 undeclared package imports, 0 missing l10n keys, 0 stale references to any symbol renamed in steps 2–4. | ⚠️ not run |
+| 2026-09-21 | 9 | **Untracked 163 MB of build output.** 50 files under `app/android/app/build/`, `app/ios/build/` and `tools/build/` were committed — two copies of a 69 MB `kernel_blob.bin` among them. The root ignore said `/build/`, which is anchored to the repo root and so only ever covered Flutter's own output directory inside `app/`; Gradle writes one level deeper. Widened to `build/` at any depth and `git rm --cached`'d the lot. **History still carries the blobs** — every clone pays for them until somebody runs a `git filter-repo` pass, which rewrites shared history and is the repo owner's call. | ⚠️ not run |
 | 2026-09-21 | 9 | **Docs accuracy is now machine-held.** Built `tools/docs_check` (CI **Gate 5**): resolves every repo path the docs name — backticked spans anchored to a real top-level directory, and markdown links resolved relative to their own file. 70 documents, ~1 300 references, 0 dead. Fixed three genuine drifts (`feature_auth` was said to ship `assets/images`, it ships `assets/language/`; a promised `07_backend_boundary.md` that the backend-out-of-scope decision made moot; a `generate.dart:90-101` line citation whose lines now hold unrelated code). 14 correctly-absent paths moved to `tools/docs_check/allowlist.txt`, each with its reason. The audit also surfaced a real hole: `app/env.prod` and `app/android/keystore.jks` — one the setup guide tells every user to create, the other written into the tree by CI — were **not gitignored**; both now are. | ⚠️ not run |
 | 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |
 

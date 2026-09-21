@@ -4,8 +4,8 @@ import 'dart:math' as math;
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:permission_handler/permission_handler.dart';
-
-import '../enums/app_enums.dart';
+// `UpdateStatus` moved to platform_kernel with the rest of the enums.
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// The `AppUtils` class provides various utility functions for the application.
 /// It includes methods for checking internet connection, handling permissions, and more.

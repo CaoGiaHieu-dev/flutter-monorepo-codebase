@@ -5,30 +5,32 @@ environment:
   flutter: ">=3.47.4"
 
 workspace:
+  # composer:managed:workspace — generated from app_manifest.yaml
   - app
-  - tools
-  - packages/core/kernel
+  - packages/core/base_ui
+  - packages/core/bloc_state_management
   - packages/core/common
-  - packages/core/network
-  - packages/core/storage
   - packages/core/database
+  - packages/core/di
+  - packages/core/kernel
+  - packages/core/network
+  - packages/core/notifications
   - packages/core/provider_state_management
   - packages/core/responsive
-  - packages/core/bloc_state_management
-  - packages/core/base_ui
-  - packages/core/notifications
+  - packages/core/storage
   - packages/core/ui_kit
+  - packages/data/auth
+  - packages/data/core
+  - packages/domain/auth
+  - packages/domain/core
   - packages/features/auth
   - packages/features/dashboard
-  - packages/features/onboarding
-  - packages/features/splash
   - packages/features/home
+  - packages/features/onboarding
   - packages/features/settings
-  - packages/core/di
-  - packages/domain/core
-  - packages/domain/auth
-  - packages/data/core
-  - packages/data/auth
+  - packages/features/splash
+  - tools
+  # composer:end:workspace
 
 dev_dependencies:
   flutter_lints: ^6.0.0

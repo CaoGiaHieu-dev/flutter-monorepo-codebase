@@ -60,6 +60,24 @@ R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai
 
 ---
 
+## `composer`
+
+```bash
+dart tools/composer/composer.dart list              # liệt kê app và thành phần
+dart tools/composer/composer.dart sync --app mobile # sinh lại
+dart tools/composer/composer.dart verify            # gate 0 của CI — fail khi lệch
+```
+
+Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `workspace:` ở root, dependency dạng path của app, và `lib/di/injection.dart` của nó. Thêm một module nghĩa là sửa cả ba cho khớp, và sai thì vỡ lúc boot với `"<Type> is not registered"` — thứ `flutter analyze` không thấy được.
+
+`composer` sinh cả ba từ `app/app_manifest.yaml`, nhưng **chỉ** phần nằm giữa marker `composer:managed:<region>` và `composer:end:<region>`. Dependency ngoài, flavor và khai báo asset vẫn viết tay.
+
+Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.yaml`. Không chỗ nào mã hoá đường dẫn, nên di chuyển package không phải sửa tool hay manifest. Package của module khớp được cả hai quy ước đặt tên — `domain_auth` và `auth_domain` đều nhận.
+
+`--strict` (tự động bật trong `verify`) biến "manifest khai một module không có trên đĩa" từ cảnh báo thành lỗi. Không có nó, `sync` ghép những gì tìm được và in rõ đã bỏ qua cái gì — chính điều này cho phép một dev làm việc khi chỉ checkout module của mình. CI chạy strict, nên chế độ đó không bao giờ lọt lên release.
+
+---
+
 ## `sample_cleanup`
 
 Trả lời câu "cái nào là code mẫu, và xoá sao cho không vỡ app?".

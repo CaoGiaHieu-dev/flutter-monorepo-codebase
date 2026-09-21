@@ -1,0 +1,98 @@
+# Composition manifest for the `mobile` app.
+#
+# This is the single source of truth for *what this app is made of*. Three
+# artifacts are generated from it, each between `composer:managed` markers:
+#
+#   1. the root `pubspec.yaml` `workspace:` list
+#   2. this app's path dependencies in `pubspec.yaml`
+#   3. this app's `lib/di/injection.dart`
+#
+#   dart tools/composer/composer.dart sync --app mobile
+#
+# Everything outside those markers stays hand-written — external dependencies,
+# flavors, asset declarations.
+#
+# Packages are resolved by *name*, discovered by scanning for `pubspec.yaml`.
+# Nothing here encodes a directory, so moving packages around does not edit
+# this file.
+
+app:
+  id: mobile
+  kind: flutter
+  entrypoint: lib/main.dart
+
+# ---------------------------------------------------------------------------
+# DI groups — ORDERED, and the order is load-bearing.
+#
+# `configureDependencies()` initialises modules in exactly this sequence. An
+# eager `@Singleton` may only depend on a type registered by an earlier group;
+# depending on a later one throws "<Type> is not registered" at boot, which
+# `flutter analyze` cannot see. See AGENTS.md §18.
+#
+# `phase: before` maps to `externalPackageModulesBefore`, `after` to
+# `externalPackageModulesAfter`.
+# ---------------------------------------------------------------------------
+di_groups:
+  - name: core
+    phase: before
+    packages:
+      - core_common
+      - core_network
+      - core_notifications
+      - core_storage
+      # Registers nothing: `core_database` is mechanism only and owns no
+      # database. Each package that persists data declares its own.
+      - core_database
+      - core_di
+
+  # Depends on ILanguageStorage / IThemeStorage, which are app-local singletons
+  # registered between the two phases. Must therefore run in `after`.
+  - name: ui
+    phase: after
+    packages: [core_base_ui]
+
+  - name: domain
+    phase: after
+    packages: [domain_core]
+    from_modules: domain
+
+  # A module that opens a database with `@preResolve` runs its collected
+  # `IDatabaseMigration` steps during its own initialisation, so anything
+  # contributing a step must appear before it. `data_core` opens CacheDatabase
+  # here, which means a migration contributed by a *feature* would be missed.
+  - name: data
+    phase: after
+    packages: [data_core]
+    from_modules: data
+
+  - name: feature
+    phase: after
+    from_modules: feature
+
+  - name: other
+    phase: after
+    packages:
+      - provider_state_management
+      - bloc_state_management
+
+# ---------------------------------------------------------------------------
+# Modules this app composes.
+#
+# `layers` picks which of a module's packages are included. A module absent
+# from disk is skipped with a warning by `sync`, and is an error under
+# `sync --strict` — which is what CI runs, so a release can never silently
+# ship without one.
+# ---------------------------------------------------------------------------
+modules:
+  - { id: auth, layers: [domain, data, feature] }
+  - { id: home, layers: [feature] }
+  - { id: settings, layers: [feature] }
+  - { id: onboarding, layers: [feature] }
+  - { id: splash, layers: [feature] }
+  - { id: dashboard, layers: [feature] }
+
+# Packages the app depends on that contribute no DI module of their own.
+extra_dependencies:
+  - platform_kernel
+  - core_responsive
+  - core_ui_kit

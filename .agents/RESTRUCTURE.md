@@ -56,11 +56,17 @@ Steps are sequenced so each one leaves the repo building. Do not batch them.
 | 2 | Shrink the samples (**done**) | 1 | no (deletes code) |
 | 3 | Empty `core_di` of product names (**done**) | 2 | yes |
 | 4 | Split `core_common` (**done**) | — | yes |
-| 5 | Rename + relayout to `platform/` + `modules/` | 3, 4 | no |
-| 6 | Manifest + `composer` | 5 | yes |
+| 5 | Manifest + `composer` (**done**) | 4 | yes |
+| 6 | Rename + relayout to `platform/` + `modules/` | 5 | no |
 | 7 | Second app (`admin`) | 6 | yes |
 | 8 | Submodules + CODEOWNERS | 7 | no |
 
+> **Revised again after step 4.** `composer` now comes *before* the relayout. It resolves
+> packages by name from a scan, so no directory is encoded in it or in any manifest — the
+> relayout therefore needs no change to either. Doing the additive, low-risk tool first also
+> means the relayout lands against a checked-in `composer verify` gate that will catch a
+> mis-wired path immediately.
+>
 > **Revised after step 1.** Shrinking the samples now comes *before* emptying `core_di`.
 > The original order had step 3 carefully migrating contracts —
 > `OnboardingNavigator`, `IAppSplashScreen`, `DashboardRouteModule` — that step 2 then
@@ -172,7 +178,7 @@ dependencies, not leftovers.
 
 **Gate:** `arch_check` R9 clean. Full verify chain passes.
 
-### Step 5 — Relayout
+### Step 6 — Relayout
 
 Physical move, no behaviour change. `packages/core/*` → `platform/*`;
 `packages/{domain,data,features}/<name>` → `modules/<name>/<name>_{domain,data,feature}`;
@@ -182,7 +188,7 @@ Physical move, no behaviour change. `packages/core/*` → `platform/*`;
 **Gate:** the app boots with **zero modules** composed. This is the property everything else
 depends on, tested directly.
 
-### Step 6 — Manifest + `composer`
+### Step 5 — Manifest + `composer` ✅ done
 
 `apps/<id>/app_manifest.yaml` becomes the single source of truth.
 `tools/composer/` gains `checkout`, `sync`, `sync --strict`, `gen-di`, `verify`.
@@ -247,6 +253,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
 | 2026-09-21 | 4a | Extracted `platform_kernel` (27 files, 7 deps, no Flutter) from `core_common` (20 → 16 deps). `ErrorHandler` lost its last Flutter import (`kDebugMode` → `dart.vm.product`). Added `arch_check` **R9** — pure-Dart tier checked in the **pubspec** as well as imports. Approved edge `core_common → domain_core` became `platform_kernel → domain_core`. Deleted three stray barrel files outside any `lib/`. | ⚠️ not run |
+| 2026-09-21 | 5 | Built `tools/composer`. `app/app_manifest.yaml` is now the source of truth for the root `workspace:` list, the app's path dependencies and `injection.dart`; all three are generated between `composer:managed` markers. Added CI **Gate 0** (`composer verify`). Two bugs caught by diffing generated output against the hand-written files: the micro-package probe matched `@InjectableInit.microPackage()` with parentheses and silently dropped the three packages that pass arguments, and marker splicing by string offset ate the markers' indentation. | ⚠️ not run |
 | 2026-09-21 | 4b | Migrated `core_network`, `core_notifications`, `data_core`, `feature_dashboard` off `core_common` onto `platform_kernel` — each drops 14 inherited deps. Removed a dead `package:flutter/foundation.dart` import from `cache_database.dart` (nothing in the file used it). | ⚠️ not run |
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |

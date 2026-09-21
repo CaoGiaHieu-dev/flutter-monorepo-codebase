@@ -20,7 +20,8 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 > For types `2` and `3` the generator **only scaffolds empty folders** plus `pubspec.yaml` and
 > `lib/di/module.dart`. Unlike a feature, there are no starter templates — every class below you
 > write by hand. See
-> [`tools/module_generator/generate.dart:90-101`](../../../tools/module_generator/generate.dart).
+> the `ModuleType.domain` / `ModuleType.data` branches in
+> [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 
 It creates:
 
@@ -311,43 +312,42 @@ class AuthLocalDataSource {
 
 Extends `IBaseRepository` from `data_core` and wraps every call in `execute()` (async) or
 `executeSync()` (sync). Real code from
-[`packages/data/language/lib/src/repositories_impl/language_repository_impl.dart`](../../../packages/data/language/lib/src/repositories_impl/language_repository_impl.dart):
+[`packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
-@LazySingleton(as: ILanguageRepository)
-class LanguageRepositoryImpl extends IBaseRepository
-    implements ILanguageRepository {
-  LanguageRepositoryImpl(this._storageManager);
+@LazySingleton(as: ICacheEntryRepository)
+class CacheEntryRepositoryImpl extends IBaseRepository
+    implements ICacheEntryRepository {
+  CacheEntryRepositoryImpl(this._local);
 
-  final StorageManager _storageManager;
+  final ICacheEntryLocalDataSource _local;
 
-  late final _locale = StorageValue<String>(
-    _storageManager.getStorage(StorageType.pref),
-    LanguageStorageKeys.LOCALE,
-  );
-
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await _locale.readFromStorage();
+  @override
+  Future<Result<CacheEntryEntity?>> getByKey(String key) {
+    return execute<CacheEntryModel?, CacheEntryEntity?>(
+      () => _local.getEntry(key),
+      mapper: (model) => model?.toEntity(),
+    );
   }
 
   @override
-  Result<String> getLanguage() {
-    return executeSync<String, String>(() {
-      final language = _locale.value;
-      if (language != null) return language;
-      return AppConfig.defaultLanguage.languageCode;
-    });
+  Future<Result<void>> save(CacheEntryParams params) {
+    return execute<void, void>(() => _local.save(params.key, params.value));
   }
 
   @override
-  Result<void> setLanguage(String languageCode) {
-    return executeSync<void, void>(() {
-      _locale.value = languageCode;
-    });
+  Future<Result<List<CacheEntryEntity>>> getAll() {
+    return execute<List<CacheEntryModel>, List<CacheEntryEntity>>(
+      _local.getAll,
+      mapper: (models) => models.map((model) => model.toEntity()).toList(),
+    );
   }
 }
 ```
+
+Note the shape: the data source returns **models**, and `mapper` converts them to entities at
+this boundary. Nothing above this layer ever sees a `CacheEntryModel`.
+
 
 `execute<R, T>` takes the raw operation and an optional `mapper` to convert Model → Entity:
 
@@ -368,7 +368,7 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 
 > [!WARNING]
 > **`ErrorHandler` has no Firebase branch today.** Reading
-> [`error_handler.dart:50-88`](../../../packages/core/common/lib/src/error/error_handler.dart):
+> [`error_handler.dart:50-88`](../../../packages/core/kernel/lib/src/error/error_handler.dart):
 > it handles `AppException`, `DioException`, `SocketException`, `HttpException` and
 > `FormatException` — but not `FirebaseException`, `FirebaseAuthException` or `PlatformException`.
 > Every Firebase error therefore lands on the fallback:

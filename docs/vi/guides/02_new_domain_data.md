@@ -20,7 +20,8 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 > Với loại `2` và `3`, generator **chỉ tạo thư mục rỗng** cùng `pubspec.yaml` và
 > `lib/di/module.dart`. Khác với feature, ở đây không có template khởi tạo — mọi class dưới đây
 > bạn viết tay. Xem
-> [`tools/module_generator/generate.dart:90-101`](../../../tools/module_generator/generate.dart).
+> the `ModuleType.domain` / `ModuleType.data` branches in
+> [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 
 Nó tạo ra:
 
@@ -312,43 +313,42 @@ class AuthLocalDataSource {
 
 Kế thừa `IBaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
 `executeSync()` (đồng bộ). Code thật từ
-[`packages/data/language/lib/src/repositories_impl/language_repository_impl.dart`](../../../packages/data/language/lib/src/repositories_impl/language_repository_impl.dart):
+[`packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
-@LazySingleton(as: ILanguageRepository)
-class LanguageRepositoryImpl extends IBaseRepository
-    implements ILanguageRepository {
-  LanguageRepositoryImpl(this._storageManager);
+@LazySingleton(as: ICacheEntryRepository)
+class CacheEntryRepositoryImpl extends IBaseRepository
+    implements ICacheEntryRepository {
+  CacheEntryRepositoryImpl(this._local);
 
-  final StorageManager _storageManager;
+  final ICacheEntryLocalDataSource _local;
 
-  late final _locale = StorageValue<String>(
-    _storageManager.getStorage(StorageType.pref),
-    LanguageStorageKeys.LOCALE,
-  );
-
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await _locale.readFromStorage();
+  @override
+  Future<Result<CacheEntryEntity?>> getByKey(String key) {
+    return execute<CacheEntryModel?, CacheEntryEntity?>(
+      () => _local.getEntry(key),
+      mapper: (model) => model?.toEntity(),
+    );
   }
 
   @override
-  Result<String> getLanguage() {
-    return executeSync<String, String>(() {
-      final language = _locale.value;
-      if (language != null) return language;
-      return AppConfig.defaultLanguage.languageCode;
-    });
+  Future<Result<void>> save(CacheEntryParams params) {
+    return execute<void, void>(() => _local.save(params.key, params.value));
   }
 
   @override
-  Result<void> setLanguage(String languageCode) {
-    return executeSync<void, void>(() {
-      _locale.value = languageCode;
-    });
+  Future<Result<List<CacheEntryEntity>>> getAll() {
+    return execute<List<CacheEntryModel>, List<CacheEntryEntity>>(
+      _local.getAll,
+      mapper: (models) => models.map((model) => model.toEntity()).toList(),
+    );
   }
 }
 ```
+
+Chú ý hình dạng: data source trả về **model**, và `mapper` chuyển chúng thành entity ngay tại
+biên này. Không tầng nào phía trên nhìn thấy `CacheEntryModel`.
+
 
 `execute<R, T>` nhận thao tác thô và một `mapper` tuỳ chọn để chuyển Model → Entity:
 
@@ -368,7 +368,7 @@ Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handle
 
 > [!WARNING]
 > **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc
-> [`error_handler.dart:50-88`](../../../packages/core/common/lib/src/error/error_handler.dart):
+> [`error_handler.dart:50-88`](../../../packages/core/kernel/lib/src/error/error_handler.dart):
 > nó xử lý `AppException`, `DioException`, `SocketException`, `HttpException` và `FormatException`
 > — nhưng **không** có `FirebaseException`, `FirebaseAuthException` hay `PlatformException`. Mọi
 > lỗi Firebase vì thế rơi vào nhánh mặc định:

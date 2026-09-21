@@ -13,6 +13,7 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | Vấn đề | Lệnh |
 |---|---|
 | **Kiểm tra luật phân tầng còn đúng không** | `dart tools/arch_check/check.dart` |
+| **Kiểm tra docs còn mô tả đúng cây thư mục hiện tại** | `dart tools/docs_check/check.dart` |
 | **Package nào là code mẫu có thể xoá?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
 | **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <tên>` |
 | Tạo package feature / domain / data / core mới | `dart tools/module_generator/generate.dart …` |
@@ -75,6 +76,39 @@ Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `wor
 Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.yaml`. Không chỗ nào mã hoá đường dẫn, nên di chuyển package không phải sửa tool hay manifest. Package của module khớp được cả hai quy ước đặt tên — `domain_auth` và `auth_domain` đều nhận.
 
 `--strict` (tự động bật trong `verify`) biến "manifest khai một module không có trên đĩa" từ cảnh báo thành lỗi. Không có nó, `sync` ghép những gì tìm được và in rõ đã bỏ qua cái gì — chính điều này cho phép một dev làm việc khi chỉ checkout module của mình. CI chạy strict, nên chế độ đó không bao giờ lọt lên release.
+
+---
+
+## `docs_check`
+
+**Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, và fail ngay ở cái đầu tiên không tồn tại.
+
+```bash
+dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết
+dart tools/docs_check/check.dart --verbose  # kèm block allowlist để copy-paste
+```
+
+Hai loại tham chiếu được kiểm tra trên `docs/`, `.agents/`, `README.md` và `CLAUDE.md`:
+
+| Loại | Ví dụ | Cách giải |
+|---|---|---|
+| Path trong backtick | `` `packages/core/kernel/lib/platform_kernel.dart` `` | Tính từ gốc repo, nhưng chỉ khi chuỗi bắt đầu bằng một thư mục top-level có thật |
+| Markdown link | `[…](../../../tools/arch_check/check.dart)` | Tương đối với **file chứa link**, không phải thư mục đang chạy lệnh |
+
+Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `packages/`, `app/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 300 tham chiếu thật — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
+
+Chuỗi có khoảng trắng, `*`, `{` hoặc `<` cũng bị bỏ qua: đó là lệnh shell, glob hoặc placeholder, mỗi thứ mô tả một *tập hợp* chứ không phải một file.
+
+Những path vắng mặt một cách chính đáng nằm trong `tools/docs_check/allowlist.txt`, mỗi dòng một path kèm lý do. Chỉ đúng ba lý do được chấp nhận:
+
+1. **Sinh tự động** — `app/lib/di/injection.config.dart`, build output.
+2. **Bí mật** — `app/env.prod`, `app/android/key.properties`; không bao giờ commit.
+3. **Hướng dẫn** — file mà người đọc *được bảo là hãy tạo ra* (`app_elevation.dart` trong guide design system), hoặc placeholder đại diện cho module của chính người đọc (`packages/features/profile`).
+
+Mọi trường hợp khác là drift, và cách sửa là sửa tài liệu. Một entry không kèm lý do là không hợp lệ — khoảnh khắc allowlist trở thành danh sách những path ai đó bịt miệng, gate này hết đáng chạy.
+
+> [!NOTE]
+> Check này cố ý không nói gì về việc tài liệu có *đúng* hay không, chỉ nói những thứ nó trỏ tới có tồn tại hay không. Đó là một chuẩn thấp, và là chuẩn duy nhất máy giữ được. Trích dẫn theo số dòng (`generate.dart:90-101`) fail check này theo thiết kế — đó là loại tham chiếu mục nhanh nhất, còn gọi tên symbol thì sống sót qua mọi chỉnh sửa phía trên nó.
 
 ---
 

@@ -26,6 +26,12 @@
 # Lock files
 pubspec.lock
 
+# Production environment values.
+# `env.dev` and `env.stg` are committed deliberately — they hold no secrets
+# and a fresh clone must build. `env.prod` is the one the setup guide tells
+# you to create yourself, so it must never be committable.
+env.prod
+
 # Firebase configuration
 firebase.json
 google-services.json

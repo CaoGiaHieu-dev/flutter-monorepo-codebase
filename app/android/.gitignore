@@ -6,10 +6,15 @@ gradle-wrapper.jar
 local.properties
 GeneratedPluginRegistrant.java
 
-# Ignore prod key only 
+# Signing material — never committed, under any name.
+# CI writes `app/android/keystore.jks` (flutter_build.yml) and Gradle reads
+# `key.properties` / `key-dev.properties` / `key-stg.properties`, so the
+# patterns are broad on purpose: a keystore named something else is still
+# a keystore, and one accidental `git add -A` is all it takes.
+*.jks
+*.keystore
 key.properties
-key.keystore
-key.jks
+key-*.properties
 
 .cxx
 .kotlin

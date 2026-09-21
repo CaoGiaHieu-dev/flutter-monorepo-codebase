@@ -110,7 +110,7 @@ Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` 
 
 ### `ErrorHandler` thực sự nhận diện được gì
 
-`packages/core/common/lib/src/error/error_handler.dart` phân nhánh theo thứ tự: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định.
+`packages/core/kernel/lib/src/error/error_handler.dart` phân nhánh theo thứ tự: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định.
 
 > [!WARNING]
 > **Không có nhánh nào cho `FirebaseException` / `FirebaseAuthException` / `PlatformException`.** Vì `AuthRepositoryImpl` gọi thẳng Firebase SDK (§6), mọi lỗi Firebase — sai mật khẩu, không tìm thấy user, mất mạng — đều rơi xuống nhánh mặc định:

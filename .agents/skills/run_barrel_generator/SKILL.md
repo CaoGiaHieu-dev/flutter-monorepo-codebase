@@ -28,7 +28,7 @@ Use the `run_command` tool to execute the command and report the status.
 - It rewrites the `export` lines of each barrel. **Hand-written `export` statements in a
   barrel will be removed.** If a file must re-export something manually, put that export in a
   normal source file instead — this is why
-  `packages/core/common/lib/src/error/failures.dart` (the `AppFailure` compatibility shim)
+  `packages/core/kernel/lib/src/error/failures.dart` (the `AppFailure` compatibility shim)
   is a regular file, not a barrel.
 - New `utils/` folders get their own `utils.dart` barrel automatically, wired into `src.dart`.
 - Run it **before** `build_runner` when you have added files, so codegen sees the new exports.

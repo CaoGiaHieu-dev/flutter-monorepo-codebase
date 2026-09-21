@@ -161,7 +161,7 @@ APP_SCHEMA_VERSION=
 APP_NAME=
 ```
 
-Most of these surface in Dart through `EnvConstants` (`packages/core/common/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
+Most of these surface in Dart through `EnvConstants` (`packages/core/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {

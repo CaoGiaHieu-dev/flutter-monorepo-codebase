@@ -69,7 +69,7 @@ packages:
     kind: sample
     path: packages/features/home
     demonstrates: >-
-      BLoC with private Freezed events, a dashboard tab (IDashboardTabModule),
+      BLoC with private Freezed events, a dashboard tab (INavDestinationModule),
       and consuming another feature's state through a core_di contract.
 
   feature_settings:
@@ -176,7 +176,7 @@ bundles:
       - packages/core/di/lib/src/actions/i_auth_action_handler.dart
       - packages/core/di/lib/src/navigators/auth_navigator.dart
     orphaned_keys:
-      - "NavigatorKeys.authKey in packages/core/di/lib/src/routing/navigator_keys.dart"
+      - "NavigatorKeys.nested('auth') in packages/core/di/lib/src/routing/navigator_keys.dart"
     breaks:
       - sample: feature_settings
         at: packages/features/settings/lib/src/pages/settings_page.dart:60
@@ -201,7 +201,7 @@ bundles:
     safe_couplings:
       - "feature_auth -> HomeNavigator (getItOrNull + fallback, degrades quietly)"
     note: >-
-      Removing every IDashboardTabModule leaves the dashboard with no tabs;
+      Removing every INavDestinationModule leaves the dashboard with no tabs;
       AppRouter falls back to an empty branch rather than crashing.
 
   settings:
@@ -249,7 +249,7 @@ shared_files:
 # feature-specific. Do not delete these while chasing orphans.
 framework_contracts:
   - packages/core/di/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
-  - packages/core/di/lib/src/routing/i_dashboard_tab_module.dart
+  - packages/core/di/lib/src/routing/i_nav_destination_module.dart
   - packages/core/di/lib/src/routing/i_app_entry_location.dart
   - packages/core/di/lib/src/routing/navigator_keys.dart
   - packages/core/di/lib/src/feature_localization.dart

@@ -24,7 +24,7 @@ Năm tham số vị trí được đọc bởi
 | 2 | `profile` | Tên module (snake_case). Package thành `feature_profile` tại `packages/features/profile` |
 | 3 | `""` | Thư mục tuỳ chỉnh — chỉ dùng khi loại là `5`. Truyền `""` cho loại 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` không dùng |
-| 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `IDashboardTabModule`, `3` không sinh |
+| 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` không sinh |
 
 Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 
@@ -37,7 +37,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 | Chọn | Khi nào | Bạn nhận được |
 | :-- | :-- | :-- |
 | `1` `IFeatureRouteModule` | Một chồng màn hình push lên trên app (auth, onboarding, màn chi tiết) | Stub `*FeatureRouteModule` |
-| `2` `IDashboardTabModule` | Một **tab chính của bottom navigation**, cần back stack riêng bền vững | Stub `*DashboardTabModule` |
+| `2` `INavDestinationModule` | Một **tab chính của bottom navigation**, cần back stack riêng bền vững | Stub `*DashboardTabModule` |
 | `3` không | Bạn sẽ tự nối routing sau, hoặc feature không có route | Không sinh stub |
 
 > [!WARNING]
@@ -61,7 +61,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 **Thủ công — tool in ra ở cuối:**
 
 1. Hoàn thiện `TypedGoRoute` / navigator trong `lib/src/routing/`
-2. Điền nội dung cho stub route module (`routes`, và với tab thì thêm `order`, `path`, `navigationBarItem`)
+2. Điền nội dung cho stub route module (`routes`, và với tab thì thêm `order`, `path`, `destination`)
 3. Chạy lại `build_runner`, rồi **restart hoàn toàn** app — DI mới không được hot reload nhận
 
 > [!NOTE]
@@ -119,7 +119,7 @@ class ProfilePath {
 
 ## 4. Viết route module
 
-### Phương án A — tab bottom-nav (`IDashboardTabModule`)
+### Phương án A — tab bottom-nav (`INavDestinationModule`)
 
 Hai file. Trước hết là bản thân các route — code thật từ
 [`packages/features/home/lib/src/routing/home_route_module.dart`](../../../packages/features/home/lib/src/routing/home_route_module.dart):
@@ -162,7 +162,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 ```
 
 Rồi tới phần đóng góp qua DI — code thật từ
-[`home_dashboard_tab_module.dart`](../../../packages/features/home/lib/src/routing/home_dashboard_tab_module.dart):
+[`home_nav_destination.dart`](../../../packages/features/home/lib/src/routing/home_nav_destination.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -174,8 +174,8 @@ import '../extensions/extensions.dart';
 import '../utils/home_path.dart';
 import 'home_route_module.dart';
 
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
   @override
   int get order => 0;
 
@@ -186,12 +186,11 @@ class HomeDashboardTabModule extends IDashboardTabModule {
   List<RouteBase> get routes => [$homeShellRoute];
 
   @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
 }
 ```
 
@@ -222,7 +221,7 @@ Không có `order` — nhóm route này khớp theo path chứ không theo chỉ
 > [!CAUTION]
 > Tuyệt đối không sửa `app/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
 > gom các đóng góp qua `getAllOrEmpty<IFeatureRouteModule>()` và
-> `getAllOrEmpty<IDashboardTabModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
+> `getAllOrEmpty<INavDestinationModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
 
 ---
 
@@ -385,7 +384,7 @@ Sau đó **restart hoàn toàn** app (không phải hot reload) để đồ th�
 - [ ] `pubspec.yaml` của package có `resolution: workspace`
 - [ ] Mọi dependency thực dùng đều được khai — kiểm bằng `dart tools/unused_checker/check_unused_packages.dart`
 - [ ] Hằng số nằm trong `src/utils/`, không rải rác
-- [ ] Route đăng ký qua `IFeatureRouteModule` / `IDashboardTabModule` — `app_router.dart` không bị đụng
+- [ ] Route đăng ký qua `IFeatureRouteModule` / `INavDestinationModule` — `app_router.dart` không bị đụng
 - [ ] Controller tạo ở tầng route, page **không** bọc lại
 - [ ] Controller màn hình là `@injectable`, không phải singleton
 - [ ] Đã đăng ký `IFeatureLocalization` — `root_app.dart` không bị đụng

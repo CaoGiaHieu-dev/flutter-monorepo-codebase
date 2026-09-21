@@ -91,7 +91,7 @@ dart tools/module_generator/generate.dart <type> <name> [<dir>] [<sm>] [<route>]
 | `<name>` | tên thư mục trần (`profile`) — package sẽ thành `feature_profile` |
 | `<dir>` | chỉ dùng cho type `5` |
 | `<sm>` | chỉ feature — `1` Provider · `2` BLoC · `3` không dùng |
-| `<route>` | chỉ feature — `1` `IFeatureRouteModule` · `2` `IDashboardTabModule` · `3` không |
+| `<route>` | chỉ feature — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` không |
 
 ```bash
 dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provider + route stack

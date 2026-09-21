@@ -47,7 +47,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
 | `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enum, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), extension, mixin, `EnvConstants`, `ApiStatusConstants`, module Firebase options |
-| `core_di` | `packages/core/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
+| `core_di` | `packages/core/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `packages/core/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
 | `core_ui_kit` | `packages/core/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
 | `core_network` | `packages/core/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
@@ -83,10 +83,10 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
 | `feature_auth` | `packages/features/auth` | Trang Login / Register / Forgot-password, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
-| `feature_home` | `packages/features/home` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeDashboardTabModule` |
-| `feature_settings` | `packages/features/settings` | Tab Settings, `SettingsDashboardTabModule` |
+| `feature_home` | `packages/features/home` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination` |
+| `feature_settings` | `packages/features/settings` | Tab Settings, `SettingsNavDestination` |
 | `feature_onboarding` | `packages/features/onboarding` | Luồng onboarding, hiện thực `IAppEntryLocation` |
-| `feature_dashboard` | `packages/features/dashboard` | **Chỉ là khung vỏ** — `Scaffold` + bottom navigation bar. Dựng tab từ `getAllOrEmpty<IDashboardTabModule>()`; không sở hữu trang tab nào. |
+| `feature_dashboard` | `packages/features/dashboard` | **Chỉ là khung vỏ** — `Scaffold` + bottom navigation bar. Dựng tab từ `getAllOrEmpty<INavDestinationModule>()`; không sở hữu trang tab nào. |
 | `feature_splash` | `packages/features/splash` | Trang splash do `MainScope` hiển thị trước khi router tồn tại |
 
 > [!NOTE]

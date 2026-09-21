@@ -199,8 +199,8 @@ List<RouteBase> get _featureRoutes => [
   for (final module in getAllOrEmpty<IFeatureRouteModule>()) ...module.routes,
 ];
 
-List<IDashboardTabModule> get _dashboardTabs =>
-    getAllOrEmpty<IDashboardTabModule>().toList()
+List<INavDestinationModule> get _dashboardTabs =>
+    getAllOrEmpty<INavDestinationModule>().toList()
       ..sort((a, b) => a.order.compareTo(b.order));
 ```
 
@@ -210,7 +210,7 @@ Structure produced:
 GoRouter(navigatorKey: NavigatorKeys.rootKey)
 └── ShellRoute(navigatorKey: appKey)          → NavigatorWrapperWidget
     ├── ..._featureRoutes                      ← IFeatureRouteModule
-    └── StatefulShellRoute.indexedStack        ← IDashboardTabModule (sorted by order)
+    └── StatefulShellRoute.indexedStack        ← INavDestinationModule (sorted by order)
         └── builder → DashboardRouteModule
 ```
 
@@ -219,14 +219,14 @@ Every collection point degrades gracefully when nothing is registered:
 | Missing | Fallback |
 |:--|:--|
 | `IFeatureRouteModule` | empty list |
-| `IDashboardTabModule` | one placeholder branch at `/_empty_dashboard` rendering `SizedBox.shrink()` |
+| `INavDestinationModule` | one placeholder branch at `/_empty_dashboard` rendering `SizedBox.shrink()` |
 | `DashboardRouteModule` | `SizedBox.shrink()` |
 | `IAppEntryLocation` | first dashboard tab path, else `/` |
 
 Deleting a feature package therefore cannot crash the shell.
 
 > [!CAUTION]
-> **Never hardcode a feature route in `app_router.dart`.** Register `IFeatureRouteModule` or `IDashboardTabModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
+> **Never hardcode a feature route in `app_router.dart`.** Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
 
 `refreshListenable: getItOrNull<AuthProvider>()` makes GoRouter re-evaluate redirects when auth state changes. `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
 

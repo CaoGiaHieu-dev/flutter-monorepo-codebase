@@ -72,7 +72,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
 # Syntax: dart tools/module_generator/generate.dart <type> <name> [<dir>] [<SM>] [<route>]
 # <type>: 1=Feature, 2=Domain, 3=Data, 4=Core, 5=Custom
 # <SM> (Feature only): 1=Provider, 2=BLoC, 3=None
-# <route> (Feature only): 1=IFeatureRouteModule (stack), 2=IDashboardTabModule (bottom nav tab), 3=none
+# <route> (Feature only): 1=IFeatureRouteModule (stack), 2=INavDestinationModule (bottom nav tab), 3=none
 dart tools/module_generator/generate.dart 1 profile "" 1 1    # Feature+Provider+stack routes
 dart tools/module_generator/generate.dart 1 chat "" 2 2       # Feature+BLoC+bottom nav tab
 dart tools/module_generator/generate.dart 2 payment            # Domain micro-package
@@ -146,7 +146,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | Package | Purpose | Key Notes |
 |:--------|:--------|:----------|
 | `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` lives in `domain_core`; a re-export shim at `src/error/failures.dart` re-exports it for convenience |
-| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
+| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in app shell |
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
@@ -251,7 +251,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 | Contract | Purpose | Has Order? | Who Implements |
 |:---------|:--------|:-----------|:---------------|
 | `IFeatureRouteModule` | Stack/shell routes under app `ShellRoute` | **No** (path match) | auth, onboarding, … |
-| `IDashboardTabModule` | One bottom-nav tab + one `StatefulShellBranch` | **Yes** (must match nav index) | home, settings, … |
+| `INavDestinationModule` | One bottom-nav tab + one `StatefulShellBranch` | **Yes** (must match nav index) | home, settings, … |
 | `IAppEntryLocation` | Cold-start `GoRouter.initialLocation` | n/a | usually onboarding |
 | `DashboardRouteModule` | Dashboard **chrome** only (scaffold/bottom bar host) | n/a | `feature_dashboard` only |
 | `IFeatureLocalization` | Feature ARB delegates | n/a | every feature with strings |
@@ -293,19 +293,19 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ### Dashboard Rules
 
-**`feature_dashboard` is chrome only** — it implements `DashboardRouteModule` and builds the bottom bar from `getAllOrEmpty<IDashboardTabModule>()`.
+**`feature_dashboard` is chrome only** — it implements `DashboardRouteModule` and builds the bottom bar from `getAllOrEmpty<INavDestinationModule>()`.
 
 **Dashboard MUST NOT:**
 - Import `feature_home`/`feature_settings` or embed their pages
 - Own `HomePage`/`SettingsPage` or business BLoCs for tabs
-- Hardcode `BottomNavigationBarItem` list ignoring DI
-- Register `IDashboardTabModule` itself for "fake" tabs
+- Hardcode a destination list ignoring DI
+- Register `INavDestinationModule` itself for "fake" tabs
 
-**Use `IDashboardTabModule`** ONLY when the screen is a primary bottom-nav destination needing a stable `StatefulShellBranch`.
+**Use `INavDestinationModule`** ONLY when the screen is a primary bottom-nav destination needing a stable `StatefulShellBranch`.
 
 ### Key Router Components
 
-- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, `authKey`) from `core_di/lib/src/routing/navigator_keys.dart` — its own file now, and `homeKey` was deleted as unused. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
+- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart` — its own file now, and `homeKey` was deleted as unused. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
 - **`NavigatorWrapperWidget`**: App shell widget at `app/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
 - **`UndefineRouteWidget`**: GoRouter's `errorPageBuilder` child — never use inline anonymous widgets
 - **SplashPage**: Manually managed by `MainScope` (`AppMaterialWrapper`), NOT a GoRouter route

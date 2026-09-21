@@ -54,7 +54,7 @@ Steps are sequenced so each one leaves the repo building. Do not batch them.
 |:--|:--|:--|:--|
 | 1 | Machine-enforce removability (**done**) | — | yes |
 | 2 | Shrink the samples (**done**) | 1 | no (deletes code) |
-| 3 | Empty `core_di` of product names *(3a done)* | 2 | yes |
+| 3 | Empty `core_di` of product names (**done**) | 2 | yes |
 | 4 | Split `core_common` | — | yes |
 | 5 | Rename + relayout to `platform/` + `modules/` | 3, 4 | no |
 | 6 | Manifest + `composer` | 5 | yes |
@@ -107,28 +107,32 @@ mechanism it exists to show.
 **Gate:** `dart tools/sample_cleanup/remove_sample.dart --list` agrees with the table above,
 and removing either module leaves the app building and booting.
 
-### Step 3 — Empty `core_di` of product names  *(3a done)*
+### Step 3 — Empty `core_di` of product names ✅ done
 
 `core_di` becomes generic-only. Per-module contracts move to their own package.
 
-- Create `packages/contracts/account_contracts/` (pure Dart, no `flutter` in `dependencies`).
-- Move out of `core_di`: `IAuthSessionState`, `IAuthStatusStream`, `IAuthRefreshListenable`,
-  `AuthSessionFailure`, `IAuthActionHandler`, `AuthNavigator`, `HomeNavigator`,
-  `SettingsNavigator`, `OnboardingNavigator`.
+- ⏳ **Deferred to step 5.** Physically moving these contracts into
+  `packages/contracts/<module>_contracts/` is a file move; it rides the relayout rather than
+  churning every pubspec twice. `core_di` is already free of any *domain* dependency, which is
+  the part that blocked isolation.
 - ✅ **3a — no domain entity in a contract.** `IAuthStatusStream` / `IAuthSessionState` now
   carry `AuthPrincipal`, owned by `core_di`; `AuthStatusStreamImpl.toPrincipal` maps at the
   auth boundary. The `core_di → domain_auth` edge is gone, and with it `domain_auth` from
   `core_di` and `feature_home`. The approved-exception list in `arch_check` is down from four
   entries to three.
-- Replace `NavigatorKeys.authKey` with a registry: `INavigatorKeyRegistry.keyFor('auth')`.
-- Generalise `IDashboardTabModule` → `INavDestinationModule` (drop `BottomNavigationBarItem`
-  from the contract; return a neutral descriptor and let each app render it). This is what
-  lets an admin app use a sidebar.
+- ✅ **3b — no feature-named key.** `NavigatorKeys.authKey` is gone; `NavigatorKeys.nested(id)`
+  returns the same instance per id, so a module asks for its own back stack without the Hub
+  declaring anything.
+- ✅ **3b — `IDashboardTabModule` → `INavDestinationModule`.** The contract returns a
+  `NavDestination` (label + icons), not a `BottomNavigationBarItem`. `DashboardPage` maps it to
+  a bottom bar; a desktop or admin shell maps the same modules to a rail or a sidebar without
+  the modules changing. `module_generator`'s template was renamed and rewritten to match.
 - Replace `AuthNavigator.toLogin(context)` with a pure-Dart `NavIntent`. Navigation contracts
   stop needing `BuildContext`, so contracts stay pure Dart.
 
-**Gate:** `grep -rniE "auth|home|settings|onboard|dashboard" packages/core/di/lib` prints
-nothing. `core_di/pubspec.yaml` no longer declares `domain_auth`. Full verify chain passes.
+**Gate:** `core_di/pubspec.yaml` declares no `domain_*` package, and `arch_check` prints three
+approved upward edges instead of four. Contract *names* still mention auth until step 5 moves
+them out; the dependency — the part that broke isolation — is gone.
 
 **Docs to update in the same PR:** `.agents/AGENTS.md` §2.3, §8.4, §22 · `CLAUDE.md` Routing +
 Cross-Feature tables · `docs/{en,vi}/architecture/02_core.md` §2 ·
@@ -225,6 +229,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 |:--|:--|:--|:--|
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
+| 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
 | 2026-09-21 | 2a | Doc drift from §4: `AGENTS.md` naming table said `_repository.dart` (real convention is `i_<name>_repository.dart`); `build.yaml` pointed `generate_for` at `lib/core/di/injection.dart`, which does not exist | ⚠️ not run |

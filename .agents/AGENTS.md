@@ -8,10 +8,10 @@ This file contains the rules for architectural design, naming conventions, depen
 
 This monorepo uses **Pub Workspaces** and is divided into independent physical layers under the `packages/` directory:
 
-- **`app/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `IDashboardTabModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
+- **`app/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
 - **`packages/core/`**: Infrastructure and utility packages shared across the project:
   - `core_common`: **Genuinely global** constants (`ApiStatusConstants`, `EnvConstants` — all under `lib/src/utils/`), enums, mixins, `ErrorHandler`, `AppConfig`, `AppInitializer`, extensions. **MUST NOT** hold constants owned by a single feature/domain (storage keys, route paths, API endpoints) — those live in the owning package's `utils/`. Note `AppFailure` now lives in `domain_core` (§ 2.1); `core_common` keeps a re-export shim at `lib/src/error/failures.dart` so existing imports keep resolving.
-  - `core_di`: Navigation keys, routing contribution contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), and cross-package communication interfaces.
+  - `core_di`: Navigation keys, routing contribution contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), and cross-package communication interfaces.
   - `core_base_ui`: Design system resources (typography, color palette, icons, assets, and L10n translations). **Contains zero Flutter widgets.**
   - `core_ui_kit`: Unified library for all reusable widgets (atomic components like buttons/inputs, plus dialogs, feedback, layout, media and navigation widgets). Depends only on `core_common`, `core_base_ui` and `provider_state_management` — never on a feature. It lives under `packages/core/` because it is a shared UI library every feature may consume, **not** a removable feature.
   - `core_network`: Pre-configured HTTP client (Dio, Retrofit) with interceptors (auth, retry, logging).
@@ -30,7 +30,7 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
   - Feature packages (e.g., `feature_onboarding`, `feature_auth`, `feature_dashboard`, `feature_home`, `feature_settings`, `feature_splash`):
     - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
     - **ABSOLUTELY FORBIDDEN** to directly depend on the `data` layer or on **any** other feature package. There is no exception: shared widgets come from `core_ui_kit`, which is core, not a feature.
-    - **One bounded UI concern per feature package**: Do not co-locate unrelated product surfaces in the same feature (e.g. Home tab + Settings tab). `AppRouter` + `IDashboardTabModule` assemble shell branches; `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`), not tab pages. Sample split: `feature_home` vs `feature_settings`.
+    - **One bounded UI concern per feature package**: Do not co-locate unrelated product surfaces in the same feature (e.g. Home tab + Settings tab). `AppRouter` + `INavDestinationModule` assemble shell branches; `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`), not tab pages. Sample split: `feature_home` vs `feature_settings`.
 
 ---
 
@@ -68,8 +68,8 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
    - ⚠️ Known gap: `ErrorHandler` has no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch, so every Firebase error collapses to `ServerFailure(code: 9999)` (`"Unknown error occurred"` in release). Add a branch before relying on Firebase error codes in UI.
 3. **Feature Module Boundary**:
    - Feature package A must never import any file from Feature package B.
-   - **One feature = one bounded UI concern.** Unrelated tabs/screens (e.g. Home vs Settings) MUST live in separate feature packages. `feature_dashboard` only provides shell chrome (`DashboardRouteModule`); tab routes register via `IDashboardTabModule` and are assembled by `AppRouter`.
-   - **Forbidden:** editing `app_router.dart` to hardcode a new feature’s `$…Route` / `StatefulShellBranch`. Register `IFeatureRouteModule` or `IDashboardTabModule` in the feature DI instead. See [`docs/en/guides/04_routing.md`](../docs/en/guides/04_routing.md) § Dashboard for misuse rules.
+   - **One feature = one bounded UI concern.** Unrelated tabs/screens (e.g. Home vs Settings) MUST live in separate feature packages. `feature_dashboard` only provides shell chrome (`DashboardRouteModule`); tab routes register via `INavDestinationModule` and are assembled by `AppRouter`.
+   - **Forbidden:** editing `app_router.dart` to hardcode a new feature’s `$…Route` / `StatefulShellBranch`. Register `IFeatureRouteModule` or `INavDestinationModule` in the feature DI instead. See [`docs/en/guides/04_routing.md`](../docs/en/guides/04_routing.md) § Dashboard for misuse rules.
    - Cross-feature communication (e.g., navigating from Feature A to Feature B) must be done through navigation interfaces (`Navigator`) defined in `core_di`.
    - **Navigation Rules (Decentralized Navigators)**:
      - Navigator interfaces (`AuthNavigator`, `HomeNavigator`, etc.) defined in `core_di` must only contain navigation methods to routes owned by that specific feature.
@@ -244,7 +244,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - **Global Assets & Shared UI Only**: The `core_base_ui` package is strictly reserved ONLY for globally shared assets and global fallback strings. Purely reusable UI packages (like `core_ui_kit`) **MUST NOT** define their own translation `.arb` files. They must use translations exported from `core_base_ui`.
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
-- **Decentralized Delegation**: Feature packages MUST NOT modify `app/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The root app dynamically collects all delegates using `getIt.getAll<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `IDashboardTabModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
+- **Decentralized Delegation**: Feature packages MUST NOT modify `app/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The root app dynamically collects all delegates using `getIt.getAll<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
 
 ---
 
@@ -429,7 +429,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 
 1. **`getAll<T>()` THROWS when `T` is unregistered — `getAllOrEmpty<T>()` does not.**
    - Both live in `packages/core/common/lib/di/module.dart`. `getAllOrEmpty` guards with `getIt.isRegistered<T>()` and returns `const []`.
-   - **MANDATORY**: every optional multi-instance contribution (`IFeatureRouteModule`, `IDashboardTabModule`, `IFeatureLocalization`, `IAppTreeWrapper`, `IDatabaseMigration`) MUST be collected with `getAllOrEmpty`.
+   - **MANDATORY**: every optional multi-instance contribution (`IFeatureRouteModule`, `INavDestinationModule`, `IFeatureLocalization`, `IAppTreeWrapper`, `IDatabaseMigration`) MUST be collected with `getAllOrEmpty`.
    - Real bug: `app_material_wrapper.dart` used `getIt.getAll<IFeatureLocalization>()`; with no feature contributing one, `MaterialApp` construction threw and the app died at boot.
    - Same rule for single instances: `getItOrNull<T>()` + a fallback, never bare `getIt<T>()`, whenever `T` is owned by a removable feature.
    - **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R8** derives every `core_di`

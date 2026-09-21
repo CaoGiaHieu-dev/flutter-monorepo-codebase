@@ -358,7 +358,7 @@ Each Feature Package owns its own routing structure and files:
 `app/lib/presentation/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeShellRoute` lists. It collects:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
-- `getAllOrEmpty<IDashboardTabModule>()` sorted by `order` → `StatefulShellBranch` list
+- `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list
 - `getItOrNull<DashboardRouteModule>()` → dashboard chrome (optional)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (else first tab / `/`)
 - `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`

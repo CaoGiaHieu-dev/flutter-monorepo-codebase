@@ -201,8 +201,8 @@ List<RouteBase> get _featureRoutes => [
   for (final module in getAllOrEmpty<IFeatureRouteModule>()) ...module.routes,
 ];
 
-List<IDashboardTabModule> get _dashboardTabs =>
-    getAllOrEmpty<IDashboardTabModule>().toList()
+List<INavDestinationModule> get _dashboardTabs =>
+    getAllOrEmpty<INavDestinationModule>().toList()
       ..sort((a, b) => a.order.compareTo(b.order));
 ```
 
@@ -212,7 +212,7 @@ Cấu trúc tạo ra:
 GoRouter(navigatorKey: NavigatorKeys.rootKey)
 └── ShellRoute(navigatorKey: appKey)          → NavigatorWrapperWidget
     ├── ..._featureRoutes                      ← IFeatureRouteModule
-    └── StatefulShellRoute.indexedStack        ← IDashboardTabModule (sắp theo order)
+    └── StatefulShellRoute.indexedStack        ← INavDestinationModule (sắp theo order)
         └── builder → DashboardRouteModule
 ```
 
@@ -221,14 +221,14 @@ Mọi điểm gom đều lùi về phương án dự phòng khi không có đón
 | Thiếu | Dự phòng |
 |:--|:--|
 | `IFeatureRouteModule` | danh sách rỗng |
-| `IDashboardTabModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()` |
+| `INavDestinationModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()` |
 | `DashboardRouteModule` | `SizedBox.shrink()` |
 | `IAppEntryLocation` | path của tab dashboard đầu tiên, nếu không có thì `/` |
 
 Nhờ vậy, xoá một feature package không thể làm sập shell.
 
 > [!CAUTION]
-> **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Hãy đăng ký `IFeatureRouteModule` hoặc `IDashboardTabModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
+> **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Hãy đăng ký `IFeatureRouteModule` hoặc `INavDestinationModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
 
 `refreshListenable: getItOrNull<AuthProvider>()` khiến GoRouter đánh giá lại redirect khi trạng thái đăng nhập đổi. `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
 

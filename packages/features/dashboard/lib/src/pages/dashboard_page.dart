@@ -22,10 +22,18 @@ class DashboardPage extends StatelessWidget {
     }
   }
 
+  BottomNavigationBarItem _itemOf(NavDestination d) {
+    return BottomNavigationBarItem(
+      icon: Icon(d.icon),
+      activeIcon: Icon(d.selectedIcon ?? d.icon),
+      label: d.label,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final index = navigationShell.currentIndex;
-    final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
+    final tabs = getAllOrEmpty<INavDestinationModule>().toList()
       ..sort((a, b) => a.order.compareTo(b.order));
     return Scaffold(
       body: navigationShell,
@@ -40,8 +48,12 @@ class DashboardPage extends StatelessWidget {
                   tabs[tabIndex].onRestore,
                 );
               },
+              // This is where a neutral [NavDestination] becomes one app's
+              // widget. A desktop shell would build NavigationRailDestination
+              // from the same modules, unchanged.
               items: [
-                for (final tab in tabs) tab.navigationBarItem(context),
+                for (final tab in tabs)
+                  _itemOf(tab.destination(context)),
               ],
             ),
     );

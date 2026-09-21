@@ -10,7 +10,7 @@ part 'auth_route_module.g.dart';
 /// SAMPLE — a feature contributing top-level routes.
 ///
 /// The shell route gives the auth flow its own nested [Navigator] (its own back
-/// stack) via [NavigatorKeys.authKey]. One child route is enough to show the
+/// stack) via a key requested from [NavigatorKeys.nested]. One child route is enough to show the
 /// shape; add siblings as `TypedGoRoute` entries here.
 @TypedShellRoute<AuthShellRoute>(
   routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
@@ -18,7 +18,7 @@ part 'auth_route_module.g.dart';
 class AuthShellRoute extends ShellRouteData {
   const AuthShellRoute();
 
-  static final $navigatorKey = NavigatorKeys.authKey;
+  static final $navigatorKey = NavigatorKeys.nested('auth');
   static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
@@ -33,7 +33,7 @@ class AuthShellRoute extends ShellRouteData {
 /// it in `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
+  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
 
   @override
   Widget build(BuildContext context, GoRouterState state) => const LoginPage();

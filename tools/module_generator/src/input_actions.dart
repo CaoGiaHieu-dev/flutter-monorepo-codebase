@@ -115,7 +115,7 @@ class InputActions {
           '1. IFeatureRouteModule — màn stack độc lập (auth, onboarding, detail…)',
         );
         stdout.writeln(
-          '2. IDashboardTabModule — tab Bottom Nav (CHỈ khi là tab chính của app)',
+          '2. INavDestinationModule — điểm đến chính (CHỈ khi là destination chính của app)',
         );
         stdout.writeln('3. Không scaffold stub route DI');
         stdout.write('Nhập lựa chọn (Mặc định 1): ');

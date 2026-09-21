@@ -85,8 +85,8 @@ class AuthPath {
 | `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Login / register / forgot password | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthActionHandler` |
 | `feature_dashboard` | Bottom-nav shell chrome | none | `DashboardRouteModule` |
-| `feature_home` | Home tab | **BLoC** | `IDashboardTabModule` (order 0), `HomeNavigator` |
-| `feature_settings` | Settings tab | none (uses global providers) | `IDashboardTabModule` (order 1), `SettingsNavigator` |
+| `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
+| `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1), `SettingsNavigator` |
 | `feature_splash` | Splash screen | none | `IFeatureLocalization` only — **not a route** |
 
 `feature_auth` and `feature_home` are deliberately built on **different** state approaches so the template demonstrates both. See [state management](../guides/03_state_management.md) — and read the honest comparison there before choosing, because the two branches are not equally equipped.
@@ -105,7 +105,7 @@ The dashboard owns the `Scaffold` and the `BottomNavigationBar` — nothing else
 @override
 Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
-  final tabs = getAllOrEmpty<IDashboardTabModule>().toList()
+  final tabs = getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
   return Scaffold(
     body: navigationShell,
@@ -114,7 +114,7 @@ Widget build(BuildContext context) {
         : BottomNavigationBar(
             currentIndex: index.clamp(0, tabs.length - 1),
             onTap: (tabIndex) => _onTap(context, tabIndex, tabs[tabIndex].onRestore),
-            items: [for (final tab in tabs) tab.navigationBarItem(context)],
+            items: [for (final tab in tabs) tab.destination(context)],
           ),
   );
 }
@@ -126,17 +126,17 @@ Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab a
 
 - Import `feature_home` / `feature_settings`, or embed their pages
 - Own `HomePage` / `SettingsPage`, or any business BLoC for a tab
-- Hardcode a `BottomNavigationBarItem` list instead of reading DI
-- Register `IDashboardTabModule` itself to fake a tab
+- Hardcode a destination list instead of reading DI
+- Register `INavDestinationModule` itself to fake a tab
 
 ### Contributing a tab
 
 A feature registers one implementation and gets a branch plus a nav item:
 
 ```dart
-// packages/features/home/lib/src/routing/home_dashboard_tab_module.dart
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
+// packages/features/home/lib/src/routing/home_nav_destination.dart
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
   @override
   int get order => 0;                       // must match the intended tab index
 
@@ -147,18 +147,17 @@ class HomeDashboardTabModule extends IDashboardTabModule {
   List<RouteBase> get routes => [$homeShellRoute];
 
   @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
 }
 ```
 
-`IDashboardTabModule` also provides a virtual `onRestore()` — called when the user taps the tab they are already on (the usual "scroll to top / pop to root" gesture). Override it if the tab should react.
+`INavDestinationModule` also provides a virtual `onRestore()` — called when the user taps the tab they are already on (the usual "scroll to top / pop to root" gesture). Override it if the tab should react.
 
-Use `IDashboardTabModule` **only** for primary bottom-nav destinations that need their own `StatefulShellBranch`. A screen pushed on top of a tab is an ordinary route inside that branch.
+Use `INavDestinationModule` **only** for primary bottom-nav destinations that need their own `StatefulShellBranch`. A screen pushed on top of a tab is an ordinary route inside that branch.
 
 ---
 
@@ -212,7 +211,7 @@ A global controller needs no wrapper at all. `AuthProvider` is `@lazySingleton`,
 ```dart
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.authKey;
+  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
@@ -281,7 +280,7 @@ dart run build_runner build -d --workspace
 Checklist:
 
 - [ ] `resolution: workspace` in the pubspec; no `data_*` and no other feature in dependencies
-- [ ] Routes registered via `IFeatureRouteModule` or `IDashboardTabModule` — `app_router.dart` untouched
+- [ ] Routes registered via `IFeatureRouteModule` or `INavDestinationModule` — `app_router.dart` untouched
 - [ ] Localization registered via `IFeatureLocalization` — `root_app.dart` untouched
 - [ ] Screen controllers `@injectable`, created at the route, not re-wrapped in the page
 - [ ] Path constants in `src/utils/<name>_path.dart`

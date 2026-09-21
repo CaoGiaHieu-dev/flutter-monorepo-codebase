@@ -129,9 +129,9 @@ flutter pub get && dart analyze app
 ## 8. Routing
 
 - [ ] `app_router.dart` was **not** edited to add a route
-- [ ] The feature registers `IFeatureRouteModule` and/or `IDashboardTabModule` (plus optional `IAppEntryLocation`)
-- [ ] `IDashboardTabModule.order` matches the intended bottom-nav index
-- [ ] `IDashboardTabModule` is used only for real bottom-nav destinations, not push-only screens
+- [ ] The feature registers `IFeatureRouteModule` and/or `INavDestinationModule` (plus optional `IAppEntryLocation`)
+- [ ] `INavDestinationModule.order` matches the intended bottom-nav index
+- [ ] `INavDestinationModule` is used only for real bottom-nav destinations, not push-only screens
 - [ ] `feature_dashboard` stays chrome-only — no tab pages, no hardcoded nav item list
 - [ ] Route path constants live in `lib/src/utils/<feature>_path.dart`
 - [ ] Controllers are created at the route; the `Page` does **not** wrap itself again

@@ -7,7 +7,7 @@ description: Guide for creating Routes, declaring local Navigator interfaces, an
 
 Use this skill when requested to: "create a new screen/page and link navigation", "navigate from Feature A to Feature B", "add routing parameters", etc.
 
-**Read first:** `docs/{en,vi}/guides/04_routing.md` § Dashboard — when to use `IDashboardTabModule` vs `IFeatureRouteModule`, and what `feature_dashboard` must not own.
+**Read first:** `docs/{en,vi}/guides/04_routing.md` § Dashboard — when to use `INavDestinationModule` vs `IFeatureRouteModule`, and what `feature_dashboard` must not own.
 
 ---
 
@@ -23,7 +23,7 @@ abstract class ProfileNavigator {
   void toSettings(BuildContext context);
 }
 ```
-**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — use `feature_settings` + `SettingsNavigator`. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `IDashboardTabModule`.
+**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — use `feature_settings` + `SettingsNavigator`. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
 
 ### Step 2: Put the path constants in `utils/`
 
@@ -72,7 +72,7 @@ Pick **one** contribution type:
 
 | Need | Contract | Notes |
 | :--- | :--- | :--- |
-| Bottom-nav primary tab | `IDashboardTabModule` | Requires `order`, `path`, `routes`, `navigationBarItem`. `order` **must** stay unique and match shell branch index. |
+| Bottom-nav primary tab | `INavDestinationModule` | Requires `order`, `path`, `routes`, `destination`. `order` **must** stay unique and match shell branch index. |
 | Stack / shell sibling (login, onboarding, …) | `IFeatureRouteModule` | **`routes` only — no `order`** (GoRouter matches by path). |
 | Cold-start path | `IAppEntryLocation` | Optional; else first tab path / `/`. |
 | Dashboard scaffold chrome | `DashboardRouteModule` | **Only** in `feature_dashboard`. |
@@ -98,7 +98,7 @@ class NavigatorKeys {
   NavigatorKeys._();
   static final appKey = GlobalKey<NavigatorState>();
   static final rootKey = GlobalKey<NavigatorState>();
-  static final authKey = GlobalKey<NavigatorState>();
+  // nested keys are requested by id: NavigatorKeys.nested('auth')
 }
 ```
 

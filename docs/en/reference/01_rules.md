@@ -285,13 +285,13 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 | Contract | Purpose | Ordered? |
 |---|---|---|
 | `IFeatureRouteModule` | stack routes under the app `ShellRoute` | no (path match) |
-| `IDashboardTabModule` | one bottom-nav tab + one `StatefulShellBranch` | **yes** — `order` must match nav index |
+| `INavDestinationModule` | one primary destination + one `StatefulShellBranch` | **yes** — ascending `order` |
 | `IAppEntryLocation` | cold-start `initialLocation` | n/a |
 | `DashboardRouteModule` | dashboard chrome only | `feature_dashboard` only |
 
 Cross-feature navigation goes through a Navigator interface declared in `core_di` and implemented in the owning feature's `routing/`. Hardcoding a path or calling `GoRouter.of(context).go(...)` into another feature is forbidden. **`BuildContext` is passed directly from the UI caller** — do not reach for `NavigatorKeys.*.currentContext`.
 
-`feature_dashboard` is **chrome only**: it must not import tab features, own tab pages, hardcode a `BottomNavigationBarItem` list, or register `IDashboardTabModule` itself.
+`feature_dashboard` is **chrome only**: it must not import tab features, own tab pages, hardcode a destination list, or register `INavDestinationModule` itself.
 
 ---
 

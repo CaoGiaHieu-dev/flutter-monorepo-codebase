@@ -47,7 +47,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | Package | Path | Owns |
 | :--- | :--- | :--- |
 | `core_common` | `packages/core/common` | `AppConfig`, `AppInitializer`, enums, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), extensions, mixins, `EnvConstants`, `ApiStatusConstants`, Firebase options module |
-| `core_di` | `packages/core/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `IDashboardTabModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
+| `core_di` | `packages/core/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `packages/core/base_ui` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
 | `core_ui_kit` | `packages/core/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
 | `core_network` | `packages/core/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
@@ -83,10 +83,10 @@ One bounded UI concern per package. A feature may depend on `domain_*`, `core_di
 | Package | Path | Owns |
 | :--- | :--- | :--- |
 | `feature_auth` | `packages/features/auth` | Login / Register / Forgot-password pages, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
-| `feature_home` | `packages/features/home` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeDashboardTabModule` |
-| `feature_settings` | `packages/features/settings` | Settings tab, `SettingsDashboardTabModule` |
+| `feature_home` | `packages/features/home` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination` |
+| `feature_settings` | `packages/features/settings` | Settings tab, `SettingsNavDestination` |
 | `feature_onboarding` | `packages/features/onboarding` | Onboarding flow, `IAppEntryLocation` implementation |
-| `feature_dashboard` | `packages/features/dashboard` | **Shell chrome only** — the `Scaffold` + bottom navigation bar. Builds tabs from `getAllOrEmpty<IDashboardTabModule>()`; owns no tab page. |
+| `feature_dashboard` | `packages/features/dashboard` | **Shell chrome only** — the `Scaffold` + bottom navigation bar. Builds tabs from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
 | `feature_splash` | `packages/features/splash` | Splash page shown by `MainScope` before the router exists |
 
 > [!NOTE]

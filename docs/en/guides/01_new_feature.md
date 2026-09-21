@@ -24,7 +24,7 @@ The five positional arguments are read by
 | 2 | `profile` | Module name (snake_case). Package becomes `feature_profile` at `packages/features/profile` |
 | 3 | `""` | Custom directory — only used when type is `5`. Pass `""` for types 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` none |
-| 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `IDashboardTabModule`, `3` none |
+| 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` none |
 
 Run it with no arguments to get an interactive prompt instead.
 
@@ -37,7 +37,7 @@ Run it with no arguments to get an interactive prompt instead.
 | Choose | When | You get |
 | :-- | :-- | :-- |
 | `1` `IFeatureRouteModule` | A stack of screens pushed on top of the app (auth, onboarding, detail pages) | A `*FeatureRouteModule` stub |
-| `2` `IDashboardTabModule` | A **primary bottom-navigation destination** that needs its own persistent back stack | A `*DashboardTabModule` stub |
+| `2` `INavDestinationModule` | A **primary bottom-navigation destination** that needs its own persistent back stack | A `*DashboardTabModule` stub |
 | `3` none | You will wire routing yourself later, or the feature has no routes | No routing stub |
 
 > [!WARNING]
@@ -61,7 +61,7 @@ Run it with no arguments to get an interactive prompt instead.
 **Manual — the tool prints these at the end:**
 
 1. Fill in the `TypedGoRoute` / navigator in `lib/src/routing/`
-2. Populate the route module stub (`routes`, and for a tab also `order`, `path`, `navigationBarItem`)
+2. Populate the route module stub (`routes`, and for a tab also `order`, `path`, `destination`)
 3. Re-run `build_runner`, then **full restart** the app — new DI registrations are not picked up by hot reload
 
 > [!NOTE]
@@ -119,7 +119,7 @@ verbatim.
 
 ## 4. Write the route module
 
-### Option A — a bottom-nav tab (`IDashboardTabModule`)
+### Option A — a bottom-nav tab (`INavDestinationModule`)
 
 Two files. First the routes themselves — real code from
 [`packages/features/home/lib/src/routing/home_route_module.dart`](../../../packages/features/home/lib/src/routing/home_route_module.dart):
@@ -162,7 +162,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 ```
 
 Then the DI contribution — real code from
-[`home_dashboard_tab_module.dart`](../../../packages/features/home/lib/src/routing/home_dashboard_tab_module.dart):
+[`home_nav_destination.dart`](../../../packages/features/home/lib/src/routing/home_nav_destination.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -174,8 +174,8 @@ import '../extensions/extensions.dart';
 import '../utils/home_path.dart';
 import 'home_route_module.dart';
 
-@LazySingleton(as: IDashboardTabModule)
-class HomeDashboardTabModule extends IDashboardTabModule {
+@LazySingleton(as: INavDestinationModule)
+class HomeNavDestination extends INavDestinationModule {
   @override
   int get order => 0;
 
@@ -186,12 +186,11 @@ class HomeDashboardTabModule extends IDashboardTabModule {
   List<RouteBase> get routes => [$homeShellRoute];
 
   @override
-  BottomNavigationBarItem navigationBarItem(BuildContext context) {
-    return BottomNavigationBarItem(
-      icon: const Icon(Icons.home),
-      label: context.l10nHome.tabLabel,
-    );
-  }
+  NavDestination destination(BuildContext context) => NavDestination(
+    label: context.l10nHome.tabLabel,
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home,
+  );
 }
 ```
 
@@ -222,7 +221,7 @@ No `order` — these routes are matched by path, not by index.
 > [!CAUTION]
 > Never edit `app/lib/presentation/navigation/app_router.dart` to add your routes. It collects
 > contributions through `getAllOrEmpty<IFeatureRouteModule>()` and
-> `getAllOrEmpty<IDashboardTabModule>()`. Hardcoding there breaks feature removability.
+> `getAllOrEmpty<INavDestinationModule>()`. Hardcoding there breaks feature removability.
 
 ---
 
@@ -387,7 +386,7 @@ Then **full restart** the app (not hot reload) so the new DI graph is built.
 - [ ] `resolution: workspace` present in the package `pubspec.yaml`
 - [ ] Every dependency actually used is declared — verify with `dart tools/unused_checker/check_unused_packages.dart`
 - [ ] Constants live in `src/utils/`, not scattered
-- [ ] Route registered via `IFeatureRouteModule` / `IDashboardTabModule` — `app_router.dart` untouched
+- [ ] Route registered via `IFeatureRouteModule` / `INavDestinationModule` — `app_router.dart` untouched
 - [ ] Controller created at route level, page does **not** re-wrap it
 - [ ] Screen controller is `@injectable`, not a singleton
 - [ ] `IFeatureLocalization` registered — `root_app.dart` untouched

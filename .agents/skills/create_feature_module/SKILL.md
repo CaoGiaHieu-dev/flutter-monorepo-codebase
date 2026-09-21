@@ -15,7 +15,7 @@ Use this skill when the developer requests to create a new package/module in the
 Before creating the module, the Agent **MUST** ask the user if they have not provided clear specifications:
 1. *What type of module do you want to create? (1. Feature, 2. Domain, 3. Data, 4. Core, 5. Custom)*
 2. *If creating a Feature: Which State Management do you want to use? (1. Provider, 2. BLoC, 3. None)*
-3. *If creating a Feature: How should routes join the App Shell? (1. `IFeatureRouteModule` stack/standalone, 2. `IDashboardTabModule` bottom-nav tab, 3. None)*
+3. *If creating a Feature: How should routes join the App Shell? (1. `IFeatureRouteModule` stack/standalone, 2. `INavDestinationModule` bottom-nav tab, 3. None)*
    - Choose **2** only for a **primary authenticated bottom-nav destination**. Read `docs/{en,vi}/guides/04_routing.md` § Dashboard before choosing tab.
    - Login / detail / onboarding / push screens → **1**, never **2**.
 
@@ -29,7 +29,7 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 # <module_name>: Business entity name (e.g., profile, payment, logging)
 # <directory>: Usually left empty "" (only used for Custom)
 # [sm]: (Feature only) 1 (Provider), 2 (BLoC), 3 (None)
-# [route_contribution]: (Feature only) 1 (IFeatureRouteModule), 2 (IDashboardTabModule), 3 (none)
+# [route_contribution]: (Feature only) 1 (IFeatureRouteModule), 2 (INavDestinationModule), 3 (none)
 ```
 
 **Examples:**
@@ -60,12 +60,12 @@ dart tools/module_generator/generate.dart 2 payment
 | Rollback | The three shared files (root `pubspec.yaml`, `app/pubspec.yaml`, `app/lib/di/injection.dart`) are snapshotted first; any later failure restores them and deletes the new module directory. |
 
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)
-The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_dashboard_tab_module.dart` according to `[route_contribution]`.
+The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_nav_destination.dart` according to `[route_contribution]`.
 
 **Clean Architecture / feature boundary (mandatory):**
 - One feature package = one bounded UI concern (e.g. `feature_home`, `feature_settings`, `feature_auth`).
 - Do **not** put unrelated shell tabs in the same package (Home + Settings = two packages).
-- **`feature_dashboard` is chrome only** (`DashboardRouteModule`). It does **not** own tab pages. Tabs register `IDashboardTabModule`; `AppRouter` assembles branches.
+- **`feature_dashboard` is chrome only** (`DashboardRouteModule`). It does **not** own tab pages. Tabs register `INavDestinationModule`; `AppRouter` assembles branches.
 - Cross-feature UI actions use Action Handlers / Navigators in `core_di` — never import another feature package.
 - **core packages must never depend on your feature.** The only approved inward exceptions are
   `core_di → domain_auth`, `provider_state_management → domain_core` and
@@ -93,7 +93,7 @@ class ProfileRoute extends GoRouteDataCustom with $ProfileRoute {
 unnecessary). Note the BLoC branch has no `executeOperation` — see `implement_bloc_ui`.
 
 ### Step 3: Expose routes via DI (do **not** edit `app_router.dart` lists)
-- Fill `IFeatureRouteModule.routes` **or** `IDashboardTabModule` (`order`, `path`, `routes`, `navigationBarItem`).
+- Fill `IFeatureRouteModule.routes` **or** `INavDestinationModule` (`order`, `path`, `routes`, `destination`).
 - Optional cold-start: `@LazySingleton(as: IAppEntryLocation)`.
 - Host already collects with `getAllOrEmpty` / `getItOrNull`. Follow `implement_navigation_route` Step 6.
 

@@ -319,7 +319,6 @@ Local (workspace) dependencies only — pub.dev packages omitted.
 | `core_database` | *(none)* |
 | `core_responsive` | *(none)* |
 | `core_common` | `core_responsive`, `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
-| `core_di` | `domain_auth` *(approved exception)* |
 | `core_network` | `core_common` |
 | `core_storage` | `core_common` |
 | `core_notifications` | `core_common` |

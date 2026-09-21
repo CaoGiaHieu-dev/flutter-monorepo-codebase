@@ -20,9 +20,6 @@ import '../unused_checker/output_formatter.dart';
 // Adding one here without updating `.agents/AGENTS.md` is itself a violation.
 // ---------------------------------------------------------------------------
 const _approvedUpwardEdges = <String, String>{
-  'core_di -> domain_auth':
-      'Agnostic stream contracts expose concrete entity types (UserEntity); '
-          'generics would erase type-safety.',
   'provider_state_management -> domain_core':
       'Needs Result<T> and PaginatedEntity<T> for executeOperation / '
           'PaginatedViewWidget.',

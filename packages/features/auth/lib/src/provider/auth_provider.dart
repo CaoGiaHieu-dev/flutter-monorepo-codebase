@@ -54,10 +54,10 @@ class AuthProvider extends BaseProvider<UserEntity>
   // observe one source of truth rather than two that can drift.
 
   @override
-  UserEntity? get signedInUser => data;
+  AuthPrincipal? get signedInUser => AuthStatusStreamImpl.toPrincipal(data);
 
   @override
-  Stream<UserEntity?> get sessionChanges => _authStream.authStatusStream;
+  Stream<AuthPrincipal?> get sessionChanges => _authStream.authStatusStream;
 
   @override
   Stream<AuthSessionFailure> get sessionFailures => _failureController.stream;

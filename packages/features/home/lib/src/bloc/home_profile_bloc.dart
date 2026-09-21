@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_di/core_di.dart';
-import 'package:domain_auth/domain_auth.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
 
@@ -22,7 +21,7 @@ part 'home_profile_bloc.freezed.dart';
 /// This is **sample / reference** code — replace with real home business logic.
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream)
     : super(const BlocViewState.initial()) {
     on<_HomeProfileStarted>(_onStarted);
@@ -33,11 +32,11 @@ class HomeProfileBloc
   }
 
   final IAuthStatusStream _authStatusStream;
-  StreamSubscription<UserEntity?>? _subscription;
+  StreamSubscription<AuthPrincipal?>? _subscription;
 
   Future<void> _onStarted(
     _HomeProfileStarted event,
-    Emitter<BlocViewState<UserEntity?>> emit,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
   ) async {
     await _subscription?.cancel();
     _subscription = _authStatusStream.authStatusStream.listen((user) {
@@ -48,14 +47,14 @@ class HomeProfileBloc
 
   Future<void> _onRefreshed(
     _HomeProfileRefreshed event,
-    Emitter<BlocViewState<UserEntity?>> emit,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
   ) async {
     emit(BlocViewState.success(_authStatusStream.currentUser));
   }
 
   Future<void> _onAuthStatusChanged(
     _HomeProfileAuthStatusChanged event,
-    Emitter<BlocViewState<UserEntity?>> emit,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
   ) async {
     emit(BlocViewState.success(event.user));
   }

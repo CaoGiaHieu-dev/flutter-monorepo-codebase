@@ -1,4 +1,5 @@
 // Auto-generated exports, do not edit manually.
+export 'auth_principal.dart';
 export 'auth_session_failure.dart';
 export 'i_auth_refresh_listenable.dart';
 export 'i_auth_session_state.dart';

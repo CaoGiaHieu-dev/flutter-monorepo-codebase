@@ -171,7 +171,7 @@ class HomeProfileBloc
   StreamSubscription<UserEntity?>? _subscription;
 ```
 
-`feature_home` phụ thuộc `core_di` và `domain_auth` — không bao giờ phụ thuộc `feature_auth`.
+`feature_home` chỉ phụ thuộc `core_di` — không phụ thuộc `feature_auth`, và cũng không phụ thuộc `domain_auth`: hợp đồng mang `AuthPrincipal`, kiểu do chính `core_di` sở hữu, nên không có package domain nào đi qua ranh giới.
 
 > [!CAUTION]
 > Luôn huỷ subscription trong `close()` / `dispose()`. Stream broadcast sẽ vô tư giữ sống một

@@ -42,8 +42,7 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
      ```bash
      grep -E "^  (domain_|data_|feature_)" packages/core/*/pubspec.yaml
      ```
-   - Currently **four** core → domain edges exist, and no `core → data` or `core → feature` edge may ever be added:
-     - `core_di → domain_auth` — needs concrete entity types (e.g. `UserEntity`) for agnostic stream interfaces (see § 8.4).
+   - Currently **three** core → domain edges exist, and no `core → data` or `core → feature` edge may ever be added:
      - `provider_state_management → domain_core` — needs `Result<T>` / `PaginatedEntity<T>`.
      - `bloc_state_management → domain_core` — needs `AppFailure` for `BlocViewState.error`. It must import `domain_core` **directly**, not via `core_common`'s re-export shim: the shim's `show` clause cannot carry the Freezed-generated `$AppFailureCopyWith`, and the resulting breakage is invisible to `flutter analyze` (§ 21).
      - `core_common → domain_core` — `ErrorHandler` produces `AppFailure`, which now lives in Domain.
@@ -202,10 +201,11 @@ The codebase supports multiple state management frameworks (Provider, BLoC). To 
    - The feature that owns and writes to the neutral stream MUST register its implementation as a concrete `@singleton` (e.g., `AuthStatusStreamImpl`).
    - Use a DI `@module` to bind the pure interface to the concrete instance (e.g., `IAuthStatusStream bind(AuthStatusStreamImpl impl) => impl;`).
    - This allows the owner feature to inject the concrete class directly via constructor (avoiding manual `getIt` lookups and type casting `as`), while other features remain decoupled by only listening to the Interface.
-4. **Domain Entity Sharing via DI Hub**:
-   - When a Neutral Stream needs to expose a strictly typed Domain Entity (e.g., `UserEntity`), the interface in `core_di` MUST explicitly use that type without falling back to generics (`<T>`).
-   - Consequently, `core_di` is **explicitly permitted** to declare dependencies on `domain_*` micro-packages (e.g., `domain_auth`) in its `pubspec.yaml` to access these entity models. 
-   - This ensures UI-state-sharing streams remain centrally located in the DI Hub without falsely treating them as domain UseCases.
+4. **A Neutral Stream MUST NOT carry a Domain Entity**:
+   - **ABSOLUTELY FORBIDDEN** for a `core_di` contract to name a type from a `domain_*` package. Doing so makes the DI Hub — and therefore every consumer of it — depend on one feature's domain package for a *type*, which `getItOrNull` cannot soften: an unresolved import fails at compile time, not at lookup time.
+   - Declare a **contract-owned** value type instead, and have the owning feature map to it at its boundary. Reference: `AuthPrincipal` (`core_di/lib/src/agnostic_streams/auth_principal.dart`), which `AuthStatusStreamImpl.toPrincipal` produces from `UserEntity`.
+   - The contract is deliberately **smaller** than the entity. `UserEntity` carries `bankName`, `bankAccount` and `fcmToken`; a module that only needs to know whether someone is signed in has no business reading those. Add a field to the contract only when a *second* module genuinely needs it.
+   - `core_di` therefore declares **no** `domain_*` dependency.
 
 ---
 

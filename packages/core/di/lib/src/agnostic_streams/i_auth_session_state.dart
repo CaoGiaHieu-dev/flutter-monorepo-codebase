@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:domain_auth/domain_auth.dart';
-
+import 'auth_principal.dart';
 import 'auth_session_failure.dart';
 
 /// Everything the app shell needs to drive its boot redirect and react to
@@ -51,14 +50,14 @@ abstract class IAuthSessionState {
   /// navigation, so session events before this flips are ignored.
   bool get hasRestoredSession;
 
-  /// The signed-in user, or `null` when signed out.
-  UserEntity? get signedInUser;
+  /// The signed-in principal, or `null` when signed out.
+  AuthPrincipal? get signedInUser;
 
   /// Emits after every settled session transition; `null` means signed out.
   ///
   /// Broadcast and non-replaying — read [signedInUser] for the value at
   /// subscription time.
-  Stream<UserEntity?> get sessionChanges;
+  Stream<AuthPrincipal?> get sessionChanges;
 
   /// Emits whenever a session operation fails, already classified.
   ///

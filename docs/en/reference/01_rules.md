@@ -26,11 +26,10 @@ This is the **lookup** copy. For step-by-step instructions see [`../guides/`](..
 
 ### Approved upward exceptions
 
-Only these four exist. Adding a fifth requires updating `AGENTS.md` and the allow-list in `tools/arch_check/check.dart` — the checker fails the build otherwise.
+Only these three exist. Adding a fifth requires updating `AGENTS.md` and the allow-list in `tools/arch_check/check.dart` — the checker fails the build otherwise.
 
 | Exception | Reason |
 |---|---|
-| `core_di → domain_auth` | Agnostic stream contracts expose concrete entity types (`UserEntity`); generics would erase type-safety. See [rule 15](#15-cross-feature-communication). |
 | `provider_state_management → domain_core` | Needs `Result<T>` and `PaginatedEntity<T>` for `executeOperation` / `PaginatedViewWidget`. |
 | `core_common → domain_core` | `ErrorHandler` produces `AppFailure`, which lives in `domain_core` as part of the `Result` contract. Core→Domain is the *correct* Clean Architecture direction. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries `AppFailure` directly, so the base state type needs it. |

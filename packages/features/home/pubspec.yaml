@@ -17,8 +17,6 @@ dependencies:
     sdk: flutter
   core_common:
     path: ../../core/common
-  domain_auth:
-    path: ../../domain/auth
   core_base_ui:
     path: ../../core/base_ui
   bloc_state_management:

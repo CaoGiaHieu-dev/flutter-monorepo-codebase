@@ -26,11 +26,10 @@
 
 ### Ngoại lệ hướng lên được duyệt
 
-Chỉ có đúng bốn. Thêm cái thứ năm bắt buộc phải cập nhật `AGENTS.md` và danh sách cho phép trong `tools/arch_check/check.dart` — nếu không, tool sẽ làm fail build.
+Chỉ có đúng ba. Thêm cái thứ năm bắt buộc phải cập nhật `AGENTS.md` và danh sách cho phép trong `tools/arch_check/check.dart` — nếu không, tool sẽ làm fail build.
 
 | Ngoại lệ | Lý do |
 |---|---|
-| `core_di → domain_auth` | Hợp đồng agnostic stream phơi type entity cụ thể (`UserEntity`); dùng generic sẽ xoá mất type-safety. Xem [luật 15](#15-giao-tiếp-giữa-các-feature). |
 | `provider_state_management → domain_core` | Cần `Result<T>` và `PaginatedEntity<T>` cho `executeOperation` / `PaginatedViewWidget`. |
 | `core_common → domain_core` | `ErrorHandler` sinh ra `AppFailure`, class nằm ở `domain_core` như một phần của hợp đồng `Result`. Core→Domain là chiều **đúng** của Clean Architecture. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` mang thẳng `AppFailure`, nên kiểu state cơ sở cần nó. |

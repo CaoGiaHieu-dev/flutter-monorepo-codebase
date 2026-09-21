@@ -34,7 +34,7 @@ obfuscate
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+build/
 **/doc/api/
 
 # FVM

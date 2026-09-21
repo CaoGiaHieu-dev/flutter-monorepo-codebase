@@ -1,6 +1,6 @@
 # Tầng Domain
 
-**File này trả lời:** nghiệp vụ nằm ở đâu trong `packages/domain/*`, vì sao code ở đây bị cấm chạm tới Flutter, và `Result<T>` thực sự cho bạn những gì.
+**File này trả lời:** nghiệp vụ nằm ở đâu trong `modules/*/domain`, vì sao code ở đây bị cấm chạm tới Flutter, và `Result<T>` thực sự cho bạn những gì.
 
 **Đọc xong bạn làm được:** đọc hiểu bất kỳ use case nào trong repo, biết được phép import gì bên trong một domain package, và thêm entity / params / use case mới mà không phá vỡ ranh giới tầng.
 
@@ -23,7 +23,7 @@ Một domain package chỉ chứa đúng bốn thứ:
 | **Repository interface** | `repositories/` | Hợp đồng mà tầng Data phải thoả mãn |
 | **Use cases** | `usecases/` | Mỗi lớp một thao tác nghiệp vụ, trả về `Result<T>` |
 
-Không widget, không HTTP, không SQL, không `SharedPreferences`. Nếu use case cần những thứ đó, nó khai báo *interface* và để `packages/data/*` hiện thực hoá.
+Không widget, không HTTP, không SQL, không `SharedPreferences`. Nếu use case cần những thứ đó, nó khai báo *interface* và để `modules/*/data` hiện thực hoá.
 
 ---
 
@@ -53,7 +53,7 @@ Quy tắc này đúng ở mức mã nguồn. Bạn tự chạy được:
 
 ```bash
 grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit" \
-  --include="*.dart" packages/domain/
+  --include="*.dart" modules/*/domain/
 # → không có kết quả
 ```
 
@@ -61,7 +61,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 > **Đồ thị package cưỡng chế điều này, không chỉ mình khâu review.** Không domain pubspec nào liệt kê `flutter` dưới `dependencies`, và cũng không cái nào khai một package `core_*`:
 >
 > ```yaml
-> # packages/domain/auth/pubspec.yaml
+> # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
 >     path: ../core
@@ -83,11 +83,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ## 3. `domain_core` — bộ từ vựng dùng chung
 
-`packages/domain/core/` được mọi domain package khác phụ thuộc vào.
+`platform/domain_core/` được mọi domain package khác phụ thuộc vào.
 
 ### `Result<T>` — kiểu trả về của mọi use case
 
-Định nghĩa tại `packages/domain/core/lib/src/repositories/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
+Định nghĩa tại `platform/domain_core/lib/src/repositories/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
 
 ```dart
 @freezed
@@ -150,7 +150,7 @@ typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 
 ### `BaseEntity<T>` — vỏ response chuẩn
 
-`packages/domain/core/lib/src/entities/base/base_entity.dart`:
+`platform/domain_core/lib/src/entities/base/base_entity.dart`:
 
 ```dart
 @Freezed(genericArgumentFactories: true)
@@ -169,7 +169,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 
-`packages/domain/core/lib/src/entities/base/paginate_entity.dart` — danh sách nằm ở `data` (JSON key `items`), thông tin phân trang ở `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
+`platform/domain_core/lib/src/entities/base/paginate_entity.dart` — danh sách nằm ở `data` (JSON key `items`), thông tin phân trang ở `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
 
 ### `BaseUseCase<RType, Params>`
 
@@ -202,7 +202,7 @@ Dùng `NoParams()` khi thao tác không cần đầu vào.
 
 ### Một use case đầy đủ
 
-`packages/domain/auth/lib/src/usecases/auth/login_usecase.dart`:
+`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`:
 
 ```dart
 @injectable
@@ -257,7 +257,7 @@ enum UserRole {
 ## 5. Bố cục package và quy tắc đặt tên
 
 ```
-packages/domain/<name>/
+modules/*/domain/<name>/
 ├── lib/
 │   ├── domain_<name>.dart          # barrel công khai
 │   ├── di/
@@ -314,7 +314,7 @@ dart tools/module_generator/generate.dart 2 payment
 # 2. Viết entity → params → repository interface → use case
 
 # 3. Cập nhật barrel
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 
 # 4. Sinh code Freezed + injectable
 dart run build_runner build -d --workspace

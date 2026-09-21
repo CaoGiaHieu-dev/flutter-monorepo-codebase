@@ -70,13 +70,13 @@ abstract class NetworkBindingModule {
 
 Typing the parameter as `NetworkConfig` makes the upcast compiler-checked — no `as` needed.
 The same dual-registration pattern binds `IAuthStatusStream`, `IAuthSessionState` and
-`IAuthRefreshListenable` in `packages/features/auth/lib/di/module.dart`.
+`IAuthRefreshListenable` in `modules/auth/feature/lib/di/module.dart`.
 
 ### Third-party SDKs go through `@module` too
 
 Never call `SomeSdk.instance` inside a repository — it hides the dependency from the
 container and leaves no seam for a fake. Register it, then take it as a constructor
-parameter. `packages/data/auth/lib/di/register_module.dart`:
+parameter. `modules/auth/data/lib/di/register_module.dart`:
 
 ```dart
 @module
@@ -121,7 +121,7 @@ variants plus a fallback, so deleting that feature leaves the app bootable.
 ## 📋 Steps for setting up DI in a New Package
 
 ### Step 1: Initialize Micro-package DI Module
-Inside the sub-package (`packages/<layer>/<package_name>`), create the file `lib/di/module.dart`:
+Inside the sub-package (`modules/<module>/<layer>`), create the file `lib/di/module.dart`:
 ```dart
 import 'package:injectable/injectable.dart';
 

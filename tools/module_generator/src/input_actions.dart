@@ -15,9 +15,9 @@ class InputActions {
       }
     } else {
       stdout.writeln('\nChọn loại module muốn tạo:');
-      stdout.writeln('1. Feature Package (packages/features/)');
-      stdout.writeln('2. Domain Micro-Package (packages/domain/)');
-      stdout.writeln('3. Data Micro-Package (packages/data/)');
+      stdout.writeln('1. Feature Package (modules/*/feature/)');
+      stdout.writeln('2. Domain Micro-Package (modules/*/domain/)');
+      stdout.writeln('3. Data Micro-Package (modules/*/data/)');
       stdout.writeln('4. Core Package (platform/)');
       stdout.writeln('5. Custom Package (custom name)');
       stdout.write('Nhập lựa chọn: ');
@@ -30,15 +30,15 @@ class InputActions {
 
     if (typeInput == '1') {
       type = ModuleType.feature;
-      typeDir = 'packages/features';
+      typeDir = 'modules/*/feature';
       typeName = 'feature';
     } else if (typeInput == '2') {
       type = ModuleType.domain;
-      typeDir = 'packages/domain';
+      typeDir = 'modules/*/domain';
       typeName = 'domain';
     } else if (typeInput == '3') {
       type = ModuleType.data;
-      typeDir = 'packages/data';
+      typeDir = 'modules/*/data';
       typeName = 'data';
     } else if (typeInput == '4') {
       type = ModuleType.core;
@@ -63,7 +63,7 @@ class InputActions {
         exit(1);
       }
       typeName = typeDirInput;
-      typeDir = 'packages/$typeName';
+      typeDir = 'modules/$typeName';
 
       if (typeDirInput == 'features') type = ModuleType.feature;
       if (typeDirInput == 'domain') type = ModuleType.domain;

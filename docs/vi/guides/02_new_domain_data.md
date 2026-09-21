@@ -26,8 +26,8 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 Nó tạo ra:
 
 ```
-packages/domain/payment/lib/src/     entities/  usecases/  repositories/
-packages/data/payment/lib/src/       models/    data_sources/  repositories_impl/
+modules/payment/domain/lib/src/     entities/  usecases/  repositories/
+modules/payment/data/lib/src/       models/    data_sources/  repositories_impl/
 ```
 
 Bạn tự thêm `utils/` cho mỗi package — mọi package tự giữ hằng số của mình ở đó
@@ -51,7 +51,7 @@ Mỗi bước chỉ phụ thuộc các bước phía trên, nên không phải l
 
 > [!CAUTION]
 > Tầng domain là **Dart thuần**. Cấm import `package:flutter/...`, `package:dio/...` hay
-> `package:retrofit/...` ở bất kỳ đâu dưới `packages/domain/` — và cấm luôn mọi package `core_*`.
+> `package:retrofit/...` ở bất kỳ đâu dưới `modules/*/domain/` — và cấm luôn mọi package `core_*`.
 > Được phép: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`,
 > `get_it`.
 
@@ -61,7 +61,7 @@ Mỗi bước chỉ phụ thuộc các bước phía trên, nên không phải l
 
 Freezed, bất biến, kèm constructor riêng `const Class._()` để sau này thêm method được. Code thật
 từ
-[`packages/domain/auth/lib/src/entities/user/user_entity.dart`](../../../packages/domain/auth/lib/src/entities/user/user_entity.dart):
+[`modules/auth/domain/lib/src/entities/user/user_entity.dart`](../../../modules/auth/domain/lib/src/entities/user/user_entity.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -97,7 +97,7 @@ tầng truyền tải.
 ## 4. Params
 
 Cũng dùng Freezed. Code thật từ
-[`login_params.dart`](../../../packages/domain/auth/lib/src/params/auth_params/login_params.dart):
+[`login_params.dart`](../../../modules/auth/domain/lib/src/params/auth_params/login_params.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -122,7 +122,7 @@ Dùng `NoParams` từ `domain_core` khi use case không cần đầu vào.
 Đặt tên file `i_<name>_repository.dart`, class có tiền tố `I`. Mọi method trả `Result<T>`:
 
 ```dart
-// packages/domain/payment/lib/src/repositories/i_payment_repository.dart
+// modules/payment/domain/lib/src/repositories/i_payment_repository.dart
 import 'package:domain_core/domain_core.dart';
 
 import '../entities/payment/payment_entity.dart';
@@ -141,7 +141,7 @@ sạch khỏi Dio, Firebase và Drift.
 ## 6. UseCase
 
 `@injectable`, kế thừa `BaseUseCase<KiểuTrảVề, Params>`, trả `Result<T>`. Code thật từ
-[`packages/domain/auth/lib/src/usecases/auth/login_usecase.dart`](../../../packages/domain/auth/lib/src/usecases/auth/login_usecase.dart):
+[`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`](../../../modules/auth/domain/lib/src/usecases/auth/login_usecase.dart):
 
 ```dart
 import 'package:domain_core/domain_core.dart';
@@ -166,7 +166,7 @@ class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
 ```
 
 `BaseUseCase` là hợp đồng chỉ một method
-([`base_use_case.dart`](../../../packages/domain/core/lib/src/usecases/base_use_case.dart)) —
+([`base_use_case.dart`](../../../platform/domain_core/lib/src/usecases/base_use_case.dart)) —
 một use case, một thao tác. Phụ thuộc truyền qua constructor; không bao giờ gọi `getIt<T>()` bên
 trong use case.
 
@@ -176,7 +176,7 @@ trong use case.
 
 Freezed + `json_serializable`, `implements BaseModel<Entity>`, kèm mapper `toEntity()`. Code thật
 từ
-[`packages/data/auth/lib/src/models/user/user_model.dart`](../../../packages/data/auth/lib/src/models/user/user_model.dart):
+[`modules/auth/data/lib/src/models/user/user_model.dart`](../../../modules/auth/data/lib/src/models/user/user_model.dart):
 
 ```dart
 import 'package:data_core/data_core.dart';
@@ -263,7 +263,7 @@ Nếu package của bạn lưu dữ liệu key-value, nó tự khai `StorageValu
 `StorageManager` được inject. `core_storage` chỉ cấp cơ chế; nó không định nghĩa key nào cả.
 
 Key đặt trong `utils/` — code thật từ
-[`packages/data/auth/lib/src/utils/auth_storage_keys.dart`](../../../packages/data/auth/lib/src/utils/auth_storage_keys.dart):
+[`modules/auth/data/lib/src/utils/auth_storage_keys.dart`](../../../modules/auth/data/lib/src/utils/auth_storage_keys.dart):
 
 ```dart
 /// Physical storage keys owned exclusively by `feature_auth`'s data layer.
@@ -276,7 +276,7 @@ class AuthStorageKeys {
 ```
 
 Bên sở hữu dựng giá trị và nạp sẵn lúc khởi động
-([`auth_local_data_source.dart`](../../../packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart)):
+([`auth_local_data_source.dart`](../../../modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart)):
 
 ```dart
 @lazySingleton
@@ -313,7 +313,7 @@ class AuthLocalDataSource {
 
 Kế thừa `IBaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
 `executeSync()` (đồng bộ). Code thật từ
-[`packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
+[`platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
 @LazySingleton(as: ICacheEntryRepository)
@@ -360,7 +360,7 @@ return execute<UserModel, UserEntity>(
 ```
 
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
-[`i_base_repository.dart:57-59`](../../../packages/data/core/lib/src/base/i_base_repository.dart).
+[`i_base_repository.dart:57-59`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
 
 > [!CAUTION]
 > Dùng `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`. Và tuyệt
@@ -391,7 +391,7 @@ Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handle
 Khai báo dependency tường minh ở cả hai `pubspec.yaml`:
 
 ```yaml
-# packages/data/payment/pubspec.yaml
+# modules/payment/data/pubspec.yaml
 dependencies:
   core_common:
     path: ../../core/common
@@ -415,8 +415,8 @@ dependencies:
 Rồi sinh lại:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/domain/payment/lib
-dart tools/barrel_generator/generate.dart packages/data/payment/lib
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
+dart tools/barrel_generator/generate.dart modules/payment/data/lib
 dart run build_runner build -d --workspace
 flutter analyze
 ```

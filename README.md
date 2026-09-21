@@ -25,20 +25,20 @@ graph TD
 
     App["🚀 Host App Shell (app/)<br/>Assembles the application"]:::app
 
-    subgraph FeatureLayer ["🎨 Feature Presentation Layer (packages/features/*)"]
+    subgraph FeatureLayer ["🎨 Feature Presentation Layer (modules/*/feature)"]
         direction LR
         FeatSplash["splash"]:::feature
         FeatAuth["auth"]:::feature
         FeatDash["dashboard"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (packages/data/*)"]
+    subgraph DataLayer ["🔌 Data Layer (modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (packages/domain/*)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
@@ -113,34 +113,31 @@ Below is the complete physical organization structure of the Workspace:
 │   │   ├── main.dart              # Main app entrypoint
 │   │   └── main_scope.dart        # Boot Lifecycle Management (Splash → RootApp)
 │   └── pubspec.yaml               # Host App config (links all sub-packages)
-├── packages/                      # Contains Micro-packages
-│   ├── core/                      # Shared infrastructure — MECHANISM ONLY, never feature data
-│   │   ├── base_ui/               # Theme, LanguageProvider, design tokens & l10n (zero widgets)
-│   │   ├── bloc_state_management/ # BaseBloc, BaseCubit, BlocViewState<T>
-│   │   ├── common/                # Enums, ErrorHandler, AppConfig, extensions, src/utils/
-│   │   ├── database/              # Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
-│   │   ├── di/                    # DI Hub — every cross-package contract lives here
-│   │   ├── network/               # Dio + Retrofit factory, interceptor chain, SSL pinning
-│   │   ├── notifications/         # Push Notification management module
-│   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   │   ├── responsive/            # Design-size scaling bound to BuildContext
-│   │   ├── storage/               # StorageManager + StorageValue<T> (defines NO keys)
-│   │   └── ui_kit/                # core_ui_kit — reusable widgets every feature may use
-│   ├── domain/                    # Pure Dart business Micro-packages — ZERO dependencies
-│   │   ├── core/                  # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   ├── auth/                  # Entities, UseCases, Repository interfaces for Auth
-│   │   └── language/              # Entities, UseCases for multi-language
-│   ├── data/                      # Integration implementation Micro-packages
-│   │   ├── core/                  # IBaseRepository + CacheDatabase (owns its own tables/DAO)
-│   │   ├── auth/                  # Models, DataSources, RepositoryImpl for Auth
-│   │   └── language/              # RepositoryImpl for multi-language
-│   └── features/                  # Independent feature packages (Feature Packages)
-│       ├── splash/                # Splash Feature (sample): Startup loading screen
-│       ├── onboarding/            # Onboarding Feature (sample): New user guide
-│       ├── auth/                  # Auth Feature (sample): Login, Register, Forgot Password
-│       ├── dashboard/             # Dashboard Feature (sample): Shell chrome only (Bottom Tab host)
-│       ├── home/                  # Home Feature (sample): Home Tab
-│       └── settings/              # Settings Feature (sample): Settings Tab (separate from Home)
+├── platform/                      # Infra team's ground — every module may depend on it
+│   ├── kernel/                    # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
+│   ├── base_ui/                   # Theme, LanguageProvider, design tokens & l10n (zero widgets)
+│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
+│   ├── common/                    # AppConfig, AppInitializer, Flutter-bound helpers
+│   ├── database/                  # Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
+│   ├── di/                        # DI Hub — every cross-module contract lives here
+│   ├── network/                   # Dio + Retrofit factory, interceptor chain, SSL pinning
+│   ├── notifications/             # Push Notification management module
+│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   ├── responsive/                # Design-size scaling bound to BuildContext
+│   ├── storage/                   # StorageManager + StorageValue<T> (defines NO keys)
+│   ├── ui_kit/                    # core_ui_kit — reusable widgets every module may use
+│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   └── data_core/                 # IBaseRepository + CacheDatabase (owns its own tables/DAO)
+├── modules/                       # One vertical slice per bounded context, one per team
+│   ├── auth/                      # Sample: the full three-layer slice
+│   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
+│   │   ├── data/                  # Models, DataSources, RepositoryImpl
+│   │   └── feature/               # UI + Provider, login only
+│   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
+│   ├── settings/feature/          # Sample: consuming another module's contract
+│   ├── dashboard/feature/         # Sample: shell chrome only (bottom-bar host)
+│   ├── onboarding/feature/        # Sample: IAppEntryLocation, the cold-start location
+│   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── tools/                         # Command-line toolset for developers
 │   ├── android_compliance/        # 16KB Page Size compatibility check (Android 15+)
 │   ├── barrel_generator/          # Script to auto-generate barrel files for packages
@@ -189,7 +186,7 @@ All tools can be run from the root directory.
     ```
 4.  **Barrel Generator (`tools/barrel_generator/`)**:
     ```bash
-    dart tools/barrel_generator/generate.dart packages/features/profile/lib
+    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
     ```
 5.  **Workspace Setup (`tools/workspace_setup/`)**:
     ```bash
@@ -214,18 +211,18 @@ All tools can be run from the root directory.
 ## 🏛️ 4. The Golden Rules of Clean Architecture & SOLID
 
 ### Separation of Concerns
-1. **Domain Layer (`packages/domain/*`)**:
+1. **Domain Layer (`modules/*/domain`)**:
    - **Pure Dart, enforced by the package graph** — not merely by convention. `domain_core` has
      **zero** workspace dependencies and none of the three domain packages declares the Flutter SDK.
    - Do not import `flutter/material.dart`, `dio`, `retrofit`, or any UI/Network library.
    - Defines `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` and `AppFailure`.
-2. **Data Layer (`packages/data/*`)**:
+2. **Data Layer (`modules/*/data`)**:
    - Implements contracts from the `domain`.
    - Uses `core_network` (API), `core_storage` (key-value) and `core_database` (SQL) as *mechanisms*
      — each data package declares its own storage keys and its own database.
    - DataSources return **Models**, never Entities, and never expose Drift-generated row classes.
    - Transforms Models → Entities via the `.toEntity()` function.
-3. **Presentation Layer (`packages/features/*`)**:
+3. **Presentation Layer (`modules/*/feature`)**:
    - Renders UI and manages state (Provider or BLoC).
    - **Only communicates with Domain through UseCases**, absolutely no direct API calls.
    - **FORBIDDEN to depend on the `data` layer** or on any other feature package — no exception; shared widgets come from the core package `core_ui_kit`.
@@ -249,7 +246,7 @@ Features communicate across each other entirely through intermediate interfaces 
 [Interface HomeNavigator (core_di)]  ◄── (Contract definition)
    ▲
    │ (Concrete implementation in the owning feature)
-[HomeNavigatorImpl (packages/features/home/lib/src/routing/)]
+[HomeNavigatorImpl (modules/home/feature/lib/src/routing/)]
 ```
 
 Cross-feature UI actions (e.g. logout) use the same DIP shape with `I*ActionHandler` in `core_di` and `*ActionHandlerImpl` inside the owning feature (`feature_auth/handlers/`).

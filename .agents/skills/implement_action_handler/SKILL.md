@@ -37,7 +37,7 @@ abstract class IAuthActionHandler {
 Export it from `platform/di/lib/src/actions/actions.dart` (barrel will pick it up via generator).
 
 ### Step 2: Implement in the Owning Feature
-Create `packages/features/<owner>/lib/src/handlers/<feature>_action_handler_impl.dart`:
+Create `modules/*/feature/<owner>/lib/src/handlers/<feature>_action_handler_impl.dart`:
 ```dart
 import 'package:core_di/core_di.dart';
 import 'package:flutter/widgets.dart';
@@ -65,7 +65,7 @@ The consumer MUST NOT import the owning feature package.
 > **Prefer `getItOrNull` over `getIt` for cross-feature calls.** The app must still run when
 > any feature package is deleted, and the handler's implementation lives in the *owning*
 > feature. `getIt<T>()` throws when that feature is gone; `getItOrNull<T>()?` degrades to a
-> no-op. (`packages/features/settings/lib/src/pages/settings_page.dart` still uses the
+> no-op. (`modules/settings/feature/lib/src/pages/settings_page.dart` still uses the
 > throwing form — do not copy that line.)
 >
 > If the action must visibly do *something* when the owner is absent, branch on the null and
@@ -74,7 +74,7 @@ The consumer MUST NOT import the owning feature package.
 ### Step 4: Barrel + Code Gen
 ```bash
 dart tools/barrel_generator/generate.dart platform/di/lib
-dart tools/barrel_generator/generate.dart packages/features/<owner>/lib
+dart tools/barrel_generator/generate.dart modules/*/feature/<owner>/lib
 dart run build_runner build -d --workspace
 ```
 

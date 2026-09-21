@@ -6,7 +6,7 @@ import 'package:yaml/yaml.dart';
 /// with it (domain/data pairs, workspace entries, DI registrations).
 ///
 /// The template ships working reference features. Deleting one by hand is where
-/// people get hurt: `auth` is not just `packages/features/auth`, it is also
+/// people get hurt: `auth` is not just `modules/auth/feature`, it is also
 /// `domain_auth`, `data_auth`, six contracts in `core_di`, and three shared
 /// files. Miss one and the workspace stops resolving.
 ///
@@ -331,7 +331,7 @@ List<_FileEdit> _planSharedEdits(
         // injection.dart: `  ExternalModule(FeatureAuthPackageModule),`
         if (line.contains('ExternalModule(${_moduleClass(name)})')) drop = true;
 
-        // root pubspec: `  - packages/features/auth`
+        // root pubspec: `  - modules/auth/feature`
         final path = paths[name];
         if (path != null && RegExp('^\\s*-\\s+$path\\s*\$').hasMatch(line)) {
           drop = true;

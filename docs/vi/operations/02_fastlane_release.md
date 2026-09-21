@@ -304,7 +304,7 @@ sh "#{prefix}dart pub global activate flutterfire_cli"
 sh "#{prefix}dart pub global activate flutter_gen"
 sh "#{prefix}flutter clean"
 sh "#{prefix}flutter pub get"
-# ...rồi flutter gen-l10n cho mọi packages/**/l10n.yaml
+# ...rồi flutter gen-l10n cho mọi mọi l10n.yaml trong cây thư mục
 sh "#{prefix}dart run build_runner build -d --workspace"
 ```
 

@@ -2,8 +2,8 @@
 #
 # This template ships working reference features. They exist to show how the
 # architecture is wired, not because your product needs them. Nothing here is
-# derivable from the folder layout alone: `packages/domain/core` is framework
-# while `packages/domain/auth` is a sample, and both live under `packages/domain/`.
+# derivable from the folder layout alone: `platform/domain_core` is framework
+# while `modules/auth/domain` is a sample, and both live under `modules/*/domain/`.
 #
 # YAML rather than JSON on purpose: this file is read by humans first and by
 # `tools/sample_cleanup/remove_sample.dart` second, and JSON cannot carry the
@@ -43,8 +43,8 @@ packages:
   # These carry the base contracts every domain/data package builds on
   # (Result<T>, BaseEntity, IBaseRepository). They also happen to contain the
   # cache sample — see `embedded_samples` below.
-  domain_core: { kind: framework, path: packages/domain/core }
-  data_core: { kind: framework, path: packages/data/core }
+  domain_core: { kind: framework, path: platform/domain_core }
+  data_core: { kind: framework, path: platform/data_core }
 
   # --- Shell ---------------------------------------------------------------
   app:
@@ -58,7 +58,7 @@ packages:
   # --- Samples: features ---------------------------------------------------
   feature_auth:
     kind: sample
-    path: packages/features/auth
+    path: modules/auth/feature
     demonstrates: >-
       Provider state management, a global @lazySingleton controller, Firebase
       auth via the data layer, cross-feature contracts (agnostic streams,
@@ -68,35 +68,35 @@ packages:
 
   feature_home:
     kind: sample
-    path: packages/features/home
+    path: modules/home/feature
     demonstrates: >-
       BLoC with private Freezed events, a dashboard tab (INavDestinationModule),
       and consuming another feature's state through a core_di contract.
 
   feature_settings:
     kind: sample
-    path: packages/features/settings
+    path: modules/settings/feature
     demonstrates: >-
       A second dashboard tab, theme/locale switching that bypasses Domain, and
       triggering another feature's action through an action handler.
 
   feature_onboarding:
     kind: sample
-    path: packages/features/onboarding
+    path: modules/onboarding/feature
     demonstrates: >-
       A stack route (IFeatureRouteModule) and the cold-start entry point
       (IAppEntryLocation).
 
   feature_dashboard:
     kind: sample
-    path: packages/features/dashboard
+    path: modules/dashboard/feature
     demonstrates: >-
       Shell chrome only — builds the bottom bar from whatever tabs register
       themselves. Owns no business logic and no tab page.
 
   feature_splash:
     kind: sample
-    path: packages/features/splash
+    path: modules/splash/feature
     demonstrates: >-
       Supplying the boot splash screen to the app shell through
       IAppSplashScreen.
@@ -104,11 +104,11 @@ packages:
   # --- Samples: domain/data pairs -----------------------------------------
   domain_auth:
     kind: sample
-    path: packages/domain/auth
+    path: modules/auth/domain
     demonstrates: Pure-Dart entities, params, repository contract and use cases.
   data_auth:
     kind: sample
-    path: packages/data/auth
+    path: modules/auth/data
     demonstrates: >-
       Freezed models with .toEntity(), a package-owned storage key, and a
       Firebase-backed repository. Also ships an unused Retrofit data source as
@@ -131,21 +131,21 @@ embedded_samples:
       it is registered in DI, and the tests use it as a fixture, so it looks
       alive. It is not.
     files:
-      - packages/domain/core/lib/src/entities/cache_entry_entity.dart
-      - packages/domain/core/lib/src/params/cache_entry_params.dart
-      - packages/domain/core/lib/src/repositories/i_cache_entry_repository.dart
-      - packages/domain/core/lib/src/usecases/get_cache_entry_usecase.dart
-      - packages/domain/core/lib/src/usecases/get_all_cache_entries_usecase.dart
-      - packages/domain/core/lib/src/usecases/save_cache_entry_usecase.dart
-      - packages/data/core/lib/src/database/cache_database.dart
-      - packages/data/core/lib/src/database/tables/cache_entries_table.dart
-      - packages/data/core/lib/src/database/dao/cache_entries_dao.dart
-      - packages/data/core/lib/src/models/cache_entry_model.dart
-      - packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart
-      - packages/data/core/lib/src/repositories_impl/cache_entry_repository_impl.dart
+      - platform/domain_core/lib/src/entities/cache_entry_entity.dart
+      - platform/domain_core/lib/src/params/cache_entry_params.dart
+      - platform/domain_core/lib/src/repositories/i_cache_entry_repository.dart
+      - platform/domain_core/lib/src/usecases/get_cache_entry_usecase.dart
+      - platform/domain_core/lib/src/usecases/get_all_cache_entries_usecase.dart
+      - platform/domain_core/lib/src/usecases/save_cache_entry_usecase.dart
+      - platform/data_core/lib/src/database/cache_database.dart
+      - platform/data_core/lib/src/database/tables/cache_entries_table.dart
+      - platform/data_core/lib/src/database/dao/cache_entries_dao.dart
+      - platform/data_core/lib/src/models/cache_entry_model.dart
+      - platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+      - platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart
     also_remove:
-      - packages/data/core/test/cache_database_test.dart
-      - packages/data/core/test/database_handle_test.dart
+      - platform/data_core/test/cache_database_test.dart
+      - platform/data_core/test/database_handle_test.dart
 
   auth_rest_reference:
     lives_in: [data_auth]
@@ -154,8 +154,8 @@ embedded_samples:
       Dead in the running app — AuthRepositoryImpl talks to the Firebase SDK
       directly and never calls it. Kept as a REST reference.
     files:
-      - packages/data/auth/lib/src/data_sources/remote/auth_remote_data_source.dart
-      - packages/data/auth/lib/src/utils/auth_api_constants.dart
+      - modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
+      - modules/auth/data/lib/src/utils/auth_api_constants.dart
 
 # ---------------------------------------------------------------------------
 # Removal bundles
@@ -180,13 +180,13 @@ bundles:
       - "NavigatorKeys.nested('auth') in platform/di/lib/src/routing/navigator_keys.dart"
     breaks:
       - sample: feature_settings
-        at: packages/features/settings/lib/src/pages/settings_page.dart:60
+        at: modules/settings/feature/lib/src/pages/settings_page.dart:60
         why: >-
           Calls getIt<IAuthActionHandler>() — the throwing lookup, not
           getItOrNull. Tapping logout throws once auth is gone.
         fix: Delete the logout row, or switch to getItOrNull and hide it when null.
       - sample: feature_home
-        at: packages/features/home/lib/src/bloc/home_profile_bloc.dart:35
+        at: modules/home/feature/lib/src/bloc/home_profile_bloc.dart:35
         why: >-
           HomeProfileBloc takes IAuthStatusStream through the constructor, so
           DI cannot build it at all once nothing registers that contract.

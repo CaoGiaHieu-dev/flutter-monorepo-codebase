@@ -18,7 +18,7 @@ flutter analyze                                      # static analysis
 ```
 
 - [ ] All four pass clean
-- [ ] Tests pass in every touched package — `cd packages/<layer>/<pkg> && flutter test`
+- [ ] Tests pass in every touched package — `cd modules/<module>/<layer> && flutter test`
 - [ ] No file under `lib/` was hand-edited if it ends in `.g.dart`, `.freezed.dart`, `.module.dart` or `.config.dart`
 - [ ] Barrel generator was re-run if any file was added, renamed or deleted
 
@@ -53,7 +53,7 @@ dart tools/unused_checker/check_unused_packages.dart
 
 ## 3. Domain layer
 
-- [ ] No `flutter` / `dio` / `retrofit` import in `packages/domain/*`
+- [ ] No `flutter` / `dio` / `retrofit` import in `modules/*/domain`
 - [ ] No domain `pubspec.yaml` declares the Flutter SDK
 - [ ] Entities use `freezed` with the `const Class._()` private constructor
 - [ ] Each use case does one thing and returns `Result<T>`
@@ -62,7 +62,7 @@ dart tools/unused_checker/check_unused_packages.dart
 **Verify**
 
 ```bash
-grep -rn "package:flutter" packages/domain/*/lib   # must be empty
+grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 ```
 
 ---

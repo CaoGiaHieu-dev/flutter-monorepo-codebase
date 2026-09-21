@@ -18,12 +18,31 @@ flutter-monorepo-codebase/
 │   ├── env.dev / env.stg   #   File env theo flavor (env.prod KHÔNG có trong repo)
 │   └── pubspec.yaml
 │
-├── packages/
-│   ├── core/               # Hạ tầng — mọi tầng đều dùng được
-│   ├── domain/             # Business logic thuần Dart (không Flutter, không Dio)
-│   ├── data/               # Repository impl, model, data source
-│   └── features/           # Module UI, mỗi package một mối quan tâm
-│
+├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
+│   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
+│   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
+│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
+│   ├── common/                    # AppConfig, AppInitializer, helper gắn với Flutter
+│   ├── database/                  # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
+│   ├── di/                        # DI Hub — mọi hợp đồng liên module nằm ở đây
+│   ├── network/                   # Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
+│   ├── notifications/             # Module quản lý Push Notification
+│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   ├── responsive/                # Scale theo design-size, gắn với BuildContext
+│   ├── storage/                   # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
+│   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
+│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   └── data_core/                 # IBaseRepository + CacheDatabase (tự sở hữu table/DAO của nó)
+├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
+│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
+│   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
+│   │   ├── data/                  # Model, DataSource, RepositoryImpl
+│   │   └── feature/               # UI + Provider, chỉ còn màn login
+│   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
+│   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
+│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
+│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
+│   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── tools/                  # CLI viết bằng Dart (generator, checker, sync)
 ├── docs/                   # Chính bộ tài liệu này (en/ + vi/)
 ├── .agents/                # Luật AGENTS.md + skills cho AI agent
@@ -58,36 +77,36 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
 | `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
-### Domain — `packages/domain/*`
+### Domain — `modules/*/domain`
 
 **Thuần Dart 100%.** Không `package:flutter`, không `dio`, không `retrofit`.
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `domain_core` | `packages/domain/core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, entity/usecase cache |
-| `domain_auth` | `packages/domain/auth` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
+| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, entity/usecase cache |
+| `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
-### Data — `packages/data/*`
+### Data — `modules/*/data`
 
 Hiện thực hợp đồng của domain. Data source trả về **Model**, không trả entity, và không để lộ type của Drift/Dio ra ngoài.
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `data_core` | `packages/data/core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, data source + repository cache |
-| `data_auth` | `packages/data/auth` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
+| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, data source + repository cache |
+| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
-### Features — `packages/features/*`
+### Features — `modules/*/feature`
 
 Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thuộc `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, và một package state-management — **không bao giờ phụ thuộc `data_*`, cũng không phụ thuộc feature khác**.
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `feature_auth` | `packages/features/auth` | Trang Login / Register / Forgot-password, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
-| `feature_home` | `packages/features/home` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination` |
-| `feature_settings` | `packages/features/settings` | Tab Settings, `SettingsNavDestination` |
-| `feature_onboarding` | `packages/features/onboarding` | Luồng onboarding, hiện thực `IAppEntryLocation` |
-| `feature_dashboard` | `packages/features/dashboard` | **Chỉ là khung vỏ** — `Scaffold` + bottom navigation bar. Dựng tab từ `getAllOrEmpty<INavDestinationModule>()`; không sở hữu trang tab nào. |
-| `feature_splash` | `packages/features/splash` | Trang splash do `MainScope` hiển thị trước khi router tồn tại |
+| `feature_auth` | `modules/auth/feature` | Trang Login / Register / Forgot-password, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
+| `feature_home` | `modules/home/feature` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination` |
+| `feature_settings` | `modules/settings/feature` | Tab Settings, `SettingsNavDestination` |
+| `feature_onboarding` | `modules/onboarding/feature` | Luồng onboarding, hiện thực `IAppEntryLocation` |
+| `feature_dashboard` | `modules/dashboard/feature` | **Chỉ là khung vỏ** — `Scaffold` + bottom navigation bar. Dựng tab từ `getAllOrEmpty<INavDestinationModule>()`; không sở hữu trang tab nào. |
+| `feature_splash` | `modules/splash/feature` | Trang splash do `MainScope` hiển thị trước khi router tồn tại |
 
 > [!NOTE]
 > Mọi thứ trong `domain/`, `data/`, `features/` đều là **code mẫu / tham khảo**. Chúng minh hoạ cách đấu nối, không phải nghiệp vụ production. Hãy copy pattern rồi xoá hoặc thay bằng nghiệp vụ thật.
@@ -102,13 +121,13 @@ graph BT
         App["app/ — host shell"]
     end
     subgraph UI
-        Features["packages/features/*"]
+        Features["modules/*/feature"]
     end
     subgraph Business
-        Domain["packages/domain/*<br/>(thuần Dart)"]
+        Domain["modules/*/domain<br/>(thuần Dart)"]
     end
     subgraph IO
-        Data["packages/data/*"]
+        Data["modules/*/data"]
     end
     subgraph Infra
         Core["platform/*"]
@@ -179,15 +198,15 @@ Những hệ quả bạn bắt buộc phải biết:
 
 | Tôi muốn… | Package / file | Hướng dẫn |
 | :--- | :--- | :--- |
-| Thêm màn hình mới + state của nó | `packages/features/<tên>/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
-| Thêm quy tắc nghiệp vụ / use case | `packages/domain/<tên>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
-| Thêm endpoint API | `packages/data/<tên>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
+| Thêm màn hình mới + state của nó | `modules/*/feature/<tên>/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
+| Thêm quy tắc nghiệp vụ / use case | `modules/*/domain/<tên>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
+| Thêm endpoint API | `modules/*/data/<tên>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Lưu một cặp key/value | Thư mục `utils/*_storage_keys.dart` của package **sở hữu** | [../guides/06_storage.md](../guides/06_storage.md) |
-| Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `packages/data/core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
+| Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `platform/data_core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Đổi màu / khoảng cách / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Thêm chuỗi cần dịch | `packages/features/<tên>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Thêm chuỗi cần dịch | `modules/*/feature/<tên>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Chia sẻ widget giữa các feature | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Cho feature A kích hoạt hành động ở feature B | `core_di/src/actions/` hoặc `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Nâng version một thư viện | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |

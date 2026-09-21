@@ -58,7 +58,7 @@ abstract class IFeatureRouteModule {
 }
 ```
 
-Registered in the owning feature — `packages/features/onboarding/lib/src/routing/onboarding_feature_route_module.dart`:
+Registered in the owning feature — `modules/onboarding/feature/lib/src/routing/onboarding_feature_route_module.dart`:
 
 ```dart
 @LazySingleton(as: IFeatureRouteModule)
@@ -88,7 +88,7 @@ abstract class INavDestinationModule {
 }
 ```
 
-`packages/features/home/lib/src/routing/home_nav_destination.dart`:
+`modules/home/feature/lib/src/routing/home_nav_destination.dart`:
 
 ```dart
 @LazySingleton(as: INavDestinationModule)
@@ -116,7 +116,7 @@ class HomeNavDestination extends INavDestinationModule {
 
 ### 2.3 Dashboard is chrome only
 
-`feature_dashboard` depends on just `core_di` and `core_common` — it physically **cannot** import another feature. Its page builds the bar from DI (`packages/features/dashboard/lib/src/pages/dashboard_page.dart`):
+`feature_dashboard` depends on just `core_di` and `core_common` — it physically **cannot** import another feature. Its page builds the bar from DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
 
 ```dart
 final tabs = getAllOrEmpty<INavDestinationModule>().toList()
@@ -143,7 +143,7 @@ Routes are declared with annotations and generated into `*_route_module.g.dart`.
 
 Path constants live in the feature's `src/utils/` folder, not in `routing/` — every package keeps its constants under `utils/`:
 
-`packages/features/auth/lib/src/utils/auth_path.dart`:
+`modules/auth/feature/lib/src/utils/auth_path.dart`:
 
 ```dart
 class AuthPath {
@@ -154,7 +154,7 @@ class AuthPath {
 }
 ```
 
-`packages/features/auth/lib/src/routing/auth_route_module.dart`:
+`modules/auth/feature/lib/src/routing/auth_route_module.dart`:
 
 ```dart
 @TypedShellRoute<AuthShellRoute>(
@@ -194,7 +194,7 @@ The generated `$authShellRoute` is what the feature hands back from `IFeatureRou
 
 The route's `build()` is where a screen controller is created and bound to the tree.
 
-**BLoC** — `packages/features/home/lib/src/routing/home_route_module.dart`:
+**BLoC** — `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
@@ -242,7 +242,7 @@ abstract class AuthNavigator {
 }
 ```
 
-**2. Implement in the owning feature** — `packages/features/auth/lib/src/routing/auth_navigator_impl.dart`:
+**2. Implement in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
 @Singleton(as: AuthNavigator)
@@ -341,7 +341,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
 4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`.
 5. **Generate** → `dart run build_runner build -d --workspace`.
-6. **Barrels** → `dart tools/barrel_generator/generate.dart packages/features/<name>/lib`.
+6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/*/feature/<name>/lib`.
 
 ## Checklist
 

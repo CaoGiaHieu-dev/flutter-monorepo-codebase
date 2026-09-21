@@ -1,6 +1,6 @@
 # Data Layer
 
-**What this answers:** how `packages/data/*` fulfils the repository contracts declared by Domain — where models, data sources and error handling live, and which boundaries this layer must not leak across.
+**What this answers:** how `modules/*/data` fulfils the repository contracts declared by Domain — where models, data sources and error handling live, and which boundaries this layer must not leak across.
 
 **After reading you can:** implement a repository that returns `Result<T>` without writing a single `try/catch`, decide whether a value belongs in a Model or an Entity, and know exactly which types are allowed to appear in a data source's signature.
 
@@ -28,7 +28,7 @@ Data depends **inward** on Domain (to implement its interfaces) and **outward** 
 ## 2. Package layout
 
 ```
-packages/data/<name>/
+modules/*/data/<name>/
 ├── lib/
 │   ├── data_<name>.dart             # public barrel
 │   ├── di/
@@ -59,7 +59,7 @@ Current packages:
 
 ## 3. `IBaseRepository` — why repositories have no `try/catch`
 
-`packages/data/core/lib/src/base/i_base_repository.dart` gives every repository two wrappers. A `RepositoryImpl` `extends IBaseRepository` and calls them instead of handling errors itself.
+`platform/data_core/lib/src/base/i_base_repository.dart` gives every repository two wrappers. A `RepositoryImpl` `extends IBaseRepository` and calls them instead of handling errors itself.
 
 ### `execute<R, T>()` — asynchronous
 
@@ -135,7 +135,7 @@ A Model is the Data layer's own representation. It never escapes into Domain —
 ### Contract
 
 ```dart
-// packages/data/core/lib/src/models/base_model.dart
+// platform/data_core/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
   E toEntity() {
     throw UnimplementedError();
@@ -145,7 +145,7 @@ abstract class BaseModel<E> {
 
 ### A network Model
 
-`packages/data/auth/lib/src/models/user/user_model.dart` — Freezed + `json_serializable`:
+`modules/auth/data/lib/src/models/user/user_model.dart` — Freezed + `json_serializable`:
 
 ```dart
 @freezed
@@ -178,7 +178,7 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
 ### A database Model
 
-`packages/data/core/lib/src/models/cache_entry_model.dart` — Freezed, **no** `json_serializable`:
+`platform/data_core/lib/src/models/cache_entry_model.dart` — Freezed, **no** `json_serializable`:
 
 ```dart
 @freezed
@@ -217,7 +217,7 @@ A data source's job stops at "typed object". Mapping to Domain is the repository
 
 ### Rule 2 — never leak the transport type
 
-This is the rule that `CacheEntryModel` exists to satisfy. `packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
+This is the rule that `CacheEntryModel` exists to satisfy. `platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
 ```dart
 /// Contract for reading/writing cache rows.
@@ -269,7 +269,7 @@ Data sources do **not** catch. `execute()` in the repository is the single catch
 
 `core_storage` provides only the mechanism. Each consumer declares its own `StorageValue`s and keeps its keys in its own `utils/`.
 
-`packages/data/auth/lib/src/utils/auth_storage_keys.dart`:
+`modules/auth/data/lib/src/utils/auth_storage_keys.dart`:
 
 ```dart
 class AuthStorageKeys {
@@ -280,7 +280,7 @@ class AuthStorageKeys {
 }
 ```
 
-`packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart`:
+`modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart`:
 
 ```dart
 @lazySingleton
@@ -314,7 +314,7 @@ class AuthLocalDataSource {
 >
 > `StorageValue` keeps an in-memory cache that `initialize()` fills from disk once at boot. A factory registration builds a **new, empty** instance on every injection, so `getUserToken()` would return `null` even though the token is on disk. The pairing is: singleton registration **+** `@PostConstruct(preResolve: true)`.
 
-REST endpoints follow the same ownership rule — `packages/data/auth/lib/src/utils/auth_api_constants.dart` holds `AuthApiConstants`, because those endpoints belong to auth and to nothing else.
+REST endpoints follow the same ownership rule — `modules/auth/data/lib/src/utils/auth_api_constants.dart` holds `AuthApiConstants`, because those endpoints belong to auth and to nothing else.
 
 ---
 
@@ -340,7 +340,7 @@ class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
   final FacebookAuth _facebookAuth;
 ```
 
-The SDK singletons are bound once in [`packages/data/auth/lib/di/register_module.dart`](../../../packages/data/auth/lib/di/register_module.dart):
+The SDK singletons are bound once in [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart):
 
 ```dart
 @module
@@ -434,7 +434,7 @@ Checklist:
 Then:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/data/<name>/lib
+dart tools/barrel_generator/generate.dart modules/*/data/<name>/lib
 dart run build_runner build -d --workspace
 ```
 

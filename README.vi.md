@@ -25,20 +25,20 @@ graph TD
 
     App["🚀 Host App Shell (app/)<br/>Lắp ráp và khởi động ứng dụng"]:::app
 
-    subgraph FeatureLayer ["🎨 Feature Presentation Layer (packages/features/*)"]
+    subgraph FeatureLayer ["🎨 Feature Presentation Layer (modules/*/feature)"]
         direction LR
         FeatSplash["splash"]:::feature
         FeatAuth["auth"]:::feature
         FeatDash["dashboard"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (packages/data/*)"]
+    subgraph DataLayer ["🔌 Data Layer (modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (packages/domain/*)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
@@ -112,34 +112,31 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │   │   ├── main.dart              # Điểm chạy app chính (entrypoint)
 │   │   └── main_scope.dart        # Quản lý Boot Lifecycle (Splash → RootApp)
 │   └── pubspec.yaml               # Cấu hình Host App (liên kết tất cả packages con)
-├── packages/                      # Thư mục chứa các Micro-packages
-│   ├── core/                      # Hạ tầng dùng chung — CHỈ CƠ CHẾ, không chứa dữ liệu feature
-│   │   ├── base_ui/               # Theme, LanguageProvider, design token & l10n (0 widget)
-│   │   ├── bloc_state_management/ # BaseBloc, BaseCubit, BlocViewState<T>
-│   │   ├── common/                # Enums, ErrorHandler, AppConfig, extensions, src/utils/
-│   │   ├── database/              # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
-│   │   ├── di/                    # DI Hub — mọi contract xuyên package nằm ở đây
-│   │   ├── network/               # Dio + Retrofit factory, chuỗi interceptor, SSL pinning
-│   │   ├── notifications/         # Module quản lý thông báo đẩy (Push Notification)
-│   │   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   │   ├── responsive/            # Scale theo design size, gắn với BuildContext
-│   │   ├── storage/               # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
-│   │   └── ui_kit/                # core_ui_kit — widget dùng chung cho mọi feature
-│   ├── domain/                    # Micro-packages nghiệp vụ Pure Dart — 0 phụ thuộc
-│   │   ├── core/                  # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   ├── auth/                  # Entities, UseCases, Repository interfaces cho Auth
-│   │   └── language/              # Entities, UseCases cho đa ngôn ngữ
-│   ├── data/                      # Micro-packages triển khai tích hợp
-│   │   ├── core/                  # IBaseRepository + CacheDatabase (tự sở hữu bảng/DAO)
-│   │   ├── auth/                  # Models, DataSources, RepositoryImpl cho Auth
-│   │   └── language/              # RepositoryImpl cho đa ngôn ngữ
-│   └── features/                  # Các gói tính năng độc lập (Feature Packages)
-│       ├── splash/                # Feature Splash (mẫu): Màn hình chờ khởi động
-│       ├── onboarding/            # Feature Onboarding (mẫu): Hướng dẫn người dùng mới
-│       ├── auth/                  # Feature Auth (mẫu): Login, Register, Forgot Password
-│       ├── dashboard/             # Feature Dashboard (mẫu): Chrome shell Bottom Tab only
-│       ├── home/                  # Feature Home (mẫu): Tab Trang chủ
-│       └── settings/              # Feature Settings (mẫu): Tab Cài đặt (tách khỏi Home)
+├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
+│   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
+│   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
+│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
+│   ├── common/                    # AppConfig, AppInitializer, helper gắn với Flutter
+│   ├── database/                  # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
+│   ├── di/                        # DI Hub — mọi hợp đồng liên module nằm ở đây
+│   ├── network/                   # Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
+│   ├── notifications/             # Module quản lý Push Notification
+│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
+│   ├── responsive/                # Scale theo design-size, gắn với BuildContext
+│   ├── storage/                   # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
+│   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
+│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   └── data_core/                 # IBaseRepository + CacheDatabase (tự sở hữu table/DAO của nó)
+├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
+│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
+│   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
+│   │   ├── data/                  # Model, DataSource, RepositoryImpl
+│   │   └── feature/               # UI + Provider, chỉ còn màn login
+│   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
+│   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
+│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
+│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
+│   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── tools/                         # Bộ công cụ dòng lệnh dành cho lập trình viên
 │   ├── android_compliance/        # Kiểm tra tính tương thích 16KB Page Size (Android 15+)
 │   ├── barrel_generator/          # Script tự động tạo barrel files cho packages
@@ -188,7 +185,7 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 4.  **Barrel Generator (`tools/barrel_generator/`)**:
     ```bash
-    dart tools/barrel_generator/generate.dart packages/features/profile/lib
+    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
     ```
 5.  **Workspace Setup (`tools/workspace_setup/`)**:
     ```bash
@@ -213,18 +210,18 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
 ## 🏛️ 4. Quy Tắc Vàng của Clean Architecture & SOLID
 
 ### Tách Biệt Mối Quan Tâm (Separation of Concerns)
-1. **Tầng Domain (`packages/domain/*`)**:
+1. **Tầng Domain (`modules/*/domain`)**:
    - **Pure Dart, được bảo đảm bởi package graph** — không chỉ bằng quy ước. `domain_core` có
      **0** workspace dependency và không package domain nào khai Flutter SDK.
    - Không import `flutter/material.dart`, `dio`, `retrofit`, hay bất kỳ thư viện UI/Network nào.
    - Định nghĩa `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` và `AppFailure`.
-2. **Tầng Data (`packages/data/*`)**:
+2. **Tầng Data (`modules/*/data`)**:
    - Triển khai các hợp đồng (contracts) từ `domain`.
    - Dùng `core_network` (API), `core_storage` (key-value) và `core_database` (SQL) như *cơ chế* —
      mỗi package data tự khai storage key và tự sở hữu database riêng.
    - DataSource trả về **Model**, không bao giờ trả Entity, và không phơi class do Drift sinh.
    - Biến đổi Models → Entities qua hàm `.toEntity()`.
-3. **Tầng Presentation (`packages/features/*`)**:
+3. **Tầng Presentation (`modules/*/feature`)**:
    - Hiển thị UI và quản lý trạng thái (Provider hoặc BLoC).
    - **Chỉ giao tiếp với Domain thông qua UseCases**, tuyệt đối không gọi trực tiếp API.
    - **CẤM phụ thuộc vào tầng `data`** hoặc bất kỳ feature package nào khác — không ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit`.
@@ -248,7 +245,7 @@ Features giao tiếp chéo hoàn toàn qua giao diện trung gian trong `core_di
 [Interface HomeNavigator (core_di)]  ◄── (Định nghĩa hợp đồng)
    ▲
    │ (Triển khai cụ thể trong feature sở hữu route)
-[HomeNavigatorImpl (packages/features/home/lib/src/routing/)]
+[HomeNavigatorImpl (modules/home/feature/lib/src/routing/)]
 ```
 
 Hành động UI xuyên feature (ví dụ logout) dùng cùng mô hình DIP với `I*ActionHandler` trong `core_di` và `*ActionHandlerImpl` trong feature sở hữu (`feature_auth/handlers/`).

@@ -70,7 +70,7 @@ The job runs on `macos-latest` even though it only builds Android. macOS runners
 
 Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart`) and posts results back to the pull request.
 
-**Triggers**: pull requests to `main` / `develop` / `master` touching `app/lib/**/*.dart` or `packages/**/*.dart` (generated files excluded), plus manual dispatch with a scope selector (`changed` / `all` / `domain` / `data` / `presentation`) and a report language (`en` / `vi` / `ja` / `ko` / `zh`).
+**Triggers**: pull requests to `main` / `develop` / `master` touching `app/lib/**/*.dart`, `modules/**/*.dart` or `platform/**/*.dart` (generated files excluded), plus manual dispatch with a scope selector (`changed` / `all` / `domain` / `data` / `presentation`) and a report language (`en` / `vi` / `ja` / `ko` / `zh`).
 
 **What it does**: resolves changed files with `tj-actions/changed-files`, runs the reviewer, uploads the Markdown report as an artifact (30-day retention), then parses that report and posts **inline review comments** on the exact lines when they fall inside the PR diff. Findings outside the diff are grouped into a separate per-file comment.
 
@@ -143,13 +143,13 @@ The iOS build and iOS distribute tasks are present but fully commented out.
 |:--|:---|:---|:---|
 | 1 | Architecture rules | `dart tools/arch_check/check.dart` | yes |
 | 2 | Static analysis | `flutter analyze` | yes |
-| 3 | Tests, per package | `flutter test` in each `packages/*/*/test` | yes |
+| 3 | Tests, per package | `flutter test` in each `modules/*/*/test` | yes |
 | 4 | Catalog drift | `dart tools/dependency_sync.dart --check` | yes |
 | — | Unused dependency audit | `dart tools/unused_checker/check_unused_packages.dart` | no (advisory) |
 
 Gate 1 runs first on purpose: it only reads imports and pubspecs, needs no codegen, and finishes in about 200 ms — so a layering mistake fails in seconds instead of after a full analyze-and-test cycle. It is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
 
-Gate 3 loops per package because this is a Pub Workspace: tests live under `packages/<layer>/<pkg>/test/`, and a single `flutter test` at the root does not pick them up.
+Gate 3 loops per package because this is a Pub Workspace: tests live under `modules/<module>/<layer>/test/`, and a single `flutter test` at the root does not pick them up.
 
 > [!IMPORTANT]
 > A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. Move a type between packages and a `.freezed.dart` file can end up referencing a symbol it cannot see: analyze stays green while the APK build fails. Only a real build catches that class of error.

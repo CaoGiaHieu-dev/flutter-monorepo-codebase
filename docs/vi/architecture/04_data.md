@@ -1,6 +1,6 @@
 # Tầng Data
 
-**File này trả lời:** `packages/data/*` thoả mãn các hợp đồng repository do Domain khai báo bằng cách nào — model, data source và xử lý lỗi nằm ở đâu, và tầng này tuyệt đối không được để lộ những gì ra ngoài.
+**File này trả lời:** `modules/*/data` thoả mãn các hợp đồng repository do Domain khai báo bằng cách nào — model, data source và xử lý lỗi nằm ở đâu, và tầng này tuyệt đối không được để lộ những gì ra ngoài.
 
 **Đọc xong bạn làm được:** viết một repository trả `Result<T>` mà không cần một dòng `try/catch` nào, quyết định được một giá trị thuộc về Model hay Entity, và biết chính xác kiểu nào được phép xuất hiện trong chữ ký của data source.
 
@@ -28,7 +28,7 @@ Data phụ thuộc **vào trong** là Domain (để hiện thực interface củ
 ## 2. Bố cục package
 
 ```
-packages/data/<name>/
+modules/*/data/<name>/
 ├── lib/
 │   ├── data_<name>.dart             # barrel công khai
 │   ├── di/
@@ -59,7 +59,7 @@ Các package hiện có:
 
 ## 3. `IBaseRepository` — vì sao repository không có `try/catch`
 
-`packages/data/core/lib/src/base/i_base_repository.dart` cung cấp cho mọi repository hai hàm bọc. `RepositoryImpl` sẽ `extends IBaseRepository` rồi gọi chúng thay vì tự xử lý lỗi.
+`platform/data_core/lib/src/base/i_base_repository.dart` cung cấp cho mọi repository hai hàm bọc. `RepositoryImpl` sẽ `extends IBaseRepository` rồi gọi chúng thay vì tự xử lý lỗi.
 
 ### `execute<R, T>()` — bất đồng bộ
 
@@ -135,7 +135,7 @@ Model là biểu diễn của riêng tầng Data. Nó không bao giờ lọt và
 ### Hợp đồng
 
 ```dart
-// packages/data/core/lib/src/models/base_model.dart
+// platform/data_core/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
   E toEntity() {
     throw UnimplementedError();
@@ -145,7 +145,7 @@ abstract class BaseModel<E> {
 
 ### Model cho mạng
 
-`packages/data/auth/lib/src/models/user/user_model.dart` — Freezed + `json_serializable`:
+`modules/auth/data/lib/src/models/user/user_model.dart` — Freezed + `json_serializable`:
 
 ```dart
 @freezed
@@ -178,7 +178,7 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
 ### Model cho database
 
-`packages/data/core/lib/src/models/cache_entry_model.dart` — Freezed, **không** dùng `json_serializable`:
+`platform/data_core/lib/src/models/cache_entry_model.dart` — Freezed, **không** dùng `json_serializable`:
 
 ```dart
 @freezed
@@ -217,7 +217,7 @@ Nhiệm vụ của data source dừng ở mức "object có kiểu". Ánh xạ s
 
 ### Quy tắc 2 — không để lộ kiểu của tầng vận chuyển
 
-Đây chính là lý do `CacheEntryModel` tồn tại. `packages/data/core/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
+Đây chính là lý do `CacheEntryModel` tồn tại. `platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
 ```dart
 /// Contract for reading/writing cache rows.
@@ -269,7 +269,7 @@ Data source **không** bắt lỗi. `execute()` trong repository là điểm b�
 
 `core_storage` chỉ cung cấp cơ chế. Mỗi bên tiêu thụ tự khai `StorageValue` của mình và giữ key trong `utils/` của chính nó.
 
-`packages/data/auth/lib/src/utils/auth_storage_keys.dart`:
+`modules/auth/data/lib/src/utils/auth_storage_keys.dart`:
 
 ```dart
 class AuthStorageKeys {
@@ -280,7 +280,7 @@ class AuthStorageKeys {
 }
 ```
 
-`packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart`:
+`modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart`:
 
 ```dart
 @lazySingleton
@@ -314,7 +314,7 @@ class AuthLocalDataSource {
 >
 > `StorageValue` giữ một cache trong RAM, được `initialize()` nạp từ đĩa đúng một lần lúc khởi động. Đăng ký dạng factory sẽ tạo instance **mới, rỗng** ở mỗi lần inject, nên `getUserToken()` trả `null` dù token vẫn nằm trên đĩa. Cặp bắt buộc là: đăng ký singleton **+** `@PostConstruct(preResolve: true)`.
 
-Endpoint REST cũng theo đúng quy tắc sở hữu này — `packages/data/auth/lib/src/utils/auth_api_constants.dart` chứa `AuthApiConstants`, vì những endpoint đó thuộc về auth và không thuộc về bất cứ thứ gì khác.
+Endpoint REST cũng theo đúng quy tắc sở hữu này — `modules/auth/data/lib/src/utils/auth_api_constants.dart` chứa `AuthApiConstants`, vì những endpoint đó thuộc về auth và không thuộc về bất cứ thứ gì khác.
 
 ---
 
@@ -340,7 +340,7 @@ class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
   final FacebookAuth _facebookAuth;
 ```
 
-Các singleton SDK được bind một lần duy nhất trong [`packages/data/auth/lib/di/register_module.dart`](../../../packages/data/auth/lib/di/register_module.dart):
+Các singleton SDK được bind một lần duy nhất trong [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart):
 
 ```dart
 @module
@@ -434,7 +434,7 @@ Checklist:
 Sau đó:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/data/<name>/lib
+dart tools/barrel_generator/generate.dart modules/*/data/<name>/lib
 dart run build_runner build -d --workspace
 ```
 

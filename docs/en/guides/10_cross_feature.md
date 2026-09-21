@@ -110,7 +110,7 @@ until the next change, so it reads `currentUser` for the state at subscription t
 ### Step 2 — concrete implementation in the owning feature
 
 Real code from
-[`packages/features/auth/lib/src/services/auth_status_stream_impl.dart`](../../../packages/features/auth/lib/src/services/auth_status_stream_impl.dart):
+[`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
 
 ```dart
 /// Implementation of [IAuthStatusStream] provided by `feature_auth`.
@@ -136,7 +136,7 @@ class AuthStatusStreamImpl implements IAuthStatusStream {
 ### Step 3 — bind the interface to that same instance
 
 Real code from
-[`packages/features/auth/lib/di/module.dart`](../../../packages/features/auth/lib/di/module.dart):
+[`modules/auth/feature/lib/di/module.dart`](../../../modules/auth/feature/lib/di/module.dart):
 
 ```dart
 @InjectableInit.microPackage()
@@ -157,7 +157,7 @@ for everyone else. Owner writes, consumers read.
 ### Step 4 — consume from another feature
 
 Real code from
-[`packages/features/home/lib/src/bloc/home_profile_bloc.dart`](../../../packages/features/home/lib/src/bloc/home_profile_bloc.dart):
+[`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`](../../../modules/home/feature/lib/src/bloc/home_profile_bloc.dart):
 
 ```dart
 @injectable
@@ -260,7 +260,7 @@ abstract class IAuthActionHandler {
 ```
 
 The implementation — real code from
-[`packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart`](../../../packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart):
+[`modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart`](../../../modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';

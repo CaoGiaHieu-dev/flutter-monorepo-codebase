@@ -304,7 +304,7 @@ sh "#{prefix}dart pub global activate flutterfire_cli"
 sh "#{prefix}dart pub global activate flutter_gen"
 sh "#{prefix}flutter clean"
 sh "#{prefix}flutter pub get"
-# ...then flutter gen-l10n for every packages/**/l10n.yaml
+# ...then flutter gen-l10n for every every l10n.yaml in the tree
 sh "#{prefix}dart run build_runner build -d --workspace"
 ```
 

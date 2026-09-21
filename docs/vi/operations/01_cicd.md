@@ -70,7 +70,7 @@ Job chạy trên `macos-latest` dù chỉ build Android. Runner macOS bị tính
 
 Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code_review.dart`) rồi trả kết quả về pull request.
 
-**Kích hoạt**: pull request vào `main` / `develop` / `master` có đụng `app/lib/**/*.dart` hoặc `packages/**/*.dart` (trừ file generated), cộng thêm chạy tay với bộ chọn phạm vi (`changed` / `all` / `domain` / `data` / `presentation`) và ngôn ngữ báo cáo (`en` / `vi` / `ja` / `ko` / `zh`).
+**Kích hoạt**: pull request vào `main` / `develop` / `master` có đụng `app/lib/**/*.dart`, `modules/**/*.dart` hoặc `platform/**/*.dart` (trừ file generated), cộng thêm chạy tay với bộ chọn phạm vi (`changed` / `all` / `domain` / `data` / `presentation`) và ngôn ngữ báo cáo (`en` / `vi` / `ja` / `ko` / `zh`).
 
 **Nó làm gì**: lấy danh sách file thay đổi bằng `tj-actions/changed-files`, chạy reviewer, upload báo cáo Markdown làm artifact (giữ 30 ngày), rồi phân tích báo cáo đó và đăng **comment inline đúng dòng** khi dòng đó nằm trong diff của PR. Phát hiện nằm ngoài diff được gom thành comment riêng theo từng file.
 
@@ -142,13 +142,13 @@ Các task build và distribute cho iOS có mặt nhưng đã bị comment toàn 
 |:--|:---|:---|:---|
 | 1 | Luật kiến trúc | `dart tools/arch_check/check.dart` | có |
 | 2 | Phân tích tĩnh | `flutter analyze` | có |
-| 3 | Test theo từng package | `flutter test` trong mỗi `packages/*/*/test` | có |
+| 3 | Test theo từng package | `flutter test` trong mỗi `modules/*/*/test` | có |
 | 4 | Lệch catalog version | `dart tools/dependency_sync.dart --check` | có |
 | — | Audit dependency thừa | `dart tools/unused_checker/check_unused_packages.dart` | không (chỉ cảnh báo) |
 
 Gate 1 chạy đầu tiên là có chủ đích: nó chỉ đọc import và pubspec, không cần codegen, xong trong khoảng 200 ms — nên lỗi phân tầng fail sau vài giây thay vì sau cả chu kỳ analyze và test. Nó cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
 
-Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm ở `packages/<layer>/<pkg>/test/`, chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
+Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm ở `modules/<module>/<layer>/test/`, chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
 
 > [!IMPORTANT]
 > `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Chuyển một type sang package khác là đủ để một file `.freezed.dart` tham chiếu tới symbol nó không thấy được: analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.

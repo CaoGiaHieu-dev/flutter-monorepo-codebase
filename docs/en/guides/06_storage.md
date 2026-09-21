@@ -150,7 +150,7 @@ Three steps. The worked example is the auth token, which really exists in the re
 Never in `core_common`, never in `core_storage`.
 
 ```dart
-// packages/data/auth/lib/src/utils/auth_storage_keys.dart
+// modules/auth/data/lib/src/utils/auth_storage_keys.dart
 /// Physical storage keys owned exclusively by `feature_auth`'s data layer.
 ///
 /// Package-internal by convention — no other package's pubspec declares a
@@ -172,7 +172,7 @@ Conventions: private constructor, `UPPER_SNAKE_CASE`, one class per owning packa
 Inject `StorageManager`, pick the backend, point at your key:
 
 ```dart
-// packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart
+// modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart
 @lazySingleton
 class AuthLocalDataSource {
   AuthLocalDataSource(this._storageManager);

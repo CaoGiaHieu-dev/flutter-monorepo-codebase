@@ -356,7 +356,7 @@ Pin **at least two** keys — the leaf plus a backup — so certificate rotation
 ## 6. Declaring an API service with Retrofit
 
 ```dart
-// packages/data/auth/lib/src/data_sources/remote/auth_remote_data_source.dart
+// modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
 @RestApi()
 abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
@@ -380,7 +380,7 @@ Steps: declare the abstract class → `part 'x.g.dart';` → run `dart run build
 ### Endpoints belong to the owning package
 
 ```dart
-// packages/data/auth/lib/src/utils/auth_api_constants.dart
+// modules/auth/data/lib/src/utils/auth_api_constants.dart
 class AuthApiConstants {
   AuthApiConstants._();
 
@@ -400,7 +400,7 @@ Endpoint constants live with the package that owns them, never in `core_common` 
 `BaseEntity<T>` wraps a standard server response:
 
 ```dart
-// packages/domain/core/lib/src/entities/base/base_entity.dart
+// platform/domain_core/lib/src/entities/base/base_entity.dart
 const factory BaseEntity({
   @JsonKey(name: 'statusCode') @Default(200) int statusCode,
   @JsonKey(name: 'data') T? data,
@@ -414,7 +414,7 @@ bool get hasError => !isSuccess;
 `PaginatedEntity<T>` carries the page plus metadata:
 
 ```dart
-// packages/domain/core/lib/src/entities/base/paginate_entity.dart
+// platform/domain_core/lib/src/entities/base/paginate_entity.dart
 typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
 
 const factory PaginatedEntity({
@@ -428,7 +428,7 @@ const factory PaginatedEntity({
 `BaseRequest<T>` is the paging request builder:
 
 ```dart
-// packages/data/core/lib/src/models/base_request.dart
+// platform/data_core/lib/src/models/base_request.dart
 const factory BaseRequest({
   @JsonKey(name: 'page') @Default(1) int page,
   @JsonKey(name: 'pageSize') @Default(25) int pageSize,

@@ -6,7 +6,7 @@ This file contains the rules for architectural design, naming conventions, depen
 
 ## 🏗️ 1. Monorepo Directory Layout
 
-This monorepo uses **Pub Workspaces** and is divided into independent physical layers under the `packages/` directory:
+This monorepo uses **Pub Workspaces** and is divided into two top-level territories: `platform/` (infrastructure, owned by the infra team) and `modules/` (one vertical slice per bounded context, one owner each):
 
 - **`app/`**: Host App Shell. Contains startup (`main.dart`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), and centralized DI (`injection.dart`).
 - **`platform/`**: Infrastructure and utility packages shared across the project:
@@ -23,13 +23,13 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
   - `core_notifications`: Push notification management module. Owns its channel constants at `lib/src/utils/notification_constants.dart`.
   - `provider_state_management`: Provider state management base classes (`BaseProvider`, `executeOperation`, `BaseViewWidget`, `ViewStateModel`), plus the in-core `DefaultLoadingWidget` / `DefaultEmptyWidget` fallbacks.
   - `bloc_state_management`: BLoC state management base classes (`BaseBloc`, `BlocViewState<T>`; `BaseCubit` only when events are unnecessary). **`BaseBloc`/`BaseCubit` are extension points only** — there is no BLoC equivalent of `executeOperation`, so BLoC handlers unwrap `Result` / map `AppFailure` / set loading by hand.
-- **`packages/domain/*` (Micro-packages)**: Business logic core. **MUST be pure Dart (100% decoupled from Flutter UI, Dio, Retrofit, or any platform-specific dependencies)**. Current micro-packages:
+- **`modules/*/domain` (Micro-packages)**: Business logic core. **MUST be pure Dart (100% decoupled from Flutter UI, Dio, Retrofit, or any platform-specific dependencies)**. Current micro-packages:
   - `domain_core`: Defines `Result<T>`, `BaseEntity<T>`, and shared primitive types.
   - `domain_auth`: Entities, use cases, and repository interfaces for authentication.
-- **`packages/data/*` (Micro-packages)**: Data access layer (remotes, local caching, models/DTOs). Depends on `domain` packages. Current micro-packages:
+- **`modules/*/data` (Micro-packages)**: Data access layer (remotes, local caching, models/DTOs). Depends on `domain` packages. Current micro-packages:
   - `data_core`: `IBaseRepository` with `execute()` and `executeSync()` wrappers to automatically handle error conversion.
   - `data_auth`: Models/DTOs, Remote DataSources (Retrofit), and RepositoryImpl for authentication.
-- **`packages/features/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `platform/ui_kit` as `core_ui_kit`.
+- **`modules/*/feature/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `platform/ui_kit` as `core_ui_kit`.
   - Feature packages (e.g., `feature_onboarding`, `feature_auth`, `feature_dashboard`, `feature_home`, `feature_settings`, `feature_splash`):
     - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
     - **ABSOLUTELY FORBIDDEN** to directly depend on the `data` layer or on **any** other feature package. There is no exception: shared widgets come from `core_ui_kit`, which is core, not a feature.
@@ -59,13 +59,13 @@ This monorepo uses **Pub Workspaces** and is divided into independent physical l
    - If UI-related classes (such as colors or image assets) are needed, translate them into primitive data types or enums declared **inside the domain package**.
    - Verify:
      ```bash
-     grep -rn "package:flutter" packages/domain/*/lib   # must print nothing
+     grep -rn "package:flutter" modules/*/domain/lib   # must print nothing
      ```
 2. **Data Layer**:
    - Data source directories must be named `data_sources/` (snake_case), NOT `datasources/`.
    - Categorize into `data_sources/remote/` (Retrofit) and `data_sources/local/` (Storage/DB).
    - RepositoryImpl classes should inherit from `BaseRepository` in `data_core` and use the helper methods `execute()` or `executeSync()` wrappers to automatically handle error conversion. API calls are not required to return `BaseEntity`; when the payload is wrapped, unwrap and map it via the `mapper` parameter.
-   - **DataSources return Models, never Entities**, and never leak a generated type. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `packages/data/core/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
+   - **DataSources return Models, never Entities**, and never leak a generated type. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `platform/data_core/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
    - Error handling must use `ErrorHandler.handleError(e)` from `core_common`. **DO NOT** invent an `AppFailure.fromException()` — no such constructor exists.
    - ⚠️ Known gap: `ErrorHandler` has no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch, so every Firebase error collapses to `ServerFailure(code: 9999)` (`"Unknown error occurred"` in release). Add a branch before relying on Firebase error codes in UI.
 3. **Feature Module Boundary**:
@@ -172,7 +172,7 @@ All files and class names must strictly adhere to the following naming conventio
 
 - When creating, renaming, or deleting Dart files under `lib/` in any sub-package, run the barrel generator script to update exports:
   ```bash
-  dart tools/barrel_generator/generate.dart packages/<layer>/<package_name>/lib
+  dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
   ```
 - ⚠️ **The generator DELETES every hand-written `export '...';` line in a barrel.** It strips all lines starting with `export '` and re-emits its own sorted list (`tools/barrel_generator/generate.dart`, the `line.trim().startsWith("export '")` filter).
   - **ABSOLUTELY FORBIDDEN** to hand-add an `export` to a barrel file — it will silently vanish on the next run.
@@ -242,7 +242,7 @@ dart tools/module_generator/generate.dart 4 <name>
 ## 🌍 11. Strict Localization (Translation) Enforcement
 
 - If the app supports localization, **ALL user-facing text** (including hardcoded UI text, toast messages, and server error messages) **MUST be translated** using the app's standard localization infrastructure.
-- **Feature-Scoped Translations**: Each feature MUST define its own translation `.arb` files inside its `assets/language/` directory (e.g., `packages/features/auth/assets/language/en.arb`).
+- **Feature-Scoped Translations**: Each feature MUST define its own translation `.arb` files inside its `assets/language/` directory (e.g., `modules/auth/feature/assets/language/en.arb`).
 - **Global Assets & Shared UI Only**: The `core_base_ui` package is strictly reserved ONLY for globally shared assets and global fallback strings. Purely reusable UI packages (like `core_ui_kit`) **MUST NOT** define their own translation `.arb` files. They must use translations exported from `core_base_ui`.
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
@@ -338,7 +338,7 @@ dart tools/module_generator/generate.dart 4 <name>
 ## 🖼️ 15. Feature-Scoped Assets & Resources
 
 - **Decentralized Assets**: All UI assets (images, svgs, animations, Lottie) that are specific to a feature MUST be placed in that feature's own `assets/` folder — the shipped example is
-  `packages/features/auth/assets/language/`, and images belong beside it in an `assets/images/`
+  `modules/auth/feature/assets/language/`, and images belong beside it in an `assets/images/`
   folder the feature creates when it first needs one.
 - **Global Assets Only**: The `core_base_ui` package is strictly reserved ONLY for globally shared assets (like the app logo, global icons, or global background patterns) and global fallback strings.
 - **Do not** dump all images into `core_base_ui` as it creates massive coupling. Feature modules should be standalone and encapsulate their own assets.
@@ -347,14 +347,14 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ## 🗂️ 16. Mandatory `utils/` Folder for Package Constants
 
-- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `packages/features/auth/lib/src/utils/`, `app/lib/di/utils/`.
+- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `app/lib/di/utils/`.
 - **ABSOLUTELY FORBIDDEN** to create a shared cross-domain constants file that many packages import. A constant belongs to exactly one owner.
 - `core_common/lib/src/utils/` is reserved for constants that are **genuinely global** — today only `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
 - **Precedent — constants that were evicted from `core_common`,** so nobody re-adds them:
   | Was | Now | Why |
   | :--- | :--- | :--- |
   | `StorageKeyConstants` | deleted → per-owner `utils/` keys (§ 17) | held every domain's storage keys |
-  | `ApiConstants` | `AuthApiConstants` in `packages/data/auth/lib/src/utils/` | held only auth endpoints |
+  | `ApiConstants` | `AuthApiConstants` in `modules/auth/data/lib/src/utils/` | held only auth endpoints |
   | `NotificationConstants` | `platform/notifications/lib/src/utils/` | belongs to the notifications package |
   | `AnalyticsConstants`, `SocketConstants`, `FirebaseRemoteConfigConstants` | deleted | zero references; dead scaffolding |
 - **Approved exception — design tokens.** `core_base_ui/lib/src/styles/` (`AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows`) stays in `styles/`, **not** `utils/`. It is the design system's public API; `styles/` names that intent, while `utils/` reads as miscellany. **Do not "fix" this in a future audit.**
@@ -438,7 +438,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
    - Real bug: `app_material_wrapper.dart` used `getIt.getAll<IFeatureLocalization>()`; with no feature contributing one, `MaterialApp` construction threw and the app died at boot.
    - Same rule for single instances: `getItOrNull<T>()` + a fallback, never bare `getIt<T>()`, whenever `T` is owned by a removable feature.
    - **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R8** derives every `core_di`
-     contract whose only implementer lives in `packages/features/*`, then blocks a throwing
+     contract whose only implementer lives in `modules/*/feature`, then blocks a throwing
      `getIt<T>()` / `getAll<T>()` against one. Contracts implemented in the app shell
      (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; the owning
      feature is exempt from its own contract. `flutter analyze` cannot see this class of bug —
@@ -466,7 +466,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 `core_database` provides the **mechanism only** and owns no database, table or DAO — its generated module body is literally `init(gh) {}`.
 
 - **Why**: Drift resolves `@DriftDatabase(tables: [...], daos: [...])` at compile time and a DAO must be `part of` its database library. A single shared `AppDatabase` therefore forces whichever package declares it to own **every** table — reproducing the god-object that § 16/§ 17 exist to prevent.
-- **Rule**: a package that needs relational storage declares **its own database** beside its own tables and DAO. Reference: `packages/data/core/lib/src/database/` holds `CacheDatabase`, `tables/cache_entries_table.dart` and `dao/cache_entries_dao.dart`.
+- **Rule**: a package that needs relational storage declares **its own database** beside its own tables and DAO. Reference: `platform/data_core/lib/src/database/` holds `CacheDatabase`, `tables/cache_entries_table.dart` and `dao/cache_entries_dao.dart`.
 - `core_database` supplies: `IDatabaseHandle<TDb extends GeneratedDatabase>` (hand a package only the accessor it asks for, plus `transaction`), `IDatabaseMigration` (a package contributes its own upgrade/downgrade steps), `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`.
 - **Accepted trade-off**: SQL cannot join across package boundaries. That is deliberate — crossing a bounded context belongs at the repository layer, not in a query.
 - **Removability**: deleting a package deletes its database with it. A database must open normally when **no** `IDatabaseMigration` is registered.
@@ -476,7 +476,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 
 ## 🔌 22. Any Feature Must Be Removable
 
-Deleting any `packages/features/*` package must leave the app compiling and booting.
+Deleting any `modules/*/feature` package must leave the app compiling and booting.
 
 - **The app shell's only intentional hard reference to features is `app/lib/di/injection.dart`** — as the composition root it must name what it composes. Every *other* shell file resolves features through `core_di` contracts.
 - To drop a feature, delete its entry from `app/app_manifest.yaml` and run:
@@ -497,7 +497,7 @@ Deleting any `packages/features/*` package must leave the app compiling and boot
 
 - Contracts in `core_di` MUST stay state-management agnostic: `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature can return `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other.
 - Prefer a plain Dart 3 `sealed class` over Freezed for `core_di` contracts (see `AuthSessionFailure`) — `core_di` runs no codegen, and adding a `part` would make every consumer wait on `build_runner`.
-- The shared widget library is **not** a removable feature: it lives at `platform/ui_kit` as `core_ui_kit`, so `packages/features/` contains only genuinely removable product surfaces.
+- The shared widget library is **not** a removable feature: it lives at `platform/ui_kit` as `core_ui_kit`, so `modules/*/feature/` contains only genuinely removable product surfaces.
 
 ---
 
@@ -511,7 +511,7 @@ Deleting any `packages/features/*` package must leave the app compiling and boot
   ```bash
   dart run build_runner build -d --workspace
   flutter analyze
-  cd packages/<layer>/<pkg> && flutter test      # per package
+  cd modules/<module>/<layer> && flutter test      # per package
   cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
   ```
   The build step is **not optional** — it is the only gate that sees generated code.

@@ -13,9 +13,9 @@ Dự án theo **Clean Architecture**: phụ thuộc luôn hướng *vào trong*,
 ```mermaid
 graph TD
     App["<b>App Shell</b><br/><code>app/</code><br/><i>điểm lắp ráp</i>"]
-    Feature["<b>Feature</b><br/><code>packages/features/*</code><br/><i>UI + state</i>"]
-    Domain["<b>Domain</b><br/><code>packages/domain/*</code><br/><i>nghiệp vụ Dart thuần</i>"]
-    Data["<b>Data</b><br/><code>packages/data/*</code><br/><i>repository impl, DTO</i>"]
+    Feature["<b>Feature</b><br/><code>modules/*/feature</code><br/><i>UI + state</i>"]
+    Domain["<b>Domain</b><br/><code>modules/*/domain</code><br/><i>nghiệp vụ Dart thuần</i>"]
+    Data["<b>Data</b><br/><code>modules/*/data</code><br/><i>repository impl, DTO</i>"]
     Core["<b>Core</b><br/><code>platform/*</code><br/><i>hạ tầng</i>"]
 
     Feature --> Domain
@@ -34,7 +34,7 @@ graph TD
 Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên **không có**: không gì trỏ ra khỏi Domain, và không gì trỏ từ Core lên Feature hay Data.
 
 > [!IMPORTANT]
-> **Core tuyệt đối không được phụ thuộc feature.** `platform/*` nằm dưới cùng; nếu nó với ngược lên `packages/features/*` thì đồ thị phụ thuộc có chu trình, và package đó không còn tách ra hay test độc lập được nữa.
+> **Core tuyệt đối không được phụ thuộc feature.** `platform/*` nằm dưới cùng; nếu nó với ngược lên `modules/*/feature` thì đồ thị phụ thuộc có chu trình, và package đó không còn tách ra hay test độc lập được nữa.
 >
 > Lập luận đó áp dụng y hệt bên trong vòng core. Một lớp nền state-management cần widget placeholder cho trạng thái rỗng/đang tải, và `core_ui_kit` đã có sẵn bản có nhận diện thương hiệu — nhưng `core_ui_kit` lại phụ thuộc `provider_state_management`, nên mượn ngược lại là khép một chu trình. Vì vậy `provider_state_management` tự mang
 > [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../platform/provider_state_management/lib/src/base_view/default_state_widgets.dart) tối giản của riêng nó. Core cần widget thì core tự định nghĩa.
@@ -46,17 +46,17 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 | Tầng | Đường dẫn | Trách nhiệm | Được import | **Cấm** import |
 |:--|:--|:--|:--|:--|
 | **App Shell** | `app/` | Điểm khởi động, flavor, lắp ráp DI và router | tất cả | — |
-| **Feature** | `packages/features/*` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, một package state-management | `data_*`, feature package khác |
-| **Domain** | `packages/domain/*` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
-| **Data** | `packages/data/*` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `packages/features/*` |
-| **Core** | `platform/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | `core_*` khác, cộng ba ngoại lệ bên dưới | `packages/features/*`, `packages/data/*` |
+| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, một package state-management | `data_*`, feature package khác |
+| **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
+| **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |
+| **Core** | `platform/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | `core_*` khác, cộng ba ngoại lệ bên dưới | `modules/*/feature`, `modules/*/data` |
 
 Mỗi tầng có trang riêng:
 [Core](02_core.md) · [Domain](03_domain.md) · [Data](04_data.md) · [Feature](05_features.md) · [App Shell](06_app_shell.md).
 
 ### Yêu cầu Dart thuần của tầng Domain
 
-`packages/domain/*` là **Dart thuần 100%**. Không `package:flutter/...`, không `package:dio/...`, không `package:drift/...`. Chính điều này khiến tầng nghiệp vụ unit-test được mà không cần thiết bị hay cây widget.
+`modules/*/domain` là **Dart thuần 100%**. Không `package:flutter/...`, không `package:dio/...`, không `package:drift/...`. Chính điều này khiến tầng nghiệp vụ unit-test được mà không cần thiết bị hay cây widget.
 
 Khi domain cần thứ *trông giống* UI — màu sắc, icon, kích thước — phải quy về kiểu nguyên thuỷ hoặc enum khai ngay trong chính package domain đó, còn tầng feature mới quyết định vẽ nó ra sao.
 
@@ -118,4 +118,4 @@ Mọi package đều là thành viên trong danh sách `workspace:` của [`pubs
 | Tra luật trước khi mở PR | [`../reference/01_rules.md`](../reference/01_rules.md) · [`../reference/04_review_checklist.md`](../reference/04_review_checklist.md) |
 
 > [!NOTE]
-> Các package trong `packages/domain/*`, `packages/data/*` và `packages/features/*` (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language) là **code mẫu**. Chúng minh hoạ cách đấu nối, không phải nghiệp vụ thật — hãy copy hình dạng rồi thay hoặc xoá.
+> Các package trong `modules/*/domain`, `modules/*/data` và `modules/*/feature` (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language) là **code mẫu**. Chúng minh hoạ cách đấu nối, không phải nghiệp vụ thật — hãy copy hình dạng rồi thay hoặc xoá.

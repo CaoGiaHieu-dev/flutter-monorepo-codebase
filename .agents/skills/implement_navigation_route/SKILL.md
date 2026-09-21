@@ -30,7 +30,7 @@ abstract class ProfileNavigator {
 Route paths are constants, so they follow the repo-wide rule: every package keeps its
 constants in `lib/src/utils/`. **Not** in `routing/` — they were moved.
 
-`packages/features/home/lib/src/utils/home_path.dart`:
+`modules/home/feature/lib/src/utils/home_path.dart`:
 ```dart
 class HomePath {
   HomePath._();
@@ -82,7 +82,7 @@ Pick **one** contribution type:
 3. **Never** append `$fooRoute` into `app_router.dart` manually — host already uses `getAllOrEmpty` / `getItOrNull`.
 4. Codegen + **hot restart**:
    ```bash
-   dart tools/barrel_generator/generate.dart packages/features/profile/lib
+   dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    dart run build_runner build -d --workspace
    ```
 

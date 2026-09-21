@@ -5,7 +5,7 @@ on:
     branches: [main, develop, master]
     paths:
       - "app/lib/**/*.dart"
-      - "packages/**/*.dart"
+      - "modules/**/*.dart"
       - "platform/**/*.dart"
       - "!**/*.g.dart"
       - "!**/*.freezed.dart"
@@ -68,10 +68,10 @@ jobs:
         with:
           files: |
             app/lib/**/*.dart
-            packages/**/*.dart
+            modules/**/*.dart
             platform/**/*.dart
             app/test/**/*.dart
-            packages/**/test/**/*.dart
+            modules/**/test/**/*.dart
             platform/**/test/**/*.dart
             !**/*.g.dart
             !**/*.freezed.dart
@@ -104,9 +104,9 @@ jobs:
           if [ "$SCOPE" = "all" ]; then
             dart tools/code_review/code_review.dart --all --language "$LANG" --format markdown
           elif [ "$SCOPE" = "domain" ]; then
-            dart tools/code_review/code_review.dart --folder packages/domain --language "$LANG" --format markdown
+            dart tools/code_review/code_review.dart --folder modules --language "$LANG" --format markdown
           elif [ "$SCOPE" = "data" ]; then
-            dart tools/code_review/code_review.dart --folder packages/data --language "$LANG" --format markdown
+            dart tools/code_review/code_review.dart --folder modules --language "$LANG" --format markdown
           elif [ "$SCOPE" = "platform" ]; then
             dart tools/code_review/code_review.dart --folder platform --language "$LANG" --format markdown
           elif [ "$SCOPE" = "presentation" ]; then

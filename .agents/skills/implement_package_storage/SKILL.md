@@ -21,7 +21,7 @@ Before writing code, answer: **which package owns this value?**
 
 | Value | Owner | Keys file |
 | :--- | :--- | :--- |
-| Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `packages/data/auth/lib/src/utils/auth_storage_keys.dart` |
+| Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
 | Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `app/lib/di/utils/theme_storage_keys.dart` |
 | Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `app/lib/di/utils/language_storage_keys.dart` |
 | Onboarding-seen boot flag | app shell → `AppBootStorage` | `app/lib/di/utils/app_boot_storage_keys.dart` |
@@ -117,7 +117,7 @@ dart run build_runner build -d --workspace
 If you created a new file, refresh the barrels first:
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/<layer>/<package>/lib
+dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 ```
 
 ### Step 5: Expose it — through the owner's own API

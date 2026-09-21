@@ -21,7 +21,7 @@ The five positional arguments are read by
 | Position | Value | Meaning |
 | :-- | :-- | :-- |
 | 1 | `1` | Module type — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
-| 2 | `profile` | Module name (snake_case). Package becomes `feature_profile` at `packages/features/profile` |
+| 2 | `profile` | Module name (snake_case). Package becomes `feature_profile` at `modules/profile/feature` |
 | 3 | `""` | Custom directory — only used when type is `5`. Pass `""` for types 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` none |
 | 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` none |
@@ -29,7 +29,7 @@ The five positional arguments are read by
 Run it with no arguments to get an interactive prompt instead.
 
 > [!CAUTION]
-> If `packages/features/profile` already exists the tool asks to overwrite and **deletes the
+> If `modules/profile/feature` already exists the tool asks to overwrite and **deletes the
 > directory recursively** on `y`. Check the path before answering.
 
 ### Choosing argument 5 — this decides your routing shape
@@ -77,7 +77,7 @@ Run it with no arguments to get an interactive prompt instead.
 The generator produces this tree in full.
 
 ```
-packages/features/profile/
+modules/profile/feature/
 ├── assets/language/          en.arb, vi.arb  — feature-scoped translations
 ├── l10n.yaml                 gen-l10n config (output class, output dir)
 ├── lib/
@@ -104,7 +104,7 @@ packages/features/profile/
 Create your path constants first — everything else references them:
 
 ```dart
-// packages/features/profile/lib/src/utils/profile_path.dart
+// modules/profile/feature/lib/src/utils/profile_path.dart
 class ProfilePath {
   ProfilePath._();
 
@@ -112,7 +112,7 @@ class ProfilePath {
 }
 ```
 
-This mirrors [`packages/features/home/lib/src/utils/home_path.dart`](../../../packages/features/home/lib/src/utils/home_path.dart)
+This mirrors [`modules/home/feature/lib/src/utils/home_path.dart`](../../../modules/home/feature/lib/src/utils/home_path.dart)
 verbatim.
 
 ---
@@ -122,7 +122,7 @@ verbatim.
 ### Option A — a bottom-nav tab (`INavDestinationModule`)
 
 Two files. First the routes themselves — real code from
-[`packages/features/home/lib/src/routing/home_route_module.dart`](../../../packages/features/home/lib/src/routing/home_route_module.dart):
+[`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
 
 ```dart
 import 'package:core_common/core_common.dart';
@@ -162,7 +162,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 ```
 
 Then the DI contribution — real code from
-[`home_nav_destination.dart`](../../../packages/features/home/lib/src/routing/home_nav_destination.dart):
+[`home_nav_destination.dart`](../../../modules/home/feature/lib/src/routing/home_nav_destination.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -200,7 +200,7 @@ sorts by it to build the `StatefulShellBranch` list.
 ### Option B — a pushed stack (`IFeatureRouteModule`)
 
 Much smaller. Real code from
-[`packages/features/auth/lib/src/routing/auth_feature_route_module.dart`](../../../packages/features/auth/lib/src/routing/auth_feature_route_module.dart):
+[`modules/auth/feature/lib/src/routing/auth_feature_route_module.dart`](../../../modules/auth/feature/lib/src/routing/auth_feature_route_module.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -262,8 +262,8 @@ Registering a screen controller as a singleton leaks it for the process lifetime
 
 Feature translations live in the feature. Nothing is added to the app shell.
 
-`packages/features/profile/l10n.yaml` — copy the shape from
-[`packages/features/home/l10n.yaml`](../../../packages/features/home/l10n.yaml):
+`modules/profile/feature/l10n.yaml` — copy the shape from
+[`modules/home/feature/l10n.yaml`](../../../modules/home/feature/l10n.yaml):
 
 ```yaml
 arb-dir: assets/language
@@ -286,7 +286,7 @@ output-dir: lib/src/gen/language
 ```
 
 Expose it through an extension — real code from
-[`l10n_home_extension.dart`](../../../packages/features/home/lib/src/extensions/l10n_home_extension.dart):
+[`l10n_home_extension.dart`](../../../modules/home/feature/lib/src/extensions/l10n_home_extension.dart):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -301,7 +301,7 @@ extension ContextHomeExtension on BuildContext {
 ```
 
 Register the delegate through DI — real code from
-[`packages/features/home/lib/di/localization.dart`](../../../packages/features/home/lib/di/localization.dart):
+[`modules/home/feature/lib/di/localization.dart`](../../../modules/home/feature/lib/di/localization.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -323,7 +323,7 @@ The root app collects every registered `IFeatureLocalization`, so **do not edit 
 Regenerate after editing any `.arb`:
 
 ```bash
-cd packages/features/profile && flutter gen-l10n
+cd modules/profile/feature && flutter gen-l10n
 ```
 
 > [!WARNING]
@@ -349,7 +349,7 @@ That is exactly the shape of
 [`home_navigator.dart`](../../../platform/di/lib/src/navigators/home_navigator.dart).
 
 Implement it inside your own `routing/` — real code from
-[`home_navigator_impl.dart`](../../../packages/features/home/lib/src/routing/home_navigator_impl.dart):
+[`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
@@ -374,7 +374,7 @@ from `NavigatorKeys`.
 ## 8. Finish and verify
 
 ```bash
-dart tools/barrel_generator/generate.dart packages/features/profile/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 dart run build_runner build -d --workspace
 flutter analyze
 ```
@@ -404,7 +404,7 @@ The app must keep running when any feature is deleted. Remove in this order:
 1. Its `ExternalModule(...)` entry **and** the matching import in `app/lib/di/injection.dart`
 2. Its entry in `app/pubspec.yaml`
 3. Its path in the root `pubspec.yaml` `workspace:` list
-4. The `packages/features/<name>/` directory
+4. The `modules/*/feature/<name>/` directory
 5. `flutter pub get && dart run build_runner build -d --workspace`
 
 **Let the tool do it.** `remove_sample.dart` performs all five steps and, more importantly,

@@ -18,7 +18,7 @@ flutter analyze                                      # phân tích tĩnh
 ```
 
 - [ ] Cả bốn lệnh đều sạch
-- [ ] Test pass ở mọi package bị đụng — `cd packages/<layer>/<pkg> && flutter test`
+- [ ] Test pass ở mọi package bị đụng — `cd modules/<module>/<layer> && flutter test`
 - [ ] Không file nào trong `lib/` bị sửa tay nếu nó kết thúc bằng `.g.dart`, `.freezed.dart`, `.module.dart` hoặc `.config.dart`
 - [ ] Đã chạy lại barrel generator nếu có file được thêm, đổi tên hoặc xoá
 
@@ -53,7 +53,7 @@ dart tools/unused_checker/check_unused_packages.dart
 
 ## 3. Tầng Domain
 
-- [ ] Không có import `flutter` / `dio` / `retrofit` trong `packages/domain/*`
+- [ ] Không có import `flutter` / `dio` / `retrofit` trong `modules/*/domain`
 - [ ] Không `pubspec.yaml` domain nào khai Flutter SDK
 - [ ] Entity dùng `freezed` với private constructor `const Class._()`
 - [ ] Mỗi use case làm đúng một việc và trả `Result<T>`
@@ -62,7 +62,7 @@ dart tools/unused_checker/check_unused_packages.dart
 **Kiểm chứng**
 
 ```bash
-grep -rn "package:flutter" packages/domain/*/lib   # phải rỗng
+grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 ```
 
 ---

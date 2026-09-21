@@ -82,7 +82,7 @@ Removability is the property the whole design rests on, and it was held only by 
 which had already leaked once, in the template's own sample code.
 
 - `tools/arch_check/check.dart`: added rule **R8**. It derives the set of `core_di` contracts
-  implemented *only* by a `packages/features/*` package, then blocks any `getIt<T>()` /
+  implemented *only* by a `modules/*/feature` package, then blocks any `getIt<T>()` /
   `getAll<T>()` against one. The owning feature is exempt: if it is in the build, so is its
   registration.
 - Fixed the single violation: `feature_settings` resolved `IAuthActionHandler` with a throwing
@@ -118,7 +118,7 @@ and removing either module leaves the app building and booting.
 `core_di` becomes generic-only. Per-module contracts move to their own package.
 
 - ⏳ **Deferred to step 5.** Physically moving these contracts into
-  `packages/contracts/<module>_contracts/` is a file move; it rides the relayout rather than
+  `modules/<module>/contracts/` is a file move; it rides the relayout rather than
   churning every pubspec twice. `core_di` is already free of any *domain* dependency, which is
   the part that blocked isolation.
 - ✅ **3a — no domain entity in a contract.** `IAuthStatusStream` / `IAuthSessionState` now
@@ -178,7 +178,7 @@ dependencies, not leftovers.
 
 **Gate:** `arch_check` R9 clean. Full verify chain passes.
 
-### Step 6 — Relayout  *(6a done)*
+### Step 6 — Relayout ✅ done
 
 ✅ **6a — the tooling stopped caring where packages live.** Prerequisite, and worth more than
 the move itself:
@@ -194,10 +194,24 @@ the move itself:
 R1, R2 and R3 **silently passed** for it. A guardrail that switches itself off when files move
 is worse than none, because the report still reads clean.
 
-⏳ **6b — the move itself** (`platform/*` → `platform/*`,
-`packages/{domain,data,features}/<x>` → `modules/<x>/{domain,data,feature}`,
-`app/` → `apps/mobile/`) is now a pure `git mv` plus `composer sync`: nothing in the tooling,
-and nothing in any manifest, encodes a directory any more.
+✅ **6b — the move itself.** `packages/core/*` → `platform/*`; `packages/{domain,data,features}/<x>`
+→ `modules/<x>/{domain,data,feature}`; `domain_core` and `data_core` → `platform/`, because a
+layer foundation is framework, not product. `packages/` no longer exists. Every move was a
+`git mv`, so blame and history follow the files.
+
+Package **names** did not change, deliberately. `core_di` lives at `platform/di` and is still
+imported as `package:core_di/...`. The directory tree is what CODEOWNERS matches and what a
+submodule splits on; the package name is the import surface, and renaming it would rewrite
+every import in the repository to buy nothing.
+
+Path dependencies and the root `workspace:` list were **recomputed from where packages actually
+are**, not hand-patched — the same calculation `composer sync` performs, so CI Gate 0 agrees.
+
+⏳ **Still open: `app/` → `apps/mobile/`.** Unlike the rest, that one moves a Flutter project
+root: `android/settings.gradle.kts`, the iOS project, `fastlane/`, the splash and icon configs
+and every `cd app` in CI all resolve relative to it. It is the only part of the relayout whose
+blast radius reaches the native build, so it rides step 7, where a second app forces the
+question anyway.
 
 **Gate:** the app boots with **zero modules** composed. This is the property everything else
 depends on, tested directly.
@@ -307,6 +321,7 @@ Doing neither is the only wrong answer: today it is product code wearing framewo
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
+| 2026-09-21 | 6b | **Relayout complete.** `packages/core/*` → `platform/*` (infra team's ground); `packages/{domain,data,features}/<x>` → `modules/<x>/{domain,data,feature}` (one vertical slice per bounded context); `domain_core` / `data_core` → `platform/`, since layer foundations are framework, not product. `packages/` is gone. All 298 files moved with `git mv`, so history follows. Package **names** unchanged on purpose — the directory tree is what submodules and CODEOWNERS split on, the package name is the import surface. Path deps and the workspace list recomputed from disk, not patched. Two silent failures caught: CI Gate 3's `packages/*/*/` glob would have kept passing while skipping six of eight test suites, and `module_generator`'s pubspec template had hardcoded paths that were **already** wrong before the move (`../../core/core_common` has never existed) — it now resolves every dependency by name. | ⚠️ not run |
 | 2026-09-21 | 2c | **Samples now teach the rules they document.** `splash_page` 107 → 45 lines (107 lines of glassmorphism for a one-line lesson, with two hardcoded English strings beside an *empty* ARB and an unused delegate). `onboarding` and `home` dropped raw `TextStyle(fontSize:)` for `AppTextStyles`, and `context.h(...)` gaps for `AppSpacing`'s `H` variants; `feature_home` no longer depends on `core_responsive`. `settings` stopped using the radius axis for padding. All 26 snake_case ARB keys → lowerCamelCase, because `gen-l10n` copies a key into a getter name and the generated file is excluded from analysis, so nothing ever warned. Convention now written into AGENTS.md, CLAUDE.md and both rules references. | ⚠️ not run |
 | 2026-09-21 | 9 | **Correctness sweep of the nine preceding commits** — no toolchain here, so each refactor was re-checked mechanically instead. Three real breaks found and fixed: `home_page.dart` still read `user.name` after step 3a renamed it to `AuthPrincipal.displayName`; `app_utils.dart` and `download_image.dart` still imported `../enums/app_enums.dart` and `api_status_constants.dart` by relative path after step 4a moved both into `platform_kernel`. Also added the `network_binding_module.dart` export the barrel generator would add on its next run. Clean: 0 dangling relative imports, 0 undeclared package imports, 0 missing l10n keys, 0 stale references to any symbol renamed in steps 2–4. | ⚠️ not run |
 | 2026-09-21 | 9 | **Untracked 163 MB of build output.** 50 files under `app/android/app/build/`, `app/ios/build/` and `tools/build/` were committed — two copies of a 69 MB `kernel_blob.bin` among them. The root ignore said `/build/`, which is anchored to the repo root and so only ever covered Flutter's own output directory inside `app/`; Gradle writes one level deeper. Widened to `build/` at any depth and `git rm --cached`'d the lot. **History still carries the blobs** — every clone pays for them until somebody runs a `git filter-repo` pass, which rewrites shared history and is the repo owner's call. | ⚠️ not run |

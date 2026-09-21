@@ -99,7 +99,7 @@ jobs:
 
       # Gate 3 — tests, per package.
       #
-      # Discovered, not globbed. A pattern like `packages/*/*/` encodes today's
+      # Discovered, not globbed. A pattern like `modules/*/*/` encodes today's
       # directory depth, so the day packages move it keeps passing while
       # testing nothing — the worst failure a gate can have. Any directory
       # holding both a pubspec.yaml and a test/ is a package with tests,

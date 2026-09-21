@@ -55,7 +55,7 @@ class MonorepoHelper {
 
     // Discovery is a recursive scan for `pubspec.yaml`, not a fixed list of
     // directories. The previous version hardcoded `app/`, `packages/core`,
-    // `packages/features`, `packages/data` and `packages/domain`, so moving a
+    // `modules/*/feature`, `modules/*/data` and `modules/*/domain`, so moving a
     // package anywhere else made it invisible — and every consumer of this
     // helper (unused_checker, arch_check) would then report a clean result for
     // a package it had simply stopped looking at.

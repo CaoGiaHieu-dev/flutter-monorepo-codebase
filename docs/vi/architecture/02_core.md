@@ -37,7 +37,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Loại hằng số | Nơi nó thuộc về | Vì sao không phải ở đây |
 |:--|:--|:--|
 | Key storage (`TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | cùng chỗ với class sở hữu giá trị đó — xem [hướng dẫn storage](../guides/06_storage.md) | Liệt kê chung một chỗ thì mọi package đọc và ghi đè được key storage của mọi feature khác. |
-| Endpoint REST (`/user/login`, `/user/register`, `/user/refresh-token`…) | package data sở hữu chúng — [`packages/data/auth/lib/src/utils/auth_api_constants.dart`](../../../packages/data/auth/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
+| Endpoint REST (`/user/login`, `/user/register`, `/user/refresh-token`…) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
 Đúng hai file constants nằm ở đây, và cả hai đều thật sự toàn cục: `ApiStatusConstants` (mã trạng thái HTTP) và `EnvConstants` (giá trị `String.fromEnvironment`). Cả hai đặt trong `src/utils/`, nơi duy nhất package này giữ loại giá trị đó.
@@ -111,7 +111,7 @@ Observer được gỡ trong `dispose()`, và hàm này gắn `@disposeMethod` �
 
 ## 4. `core_ui_kit` — widget dùng lại
 
-Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `platform/ui_kit` để `packages/features/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
+Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `platform/ui_kit` để `modules/*/feature/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
 
 Cấu trúc phẳng (không có `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
@@ -222,7 +222,7 @@ Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước 
 
 Chạy trên isolate nền qua `NativeDatabase.createInBackground`. **Không phụ thuộc package nào khác** trong workspace.
 
-Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng hay DAO nào, và DI module của nó không đăng ký gì cả. Package nào cần lưu dữ liệu quan hệ thì tự khai **database của chính mình** ngay cạnh bảng, DAO và data source của nó, rồi mở database đó bằng các mảnh ghép dưới đây. `CacheDatabase` của `data_core` (`packages/data/core/lib/src/database/`) là bản đấu nối tham chiếu.
+Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng hay DAO nào, và DI module của nó không đăng ký gì cả. Package nào cần lưu dữ liệu quan hệ thì tự khai **database của chính mình** ngay cạnh bảng, DAO và data source của nó, rồi mở database đó bằng các mảnh ghép dưới đây. `CacheDatabase` của `data_core` (`platform/data_core/lib/src/database/`) là bản đấu nối tham chiếu.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
@@ -349,4 +349,4 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `provider_state_management` | `core_common`, `domain_core` *(ngoại lệ đã duyệt)* |
 | `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
 
-Không mũi tên nào trong bảng này trỏ tới `packages/features/*` hay `packages/data/*` — đó là bất biến cần giữ.
+Không mũi tên nào trong bảng này trỏ tới `modules/*/feature` hay `modules/*/data` — đó là bất biến cần giữ.

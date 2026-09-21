@@ -38,7 +38,7 @@ Hai nhánh cùng đăng ký trong DI và sống chung được: `feature_auth` d
 
 ### 2.1 Một controller thật
 
-`packages/features/auth/lib/src/provider/auth_provider.dart`:
+`modules/auth/feature/lib/src/provider/auth_provider.dart`:
 
 ```dart
 @lazySingleton
@@ -216,7 +216,7 @@ Future<void> initialize() async {
 
 ### 3.1 Một BLoC thật
 
-`packages/features/home/lib/src/bloc/home_profile_bloc.dart`:
+`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`:
 
 ```dart
 @injectable
@@ -257,7 +257,7 @@ Chú ý phần override `close()` để huỷ subscription — vì lớp cơ s�
 
 ### 3.2 Quy tắc event Freezed
 
-`packages/features/home/lib/src/bloc/home_profile_event.dart`:
+`modules/home/feature/lib/src/bloc/home_profile_event.dart`:
 
 ```dart
 part of 'home_profile_bloc.dart';
@@ -370,7 +370,7 @@ Future<void> _onStarted(
 > [!CAUTION]
 > **Tuyệt đối không đăng ký controller gắn màn hình là `@singleton` / `@lazySingleton`.** GetIt sẽ giữ instance vĩnh viễn, nên pop màn hình là rò rỉ bộ nhớ và lần vào sau sẽ thấy state cũ.
 
-Controller được khởi tạo **ở route**, không phải trong page. Trích `packages/features/home/lib/src/routing/home_route_module.dart`:
+Controller được khởi tạo **ở route**, không phải trong page. Trích `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {

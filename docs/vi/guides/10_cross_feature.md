@@ -109,7 +109,7 @@ thay đổi kế tiếp, nên nó đọc `currentUser` để lấy state tại t
 ### Bước 2 — implementation cụ thể trong feature sở hữu
 
 Code thật từ
-[`packages/features/auth/lib/src/services/auth_status_stream_impl.dart`](../../../packages/features/auth/lib/src/services/auth_status_stream_impl.dart):
+[`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
 
 ```dart
 /// Implementation of [IAuthStatusStream] provided by `feature_auth`.
@@ -135,7 +135,7 @@ class AuthStatusStreamImpl implements IAuthStatusStream {
 ### Bước 3 — bind interface về đúng instance đó
 
 Code thật từ
-[`packages/features/auth/lib/di/module.dart`](../../../packages/features/auth/lib/di/module.dart):
+[`modules/auth/feature/lib/di/module.dart`](../../../modules/auth/feature/lib/di/module.dart):
 
 ```dart
 @InjectableInit.microPackage()
@@ -156,7 +156,7 @@ bên khác. Bên sở hữu ghi, bên tiêu thụ đọc.
 ### Bước 4 — tiêu thụ từ feature khác
 
 Code thật từ
-[`packages/features/home/lib/src/bloc/home_profile_bloc.dart`](../../../packages/features/home/lib/src/bloc/home_profile_bloc.dart):
+[`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`](../../../modules/home/feature/lib/src/bloc/home_profile_bloc.dart):
 
 ```dart
 @injectable
@@ -260,7 +260,7 @@ abstract class IAuthActionHandler {
 ```
 
 Implementation — code thật từ
-[`packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart`](../../../packages/features/auth/lib/src/handlers/auth_action_handler_impl.dart):
+[`modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart`](../../../modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';

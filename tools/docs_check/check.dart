@@ -34,6 +34,9 @@ const _docRoots = <String>['docs', '.agents', 'README.md', 'CLAUDE.md'];
 const _topLevelDirs = <String>[
   'app/',
   'apps/',
+  // Kept after the relayout on purpose: nothing lives under `packages/`
+  // any more, so a document still pointing there is drift, and leaving
+  // the prefix in this list is what makes the gate say so.
   'packages/',
   'tools/',
   'docs/',

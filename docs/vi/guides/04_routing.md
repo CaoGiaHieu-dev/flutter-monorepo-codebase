@@ -58,7 +58,7 @@ abstract class IFeatureRouteModule {
 }
 ```
 
-Đăng ký trong chính feature sở hữu — `packages/features/onboarding/lib/src/routing/onboarding_feature_route_module.dart`:
+Đăng ký trong chính feature sở hữu — `modules/onboarding/feature/lib/src/routing/onboarding_feature_route_module.dart`:
 
 ```dart
 @LazySingleton(as: IFeatureRouteModule)
@@ -88,7 +88,7 @@ abstract class INavDestinationModule {
 }
 ```
 
-`packages/features/home/lib/src/routing/home_nav_destination.dart`:
+`modules/home/feature/lib/src/routing/home_nav_destination.dart`:
 
 ```dart
 @LazySingleton(as: INavDestinationModule)
@@ -116,7 +116,7 @@ class HomeNavDestination extends INavDestinationModule {
 
 ### 2.3 Dashboard chỉ là chrome
 
-`feature_dashboard` chỉ phụ thuộc `core_di` và `core_common` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`packages/features/dashboard/lib/src/pages/dashboard_page.dart`):
+`feature_dashboard` chỉ phụ thuộc `core_di` và `core_common` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
 
 ```dart
 final tabs = getAllOrEmpty<INavDestinationModule>().toList()
@@ -143,7 +143,7 @@ Route được khai bằng annotation và sinh ra `*_route_module.g.dart`. **Ph�
 
 Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm trong `routing/` — mọi package đều giữ constants của mình dưới `utils/`:
 
-`packages/features/auth/lib/src/utils/auth_path.dart`:
+`modules/auth/feature/lib/src/utils/auth_path.dart`:
 
 ```dart
 class AuthPath {
@@ -154,7 +154,7 @@ class AuthPath {
 }
 ```
 
-`packages/features/auth/lib/src/routing/auth_route_module.dart`:
+`modules/auth/feature/lib/src/routing/auth_route_module.dart`:
 
 ```dart
 @TypedShellRoute<AuthShellRoute>(
@@ -194,7 +194,7 @@ class LoginRoute extends GoRouteDataCustom with $LoginRoute {
 
 `build()` của route là nơi controller màn hình được tạo và gắn vào cây widget.
 
-**BLoC** — `packages/features/home/lib/src/routing/home_route_module.dart`:
+**BLoC** — `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
@@ -242,7 +242,7 @@ abstract class AuthNavigator {
 }
 ```
 
-**2. Implement trong feature sở hữu** — `packages/features/auth/lib/src/routing/auth_navigator_impl.dart`:
+**2. Implement trong feature sở hữu** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
 @Singleton(as: AuthNavigator)
@@ -341,7 +341,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
 4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`.
 5. **Sinh code** → `dart run build_runner build -d --workspace`.
-6. **Barrel** → `dart tools/barrel_generator/generate.dart packages/features/<name>/lib`.
+6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/*/feature/<name>/lib`.
 
 ## Checklist
 

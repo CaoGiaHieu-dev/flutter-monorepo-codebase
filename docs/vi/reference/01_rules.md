@@ -45,7 +45,7 @@ grep -rn "package:feature_\|package:data_" platform/*/lib
 grep -l "feature_\|data_" platform/*/pubspec.yaml
 
 # domain tuyệt đối không chạm Flutter
-grep -rn "package:flutter" packages/domain/*/lib
+grep -rn "package:flutter" modules/*/domain/lib
 ```
 
 Cả bốn lệnh phải không trả về gì.
@@ -87,14 +87,14 @@ Quy ước đang áp dụng:
 
 | Loại | Vị trí | Ví dụ thật |
 |---|---|---|
-| Route path | `lib/src/utils/<feature>_path.dart` | `packages/features/home/lib/src/utils/home_path.dart` |
-| Storage key | `lib/src/utils/<owner>_storage_keys.dart` | `packages/data/auth/lib/src/utils/auth_storage_keys.dart` |
-| API endpoint | `lib/src/utils/<owner>_api_constants.dart` | `packages/data/auth/lib/src/utils/auth_api_constants.dart` |
+| Route path | `lib/src/utils/<feature>_path.dart` | `modules/home/feature/lib/src/utils/home_path.dart` |
+| Storage key | `lib/src/utils/<owner>_storage_keys.dart` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
+| API endpoint | `lib/src/utils/<owner>_api_constants.dart` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
 
 Class hằng số dùng private constructor và thành viên `UPPER_SNAKE_CASE`:
 
 ```dart
-// packages/data/auth/lib/src/utils/auth_storage_keys.dart
+// modules/auth/data/lib/src/utils/auth_storage_keys.dart
 class AuthStorageKeys {
   AuthStorageKeys._();
 
@@ -121,7 +121,7 @@ class AuthStorageKeys {
 Đăng ký **bắt buộc là singleton** kèm `@PostConstruct(preResolve: true)`:
 
 ```dart
-// packages/data/auth/lib/src/data_sources/local/auth_local_data_source.dart
+// modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart
 @lazySingleton
 class AuthLocalDataSource {
   AuthLocalDataSource(this._storageManager);
@@ -191,7 +191,7 @@ Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng
 > [!WARNING]
 > `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. `getAll` ném lỗi khi type chưa đăng ký, nên một lệnh `getAll<IFeatureLocalization>()` trần sẽ làm app crash ngay lúc dựng `MaterialApp` ở bất kỳ bản build nào không có feature nào đóng góp.
 
-**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` mà implementer duy nhất nằm trong một package `packages/features/*`, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
+**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` mà implementer duy nhất nằm trong một package `modules/*/feature`, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
 
 ```bash
 dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_check.yml
@@ -219,7 +219,7 @@ flutter pub get && dart analyze app
 
 ## 7. Domain là Pure Dart
 
-**Luật.** Không `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, hay bất kỳ thư viện UI/network nào trong `packages/domain/*`. Khái niệm UI phải được dịch sang kiểu nguyên thuỷ hoặc enum.
+**Luật.** Không `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, hay bất kỳ thư viện UI/network nào trong `modules/*/domain`. Khái niệm UI phải được dịch sang kiểu nguyên thuỷ hoặc enum.
 
 **Vì sao.** Domain là tầng duy nhất nên sống lâu hơn lựa chọn framework. Điều này được đảm bảo ngay ở mức package graph: không `pubspec.yaml` domain nào khai Flutter SDK, và `domain_core` có zero phụ thuộc workspace.
 
@@ -237,7 +237,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 - **DataSource trả Model, không bao giờ trả Entity** — và không bao giờ trả class do Drift sinh.
 - Không bao giờ `throw` từ Data lên UI; trả về `Result.failure(AppFailure)`.
 
-**Vì sao có luật Model.** Trả về class row của Drift làm rò rỉ thư viện lưu trữ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`packages/data/core/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
+**Vì sao có luật Model.** Trả về class row của Drift làm rò rỉ thư viện lưu trữ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`platform/data_core/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
 
 ---
 
@@ -435,7 +435,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | An toàn thứ tự DI | đọc `app/lib/di/injection.config.dart` |
 | core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
-| Domain thuần Dart | `grep -rn "package:flutter" packages/domain/*/lib` |
+| Domain thuần Dart | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---
 

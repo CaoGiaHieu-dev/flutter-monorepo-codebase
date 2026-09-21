@@ -53,29 +53,40 @@ class MonorepoHelper {
       }
     }
 
-    // 1. Scan app/
-    parsePubspec(p.posix.join(projectRootPosix, 'app'));
-
-    // 2. Scan packages/ subdirectories
-    final packagesDir = Directory(p.posix.join(projectRootPosix, 'packages'));
-    if (packagesDir.existsSync()) {
-      final subDirs = [
-        Directory(p.posix.join(projectRootPosix, 'packages/core')),
-        Directory(p.posix.join(projectRootPosix, 'packages/features')),
-        Directory(p.posix.join(projectRootPosix, 'packages/data')),
-        Directory(p.posix.join(projectRootPosix, 'packages/domain')),
-      ];
-
-      for (final parent in subDirs) {
-        if (parent.existsSync()) {
-          for (final entity in parent.listSync(recursive: false)) {
-            if (entity is Directory) {
-              parsePubspec(entity.path.replaceAll('\\', '/'));
-            }
-          }
+    // Discovery is a recursive scan for `pubspec.yaml`, not a fixed list of
+    // directories. The previous version hardcoded `app/`, `packages/core`,
+    // `packages/features`, `packages/data` and `packages/domain`, so moving a
+    // package anywhere else made it invisible — and every consumer of this
+    // helper (unused_checker, arch_check) would then report a clean result for
+    // a package it had simply stopped looking at.
+    void walk(Directory dir) {
+      for (final entity in dir.listSync(followLinks: false)) {
+        final name = p.posix.basename(entity.path.replaceAll('\\', '/'));
+        if (entity is Directory) {
+          const skip = {
+            '.git',
+            '.dart_tool',
+            'build',
+            'ios',
+            'android',
+            'macos',
+            'windows',
+            'linux',
+            'web',
+            'node_modules',
+          };
+          if (skip.contains(name) || name.startsWith('.')) continue;
+          walk(entity);
+        } else if (entity is File && name == 'pubspec.yaml') {
+          parsePubspec(p.posix.dirname(entity.path.replaceAll('\\', '/')));
         }
       }
     }
+
+    walk(Directory(projectRootPosix));
+    // The repository root is a workspace anchor, not a package anyone depends
+    // on; including it would make every path check relative to the wrong node.
+    packages.removeWhere((_, pkg) => pkg.rootPath == projectRootPosix);
 
     _cachedPackages = packages;
     return packages;

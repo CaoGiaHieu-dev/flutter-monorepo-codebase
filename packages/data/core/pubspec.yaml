@@ -12,8 +12,8 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  core_common:
-    path: ../../core/common
+  platform_kernel:
+    path: ../../core/kernel
   core_database:
     path: ../../core/database
   domain_core:

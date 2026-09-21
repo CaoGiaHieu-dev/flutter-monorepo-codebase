@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:core_common/core_common.dart';
 import 'package:domain_core/domain_core.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 abstract class IBaseRepository {
   /// Wrapper function for executing asynchronous operations (API, DB, etc.).

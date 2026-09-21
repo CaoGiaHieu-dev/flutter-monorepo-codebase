@@ -1,6 +1,6 @@
 /// Constants owned exclusively by `core_network`.
 ///
-/// Kept inside this package — not in `core_common` — so transport-level
+/// Kept inside this package — not in `platform_kernel` — so transport-level
 /// details (timeouts, header names, request-extra flags, log tags) stay
 /// invisible to features and other layers.
 class NetworkConstants {

@@ -55,7 +55,7 @@ Steps are sequenced so each one leaves the repo building. Do not batch them.
 | 1 | Machine-enforce removability (**done**) | — | yes |
 | 2 | Shrink the samples (**done**) | 1 | no (deletes code) |
 | 3 | Empty `core_di` of product names (**done**) | 2 | yes |
-| 4 | Split `core_common` *(4a done)* | — | yes |
+| 4 | Split `core_common` (**done**) | — | yes |
 | 5 | Rename + relayout to `platform/` + `modules/` | 3, 4 | no |
 | 6 | Manifest + `composer` | 5 | yes |
 | 7 | Second app (`admin`) | 6 | yes |
@@ -139,7 +139,7 @@ Cross-Feature tables · `docs/{en,vi}/architecture/02_core.md` §2 ·
 `docs/{en,vi}/guides/04_routing.md` · `docs/{en,vi}/guides/10_cross_feature.md` ·
 `docs/{en,vi}/reference/01_rules.md`.
 
-### Step 4 — Split `core_common`  *(4a done)*
+### Step 4 — Split `core_common` ✅ done
 
 One package with 20 dependencies becomes three with a defensible boundary each.
 
@@ -154,9 +154,18 @@ re-exports `platform_kernel` wholesale and `core_common/di/module.dart` re-expor
 service-locator helpers. Only two import paths into `core_common` exist in the whole repo, which
 is what made this safe to do blind.
 
-**4b (deferred)** migrates consumers to import `platform_kernel` directly. Until that happens the
-dependency weight is unchanged at the consumer end — the win so far is structural: the pure files
-now live somewhere that *cannot* import Flutter, and R9 keeps it that way.
+✅ **4b** migrated every package that uses only kernel symbols: `core_network`,
+`core_notifications`, `data_core`, `feature_dashboard`. Each shed 14 inherited dependencies —
+`material_ui`, `cupertino_ui`, `firebase_core`, `go_router`, `permission_handler`,
+`device_info_plus`, `package_info_plus`, `internet_connection_checker_plus`,
+`http_security_pinning`, `core_responsive`, `uuid`, `injectable`, `flutter` and `core_common`
+itself — for one: `platform_kernel`.
+
+The remaining consumers each need something genuinely Flutter-bound: the four feature packages
+need `GoRouteDataCustom` for their routes, `provider_state_management` needs `LifecycleMixin` /
+`NetworkMixin`, `core_storage` and `core_base_ui` need `DisposeGuard`, `core_ui_kit` needs the
+dialog controller, and the app shell needs `AppConfig` / `AppInitializer`. Those are correct
+dependencies, not leftovers.
 
 `ErrorHandler` loses its only Flutter dependency by swapping `kDebugMode` for
 `bool.fromEnvironment('dart.vm.product')`.
@@ -238,6 +247,7 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 | 2026-09-21 | 1 | `arch_check` R8 + fixed `feature_settings` throwing lookup | ⚠️ not run |
 | 2026-09-21 | 2a | Deleted `domain_language` + `data_language` (dead by the repo's own docs); unwired from `injection.dart`, both pubspecs, `sample_manifest.yaml`; purged from 22 doc files; removed two orphaned doc sections and renumbered `03_domain.md` / `04_data.md` | ⚠️ not run |
 | 2026-09-21 | 4a | Extracted `platform_kernel` (27 files, 7 deps, no Flutter) from `core_common` (20 → 16 deps). `ErrorHandler` lost its last Flutter import (`kDebugMode` → `dart.vm.product`). Added `arch_check` **R9** — pure-Dart tier checked in the **pubspec** as well as imports. Approved edge `core_common → domain_core` became `platform_kernel → domain_core`. Deleted three stray barrel files outside any `lib/`. | ⚠️ not run |
+| 2026-09-21 | 4b | Migrated `core_network`, `core_notifications`, `data_core`, `feature_dashboard` off `core_common` onto `platform_kernel` — each drops 14 inherited deps. Removed a dead `package:flutter/foundation.dart` import from `cache_database.dart` (nothing in the file used it). | ⚠️ not run |
 | 2026-09-21 | 3b | `NavigatorKeys.authKey` → `NavigatorKeys.nested(id)` registry. `IDashboardTabModule` → `INavDestinationModule` returning a neutral `NavDestination`; `DashboardPage` now maps it to `BottomNavigationBarItem`. Renamed the two sample destination modules and the generator template. 39 doc/code files synced. | ⚠️ not run |
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
@@ -247,6 +257,9 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 
 ```bash
 dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
+# NOTE: `data_core` no longer imports Flutter anywhere in lib/. Its pubspec still
+# declares `flutter: sdk: flutter`; confirm whether drift/core_database still need
+# it before removing — this was not verifiable without a toolchain.
 dart tools/arch_check/check.dart              # R1–R8
 flutter analyze
 cd app && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev

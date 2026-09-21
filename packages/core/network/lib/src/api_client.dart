@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:core_common/core_common.dart';
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 import 'handlers/refresh_token_handler.dart';
 import 'handlers/retry_handler.dart';

@@ -667,12 +667,14 @@ Deleting any `packages/features/*` package must leave the app compiling and boot
 
 **`app/lib/di/injection.dart` is the app shell's only intentional hard reference to features** — as the composition root it must name what it composes. Every other shell file resolves features through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
 
-**To drop a feature** (order matters):
+**To drop a feature**: remove it from `app/app_manifest.yaml`, then
 
-1. its `ExternalModule(...)` entry + matching import in `app/lib/di/injection.dart`
-2. its `feature_x:` entry in `app/pubspec.yaml`
-3. its path in the root `pubspec.yaml` `workspace:` list
-4. `flutter pub get` + `dart run build_runner build -d --workspace`
+```bash
+dart tools/composer/composer.dart sync --app mobile
+flutter pub get && dart run build_runner build -d --workspace
+```
+
+`injection.dart`, `app/pubspec.yaml`'s path deps and the root `workspace:` list are generated between `composer:managed` markers — never edit them by hand. `composer verify` is Gate 0 in CI.
 
 **A type import defeats `getItOrNull`** — guarding the lookup is useless if the file still imports the feature for the type. When the shell needs something a feature owns, declare a contract in `core_di`:
 

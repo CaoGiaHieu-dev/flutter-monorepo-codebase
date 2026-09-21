@@ -71,6 +71,16 @@ jobs:
       - name: Install dependencies and run code generation
         run: dart tools/workspace_setup/configure.dart
 
+      # Gate 0 — the composition matches its manifest.
+      # Runs before anything else and needs no toolchain beyond Dart: if
+      # injection.dart, an app's dependencies and the root workspace list have
+      # drifted from app_manifest.yaml, every later gate is testing something
+      # nobody declared. `--strict` additionally fails when a manifest names a
+      # module that is not on disk, so a release can never quietly ship without
+      # one.
+      - name: Composition in sync with manifest
+        run: dart tools/composer/composer.dart verify
+
       # Gate 1 — architecture rules.
       # Runs first and needs no codegen: it reads imports and pubspecs, so
       # it fails in seconds on a layering mistake instead of after a full

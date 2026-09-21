@@ -60,6 +60,24 @@ R5 is the mirror image of `unused_checker`: that tool finds dependencies *declar
 
 ---
 
+## `composer`
+
+```bash
+dart tools/composer/composer.dart list              # every app and its composition
+dart tools/composer/composer.dart sync --app mobile # regenerate
+dart tools/composer/composer.dart verify            # CI gate 0 — fails on drift
+```
+
+Three things had to agree and were maintained by hand: the root `workspace:` list, an app's path dependencies, and its `lib/di/injection.dart`. Adding a module meant editing all three in step, and getting it wrong fails at boot with `"<Type> is not registered"` — invisible to `flutter analyze`.
+
+`composer` generates all three from `app/app_manifest.yaml`, but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
+
+Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No directory is encoded anywhere, so moving packages needs no change to the tool or to any manifest. Module packages are matched under either naming convention — `domain_auth` and `auth_domain` both resolve.
+
+`--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find and says loudly what it skipped — which is what lets a developer work with only their own module checked out. CI runs strict, so that mode can never reach a release.
+
+---
+
 ## `sample_cleanup`
 
 Answers "which of this is example code, and how do I delete it without breaking the app?".

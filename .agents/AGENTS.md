@@ -476,11 +476,13 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 Deleting any `packages/features/*` package must leave the app compiling and booting.
 
 - **The app shell's only intentional hard reference to features is `app/lib/di/injection.dart`** — as the composition root it must name what it composes. Every *other* shell file resolves features through `core_di` contracts.
-- To drop a feature (order matters — see the doc comment on `_featureModules`):
-  1. its `ExternalModule(...)` entry and matching import in `app/lib/di/injection.dart`;
-  2. its `feature_x:` entry in `app/pubspec.yaml`;
-  3. its path in the root `pubspec.yaml` `workspace:` list;
-  4. `flutter pub get` + `dart run build_runner build -d --workspace`.
+- To drop a feature, delete its entry from `app/app_manifest.yaml` and run:
+  ```bash
+  dart tools/composer/composer.dart sync --app mobile
+  flutter pub get && dart run build_runner build -d --workspace
+  ```
+  `composer` regenerates the three artifacts that previously had to be edited by hand and kept in step — `app/lib/di/injection.dart`, `app/pubspec.yaml`'s path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
+  **Only the manifest is edited by hand.**
 - **A type import defeats `getItOrNull`.** Guarding the *lookup* is useless if the file still imports the feature for the *type* — it fails at compile time. When the shell needs something a feature owns, declare a contract in `core_di` and have the feature implement + register it:
 
   | Contract (`core_di`) | Replaces the shell's direct use of |

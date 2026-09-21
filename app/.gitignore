@@ -1,4 +1,8 @@
 # App-specific Dart/Flutter ignore
+# Build output, at ANY depth. The bare `/build/` below only ever covered
+# `app/build/`, so Gradle's `app/android/app/build/` was tracked instead —
+# 163 MB of kernel_blob.bin and merged assets that every clone paid for.
+build/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies

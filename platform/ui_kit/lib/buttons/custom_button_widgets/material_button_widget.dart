@@ -77,8 +77,16 @@ class _MaterialButtonWidget extends StatelessWidget {
       elevation: elevation,
       enableFeedback: false,
       highlightElevation: color == Colors.transparent ? 0 : null,
-      highlightColor: color == Colors.transparent ? Colors.white70 : null,
-      splashColor: color == Colors.transparent ? Colors.white70 : null,
+      // A transparent button has no background of its own, so its ripple has
+      // to read against whatever is behind it. `Colors.white70` was invisible
+      // on a light surface — `textPrimary` inverts with the theme, so the
+      // feedback shows in both.
+      highlightColor: color == Colors.transparent
+          ? context.colors.textPrimary.withValues(alpha: 0.12)
+          : null,
+      splashColor: color == Colors.transparent
+          ? context.colors.textPrimary.withValues(alpha: 0.12)
+          : null,
       disabledColor: disableColor ?? backgroundColor,
       disabledTextColor: Theme.of(context).primaryColor,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

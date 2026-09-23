@@ -21,6 +21,9 @@ dependencies:
   injectable: ^3.0.0
   core_responsive:
     path: ../../../platform/responsive
+  flutter_localizations:
+    sdk: flutter
+  intl: "^0.20.3"
 dev_dependencies:
   build_runner: "^2.16.0"
   injectable_generator: "^3.1.3"

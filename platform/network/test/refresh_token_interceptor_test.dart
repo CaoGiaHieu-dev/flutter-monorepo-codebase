@@ -187,6 +187,41 @@ void main() {
       expect(handler.rejected, isTrue);
     });
 
+    test(
+      'replays without refreshing when the request carried an older token',
+      () async {
+        final interceptor = RefreshTokenInterceptor(
+          RefreshTokenHandler(
+            dio: Dio(),
+            currentToken: () => 'new-token',
+            onRefreshToken: () async {
+              refreshCalls++;
+              return 'newer-token';
+            },
+            onRefreshFailed: () async => failureCalls++,
+          ),
+        );
+        final options = RequestOptions(
+          path: '/me',
+          headers: {'authorization': 'Bearer old-token'},
+        );
+        final err = DioException(
+          requestOptions: options,
+          response: Response<dynamic>(requestOptions: options, statusCode: 401),
+          type: DioExceptionType.badResponse,
+        );
+
+        interceptor.onError(err, _RecordingErrorHandler());
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          refreshCalls,
+          0,
+          reason: 'the 401 was for the old token; the current one is fresh',
+        );
+      },
+    );
+
     test('a single refresh serves several concurrent 401s', () async {
       final completer = Completer<String?>();
       final interceptor = RefreshTokenInterceptor(

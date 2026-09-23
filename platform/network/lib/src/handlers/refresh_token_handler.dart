@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+
+import '../utils/network_constants.dart';
 
 /// Handles refreshing the token when a request fails due to an expired token.
 /// This handler uses a Completer to ensure that the token is refreshed only once,
@@ -23,11 +27,16 @@ class RefreshTokenHandler {
   /// It completes with the new token on success, or null on failure.
   Completer<String?>? _completer;
 
+  /// The token requests are sent with now. Optional: when given, a `401`
+  /// for a request sent with an older token is replayed without refreshing.
+  final String? Function()? currentToken;
+
   /// Creates a new instance of [RefreshTokenHandler].
   RefreshTokenHandler({
     required this.dio,
     required this.onRefreshToken,
     required this.onRefreshFailed,
+    this.currentToken,
   });
 
   /// Handles a refresh request. This method is intended to be called from
@@ -49,6 +58,19 @@ class RefreshTokenHandler {
         // The token refresh failed, reject the original request.
         return handler.reject(err);
       }
+    }
+
+    // A request sent before the last refresh finished carries the old token;
+    // its 401 says nothing about the current one. Replay it with the new
+    // token instead of starting another refresh — with rotating refresh
+    // tokens, a redundant refresh can invalidate the session just renewed.
+    final current = currentToken?.call();
+    final sent = err.requestOptions.headers[HttpHeaders.authorizationHeader];
+    if (current != null &&
+        current.isNotEmpty &&
+        sent != null &&
+        sent != '${NetworkConstants.BEARER_PREFIX} $current') {
+      return _retryRequest(err, handler);
     }
 
     // This is the first request to trigger a refresh.

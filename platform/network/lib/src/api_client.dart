@@ -74,6 +74,7 @@ class ApiClient {
           RefreshTokenInterceptor(
             RefreshTokenHandler(
               dio: dio,
+              currentToken: _config.getToken,
               onRefreshToken: onRefreshToken,
               onRefreshFailed: onRefreshFailed ?? () async {},
             ),

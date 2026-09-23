@@ -181,7 +181,7 @@ class EnvConstants {
 > `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
 
 > [!WARNING]
-> `apps/mobile/env.dev` và `apps/mobile/env.stg` hiện **đang được git theo dõi** — mẫu `*.env` trong `.gitignore` không khớp với tên file `env.dev`. Hãy coi nội dung của chúng là giá trị mẫu không bí mật, và đừng đặt credential production thật vào `apps/mobile/env.prod` cho tới khi bạn xác nhận file đó đã được ignore.
+> `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
 
 ---
 

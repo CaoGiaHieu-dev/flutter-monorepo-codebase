@@ -58,16 +58,4 @@ dev_dependencies:
 {{#isFeature}}
 flutter:
   generate: true
-  assets:
-    - assets/
-
-flutter_gen:
-  output: lib/src/gen/
-  assets:
-    outputs:
-      class_name: {{moduleAssetName}}Assets
-      package_parameter_enabled: true
-      style: "dot-delimiter"
-  integrations:
-    flutter_svg: true
 {{/isFeature}}

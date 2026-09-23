@@ -39,7 +39,7 @@ Chạy mỗi khi bạn thêm, xoá hoặc sửa bất kỳ thứ nào sau đây:
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
 | `@DriftDatabase`, `@DriftAccessor`, thêm bảng | `drift_dev` | `<tên>_database.g.dart` (ví dụ `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
-| Thêm asset mới vào thư mục `assets/` | `flutter_gen_runner` | `gen/assets.gen.dart` |
+| Thêm asset mới vào `platform/base_ui/assets/` | `flutter_gen_runner` (chỉ `core_base_ui` khai) | `lib/src/gen/assets.gen.dart` |
 
 > [!WARNING]
 > Dấu hiệu bạn quên chạy: `Undefined class '_$SomethingImpl'`, `The getter '$myRoute' isn't defined`, `Type X is not registered inside GetIt`, hoặc binding DI mới thêm im lặng không tồn tại.

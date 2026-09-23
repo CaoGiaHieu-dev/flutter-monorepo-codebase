@@ -4,7 +4,6 @@ import 'package:mustache_template/mustache.dart';
 import 'package:path/path.dart' as p;
 
 import '../../unused_checker/monorepo_helper.dart';
-import 'common_helpers.dart';
 import 'module_type.dart';
 
 /// Writes a new package's `pubspec.yaml`.
@@ -22,11 +21,9 @@ class PubspecGenerator {
       'tools/module_generator/templates/common/pubspec.yaml.mustache',
     ).readAsStringSync();
     final template = Template(templateString);
-    final pascalName = CommonHelpers.toPascalCase(config.moduleName);
 
     final values = {
       'moduleName': config.moduleName,
-      'moduleAssetName': pascalName,
       'isFeature': config.type == ModuleType.feature,
       'isDomain': config.type == ModuleType.domain,
       'isData': config.type == ModuleType.data,

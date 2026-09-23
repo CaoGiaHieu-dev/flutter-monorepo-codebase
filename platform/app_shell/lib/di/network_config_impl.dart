@@ -77,16 +77,10 @@ class NetworkConfigImpl implements NetworkConfig {
   }) {
     AppDialogController.show(
       builder: (context) {
-        return RetryDialog(
-          onRetry: () {
-            AppOverlay.removeDialogOverlay();
-            onRetry();
-          },
-          onCancel: () {
-            AppOverlay.removeDialogOverlay();
-            onCancel();
-          },
-        );
+        // RetryDialog closes itself before calling back. A second close
+        // through AppOverlay would target a different overlay system and
+        // could dismiss an unrelated dialog.
+        return RetryDialog(onRetry: onRetry, onCancel: onCancel);
       },
     );
   }

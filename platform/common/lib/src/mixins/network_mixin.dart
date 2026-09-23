@@ -27,7 +27,10 @@ mixin NetworkMixin {
   /// Call [stopListenOnNetworkConnect] in the `dispose` method.
   @mustCallSuper
   Future<void> startListenOnNetworkConnect() async {
-    await stopListenOnNetworkConnect();
+    // Swap synchronously, cancel afterwards: awaiting the cancel first let
+    // two overlapping calls both see an empty slot and both subscribe,
+    // leaking one — or re-subscribe after a stop had already run.
+    final previous = _internetConnectionSubscription;
     _internetConnectionSubscription = AppUtils.internetConnection.onStatusChange
         .listen((event) {
           switch (event) {
@@ -39,6 +42,7 @@ mixin NetworkMixin {
               break;
           }
         });
+    await previous?.cancel();
   }
 
   /// Stops listening for network connectivity changes.
@@ -49,8 +53,9 @@ mixin NetworkMixin {
   /// This method should be called in the `dispose` method of the widget.
   @mustCallSuper
   Future<void> stopListenOnNetworkConnect() async {
-    await _internetConnectionSubscription?.cancel();
+    final previous = _internetConnectionSubscription;
     _internetConnectionSubscription = null;
+    await previous?.cancel();
   }
 
   /// Called when the network connection is established.

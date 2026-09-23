@@ -15,6 +15,7 @@ workspace:
   - modules/onboarding/feature
   - modules/settings/feature
   - modules/splash/feature
+  - platform/app_shell
   - platform/base_ui
   - platform/bloc_state_management
   - platform/common

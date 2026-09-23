@@ -191,7 +191,7 @@ Hai getter refresh mặc định `null`, nên trong một app không có endpoin
 Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, thay vì tự đọc storage:
 
 ```dart
-// apps/mobile/lib/di/network_config_impl.dart
+// platform/app_shell/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(
@@ -215,7 +215,7 @@ class NetworkConfigImpl implements NetworkConfig {
 ```
 
 > [!IMPORTANT]
-> `NetworkConfigImpl` là `@LazySingleton`, **không phải** `@Singleton`. Nó phụ thuộc `AuthLocalDataSource` thuộc `data_auth` — module được nạp **sau** khối DI cục bộ của app. Nếu để eager singleton, nó sẽ resolve ngay trong `configureDependencies()` và ném lỗi "not registered". `flutter analyze` **không** bắt được lỗi này; phải kiểm tra ở file sinh ra `apps/mobile/lib/di/injection.config.dart`. Xem [`05_di.md`](05_di.md).
+> `NetworkConfigImpl` không import module nào. Nó đọc token qua `IAuthSessionGateway`, được resolve bằng `getItOrNull` ngay lúc gọi thay vì inject, nên nó dựng được dù build có module auth hay không, và không thứ tự DI nào làm hỏng được nó. Khi không có gateway nào được đăng ký, `onRefreshToken` trả về null — và `ApiClient` chỉ gắn `RefreshTokenInterceptor` **khi** giá trị đó khác null, nên một build không có auth sẽ không có interceptor refresh, thay vì có một cái không bao giờ thành công. `arch_check` R1 giữ điều đó: nó nằm trong `platform_app_shell`, và package `platform/` không được import module. Xem [`05_di.md`](05_di.md).
 
 ---
 
@@ -224,7 +224,7 @@ class NetworkConfigImpl implements NetworkConfig {
 `_refreshSession` chạy use case ở tầng domain, rồi đọc lại token từ chủ sở hữu — bản thân config không lưu gì cả:
 
 ```dart
-// apps/mobile/lib/di/network_config_impl.dart
+// platform/app_shell/lib/di/network_config_impl.dart
 Future<String?> _refreshSession() async {
   final result = await _refreshTokenUseCase(const NoParams());
   if (!result.isSuccess) return null;
@@ -322,7 +322,7 @@ if (hashes != null && hashes.isNotEmpty) {
 `NetworkConfig implements SslPinningConfig`, nhưng đăng ký impl `as: NetworkConfig` **không** làm nó phân giải được dưới kiểu `SslPinningConfig` — GetIt khớp đúng kiểu đã đăng ký. Thiếu một binding thứ hai, `getItOrNull<SslPinningConfig>()` trả về `null` và pinning âm thầm vô hiệu trên mọi flavor, kể cả production. Binding ngăn điều đó:
 
 ```dart
-// apps/mobile/lib/di/network_binding_module.dart
+// platform/app_shell/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
 /// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`

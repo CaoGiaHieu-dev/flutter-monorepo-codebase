@@ -219,7 +219,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 Không có `order` — nhóm route này khớp theo path chứ không theo chỉ số.
 
 > [!CAUTION]
-> Tuyệt đối không sửa `apps/mobile/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
+> Tuyệt đối không sửa `platform/app_shell/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
 > gom các đóng góp qua `getAllOrEmpty<IFeatureRouteModule>()` và
 > `getAllOrEmpty<INavDestinationModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
 
@@ -430,7 +430,8 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > [!NOTE]
 > Việc `injection.dart` gọi tên các package feature là **tham chiếu cứng có chủ đích duy nhất** của
 > composition root — nơi lắp ráp thì buộc phải biết nó lắp cái gì. Đó cũng là chỗ duy nhất: không
-> file nào khác dưới `apps/mobile/lib/` import một package `feature_*`. Shell có import `core_ui_kit` ở vài
+> file nào khác trong app import module (`arch_check` R10 giữ điều đó), và shell dùng chung ở `platform/app_shell/` là
+> package `platform/`, nên R1 cấm nó import module ngay từ đầu. Shell có import `core_ui_kit` ở vài
 > nơi, và điều đó hoàn toàn ổn — đó là package core, không phải feature có thể gỡ.
 
 ---

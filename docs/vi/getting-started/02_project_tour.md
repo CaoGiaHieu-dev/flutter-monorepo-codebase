@@ -10,15 +10,19 @@
 
 ```text
 flutter-monorepo-codebase/
-├── apps/mobile/                    # Host app shell — entrypoint, lắp DI, router, flavor
-│   ├── lib/                #   main.dart, main_scope.dart, di/, presentation/
-│   ├── android/            #   Project Gradle (build APK TỪ ĐÂY, không phải từ root)
-│   ├── ios/                #   Project Xcode
-│   ├── fastlane/           #   Lane CI cho mobile
-│   ├── env.dev / env.stg   #   File env theo flavor (env.prod KHÔNG có trong repo)
-│   └── pubspec.yaml
+├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
+│   └── mobile/
+│       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
+│       ├── lib/
+│       │   ├── main.dart          # Entry point, error zone
+│       │   └── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       ├── android/  ios/         # Project native — build APK từ apps/mobile/, không phải từ gốc
+│       ├── fastlane/              # Lane phát hành
+│       ├── env.dev  env.stg       # File env theo flavor (env.prod KHÔNG có trong repo)
+│       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
 │
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
+│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter — dùng chung cho mọi app
 │   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
 │   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
 │   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>

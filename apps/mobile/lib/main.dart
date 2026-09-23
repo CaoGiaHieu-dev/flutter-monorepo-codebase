@@ -5,11 +5,9 @@ import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:platform_app_shell/platform_app_shell.dart';
 
 import 'di/injection.dart';
-import 'main_scope.dart';
-import 'presentation/navigation/app_router.dart';
-import 'presentation/root_app.dart';
 
 void main() {
   // Run the app within a guarded zone to catch and report errors.

@@ -21,7 +21,7 @@ Mỗi feature tự sở hữu bản dịch của mình. App shell không hề bi
 | `core_base_ui` | Chuỗi global / fallback dùng chung |
 
 > [!CAUTION]
-> Một feature **tuyệt đối không** được sửa `apps/mobile/lib/presentation/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI — xem §3.
+> Một feature **tuyệt đối không** được sửa `platform/app_shell/lib/presentation/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI — xem §3.
 
 ## 2. Hợp đồng
 
@@ -37,7 +37,7 @@ abstract class IFeatureLocalization {
 ## 3. App shell gom delegate như thế nào
 
 ```dart
-// apps/mobile/lib/presentation/app_material_wrapper.dart
+// platform/app_shell/lib/presentation/app_material_wrapper.dart
 // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
 // registers `IFeatureLocalization`. Every feature package is removable, so
 // an app built without any of them must still resolve its delegates —

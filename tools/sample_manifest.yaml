@@ -26,6 +26,7 @@
 packages:
   # --- Framework: core infrastructure -------------------------------------
   platform_kernel: { kind: framework, path: platform/kernel }
+  platform_app_shell: { kind: framework, path: platform/app_shell }
   core_common: { kind: framework, path: platform/common }
   core_di: { kind: framework, path: platform/di }
   core_base_ui: { kind: framework, path: platform/base_ui }
@@ -49,11 +50,12 @@ packages:
   # --- Shell ---------------------------------------------------------------
   app:
     kind: shell
-    path: app
+    path: apps/mobile
     note: >-
-      Keep. Its `lib/di/injection.dart` names every feature it composes — that
-      is the one intentional hard reference from shell to features, and it is
-      what you edit when adding or removing one.
+      Keep. Its `lib/di/injection.dart` names every module it composes — that
+      is the one intentional hard reference from shell to modules. It is
+      generated: to add or remove a module, edit `app_manifest.yaml` and run
+      `dart tools/composer/composer.dart sync`, never the file itself.
 
   # --- Samples: features ---------------------------------------------------
   feature_auth:

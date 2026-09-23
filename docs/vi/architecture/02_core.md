@@ -303,7 +303,7 @@ Luật **R7** của `dart tools/arch_check/check.dart` chặn mọi dạng bare 
 > [!NOTE]
 > Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Bản thân package có 19 test tại `platform/responsive/test/`.
 
-Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `apps/mobile/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục và đổi khung thiết kế nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md).
+Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục và đổi khung thiết kế nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md).
 
 ---
 

@@ -45,8 +45,16 @@ di_groups:
       - core_database
       - core_di
 
-  # Depends on ILanguageStorage / IThemeStorage, which are app-local singletons
-  # registered between the two phases. Must therefore run in `after`.
+  # The shared app shell: storage adapters, NetworkConfig, router, providers.
+  # These used to be app-local registrations, which injectable runs *between*
+  # the two phases — so this group goes first in `after`, the same slot.
+  # `ui` depends on it: ThemeProvider / LanguageProvider inject the storage
+  # adapters registered here.
+  - name: shell
+    phase: after
+    packages: [platform_app_shell]
+
+  # Depends on ILanguageStorage / IThemeStorage, registered by `shell` above.
   - name: ui
     phase: after
     packages: [core_base_ui]

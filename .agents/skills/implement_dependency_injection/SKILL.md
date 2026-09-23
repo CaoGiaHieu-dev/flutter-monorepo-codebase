@@ -31,12 +31,13 @@ Use this skill when requested to: "register a new Service/Repository in DI", "in
 constructor needs a type registered by a module that runs *later* in
 `configureDependencies()`, boot throws `... is not registered inside GetIt`.
 
-Real case: `NetworkConfigImpl` needs `AuthLocalDataSource` (from `data_auth`, an
-`externalPackageModulesAfter` module) while the app-local block runs earlier. The fix is to
-defer construction:
+The historical case: `NetworkConfigImpl` once injected `AuthLocalDataSource` (from
+`data_auth`, a later module) and had to be lazy for it. It now resolves `IAuthSessionGateway`
+at call time and has no such dependency, but it keeps the lazy annotation — the shape is the
+one to copy whenever a constructor needs something from a later group:
 
 ```dart
-// apps/mobile/lib/di/network_config_impl.dart
+// platform/app_shell/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)   // NOT @Singleton
 class NetworkConfigImpl implements NetworkConfig { ... }
 ```
@@ -58,7 +59,7 @@ supertype chain. Registering `@LazySingleton(as: NetworkConfig)` therefore leave
 `getItOrNull<SslPinningConfig>()` returning `null` even though `NetworkConfig implements
 SslPinningConfig` — and certificate pinning then silently no-ops.
 
-Bind the second type explicitly with a `@module` (`apps/mobile/lib/di/network_binding_module.dart`):
+Bind the second type explicitly with a `@module` (`platform/app_shell/lib/di/network_binding_module.dart`):
 
 ```dart
 @module
@@ -152,8 +153,9 @@ UseCase.
 
 | List | Phase | When to use |
 |------|-------|-------------|
-| `_coreModules` | `externalPackageModulesBefore` | Core infra **without** app-local interface deps (`CoreCommon`, `CoreNetwork`, `CoreNotifications`, `CoreStorage`, `CoreDatabase`, `CoreDi`) |
-| `_uiModules` | after | **`CoreBaseUiPackageModule` only** — depends on app-local `ILanguageStorage` / `IThemeStorage` |
+| `_coreModules` | `externalPackageModulesBefore` | Core infra with no dependency on the shell's adapters (`CoreCommon`, `CoreNetwork`, `CoreNotifications`, `CoreStorage`, `CoreDatabase`, `CoreDi`) |
+| `_shellModules` | after, **first** | `PlatformAppShellPackageModule` — the storage adapters, `NetworkConfig`, the router |
+| `_uiModules` | after | **`CoreBaseUiPackageModule` only** — injects the shell's `ILanguageStorage` / `IThemeStorage` |
 | `_domainModules` | after | `domain_*` micro-packages |
 | `_dataModules` | after | `data_*` micro-packages |
 | `_featureModules` | after | `feature_*` packages |
@@ -177,8 +179,9 @@ UseCase.
 - Inlining `ExternalModule(...)` directly inside `@InjectableInit` arrays — always use the named lists + spread.
 
 App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
-`NetworkConfigImpl`, `NetworkBindingModule`) are registered as local bindings in
-`apps/mobile/lib/di/` so they exist **before** `_uiModules` run.
+`NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_app_shell` and register through
+its own micro-package module, in the `shell` group — first in `after`, so they exist **before**
+`_uiModules` run.
 
 ### Step 3b: Ordering when a module opens a database
 

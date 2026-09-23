@@ -378,7 +378,7 @@ Three details carry the weight:
 | Detail | Why it matters |
 |:---|:---|
 | `successCondition` | Without it, `execute` treats **any** response that did not throw as a success. An API that reports failure inside a 200 body would log the user in |
-| `onSuccess` saves the token | `NetworkConfig.getToken()` reads it from `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger |
+| `onSuccess` saves the token | `NetworkConfig.getToken()` reads it back through `IAuthSessionGateway`, which `data_auth` implements over `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger |
 | `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward — there is a test asserting exactly that |
 
 `logout` is `executeSync`, not `execute`: it only clears storage, and there is nothing to await.

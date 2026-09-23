@@ -219,7 +219,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 No `order` — these routes are matched by path, not by index.
 
 > [!CAUTION]
-> Never edit `apps/mobile/lib/presentation/navigation/app_router.dart` to add your routes. It collects
+> Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart` to add your routes. It collects
 > contributions through `getAllOrEmpty<IFeatureRouteModule>()` and
 > `getAllOrEmpty<INavDestinationModule>()`. Hardcoding there breaks feature removability.
 
@@ -432,9 +432,11 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 > [!NOTE]
 > `injection.dart` naming feature packages is the composition root's **one intentional hard
-> reference** — a composition root must name what it composes. It is also the only one: no other
-> file under `apps/mobile/lib/` imports a `feature_*` package. The shell does import `core_ui_kit` in a few
-> places, which is fine — that is a core package, not a removable feature.
+> reference** — a composition root must name what it composes. It is also the only one, and a
+> machine holds that: `arch_check` R10 fails any other file in an app that imports a module, and the
+> shared shell in `platform/app_shell/` is a `platform/` package, which R1 forbids from importing one
+> at all. The shell does import `core_ui_kit`, which is fine — that is a core package, not a
+> removable feature.
 
 ---
 

@@ -524,7 +524,7 @@ class CommonHelpers {
 
   static void registerLocalizationsDelegateInApp(String moduleName) {
     // Không còn cần thiết, GetIt getAll đã đảm nhận.
-    final file = File('apps/mobile/lib/presentation/root_app.dart');
+    final file = File('platform/app_shell/lib/presentation/root_app.dart');
     if (!file.existsSync()) return;
 
     final lines = file.readAsLinesSync();
@@ -565,7 +565,7 @@ class CommonHelpers {
 
     file.writeAsStringSync('${lines.join('\n')}\n');
     stdout.writeln(
-      '  -> Đã đăng ký $delegateClass.delegate vào apps/mobile/lib/presentation/root_app.dart',
+      '  -> Đã đăng ký $delegateClass.delegate vào platform/app_shell/lib/presentation/root_app.dart',
     );
   }
 }

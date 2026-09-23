@@ -5,7 +5,7 @@ import 'package:injectable/injectable.dart';
 import '../{{moduleName}}.dart';
 
 @Injectable(as: IFeatureLocalization)
-class {{pascalName}}LocalizationImpl implements IFeatureLocalization {
+class {{pascalNameInput}}LocalizationImpl implements IFeatureLocalization {
   @override
   LocalizationsDelegate<dynamic> get delegate =>
       {{pascalName}}Localizations.delegate;

@@ -57,7 +57,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 ## 📋 High-Resolution Review Checklist
 
 ### 🏛️ Architecture & SOLID
-- **Layer Suffixes**: Does the file follow the naming standard? (`_page.dart`, `_provider.dart`, `_entity.dart`, `_usecase.dart`, `_repository.dart`, `_navigator_impl.dart`, `_action_handler_impl.dart`).
+- **Layer Suffixes**: Does the file follow the naming standard? (`_page.dart`, `_provider.dart`, `_entity.dart`, `_usecase.dart`, `i_<name>_repository.dart`, `_repository_impl.dart`, `_navigator_impl.dart`, `_action_handler_impl.dart`).
 - **SRP**: Is the UseCase doing more than one thing? Is the Provider handling raw API logic (it shouldn't)?
 - **Interface Suffix**: Does the Repository / Action Handler interface start with `I` (e.g., `IAuthRepository`, `IAuthActionHandler`)? Are implementations named `*Impl` / `*ActionHandlerImpl` (never `I*`)?
 - **Constructor Injection**: Does the class correctly receive its dependencies (like `AppRouter`) via Constructor Injection instead of `getIt<T>()` lookups?

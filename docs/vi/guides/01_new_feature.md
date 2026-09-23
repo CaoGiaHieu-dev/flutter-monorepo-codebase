@@ -37,7 +37,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 | Chọn | Khi nào | Bạn nhận được |
 | :-- | :-- | :-- |
 | `1` `IFeatureRouteModule` | Một chồng màn hình push lên trên app (auth, onboarding, màn chi tiết) | Stub `*FeatureRouteModule` |
-| `2` `INavDestinationModule` | Một **tab chính của bottom navigation**, cần back stack riêng bền vững | Stub `*DashboardTabModule` |
+| `2` `INavDestinationModule` | Một **tab chính của bottom navigation**, cần back stack riêng bền vững | Stub `*NavDestination` |
 | `3` không | Bạn sẽ tự nối routing sau, hoặc feature không có route | Không sinh stub |
 
 > [!WARNING]

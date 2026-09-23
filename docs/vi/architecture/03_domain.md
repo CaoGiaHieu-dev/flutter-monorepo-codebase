@@ -196,7 +196,6 @@ Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là m�
 | `entities/user/user_entity.dart` | `UserEntity` (Freezed) |
 | `entities/user/user_role.dart` | enum `UserRole` — `customer`, `owner`, `none`, `unknown` |
 | `params/auth_params/login_params.dart` | `LoginParams` |
-| `params/auth_params/complete_login_flow_params.dart` | `CompleteLoginFlowParams` |
 | `repositories/i_auth_repository.dart` | `IAuthRepository` |
 | `usecases/auth/` | `LoginUseCase`, `LogoutUseCase`, `RefreshTokenUseCase` |
 

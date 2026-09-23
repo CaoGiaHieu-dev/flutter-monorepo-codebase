@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:path/path.dart' as path;
+
 import '../core/constants.dart';
 
 /// Service for managing configuration settings
@@ -177,7 +179,9 @@ class ConfigService {
     stdout.writeln('⏰ Include Timestamps: ${config['includeTimestamps']}');
     stdout.writeln('📊 Detailed Output: ${config['detailedOutput']}');
     stdout.writeln('📦 Batch Size: ${config['batchSize']}');
-    stdout.writeln('⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms');
+    stdout.writeln(
+      '⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms',
+    );
 
     if (config.containsKey('geminiApiKey')) {
       final apiKey = config['geminiApiKey'] as String;

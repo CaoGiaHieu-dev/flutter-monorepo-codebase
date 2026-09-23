@@ -31,8 +31,9 @@ class CommonHelpers {
 
     for (final executable in const ['dart', 'flutter']) {
       try {
-        final result =
-            Process.runSync(executable, ['--version'], runInShell: true);
+        final result = Process.runSync(executable, [
+          '--version',
+        ], runInShell: true);
         if (result.exitCode != 0) {
           throw Exception('"$executable --version" trả về ${result.exitCode}');
         }
@@ -52,8 +53,10 @@ class CommonHelpers {
     String? workingDirectory,
   }) {
     return useFvm
-        ? runCommand('fvm', ['dart', ...args],
-            workingDirectory: workingDirectory)
+        ? runCommand('fvm', [
+            'dart',
+            ...args,
+          ], workingDirectory: workingDirectory)
         : runCommand('dart', args, workingDirectory: workingDirectory);
   }
 
@@ -63,8 +66,10 @@ class CommonHelpers {
     String? workingDirectory,
   }) {
     return useFvm
-        ? runCommand('fvm', ['flutter', ...args],
-            workingDirectory: workingDirectory)
+        ? runCommand('fvm', [
+            'flutter',
+            ...args,
+          ], workingDirectory: workingDirectory)
         : runCommand('flutter', args, workingDirectory: workingDirectory);
   }
 
@@ -102,8 +107,9 @@ class CommonHelpers {
     _sharedFileSnapshots.clear();
     for (final path in sharedMutatedFiles) {
       final file = File(path);
-      _sharedFileSnapshots[path] =
-          file.existsSync() ? file.readAsStringSync() : null;
+      _sharedFileSnapshots[path] = file.existsSync()
+          ? file.readAsStringSync()
+          : null;
     }
   }
 
@@ -240,7 +246,6 @@ class CommonHelpers {
       manifest.writeAsStringSync('${lines.join('\n')}\n');
       stdout.writeln('  -> Đã thêm vào ${manifest.path}');
     }
-
   }
 
   /// `- { id: <name>, layers: [...] }` — appended, or extended if present.
@@ -253,7 +258,8 @@ class CommonHelpers {
       (l) => l.trimLeft().startsWith('- { id: $moduleName,'),
     );
     if (existing != -1) {
-      final layers = RegExp(r'layers:\s*\[([^\]]*)\]')
+      final layers =
+          RegExp(r'layers:\s*\[([^\]]*)\]')
               .firstMatch(lines[existing])
               ?.group(1)
               ?.split(',')
@@ -410,8 +416,7 @@ class CommonHelpers {
 
     String pageTemplatePath;
     if (config.smType == StateManagementType.provider) {
-      pageTemplatePath =
-          'tools/module_generator/templates/feature/provider/page.dart.mustache';
+      pageTemplatePath = 'tools/module_generator/templates/feature/provider/page.dart.mustache';
 
       final providerTpl = Template(
         File(

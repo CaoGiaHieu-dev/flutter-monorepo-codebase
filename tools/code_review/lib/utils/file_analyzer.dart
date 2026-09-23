@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as path;
+
 import '../core/enums.dart';
 
 /// Utility class for analyzing file types and architecture layers
@@ -43,7 +45,8 @@ class FileAnalyzer {
       };
     }
     if (RegExp(r'(^|/)platform/').hasMatch(p)) return ArchitectureLayer.core;
-    if (RegExp(r'(^|/)apps/').hasMatch(p)) return ArchitectureLayer.presentation;
+    if (RegExp(r'(^|/)apps/').hasMatch(p))
+      return ArchitectureLayer.presentation;
     return ArchitectureLayer.unknown;
   }
 

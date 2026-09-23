@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'module_type.dart';
 
 class InputActions {
@@ -55,7 +56,9 @@ class InputActions {
 
     if (type == ModuleType.custom) {
       if (args.length < 3) {
-        stdout.write('\nNhập tiền tố tên package (ví dụ: analytics, payments): ');
+        stdout.write(
+          '\nNhập tiền tố tên package (ví dụ: analytics, payments): ',
+        );
         typeDirInput = stdin.readLineSync()?.trim();
       }
       if (typeDirInput == null || typeDirInput.isEmpty) {

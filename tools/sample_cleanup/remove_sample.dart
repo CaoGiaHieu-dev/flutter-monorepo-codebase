@@ -47,8 +47,10 @@ final List<String> _deletedDirs = [];
 
 Future<void> main(List<String> args) async {
   if (!File(_manifestPath).existsSync()) {
-    stderr.writeln('[ERROR] Không tìm thấy $_manifestPath. '
-        'Hãy chạy lệnh này từ thư mục gốc của repo.');
+    stderr.writeln(
+      '[ERROR] Không tìm thấy $_manifestPath. '
+      'Hãy chạy lệnh này từ thư mục gốc của repo.',
+    );
     exitCode = 1;
     return;
   }
@@ -67,7 +69,9 @@ Future<void> main(List<String> args) async {
 
   final positional = args.where((a) => !a.startsWith('-')).toList();
   if (positional.isEmpty) {
-    stderr.writeln('[ERROR] Thiếu tên bundle. Xem "--list" để biết các lựa chọn.');
+    stderr.writeln(
+      '[ERROR] Thiếu tên bundle. Xem "--list" để biết các lựa chọn.',
+    );
     exitCode = 1;
     return;
   }
@@ -75,8 +79,10 @@ Future<void> main(List<String> args) async {
   final bundleName = positional.first;
   final bundles = manifest['bundles'] as YamlMap;
   if (!bundles.containsKey(bundleName)) {
-    stderr.writeln('[ERROR] Không có bundle "$bundleName". '
-        'Các bundle hợp lệ: ${bundles.keys.join(', ')}');
+    stderr.writeln(
+      '[ERROR] Không có bundle "$bundleName". '
+      'Các bundle hợp lệ: ${bundles.keys.join(', ')}',
+    );
     exitCode = 1;
     return;
   }
@@ -148,7 +154,9 @@ void _printClassification(YamlMap manifest) {
   final bundles = manifest['bundles'] as YamlMap;
   stdout.writeln('');
   stdout.writeln('BUNDLE GỠ ĐƯỢC: ${bundles.keys.join(', ')}');
-  stdout.writeln('  Xem trước: dart tools/sample_cleanup/remove_sample.dart <bundle>');
+  stdout.writeln(
+    '  Xem trước: dart tools/sample_cleanup/remove_sample.dart <bundle>',
+  );
   stdout.writeln('');
 }
 
@@ -178,8 +186,10 @@ Future<void> _removeBundle({
     }
     final path = entry['path'] as String;
     final exists = Directory(path).existsSync();
-    stdout.writeln('  ${exists ? '-' : 'x'} $path'
-        '${exists ? '' : '   (không tồn tại, bỏ qua)'}');
+    stdout.writeln(
+      '  ${exists ? '-' : 'x'} $path'
+      '${exists ? '' : '   (không tồn tại, bỏ qua)'}',
+    );
     if (exists) dirs.add(path);
   }
 
@@ -213,7 +223,9 @@ Future<void> _removeBundle({
   final orphans = bundle['orphaned_contracts'] as YamlList?;
   if (orphans != null && orphans.isNotEmpty) {
     stdout.writeln('');
-    stdout.writeln('Contract ở core_di trở thành code chết (tự quyết định xoá):');
+    stdout.writeln(
+      'Contract ở core_di trở thành code chết (tự quyết định xoá):',
+    );
     for (final o in orphans) {
       stdout.writeln('  ? $o');
     }
@@ -274,8 +286,10 @@ Future<void> _removeBundle({
     stderr.writeln('[ERROR] Thất bại giữa chừng: $e');
     stderr.writeln('[INFO] Đang khôi phục các file dùng chung...');
     _rollback();
-    stderr.writeln('[INFO] Đã khôi phục file dùng chung. '
-        'Thư mục đã xoá KHÔNG khôi phục được — dùng git để lấy lại.');
+    stderr.writeln(
+      '[INFO] Đã khôi phục file dùng chung. '
+      'Thư mục đã xoá KHÔNG khôi phục được — dùng git để lấy lại.',
+    );
     exitCode = 1;
     return;
   }
@@ -347,8 +361,7 @@ List<_FileEdit> _planSharedEdits(
         // an app's pubspec.yaml: `  feature_auth:` followed by `    path: ...`
         if (RegExp('^\\s{2}$name:\\s*\$').hasMatch(line)) {
           drop = true;
-          if (i + 1 < lines.length &&
-              lines[i + 1].trim().startsWith('path:')) {
+          if (i + 1 < lines.length && lines[i + 1].trim().startsWith('path:')) {
             removed.add(lines[i + 1]);
             i++; // consume the path line with it
           }

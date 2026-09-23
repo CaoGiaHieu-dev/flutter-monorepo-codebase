@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import '../core/constants.dart';
 
 class InteractiveService {
@@ -123,7 +124,9 @@ class InteractiveService {
     stdout.writeln(
       '1. 🔥 Batch Review (FAST) - Review all $fileCount files in one API call',
     );
-    stdout.writeln('2. 📄 Individual Review (DETAILED) - Review each file separately');
+    stdout.writeln(
+      '2. 📄 Individual Review (DETAILED) - Review each file separately',
+    );
     stdout.writeln('');
     stdout.writeln(
       '💡 Batch review is much faster but may have less detailed analysis per file.',
@@ -172,7 +175,9 @@ class InteractiveService {
         };
 
       case '3':
-        stdout.writeln('📄 Enter file paths (one per line, empty line to finish):');
+        stdout.writeln(
+          '📄 Enter file paths (one per line, empty line to finish):',
+        );
         final files = <String>[];
         while (true) {
           stdout.write('File path: ');
@@ -206,7 +211,9 @@ class InteractiveService {
   static Future<List<String>> promptFocusAreas() async {
     stdout.writeln('\n🔍 Focus Areas (optional):');
     stdout.writeln('Available focus areas:');
-    stdout.writeln('1. security - Security vulnerabilities and data protection');
+    stdout.writeln(
+      '1. security - Security vulnerabilities and data protection',
+    );
     stdout.writeln('2. performance - Performance bottlenecks and optimization');
     stdout.writeln('3. bugs - Potential runtime errors and logic bugs');
     stdout.writeln('4. style - Code style and formatting conventions');
@@ -259,8 +266,12 @@ class InteractiveService {
       return [];
     }
 
-    stdout.writeln('Enter exclude patterns (one per line, empty line to finish):');
-    stdout.writeln('Examples: **/*.generated.dart, lib/legacy/**, **/old_*.dart');
+    stdout.writeln(
+      'Enter exclude patterns (one per line, empty line to finish):',
+    );
+    stdout.writeln(
+      'Examples: **/*.generated.dart, lib/legacy/**, **/old_*.dart',
+    );
 
     final patterns = <String>[];
     while (true) {

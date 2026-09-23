@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as path;
+
 import '../models/review_result.dart';
 import 'api_service.dart';
 import 'file_service.dart';
@@ -54,7 +56,9 @@ class BatchService {
     Duration delayBetweenBatches = const Duration(seconds: 2),
     String language = 'en',
   }) async {
-    stdout.writeln('🔥 Starting parallel batch review of ${filePaths.length} files...');
+    stdout.writeln(
+      '🔥 Starting parallel batch review of ${filePaths.length} files...',
+    );
     stdout.writeln('📊 Processing files concurrently with rate limiting...\n');
 
     _reviewResults.clear();
@@ -108,7 +112,9 @@ class BatchService {
 
       // Process retry queue if any files need retry
       if (_retryQueue.isNotEmpty) {
-        stdout.writeln('\n🔄 Processing retry queue (${_retryQueue.length} files)...');
+        stdout.writeln(
+          '\n🔄 Processing retry queue (${_retryQueue.length} files)...',
+        );
         await _processRetryQueue();
       }
 

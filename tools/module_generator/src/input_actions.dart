@@ -15,9 +15,9 @@ class InputActions {
       }
     } else {
       stdout.writeln('\nChọn loại module muốn tạo:');
-      stdout.writeln('1. Feature Package (modules/*/feature/)');
-      stdout.writeln('2. Domain Micro-Package (modules/*/domain/)');
-      stdout.writeln('3. Data Micro-Package (modules/*/data/)');
+      stdout.writeln('1. Feature Package (modules/<name>/feature/)');
+      stdout.writeln('2. Domain Micro-Package (modules/<name>/domain/)');
+      stdout.writeln('3. Data Micro-Package (modules/<name>/data/)');
       stdout.writeln('4. Core Package (platform/)');
       stdout.writeln('5. Custom Package (custom name)');
       stdout.write('Nhập lựa chọn: ');
@@ -30,15 +30,15 @@ class InputActions {
 
     if (typeInput == '1') {
       type = ModuleType.feature;
-      typeDir = 'modules/*/feature';
+      typeDir = 'modules/<name>/feature';
       typeName = 'feature';
     } else if (typeInput == '2') {
       type = ModuleType.domain;
-      typeDir = 'modules/*/domain';
+      typeDir = 'modules/<name>/domain';
       typeName = 'domain';
     } else if (typeInput == '3') {
       type = ModuleType.data;
-      typeDir = 'modules/*/data';
+      typeDir = 'modules/<name>/data';
       typeName = 'data';
     } else if (typeInput == '4') {
       type = ModuleType.core;
@@ -135,7 +135,14 @@ class InputActions {
     }
 
     final moduleName = typeName.isEmpty ? nameInput : '${typeName}_$nameInput';
-    final modulePath = '$typeDir/$nameInput';
+    // A module's layers sit side by side under the module:
+    // `modules/<name>/{domain,data,feature}`. Core and custom packages keep
+    // `<dir>/<name>`.
+    final isModuleLayer =
+        typeInput == '1' || typeInput == '2' || typeInput == '3';
+    final modulePath = isModuleLayer
+        ? 'modules/$nameInput/$typeName'
+        : '$typeDir/$nameInput';
     final moduleDir = Directory(modulePath);
 
     if (moduleDir.existsSync()) {

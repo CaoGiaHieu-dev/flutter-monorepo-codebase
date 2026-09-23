@@ -19,7 +19,7 @@ Use this skill when requested to: "call logout from settings without importing a
 | Inject a widget/scope from another feature | **`IAppTreeWrapper`** or a widget-builder interface in `core_di` |
 | Trigger Feature B Provider / dialog / UI method from Feature A (e.g. Settings → logout in Auth) | **Action Handler** (`I*ActionHandler`) |
 
-**Sample in this template:** `feature_settings` calls `getIt<IAuthActionHandler>().logout(context)` — Settings and Auth remain separate packages.
+**Sample in this template:** `feature_settings` calls `getItOrNull<IAuthActionHandler>()?.logout(context)` — Settings and Auth remain separate packages, and with no auth feature the logout row is simply not offered.
 
 ---
 
@@ -65,8 +65,7 @@ The consumer MUST NOT import the owning feature package.
 > **Prefer `getItOrNull` over `getIt` for cross-feature calls.** The app must still run when
 > any feature package is deleted, and the handler's implementation lives in the *owning*
 > feature. `getIt<T>()` throws when that feature is gone; `getItOrNull<T>()?` degrades to a
-> no-op. (`modules/settings/feature/lib/src/pages/settings_page.dart` still uses the
-> throwing form — do not copy that line.)
+> no-op.
 >
 > If the action must visibly do *something* when the owner is absent, branch on the null and
 > show a fallback rather than letting the widget throw.

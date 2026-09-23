@@ -327,8 +327,8 @@ BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
   builder: (context, state) => state.when(
     initial: () => const SizedBox.shrink(),
     loading: () => const Center(child: CircularProgressIndicator.adaptive()),
-    success: (user) => Text(user?.name ?? ''),
-    error: (failure) => Text(failure.message ?? ''),
+    success: (user) => Text(user?.displayName ?? ''),
+    error: (failure) => Text(failure.message),
   ),
 )
 ```

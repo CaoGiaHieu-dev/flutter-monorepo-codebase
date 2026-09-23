@@ -122,4 +122,4 @@ Building, signing and shipping.
 - Where a rule has an approved exception, the exception is written down with its reasoning — so a later audit does not "fix" it by mistake.
 
 > [!NOTE]
-> The feature, domain and data packages shipped here (auth, home, settings, onboarding, splash, dashboard) are **reference sample code**. They demonstrate the wiring; they are patterns to copy or delete, not production logic. The AI-agent rules live in [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md).
+> The feature, domain and data packages shipped here (auth, cache, home, settings, onboarding, splash, dashboard) are **reference sample code**. They demonstrate the wiring; they are patterns to copy or delete, not production logic. The AI-agent rules live in [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md).

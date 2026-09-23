@@ -224,7 +224,7 @@ List<RouteBase> get _featureRoutes => [
   for (final module in getAllOrEmpty<IFeatureRouteModule>()) ...module.routes,
 ];
 
-List<INavDestinationModule> get _dashboardTabs =>
+List<INavDestinationModule> get _destinations =>
     getAllOrEmpty<INavDestinationModule>().toList()
       ..sort((a, b) => a.order.compareTo(b.order));
 ```

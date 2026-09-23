@@ -44,8 +44,9 @@ Use the `run_command` tool to execute the scripts. Remind the user to run `flutt
 
 - `pubspec_dependencies.yaml` is the single source of truth for **shared pub.dev versions**.
   Never hardcode a version in a package's `pubspec.yaml` — edit the catalog and re-sync.
-- It does **not** manage local `path:` dependencies between workspace packages, nor native
-  Gradle/CocoaPods dependencies — those are edited by hand.
+- It does not pick *which* workspace packages a package depends on, but it does check every
+  local `path:` entry and repair one that points at the wrong directory (`--check` reports it).
+  Native Gradle/CocoaPods dependencies are edited by hand.
 - `--check` exits non-zero on drift, so it is the form to use in CI / pre-commit hooks.
 - Workspace setup (`flutter pub get` + codegen + l10n in one go):
   ```bash

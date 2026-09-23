@@ -2,8 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/services.dart';
 
-import '../../extensions/extensions.dart';
-
 /// A [TextInputFormatter] that formats numeric input with currency-style formatting.
 ///
 /// This formatter provides real-time formatting of numeric input with comma

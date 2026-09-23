@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + SOLID + MVVM** with dual state management support (**Provider** and **BLoC**). The shipped feature/domain/data packages (auth, home, settings, onboarding, splash, dashboard) are **sample reference code** demonstrating the wiring — patterns to copy or delete, not production logic.
+A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + SOLID + MVVM** with dual state management support (**Provider** and **BLoC**). The shipped feature/domain/data packages (auth, cache, home, settings, onboarding, splash, dashboard) are **sample reference code** demonstrating the wiring — patterns to copy or delete, not production logic.
 
 **Author:** CaoGiaHieu-dev. **Docs hub:** `docs/en/` (and `docs/vi/`), grouped by purpose:
 
@@ -209,8 +209,8 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
     ..._notificationsModules, // CoreNotificationsPackageModule — injects the app's FirebaseOptions
     ..._shellModules,    // PlatformAppShellPackageModule — storage adapters, NetworkConfig, router
     ..._uiModules,       // CoreBaseUiPackageModule (injects the shell's storage adapters)
-    ..._domainModules,   // domain_core, domain_auth
-    ..._dataModules,     // data_core, data_auth
+    ..._domainModules,   // domain_core, domain_auth, domain_cache
+    ..._dataModules,     // data_core, data_auth, data_cache
     ..._featureModules,  // feature_auth, feature_dashboard, feature_home, etc.
     ..._otherModules,    // ProviderStateManagementPackageModule, BlocStateManagementPackageModule
   ],
@@ -272,7 +272,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 
 1. **Declare** Navigator interface in `core_di/lib/src/navigators/` (e.g., `AuthNavigator`)
 2. **Implement** in the owning feature's `routing/` directory (e.g., `AuthNavigatorImpl` in `feature_auth`)
-3. **Use** via `getIt<AuthNavigator>().toLogin(context)` — never hardcode paths or `GoRouter.of(context).go(...)`
+3. **Use** via `getItOrNull<AuthNavigator>()?.toLogin(context)` (a throwing `getIt` is allowed only inside the owning feature — arch_check R8) — never hardcode paths or `GoRouter.of(context).go(...)`
 4. **BuildContext MUST be passed directly** from UI caller — avoid using `NavigatorKeys.*.currentContext`
 
 ### Route-Level Instantiation (Critical)
@@ -280,21 +280,21 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 Feature controllers are instantiated in the `build` method of `GoRouteDataCustom`:
 
 ```dart
-// Provider:
+// Provider (what `generate.dart 1 profile "" 1 1` scaffolds):
 @override
 Widget build(BuildContext context, GoRouterState state) {
   return ChangeNotifierProvider(
-    create: (context) => getIt<OnboardingProvider>(),
-    child: const OnboardingPage(),
+    create: (context) => getIt<ProfileProvider>(),
+    child: const ProfilePage(),
   );
 }
 
-// BLoC:
+// BLoC (modules/home/feature/lib/src/routing/home_route_module.dart):
 @override
 Widget build(BuildContext context, GoRouterState state) {
   return BlocProvider(
-    create: (context) => getIt<ProfileBloc>(),
-    child: const ProfilePage(),
+    create: (context) => getIt<HomeProfileBloc>(),
+    child: const HomePage(),
   );
 }
 ```
@@ -724,7 +724,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files.
 15. **Build runner flag:** Use `-d` (replaces deprecated `--delete-conflicting-outputs`).
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
-17. **Core never depends on features or data.** No `platform/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
+17. **Core never depends on features or data.** No `platform/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml` — it also prints `data_core → domain_core`, a data → domain edge from the data layer's foundation, which lives under `platform/`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
 19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead. Two live ordering constraints in this template: `shell` before `ui` (`ThemeProvider` injects `IThemeStorage`, which the shell registers), and `notifications` after the app's own registrations (`PushNotificationService` injects the app's `FirebaseOptions`). `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.

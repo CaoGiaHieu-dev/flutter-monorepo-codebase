@@ -11,7 +11,7 @@
 `platform/app_shell/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
 
 ```dart
-List<INavDestinationModule> get _dashboardTabs {
+List<INavDestinationModule> get _destinations {
   return getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
 }
@@ -208,8 +208,8 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 @override
 Widget build(BuildContext context, GoRouterState state) {
   return ChangeNotifierProvider(
-    create: (context) => getIt<OnboardingProvider>(),
-    child: const OnboardingPage(),
+    create: (context) => getIt<ProfileProvider>(),
+    child: const ProfilePage(),
   );
 }
 ```
@@ -248,9 +248,11 @@ class AuthNavigatorImpl implements AuthNavigator {
 **3. Consume from anywhere:**
 
 ```dart
-getIt<AuthNavigator>().toLogin(context);
-// or, when the feature may be absent:
+// From any package other than the owner — the owner is removable:
 getItOrNull<AuthNavigator>()?.toLogin(context);
+
+// Only inside feature_auth itself, which cannot be absent from its own code:
+getIt<AuthNavigator>().toLogin(context);
 ```
 
 ### Rules

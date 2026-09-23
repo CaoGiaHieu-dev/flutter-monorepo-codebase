@@ -145,4 +145,4 @@ submodule per module possible.
 | Check a rule before a PR | [`../reference/01_rules.md`](../reference/01_rules.md) · [`../reference/04_review_checklist.md`](../reference/04_review_checklist.md) |
 
 > [!NOTE]
-> The packages under `modules/*/domain`, `modules/*/data` and `modules/*/feature` (Auth, Home, Settings, Onboarding, Splash, Dashboard) ship as **sample implementations**. They demonstrate the wiring, not production business rules — copy the shape, then replace or delete them.
+> The packages under `modules/*/domain`, `modules/*/data` and `modules/*/feature` (Auth, Cache, Home, Settings, Onboarding, Splash, Dashboard) ship as **sample implementations**. They demonstrate the wiring, not production business rules — copy the shape, then replace or delete them.

@@ -20,16 +20,18 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
   - `core_ui_kit`: Unified library for all reusable widgets (atomic components like buttons/inputs, plus dialogs, feedback, layout, media and navigation widgets). Depends only on `core_common`, `core_base_ui`, `core_responsive` and `provider_state_management` — never on a feature. It lives under `platform/` because it is a shared UI library every feature may consume, **not** a removable feature.
   - `core_network`: Pre-configured HTTP client (Dio, Retrofit) with interceptors (auth, retry, logging).
   - `core_storage`: **Storage mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, over two-tier storage (Secure Storage + SharedPreferences). **Defines zero keys or presets**; every consumer declares its own `StorageValue` (see § 17).
-  - `core_database`: **Database mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`. **Owns no database, table or DAO** (its DI module registers nothing); each package declares its own database (see § 20).
+  - `core_database`: **Database mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`. **Owns no database, table or DAO** (its DI module registers nothing); each package declares its own database (see § 21).
   - `core_notifications`: Push notification management module. Owns its channel constants at `lib/src/utils/notification_constants.dart`.
   - `provider_state_management`: Provider state management base classes (`BaseProvider`, `executeOperation`, `BaseViewWidget`, `ViewStateModel`), plus the in-core `DefaultLoadingWidget` / `DefaultEmptyWidget` fallbacks.
   - `bloc_state_management`: BLoC state management base classes (`BaseBloc`, `BlocViewState<T>`; `BaseCubit` only when events are unnecessary). **`BaseBloc`/`BaseCubit` are extension points only** — there is no BLoC equivalent of `executeOperation`, so BLoC handlers unwrap `Result` / map `AppFailure` / set loading by hand.
 - **Domain micro-packages** — the layer foundation `platform/domain_core` plus one `modules/<name>/domain` per module. Business logic core. **MUST be pure Dart (100% decoupled from Flutter UI, Dio, Retrofit, or any platform-specific dependencies)**. Current micro-packages:
   - `domain_core` (`platform/domain_core`): Defines `Result<T>`, `AppFailure`, `BaseEntity<T>`, and shared primitive types.
   - `domain_auth`: Entities, use cases, and repository interfaces for authentication.
+  - `domain_cache`: The cache-entry entity, params, repository interface and use cases (sample, backing `data_cache`).
 - **Data micro-packages** — the layer foundation `platform/data_core` plus one `modules/<name>/data` per module. Data access layer (remotes, local caching, models/DTOs). Depends on `domain` packages. Current micro-packages:
   - `data_core` (`platform/data_core`): `IBaseRepository` with `execute()` and `executeSync()` wrappers to automatically handle error conversion.
   - `data_auth`: Models/DTOs, Remote DataSources (Retrofit), and RepositoryImpl for authentication.
+  - `data_cache`: A package-owned Drift database (`CacheDatabase`, table, DAO), its local data source and RepositoryImpl — the reference for § 21.
 - **`modules/*/feature/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `platform/ui_kit` as `core_ui_kit`.
   - Feature packages (e.g., `feature_onboarding`, `feature_auth`, `feature_dashboard`, `feature_home`, `feature_settings`, `feature_splash`):
     - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
@@ -45,9 +47,9 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
      ```bash
      grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml
      ```
-   - Currently **three** core → domain edges exist, and no `core → data` or `core → feature` edge may ever be added:
+   - The grep also prints `platform/data_core → domain_core`; that is a data → domain edge (`data_core` is the data layer's foundation that happens to live under `platform/`). Among core packages, currently **three** core → domain edges exist, and no `core → data` or `core → feature` edge may ever be added:
      - `provider_state_management → domain_core` — needs `Result<T>` / `PaginatedEntity<T>`.
-     - `bloc_state_management → domain_core` — needs `AppFailure` for `BlocViewState.error`. It must import `domain_core` **directly**, not via `core_common`'s re-export shim: the shim's `show` clause cannot carry the Freezed-generated `$AppFailureCopyWith`, and the resulting breakage is invisible to `flutter analyze` (§ 21).
+     - `bloc_state_management → domain_core` — needs `AppFailure` for `BlocViewState.error`. It must import `domain_core` **directly**, not via `core_common`'s re-export shim: the shim's `show` clause cannot carry the Freezed-generated `$AppFailureCopyWith`, and the resulting breakage is invisible to `flutter analyze` (§ 23).
      - `platform_kernel → domain_core` — `ErrorHandler` produces `AppFailure`, which now lives in Domain.
    - If a core package needs a fallback widget, **define it inside that core package**. Do not borrow one from `core_ui_kit`. Reference: `provider_state_management` ships `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` for exactly this reason.
    - Dependencies flow **one way**: `core_ui_kit → provider_state_management` is correct; the reverse is a genuine cycle **inside** the core ring and is forbidden. (This is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` instead of reaching into the widget library for them — that would close the loop.)
@@ -65,9 +67,9 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
 2. **Data Layer**:
    - Data source directories must be named `data_sources/` (snake_case), NOT `datasources/`.
    - Categorize into `data_sources/remote/` (Retrofit) and `data_sources/local/` (Storage/DB).
-   - RepositoryImpl classes should inherit from `BaseRepository` in `data_core` and use the helper methods `execute()` or `executeSync()` wrappers to automatically handle error conversion. API calls are not required to return `BaseEntity`; when the payload is wrapped, unwrap and map it via the `mapper` parameter.
+   - RepositoryImpl classes should inherit from `IBaseRepository` in `data_core` and use the helper methods `execute()` or `executeSync()` wrappers to automatically handle error conversion. API calls are not required to return `BaseEntity`; when the payload is wrapped, unwrap and map it via the `mapper` parameter.
    - **DataSources return Models, never Entities**, and never leak a generated type. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `modules/cache/data/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
-   - Error handling must use `ErrorHandler.handleError(e)` from `core_common`. **DO NOT** invent an `AppFailure.fromException()` — no such constructor exists.
+   - Error handling must use `ErrorHandler.handleError(e)` from `platform_kernel` (re-exported by `core_common`). **DO NOT** invent an `AppFailure.fromException()` — no such constructor exists.
    - ⚠️ Known gap: `ErrorHandler` has no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch, so every Firebase error collapses to `ServerFailure(code: 9999)` (`"Unknown error occurred"` in release). Add a branch before relying on Firebase error codes in UI.
 3. **Feature Module Boundary**:
    - Feature package A must never import any file from Feature package B.
@@ -77,13 +79,13 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
    - **Navigation Rules (Decentralized Navigators)**:
      - Navigator interfaces (`AuthNavigator`, `HomeNavigator`, etc.) defined in `core_di` must only contain navigation methods to routes owned by that specific feature.
      - Implementation classes (`NavigatorImpl`) must reside locally under the `routing/` directory of the feature package that owns those routes (e.g., `AuthNavigatorImpl` resides in `feature_auth`).
-     - **ABSOLUTELY FORBIDDEN** to hardcode route paths or call `GoRouter.of(context).go(...)` directly to navigate to another feature. Instead, fetch the target feature's Navigator from GetIt (e.g., `getIt<HomeNavigator>().toHome(context)`).
+     - **ABSOLUTELY FORBIDDEN** to hardcode route paths or call `GoRouter.of(context).go(...)` directly to navigate to another feature. Instead, fetch the target feature's Navigator from GetIt with `getItOrNull` — the owner is removable, and `arch_check` R8 blocks a throwing lookup (e.g., `getItOrNull<HomeNavigator>()?.toHome(context)`).
      - **BuildContext MUST be passed directly** as a parameter from the UI caller (Widget/Page/View). Minimize or avoid utilizing context from `NavigatorKeys` or `appRouter.currentContext` to prevent Widget Lifecycle issues.
    - Shared utilities and UI widgets used only across features should be placed in `platform/ui_kit`.
    - **Cross-Feature UI Actions (Action Handlers)**:
      - When Feature A must trigger a UI-bound action owned by Feature B (e.g., logout) without importing Feature B, declare an `I*ActionHandler` interface in `platform/di/lib/src/actions/`.
      - Implement `*ActionHandlerImpl` inside the owning feature under `handlers/` and register with `@Injectable(as: I*ActionHandler)` (or `@LazySingleton(as: ...)` when appropriate).
-     - Consumers call `getIt<I*ActionHandler>().method(context)`. Do **not** use Action Handlers for pure route navigation (use Navigators) or Domain-only logic (use UseCases).
+     - Consumers call `getItOrNull<I*ActionHandler>()?.method(context)` (R8). Do **not** use Action Handlers for pure route navigation (use Navigators) or Domain-only logic (use UseCases).
 4. **UI vs. Business State Workflows (Bypassing Domain)**:
    - **Pure UI State (e.g., ThemeMode, Locale)**: Cannot pass through the Domain layer because Domain must be Pure Dart (cannot import `flutter/material.dart`). UI Providers bypass Domain and persist via a DI storage Interface implemented in the App Shell:
      - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`platform/app_shell/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`platform/app_shell/lib/di/utils/theme_storage_keys.dart`)
@@ -103,8 +105,8 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
      @override
      Widget build(BuildContext context, GoRouterState state) {
        return ChangeNotifierProvider(
-         create: (context) => getIt<OnboardingProvider>(),
-         child: const OnboardingPage(),
+         create: (context) => getIt<ProfileProvider>(),
+         child: const ProfilePage(),
        );
      }
 
@@ -112,8 +114,8 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
      @override
      Widget build(BuildContext context, GoRouterState state) {
        return BlocProvider(
-         create: (context) => getIt<ProfileBloc>(),
-         child: const ProfilePage(),
+         create: (context) => getIt<HomeProfileBloc>(),
+         child: const HomePage(),
        );
      }
      ```
@@ -248,7 +250,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
 - **ARB keys MUST be `lowerCamelCase`.** `flutter gen-l10n` copies each key straight through into a Dart getter, so `welcome_back` yields `context.l10nAuth.welcome_back` at every call site — an identifier that breaks Dart's naming convention. Generated files are excluded from `analysis_options.yaml`, so nothing will warn you; the `.arb` is the only place the casing is decided.
-- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The shell's `app_material_wrapper.dart` collects all delegates using `getAllOrEmpty<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
+- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@Injectable(as: IFeatureLocalization)`). The shell's `app_material_wrapper.dart` collects all delegates using `getAllOrEmpty<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
 
 ---
 
@@ -479,13 +481,13 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 
 Deleting any `modules/*/feature` package must leave the app compiling and booting.
 
-- **The app shell's only intentional hard reference to features is `apps/mobile/lib/di/injection.dart`** — as the composition root it must name what it composes. Every *other* shell file resolves features through `core_di` contracts.
-- To drop a feature, delete its entry from `apps/mobile/app_manifest.yaml` and run:
+- **An app's only intentional hard reference to features is its generated `apps/<id>/lib/di/injection.dart`** — as the composition root it must name what it composes. Every *other* shell file resolves features through `core_di` contracts.
+- To drop a feature, delete its entry from **every** `apps/<id>/app_manifest.yaml` that composes it (`auth` and `settings` appear in both `mobile` and `admin`) and run:
   ```bash
-  dart tools/composer/composer.dart sync --app mobile
+  dart tools/composer/composer.dart sync
   flutter pub get && dart run build_runner build -d --workspace
   ```
-  `composer` regenerates the three artifacts that previously had to be edited by hand and kept in step — `apps/mobile/lib/di/injection.dart`, `apps/mobile/pubspec.yaml`'s path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
+  `composer` regenerates three artifacts — each app's `lib/di/injection.dart`, each app's `pubspec.yaml` path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
   **Only the manifest is edited by hand.**
 - **A type import defeats `getItOrNull`.** Guarding the *lookup* is useless if the file still imports the feature for the *type* — an unresolved import fails at compile time, before any lookup runs. When the shell needs something a module owns, declare a contract in `core_di` and have the module implement + register it:
 

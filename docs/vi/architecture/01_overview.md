@@ -144,4 +144,4 @@ submodule trở nên khả thi.
 | Tra luật trước khi mở PR | [`../reference/01_rules.md`](../reference/01_rules.md) · [`../reference/04_review_checklist.md`](../reference/04_review_checklist.md) |
 
 > [!NOTE]
-> Các package trong `modules/*/domain`, `modules/*/data` và `modules/*/feature` (Auth, Home, Settings, Onboarding, Splash, Dashboard) là **code mẫu**. Chúng minh hoạ cách đấu nối, không phải nghiệp vụ thật — hãy copy hình dạng rồi thay hoặc xoá.
+> Các package trong `modules/*/domain`, `modules/*/data` và `modules/*/feature` (Auth, Cache, Home, Settings, Onboarding, Splash, Dashboard) là **code mẫu**. Chúng minh hoạ cách đấu nối, không phải nghiệp vụ thật — hãy copy hình dạng rồi thay hoặc xoá.

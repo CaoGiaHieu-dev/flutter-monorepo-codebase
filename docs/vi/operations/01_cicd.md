@@ -71,7 +71,7 @@ Job chạy trên `macos-latest` dù chỉ build Android. Runner macOS bị tính
 
 Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code_review.dart`) rồi trả kết quả về pull request.
 
-**Kích hoạt**: pull request vào `main` / `develop` / `master` có đụng `apps/mobile/lib/**/*.dart`, `modules/**/*.dart` hoặc `platform/**/*.dart` (trừ file generated), cộng thêm chạy tay với bộ chọn phạm vi (`changed` / `all` / `domain` / `data` / `presentation`) và ngôn ngữ báo cáo (`en` / `vi` / `ja` / `ko` / `zh`).
+**Kích hoạt**: pull request vào `main` / `develop` / `master` có đụng `apps/*/lib/**/*.dart`, `modules/**/*.dart` hoặc `platform/**/*.dart` (trừ file generated), cộng thêm chạy tay với bộ chọn phạm vi (`changed` / `all` / `domain` / `data` / `platform` / `presentation`) và ngôn ngữ báo cáo (`en` / `vi` / `ja` / `ko` / `zh`).
 
 **Nó làm gì**: lấy danh sách file thay đổi bằng `tj-actions/changed-files`, chạy reviewer, upload báo cáo Markdown làm artifact (giữ 30 ngày), rồi phân tích báo cáo đó và đăng **comment inline đúng dòng** khi dòng đó nằm trong diff của PR. Phát hiện nằm ngoài diff được gom thành comment riêng theo từng file.
 

@@ -132,9 +132,6 @@ android {
         versionName = flutter.versionName
         multiDexEnabled = true
 
-        resValue("string", "FACEBOOK_APP_ID", envs["FACEBOOK_APP_ID"] ?: "")
-        resValue("string", "FACEBOOK_TOKEN", envs["FACEBOOK_TOKEN"] ?: "")
-        resValue("string", "APP_SCHEMA", envs["APP_SCHEMA"] ?: "")
         resValue("string", "WEB_DOMAIN", envs["WEB_DOMAIN"] ?: "")
         resValue("string", "app_name", envs["APP_NAME"] ?: "Codebase") 
         resValue("string", "APP_ID", "${applicationId}${applicationIdSuffix ?: ""}") 

@@ -49,20 +49,8 @@ class AppConfig {
   /// Base URL for API calls based on current flavor
   static String get baseUrl => EnvConstants.BASE_URL;
 
-  /// WebSocket URL for real-time communication
-  static String get socketUrl => EnvConstants.SOCKET;
-
   /// Web domain for the application
   static String get webDomain => EnvConstants.WEB_DOMAIN;
-
-  /// Google Maps API key
-  static String get googleMapsApiKey => EnvConstants.GOOGLE_MAP_API;
-
-  /// Facebook App ID
-  static String get facebookAppId => EnvConstants.FACEBOOK_APP_ID;
-
-  /// Application schema version
-  static String get appSchemaVersion => EnvConstants.APP_SCHEMA_VERSION;
 
   /// Gets the current environment name as a string
   static String get environmentName => appFlavor.toValue();

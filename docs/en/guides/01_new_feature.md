@@ -54,7 +54,7 @@ Run it with no arguments to get an interactive prompt instead.
 1. Creates the directory tree and `pubspec.yaml`
 2. Writes `lib/di/module.dart` with `@InjectableInit.microPackage()`
 3. Registers the package in the root `pubspec.yaml` `workspace:` list
-4. Registers it in `apps/mobile/pubspec.yaml` **and** in `apps/mobile/lib/di/injection.dart`
+4. Adds it to `modules:` in every `apps/<id>/app_manifest.yaml` — then run `dart tools/composer/composer.dart sync`, which regenerates the app's path dependencies and `injection.dart`
 5. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
    `build_runner build -d --workspace`, then `dart fix --apply`
 
@@ -401,13 +401,12 @@ Then **full restart** the app (not hot reload) so the new DI graph is built.
 
 The app must keep running when any feature is deleted. Remove in this order:
 
-1. Its `ExternalModule(...)` entry **and** the matching import in `apps/mobile/lib/di/injection.dart`
-2. Its entry in `apps/mobile/pubspec.yaml`
-3. Its path in the root `pubspec.yaml` `workspace:` list
-4. The `modules/<name>/feature/` directory
-5. `flutter pub get && dart run build_runner build -d --workspace`
+1. Its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it
+2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list
+3. The `modules/<name>/feature/` directory
+4. `flutter pub get && dart run build_runner build -d --workspace`
 
-**Let the tool do it.** `remove_sample.dart` performs all five steps and, more importantly,
+**Let the tool do it.** `remove_sample.dart` performs these steps and, more importantly,
 tells you what the manual list above cannot:
 
 ```bash
@@ -417,7 +416,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 ```
 
 > [!CAUTION]
-> **The five steps are not always sufficient.** The shell degrades gracefully — it resolves
+> **These steps are not always sufficient.** The shell degrades gracefully — it resolves
 > everything through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks — but
 > *other samples* may hold a hard dependency on the one you are deleting. Removing `auth` breaks
 > two of them:

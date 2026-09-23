@@ -322,7 +322,7 @@ builder: (context, state, navigationShell) {
         state,
         navigationShell,
       ) ??
-      const SizedBox.shrink();
+      navigationShell;
 },
 ```
 
@@ -330,8 +330,9 @@ builder: (context, state, navigationShell) {
 |---|---|
 | Toàn bộ `IFeatureRouteModule` | Không có route stack; app vẫn dựng được |
 | Toàn bộ `INavDestinationModule` | Một branch giữ chỗ `/_empty_dashboard` giữ `StatefulShellRoute` hợp lệ |
-| `DashboardRouteModule` | Dashboard render `SizedBox.shrink()` |
-| `IAppEntryLocation` | Rơi về path của tab đầu tiên, rồi tới `/` |
+| `DashboardRouteModule` | Các tab vẫn hiển thị, chỉ là không có chrome — `navigationShell` hiển thị nhánh hiện tại. (Trước đây là `SizedBox.shrink()`: app có tab mà không có dashboard sẽ mở ra màn hình trắng) |
+| `IAppEntryLocation` | Boot bắt đầu ở path của tab đầu tiên, rồi tới `/`. Lần mở đầu tiên không còn *dừng* ở đó nữa: không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
+| `HomeNavigator` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
 
 Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
 

@@ -181,20 +181,15 @@ bundles:
     orphaned_keys:
       - "NavigatorKeys.nested('auth') in platform/di/lib/src/routing/navigator_keys.dart"
     breaks:
-      - sample: feature_settings
-        at: modules/settings/feature/lib/src/pages/settings_page.dart:60
-        why: >-
-          Calls getIt<IAuthActionHandler>() — the throwing lookup, not
-          getItOrNull. Tapping logout throws once auth is gone.
-        fix: Delete the logout row, or switch to getItOrNull and hide it when null.
       - sample: feature_home
-        at: modules/home/feature/lib/src/bloc/home_profile_bloc.dart:35
+        at: modules/home/feature/lib/src/bloc/home_profile_bloc.dart:25
         why: >-
           HomeProfileBloc takes IAuthStatusStream through the constructor, so
           DI cannot build it at all once nothing registers that contract.
         fix: Drop the dependency from the bloc, or remove feature_home too.
     safe_couplings:
       - "feature_onboarding -> AuthNavigator (getItOrNull + fallback, degrades quietly)"
+      - "feature_settings -> IAuthActionHandler (getItOrNull; the logout row is hidden)"
 
   home:
     packages: [feature_home]

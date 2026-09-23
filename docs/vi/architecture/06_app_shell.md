@@ -7,7 +7,7 @@ Shell được tách làm hai, có chủ đích:
 - **`apps/<id>/`** là **điểm lắp ráp (composition root)** — nơi duy nhất được phép phụ thuộc mọi tầng, và nơi duy nhất biết danh sách đầy đủ các module. Nó chỉ chứa những gì thực sự khác nhau giữa các app, ngoài ra không có gì khác.
 - **`platform/app_shell/`** (`platform_app_shell`) là mọi thứ app nào cũng cần và lẽ ra phải copy: boot scope, lắp ráp router, material wrapper, các storage adapter và `NetworkConfigImpl`. Nó không import module nào — `arch_check` R1 giữ điều đó, vì đây là một package `platform/`.
 
-Trước khi tách, thêm app thứ hai nghĩa là copy 1.369 dòng qua 24 file. Giờ một app chỉ là một `main.dart`, một manifest, và một `injection.dart` được sinh ra.
+Trước khi tách, thêm app thứ hai nghĩa là copy 1.369 dòng qua 24 file. Giờ một app chỉ là một manifest, một `injection.dart` được sinh ra, một `main.dart` dài một dòng, và những gì định danh chính nó — ở app mẫu là Firebase options.
 
 ---
 
@@ -17,12 +17,14 @@ Trước khi tách, thêm app thứ hai nghĩa là copy 1.369 dòng qua 24 file.
 apps/mobile/                         điểm lắp ráp
 ├── app_manifest.yaml                module nào, thứ tự nhóm DI ra sao
 ├── lib/
-│   ├── main.dart                    entry point, error zone
-│   └── di/injection.dart            do composer sinh — không bao giờ sửa tay
+│   ├── main.dart                    một dòng: runShellApp(configureDependencies: …)
+│   ├── di/injection.dart            do composer sinh — không bao giờ sửa tay
+│   └── firebase/firebase_module.dart FirebaseOptions của app này (file options bị git-ignore)
 ├── android/  ios/  fastlane/        project native và lane phát hành
 └── env.dev  env.stg                 giá trị theo flavor (env.prod bạn tự tạo)
 
 platform/app_shell/lib/              dùng chung cho mọi app
+├── bootstrap.dart                   runShellApp — error zone, DI, splash, init
 ├── main_scope.dart                  splash → init → chuyển sang root
 ├── di/
 │   ├── module.dart                  @InjectableInit.microPackage — nhóm DI `shell`
@@ -47,7 +49,7 @@ platform/app_shell/lib/              dùng chung cho mọi app
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M as main.dart
+    participant M as runShellApp()
     participant DI as configureDependencies()
     participant S as MainScope.run()
     participant N as FlutterNativeSplash
@@ -79,7 +81,9 @@ sequenceDiagram
 
 ### Từng bước
 
-1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm. Móc nối Crashlytics cho bản release đã có sẵn nhưng đang bị comment.
+Trình tự này nằm trong `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`](../../../platform/app_shell/lib/bootstrap.dart)); `main.dart` của app chỉ gọi nó với `configureDependencies` được sinh cho chính app đó.
+
+1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm. Mỗi lỗi đi qua callback `onError` (tuỳ chọn) của app — chỗ để gắn crash reporter — rồi tới `FlutterError.reportError`.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin.
 3. **`await configureDependencies()`** chạy *trước* `MainScope`. Đến lúc widget đầu tiên build, cả container đã phân giải xong.
 4. **`MainScope`** được dựng với ba thứ: hiển thị splash widget nào (nếu có), widget gốc, và `initService` — ở đây là `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`.
@@ -87,20 +91,20 @@ sequenceDiagram
 
 ### Hai đường splash
 
-`main.dart` chọn splash theo nền tảng:
+`runShellApp` chọn splash theo nền tảng, và lấy nó từ module nào đã đăng ký `IAppSplashScreen` — ở app mẫu là `feature_splash`:
 
 ```dart
-splashScreen: kIsWeb
-    ? const SplashPage()
-    : Platform.isIOS
-    ? null
-    : const SplashPage(),
+final usesDartSplash = kIsWeb || !Platform.isIOS;
+// ...
+splashScreen: usesDartSplash
+    ? getItOrNull<IAppSplashScreen>()?.build()
+    : null,
 ```
 
 | Nền tảng | `splashScreen` | Hành vi |
 |:--|:--|:--|
 | iOS | `null` | Splash native được **giữ lại** suốt quá trình init rồi mới gỡ. Không có splash Dart nào được vẽ. |
-| Android, Web | `SplashPage()` | Splash native gỡ ngay lập tức; một `SplashPage` Dart được vẽ thay thế, rồi mờ dần sang `RootApp` qua `AnimatedSwitcher`. |
+| Android, Web, desktop | `IAppSplashScreen.build()` | Splash native gỡ ngay lập tức; splash đã đăng ký được vẽ thay thế, rồi mờ dần sang `RootApp` qua `AnimatedSwitcher`. Không ghép module splash nào thì giá trị là `null` và đi theo đường của iOS. |
 
 Cả hai đường đều `await Future.wait([initService(), Future.delayed(_minimumDelay)])`, với `_minimumDelay` là 2 giây. Độ trễ này là **sàn**, không phải cộng thêm — init nhanh vẫn phải chờ để splash không bị nháy.
 
@@ -238,7 +242,7 @@ Mọi điểm gom đều lùi về phương án dự phòng khi không có đón
 |:--|:--|
 | `IFeatureRouteModule` | danh sách rỗng |
 | `INavDestinationModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()` |
-| `DashboardRouteModule` | `SizedBox.shrink()` |
+| `DashboardRouteModule` | chính `navigationShell` — các tab không có chrome |
 | `IAppEntryLocation` | path của tab dashboard đầu tiên, nếu không có thì `/` |
 
 Nhờ vậy, xoá một feature package không thể làm sập shell.

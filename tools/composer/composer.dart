@@ -421,14 +421,21 @@ void _sync(
   final workspace = <String>{};
   var missingCount = 0;
 
+  // The root `workspace:` list is shared by every app, so it is the union
+  // over *all* of them even when `--app` narrows what else is written. It
+  // used to be built from the selected apps only: with two apps,
+  // `sync --app admin` would have dropped every package only `mobile` uses
+  // from the workspace, and `pub get` would then fail to resolve `mobile`.
+  for (final app in apps) {
+    workspace.add(p.posix.relative(app.dir, from: root));
+    for (final pkg in _resolve(app, packages, <String>[]).allPackages) {
+      workspace.add(p.posix.relative(packages[pkg]!, from: root));
+    }
+  }
+
   for (final app in selected) {
     final r = _resolve(app, packages, warnings);
     missingCount += r.missing.length;
-
-    workspace.add(p.posix.relative(app.dir, from: root));
-    for (final pkg in r.allPackages) {
-      workspace.add(p.posix.relative(packages[pkg]!, from: root));
-    }
 
     final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
     final clashes = _declaredOutsideManaged(appPubspec, r.allPackages.toSet());

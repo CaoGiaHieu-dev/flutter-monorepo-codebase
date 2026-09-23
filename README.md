@@ -381,12 +381,13 @@ holds no feature type at all, which is what makes `feature_auth` removable.
 
 ### Removing a feature
 
-1. Delete its `ExternalModule(...)` entry and matching import in `apps/mobile/lib/di/injection.dart`.
-2. Delete its `feature_x:` entry in `apps/mobile/pubspec.yaml`.
-3. Delete its path from the `workspace:` list in the root `pubspec.yaml`.
-4. `flutter pub get && dart run build_runner build -d --workspace`.
+1. Delete its line from `modules:` in every `apps/<id>/app_manifest.yaml` that composes it.
+2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path
+   dependencies and the root `workspace:` list, all between `composer:managed` markers.
+3. `flutter pub get && dart run build_runner build -d --workspace`.
 
-No other file needs editing — every runtime lookup falls back safely. See
+Or let `dart tools/sample_cleanup/remove_sample.dart <bundle>` do it, dry-run first. No other file
+needs editing — every runtime lookup falls back safely. See
 [`guides/04_routing.md`](docs/en/guides/04_routing.md).
 
 ---

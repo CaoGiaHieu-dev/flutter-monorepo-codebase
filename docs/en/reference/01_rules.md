@@ -201,12 +201,11 @@ dart tools/arch_check/check.dart      # rule R8 — Gate 1 of pr_quality_check.y
 
 This is not a style rule. The throwing lookup **compiles**: the calling package depends on `core_di`, not on the feature that implements the contract, so `flutter analyze` sees nothing wrong. It fails at runtime, in a build without that feature, on whichever screen happens to call it. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; a feature is exempt from its own contract.
 
-**Removing a feature** — the four steps documented in `apps/mobile/lib/di/injection.dart`:
+**Removing a feature** — the manifest is the only hand-edited file:
 
-1. its `ExternalModule(...)` entry and the matching import in `apps/mobile/lib/di/injection.dart`;
-2. its `feature_x:` entry in `apps/mobile/pubspec.yaml`;
-3. its path in the root `pubspec.yaml` `workspace:` list;
-4. `flutter pub get` + `dart run build_runner build -d --workspace`.
+1. its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it;
+2. `dart tools/composer/composer.dart sync`, which regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list;
+3. `flutter pub get` + `dart run build_runner build -d --workspace`.
 
 The `injection.dart` imports are the shell's **only intentional hard reference** to features — as the composition root it must name what it composes. Every other consumer goes through `core_di`.
 
@@ -214,7 +213,10 @@ The `injection.dart` imports are the shell's **only intentional hard reference**
 
 ```bash
 # after removing a feature
-flutter pub get && dart analyze app
+dart tools/composer/composer.dart sync
+flutter pub get && dart run build_runner build -d --workspace
+dart tools/arch_check/check.dart
+flutter analyze
 ```
 
 ---

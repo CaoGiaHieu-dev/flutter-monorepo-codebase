@@ -47,4 +47,8 @@ class BaseUiConstants {
 
   /// App bar elevation once content scrolls under it — flat by design.
   static const double APP_BAR_SCROLLED_UNDER_ELEVATION = 0.0;
+
+  /// Opacity of the brand colour behind the selected `NavigationRail`
+  /// destination.
+  static const double NAV_RAIL_INDICATOR_ALPHA = 0.16;
 }

@@ -25,7 +25,7 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | Vừa clone về, cần dựng mọi thứ | `dart tools/workspace_setup/configure.dart` |
 | Cấu hình Firebase cho dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
 | Sinh lại splash screen và app icon | `dart tools/theme_generator/theme_setting.dart --app mobile` |
-| Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_ckeck.sh` |
+| Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_ckeck.sh <apk>` |
 | Nhờ AI review một thay đổi | `dart tools/code_review/code_review.dart --changed` |
 
 ---
@@ -38,6 +38,8 @@ Cưỡng chế luật phân tầng bằng máy. **Gate 1 của `pr_quality_check
 dart tools/arch_check/check.dart          # exit 1 khi có vi phạm chặn
 dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
 ```
+
+Tool không nhận tham số nào khác: bất cứ thứ gì ngoài `--help` (một `--fix`, một lần gõ nhầm `--help`) đều thoát với mã `64` thay vì trông như một lần chạy sạch.
 
 | Luật | Kiểm tra gì |
 |---|---|
@@ -68,9 +70,12 @@ R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai
 
 ```bash
 dart tools/composer/composer.dart list              # liệt kê app và thành phần
+dart tools/composer/composer.dart list --app admin  # chỉ một app
 dart tools/composer/composer.dart sync --app mobile # sinh lại
 dart tools/composer/composer.dart verify            # gate 0 của CI — fail khi lệch
 ```
+
+`--app <id>` lọc như nhau cho `list`, `sync` và `verify`; danh sách `workspace:` ở root vẫn được tính từ mọi app. Cờ lạ, hoặc `--app` không kèm id, thoát với mã `64`. Một pubspec hay manifest không phải YAML hợp lệ — thường là do key trùng — bị từ chối kèm tên file, `file:dòng` và thông báo của parser, exit `1`, thay vì làm tool crash.
 
 Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `workspace:` ở root, dependency dạng path của app, và `lib/di/injection.dart` của nó. Thêm một module nghĩa là sửa cả ba cho khớp, và sai thì vỡ lúc boot với `"<Type> is not registered"` — thứ `flutter analyze` không thấy được.
 
@@ -84,7 +89,7 @@ Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.ya
 
 Cả `sync` lẫn `verify` còn **từ chối** một pubspec của app khai báo tay một package do composer quản lý ở ngoài vùng marker. Pub từ chối key trùng, nên chỉ một lỗi đó là cả workspace ngừng resolve — và đó chính là lỗi composer từng tự gây ra.
 
-Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`PARTIAL COMPOSITION`**: các file đã-commit mà nó vừa ghi đè (`pubspec.yaml` gốc, cùng `pubspec.yaml` và `injection.dart` của mỗi app được sync), cùng dòng `git checkout --` để khôi phục. Phép lắp ráp nó viết ra đúng ở local và sai khi commit, và CI Gate 0 bắt được trong mọi trường hợp, vì `verify` sinh lại từ manifest trên runner có đủ mọi module. Xem [`12_module_isolation.md`](../guides/12_module_isolation.md).
+Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`PARTIAL COMPOSITION`**: các file đã-commit mà lần chạy đó thực sự ghi lại — chỉ những file ấy; file vốn đã chứa đúng phép lắp ráp này không bị liệt kê (các ứng viên là `pubspec.yaml` gốc, cùng `pubspec.yaml` và `injection.dart` của mỗi app được sync) — cùng dòng `git checkout --` để khôi phục. Phép lắp ráp nó viết ra đúng ở local và sai khi commit, và CI Gate 0 bắt được trong mọi trường hợp, vì `verify` sinh lại từ manifest trên runner có đủ mọi module. Xem [`12_module_isolation.md`](../guides/12_module_isolation.md).
 
 ---
 
@@ -128,6 +133,7 @@ Trả lời câu "cái nào là code mẫu, và xoá sao cho không vỡ app?".
 ```bash
 dart tools/sample_cleanup/remove_sample.dart --list    # bảng phân loại
 dart tools/sample_cleanup/remove_sample.dart auth      # dry-run (mặc định)
+dart tools/sample_cleanup/remove_sample.dart auth --verbose  # dry-run, liệt kê đủ mọi tham chiếu tài liệu
 dart tools/sample_cleanup/remove_sample.dart auth --apply
 ```
 
@@ -135,7 +141,9 @@ Nguồn chân lý của nó là [`tools/sample_manifest.yaml`](../../../tools/sa
 
 Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml` gốc và khỏi manifest, pubspec, `injection.dart` của mọi app, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** (danh sách `breaks` trong `tools/sample_manifest.yaml` — hiện trống với mọi sample) — cùng các liên kết xuống cấp an toàn, như `feature_settings` ẩn dòng logout khi `getItOrNull<IAuthActionHandler>()` trả về null, hay `feature_home` hiển thị trạng thái chưa đăng nhập khi `getItOrNull<IAuthStatusStream>()` ở route trả về null.
 
-Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được.
+Cả dry-run lẫn `--apply` đều đếm các **tham chiếu Markdown** tới những đường dẫn sắp bị xoá — đường dẫn trong backtick và link tương đối trong mọi `*.md` (`docs/`, `.agents/`, các README), so khớp đúng như cách `docs_check` làm. Con số đó chính là thứ `dart tools/docs_check/check.dart` (CI Gate 5) sẽ báo sau khi gỡ package, và Gate 5 vẫn đỏ cho tới khi các tham chiếu đó được sửa. Tool in 15 dòng đầu; `--verbose` liệt kê đủ.
+
+Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được. Tham số được kiểm tra trước: cờ lạ (`--aply`), thiếu tên bundle, hoặc nhiều hơn một bundle đều thoát với mã `64` — gõ sai cờ không bao giờ lặng lẽ biến thành dry-run, cũng không bị bỏ qua khi đứng cạnh `--apply`.
 
 ---
 
@@ -144,14 +152,15 @@ Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot tr
 Dựng khung package và đăng ký nó khắp workspace.
 
 ```bash
-dart tools/module_generator/generate.dart <type> <name> [<dir>] [<sm>] [<route>]
+dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>]
+dart tools/module_generator/generate.dart --help   # cú pháp
 ```
 
 | Tham số | Giá trị |
 |---|---|
 | `<type>` | `1` feature · `2` domain · `3` data · `4` core · `5` custom |
-| `<name>` | tên thư mục trần (`profile`) — package sẽ thành `feature_profile` |
-| `<dir>` | chỉ cho type `5` — tiền tố tên package: `<dir>_<name>` tại `platform/<name>`. Từ chỉ tầng (`feature`, `domain`, `data`, `core`) bị từ chối; hãy dùng type 1–4 |
+| `<name>` | tên thư mục trần (`profile`) — package sẽ thành `feature_profile`. Phải là tên package Dart hợp lệ: chữ thường, số và `_`, bắt đầu bằng chữ cái, không phải từ khoá Dart |
+| `<prefix>` | chỉ cho type `5` — tiền tố tên package: `<prefix>_<name>` tại `platform/<name>`, cùng quy tắc đặt tên như `<name>`. Từ chỉ tầng (`feature`, `domain`, `data`, `core`) bị từ chối; hãy dùng type 1–4. Với type 1–4 tham số này phải rỗng — truyền `""` |
 | `<sm>` | chỉ feature — `1` Provider · `2` BLoC · `3` không dùng |
 | `<route>` | chỉ feature — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` không |
 
@@ -160,11 +169,14 @@ dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provide
 dart tools/module_generator/generate.dart 1 chat    "" 2 2   # feature + BLoC + tab bottom-nav
 dart tools/module_generator/generate.dart 2 payment          # domain micro-package
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
+dart tools/module_generator/generate.dart 5 billing acme     # acme_billing tại platform/billing
 ```
 
-Chạy thiếu tham số thì nó sẽ hỏi tương tác. Câu hỏi và phần lớn thông báo tiến trình, thông báo lỗi đều bằng tiếng Việt, output của `barrel_generator` và `sample_cleanup` cũng vậy.
+**Tham số được kiểm tra trước khi ghi bất cứ thứ gì**, và mọi lần từ chối đều thoát với mã `64` kèm cú pháp: `<name>` hay `<prefix>` không hợp lệ (`Bad-Name`), `<sm>` / `<route>` khác `1`/`2`/`3`, `<prefix>` / `<sm>` / `<route>` truyền cho loại module không nhận nó, cờ lạ, hoặc nhiều hơn năm tham số.
 
-**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply` trên package mới.
+Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `<sm>` hoặc `<route>` thì hỏi phần còn thiếu (bỏ trống câu trả lời là chọn `1`). **Không có terminal** — CI, shell của agent, stdin đã hết — thì giá trị cần hỏi trở thành lỗi, exit `64`, không bao giờ lặng lẽ lấy mặc định: với feature hãy luôn truyền đủ năm tham số. Câu hỏi và phần lớn thông báo tiến trình, thông báo lỗi đều bằng tiếng Việt, output của `barrel_generator` và `sample_cleanup` cũng vậy.
+
+**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template (pubspec mới chép `environment:` từ `pubspec.yaml` gốc), thêm module vào mọi `app_manifest.yaml`, chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, barrel generator **lần nữa**, và `dart fix --apply` trên package mới. Barrel chạy hai lần vì template import các barrel anh em, nên chúng phải có trước khi `build_runner` đọc package, trong khi barrel cũng export file sinh ra (`module.module.dart`, `lib/src/gen/**`) — nên lần chạy cuối phải đứng sau codegen.
 
 > [!IMPORTANT]
 > Nó không bao giờ tự ghi danh sách `workspace:` ở root, `pubspec.yaml` hay `lib/di/injection.dart` của app. Các file đó nằm giữa marker `composer:managed` và chỉ `composer sync` ghi chúng — một dòng thêm ngoài marker là dòng composer không bao giờ xoá, còn sửa tay bên trong là drift mà CI Gate 0 chặn.
@@ -173,7 +185,8 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác. Câu hỏi và phần
 
 - **Kiểm tra toolchain trước tiên.** `assertToolchainAvailable()` chạy trước khi động vào bất cứ file dùng chung nào, nên thiếu SDK là fail ngay lập tức thay vì chết ở bước 8.
 - **Từ chối thư mục đã tồn tại.** Nó sẽ không âm thầm ghi đè lên package có sẵn.
-- **Rollback khi thất bại.** Các file dùng chung bị thay đổi — mọi `app_manifest.yaml`, và những gì `composer sync` ghi lại (`pubspec.yaml` gốc, `pubspec.yaml` và `lib/di/injection.dart` của từng app) — được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
+- **Rollback khi thất bại.** Các file dùng chung bị thay đổi — mọi `app_manifest.yaml`, và những gì `composer sync` ghi lại (`pubspec.yaml` gốc, `pubspec.yaml` và `lib/di/injection.dart` của từng app) — được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục, thư mục module mới bị xoá, và tool thoát với mã `1`.
+- **Việc đăng ký được kiểm chứng.** Manifest đã liệt kê package hay chưa được quyết định bằng cách parse YAML, không so chuỗi con — trước đây một phép thử theo dòng từng coi `core_net` là đã đăng ký vì `core_network` chứa nó, và package lặng lẽ không vào app nào mà vẫn exit `0`. Mỗi lần sửa đều được parse lại; nếu không thêm được module vào một manifest (không có danh sách `modules:`, hoặc nhóm DI `core`, đúng định dạng mong đợi) thì cả lần chạy rollback và thoát với mã `1`.
 - **Tự phát hiện FVM** — mọi tool có gọi lệnh ngoài đều dùng chung `tools/shared/toolchain.dart` — yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
 > [!NOTE]
@@ -185,9 +198,12 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác. Câu hỏi và phần
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
+dart tools/barrel_generator/generate.dart --help   # cú pháp
 ```
 
-Sinh lại barrel `*.dart` cho mọi thư mục dưới đường dẫn đã cho, rồi format. Chạy nó sau **bất kỳ** thao tác thêm / đổi tên / xoá file nào trong `lib/` — và sau `build_runner` / `gen-l10n`, vì file sinh ra đang có trên đĩa cũng được export (`core_ui_kit` lấy `Assets` sinh ra của `core_base_ui` theo cách đó). Đường dẫn không tồn tại thì tool thoát với mã `2`; nó chỉ hỏi lại đường dẫn khi chạy không tham số trên terminal.
+Sinh lại barrel `*.dart` cho mọi thư mục dưới đường dẫn đã cho, rồi chạy `dart format` trên đó qua toolchain của repo (FVM nếu đã cài đặt). Chạy nó sau **bất kỳ** thao tác thêm / đổi tên / xoá file nào trong `lib/` — và sau `build_runner` / `gen-l10n`, vì file sinh ra đang có trên đĩa cũng được export (`core_ui_kit` lấy `Assets` sinh ra của `core_base_ui` theo cách đó).
+
+Mã thoát: `2` khi đường dẫn không tồn tại (nó chỉ hỏi lại đường dẫn khi chạy không tham số trên terminal); `1` khi `dart format` thất bại — barrel đã được ghi nhưng chưa format; `64` khi gặp một cờ hoặc đường dẫn thứ hai. Cờ không bao giờ bị hiểu thành đường dẫn (trước đây `--help` từng bị đọc như tên thư mục).
 
 Bỏ qua `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, và file khai `part of`. Các file sinh khác — `module.module.dart`, `injection.config.dart`, `lib/src/gen/**` — vẫn được export nếu đang có trên đĩa.
 
@@ -238,6 +254,8 @@ dart tools/check_outdated.dart
 
 Liệt kê package trong `pubspec_dependencies.yaml` có version mới hơn trên pub.dev. Khi chạy trong terminal, nó hiện checklist (mặc định chọn hết); gõ `a` để ghi version đã chọn vào catalog rồi chạy `dependency_sync` và `pub get`, `q` để thoát. Không có terminal (CI, pipe) thì chỉ liệt kê.
 
+Tool thoát với mã `1` khi resolve catalog, `pub outdated`, đọc JSON của nó, hay bước áp dụng cập nhật (`dependency_sync`, `pub get`) thất bại, nên script phân biệt được một lần kiểm tra lỗi với một lần mọi thứ đã mới nhất. Ngoài `--help` nó không nhận tham số nào; tham số khác thoát với mã `64`.
+
 ---
 
 ## `workspace_setup`
@@ -258,6 +276,7 @@ Dựng đầy đủ cho một bản clone mới. Script chạy theo thứ tự: 
 ```bash
 dart tools/firebase/firebase_config.dart              # app duy nhất của workspace
 dart tools/firebase/firebase_config.dart --app mobile # một trong nhiều app
+dart tools/firebase/firebase_config.dart --help       # cú pháp
 ```
 
 Chạy `flutterfire configure` bên trong app được chọn cho từng flavor và build mode, sinh ra ba file `lib/firebase/firebase_options_*.dart` mà `lib/firebase/firebase_module.dart` của chính app đó import (với app mẫu là `apps/mobile/lib/firebase/firebase_module.dart`), cùng `GoogleService-Info.plist` và `google-services.json` theo flavor. Khi có nhiều app mà không truyền `--app`, script liệt kê các app rồi thoát thay vì cấu hình bừa một app.
@@ -267,7 +286,9 @@ Chạy `flutterfire configure` bên trong app được chọn cho từng flavor 
 
 Phải chạy từ thư mục gốc repo; script kiểm tra sự tồn tại của `pubspec.yaml` rồi mới chạy tiếp.
 
-Script cần **Firebase CLI đã được cài và đã đăng nhập**. Cụ thể là Node.js + npm, `npm install -g firebase-tools`, và một lần `firebase login` tương tác bằng tài khoản Google có quyền vào Firebase project của bạn. Nếu thiếu CLI, script in hướng dẫn cài đặt rồi thoát. Script chỉ hỏi một project ID và dùng nó cho **mọi** flavor. Muốn mỗi flavor một project, hoặc cần stub chỉ để biên dịch khi chưa có Firebase project, xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md) § 3.
+Script cần **Firebase CLI đã được cài và đã đăng nhập**. Cụ thể là Node.js + npm, `npm install -g firebase-tools`, và một lần `firebase login` tương tác bằng tài khoản Google có quyền vào Firebase project của bạn. Script không còn tự cài CLI: nếu `firebase` không có trong `PATH`, nó in hướng dẫn cài đặt rồi thoát với mã `1`. Khi chưa đăng nhập hoặc phiên đã hết hạn, nó chạy `firebase login` **tối đa hai lần**, rồi thoát với mã `1` và yêu cầu bạn tự đăng nhập (`firebase login` trả về thành công mà không đăng nhập khi không mở được prompt, nên vòng lặp thử lại vô hạn trước đây không bao giờ dừng). Ngược lại, FlutterFire CLI thì được activate qua `dart pub global activate` khi còn thiếu.
+
+Script chạy tương tác — không có dạng cờ cho các câu trả lời — nên nó **từ chối chạy khi không có terminal** (exit `1`). Tham số khác `--app <id>` / `--help` thoát với mã `64`. Script chỉ hỏi một project ID và dùng nó cho **mọi** flavor. Muốn mỗi flavor một project, hoặc cần stub chỉ để biên dịch khi chưa có Firebase project, xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md) § 3.
 
 ---
 
@@ -276,20 +297,24 @@ Script cần **Firebase CLI đã được cài và đã đăng nhập**. Cụ th
 ```bash
 dart tools/theme_generator/theme_setting.dart              # app duy nhất của workspace
 dart tools/theme_generator/theme_setting.dart --app mobile # một trong nhiều app
+dart tools/theme_generator/theme_setting.dart --help       # cú pháp
 ```
 
 Điều khiển `flutter_native_splash` và `icons_launcher` dựa trên các file cấu hình theo flavor ở gốc repo (`flutter_native_splash-*.yaml`, `icons_launcher-*.yaml`).
+
+Trước khi ghi bất cứ thứ gì, tool kiểm tra app có nhận được chúng không: app cần có `android/` và `ios/` (các file cấu hình bật cả hai nền tảng), phải khai báo `flutter_native_splash` và `icons_launcher` trong `pubspec.yaml`, và các file cấu hình phải nằm ở gốc repo. Thiếu gì thì liệt kê ra rồi thoát với mã `1`. **`--app admin` hiện bị từ chối** — `apps/admin` không có thư mục nền tảng và không khai báo package nào trong hai package trên. Nếu một generator fail giữa chừng, mọi file nó đã tạo hoặc sửa dưới `android/`, `ios/` và `web/` của app được khôi phục, và tool thoát với mã `1`; các file cấu hình đã chép vào app luôn được xoá. Tham số khác `--app <id>` / `--help` thoát với mã `64`.
 
 ---
 
 ## `android_compliance`
 
 ```bash
-./tools/android_compliance/16kb_ckeck.sh    # macOS / Linux
-.\tools\android_compliance\16kb_ckeck.bat   # Windows
+# Trước hết build APK release của một flavor (cd apps/mobile && flutter build apk --flavor dev --release), rồi:
+./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk     # macOS / Linux
+.\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
 ```
 
-Kiểm tra các thư viện native `.so` xem có căn chỉnh 16 KB page-size cho Android 15+ chưa. Đây là công cụ duy nhất trong repo viết bằng shell script thay vì Dart.
+Kiểm tra một APK (căn chỉnh zip, rồi căn chỉnh ELF của các thư viện native `.so` bên trong), một APEX, hoặc một thư mục thư viện native xem đã tương thích 16 KB page-size cho Android 15+ chưa. Tool nhận đúng một đường dẫn; không truyền gì thì in cú pháp và thoát với mã `1`, còn `--help` in cú pháp với mã `0`. File `.sh` có quyền thực thi, nên lệnh `./` chạy được đúng như viết; file `.bat` chỉ là wrapper chạy `.sh` qua Git Bash và trả về mã thoát của nó. Đây là công cụ duy nhất trong repo viết bằng shell script thay vì Dart.
 
 > [!NOTE]
 > Tên file đúng là `16kb_ckeck` — một lỗi gõ được giữ nguyên vì đã có script và tài liệu tham chiếu tới nó.
@@ -303,9 +328,15 @@ dart tools/code_review/code_review.dart --all
 dart tools/code_review/code_review.dart --changed
 dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --all --focus architecture,security
+dart tools/code_review/code_review.dart --all --language vi   # chỉ cho lần chạy này
 ```
 
-Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`. Cần Gemini API key: `GEMINI_API_KEY`, `--api-key`, hoặc — khi tool hỏi và bạn đồng ý lưu — file đã gitignore `tools/code_review/.gemini_api_key`. Chạy từ root repo, `--all` review mọi `lib/` dưới `apps/`, `modules/` và `platform/`. Giá trị `--focus` hợp lệ: `security`, `performance`, `bugs`, `style`, `architecture`, `testing`. Báo cáo luôn là Markdown.
+Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`. Cần Gemini API key: `GEMINI_API_KEY`, `--api-key`, hoặc — khi tool hỏi và bạn đồng ý lưu — file đã gitignore `tools/code_review/.gemini_api_key`. Không có key và không có terminal để hỏi (CI, pipe) thì tool in ra stderr chỗ cần đặt key rồi thoát với mã `1`. Chạy từ root repo, `--all` review mọi `lib/` dưới `apps/`, `modules/` và `platform/`. Giá trị `--focus` hợp lệ: `security`, `performance`, `bugs`, `style`, `architecture`, `testing`.
+
+- **Luôn bị loại**, dù `--exclude` có thêm gì: file sinh tự động (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gen.dart`, `*.mocks.dart`, `lib/src/gen/**`, `firebase_options_*.dart`), file test, và mọi file bị git ignore. (Trước đây chỉ một `--exclude` là tắt luôn các loại trừ mặc định.)
+- **`--language`** chỉ áp dụng cho lần chạy đó và không được lưu lại; mặc định là `reportLanguage` trong `code_review_config.json` (file được track), đổi bằng `--config`.
+- **Báo cáo luôn là Markdown.** `--format` chỉ nhận `markdown`, giữ lại để các script đang truyền `--format markdown` không vỡ.
+- Tuỳ chọn lạ hoặc tham số vị trí thừa thoát với mã `64`.
 
 > [!NOTE]
 > Workflow GitHub chạy nó ở **chế độ cảnh báo** — bước "fail on critical issues" có dòng `exit 1` bị comment lại, nên nó không bao giờ chặn PR. Xem [`../operations/01_cicd.md`](../operations/01_cicd.md).

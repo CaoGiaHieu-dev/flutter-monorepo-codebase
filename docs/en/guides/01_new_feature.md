@@ -26,11 +26,12 @@ The five positional arguments are read by
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` none |
 | 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` none |
 
-Run it with no arguments to get an interactive prompt instead.
+Run it with no arguments on a terminal to get an interactive prompt instead; without a terminal a
+missing argument exits 64 rather than guessing. `--help` prints the usage.
 
-> [!CAUTION]
-> If `modules/profile/feature` already exists the tool asks to overwrite and **deletes the
-> directory recursively** on `y`. Check the path before answering.
+> [!NOTE]
+> If `modules/profile/feature` already exists the tool **refuses** and exits 1 — it never
+> overwrites or deletes an existing package. Remove or rename it yourself first.
 
 ### Choosing argument 5 — this decides your routing shape
 

@@ -86,7 +86,9 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
 # <prefix> (Custom only; pass "" otherwise): package-name prefix → <prefix>_<name> at platform/<name>
 # <SM> (Feature only): 1=Provider, 2=BLoC, 3=None
 # <route> (Feature only): 1=IFeatureRouteModule (stack), 2=INavDestinationModule (bottom nav tab), 3=none
-# A feature given fewer than 4 args prompts on stdin — always pass <SM> and <route>.
+# A feature missing <SM> or <route> prompts for it on a terminal, and exits 64 without one —
+# always pass both. Invalid names (must be Dart package names) or values are rejected up
+# front (exit 64, nothing written); --help prints usage.
 dart tools/module_generator/generate.dart 1 profile "" 1 1    # Feature+Provider+stack routes
 dart tools/module_generator/generate.dart 1 chat "" 2 2       # Feature+BLoC+bottom nav tab
 dart tools/module_generator/generate.dart 2 payment            # Domain micro-package
@@ -124,11 +126,12 @@ dart tools/workspace_setup/configure.dart
 dart tools/firebase/firebase_config.dart --app mobile   # --app is required once there are 2+ apps
 
 # Theme (splash screen + app icons)
-dart tools/theme_generator/theme_setting.dart --app mobile
+dart tools/theme_generator/theme_setting.dart --app mobile   # needs the app's android/ + ios/ — `--app admin` is refused
 
 # Android 15+ 16KB page size compliance check
-.\tools\android_compliance\16kb_ckeck.bat   # Windows
-./tools/android_compliance/16kb_ckeck.sh    # macOS/Linux
+# Pass the APK to check — a Flutter release build lands at the path below
+.\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
+./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk    # macOS/Linux
 ```
 
 **Dependency versions** are centrally managed in `pubspec_dependencies.yaml` — never hardcode versions in a package's pubspec; edit the catalog and run `dart tools/dependency_sync.dart`.

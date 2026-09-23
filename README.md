@@ -196,8 +196,9 @@ All tools can be run from the root directory.
 
 1.  **Module Generator (`tools/module_generator/`)**:
     ```bash
-    # Create Feature package 'profile' using Provider:
-    dart tools/module_generator/generate.dart 1 profile "" 1
+    # Create Feature package 'profile' using Provider + stack routes. Always pass <SM> and
+    # <route> for a feature: a missing one is prompted for, and without a terminal it exits 64.
+    dart tools/module_generator/generate.dart 1 profile "" 1 1
     # Create Domain micro-package 'payment':
     dart tools/module_generator/generate.dart 2 payment
     # Create Data micro-package 'payment':
@@ -230,8 +231,12 @@ All tools can be run from the root directory.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    dart tools/theme_generator/theme_setting.dart --app mobile
-    dart tools/firebase/firebase_config.dart --app mobile
+    dart tools/theme_generator/theme_setting.dart --app mobile   # needs the app's android/ + ios/
+    dart tools/firebase/firebase_config.dart --app mobile        # interactive; needs the Firebase CLI, logged in
+    ```
+9.  **Android 16 KB page-size check (`tools/android_compliance/`)**:
+    ```bash
+    ./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
     ```
 
 ---

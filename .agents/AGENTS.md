@@ -245,7 +245,7 @@ dart tools/module_generator/generate.dart 4 <name>
 dart tools/module_generator/generate.dart 5 <name> <prefix>
 ```
 
-For a feature, **always pass all five arguments** (state management: `1` Provider · `2` BLoC · `3` none; route: `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none). With fewer than four the generator prompts on stdin, which blocks an agent. For type `5` the third argument is a package-name prefix, not a directory — a layer word (`feature`, `domain`, `data`, `core`) is refused.
+For a feature, **always pass all five arguments** (state management: `1` Provider · `2` BLoC · `3` none; route: `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none). A feature missing `<SM>` or `<route>` prompts for it on a terminal, and without one exits `64` — always pass both. Arguments are validated before anything is written: `<name>` (and a type-5 prefix) must be a Dart package name — lowercase letters, digits, `_`, starting with a letter, not a Dart keyword — `<SM>` / `<route>` accept only `1`/`2`/`3`, a `<prefix>` / `<SM>` / `<route>` given to the wrong type and any unknown flag are refused; each refusal exits `64` with the usage (`--help` prints it). For types `1`–`4` the third argument must be empty (`""`). For type `5` it is a package-name prefix, not a directory — a layer word (`feature`, `domain`, `data`, `core`) is refused. If the module cannot be registered in an `app_manifest.yaml`, the generator rolls back and exits `1`.
 
 ---
 

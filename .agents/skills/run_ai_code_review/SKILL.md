@@ -37,11 +37,20 @@ When a task involves "review code", "audit codebase", "verify architecture", etc
    ```
 
 Useful extras: `--focus <area>` (repeatable, restricted to the tool's allowed focus areas),
-`--exclude <glob>` (repeatable), `--verbose`, `--output-dir <dir>`.
+`--exclude <glob>` (repeatable), `--verbose`, `--output-dir <dir>`, `--language <code>`.
+
+- Generated files (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gen.dart`,
+  `*.mocks.dart`, `lib/src/gen/**`, `firebase_options_*.dart`), tests and git-ignored files are
+  **always** excluded; `--exclude` only adds to that.
+- `--language` applies to that run only and is not written to `code_review_config.json`
+  (change the default with `--config`). The report is always Markdown — `--format` accepts only
+  `markdown`.
 
 Requires a Gemini API key — `--api-key`, the `GEMINI_API_KEY` environment variable, or the
 gitignored `tools/code_review/.gemini_api_key` the tool writes when the user agrees to save one.
-Never put a key in the tracked `code_review_config.json`.
+Never put a key in the tracked `code_review_config.json`. With no key and no terminal to ask on
+(an agent's shell, CI), the tool prints where to set one on stderr and exits `1` — set
+`GEMINI_API_KEY` rather than expecting a prompt.
 
 Run the commands above in the shell, from the repository root. After execution, analyze the summary output printed to the terminal and advise the user on how to resolve any architectural violations.
 

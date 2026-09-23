@@ -35,10 +35,17 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 ```
 
 > [!IMPORTANT]
-> For a **feature, always pass all five arguments**. With fewer than four the generator asks
-> for the state management on stdin, which blocks an agent; with exactly four it silently
-> picks route `1`. Types 2–4 need only `<type> <module_name>`; type 5 needs the prefix as the
-> third argument (or it prompts for it).
+> For a **feature, always pass all five arguments**. A feature missing `[sm]` or
+> `[route_contribution]` prompts for it on a terminal, which blocks an agent, and without a
+> terminal (or with stdin at end of input) exits `64` instead of picking a default. Types 2–4
+> need only `<type> <module_name>` — a non-empty third argument is refused for them; type 5
+> needs the prefix as the third argument (prompted for on a terminal, exit `64` otherwise).
+>
+> Arguments are checked **before anything is written**, each refusal exiting `64` with the
+> usage: `<module_name>` and a prefix must be Dart package names (lowercase letters, digits,
+> `_`, starting with a letter, not a Dart keyword — `Bad-Name` is refused); `[sm]` and
+> `[route_contribution]` accept only `1`/`2`/`3` and only for type 1; unknown flags are
+> refused. `dart tools/module_generator/generate.dart --help` prints the usage.
 
 **Examples:**
 
@@ -70,7 +77,9 @@ dart tools/module_generator/generate.dart 5 billing acme
 | State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, matching `feature_auth` / `feature_home`. |
 | Toolchain detection | Auto-detects FVM: uses it only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise falls back to global `dart` / `flutter`. |
 | Fail-safe | `assertToolchainAvailable()` runs **before any write**; an existing module directory aborts instead of being silently overwritten. |
-| Rollback | The shared files it touches — every `app_manifest.yaml`, plus what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted first; any later failure restores them and deletes the new module directory. |
+| Rollback | The shared files it touches — every `app_manifest.yaml`, plus what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted first; any later failure restores them and deletes the new module directory, and the tool exits `1`. |
+| Registration check | Presence in each `app_manifest.yaml` is decided by parsing the YAML, not by substring (`core_net` is no longer taken as registered because `core_network` exists). Every edit is re-parsed; a manifest the module could not be added to rolls everything back and exits `1`. |
+| Barrels around codegen | The barrel generator runs before `build_runner` (the templates import sibling barrels) and again after it, so generated files (`module.module.dart`, `lib/src/gen/**`) are exported too. |
 
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)
 The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_nav_destination.dart` according to `[route_contribution]`.

@@ -339,7 +339,7 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 > [!WARNING]
 > `context.edgeInsets` scale mỗi trục theo đúng trục của nó — ngang theo `w`, dọc theo `h`, và `all:` theo `w`, nên nó thay thế trực tiếp được `EdgeInsets.all(context.w(16))`. `borderRadius` là ngoại lệ: nó dùng `r`, vì bán kính chỉ scale theo một trục sẽ biến hình tròn thành elip. Khi không chắc, hãy viết dạng tường minh vì nó nói rõ đang scale theo trục nào.
 
-**Widget dùng lại nhận giá trị RAW và không được tự scale bên trong.** Scale là việc của nơi gọi.
+**Widget dùng lại dùng tham số đúng như nhận được và không được scale chúng.** Scale là việc của nơi gọi, nên giá trị đến nơi đã ở đơn vị pixel thiết bị. Còn hằng số **của chính** widget thì nó vẫn scale — `widget.paddingBottom ?? context.h(10)` đúng ở cả hai vế.
 
 ❌ **Sai** — một lệnh ghi đè bên trong âm thầm vứt bỏ giá trị của caller:
 ```dart

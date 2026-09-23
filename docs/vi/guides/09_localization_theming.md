@@ -246,10 +246,10 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 
 Những giá trị **không phải** kích thước vật lý thì được miễn: `TextStyle.height` là hệ số giãn dòng, `flex` là tỉ lệ.
 
-## 10. Widget dùng lại nhận giá trị RAW
+## 10. Widget scale hằng số của chính nó, không scale tham số
 
 > [!CAUTION]
-> Widget dùng lại trong `core_ui_kit` **không được tự scale tham số của chính nó**. Nó nhận số thô; bên gọi mới là nơi scale trước khi truyền vào. Scale bên trong sẽ khiến người gọi (vốn đã scale) bị scale hai lần, còn người truyền token thì **không thể** ghi đè được nữa.
+> Widget dùng lại trong `core_ui_kit` **không được scale tham số nó nhận vào**. Bên gọi scale trước khi truyền, nên giá trị đến nơi đã ở đơn vị pixel thiết bị và phải được dùng nguyên vẹn; scale thêm lần nữa là scale hai lần, và người truyền token thì **không thể** ghi đè được nữa. Hằng số **của chính** widget thì ngược lại: nó phải scale, nếu không widget không responsive.
 
 Luật này cấm điều gì — một `AppBar` trong `core_ui_kit` kết thúc bằng:
 

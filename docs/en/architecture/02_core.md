@@ -124,7 +124,7 @@ It depends on `core_common`, `core_base_ui`, `core_responsive` and `provider_sta
 
 ### The UI-agnostic rule
 
-Reusable widgets take **raw, unscaled** numbers and must not scale through `core_responsive` internally. Scaling is the caller's job:
+Reusable widgets use their parameters **exactly as received** and must not scale them through `core_responsive`. Scaling is the caller's job, so by the time a value arrives it is already in device pixels — note `context.w(120)` on the calling side below. A widget still scales its *own* constants, or it would not be responsive at all:
 
 ```dart
 // caller scales

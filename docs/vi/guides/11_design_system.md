@@ -361,14 +361,20 @@ static List<BoxShadow> get sm => [
 
 ## 8. Những quy tắc không đổi
 
-Các quy tắc này được giữ bằng review, và một phần bằng `dart tools/arch_check/check.dart`. Danh sách đầy đủ ở [`../reference/01_rules.md`](../reference/01_rules.md).
+Danh sách đầy đủ trong [`../reference/01_rules.md`](../reference/01_rules.md). Luật nào do máy giữ đều được ghi rõ, vì điều đó quyết định bạn tin được bao nhiêu vào việc review bắt lỗi.
 
-- **Tuyệt đối không hardcode** `Color`, `fontSize`, số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` — đừng nhét thẳng giá trị vào chỗ dùng.
-- **Mọi kích thước đều phải scale.** `SizedBox(height: 24)` trần là lỗi; phải viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`.
-- **Widget dùng lại trong `core_ui_kit` nhận giá trị RAW và không bao giờ tự scale bên trong.** Caller scale trước khi truyền vào. Widget nào tự scale tham số constructor sẽ scale hai lần với caller đã scale sẵn. Xem [`09_localization_theming.md`](09_localization_theming.md).
-- **Không scale lại giá trị đã scale.** `AppSpacing.lg(context)` là kết quả cuối; `context.w(AppSpacing.lg(context))` là lỗi scale hai lần.
-- **Sửa `raw*`, đừng sửa accessor** khi muốn chỉnh lại thang.
+- **Tuyệt đối không hard-code** `Color`, `fontSize`, con số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` — đừng nhét thẳng giá trị. *Do review giữ.* Xem ghi chú bên dưới để biết vì sao.
+- **Mọi kích thước đều phải scale.** `SizedBox(height: 24)` trần là bug; hãy viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`. *`arch_check` R7 giữ phần extension trần (`24.h`); phần số double thô do review giữ.*
+- **Widget scale hằng số của chính nó, không bao giờ scale tham số.** Một widget `core_ui_kit` nhận vào giá trị đã được scale sẵn — người gọi đã scale — nên dùng tham số ở dạng thô là đúng, còn `context.w(widget.width)` là bug scale hai lần. Nhưng padding và radius *của chính nó* thì bắt buộc phải scale, nếu không nó không responsive. `custom_input_field.dart` thể hiện cả hai trong một dòng: `widget.paddingBottom ?? context.h(10)`. *Do review giữ.*
+- **Đừng scale một giá trị đã scale.** `AppSpacing.lg(context)` là giá trị cuối; `context.w(AppSpacing.lg(context))` là bug scale hai lần. Tương tự `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` đã scale mọi bậc rồi, nên ghi đè size là vứt bỏ thang đo và ghim cứng một con số mà design system không đổi được. Hãy chọn một bậc khác. *Do review giữ.*
+- **Sửa `raw*`, không sửa accessor**, khi chỉnh lại một thang đo.
 
+> [!NOTE]
+> **Vì sao luật về màu và font size không được máy kiểm.**
+>
+> Đã cân nhắc và cố ý để cho review. Một phép kiểm `Colors.<name>` sẽ phải cho qua những chỗ mà màu literal là *đúng* — `AppShadows`, vốn là file token, và mọi lớp phủ modal, nơi `ModalBarrier` của chính Flutter là màu đen cố định và một giá trị theo theme sẽ *làm sáng* màn hình ở chế độ tối. Trên cây code này là bảy chỗ được duyệt so với hai vi phạm thật, và một luật mà danh sách ngoại lệ dài hơn số phát hiện sẽ dạy người ta thói quen đọc lướt.
+>
+> Repo cũng cấm comment suppression, nên không có lối thoát trung thực nào cho các trường hợp hợp lệ. Vậy nên: review. Và đó chính là lý do ba bug dark-mode sống sót trong `core_ui_kit` cho tới khi có người đi soát — điều đáng nhớ khi bạn copy một widget ra khỏi đó.
 ---
 
 ## 9. Tra nhanh

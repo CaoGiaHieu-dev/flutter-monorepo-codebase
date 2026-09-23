@@ -667,21 +667,24 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 
 ## Fastlane CI/CD
 
-CWD-independent architecture — run from monorepo root, no `cd apps/mobile/` needed:
+CWD-independent — every lane resolves its paths from `apps/mobile/fastlane/`, so the repo root and `apps/mobile/` work alike. Run through Bundler, which loads the `firebase_app_distribution` plugin:
 
 ```bash
+bundle install                       # once
 # Android
-fastlane android build flavor:dev build_type:apk distribute_firebase:true
-fastlane android store version:1.2.0 build_number:45 track:internal
+bundle exec fastlane android build flavor:dev build_type:apk distribute_firebase:true
+bundle exec fastlane android store version:1.2.0 build_number:45 track:internal
 
 # iOS
-fastlane ios build flavor:dev distribute_store:true
-fastlane ios store version:1.2.0 build_number:45
+bundle exec fastlane ios build flavor:dev distribute_store:true
+bundle exec fastlane ios store version:1.2.0 build_number:45
 
 # Cross-platform
-fastlane flutter flavor:dev version:1.2.0 build_number:45
-fastlane store version:1.2.0 build_number:45
+bundle exec fastlane flutter flavor:dev version:1.2.0 build_number:45
+bundle exec fastlane store version:1.2.0 build_number:45
 ```
+
+`build_number:` empty or `auto` = automatic; otherwise a positive integer. CI secrets for release builds: `docs/en/operations/01_cicd.md` § 7.
 
 Config: copy `apps/mobile/fastlane/Config.example.yaml` → `apps/mobile/fastlane/Config.yaml` (gitignored, not in the repo). Modules: `apps/mobile/fastlane/modules/` (helpers, android_lanes, ios_lanes, flutter_lanes).
 

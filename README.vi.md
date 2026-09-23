@@ -430,7 +430,7 @@ Hệ thống CI/CD sử dụng **Fastlane** với kiến trúc **Workspace-Root 
 
 ### Lệnh Biên Dịch Android APK từ Root:
 ```powershell
-fastlane android build flavor:dev build_type:apk distribute_store:false distribute_firebase:false skip_setup:true change_log:test build_number:1 flutter_version:stable version:1.0.0
+bundle exec fastlane android build flavor:dev build_type:apk distribute_store:false distribute_firebase:false skip_setup:true change_log:test build_number:1 flutter_version:stable version:1.0.0
 ```
 
 ---

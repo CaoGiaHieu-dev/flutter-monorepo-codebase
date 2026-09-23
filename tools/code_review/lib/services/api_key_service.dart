@@ -75,20 +75,34 @@ class ApiKeyService {
     }
   }
 
+  /// A key safe to print: its first four characters at most, never enough
+  /// to use, and no `RangeError` on a short one (`--api-key abc`).
+  static String mask(String apiKey) {
+    if (apiKey.length < 12) return '*** (${apiKey.length} chars)';
+    return '${apiKey.substring(0, 4)}…';
+  }
+
   /// Prompt user for API key and optionally save it
   static String _promptForApiKey() {
-    stdout.writeln('🔑 Gemini API key not found!');
-    stdout.writeln('');
-    stdout.writeln(
-      '📋 You can get your API key at: https://makersuite.google.com/app/apikey',
+    stderr.writeln('🔑 Gemini API key not found!');
+    stderr.writeln(
+      '   Set GEMINI_API_KEY, pass --api-key, or save one to '
+      'tools/code_review/${CodeReviewConstants.apiKeyFileName} (gitignored).',
     );
-    stdout.writeln('');
+    stderr.writeln(
+      '📋 You can get your API key at: ${CodeReviewConstants.apiKeyUrl}',
+    );
+    stderr.writeln('');
 
+    if (!stdin.hasTerminal) {
+      stderr.writeln('❌ No API key and no terminal to ask for one. Exiting.');
+      exit(1);
+    }
     stdout.write('🔐 Please enter your Gemini API key: ');
     final apiKey = stdin.readLineSync()?.trim() ?? '';
 
     if (apiKey.isEmpty) {
-      stdout.writeln('❌ No API key provided. Exiting...');
+      stderr.writeln('❌ No API key provided. Exiting...');
       exit(1);
     }
 
@@ -98,7 +112,7 @@ class ApiKeyService {
       stdout.write('Continue anyway? (y/N): ');
       final confirm = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
       if (confirm != 'y' && confirm != 'yes') {
-        stdout.writeln('❌ Cancelled by user. Exiting...');
+        stderr.writeln('❌ Cancelled by user. Exiting...');
         exit(1);
       }
     }

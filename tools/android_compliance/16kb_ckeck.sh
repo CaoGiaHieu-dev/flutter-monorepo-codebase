@@ -93,8 +93,9 @@ print_centered_line() {
   (( left < 0 )) && left=0
   local right=$(( inner - ${#text} - left ))
   (( right < 0 )) && right=0
-  printf "%s${style}%*s%s%*s${ENDCOLOR}%s\n" \
-    "$border" "$left" "" "$text" "$right" "" "$border"
+  # BORDER and STYLE go in the format so their colour escapes are expanded.
+  printf "${border}${style}%*s%s%*s${ENDCOLOR}${border}\n" \
+    "$left" "" "$text" "$right" ""
 }
 
 # Enhanced formatting functions

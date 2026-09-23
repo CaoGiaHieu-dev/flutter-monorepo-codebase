@@ -13,9 +13,11 @@ void main(List<String> args) async {
   final rootDir = scriptFile.parent.parent.parent;
   Directory.current = rootDir;
 
-  stdout.writeln('==========================================');
-  stdout.writeln('      Automated Module Generator');
-  stdout.writeln('==========================================');
+  if (!args.contains('--help') && !args.contains('-h')) {
+    stdout.writeln('==========================================');
+    stdout.writeln('      Automated Module Generator');
+    stdout.writeln('==========================================');
+  }
 
   final inputActions = InputActions();
   final config = inputActions.parseInput(args);
@@ -178,6 +180,11 @@ void main(List<String> args) async {
       );
     }
 
+    // Barrels run twice. The templates import sibling barrels
+    // (`../pages/pages.dart`), so they must exist before build_runner reads
+    // the package; and barrels also export generated files present on disk
+    // (`module.module.dart`, `lib/src/gen/**`), so the last run must come
+    // after codegen.
     stdout.writeln('[!] Đang sinh barrel files...');
     await CommonHelpers.runDart([
       'tools/barrel_generator/generate.dart',
@@ -189,8 +196,13 @@ void main(List<String> args) async {
       'run',
       'build_runner',
       'build',
-      '-d',
       '--workspace',
+    ]);
+
+    stdout.writeln('[!] Đang sinh lại barrel files sau codegen...');
+    await CommonHelpers.runDart([
+      'tools/barrel_generator/generate.dart',
+      '${config.modulePath}/lib',
     ]);
 
     stdout.writeln('[!] Đang sửa lỗi import với dart fix...');

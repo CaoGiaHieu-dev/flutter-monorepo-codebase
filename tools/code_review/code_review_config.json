@@ -1,6 +1,5 @@
 {
     "reportLanguage": "vi",
-    "outputFormat": "markdown",
     "includeTimestamps": true,
     "detailedOutput": true,
     "batchSize": 3,

@@ -298,6 +298,13 @@ void main(List<String> args) {
     _printHelp();
     exit(0);
   }
+  // It takes no arguments. A flag it does not know (`--fix`, a typo of
+  // `--help`) must not look like a clean run.
+  if (args.isNotEmpty) {
+    stderr.writeln('Unknown argument(s): ${args.join(' ')}');
+    stderr.writeln('Usage: dart tools/arch_check/check.dart [--help]');
+    exit(64);
+  }
 
   OutputFormatter.printHeader(
     'Architecture Check',
@@ -660,7 +667,7 @@ void main(List<String> args) {
             'R6',
             p.posix.relative(file, from: root),
             'generated file is missing its generator header — it may have '
-                'been hand-edited. Re-run `dart run build_runner build -d '
+                'been hand-edited. Re-run `dart run build_runner build '
                 '--workspace`.',
           ),
         );

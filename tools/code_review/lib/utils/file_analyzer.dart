@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
+import '../core/constants.dart';
 import '../core/enums.dart';
+import 'git_helper.dart';
 
 /// Utility class for analyzing file types and architecture layers
 class FileAnalyzer {
@@ -121,33 +123,32 @@ class FileAnalyzer {
     return files;
   }
 
-  /// Filter files based on exclude patterns
-  static List<String> filterFiles(
+  /// Whether [filePath] is generated code or a test — excluded always.
+  static bool isGeneratedOrTest(String filePath) {
+    final p = '/${filePath.replaceAll('\\', '/')}';
+    final name = path.posix.basename(p);
+    return CodeReviewConstants.generatedSuffixes.any(name.endsWith) ||
+        CodeReviewConstants.generatedFilePrefixes.any(name.startsWith) ||
+        CodeReviewConstants.excludedPathSegments.any(p.contains);
+  }
+
+  /// Drops generated files and tests, gitignored files, and anything
+  /// matching [excludePatterns].
+  ///
+  /// The built-in exclusions used to apply only when no `--exclude` was
+  /// given, so adding one pattern put every `*.g.dart` back in the review.
+  static Future<List<String>> filterFiles(
     List<String> files,
     List<String> excludePatterns,
-  ) {
-    if (excludePatterns.isEmpty) {
-      // Default exclusions
-      return files
-          .where(
-            (file) =>
-                !file.contains('.g.dart') &&
-                !file.contains('.freezed.dart') &&
-                !file.contains('.module.dart') &&
-                !file.contains('.config.dart') &&
-                !file.contains('.mocks.dart') &&
-                !file.contains('test/'),
-          )
-          .toList();
-    }
-
-    return files.where((file) {
+  ) async {
+    final kept = files.where((file) {
+      if (isGeneratedOrTest(file)) return false;
       for (final pattern in excludePatterns) {
-        if (matchesPattern(file, pattern)) {
-          return false;
-        }
+        if (matchesPattern(file, pattern)) return false;
       }
       return true;
     }).toList();
+    final ignored = await GitHelper.ignoredFiles(kept);
+    return kept.where((f) => !ignored.contains(f)).toList();
   }
 }

@@ -20,15 +20,37 @@ class CodeReviewConstants {
   static const int topK = 40;
   static const double topP = 0.95;
 
-  // File patterns
-  static const List<String> defaultExclusions = [
+  /// Where to get a Gemini API key.
+  static const String apiKeyUrl = 'https://aistudio.google.com/app/apikey';
+
+  /// The only report format the tool writes. `--format` accepts it alone,
+  /// so CI invocations that pass `--format markdown` keep working.
+  static const String reportFormat = 'markdown';
+
+  /// Suffixes of generated Dart files — never worth a review, and most are
+  /// gitignored. Always excluded, whatever `--exclude` adds.
+  static const List<String> generatedSuffixes = [
     '.g.dart',
-    '.config.dart',
     '.freezed.dart',
+    '.config.dart',
     '.module.dart',
+    '.gen.dart',
     '.mocks.dart',
-    'test/',
   ];
+
+  /// Path segments whose files are always excluded: generated code
+  /// (`lib/src/gen/`, flutter_gen / gen-l10n output) and tests.
+  static const List<String> excludedPathSegments = [
+    '/gen/',
+    '/generated/',
+    '/test/',
+    '/.dart_tool/',
+    '/build/',
+  ];
+
+  /// File-name prefixes that are generated per project and gitignored
+  /// (`flutterfire configure` writes `firebase_options_<flavor>.dart`).
+  static const List<String> generatedFilePrefixes = ['firebase_options'];
 
   // Focus areas
   static const List<String> focusAreas = [

@@ -1,5 +1,19 @@
 import 'dart:io';
 
+import '../shared/toolchain.dart';
+
+const _usage = '''
+Usage: dart tools/barrel_generator/generate.dart [<package>/lib]
+
+Regenerates the `export` barrel of every directory under the given path
+(default: lib), then runs `dart format` on it.
+
+  dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
+
+Hand-written `export` lines in a barrel are replaced. Run it after
+gen-l10n / build_runner: generated files on disk are exported too.
+Exits 2 when the path does not exist, 1 when generation or formatting fails.''';
+
 const excludedDirs = {
   'lib/gen',
   '.git',
@@ -41,6 +55,22 @@ String _normalize(String path) {
 }
 
 void main(List<String> args) {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(_usage);
+    return;
+  }
+  // A flag is never a path: `--help` used to be taken for a directory name.
+  final flag = args.where((a) => a.startsWith('-')).firstOrNull;
+  if (flag != null || args.length > 1) {
+    stderr.writeln(
+      flag != null
+          ? '[ERROR] Cờ không hợp lệ: $flag'
+          : '[ERROR] Chỉ nhận một đường dẫn, nhận được: ${args.join(' ')}',
+    );
+    stderr.writeln(_usage);
+    exit(64);
+  }
+
   var targetDir = 'lib';
   if (args.isNotEmpty) {
     targetDir = args[0];
@@ -80,14 +110,21 @@ void main(List<String> args) {
     }
 
     stdout.writeln('\n[INFO] Đang chạy format cho "$targetDir"...');
-    final result = Process.runSync(Platform.resolvedExecutable, [
+    // Through the repo's toolchain (`fvm dart` when FVM is set up), not the
+    // SDK that happens to run this script.
+    final result = Process.runSync(dartExecutable, [
+      ...dartArgs,
       'format',
       targetDir,
-    ]);
-    if (result.exitCode == 0) {
-      stdout.write(result.stdout);
-    } else {
+    ], runInShell: true);
+    stdout.write(result.stdout);
+    if (result.exitCode != 0) {
       stderr.write(result.stderr);
+      stderr.writeln(
+        '[ERROR] dart format thất bại (exit ${result.exitCode}). Barrel đã '
+        'được ghi nhưng chưa được format.',
+      );
+      exit(1);
     }
 
     stdout.writeln('\n[SUCCESS] Hoàn thành sinh barrel file!');

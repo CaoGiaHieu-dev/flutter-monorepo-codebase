@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:glob/glob.dart';
+import 'package:glob/list_local_fs.dart';
 import 'package:yaml/yaml.dart';
 
 import '../shared/app_locator.dart';
@@ -43,6 +45,9 @@ List<String> get _sharedMutatedFiles => [
 ];
 
 final Map<String, String?> _snapshots = {};
+
+/// `--verbose`: list every doc reference instead of the first few.
+var _verbose = false;
 final List<String> _deletedDirs = [];
 
 Future<void> main(List<String> args) async {
@@ -62,6 +67,20 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  // A misspelt flag must not be ignored: `home --aply` would silently be a
+  // dry run, and `home --apply --bogus` used to apply.
+  const knownFlags = {'--list', '--apply', '--verbose'};
+  final unknown = args
+      .where((a) => a.startsWith('-') && !knownFlags.contains(a))
+      .toList();
+  if (unknown.isNotEmpty) {
+    stderr.writeln('[ERROR] Cờ không hợp lệ: ${unknown.join(', ')}');
+    stderr.writeln('');
+    _printUsage(stderr);
+    exitCode = 64;
+    return;
+  }
+
   if (args.contains('--list')) {
     _printClassification(manifest);
     return;
@@ -72,7 +91,14 @@ Future<void> main(List<String> args) async {
     stderr.writeln(
       '[ERROR] Thiếu tên bundle. Xem "--list" để biết các lựa chọn.',
     );
-    exitCode = 1;
+    exitCode = 64;
+    return;
+  }
+  if (positional.length > 1) {
+    stderr.writeln(
+      '[ERROR] Mỗi lần chỉ gỡ một bundle — nhận được: ${positional.join(', ')}',
+    );
+    exitCode = 64;
     return;
   }
 
@@ -91,6 +117,7 @@ Future<void> main(List<String> args) async {
   // and the repo may well have uncommitted work, so an accidental run must not
   // be destructive. Writing requires opting in with --apply.
   final apply = args.contains('--apply');
+  _verbose = args.contains('--verbose');
   await _removeBundle(
     manifest: manifest,
     bundleName: bundleName,
@@ -99,8 +126,8 @@ Future<void> main(List<String> args) async {
   );
 }
 
-void _printUsage() {
-  stdout.writeln('''
+void _printUsage([IOSink? sink]) {
+  (sink ?? stdout).writeln('''
 Gỡ một bundle code mẫu khỏi template.
 
   dart tools/sample_cleanup/remove_sample.dart --list
@@ -111,6 +138,12 @@ Gỡ một bundle code mẫu khỏi template.
 
   dart tools/sample_cleanup/remove_sample.dart <bundle> --apply
       Thực hiện gỡ thật, có rollback nếu bước nào lỗi.
+
+  --verbose: liệt kê đủ mọi tham chiếu tài liệu thay vì vài dòng đầu.
+
+Cả hai cách đều đếm các tham chiếu trong tài liệu (*.md) tới đường dẫn
+sắp bị xoá — `dart tools/docs_check/check.dart` (CI Gate 5) sẽ fail cho
+tới khi các tham chiếu đó được sửa.
 
 Nguồn phân loại: $_manifestPath
 ''');
@@ -253,6 +286,11 @@ Future<void> _removeBundle({
     stdout.writeln('Ghi chú: $note');
   }
 
+  // --- 3b. Documentation that will point at deleted paths ------------------
+  final removedPaths = _removedPaths(dirs);
+  final docRefs = _findDocReferences(removedPaths);
+  _reportDocReferences(docRefs, applied: false);
+
   // --- 4. Execute ----------------------------------------------------------
   if (!apply) {
     stdout.writeln('');
@@ -298,9 +336,219 @@ Future<void> _removeBundle({
   stdout.writeln('Xong. Bước tiếp theo:');
   stdout.writeln('  dart tools/composer/composer.dart sync');
   stdout.writeln('  flutter pub get');
-  stdout.writeln('  dart run build_runner build -d --workspace');
+  stdout.writeln('  dart run build_runner build --workspace');
   stdout.writeln('  flutter analyze');
+  if (docRefs.isNotEmpty) {
+    stdout.writeln(
+      '  # sửa ${docRefs.length} tham chiếu tài liệu, rồi kiểm tra lại:',
+    );
+  }
+  stdout.writeln('  dart tools/docs_check/check.dart');
+  _reportDocReferences(docRefs, applied: true);
   stdout.writeln('');
+}
+
+/// A Markdown reference to a path the removal deletes.
+class _DocRef {
+  _DocRef(this.file, this.line, this.reference);
+
+  final String file;
+  final int line;
+  final String reference;
+}
+
+/// The package directories, plus each parent (`modules/<id>`) left empty
+/// once they are gone.
+List<String> _removedPaths(List<String> dirs) {
+  final removed = {...dirs};
+  for (final dir in dirs) {
+    final parent = Directory(dir).parent;
+    if (!parent.existsSync()) continue;
+    final remaining = parent.listSync().where((e) {
+      final path = e.path.replaceAll('\\', '/');
+      return !removed.contains(path) &&
+          !removed.contains(path.replaceFirst('./', ''));
+    });
+    if (remaining.isEmpty) removed.add(parent.path.replaceAll('\\', '/'));
+  }
+  return removed.toList()..sort();
+}
+
+/// Directories `tools/docs_check/check.dart` never walks — kept identical so
+/// the count here is the count that gate will report.
+const _skippedDocDirs = {
+  '.git',
+  '.dart_tool',
+  '.fvm',
+  '.idea',
+  '.symlinks',
+  'build',
+  'ephemeral',
+  'node_modules',
+  'Pods',
+};
+
+final _backtickSpan = RegExp(r'`([^`\n]+)`');
+final _markdownLink = RegExp(r'\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)');
+final _codeFence = RegExp(r'^\s*```');
+
+/// Every backticked path and relative Markdown link, outside code fences,
+/// that names one of [removedPaths] or something inside it — what
+/// `docs_check` (CI Gate 5) will call a dead reference after the removal.
+///
+/// Documents inside the removed directories are skipped: they go with them.
+List<_DocRef> _findDocReferences(List<String> removedPaths) {
+  if (removedPaths.isEmpty) return [];
+  bool hits(String ref) =>
+      removedPaths.any((r) => ref == r || ref.startsWith('$r/'));
+
+  // Paths docs_check accepts as correctly absent (generated, gitignored).
+  final allowlistFile = File('tools/docs_check/allowlist.txt');
+  final allowlist = allowlistFile.existsSync()
+      ? allowlistFile
+            .readAsLinesSync()
+            .map((l) => l.split('#').first.trim())
+            .where((l) => l.isNotEmpty)
+            .toSet()
+      : <String>{};
+
+  final docs = <File>[];
+  void walk(Directory dir) {
+    for (final entity in dir.listSync(followLinks: false)) {
+      final path = entity.path.replaceAll('\\', '/').replaceFirst('./', '');
+      final name = path.split('/').last;
+      if (entity is Directory) {
+        if (_skippedDocDirs.contains(name) || hits(path)) continue;
+        walk(entity);
+      } else if (entity is File && name.endsWith('.md')) {
+        docs.add(entity);
+      }
+    }
+  }
+
+  walk(Directory('.'));
+  docs.sort((a, b) => a.path.compareTo(b.path));
+
+  // Whether every path fitting [pattern] is one the removal deletes — the
+  // same test as docs_check's `_matchesSomething`, run against the tree as
+  // it will be. Only patterns under a top-level directory a bundle lives in
+  // can be affected.
+  final patternCache = <String, bool>{};
+  bool patternDies(String pattern) => patternCache.putIfAbsent(pattern, () {
+    if (!const ['modules/', 'platform/', 'apps/'].any(pattern.startsWith)) {
+      return false;
+    }
+    final globbable = pattern.replaceAll(RegExp(r'<[^<>]*>'), '*');
+    try {
+      final matches = Glob(globbable)
+          .listSync(root: '.')
+          .map((e) => e.path.replaceAll('\\', '/').replaceFirst('./', ''))
+          .toList();
+      return matches.isNotEmpty && matches.every(hits);
+    } on FileSystemException {
+      return false;
+    } on FormatException {
+      return false;
+    }
+  });
+
+  final out = <_DocRef>[];
+  for (final doc in docs) {
+    final rel = doc.path.replaceAll('\\', '/').replaceFirst('./', '');
+    final docDir = rel.contains('/')
+        ? rel.substring(0, rel.lastIndexOf('/'))
+        : '';
+    final lines = doc.readAsLinesSync();
+    var inFence = false;
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (_codeFence.hasMatch(line)) {
+        inFence = !inFence;
+        continue;
+      }
+      if (inFence) continue;
+
+      for (final m in _backtickSpan.allMatches(line)) {
+        var ref = m.group(1)!.trim();
+        // A shell line, not a path: docs_check skips it too.
+        if (ref.isEmpty || ref.contains(' ')) continue;
+        while (ref.endsWith('/')) {
+          ref = ref.substring(0, ref.length - 1);
+        }
+        if (ref.isEmpty) continue;
+        if (allowlist.contains(ref)) continue;
+        if (ref.contains(RegExp(r'[*{<]'))) {
+          // A set of paths (`modules/<name>/data/...`): docs_check needs at
+          // least one real path to fit it, so it dies when every fit does.
+          if (patternDies(ref)) out.add(_DocRef(rel, i + 1, ref));
+          continue;
+        }
+        if (hits(ref)) out.add(_DocRef(rel, i + 1, ref));
+      }
+      for (final m in _markdownLink.allMatches(line)) {
+        final target = m.group(1)!;
+        if (target.startsWith('http://') ||
+            target.startsWith('https://') ||
+            target.startsWith('mailto:') ||
+            target.startsWith('#')) {
+          continue;
+        }
+        final path = target.split('#').first;
+        if (path.isEmpty) continue;
+        final resolved = _normalize(docDir.isEmpty ? path : '$docDir/$path');
+        if (!allowlist.contains(resolved) && hits(resolved))
+          out.add(_DocRef(rel, i + 1, '$target -> $resolved'));
+      }
+    }
+  }
+  return out;
+}
+
+/// `a/b/../c/./d` -> `a/c/d`.
+String _normalize(String path) {
+  final parts = <String>[];
+  for (final part in path.split('/')) {
+    if (part.isEmpty || part == '.') continue;
+    if (part == '..') {
+      if (parts.isNotEmpty) parts.removeLast();
+      continue;
+    }
+    parts.add(part);
+  }
+  return parts.join('/');
+}
+
+void _reportDocReferences(List<_DocRef> refs, {required bool applied}) {
+  if (refs.isEmpty) {
+    if (!applied) {
+      stdout.writeln('');
+      stdout.writeln(
+        'Tài liệu: không có tham chiếu nào tới đường dẫn sắp xoá.',
+      );
+    }
+    return;
+  }
+  final files = refs.map((r) => r.file).toSet();
+  final sink = applied ? stderr : stdout;
+  sink.writeln('');
+  sink.writeln(
+    '!! TÀI LIỆU: ${refs.length} tham chiếu trong ${files.length} file .md '
+    '${applied ? 'đang' : 'sẽ'} trỏ tới đường dẫn đã xoá.',
+  );
+  sink.writeln(
+    '   `dart tools/docs_check/check.dart` (CI Gate 5) sẽ fail cho tới khi '
+    'chúng được sửa hoặc gỡ.',
+  );
+  final shown = _verbose ? refs.length : 15;
+  for (final ref in refs.take(shown)) {
+    sink.writeln('   ${ref.file}:${ref.line}  ${ref.reference}');
+  }
+  if (refs.length > shown) {
+    sink.writeln(
+      '   … và ${refs.length - shown} tham chiếu nữa'
+      ' — thêm --verbose (hoặc chạy `dart tools/docs_check/check.dart` sau khi gỡ) để xem đủ.',
+    );
+  }
 }
 
 class _FileEdit {

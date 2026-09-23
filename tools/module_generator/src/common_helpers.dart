@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:mustache_template/mustache.dart';
+import 'package:yaml/yaml.dart';
 
 import '../../shared/toolchain.dart' as toolchain;
 import 'module_type.dart';
@@ -212,6 +213,12 @@ class CommonHelpers {
   ///
   /// The manifest is the only hand-edited input; `generate.dart` runs
   /// `composer sync` next to regenerate the rest.
+  ///
+  /// Presence is decided by parsing the manifest, never by substring: a line
+  /// test once took `core_net` for registered because `core_network` contains
+  /// it, and the package silently joined no app. Every write is re-parsed and
+  /// checked, and a manifest the edit could not register in throws — the
+  /// caller rolls back rather than leaving a package nothing composes.
   static void registerInAppManifests(
     String packageName,
     ModuleType moduleType,
@@ -234,18 +241,77 @@ class CommonHelpers {
       ModuleType.core || ModuleType.custom => null,
     };
 
-    for (final manifest in manifests) {
-      final lines = manifest.readAsLinesSync();
-      if (lines.any((l) => l.contains(packageName))) continue;
+    bool isRegistered(String text) => layer != null
+        ? _hasModuleLayer(text, moduleName, layer)
+        : _hasPlatformPackage(text, packageName);
 
+    for (final manifest in manifests) {
+      final original = manifest.readAsStringSync();
+      if (isRegistered(original)) {
+        stdout.writeln('  -> Đã có sẵn trong ${manifest.path}');
+        continue;
+      }
+
+      final lines = original.split('\n');
+      if (lines.isNotEmpty && lines.last.isEmpty) lines.removeLast();
       if (layer != null) {
         _addModuleLayer(lines, moduleName, layer);
       } else {
         _addPlatformPackage(lines, packageName);
       }
-      manifest.writeAsStringSync('${lines.join('\n')}\n');
+      final updated = '${lines.join('\n')}\n';
+
+      if (!isRegistered(updated)) {
+        throw Exception(
+          'Không ghép được "$packageName" vào ${manifest.path}: không tìm thấy '
+          '${layer != null ? 'danh sách `modules:`' : 'nhóm DI `core` (`packages:`)'} '
+          'theo định dạng mong đợi. Thêm tay rồi chạy '
+          '`dart tools/composer/composer.dart sync`.',
+        );
+      }
+      manifest.writeAsStringSync(updated);
       stdout.writeln('  -> Đã thêm vào ${manifest.path}');
     }
+  }
+
+  /// Parses [text] as a manifest; a malformed one is reported, not guessed at.
+  static Map _parseManifest(String text) {
+    final doc = loadYaml(text);
+    if (doc is! Map) {
+      throw Exception('app_manifest.yaml không phải một YAML map.');
+    }
+    return doc;
+  }
+
+  /// Whether `modules:` lists `{ id: moduleName }` with [layer] among its
+  /// `layers`.
+  static bool _hasModuleLayer(String text, String moduleName, String layer) {
+    final modules = _parseManifest(text)['modules'];
+    if (modules is! List) return false;
+    for (final entry in modules) {
+      if (entry is Map && entry['id'] == moduleName) {
+        final layers = entry['layers'];
+        if (layers is List && layers.contains(layer)) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether any DI group's `packages:` — or `extra_dependencies:` — names
+  /// [packageName] exactly.
+  static bool _hasPlatformPackage(String text, String packageName) {
+    final doc = _parseManifest(text);
+    final groups = doc['di_groups'];
+    if (groups is List) {
+      for (final group in groups) {
+        if (group is Map) {
+          final packages = group['packages'];
+          if (packages is List && packages.contains(packageName)) return true;
+        }
+      }
+    }
+    final extra = doc['extra_dependencies'];
+    return extra is List && extra.contains(packageName);
   }
 
   /// `- { id: <name>, layers: [...] }` — appended, or extended if present.
@@ -255,46 +321,73 @@ class CommonHelpers {
     String layer,
   ) {
     final existing = lines.indexWhere(
-      (l) => l.trimLeft().startsWith('- { id: $moduleName,'),
+      (l) => RegExp(
+        '^\\s*-\\s*\\{\\s*id:\\s*${RegExp.escape(moduleName)}\\s*,',
+      ).hasMatch(l),
     );
     if (existing != -1) {
-      final layers =
-          RegExp(r'layers:\s*\[([^\]]*)\]')
-              .firstMatch(lines[existing])
-              ?.group(1)
-              ?.split(',')
-              .map((l) => l.trim())
-              .toSet() ??
-          const <String>{};
-      if (!layers.contains(layer)) {
-        lines[existing] = lines[existing].replaceFirst(
-          'layers: [',
-          'layers: [$layer, ',
-        );
-      }
+      lines[existing] = lines[existing].replaceFirst(
+        RegExp(r'layers:\s*\['),
+        'layers: [$layer, ',
+      );
       return;
     }
     final modulesIndex = lines.indexWhere((l) => l.trimRight() == 'modules:');
     if (modulesIndex == -1) return;
-    var insertAt = modulesIndex + 1;
-    while (insertAt < lines.length &&
-        lines[insertAt].trimLeft().startsWith('- ')) {
-      insertAt++;
+    // After the last `- ` item; comments and blank lines between items are
+    // skipped, the first other line (a top-level key) ends the list.
+    var lastItem = modulesIndex;
+    for (var i = modulesIndex + 1; i < lines.length; i++) {
+      final trimmed = lines[i].trimLeft();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+      if (!trimmed.startsWith('- ')) break;
+      lastItem = i;
     }
-    lines.insert(insertAt, '  - { id: $moduleName, layers: [$layer] }');
+    lines.insert(lastItem + 1, '  - { id: $moduleName, layers: [$layer] }');
   }
 
-  /// A platform package joins the `core` DI group, or `extra_dependencies`
-  /// when it ships no `@InjectableInit.microPackage()`.
+  /// A platform package joins the `core` DI group — after its last entry.
+  ///
+  /// Handles both list styles the manifests use: a block list (comments
+  /// between items allowed) and a flow list (`packages: [a, b]`).
   static void _addPlatformPackage(List<String> lines, String packageName) {
-    final anchor = lines.indexWhere((l) => l.trimRight() == '    packages:');
-    if (anchor == -1) return;
-    var insertAt = anchor + 1;
-    while (insertAt < lines.length &&
-        lines[insertAt].trimLeft().startsWith('- ')) {
-      insertAt++;
+    final group = lines.indexWhere(
+      (l) => RegExp(r'^\s*-\s*name:\s*core\s*$').hasMatch(l),
+    );
+    if (group == -1) return;
+    final groupIndent = lines[group].indexOf('-');
+
+    for (var i = group + 1; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trimLeft();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+      final indent = line.length - trimmed.length;
+      // Left the group: the next `- name:` or a top-level key.
+      if (indent <= groupIndent) return;
+
+      final flow = RegExp(r'^(\s*packages:\s*\[)(.*)\](.*)$').firstMatch(line);
+      if (flow != null) {
+        final items = flow.group(2)!.trim();
+        lines[i] =
+            '${flow.group(1)}${items.isEmpty ? packageName : '$items, $packageName'}]${flow.group(3)}';
+        return;
+      }
+      if (RegExp(r'^\s*packages:\s*$').hasMatch(line)) {
+        var lastItem = -1;
+        var itemIndent = indent + 2;
+        for (var j = i + 1; j < lines.length; j++) {
+          final t = lines[j].trimLeft();
+          if (t.isEmpty || t.startsWith('#')) continue;
+          final ind = lines[j].length - t.length;
+          if (!t.startsWith('- ') || ind < indent) break;
+          lastItem = j;
+          itemIndent = ind;
+        }
+        final at = lastItem == -1 ? i + 1 : lastItem + 1;
+        lines.insert(at, '${' ' * itemIndent}- $packageName');
+        return;
+      }
     }
-    lines.insert(insertAt, '      - $packageName');
   }
 
   static List<File> _findManifests(Directory dir) {

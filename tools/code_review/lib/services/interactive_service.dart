@@ -26,9 +26,6 @@ class InteractiveService {
     // Get report language
     final language = await promptReportLanguage();
 
-    // Get output format
-    final format = await promptOutputFormat();
-
     // Build arguments for the tool
     final args = <String>[];
 
@@ -80,9 +77,8 @@ class InteractiveService {
       args.add('--verbose');
     }
 
-    // Add language and format arguments (these will be saved to config)
+    // Applies to this run only; `--config` changes the saved default.
     args.addAll(['--language', language]);
-    args.addAll(['--format', format]);
 
     // Show configuration summary
     stdout.writeln('\n📋 Configuration Summary:');
@@ -100,7 +96,6 @@ class InteractiveService {
     stdout.writeln(
       '• Report Language: ${CodeReviewConstants.languageNames[language] ?? language}',
     );
-    stdout.writeln('• Output Format: $format');
     stdout.writeln('• Verbose Mode: $verbose');
     stdout.writeln('');
 
@@ -162,7 +157,7 @@ class InteractiveService {
         return {'type': 'all', 'description': 'All Dart files'};
 
       case '2':
-        stdout.write('📁 Enter folder path (e.g., lib/presentation): ');
+        stdout.write('📁 Enter folder path (e.g., modules/auth/domain): ');
         final folderPath = stdin.readLineSync()?.trim() ?? '';
         if (folderPath.isEmpty) {
           stdout.writeln('⚠️  No folder specified, using all files');
@@ -341,29 +336,5 @@ class InteractiveService {
     }
 
     return 'en'; // Default to English
-  }
-
-  /// Prompt for output format
-  static Future<String> promptOutputFormat() async {
-    stdout.writeln('\n📄 Output Format:');
-    stdout.writeln('1. markdown - Markdown format (.md)');
-    stdout.writeln('2. html - HTML format (.html)');
-    stdout.writeln('3. json - JSON format (.json)');
-    stdout.writeln('4. txt - Plain text (.txt)');
-    stdout.writeln('');
-
-    stdout.write('Select format (1-4, default: 1 for Markdown): ');
-    final input = stdin.readLineSync()?.trim() ?? '1';
-
-    switch (input) {
-      case '2':
-        return 'html';
-      case '3':
-        return 'json';
-      case '4':
-        return 'txt';
-      default:
-        return 'markdown';
-    }
   }
 }

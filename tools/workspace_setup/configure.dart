@@ -59,7 +59,6 @@ void main() async {
     'run',
     'build_runner',
     'build',
-    '-d',
     '--workspace',
   ]);
 

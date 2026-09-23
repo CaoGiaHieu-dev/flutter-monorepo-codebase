@@ -29,10 +29,17 @@ class CodeReviewTool {
 
     try {
       _args = parser.parse(arguments);
-    } catch (e) {
-      stdout.writeln('Error parsing arguments: $e');
-      stdout.writeln(parser.usage);
-      exit(1);
+    } on FormatException catch (e) {
+      stderr.writeln('❌ ${e.message}');
+      stderr.writeln('');
+      stderr.writeln(parser.usage);
+      exit(64);
+    }
+    if (_args.rest.isNotEmpty) {
+      stderr.writeln('❌ Unexpected argument(s): ${_args.rest.join(' ')}');
+      stderr.writeln('');
+      stderr.writeln(parser.usage);
+      exit(64);
     }
 
     if (_args['help'] as bool) {
@@ -65,8 +72,12 @@ class CodeReviewTool {
       return;
     }
 
-    // Save language and format settings to config
-    await _saveLanguageAndFormatSettings();
+    // `--language` applies to this run only. It used to be written into the
+    // tracked code_review_config.json, so one CI run changed the repo's
+    // default for everyone; `--config` is the way to change that.
+    if (_args.wasParsed('language')) {
+      ConfigService.languageOverride = _args['language'] as String;
+    }
 
     // Get API key and initialize services
     _apiKey = ApiKeyService.getApiKey(_args);
@@ -78,7 +89,7 @@ class CodeReviewTool {
 
     stdout.writeln('🤖 Starting code review with Gemini AI...');
     stdout.writeln('📁 Working directory: ${Directory.current.path}');
-    stdout.writeln('🔑 API Key: ${_apiKey.substring(0, 8)}...');
+    stdout.writeln('🔑 API Key: ${ApiKeyService.mask(_apiKey)}');
     if (_args['summary'] as bool) {
       stdout.writeln('📊 Summary will be saved to: $_outputDir/');
     }
@@ -86,8 +97,8 @@ class CodeReviewTool {
 
     // Validate we're in a Flutter project
     if (!await FileAnalyzer.validateFlutterProject()) {
-      stdout.writeln('❌ This doesn\'t appear to be a Flutter project.');
-      stdout.writeln(
+      stderr.writeln('❌ This doesn\'t appear to be a Flutter project.');
+      stderr.writeln(
         '💡 Please run this tool from the root of your Flutter project.',
       );
       exit(1);
@@ -149,8 +160,7 @@ class CodeReviewTool {
       ..addMultiOption('file', abbr: 'f', help: 'Review specific file(s)')
       ..addOption(
         'folder',
-        help:
-            'Review all Dart files in specific folder (e.g., lib/presentation)',
+        help: 'Review all Dart files in specific folder (e.g., modules/auth/domain)',
       )
       ..addFlag(
         'changed',
@@ -193,15 +203,19 @@ class CodeReviewTool {
       )
       ..addOption(
         'language',
-        help: 'Report language (en, vi, ja, ko, zh, fr, de, es)',
+        help:
+            'Report language for this run (en, vi, ja, ko, zh, fr, de, es). '
+            'Defaults to reportLanguage in code_review_config.json; '
+            'not saved — use --config to change the default.',
         allowed: CodeReviewConstants.supportedLanguages,
-        defaultsTo: 'en',
       )
       ..addOption(
         'format',
-        help: 'Output format (markdown, html, json, txt)',
-        allowed: ['markdown', 'html', 'json', 'txt'],
-        defaultsTo: 'markdown',
+        help:
+            'Report format. Only markdown is implemented; the option exists '
+            'so scripts passing --format markdown keep working.',
+        allowed: [CodeReviewConstants.reportFormat],
+        defaultsTo: CodeReviewConstants.reportFormat,
       )
       ..addFlag(
         'show-config',
@@ -230,11 +244,11 @@ class CodeReviewTool {
     stdout.writeln('  dart tools/code_review/code_review.dart --all\n');
     stdout.writeln('  # Review specific file');
     stdout.writeln(
-      '  dart tools/code_review/code_review.dart --file lib/main.dart\n',
+      '  dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart\n',
     );
     stdout.writeln('  # Review specific folder');
     stdout.writeln(
-      '  dart tools/code_review/code_review.dart --folder lib/presentation\n',
+      '  dart tools/code_review/code_review.dart --folder modules/auth/domain\n',
     );
     stdout.writeln('  # Review changed files in Git');
     stdout.writeln('  dart tools/code_review/code_review.dart --changed\n');
@@ -244,9 +258,16 @@ class CodeReviewTool {
     stdout.writeln(
       '  dart tools/code_review/code_review.dart --focus security,bugs\n',
     );
-    stdout.writeln('  # Exclude generated files');
     stdout.writeln(
-      '  dart tools/code_review/code_review.dart --exclude "**/*.g.dart"\n',
+      '  # Exclude more files (generated files, tests and gitignored',
+    );
+    stdout.writeln('  # files are always excluded)');
+    stdout.writeln(
+      '  dart tools/code_review/code_review.dart --all --exclude "**/routing/**"\n',
+    );
+    stdout.writeln('  # Report in Vietnamese for this run');
+    stdout.writeln(
+      '  dart tools/code_review/code_review.dart --all --language vi\n',
     );
     stdout.writeln('  # With API key and custom output');
     stdout.writeln(
@@ -262,7 +283,11 @@ class CodeReviewTool {
     );
     stdout.writeln('  4. Interactive prompt: Tool will ask if no key is found');
     stdout.writeln(
-      '  Get your key at: https://makersuite.google.com/app/apikey',
+      '  Get your key at: ${CodeReviewConstants.apiKeyUrl}',
+    );
+    stdout.writeln('');
+    stdout.writeln(
+      '📄 Reports are Markdown: <output-dir>/code_review_report_<date>_<time>.md',
     );
   }
 
@@ -402,28 +427,6 @@ class CodeReviewTool {
     stdout.writeln('=' * 60);
   }
 
-  /// Save language and format settings to config
-  Future<void> _saveLanguageAndFormatSettings() async {
-    // Only save if explicitly provided in arguments
-    if (_args.wasParsed('language')) {
-      final language = _args['language'] as String;
-      try {
-        await ConfigService.setReportLanguage(language);
-      } catch (e) {
-        stdout.writeln('⚠️  Warning: Could not save language setting: $e');
-      }
-    }
-
-    if (_args.wasParsed('format')) {
-      final format = _args['format'] as String;
-      try {
-        await ConfigService.setOutputFormat(format);
-      } catch (e) {
-        stdout.writeln('⚠️  Warning: Could not save format setting: $e');
-      }
-    }
-  }
-
   /// Run configuration mode
   Future<void> _runConfigMode() async {
     stdout.writeln('⚙️  Code Review Tool Configuration');
@@ -438,10 +441,6 @@ class CodeReviewTool {
     // Configure language
     final language = await InteractiveService.promptReportLanguage();
     await ConfigService.setReportLanguage(language);
-
-    // Configure format
-    final format = await InteractiveService.promptOutputFormat();
-    await ConfigService.setOutputFormat(format);
 
     // Configure batch size
     stdout.writeln('\n📦 Batch Processing:');

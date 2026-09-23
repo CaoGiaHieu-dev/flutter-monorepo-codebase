@@ -3,7 +3,28 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-void main() async {
+import 'shared/toolchain.dart';
+
+const _usage = '''
+Usage: dart tools/check_outdated.dart
+
+Resolves every package in pubspec_dependencies.yaml in a sandbox, runs
+`pub outdated`, then offers a checklist to bump the catalog (on a terminal;
+report only otherwise) and re-runs dependency_sync + pub get.
+
+Exits non-zero when resolution, `pub outdated` or applying an update fails.''';
+
+void main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(_usage);
+    return;
+  }
+  if (args.isNotEmpty) {
+    stderr.writeln('❌ Unknown argument(s): ${args.join(' ')}');
+    stderr.writeln(_usage);
+    exit(64);
+  }
+
   final stopwatch = Stopwatch()..start();
 
   stdout.writeln(
@@ -57,10 +78,12 @@ $dependenciesContent
 
     pubspecFile.writeAsStringSync(dummyPubspecContent);
 
-    // Sử dụng Platform.resolvedExecutable để luôn dùng đúng phiên bản Dart SDK đang chạy script này
-    final executable = Platform.resolvedExecutable;
-    final getArgs = ['pub', 'get'];
-    final outdatedArgs = ['pub', 'outdated'];
+    // The repo's toolchain — `fvm dart` when FVM is configured and
+    // installed — never whichever SDK happens to run this script.
+    reportToolchain();
+    final executable = dartExecutable;
+    final getArgs = [...dartArgs, 'pub', 'get'];
+    final outdatedArgs = [...dartArgs, 'pub', 'outdated'];
 
     stdout.writeln('⏳ Resolving dependencies (this might take a moment)...\n');
 
@@ -69,6 +92,7 @@ $dependenciesContent
       executable,
       getArgs,
       workingDirectory: sandboxDir.path,
+      runInShell: true,
     );
 
     if (getResult.exitCode != 0) {
@@ -86,6 +110,7 @@ $dependenciesContent
       outdatedArgs,
       workingDirectory: sandboxDir.path,
       mode: ProcessStartMode.inheritStdio,
+      runInShell: true,
     );
 
     final outdatedExit = await outdatedProcess.exitCode;
@@ -96,15 +121,18 @@ $dependenciesContent
       );
 
       stdout.writeln('\n⏳ Fetching latest versions data for checklist...');
-      final jsonProcess = await Process.run(executable, [
-        'pub',
-        'outdated',
-        '--json',
-      ], workingDirectory: sandboxDir.path);
+      final jsonProcess = await Process.run(
+        executable,
+        [...outdatedArgs, '--json'],
+        workingDirectory: sandboxDir.path,
+        runInShell: true,
+      );
 
       if (jsonProcess.exitCode == 0) {
         try {
-          final Map<String, dynamic> data = jsonDecode(jsonProcess.stdout);
+          final Map<String, dynamic> data = jsonDecode(
+            jsonProcess.stdout as String,
+          );
           final packages = data['packages'] as List<dynamic>? ?? [];
 
           String depsContent = dependenciesFile.readAsStringSync();
@@ -233,18 +261,20 @@ $dependenciesContent
                 stdout.writeln('\n🔄 Auto-syncing workspace dependencies...');
                 final syncProcess = await Process.start(
                   executable,
-                  ['tools/dependency_sync.dart'],
+                  [...dartArgs, 'tools/dependency_sync.dart'],
                   workingDirectory: projectRoot,
                   mode: ProcessStartMode.inheritStdio,
+                  runInShell: true,
                 );
 
                 if (await syncProcess.exitCode == 0) {
                   stdout.writeln('\n🚀 Running pub get to apply changes...');
                   final pubGetProcess = await Process.start(
                     executable,
-                    ['pub', 'get'],
+                    getArgs,
                     workingDirectory: projectRoot,
                     mode: ProcessStartMode.inheritStdio,
+                    runInShell: true,
                   );
 
                   if (await pubGetProcess.exitCode == 0) {
@@ -253,9 +283,11 @@ $dependenciesContent
                     );
                   } else {
                     stderr.writeln('\n⚠️ pub get finished with errors.');
+                    exitCode = 1;
                   }
                 } else {
                   stderr.writeln('\n❌ Workspace synchronization failed.');
+                  exitCode = 1;
                 }
               } else {
                 stdout.writeln('\n⚠️ No packages were selected for update.');
@@ -264,17 +296,22 @@ $dependenciesContent
           }
         } catch (e) {
           stderr.writeln('❌ Failed to parse JSON from pub outdated: $e');
+          exitCode = 1;
         }
       } else {
         stderr.writeln('❌ Error running pub outdated --json.');
+        stderr.writeln(jsonProcess.stderr);
+        exitCode = 1;
       }
     } else {
-      stderr.writeln('\n⚠️ Outdated check finished with code: $outdatedExit');
+      stderr.writeln('\n❌ Outdated check finished with code: $outdatedExit');
+      exitCode = 1;
     }
   } catch (e, stackTrace) {
     stderr.writeln('❌ An unexpected error occurred:');
     stderr.writeln(e);
     stderr.writeln(stackTrace);
+    exitCode = 1;
   } finally {
     // 5. Dọn dẹp
     try {

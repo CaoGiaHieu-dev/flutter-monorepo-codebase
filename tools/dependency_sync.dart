@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'shared/toolchain.dart';
+
 Future<void> main(List<String> arguments) async {
   if (arguments.contains('--help') || arguments.contains('-h')) {
     stdout.writeln('''
@@ -328,16 +330,15 @@ USAGE
     }
   }
 
+  // The repo's toolchain — `fvm dart` when FVM is configured and installed —
+  // the same detection every tool that shells out uses.
+  reportToolchain();
   stdout.writeln('💡 Running `dart pub get` to apply the updates...');
-
-  // The `dart` running this script, so the SDK that resolves matches the one
-  // the script was started with (FVM's included).
-  final executable = Platform.resolvedExecutable;
-  final getArgs = ['pub', 'get'];
-  final getResult = await Process.run(
-    executable,
-    getArgs,
-  );
+  final getResult = await Process.run(dartExecutable, [
+    ...dartArgs,
+    'pub',
+    'get',
+  ], runInShell: true);
 
   if (getResult.exitCode != 0) {
     stderr.writeln('❌ `dart pub get` failed after syncing:');

@@ -126,6 +126,7 @@ Two files. First the routes themselves — real code from
 
 ```dart
 import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -145,7 +146,11 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
-      create: (_) => getIt<HomeProfileBloc>(),
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
       child: const HomePage(),
     );
   }
@@ -223,7 +228,11 @@ The controller is created in the route's `build`, never inside the page.
 ```dart
 // BLoC — from home_route_module.dart above
 return BlocProvider(
-  create: (_) => getIt<HomeProfileBloc>(),
+  // Auth is optional: an app composed without `feature_auth` registers
+  // no IAuthStatusStream, and Home then shows the signed-out state.
+  create: (_) => getIt<HomeProfileBloc>(
+    param1: getItOrNull<IAuthStatusStream>(),
+  ),
   child: const HomePage(),
 );
 ```
@@ -409,15 +418,19 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > [!CAUTION]
 > **These steps are not always sufficient.** The shell degrades gracefully — it resolves
 > everything through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks — but
-> *other samples* may hold a hard dependency on the one you are deleting. Removing `auth` breaks
-> one of them, and another degrades safely:
+> *other samples* may hold a hard dependency on the one you are deleting. A contract owned by a
+> removable feature must reach its consumers the same way — never through a required constructor
+> parameter, which DI cannot satisfy once the owner is gone. Removing `auth` today breaks no sample;
+> three consumers degrade safely:
 >
 > | Consumer | How it couples | Result |
 > |---|---|---|
-> | `feature_home` (`home_profile_bloc.dart:25`) | `IAuthStatusStream` via **constructor injection** | DI cannot build `HomeProfileBloc` at all |
-> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` | The logout row is simply hidden |
+> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<IAuthStatusStream>()` passed as a **factory param** | Home shows the signed-out state |
+> | `feature_settings` (`settings_page.dart:46`) | `getItOrNull<IAuthActionHandler>()` | The logout row is simply hidden |
+> | `feature_onboarding` (`onboarding_page.dart:31`) | `getItOrNull<AuthNavigator>()` | The button goes to Home instead (`HomeNavigator`) |
 >
-> The dry-run prints both, plus the `core_di` contracts that become dead code. Read it before
+> The dry-run prints every coupling it knows — `breaks` and `safe_couplings` in
+> `tools/sample_manifest.yaml` — plus the `core_di` contracts that become dead code. Read it before
 > deleting anything.
 
 > [!NOTE]

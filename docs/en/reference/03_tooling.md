@@ -133,7 +133,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 Its source of truth is [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), which classifies every package as `framework`, `sample` or `shell`. No sample code lives inside a framework package: every sample is a package of its own, so removing one is always a whole-bundle operation.
 
-The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from the root `pubspec.yaml` and from every app's manifest, pubspec and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** — `HomeProfileBloc` takes `IAuthStatusStream` through its constructor, so DI cannot build it at all — as well as the couplings that degrade safely, such as `feature_settings` hiding its logout row when `getItOrNull<IAuthActionHandler>()` is null.
+The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from the root `pubspec.yaml` and from every app's manifest, pubspec and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** (the `breaks` list in `tools/sample_manifest.yaml` — empty for every sample today) — as well as the couplings that degrade safely, such as `feature_settings` hiding its logout row when `getItOrNull<IAuthActionHandler>()` is null, or `feature_home` showing the signed-out state when the route's `getItOrNull<IAuthStatusStream>()` is null.
 
 Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back.
 

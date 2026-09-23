@@ -126,6 +126,7 @@ Hai file. Trước hết là bản thân các route — code thật từ
 
 ```dart
 import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -145,7 +146,11 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
-      create: (_) => getIt<HomeProfileBloc>(),
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
       child: const HomePage(),
     );
   }
@@ -223,7 +228,11 @@ Controller được tạo trong `build` của route, không bao giờ tạo bên
 ```dart
 // BLoC — trích từ home_route_module.dart ở trên
 return BlocProvider(
-  create: (_) => getIt<HomeProfileBloc>(),
+  // Auth is optional: an app composed without `feature_auth` registers
+  // no IAuthStatusStream, and Home then shows the signed-out state.
+  create: (_) => getIt<HomeProfileBloc>(
+    param1: getItOrNull<IAuthStatusStream>(),
+  ),
   child: const HomePage(),
 );
 ```
@@ -407,14 +416,19 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > [!CAUTION]
 > **Các bước trên không phải lúc nào cũng đủ.** App shell thì suy biến an toàn — nó phân giải mọi
 > thứ qua hợp đồng `core_di` kèm fallback `getAllOrEmpty` / `getItOrNull` — nhưng *các sample khác*
-> có thể đang phụ thuộc cứng vào cái bạn định xoá. Gỡ `auth` làm vỡ một chỗ, và một chỗ khác xuống cấp an toàn:
+> có thể đang phụ thuộc cứng vào cái bạn định xoá. Một contract do feature gỡ được sở hữu phải đến
+> tay nơi tiêu thụ theo đúng cách đó — không bao giờ qua tham số constructor bắt buộc, thứ DI không
+> thể thoả mãn khi chủ sở hữu đã bị gỡ. Hiện nay gỡ `auth` không làm vỡ sample nào; ba nơi tiêu thụ
+> xuống cấp an toàn:
 >
 > | Nơi tiêu thụ | Kiểu phụ thuộc | Hậu quả |
 > |---|---|---|
-> | `feature_home` (`home_profile_bloc.dart:25`) | `IAuthStatusStream` qua **constructor injection** | DI không dựng nổi `HomeProfileBloc` |
-> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` | Dòng logout đơn giản bị ẩn đi |
+> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<IAuthStatusStream>()` truyền vào dưới dạng **factory param** | Home hiển thị trạng thái chưa đăng nhập |
+> | `feature_settings` (`settings_page.dart:46`) | `getItOrNull<IAuthActionHandler>()` | Dòng logout đơn giản bị ẩn đi |
+> | `feature_onboarding` (`onboarding_page.dart:31`) | `getItOrNull<AuthNavigator>()` | Nút bấm chuyển sang Home (`HomeNavigator`) |
 >
-> Dry-run in ra cả hai chỗ này, cộng các contract trong `core_di` trở thành code chết. Hãy đọc nó
+> Dry-run in ra mọi liên kết nó biết — `breaks` và `safe_couplings` trong
+> `tools/sample_manifest.yaml` — cộng các contract trong `core_di` trở thành code chết. Hãy đọc nó
 > trước khi xoá bất cứ thứ gì.
 
 > [!NOTE]

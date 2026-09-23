@@ -181,16 +181,31 @@ Real code from
 @injectable
 class HomeProfileBloc
     extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(this._authStatusStream)
+  HomeProfileBloc(@factoryParam this._authStatusStream)
     : super(const BlocViewState.initial()) {
     // …
   }
 
-  final IAuthStatusStream _authStatusStream;
+  final IAuthStatusStream? _authStatusStream;
   StreamSubscription<AuthPrincipal?>? _subscription;
 ```
 
 `feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either: the contract carries `AuthPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
+
+The stream is **optional** on purpose. `IAuthStatusStream` is registered by `feature_auth`, which an app may leave out, so the bloc takes it as an `@factoryParam` and the route supplies it — real code from [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
+
+```dart
+    return BlocProvider(
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
+      child: const HomePage(),
+    );
+```
+
+A required constructor parameter would compile just as well — and then DI could not build `HomeProfileBloc` at all in a build without auth. The constructor still receives its dependency (no lookup in business logic); only the *optional* lookup moves to the route.
 
 > [!CAUTION]
 > Always cancel the subscription in `close()` / `dispose()`. A broadcast stream will happily keep a

@@ -211,8 +211,9 @@ File kết quả nằm ở `apps/mobile/build/app/outputs/flutter-apk/app-dev-de
 `apps/mobile/android/gradle.properties` đặt `android.builtInKotlin=true`. Giữ nguyên, đừng tắt.
 
 Flutter đang chuyển plugin từ Kotlin Gradle Plugin (KGP) sang phần hỗ trợ Kotlin
-tích hợp sẵn trong Flutter Gradle plugin. Plugin nào đã migrate — ví dụ
-`google_sign_in_android` — sẽ biên dịch phần Java của nó dựa trên class sinh ra
+tích hợp sẵn trong Flutter Gradle plugin. Plugin nào đã migrate — lỗi này lộ ra ở
+đây qua `google_sign_in_android`, trước khi sample auth thôi phụ thuộc vào nó — sẽ
+biên dịch phần Java của nó dựa trên class sinh ra
 từ chính Kotlin sources của nó. Khi tắt cờ này, phần Kotlin đó không được biên
 dịch, và build chết ở những symbol trông như đáng lẽ phải tồn tại:
 
@@ -224,8 +225,9 @@ GoogleSignInPlugin.java:218: error: cannot find symbol
 Thông báo lỗi chỉ ra tên plugin chứ không nhắc tới cờ, nên rất dễ tưởng nhầm là
 lỗi version dependency. Không phải — ghim plugin về version cũ hơn cũng không cứu được.
 
-Còn ba plugin **chưa** migrate và vẫn dùng KGP: `firebase_auth`, `firebase_core`,
-`photo_manager`. Hiện chúng vẫn build bình thường, chỉ cảnh báo:
+Tại thời điểm viết, `firebase_core` **chưa** migrate và vẫn dùng KGP (`firebase_auth`
+và `photo_manager` cũng vậy, nhưng đã rời khỏi workspace). Plugin như thế hiện vẫn
+build bình thường, chỉ cảnh báo:
 
 ```
 WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): ...
@@ -233,8 +235,9 @@ Future versions of Flutter will fail to build if your app uses plugins that appl
 ```
 
 Cảnh báo này là một deadline thật, không phải nhiễu. Khi một bản Flutter tương lai
-biến nó thành lỗi, cách xử lý là nâng ba plugin đó lên version có hỗ trợ Built-in
-Kotlin — không cần sửa gì trong repo này.
+biến nó thành lỗi, cách xử lý là nâng các plugin mà cảnh báo nêu tên lên version có
+hỗ trợ Built-in Kotlin — không cần sửa gì trong repo này. Hãy tin danh sách trong cảnh
+báo hơn danh sách ở trang này: nó được tính từ những gì bạn thực sự phụ thuộc.
 
 ### Từ VS Code
 

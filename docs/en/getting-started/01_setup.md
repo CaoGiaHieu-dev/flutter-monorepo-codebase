@@ -212,7 +212,8 @@ The artifact lands at `apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.a
 
 Flutter is migrating plugins off the Kotlin Gradle Plugin (KGP) and onto the
 Kotlin support built into the Flutter Gradle plugin. A plugin that has already
-migrated — `google_sign_in_android`, for one — compiles its Java sources against
+migrated — `google_sign_in_android` was the one that surfaced it here, before the
+auth sample stopped depending on it — compiles its Java sources against
 classes generated from its own Kotlin sources. With the flag off, those Kotlin
 sources are never compiled, and the build dies on symbols that look like they
 should exist:
@@ -225,8 +226,9 @@ GoogleSignInPlugin.java:218: error: cannot find symbol
 The message names the plugin, not the flag, so it reads like a broken
 dependency version. It is not — pinning an older plugin version does not help.
 
-Three plugins have **not** migrated yet and still apply KGP: `firebase_auth`,
-`firebase_core`, `photo_manager`. They build fine today and only emit a warning:
+At the time of writing, `firebase_core` had **not** migrated and still applied KGP
+(`firebase_auth` and `photo_manager` were in the same state, and have since left
+the workspace). A plugin like that builds fine today and only emits a warning:
 
 ```
 WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): ...
@@ -234,8 +236,10 @@ Future versions of Flutter will fail to build if your app uses plugins that appl
 ```
 
 That warning is a real deadline, not noise. When a future Flutter release turns
-it into an error, the fix is to upgrade those three plugins to versions that
-support Built-in Kotlin — there is nothing to change in this repo.
+it into an error, the fix is to upgrade whichever plugins the warning names to
+versions that support Built-in Kotlin — there is nothing to change in this repo.
+Trust the warning's list over this page's: it is computed from what you actually
+depend on.
 
 ### From VS Code
 

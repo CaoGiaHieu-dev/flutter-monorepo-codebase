@@ -16,41 +16,5 @@
   "edit": "Edit",
   "duplicate": "Duplicate",
   "close": "Close",
-  "selected": "Selected",
-  "selectAlbum": "Select Album",
-  "done": "Done",
-  "noPhotosAvailable": "No photos available",
-  "albumRegular": "Album",
-  "albumSyncedEvent": "Synced Event",
-  "albumSyncedFaces": "Synced Faces",
-  "albumSyncedAlbum": "Synced Album",
-  "albumImported": "Imported",
-  "smartAlbumGeneric": "Generic Album",
-  "smartAlbumPanoramas": "Panoramas",
-  "smartAlbumVideos": "Videos",
-  "smartAlbumFavorites": "Favorites",
-  "smartAlbumTimelapses": "Timelapses",
-  "smartAlbumAllHidden": "All Hidden",
-  "smartAlbumRecentlyAdded": "Recently Added",
-  "smartAlbumBursts": "Bursts",
-  "smartAlbumSlomoVideos": "Slo-mo Videos",
-  "smartAlbumUserLibrary": "User Library",
-  "smartAlbumSelfPortraits": "Self Portraits",
-  "smartAlbumScreenshots": "Screenshots",
-  "smartAlbumDepthEffect": "Depth Effect",
-  "smartAlbumLivePhotos": "Live Photos",
-  "smartAlbumAnimated": "Animated",
-  "smartAlbumLongExposures": "Long Exposures",
-  "smartAlbumUnableToUpload": "Unable to Upload",
-  "smartAlbumRAW": "RAW",
-  "smartAlbumCinematic": "Cinematic",
-  "fileSizeExceeded": "Total file size cannot exceed 20MB. Please try again.",
-  "permissionDenied": "Permission denied: {permission}",
-  "@permissionDenied": {
-    "placeholders": {
-      "permission": {
-        "type": "String"
-      }
-    }
-  }
+  "done": "Done"
 }

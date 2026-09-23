@@ -315,14 +315,15 @@ SizedBox(height: context.h(16))
 
 **Design token cũng nhận context:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Con số nằm trong các hằng `raw*` — sửa `raw*`, đừng sửa accessor. Không bao giờ scale lại một token đã scale.
 
-**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Ví dụ thật — `platform/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
+**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Mẫu minh hoạ — hiện chưa màn hình nào trong template cần tới:
 
 ```dart
-if (!mounted) return;
-final thumbnailSide = context.w(200).toInt();   // đọc trước khi await
-final bytes = await widget.photo.thumbnailDataWithSize(
-  ThumbnailSize.square(thumbnailSide),
-);
+Future<void> _loadAvatar() async {
+  final side = context.w(96).toInt();   // đọc khi context còn hợp lệ
+  final bytes = await _repository.fetchAvatar(size: side);
+  if (!mounted) return;                 // lúc này widget có thể đã bị huỷ
+  setState(() => _avatar = bytes);
+}
 ```
 
 **Trục scale của các helper** — đọc từ `platform/responsive/lib/src/context_extension.dart`:

@@ -13,7 +13,7 @@ class {{pascalNameInput}}Page extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.l10n{{pascalNameInput}}.title),
       ),
-      body: BlocBuilder<{{pascalNameInput}}Bloc, ViewState<{{pascalNameInput}}StateData>>(
+      body: BlocBuilder<{{pascalNameInput}}Bloc, BlocViewState<{{pascalNameInput}}StateData>>(
         builder: (context, state) {
           return state.when(
             initial: () => const Center(child: CircularProgressIndicator()),

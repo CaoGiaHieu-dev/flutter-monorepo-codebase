@@ -223,10 +223,10 @@ A fourth was already broken before the move and only surfaced here: fastlane glo
 `packages/**/l10n.yaml` for translation generation, and `packages/` stopped existing one commit
 earlier. `.rb` was not in that commit's sweep. It now scans from the workspace root.
 
-The app package is still **named** `app`, not `mobile_app`. Renaming is nearly free — nothing
-imports `package:app/` — but injectable writes that name into generated code, and there is no
-toolchain here to confirm the regeneration. It rides step 7, where a second app makes the
-asymmetry concrete and testable.
+The app package was still **named** `app` after the move. ✅ Renamed to `mobile_app` in step 7c,
+next to `admin_app`: nothing imports `package:app/`, and the one place the name is written into
+code — injectable's `injection.config.dart` — is generated and git-ignored, so the next
+`build_runner` run rewrites it.
 
 ✅ **`.github/CODEOWNERS`.** The reason `modules/<name>/` exists, written down: one line per
 team, because CODEOWNERS matches paths and cannot express "the auth rows of three sibling
@@ -321,14 +321,12 @@ and the module generator's rollback snapshotted files it no longer writes. All f
 
 ⏳ **Still open, and each needs a toolchain:** generate its desktop runners (`flutter create
 --platforms=…`, see its README) and build it; per-app flavor handling
-(`AppConfig.appFlavor` → injected `IAppEnvironment`) and a CI build matrix; renaming `app` →
-`mobile_app`.
+(`AppConfig.appFlavor` → injected `IAppEnvironment`) and a CI build matrix. Done without one:
+the `app` package is now `mobile_app`, matching `admin_app`.
 
 `AppConfig.appFlavor` — a global reading `services.appFlavor` — becomes an injected
 `IAppEnvironment`, because two apps cannot share one global flavor. CI becomes a matrix. The app
-package is also renamed `mobile_app` at this point: nothing imports `package:app/`, so the rename
-is nearly free, but injectable writes the package name into generated code and that wants a
-toolchain to confirm.
+package is renamed `mobile_app` (done — see below).
 
 **Gate:** one workspace builds both `mobile` and `admin` from one set of modules, and the admin
 build contains no `feature_dashboard`, `feature_splash` or `feature_onboarding`.

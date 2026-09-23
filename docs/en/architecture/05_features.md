@@ -22,7 +22,7 @@ The practical test: *if this screen were cut from the product, would the package
 | `core_base_ui` | Design tokens, theme, `ThemeProvider` / `LanguageProvider` |
 | `provider_state_management` **or** `bloc_state_management` | Whichever state approach the feature uses |
 | `core_ui_kit` | Reusable widgets (a **core** package, not a feature) |
-| `core_responsive` | `context.w` / `.h` / `.sp` / `.r` — required by any file that sizes a widget |
+| `core_responsive` | `context.w` / `.h` / `.sp` / `.r` — required by any file that sizes a widget; `context.adaptive`, `AdaptiveLayout` and the other adaptive widgets for a screen whose layout changes with the window |
 
 ### Forbidden
 
@@ -31,7 +31,7 @@ The practical test: *if this screen were cut from the product, would the package
 > - **Never import another feature package.** There is no exception — shared widgets come from `core_ui_kit`, which lives in core. Cross-feature needs go through a contract in `core_di` — see [cross-feature communication](../guides/10_cross_feature.md).
 > - **Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart`** to add your routes, and never edit `root_app.dart` to add a localization delegate. Both are assembled from DI contributions.
 
-The pubspec enforces most of this: `feature_dashboard` declares only `core_di` and `platform_kernel`, so it *physically cannot* import another feature.
+The pubspec enforces most of this: `feature_dashboard`'s only workspace dependencies are `core_di`, `core_responsive` and `platform_kernel`, so it *physically cannot* import another feature.
 
 ---
 
@@ -82,7 +82,7 @@ class AuthPath {
 |:---|:---|:---|:---|
 | `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Login (one screen) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
-| `feature_dashboard` | Bottom-nav shell chrome | none | `DashboardRouteModule` |
+| `feature_dashboard` | Navigation shell chrome (bottom bar / rail) | none | `DashboardRouteModule` |
 | `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
 | `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Splash screen | none | `IAppSplashScreen` — **not a route**; shown by `MainScope` |
@@ -98,7 +98,7 @@ Every one with user-facing strings also registers its `IFeatureLocalization` —
 
 ## 4. `feature_dashboard` is chrome only
 
-The dashboard owns the `Scaffold` and the `BottomNavigationBar` — nothing else. It builds both from whatever tabs are registered in DI:
+The dashboard owns the `Scaffold` and the navigation chrome — a `BottomNavigationBar` on a `compact` window, a `NavigationRail` from `medium` up, extended from `large` up — nothing else. It builds them from whatever tabs are registered in DI:
 
 ```dart
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart
@@ -107,20 +107,56 @@ Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
   final tabs = getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
+  if (tabs.length < 2) return Scaffold(body: navigationShell);
+
+  final selected = index.clamp(0, tabs.length - 1);
+  void onSelect(int tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore);
+  // This is where a neutral [NavDestination] becomes one app's widget —
+  // the same modules feed both forms below, unchanged.
+  final destinations = [for (final tab in tabs) tab.destination(context)];
+
+  // A phone in portrait keeps the bottom bar. From a medium window up — a
+  // tablet, an unfolded foldable, a desktop, and a phone in landscape —
+  // the tabs move to a side rail, which costs width the window has to
+  // spare instead of height it has not.
+  final sizeClass = context.windowSizeClass;
+  if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
+    return Scaffold(
+      body: navigationShell,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: selected,
+        onTap: onSelect,
+        items: [for (final d in destinations) _itemOf(d)],
+      ),
+    );
+  }
+
+  final extended = sizeClass.isAtLeast(WindowSizeClass.large);
   return Scaffold(
-    body: navigationShell,
-    bottomNavigationBar: tabs.length < 2
-        ? null
-        : BottomNavigationBar(
-            currentIndex: index.clamp(0, tabs.length - 1),
-            onTap: (tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore),
-            items: [for (final tab in tabs) _itemOf(tab.destination(context))],
+    body: Row(
+      children: [
+        SafeArea(
+          right: false,
+          child: NavigationRail(
+            selectedIndex: selected,
+            onDestinationSelected: onSelect,
+            extended: extended,
+            labelType: extended
+                ? NavigationRailLabelType.none
+                : NavigationRailLabelType.all,
+            destinations: [for (final d in destinations) _railItemOf(d)],
           ),
+        ),
+        Expanded(child: navigationShell),
+      ],
+    ),
   );
 }
 ```
 
-Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab and the app still starts. With fewer than two tabs the bar is hidden entirely.
+Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab and the app still starts. With fewer than two tabs there is no bar or rail at all.
+
+The chrome is chosen by **window size class**, not by device — a phone in landscape, an iPad in Split View and a desktop window each get the chrome their window has room for. It is the template's reference for adaptive layout; the widgets and rules are in [design system §7](../guides/11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
 
 ### The dashboard must not
 
@@ -290,6 +326,7 @@ Checklist:
 - [ ] Path constants in `src/utils/<name>_path.dart`
 - [ ] Cross-feature navigation through a Navigator interface from `core_di`, with `BuildContext` passed from the caller
 - [ ] All sizing scaled through `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
+- [ ] A layout that changes with the window chooses by window size class (`context.adaptive`, `AdaptiveLayout`) — never by device or platform
 - [ ] Feature-specific assets inside the feature package, not in `core_base_ui`
 
 ---

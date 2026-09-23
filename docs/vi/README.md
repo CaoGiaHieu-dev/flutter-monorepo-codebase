@@ -63,7 +63,7 @@ Thực hành, từng bước, có code chạy được. Đây là phần "how to
 | [`08_networking.md`](guides/08_networking.md) | Một request HTTP rời app thế nào, phiên hết hạn được làm mới ra sao, và cái gì đang bảo vệ kết nối? |
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | Một feature tự mang bản dịch của nó ra sao, và màu/font/kích thước giữ nhất quán thế nào? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A cần thứ gì đó từ feature B — làm sao, mà không import nó? |
-| [`11_design_system.md`](guides/11_design_system.md) | Mọi màu, font, bước spacing và bo góc định nghĩa ở đâu — và sửa file nào để đổi nhận diện cho app? |
+| [`11_design_system.md`](guides/11_design_system.md) | Mọi màu, font, bước spacing và bo góc định nghĩa ở đâu — sửa file nào để đổi nhận diện cho app, và giao diện scale cũng như thích ứng ra sao trên tablet, máy gập và chia đôi màn hình? |
 | Tách một module thành repository riêng | [`guides/12_module_isolation.md`](guides/12_module_isolation.md) | [`architecture/01_overview.md`](architecture/01_overview.md) |
 | [`12_module_isolation.md`](guides/12_module_isolation.md) | Làm sao để một team chỉ checkout module của mình, build được cả app từ đó, và không bao giờ thấy source của team khác? |
 
@@ -103,6 +103,7 @@ Build, ký và phát hành.
 | Lưu một token hoặc một cờ | [`guides/06_storage.md`](guides/06_storage.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Thêm một chuỗi dịch | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) | — |
 | Đổi theme, màu hoặc spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
+| Dàn layout một màn hình cho tablet, máy gập hoặc chia đôi màn hình | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Chia sẻ state giữa hai feature | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Gỡ một feature khỏi app | [`guides/01_new_feature.md`](guides/01_new_feature.md) § gỡ feature | [`reference/01_rules.md`](reference/01_rules.md) |
 | Chọn Provider hay BLoC | [`guides/03_state_management.md`](guides/03_state_management.md) | — |

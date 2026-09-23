@@ -37,7 +37,7 @@ Run it with no arguments to get an interactive prompt instead.
 | Choose | When | You get |
 | :-- | :-- | :-- |
 | `1` `IFeatureRouteModule` | A stack of screens pushed on top of the app (auth, onboarding, detail pages) | A `*FeatureRouteModule` stub |
-| `2` `INavDestinationModule` | A **primary bottom-navigation destination** that needs its own persistent back stack | A `*NavDestination` stub |
+| `2` `INavDestinationModule` | A **primary navigation destination** — bottom bar on a phone, `NavigationRail` from a medium window up — that needs its own persistent back stack | A `*NavDestination` stub |
 | `3` none | You will wire routing yourself later, or the feature has no routes | No routing stub |
 
 > [!WARNING]

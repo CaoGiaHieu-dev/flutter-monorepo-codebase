@@ -1,6 +1,6 @@
 # Core Responsive
 
-Micro-core package cung cấp cơ chế **scale kích thước UI theo design size**.
+Micro-core package cung cấp cơ chế **scale kích thước UI theo design size** — mặc định chỉ thu nhỏ, phóng to là opt-in theo từng lớp cửa sổ — cùng **lớp kích thước cửa sổ** và các **widget layout thích ứng** cho tablet, máy gập và chia đôi màn hình.
 
 Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước về style — nó là điều kiện để widget **rebuild đúng chỗ** khi kích thước màn hình đổi (xoay máy, split-screen, resize cửa sổ desktop).
 
@@ -10,33 +10,65 @@ Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước v
 
 - **`ResponsiveInit`**: Widget mount **một lần duy nhất**, phía trên `MaterialApp`. Nhận `designSize` (artboard thiết kế) và publish metrics xuống toàn bộ subtree.
 - **`ResponsiveScope`**: `InheritedWidget` mang `ResponsiveMetrics`. Đọc qua nó sẽ **đăng ký dependency**, nên Flutter tự lo phần rebuild targeting.
-- **`ResponsiveMetrics`**: Value object bất biến, chứa toàn bộ phép toán scale (`scaleWidth`, `scaleHeight`, `scaleText`, `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`).
-- **`ResponsiveContext`**: Extension trên `BuildContext` — `context.w`, `.h`, `.r`, `.sp`, `.spMin`, `.dg`, `.dm`, `.edgeInsets`, `.borderRadius`, `.verticalSpace`, `.horizontalSpace`.
-- **`ResponsiveConstants`**: Hằng số của package (`SPLIT_SCREEN_MIN_HEIGHT = 700`, design mặc định `360x690`).
+- **`ResponsiveMetrics`**: Value object bất biến, chứa toàn bộ phép toán scale (`scaleWidth`, `scaleHeight`, `scaleText`, `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`), các giá trị đã resolve (`activeProfile`, `effectiveDesignSize`, `effectiveScaleBounds`, `effectiveTextScaleBounds`, `effectiveMinTextAdapt`) và `windowSizeClass`, `windowHeightClass`, `orientation`.
+- **`ScaleBounds`**: Khoảng mà một hệ số scale được phép nhận — `downOnly()` (mặc định), `fixed()`, `unbounded()`, hoặc `ScaleBounds(min:, max:)`.
+- **`ResponsiveProfile`**: Ghi đè `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` cho một `WindowSizeClass`.
+- **`WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints`**: Phân lớp **cửa sổ** (không phải thiết bị) theo breakpoint Material 3.
+- **`ResponsiveContext`**: Extension trên `BuildContext` — `context.w`, `.h`, `.r`, `.sp`, `.spMin`, `.dg`, `.dm`, `.edgeInsets`, `.borderRadius`, `.verticalSpace`, `.horizontalSpace`, `.responsive`, `.windowSizeClass`, `.windowHeightClass`.
+- **`AdaptiveContext`**: Extension trên `BuildContext` — `context.adaptive(...)`, `.isCompactWindow`, `.isExpandedOrWider`, `.separatingDisplayFeature`, `.foldPosture`.
+- **`AdaptiveBuilder` / `AdaptiveLayout` / `AdaptiveSplitView` / `AdaptiveContent`**, **`FoldPosture`**: Widget layout thích ứng — xem §3.
+- **`ResponsiveConstants`** / **`AdaptiveConstants`**: Hằng số của package (`SPLIT_SCREEN_MIN_HEIGHT = 700`, design mặc định `360x690`, các `BREAKPOINT_*`; `SPLIT_PRIMARY_FRACTION = 0.4`, `CONTENT_MAX_WIDTH = 640`).
 
 ---
 
 ## 🚀 1. Khởi tạo
 
-Đã được wire sẵn ở `platform/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình.
+Đã được wire sẵn ở `platform/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment):
 
 ```dart
-ResponsiveInit(
+// platform/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+return ResponsiveInit(
+  // The phone artboard every window class starts from.
   designSize: AppConfig.design,
-  minTextAdapt: true,
+  // …
+  profiles: const {
+    // …
+    WindowSizeClass.expanded: ResponsiveProfile(
+      scaleBounds: ScaleBounds.fixed(),
+      textScaleBounds: ScaleBounds.fixed(),
+    ),
+  },
+  // Keeps height scaling sane when the app is a short split-screen pane.
   splitScreenMode: true,
-  child: const RootApp(),
-)
+  child: child,
+);
 ```
 
 `ResponsiveInit` là `StatelessWidget` — đây là chủ đích. Nó đọc `MediaQuery.sizeOf(context)`, vốn chỉ đăng ký dependency vào **khía cạnh size**, nên nó rebuild khi resize và đứng yên khi brightness / textScale / padding đổi. Không cần `WidgetsBindingObserver`, không cần `setState`.
 
-| Tham số | Ý nghĩa |
-|:--|:--|
-| `designSize` | Artboard mà bản thiết kế được vẽ ở đó. Mặc định `360x690` |
-| `splitScreenMode` | Kẹp sàn chiều cao ở `700` trước khi chia, tránh giá trị scale theo chiều dọc sụp xuống mức không đọc được khi cửa sổ quá thấp |
-| `minTextAdapt` | Chữ scale theo trục nhỏ hơn thay vì theo width |
-| `fontSizeResolver` | Tự quyết định cỡ chữ. **Cảnh báo:** truyền resolver là ghi đè toàn bộ việc scale chữ, khiến `minTextAdapt` trở nên vô tác dụng |
+| Tham số | Mặc định | Ý nghĩa |
+|:--|:--|:--|
+| `designSize` | `360x690` | Artboard mà bản thiết kế được vẽ ở đó — mọi lớp cửa sổ quy chiếu về nó, trừ khi profile chỉ định khung khác |
+| `scaleBounds` | `ScaleBounds.downOnly()` | Khoảng của hệ số layout: `w`, `h`, và `r` / `dg` / `dm` dựng từ chúng |
+| `textScaleBounds` | `ScaleBounds.downOnly()` | Khoảng của hệ số chữ đứng sau `sp`, độc lập với `scaleBounds` |
+| `profiles` | `{}` | `Map<WindowSizeClass, ResponsiveProfile>` — ghi đè `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` cho từng lớp (`null` là kế thừa). Áp dụng profile của đúng lớp, không có thì của lớp nhỏ hơn gần nhất |
+| `breakpoints` | `ResponsiveBreakpoints.material3()` | Nơi mỗi lớp cửa sổ bắt đầu: `compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge` |
+| `splitScreenMode` | `false` | Kẹp sàn chiều cao ở `700` trước khi chia, tránh giá trị scale theo chiều dọc sụp xuống mức không đọc được khi cửa sổ quá thấp |
+| `minTextAdapt` | `false` | Chữ scale theo trục nhỏ hơn thay vì theo width |
+| `fontSizeResolver` | `null` | Tự quyết định cỡ chữ. **Cảnh báo:** truyền resolver là ghi đè toàn bộ việc scale chữ — `minTextAdapt` vô tác dụng, và kết quả **không bao giờ bị kẹp** bởi `textScaleBounds` hay profile (đọc `metrics.effectiveTextScaleBounds` trong resolver nếu muốn tôn trọng bound) |
+
+### Chính sách scale: mặc định thu nhỏ, phóng to khi opt-in
+
+Hệ số scale là tỉ lệ cửa sổ / artboard, rồi bị kẹp bởi một `ScaleBounds`. Không kẹp thì cửa sổ rộng 1280 so với artboard rộng 375 thành 3,4× — tiêu đề 20 px vẽ ra 68 px.
+
+| Bound | Khoảng | Ý nghĩa |
+|:--|:--|:--|
+| `ScaleBounds.downOnly()` — **mặc định** | 0 – 1 | Cửa sổ nhỏ hơn artboard thì thu nhỏ; lớn hơn thì vẽ 1:1, chỗ dư để cho layout |
+| `ScaleBounds(max: 1.2)` | 0 – 1,2 | Phóng to có chặn — phải opt-in |
+| `ScaleBounds.fixed()` | 1 – 1 | Luôn đúng cỡ thiết kế |
+| `ScaleBounds.unbounded()` | 0 – ∞ | Tỉ lệ thô, hành vi cũ trước khi có bound |
+
+Vì vậy **đừng chờ kích thước to ra trên tablet**. Muốn một lớp cửa sổ to ra thì opt-in cho riêng lớp đó bằng một `ResponsiveProfile`; profile đặt ở một lớp cũng phủ mọi lớp rộng hơn chưa khai profile riêng. Chi tiết: [`docs/vi/guides/11_design_system.md`](../../docs/vi/guides/11_design_system.md) §6.
 
 ---
 
@@ -58,7 +90,7 @@ Container(
 | `context.h(x)` | Height — khoảng cách dọc, chiều cao hàng |
 | `context.r(x)` | Trục nhỏ hơn — bo góc, viền, độ dày nét |
 | `context.sp(x)` | Cỡ chữ |
-| `context.spMin(x)` | `sp` nhưng chặn trên ở giá trị design — chữ co lại chứ không phình ra |
+| `context.spMin(x)` | `sp` nhưng chặn trên ở giá trị design — chữ co lại chứ không phình ra. Với bound mặc định thì bằng `sp`; chỉ khác khi profile hoặc `fontSizeResolver` cho chữ to ra |
 | `context.dg(x)` | Cả hai trục |
 | `context.dm(x)` | Trục lớn hơn |
 | `context.edgeInsets(all:)` / `(horizontal:)` | `w` |
@@ -70,7 +102,41 @@ Mỗi trục scale theo đúng trục nó thuộc về, nên padding giữ đư�
 
 ---
 
-## ⛔ 3. Không có extension trên `num`
+## 🧩 3. Layout thích ứng: tablet, máy gập, chia đôi màn hình
+
+Scale quyết định vẽ to cỡ nào; phần này quyết định vẽ **cái gì**. Mọi thứ phân lớp theo **cửa sổ**, không theo thiết bị, và chạy được cả khi không có `ResponsiveInit` phía trên (khi đó dùng breakpoint Material 3).
+
+```dart
+// One value per class; a missing class takes the nearest smaller one.
+final columns = context.adaptive(compact: 1, expanded: 3);
+
+// One subtree per class.
+AdaptiveLayout(
+  compact: (_) => const InboxList(),
+  expanded: (_) => const InboxWithPreview(),
+)
+
+// A form that does not stretch across a tablet or desktop window.
+AdaptiveContent(child: form)
+```
+
+| Thành phần | Dùng khi |
+|:--|:--|
+| `context.windowSizeClass` / `windowHeightClass` | Hỏi lớp của cửa sổ; so sánh bằng `isAtLeast` / `isSmallerThan` |
+| `context.adaptive(compact:, medium:, …)` | Chọn một giá trị theo lớp; `isCompactWindow`, `isExpandedOrWider` là dạng viết tắt |
+| `AdaptiveLayout` / `AdaptiveBuilder` | Chọn cả một cây con theo lớp — chỉ layout đang hiển thị được dựng |
+| `AdaptiveSplitView` | Master–detail: hai ô tại nếp gập dọc / bản lề (kể cả dưới `splitAt`), trên–dưới tại nếp gập ngang, cạnh nhau từ `splitAt` (mặc định `expanded`), còn lại một ô. `AdaptiveSplitView.isSplit(context)` cho phần tử danh sách biết nên chọn hay push route |
+| `AdaptiveContent` | Chặn chiều rộng nội dung ở `640` — pixel cửa sổ, **không** scale |
+| `context.separatingDisplayFeature` / `foldPosture` | Nếp gập hoặc bản lề đang chia cửa sổ; `FoldPosture.flat` / `book` / `tabletop` |
+
+> [!WARNING]
+> `AdaptiveSplitView` chỉ tôn trọng nếp gập khi nó trải hết cửa sổ theo phương của nếp gập (toạ độ nếp gập tính theo cửa sổ). Đặt cạnh `NavigationRail` hay dưới app bar thì nếp gập bị bỏ qua.
+
+**Chọn layout theo lớp cửa sổ, không bao giờ theo `Platform.isIOS`, đời máy hay phép kiểm `shortestSide` tự chế.** Mẫu tham chiếu: `modules/dashboard/feature/lib/src/pages/dashboard_page.dart` — bottom bar ở `compact`, `NavigationRail` từ `medium`, dạng mở rộng từ `large`. Chi tiết: [`docs/vi/guides/11_design_system.md`](../../docs/vi/guides/11_design_system.md) §7.
+
+---
+
+## ⛔ 4. Không có extension trên `num`
 
 `16.w` **không compile được**. Package cố tình không cung cấp extension nào trên `num`, và cũng không có singleton global nào để đọc.
 
@@ -78,7 +144,7 @@ Lý do: một con số không mang theo context. Extension kiểu `16.w` vì th�
 
 Bắt buộc truyền context biến "thứ đúng" thành "thứ duy nhất viết được". Việc rebuild do `InheritedWidget` của Flutter lo, nên không có cờ nào để bật/tắt.
 
-## ⚠️ 4. Hai cái bẫy
+## ⚠️ 5. Hai cái bẫy
 
 **Trong `async`:** đọc giá trị scale **trước lệnh `await` đầu tiên**, rồi truyền kết quả đi. Không bao giờ giữ `BuildContext` qua một async gap.
 
@@ -99,7 +165,7 @@ Việc assert là chủ đích. Âm thầm fallback về giá trị chưa scale 
 
 ---
 
-## 🤖 5. Được máy kiểm tra
+## 🤖 6. Được máy kiểm tra
 
 `dart tools/arch_check/check.dart` — rule **R7**, Gate 1 của `pr_quality_check.yml` — quét mọi file có import `core_responsive` và **chặn build** khi gặp bất kỳ bare sizing extension nào, in ra `file:line`. Rule này không phụ thuộc vào review.
 

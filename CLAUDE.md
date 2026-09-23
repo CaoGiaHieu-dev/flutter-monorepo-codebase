@@ -161,7 +161,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
 | `core_database` | **Mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener` | **Owns no database/table/DAO**; its DI module registers nothing. Each package declares its own database — see [Database System](#database-system-package-owned-drift--sqlite) |
 | `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
-| `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
+| `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`); scale policy (`ScaleBounds`, `ResponsiveProfile`); window classes (`WindowSizeClass`, `WindowHeightClass`, `ResponsiveBreakpoints`); adaptive layout (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`, `FoldPosture`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Scales **down only** by default. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
 | `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit` |
 | `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union) | **`BaseBloc`/`BaseCubit` are empty extension points** — no `executeOperation` equivalent; handlers unwrap `Result` by hand |
 
@@ -263,9 +263,9 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 | Contract | Purpose | Has Order? | Who Implements |
 |:---------|:--------|:-----------|:---------------|
 | `IFeatureRouteModule` | Stack/shell routes under app `ShellRoute` | **No** (path match) | auth, onboarding, … |
-| `INavDestinationModule` | One bottom-nav tab + one `StatefulShellBranch` | **Yes** (must match nav index) | home, settings, … |
+| `INavDestinationModule` | One primary nav destination (bottom-bar / rail item) + one `StatefulShellBranch` | **Yes** (must match nav index) | home, settings, … |
 | `IAppEntryLocation` | Cold-start `GoRouter.initialLocation` | n/a | usually onboarding |
-| `DashboardRouteModule` | Dashboard **chrome** only (scaffold/bottom bar host) | n/a | `feature_dashboard` only |
+| `DashboardRouteModule` | Dashboard **chrome** only (scaffold + bottom bar / rail host) | n/a | `feature_dashboard` only |
 | `IFeatureLocalization` | Feature ARB delegates | n/a | every feature with strings |
 
 ### Navigator Pattern
@@ -309,7 +309,7 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ### Dashboard Rules
 
-**`feature_dashboard` is chrome only** — it implements `DashboardRouteModule` and builds the bottom bar from `getAllOrEmpty<INavDestinationModule>()`.
+**`feature_dashboard` is chrome only** — it implements `DashboardRouteModule` and builds its navigation from `getAllOrEmpty<INavDestinationModule>()`: a bottom bar on a `compact` window, a `NavigationRail` from `medium` up (extended from `large`).
 
 **Dashboard MUST NOT:**
 - Import `feature_home`/`feature_settings` or embed their pages
@@ -463,20 +463,27 @@ abstract class AuthModule {
 - **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
 - **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `platform/app_shell/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
 - **Widget tests that scale must wrap the subject in `ResponsiveInit`** — otherwise `ResponsiveScope.of` asserts, deliberately, rather than silently falling back to unscaled values
-- **Enforced by machine:** `dart tools/arch_check/check.dart` rule **R7** blocks any bare sizing extension in a file importing `core_responsive`
-- **Enforced:** `dart tools/arch_check/check.dart` rule **R7** blocks the build on any bare sizing extension (Gate 1 of `pr_quality_check.yml`)
+- **Scale policy — down by default, up on opt-in, per window class.** Every factor is clamped by a `ScaleBounds`, layout (`scaleBounds`: `w/h/r/dg/dm`) and text (`textScaleBounds`: `sp`) separately, both `ScaleBounds.downOnly()` by default — shrink below the artboard, 1:1 above it
+  - **Do not expect sizes to grow on a tablet** — the extra room is for layout. Growth is opt-in and capped per `WindowSizeClass` through a `ResponsiveProfile` (`ScaleBounds(max: 1.2)`); `.fixed()` pins the design size; `.unbounded()` is the old raw ratio. A profile covers its class and every wider class without its own
+  - `fontSizeResolver` is **never clamped**; `spMin` is the explicit cap (equal to `sp` under the default bounds)
+  - **This app** (`_ResponsiveWrapper`): `AppConfig.design` (375×812), default bounds, `profiles: {WindowSizeClass.expanded: ResponsiveProfile(scaleBounds: ScaleBounds.fixed(), textScaleBounds: ScaleBounds.fixed())}`, `splitScreenMode: true`
+- **Choose a layout by window size class, never by device** — no `Platform.isIOS`, device model or ad-hoc `shortestSide` check. `context.windowSizeClass`: `compact` <600 · `medium` 600–839 · `expanded` 840–1199 · `large` 1200–1599 · `extraLarge` ≥1600 (Material 3; move with `ResponsiveInit(breakpoints:)`). These and every adaptive member work without a `ResponsiveInit`
+  - `context.adaptive(compact:, medium:, …)` (a missing class takes the nearest smaller one) · `AdaptiveLayout` / `AdaptiveBuilder` · `AdaptiveSplitView` (master–detail; splits at a fold/hinge or from `splitAt`, else one pane — `AdaptiveSplitView.isSplit(context)` picks select vs push) · `AdaptiveContent` (640 px readable width, **not** scaled)
+  - `AdaptiveSplitView` honours a fold only when it spans the window along it — in a dashboard tab the rail (`medium`+) rules out book folds and the bottom bar (`compact`) tabletop ones
+  - Reference: `modules/dashboard/feature/lib/src/pages/dashboard_page.dart`. Full guide: `docs/en/guides/11_design_system.md` §6–§7
+- **Enforced by machine:** `dart tools/arch_check/check.dart` rule **R7** blocks the build on any bare sizing extension in a file importing `core_responsive` (Gate 1 of `pr_quality_check.yml`). The scale-policy and window-class rules are review-held
 
 ---
 
 ## Design System (core_base_ui)
 
 - **Colors:** `context.colors.textPrimary`, `context.colors.surface`, `context.colors.primary` — auto-switch Light/Dark
-- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled (`spMin`: shrinks below the design width, never grows past it); do **not** re-apply `context.sp()` at the call site
+- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled (`context.sp`, following `textScaleBounds`: down-only by default, so it shrinks below the design width and never grows past it); do **not** re-apply `context.sp()` at the call site
 - **Spacing:** `AppSpacing.xs(context)`, `.sm(context)`, `.md(context)`, `.lg(context)`, `.xl(context)` (scaled with `w`); `H` variants (`lgH`) scale with `h`
 - **Radius:** `AppRadius.sm(context)`, `.md(context)`, `.circular(context)` (scaled with `r`); `AppRadius.smRadius(context)` for `BorderRadius` objects
 - **All three take `BuildContext`** — they are methods, not getters. Numbers live in their `raw*` constants: edit `raw*`, never the accessor
 - **Never double-scale:** `AppSpacing.lg(context)` is final. `context.w(AppSpacing.lg(context))` scales twice
-- Full configuration guide (change palette, font, spacing scale, design size): `docs/en/guides/11_design_system.md`
+- Full configuration guide (change palette, font, spacing scale, design size, scale policy, adaptive layouts): `docs/en/guides/11_design_system.md`
 - **Gradients/Shadows:** `AppGradients`, `AppShadows`
 - **FORBIDDEN:** Hard-coding colors, font sizes, spacings, border radii directly in widgets
 
@@ -759,6 +766,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] Action Handlers used for cross-feature UI actions
 - [ ] Localization uses `IFeatureLocalization` (NOT editing `root_app.dart`)
 - [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
+- [ ] Layout choices use the window size class (`context.adaptive` / `AdaptiveLayout`), not `Platform.is*` or a device check
 - [ ] Contracts owned by a removable feature resolve with `getItOrNull` / `getAllOrEmpty` — arch_check R8 is clean
 - [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R10 is clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)

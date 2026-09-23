@@ -115,8 +115,9 @@ class _ResponsiveWrapper extends StatelessWidget {
       // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
       // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
       profiles: const {
-        // Tablets in landscape, unfolded foldables and desktop windows are
-        // laid out in real logical pixels. Without this, a laptop window
+        // Tablets in landscape, unfolded foldables, desktop windows — and
+        // most phones in landscape, which are 840 or wider — are laid out
+        // in real logical pixels. Without this, a laptop window
         // shorter than the 812-tall phone artboard would still shrink every
         // vertical gap and radius.
         WindowSizeClass.expanded: ResponsiveProfile(

@@ -117,12 +117,21 @@ Cả hai đường đều `await Future.wait([initService(), Future.delayed(_min
 
 ### `_ResponsiveWrapper`
 
-Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`) với `AppConfig.design` (375×812) và `splitScreenMode: true`. `context.sp` scale theo tỉ lệ chiều rộng của cửa sổ — mặc định của package; text style của theme dùng `spMin`, không bao giờ vượt cỡ thiết kế (xem [`11_design_system.md`](../guides/11_design_system.md)). Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`). Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`. Cấu hình này chính là toàn bộ chính sách scale của app:
+
+| Thiết lập | Giá trị | Tác dụng |
+|:--|:--|:--|
+| `designSize` | `AppConfig.design` (375×812) | Khung điện thoại mà mọi lớp cửa sổ bắt đầu từ đó |
+| `scaleBounds` / `textScaleBounds` | để mặc định, `ScaleBounds.downOnly()` | Cửa sổ nhỏ hơn khung thì thiết kế thu nhỏ; cửa sổ lớn hơn — tablet, cửa sổ desktop — vẽ 1:1 và để chỗ dư cho layout |
+| `profiles` | `WindowSizeClass.expanded` → `ScaleBounds.fixed()` cho layout và chữ | Từ rộng 840 trở lên (nên cả `large` và `extraLarge`), dùng logical pixel thật — cửa sổ laptop thấp hơn 812 không còn làm mọi khoảng cách dọc nhỏ đi |
+| `splitScreenMode` | `true` | Chặn dưới chiều cao dùng để scale ở 700, để một ô chia đôi màn hình thấp vẫn dùng được |
+
+Theme scale chữ bằng `context.sp`, nên nó đi theo `textScaleBounds` như mọi thứ khác. Cho một lớp phóng to là opt-in — một `ResponsiveProfile` với bound có chặn, ví dụ `ScaleBounds(max: 1.2)`. Bảng tham số đầy đủ, mỗi cửa sổ nhận được gì, và các widget thích ứng dùng chỗ dư nằm ở [`11_design_system.md`](../guides/11_design_system.md) §6–§7.
 
 `ResponsiveInit` là `StatelessWidget`: nó đọc `MediaQuery.sizeOf(context)` — dependency **chỉ theo size** — nên tự rebuild khi màn hình đổi kích thước và bỏ qua thay đổi brightness / textScale / padding. Metrics được phát xuống qua `ResponsiveScope`, một `InheritedWidget`, nên widget nào đọc metrics là tự đăng ký theo dõi chúng — không có cờ rebuild nào để tinh chỉnh.
 
 > [!NOTE]
-> Trước đây ở đây có một `fontSizeResolver` tính đúng tỉ lệ chiều rộng đó nhưng từ `View.of(context).display` — màn hình vật lý, không phải cửa sổ. Khi toàn màn hình thì hai cái khớp nhau; khi split-screen hay đổi kích thước cửa sổ, chữ scale theo cả màn hình trong khi mọi kích thước khác theo cửa sổ. Mặc định đo cửa sổ qua `MediaQuery`, nên nó thay resolver mà không đổi gì trên điện thoại toàn màn hình.
+> Trước đây ở đây có một `fontSizeResolver` tính tỉ lệ chiều rộng từ `View.of(context).display` — màn hình vật lý, không phải cửa sổ. Khi toàn màn hình thì hai cái khớp nhau; khi split-screen hay đổi kích thước cửa sổ, chữ scale theo cả màn hình trong khi mọi kích thước khác theo cửa sổ. `ResponsiveInit` đo cửa sổ qua `MediaQuery`, nên mặc định đã thay được resolver. Cũng đừng đưa resolver trở lại để chặn cỡ chữ: kết quả của resolver không bao giờ bị `textScaleBounds` kẹp, mà mức chặn đó giờ nằm chính ở `textScaleBounds`.
 
 Việc scale vẫn phải đi qua `BuildContext` — `core_responsive` **không có extension trên `num`**, nên `16.h` đơn giản là không biên dịch được. Xem [luật 12](../reference/01_rules.md#12-responsive-ui), và lưu ý luật R7 của `arch_check` chặn mọi dạng bare còn sót ở mọi PR.
 

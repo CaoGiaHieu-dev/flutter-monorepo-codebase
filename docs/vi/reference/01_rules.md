@@ -353,13 +353,27 @@ double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩn
 
 ✅ **Đúng** — nhận tham số qua constructor, để nơi gọi tự scale.
 
+**Kích thước không to ra trên tablet.** Mọi hệ số đều bị kẹp bởi một `ScaleBounds`, và mặc định `ScaleBounds.downOnly()` dừng ở 1:1: cửa sổ nhỏ hơn khung thiết kế thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ đúng cỡ thiết kế. Đừng tinh chỉnh màn hình với kỳ vọng `context.w(16)` sẽ lớn hơn trên iPad — hãy dùng chỗ dư cho layout. Nếu một lớp cửa sổ thực sự nên to ra, hãy opt-in cho riêng lớp đó bằng một bound có chặn (`ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))` trong `profiles` của `_ResponsiveWrapper`). Xem [design system §6](../guides/11_design_system.md).
+
+**Chọn layout theo lớp kích thước cửa sổ, không bao giờ theo thiết bị.** Dùng `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` hoặc `AdaptiveSplitView` — đừng bao giờ dùng đời máy, `Platform.isIOS` hay một phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ — iPad đang Split View, màn hình ngoài của máy gập, cửa sổ desktop bị kéo hẹp — và chỉ lớp cửa sổ mới thấy được chúng. Việc dashboard đổi giữa bottom bar và rail là mẫu tham chiếu; xem [design system §7](../guides/11_design_system.md).
+
+❌ **Sai** — một phép kiểm "tablet" tự chế: ngưỡng riêng, không biết breakpoint của app, và nó hỏi "đây có phải tablet?" thay vì "cửa sổ này có đủ rộng cho hai ô?":
+```dart
+final twoPane = MediaQuery.sizeOf(context).shortestSide >= 600;
+```
+
+✅ **Đúng** — lớp chiều rộng của cửa sổ, theo breakpoint của app:
+```dart
+final twoPane = context.isExpandedOrWider;
+```
+
 **Kiểm chứng**
 
 ```bash
 dart tools/arch_check/check.dart      # luật R7 — chặn mọi dạng gọi scale bare
 ```
 
-Luật này được **cưỡng chế bằng máy**, không dựa vào review: R7 chạy như Gate 1 của `pr_quality_check.yml` ở mọi PR và in `file:line` cho từng vi phạm.
+Nửa "extension trần" của luật này được **cưỡng chế bằng máy**, không dựa vào review: R7 chạy như Gate 1 của `pr_quality_check.yml` ở mọi PR và in `file:line` cho từng vi phạm. Các điểm về số double thô, chính sách scale và lớp cửa sổ do review giữ.
 
 ---
 

@@ -20,7 +20,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 | `core_di` | Hợp đồng Navigator / action handler / routing / stream |
 | `core_common` | Hằng số, `AppFailure`, helper, các hàm `getIt` |
 | `core_base_ui` | Design token, theme, `ThemeProvider` / `LanguageProvider` |
-| `core_responsive` | Extension scale trên `BuildContext` (`context.w/h/r/sp`) |
+| `core_responsive` | Extension scale trên `BuildContext` (`context.w/h/r/sp`) — bắt buộc với mọi file có đặt kích thước widget; `context.adaptive`, `AdaptiveLayout` và các widget thích ứng khác cho màn hình có layout đổi theo cửa sổ |
 | `provider_state_management` **hoặc** `bloc_state_management` | Tuỳ hướng state feature chọn |
 | `core_ui_kit` | Widget dùng lại (là package **core**, không phải feature) |
 
@@ -31,7 +31,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 > - **Không bao giờ import feature package khác.** Không có ngoại lệ — widget dùng chung lấy từ `core_ui_kit`, vốn nằm ở core. Nhu cầu liên feature phải đi qua hợp đồng ở `core_di` — xem [giao tiếp giữa các feature](../guides/10_cross_feature.md).
 > - **Không bao giờ sửa `platform/app_shell/lib/presentation/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
 
-Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ khai `core_di` và `platform_kernel`, nên nó *về mặt vật lý không thể* import một feature khác.
+Pubspec đã cưỡng chế phần lớn điều này: phụ thuộc workspace duy nhất của `feature_dashboard` là `core_di`, `core_responsive` và `platform_kernel`, nên nó *về mặt vật lý không thể* import một feature khác.
 
 ---
 
@@ -82,7 +82,7 @@ class AuthPath {
 |:---|:---|:---|:---|
 | `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Đăng nhập (một màn hình) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
-| `feature_dashboard` | Khung chrome bottom-nav | không | `DashboardRouteModule` |
+| `feature_dashboard` | Khung chrome điều hướng (bottom bar / rail) | không | `DashboardRouteModule` |
 | `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
 | `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Màn hình splash | không | `IAppSplashScreen` — **không phải route**; do `MainScope` hiển thị |
@@ -98,7 +98,7 @@ Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocaliza
 
 ## 4. `feature_dashboard` chỉ là chrome
 
-Dashboard sở hữu `Scaffold` và `BottomNavigationBar` — không gì khác. Nó dựng cả hai từ những tab được đăng ký trong DI:
+Dashboard sở hữu `Scaffold` và chrome điều hướng — `BottomNavigationBar` trên cửa sổ `compact`, `NavigationRail` từ `medium` trở lên, dạng mở rộng từ `large` trở lên — không gì khác. Nó dựng chúng từ những tab được đăng ký trong DI:
 
 ```dart
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart
@@ -107,20 +107,56 @@ Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
   final tabs = getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
+  if (tabs.length < 2) return Scaffold(body: navigationShell);
+
+  final selected = index.clamp(0, tabs.length - 1);
+  void onSelect(int tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore);
+  // This is where a neutral [NavDestination] becomes one app's widget —
+  // the same modules feed both forms below, unchanged.
+  final destinations = [for (final tab in tabs) tab.destination(context)];
+
+  // A phone in portrait keeps the bottom bar. From a medium window up — a
+  // tablet, an unfolded foldable, a desktop, and a phone in landscape —
+  // the tabs move to a side rail, which costs width the window has to
+  // spare instead of height it has not.
+  final sizeClass = context.windowSizeClass;
+  if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
+    return Scaffold(
+      body: navigationShell,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: selected,
+        onTap: onSelect,
+        items: [for (final d in destinations) _itemOf(d)],
+      ),
+    );
+  }
+
+  final extended = sizeClass.isAtLeast(WindowSizeClass.large);
   return Scaffold(
-    body: navigationShell,
-    bottomNavigationBar: tabs.length < 2
-        ? null
-        : BottomNavigationBar(
-            currentIndex: index.clamp(0, tabs.length - 1),
-            onTap: (tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore),
-            items: [for (final tab in tabs) _itemOf(tab.destination(context))],
+    body: Row(
+      children: [
+        SafeArea(
+          right: false,
+          child: NavigationRail(
+            selectedIndex: selected,
+            onDestinationSelected: onSelect,
+            extended: extended,
+            labelType: extended
+                ? NavigationRailLabelType.none
+                : NavigationRailLabelType.all,
+            destinations: [for (final d in destinations) _railItemOf(d)],
           ),
+        ),
+        Expanded(child: navigationShell),
+      ],
+    ),
   );
 }
 ```
 
-Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab, thanh nav bị ẩn hoàn toàn.
+Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả.
+
+Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — điện thoại xoay ngang, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md).
 
 ### Dashboard KHÔNG được phép
 
@@ -290,6 +326,7 @@ Checklist:
 - [ ] Hằng số đường dẫn nằm ở `src/utils/<name>_path.dart`
 - [ ] Điều hướng liên feature đi qua Navigator interface ở `core_di`, `BuildContext` truyền từ bên gọi
 - [ ] Mọi kích thước đều scale qua `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
+- [ ] Layout đổi theo cửa sổ thì chọn theo lớp kích thước cửa sổ (`context.adaptive`, `AdaptiveLayout`) — không bao giờ theo thiết bị hay nền tảng
 - [ ] Asset riêng của feature nằm trong feature package, không nhét vào `core_base_ui`
 
 ---

@@ -51,9 +51,10 @@ class DashboardPage extends StatelessWidget {
     // the same modules feed both forms below, unchanged.
     final destinations = [for (final tab in tabs) tab.destination(context)];
 
-    // A phone keeps the bottom bar. From a medium window up — a tablet, an
-    // unfolded foldable, a desktop — the tabs move to a side rail, which
-    // costs width the window has to spare instead of height it has not.
+    // A phone in portrait keeps the bottom bar. From a medium window up — a
+    // tablet, an unfolded foldable, a desktop, and a phone in landscape —
+    // the tabs move to a side rail, which costs width the window has to
+    // spare instead of height it has not.
     final sizeClass = context.windowSizeClass;
     if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
       return Scaffold(

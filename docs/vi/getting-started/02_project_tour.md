@@ -81,7 +81,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | `core_network` | `platform/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
 | `core_storage` | `platform/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
 | `core_database` | `platform/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
-| `core_responsive` | `platform/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale |
+| `core_responsive` | `platform/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale (mặc định chỉ thu nhỏ); lớp kích thước cửa sổ và các widget layout thích ứng (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
 | `core_notifications` | `platform/notifications` | Service push notification + `NotificationConstants` của riêng nó |
 | `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
 | `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |

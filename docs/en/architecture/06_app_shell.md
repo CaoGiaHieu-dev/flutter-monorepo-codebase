@@ -117,12 +117,21 @@ Both paths await `Future.wait([initService(), Future.delayed(_minimumDelay)])`, 
 
 ### `_ResponsiveWrapper`
 
-Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`, with `AppConfig.design` (375×812) and `splitScreenMode: true`. `context.sp` scales by the window's width ratio — the package default; the theme's text styles use `spMin`, which never grows past the design size (see [`11_design_system.md`](../guides/11_design_system.md)). It sits at the very root, so every widget below it can call `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`. It sits at the very root, so every widget below it can call `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`. The configuration is the app's whole scale policy:
+
+| Setting | Value | Effect |
+|:--|:--|:--|
+| `designSize` | `AppConfig.design` (375×812) | The phone artboard every window class starts from |
+| `scaleBounds` / `textScaleBounds` | left at the default, `ScaleBounds.downOnly()` | A window smaller than the artboard shrinks the design; a larger one — a tablet, a desktop window — draws it 1:1 and gives the extra room to the layout |
+| `profiles` | `WindowSizeClass.expanded` → `ScaleBounds.fixed()` for layout and text | From 840 wide up (and so `large` and `extraLarge` too), real logical pixels — a laptop window shorter than 812 no longer shrinks every vertical gap |
+| `splitScreenMode` | `true` | Floors the height used for scaling at 700, so a short split-screen pane stays usable |
+
+The theme scales type with `context.sp`, so it follows `textScaleBounds` like everything else. Growth on a class is an opt-in — a `ResponsiveProfile` with a capped bound, e.g. `ScaleBounds(max: 1.2)`. The full parameter table, what each window gets, and the adaptive widgets that spend the extra room are in [`11_design_system.md`](../guides/11_design_system.md) §6–§7.
 
 `ResponsiveInit` publishes the metrics through a `ResponsiveScope` `InheritedWidget`, so a widget that reads them subscribes to them — there is no rebuild flag to tune. Sizing must go through `BuildContext`: there is no `num` extension, so `16.h` does not even compile. See [rule 12](../reference/01_rules.md#12-responsive-ui) for the reasoning, and note that `arch_check` rule R7 blocks the bare form on every PR.
 
 > [!NOTE]
-> There used to be a `fontSizeResolver` here computing that same width ratio from `View.of(context).display` — the physical display, not the window. Full-screen the two agree; in split-screen or a resized window, text scaled to the whole display while every other dimension followed the window. The default measures the window through `MediaQuery`, so it replaced the resolver with no change on a full-screen phone.
+> There used to be a `fontSizeResolver` here computing the width ratio from `View.of(context).display` — the physical display, not the window. Full-screen the two agree; in split-screen or a resized window, text scaled to the whole display while every other dimension followed the window. `ResponsiveInit` measures the window through `MediaQuery`, so the default replaced the resolver. Do not bring one back to cap text either: a resolver's result is never clamped by `textScaleBounds`, which is where that cap now lives.
 
 ---
 

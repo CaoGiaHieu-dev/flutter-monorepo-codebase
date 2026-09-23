@@ -63,7 +63,7 @@ Practical, step-by-step, with working code. This is the "how to use" section.
 | [`08_networking.md`](guides/08_networking.md) | How does an HTTP request leave this app, how is an expired session renewed, and what protects the connection? |
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | How does a feature ship its own translations, and how do colours, fonts and dimensions stay consistent? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A needs something from feature B — how, without importing it? |
-| [`11_design_system.md`](guides/11_design_system.md) | Where is every colour, font, spacing step and radius defined — and which file do I edit to rebrand the app? |
+| [`11_design_system.md`](guides/11_design_system.md) | Where is every colour, font, spacing step and radius defined — which file do I edit to rebrand the app, and how does the UI scale and adapt on tablets, foldables and split screen? |
 | Split a module into its own repository | [`guides/12_module_isolation.md`](guides/12_module_isolation.md) | [`architecture/01_overview.md`](architecture/01_overview.md) |
 | [`12_module_isolation.md`](guides/12_module_isolation.md) | How does a team check out only its own module, build the whole app from it, and never see another team's source? |
 
@@ -103,6 +103,7 @@ Building, signing and shipping.
 | Store a token or a flag | [`guides/06_storage.md`](guides/06_storage.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Add a translated string | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) | — |
 | Change theme, colours or spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
+| Lay out a screen for tablets, foldables or split screen | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Share state between two features | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Remove a feature from the app | [`guides/01_new_feature.md`](guides/01_new_feature.md) § removal | [`reference/01_rules.md`](reference/01_rules.md) |
 | Choose Provider or BLoC | [`guides/03_state_management.md`](guides/03_state_management.md) | — |

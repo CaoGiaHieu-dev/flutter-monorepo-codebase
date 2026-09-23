@@ -249,6 +249,8 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 
 Những giá trị **không phải** kích thước vật lý thì được miễn: `TextStyle.height` là hệ số giãn dòng, `flex` là tỉ lệ.
 
+Mặc định không gì được scale vượt cỡ thiết kế: cửa sổ tablet hay desktop vẽ thiết kế 1:1, và chỗ dư được dùng cho layout, chọn theo lớp kích thước cửa sổ. Chính sách scale và các widget thích ứng nằm ở [`11_design_system.md`](11_design_system.md) §6–§7.
+
 ## 10. Widget scale hằng số của chính nó, không scale tham số
 
 > [!CAUTION]

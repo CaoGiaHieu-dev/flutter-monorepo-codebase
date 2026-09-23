@@ -31,7 +31,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
 | Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`) |
 | Extensions | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
-| Utils **and constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+| Utils **and constants** | `src/utils/` | `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
 **`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above, and `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`.
 
@@ -53,7 +53,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | REST endpoints (`/user/login`, `/user/refresh-token`) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Exactly two constants files live at the bottom of the stack, and both are genuinely global: `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Both sit in `platform_kernel`'s `src/utils/`, the one place it keeps such values.
+Exactly one constants file lives at the bottom of the stack, because it is genuinely global: `EnvConstants` (`String.fromEnvironment` values), in `platform_kernel`'s `src/utils/`.
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.

@@ -29,7 +29,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
 | Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`) |
 | Extension | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
-| Utils **và constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+| Utils **và constants** | `src/utils/` | `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
 **`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên, và `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`.
 
@@ -51,7 +51,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
-Đúng hai file constants nằm ở đáy ngăn xếp, và cả hai đều thật sự toàn cục: `ApiStatusConstants` (mã trạng thái HTTP) và `EnvConstants` (giá trị `String.fromEnvironment`). Cả hai đặt trong `src/utils/` của `platform_kernel`, nơi duy nhất nó giữ loại giá trị đó.
+Đúng một file constants nằm ở đáy ngăn xếp, vì nó thật sự toàn cục: `EnvConstants` (giá trị `String.fromEnvironment`), trong `src/utils/` của `platform_kernel`.
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.

@@ -108,7 +108,7 @@ class AuthStorageKeys {
 >
 > Chúng là API công khai của design system, và `styles/` mang đúng ngữ nghĩa đó trong khi `utils/` đọc lên là "linh tinh". Di chuyển sẽ làm hỏng mọi tham chiếu trong docs mà chẳng được gì. **Đừng "sửa" chỗ này ở lần audit sau.**
 
-Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục — hiện là `ApiStatusConstants` (mã HTTP) và `EnvConstants` (nối `String.fromEnvironment`), cả hai nằm trong `lib/src/utils/` của `platform_kernel` và được `core_common` re-export.
+Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục — hiện chỉ có `EnvConstants` (nối `String.fromEnvironment`), nằm trong `lib/src/utils/` của `platform_kernel` và được `core_common` re-export.
 
 ---
 

@@ -353,34 +353,27 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 
 ## 5. Open decisions — for the repo owner, not for me
 
-### The asset picker in `core_ui_kit`
+None open.
 
-`platform/ui_kit/lib/media/assets_picker/` is **1,003 lines across six files that nothing
-in this template imports**. Its only reference is the barrel that exports it.
+### ✅ Resolved: the asset picker in `core_ui_kit` — deleted
 
-It costs more than its line count:
+The `assets_picker/` folder under `core_ui_kit`'s `media/` was 1,003 lines across six files that nothing
+imported, in a package classified framework. The repo owner chose deletion.
 
-| Cost | Detail |
-|:--|:--|
-| Four dependencies | `photo_manager`, `image_picker`, `extended_image`, `cached_network_image_ce` — every app composed from this template resolves and ships them |
-| 24 global strings | `smartAlbumLivePhotos`, `noPhotosAvailable`, `albumSyncedFaces` … all in `core_base_ui`'s ARB, the file documented as *global strings only*. They describe one product's photo library, not any app's shared vocabulary |
-| A framework classification | `sample_manifest.yaml` calls `core_ui_kit` **framework**, so `remove_sample.dart` will never offer to delete it |
+Removed with it: six `core_ui_kit` dependencies only the picker used (`photo_manager`,
+`image_picker`, `extended_image`, `permission_handler`, `device_info_plus`, `dynamic_logger`),
+three catalog pins nothing else declares, and 29 of `core_base_ui`'s 46 global strings — one
+product's photo-library vocabulary (`smartAlbumLivePhotos`, `albumSyncedFaces`, …) sitting in
+the file documented as *global strings only*.
 
-It is plainly residue from the application this template was extracted from. But it sits in a
-framework package, and four documents cite `photo_grid_item.dart` as *the* worked example of
-the "read from context before the first `await`" rule — so removing it is not cleanup, it is a
-decision about what the UI kit is for.
+It also could never have worked as shipped: neither `Info.plist` nor any `AndroidManifest.xml`
+declared a photo-library permission, and iOS terminates an app that touches the library
+without `NSPhotoLibraryUsageDescription`.
 
-**Two coherent answers, both cheap:**
-
-1. **Delete it.** `core_ui_kit` sheds 1,003 LOC, four dependencies and 24 global ARB keys. The
-   four docs move their async-context example to a widget that survives — or state the rule
-   without a file reference, which is how the other responsive rules are written.
-2. **Keep it and reclassify.** Move it to its own `feature_media` sample package with its own
-   ARB, so it stops being framework, stops polluting the global strings, and shows up in
-   `remove_sample.dart --list` like every other sample.
-
-Doing neither is the only wrong answer: today it is product code wearing framework clothes.
+The four documents that cited `photo_grid_item.dart` as *the* example of reading from context
+before an `await` now carry an illustrative snippet instead, labelled as such — no screen in the
+template needs the pattern today, and the documentation contract forbids pointing at a file
+that does not exist.
 
 ---
 
@@ -399,6 +392,7 @@ Doing neither is the only wrong answer: today it is product code wearing framewo
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
 | 2026-09-21 | 9 | **Semantic doc audit** — the path checker proves references *resolve*, not that prose is *true*, so the checkable claims were re-derived from code: 24 workspace members / 22 packages, `platform_kernel`'s 7 dependencies, `Result`'s 4 variants vs Provider `ViewState`'s 5, the interceptor order (Auth → RefreshToken → Retry → Logging), `AppRouter` being `@singleton`, `NavigatorKeys`' members. All held. Two stale: `CLAUDE.md` still advertised `--help` as `R1-R9`, and **R10 was machine-enforced but documented nowhere** — §4 rule 5 of this contract says a rule that becomes machine-checked must say so and name its id. Now in `AGENTS.md` §22 and both rules references. | ⚠️ not run |
+| 2026-09-23 | 2f | **Deleted the asset picker** (repo owner's decision, §5). 1,003 LOC, six `core_ui_kit` dependencies, three catalog pins, 29 global ARB keys. It could not have run as shipped — no photo-library permission was declared on either platform. Four docs re-pointed at an illustrative snippet; the setup guide's KGP note no longer lists `firebase_auth` / `photo_manager` / `google_sign_in` as current. | ⚠️ not run |
 | 2026-09-21 | 9 | **A rule the docs stated backwards, in eight places.** "Reusable widgets in `core_ui_kit` take **unscaled** values — caller scales before passing in" cannot both be true: if the caller scales, the widget receives a value that is already scaled. The operative half was right (never scale a parameter), the description was not, and it also implied widgets never scale at all — which would make them non-responsive. `custom_input_field.dart` has done it correctly the whole time: `widget.paddingBottom ?? context.h(10)` — parameter as received, own default scaled. Corrected in both locales across the rules reference, architecture, design-system guide, localization guide, review checklist, AGENTS.md, CLAUDE.md and an agent skill. Also recorded *why* the colour and font-size rules are review-held rather than machine-held: seven legitimate literal-colour uses against two real ones, and no suppression comments allowed — a rule whose exception list outweighs its findings teaches people to skim it. | ⚠️ not run |
 | 2026-09-21 | 2e | **Residue audit of `platform/common`, `platform/notifications`, `core_ui_kit`.** Mostly clean — "unused" is the normal state of a widget library and a utility toolbox, so that signal was the wrong criterion here. What it did find were three dark-mode bugs in `core_ui_kit`, all from hardcoded colours the design-system rule already forbids: `BottomWrapperDialog` was `Colors.white` while its children use theme colours (light text on white in dark mode); `ToastOverlayWidget` inverted its background with the theme but kept white text (white on light in dark mode); a transparent button's ripple was `Colors.white70`, invisible on a light surface. Also two raw `fontSize: context.sp(13)` overrides on already-scaled text tokens. The one remaining hardcoded colour, the loading scrim, now carries a comment saying why it must stay. | ⚠️ not run |
 | 2026-09-21 | 8a | **The submodule story, written down and de-fanged.** The mechanism was already complete — name-based resolution, R8, R10 — but undocumented, and it had one sharp edge: `composer sync` edits three committed files, so a partial checkout leaves a partial composition in the tree that would drop other teams' modules if committed. `sync` now prints the files and the `git checkout --` line to undo it; CI Gate 0 was already the net. New guide `12_module_isolation.md` in both locales: extraction with `git filter-repo`, the partial-checkout workflow, why a private registry is the wrong trade, and what isolation does *not* buy. | ⚠️ not run |

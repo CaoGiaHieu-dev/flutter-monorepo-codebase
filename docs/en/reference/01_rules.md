@@ -315,14 +315,15 @@ SizedBox(height: context.h(16))
 
 **Design tokens take context too:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Their numbers live in `raw*` constants — edit `raw*`, never the accessor. Never re-scale an already-scaled token.
 
-**No context in scope?** Inside an `async` method, read from context **before the first `await`** and pass the value forward. Never hold a `BuildContext` across an await. Real example — `platform/ui_kit/lib/media/assets_picker/photo_grid_item.dart`:
+**No context in scope?** Inside an `async` method, read from context **before the first `await`** and pass the value forward. Never hold a `BuildContext` across an await. The pattern — illustrative, since no screen in the template needs it today:
 
 ```dart
-if (!mounted) return;
-final thumbnailSide = context.w(200).toInt();   // read before awaiting
-final bytes = await widget.photo.thumbnailDataWithSize(
-  ThumbnailSize.square(thumbnailSide),
-);
+Future<void> _loadAvatar() async {
+  final side = context.w(96).toInt();   // read while the context is valid
+  final bytes = await _repository.fetchAvatar(size: side);
+  if (!mounted) return;                 // the widget may be gone by now
+  setState(() => _avatar = bytes);
+}
 ```
 
 **Helper scaling axes** — defined in `platform/responsive/lib/src/context_extension.dart`:

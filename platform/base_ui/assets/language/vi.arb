@@ -16,41 +16,5 @@
   "edit": "Sửa",
   "duplicate": "Nhân bản",
   "close": "Đóng",
-  "selected": "Đã chọn",
-  "selectAlbum": "Chọn Album",
-  "done": "Xong",
-  "noPhotosAvailable": "Không có ảnh nào",
-  "albumRegular": "Album",
-  "albumSyncedEvent": "Sự kiện đồng bộ",
-  "albumSyncedFaces": "Khuôn mặt đồng bộ",
-  "albumSyncedAlbum": "Album đồng bộ",
-  "albumImported": "Đã nhập",
-  "smartAlbumGeneric": "Album chung",
-  "smartAlbumPanoramas": "Toàn cảnh",
-  "smartAlbumVideos": "Video",
-  "smartAlbumFavorites": "Yêu thích",
-  "smartAlbumTimelapses": "Tua nhanh",
-  "smartAlbumAllHidden": "Tất cả đã ẩn",
-  "smartAlbumRecentlyAdded": "Mới thêm gần đây",
-  "smartAlbumBursts": "Chụp liên tiếp",
-  "smartAlbumSlomoVideos": "Video quay chậm",
-  "smartAlbumUserLibrary": "Thư viện người dùng",
-  "smartAlbumSelfPortraits": "Chân dung tự chụp",
-  "smartAlbumScreenshots": "Ảnh chụp màn hình",
-  "smartAlbumDepthEffect": "Hiệu ứng chiều sâu",
-  "smartAlbumLivePhotos": "Ảnh động",
-  "smartAlbumAnimated": "Hoạt hình",
-  "smartAlbumLongExposures": "Phơi sáng lâu",
-  "smartAlbumUnableToUpload": "Không thể tải lên",
-  "smartAlbumRAW": "RAW",
-  "smartAlbumCinematic": "Điện ảnh",
-  "fileSizeExceeded": "Tổng dung lượng file không được vượt quá 20MB. Vui lòng thử lại.",
-  "permissionDenied": "Từ chối quyền: {permission}",
-  "@permissionDenied": {
-    "placeholders": {
-      "permission": {
-        "type": "String"
-      }
-    }
-  }
+  "done": "Xong"
 }

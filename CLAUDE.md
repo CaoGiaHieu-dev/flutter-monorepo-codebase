@@ -448,7 +448,7 @@ abstract class AuthModule {
 - **There is no `num` extension.** `16.h` does not compile — `core_responsive` ships none, on purpose
   - **Why:** a number carries no context, so such an extension could only read a global, and a widget reading a global never learns the metrics changed — it computes once and never updates (silent stale value). `context.h(16)` registers a `ResponsiveScope` (InheritedWidget) dependency, so exactly the widgets that scale rebuild on rotation / split-screen / resize
 - **FORBIDDEN:** Raw doubles in layout — `SizedBox(height: 24)` → `SizedBox(height: context.h(24))`
-- **No context in an async method?** Read the value *before the first `await`*, then pass it on. See `photo_grid_item.dart` `_loadThumbnail` (`if (!mounted) return;` then `context.w(200).toInt()`)
+- **No context in an async method?** Read the value *before the first `await`*, then pass it on. Then check `mounted` after the `await`, before touching state
 - **Reusable widgets** in `core_ui_kit` receive **already-scaled** values and use them as-is (the caller scales); they scale only their *own* constants. `context.w(widget.width)` double-scales
 - **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
 - **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `apps/mobile/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own

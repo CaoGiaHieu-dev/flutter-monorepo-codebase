@@ -10,10 +10,13 @@ class RefreshTokenHandler {
   /// The main Dio instance, used for retrying requests.
   final Dio dio;
 
-  /// Callback to refresh the token, returning the new token or null if failed.
+  /// Renews the session. Returns the new token, `null` when the server
+  /// rejected renewal (the session is over), or throws when renewal could not
+  /// be attempted (the session is kept).
   final Future<String?> Function() onRefreshToken;
 
-  /// Callback to handle token refresh failure (e.g. log out or clear storage).
+  /// Called once when the server rejected renewal — clear the session.
+  /// Not called for a renewal that merely could not reach the server.
   final Future<void> Function() onRefreshFailed;
 
   /// A completer that is active during a token refresh.
@@ -50,37 +53,40 @@ class RefreshTokenHandler {
 
     // This is the first request to trigger a refresh.
     // Lock subsequent requests by creating a completer.
-    _completer = Completer<String?>();
+    final completer = _completer = Completer<String?>();
 
+    String? newToken;
     try {
-      // Call the refresh token callback.
-      final String? newToken = await onRefreshToken();
-
-      if (newToken?.isNotEmpty ?? false) {
-        // Complete the completer with the new token to unblock waiting requests.
-        _completer!.complete(newToken);
-        // Retry the current request that initiated the refresh.
-        // `await` keeps the refresh lock (`_completer`) held until the retry
-        // finishes; without it the `finally` below clears the lock early and a
-        // concurrent 401 would start a second, redundant refresh.
-        return await _retryRequest(err, handler);
-      } else {
-        // Clear local token/session by calling failure callback.
-        await onRefreshFailed();
-        // Complete the completer with null to notify waiting requests of the failure.
-        _completer!.complete(null);
-        // Reject the current request.
-        return handler.reject(err);
-      }
-    } catch (e) {
-      // In case of an unexpected error during the refresh process.
-      _completer?.complete(null);
-      await onRefreshFailed();
-      return handler.reject(err);
-    } finally {
-      // Reset the completer to allow for future refreshes.
+      newToken = await onRefreshToken();
+    } catch (_) {
+      // Renewal could not be attempted — network down, a 5xx, a cancelled
+      // retry. The session may well still be valid, so it is kept: fail this
+      // request and the ones waiting on it, and let the next 401 try again.
+      completer.complete(null);
       _completer = null;
+      return handler.reject(err);
     }
+
+    if (newToken?.isNotEmpty ?? false) {
+      completer.complete(newToken);
+      try {
+        // `await` keeps the refresh lock (`_completer`) held until the retry
+        // finishes; releasing it earlier would let a concurrent 401 start a
+        // second, redundant refresh.
+        return await _retryRequest(err, handler);
+      } finally {
+        _completer = null;
+      }
+    }
+
+    // The server rejected renewal: the session is over. A throwing callback
+    // must not leave this request — or the ones queued behind it — unsettled.
+    try {
+      await onRefreshFailed();
+    } catch (_) {}
+    completer.complete(null);
+    _completer = null;
+    return handler.reject(err);
   }
 
   /// Retries the failed request using the original Dio instance.

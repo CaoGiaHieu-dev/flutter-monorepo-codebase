@@ -59,13 +59,16 @@ class NetworkConfigImpl implements NetworkConfig {
   Future<String?> _refreshSession() async =>
       await _session?.refreshToken();
 
-  /// Drops the local session after an unrecoverable refresh failure.
+  /// Ends the session after the server refused to renew it.
   ///
-  /// Navigation is intentionally left out: clearing the stored credentials is
-  /// enough, because the auth shell listener in `NavigatorWrapperWidget`
-  /// reacts to the session change and routes to login. Doing it here would
-  /// need a `BuildContext`, which the transport layer has no business holding.
-  Future<void> _clearSession() async => _session?.clearSession();
+  /// Two steps, because they belong to two owners: the gateway drops the
+  /// stored credentials, and the session owner drops to signed-out — which is
+  /// what `NavigatorWrapperWidget` listens to and routes to login on. Clearing
+  /// storage alone changes nothing anyone observes.
+  Future<void> _clearSession() async {
+    await _session?.clearSession();
+    getItOrNull<IAuthSessionState>()?.onSessionLost();
+  }
 
   @override
   void onRetryCallback({

@@ -27,16 +27,18 @@ abstract class IAuthSessionGateway {
 
   /// Renews the session after a 401 and returns the fresh token.
   ///
-  /// Returns null when renewal fails, which is the transport's signal to give
-  /// up rather than retry. The implementation is responsible for persisting
-  /// the new credentials before returning.
+  /// Returns null when the server **rejected** renewal — the session is over,
+  /// and the transport clears it. Throws when renewal could not be attempted
+  /// (no network, a 5xx): the session may still be valid, so it is kept and
+  /// only the waiting requests fail. The implementation is responsible for
+  /// persisting the new credentials before returning.
   Future<String?> refreshToken();
 
-  /// Drops the stored session after an unrecoverable refresh failure.
+  /// Drops the stored credentials after the server rejected renewal.
   ///
-  /// Navigation is deliberately not part of this: clearing credentials is
-  /// enough, because whoever listens to the session state reacts to the
-  /// change. Routing from here would need a `BuildContext`, which the
-  /// transport layer has no business holding.
+  /// Only the stored credentials: the signed-in *state* is the session
+  /// owner's, which the transport tells separately through
+  /// [IAuthSessionState.onSessionLost]. Routing is neither's job here — it
+  /// would need a `BuildContext`, which the transport has no business holding.
   Future<void> clearSession();
 }

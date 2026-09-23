@@ -146,6 +146,11 @@ class AuthProvider extends BaseProvider<UserEntity>
   ///
   /// Clearing local storage is synchronous and cannot meaningfully fail, so
   /// this skips `executeOperation` — [login] is where that pattern is shown.
+  /// The transport cleared a session the server refused to renew; the stored
+  /// credentials are already gone, so only the state changes.
+  @override
+  void onSessionLost() => _setLoggedOut();
+
   Future<void> logout() async {
     _logoutUseCase(const NoParams());
     _setLoggedOut();

@@ -19,12 +19,11 @@ class _RetryDialogState extends OverlayDialogState<RetryDialog> {
       content: Text(context.l10n.tryAgain),
       actions: [
         CupertinoDialogAction(
-          isDestructiveAction: true,
-          child: Text(context.l10n.retry),
           onPressed: () {
             closeDialog();
             widget.onCancel?.call();
           },
+          child: Text(context.l10n.cancel),
         ),
         CupertinoDialogAction(
           isDefaultAction: true,
@@ -32,7 +31,7 @@ class _RetryDialogState extends OverlayDialogState<RetryDialog> {
             closeDialog();
             widget.onRetry?.call();
           },
-          child: Text(context.l10n.cancel),
+          child: Text(context.l10n.retry),
         ),
       ],
     );

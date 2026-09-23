@@ -76,5 +76,4 @@ class NetworkConstants {
 
   static const String DEFAULT_LOG_TAG = 'AppClient';
   static const String CLIENT_LOG_TAG = 'DioClient';
-  static const String RETRY_LOG_TAG = 'Retry';
 }

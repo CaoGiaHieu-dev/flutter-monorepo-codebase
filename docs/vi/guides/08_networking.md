@@ -144,7 +144,7 @@ bool retryWhen(DioExceptionType type) {
 }
 ```
 
-Nhiều request lỗi đồng thời được gom vào một hàng đợi và chỉ hiện **một** dialog retry duy nhất qua `NetworkConfig.onRetryCallback`. Nếu không truyền callback, mọi request trong hàng đợi sẽ bị huỷ thay vì treo.
+Nhiều request lỗi đồng thời được gom vào một hàng đợi và chỉ hiện **một** dialog retry duy nhất qua `NetworkConfig.onRetryCallback`. Nếu không truyền callback, mọi request trong hàng đợi sẽ bị huỷ thay vì treo. "Retry" lấy mọi request ra khỏi hàng đợi (mỗi bên gọi một mục) và gửi lại qua chính `Dio` đó với `canRetry: false`: interceptor auth và refresh chạy lại (token mới, 401 được refresh), timeout thì đưa bên gọi trở lại hàng đợi cho dialog kế tiếp, còn lỗi khác tới tay bên gọi đúng là lỗi *đó* chứ không phải timeout ban đầu.
 
 ### `LoggingInterceptor`
 
@@ -240,10 +240,29 @@ Future<String?> _refreshSession() async => await _session?.refreshToken();
 @override
 Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();
-  if (!result.isSuccess) return null;
-  return _local.getUserToken();
+  if (result.isSuccess) return _local.getUserToken();
+  final failure = result.errorOrNull;
+  final transient = failure is NetworkFailure ||
+      (failure is ServerFailure && (failure.code ?? 500) >= 500);
+  if (transient) {
+    throw StateError('Session renewal did not reach the server: '
+        '${failure?.message}');
+  }
+  return null;
 }
 ```
+
+### Bị từ chối hay không tới được server
+
+Câu trả lời của gateway quyết định số phận của phiên đăng nhập:
+
+| `refreshToken()` | Nghĩa là | `RefreshTokenHandler` |
+| :-- | :-- | :-- |
+| một token | đã gia hạn | gửi lại request và mọi request đang chờ nó |
+| `null` | server **từ chối** (401/403, mọi 4xx) | gọi `onRefreshFailed` một lần, reject tất cả |
+| ném lỗi | không nhận được câu trả lời (mất mạng, 5xx, bị huỷ) | reject tất cả, **giữ nguyên phiên** |
+
+`onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `IAuthSessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token.
 
 ### N request 401 đồng thời → chỉ một lần refresh
 
@@ -268,8 +287,8 @@ Việc `await` lần retry là **cố ý**:
 
 ```dart
 // `await` keeps the refresh lock (`_completer`) held until the retry
-// finishes; without it the `finally` below clears the lock early and a
-// concurrent 401 would start a second, redundant refresh.
+// finishes; releasing it earlier would let a concurrent 401 start a
+// second, redundant refresh.
 return await _retryRequest(err, handler);
 ```
 

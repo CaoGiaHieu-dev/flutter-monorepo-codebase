@@ -1,5 +1,6 @@
 import 'package:core_di/core_di.dart';
 import 'package:domain_auth/domain_auth.dart';
+import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 
 import '../data_sources/local/auth_local_data_source.dart';
@@ -25,11 +26,22 @@ class AuthSessionGatewayImpl implements IAuthSessionGateway {
 
   /// The repository persists the new credentials, so this only re-reads the
   /// value from its owner rather than storing anything itself.
+  ///
+  /// A failure that never got an answer from the server — no network, a 5xx,
+  /// a cancelled request — throws, which keeps the session; any other failure
+  /// means the server refused, and returns null.
   @override
   Future<String?> refreshToken() async {
     final result = await _repository.refreshToken();
-    if (!result.isSuccess) return null;
-    return _local.getUserToken();
+    if (result.isSuccess) return _local.getUserToken();
+    final failure = result.errorOrNull;
+    final transient = failure is NetworkFailure ||
+        (failure is ServerFailure && (failure.code ?? 500) >= 500);
+    if (transient) {
+      throw StateError('Session renewal did not reach the server: '
+          '${failure?.message}');
+    }
+    return null;
   }
 
   @override

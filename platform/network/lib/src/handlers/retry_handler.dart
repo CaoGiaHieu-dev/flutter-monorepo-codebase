@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 
 import 'package:flutter/foundation.dart';
 
-import '../interceptors/logging_interceptor.dart';
 import '../utils/network_constants.dart';
 
 /// A class that handles retrying requests when there is an error.
@@ -17,11 +16,13 @@ import '../utils/network_constants.dart';
 class RetryHandler {
   /// Constructs a [RetryHandler] object.
   ///
-  /// [options] is the [BaseOptions] for the [Dio] client.
-  RetryHandler(this.options, {this.onRetryCallback});
+  /// [dio] is the client whose requests are retried. Replays go back through
+  /// it, so the auth and refresh interceptors run again: the bearer token is
+  /// re-read and a 401 on the replay is refreshed like any other.
+  RetryHandler(this.dio, {this.onRetryCallback});
 
-  /// The [BaseOptions] for the [Dio] client.
-  final BaseOptions options;
+  /// The client whose failed requests this handler replays.
+  final Dio dio;
 
   /// Callback to show the retry dialog.
   final void Function({
@@ -38,8 +39,6 @@ class RetryHandler {
   /// A flag that indicates whether the retry dialog is being shown.
   var _isPending = false;
 
-  /// A flag that indicates whether the retry process is in progress.
-  var _isRetry = false;
 
   /// Checks if the retry is needed based on the [DioExceptionType].
   ///
@@ -60,15 +59,10 @@ class RetryHandler {
   /// request. If the user clicks "retry", the handler will retry all requests in the queue.
   /// If the user clicks "cancel", the handler will reject all requests in the queue.
   void handleRetry(DioException err, ErrorInterceptorHandler handler) {
-    // Remove the failed request from the queue.
-    _retryQueue.removeWhere(
-      (element) =>
-          element.exception.requestOptions.uri.path ==
-              err.requestOptions.uri.path &&
-          element.exception.requestOptions.method == err.requestOptions.method,
-    );
-
-    // Add the failed request to the queue.
+    // One entry per caller. Matching on anything coarser (path + method)
+    // silently dropped a second caller's request — `/items?page=1` and
+    // `?page=2` share a path — leaving its Future pending forever.
+    _retryQueue.removeWhere((element) => identical(element.errorHandler, handler));
     _retryQueue.add(_RetryItem(exception: err, errorHandler: handler));
 
     // If the dialog is already being shown, do nothing.
@@ -91,10 +85,17 @@ class RetryHandler {
   /// This method will retry all requests in the queue using the same [Dio] client as the original
   /// client.
   void _retryAllRequests() {
-    // Set the pending flag to false.
     _isPending = false;
-    // Retry all requests in the queue.
-    _retryRequests();
+    // Take the items out of the queue before sending them. Left in place,
+    // a request that times out again while others are still in flight would
+    // open a new dialog over a queue that still held the in-flight ones — and
+    // a second retry would send them twice, a cancel would reject them while
+    // their replay was about to resolve.
+    final items = _retryQueue.toList();
+    _retryQueue.clear();
+    for (final item in items) {
+      _request(item);
+    }
   }
 
   /// Cancels all requests in the queue.
@@ -113,70 +114,37 @@ class RetryHandler {
     _isPending = false;
   }
 
-  /// Retries all requests in the queue.
+  /// Replays one request through [dio].
   ///
-  /// This method will create a new [Dio] client with the same options as the original
-  /// client, but with a [LoggingInterceptor] added to the interceptors list. Then, it will
-  /// retry all requests in the queue using the new [Dio] client.
-  void _retryRequests() {
-    // If the retry process is already in progress, do nothing.
-    if (_isRetry) return;
-    _isRetry = true;
-
-    // Create a new [Dio] client with the same options as the original client.
-    final retryDio = Dio(options)
-      // Add the logger interceptor to the new [Dio] client.
-      ..interceptors.add(
-        LoggingInterceptor(tag: NetworkConstants.RETRY_LOG_TAG),
-      );
-
-    // Retry all requests in the queue.
-    for (var item in _retryQueue.toList()) {
-      _request(retryDio, item);
-    }
-
-    // Set the retry flag to false.
-    _isRetry = false;
-  }
-
-  /// Retries a single request in the queue.
-  ///
-  /// This method will retry the request using the given [retryDio] client. If the
-  /// retry is successful, the request will be removed from the queue. If the retry
-  /// fails, the handler will handle the retry based on the error type.
-  void _request(Dio retryDio, _RetryItem retryItem) async {
-    // Get the request options from the retry item.
-    RequestOptions options = retryItem.exception.requestOptions;
-
-    // If the request data is a [FormData], recreate the [FormData] object.
+  /// The replay is marked `canRetry: false` so the retry interceptor lets its
+  /// failure through to here: a retryable failure re-queues the same caller,
+  /// anything else is reported as *that* failure — not the original timeout.
+  Future<void> _request(_RetryItem retryItem) async {
+    final handler = retryItem.errorHandler;
+    var options = retryItem.exception.requestOptions;
     if (options.data is FormData) {
       options = _recreateOptions(options);
     }
+    options = options.copyWith(
+      extra: {...options.extra, NetworkConstants.EXTRA_CAN_RETRY: false},
+    );
 
     try {
-      // Retry the request using the new [Dio] client.
-      final value = await retryDio.fetch(options);
-      // If the retry is successful, resolve the request handler.
-      retryItem.errorHandler.resolve(value);
+      final value = await dio.fetch<dynamic>(options);
+      if (!handler.isCompleted) handler.resolve(value);
     } on DioException catch (exception) {
-      // If the error is a retry able error, handle the retry.
+      if (handler.isCompleted) return;
       if (retryWhen(exception.type)) {
-        handleRetry(exception, retryItem.errorHandler);
+        handleRetry(exception, handler);
       } else {
-        // If the request has already been completed, do nothing.
-        if (retryItem.errorHandler.isCompleted) return;
-        // Reject the request.
-        retryItem.errorHandler.reject(retryItem.exception);
+        handler.reject(exception);
       }
     } catch (e) {
-      // If the request has already been completed, do nothing.
-      if (retryItem.errorHandler.isCompleted) return;
-      // Reject the request.
-      retryItem.errorHandler.reject(retryItem.exception);
+      if (handler.isCompleted) return;
+      handler.reject(
+        DioException(requestOptions: options, error: e),
+      );
     }
-
-    // Remove the retry item from the queue.
-    _retryQueue.remove(retryItem);
   }
 
   /// Recreates the [FormData] object.

@@ -132,6 +132,11 @@ class CommonHelpers {
       try {
         final dir = Directory(modulePath);
         if (dir.existsSync()) dir.deleteSync(recursive: true);
+        // modules/<name>/ is left empty when <layer> was its only child.
+        final parent = dir.parent;
+        if (parent.existsSync() && parent.listSync().isEmpty) {
+          parent.deleteSync();
+        }
       } catch (e) {
         failures.add('$modulePath ($e)');
       }

@@ -111,8 +111,13 @@ Set<String> getStringKeys(String rootPath) {
     return {};
   }
 
-  // Use the first non-template arb file (or any arb file)
-  final sourceFile = files.first;
+  // The template ARB (`en.arb` in every package here) holds the full key set;
+  // `listSync` order is unspecified, so pick it by name, not position.
+  files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+  final sourceFile = files.firstWhere(
+    (f) => p.basename(f.path) == 'en.arb',
+    orElse: () => files.first,
+  );
   stdout.writeln(
     'Parsing translation keys from: ${p.basename(sourceFile.path)}',
   );

@@ -262,6 +262,14 @@ Future<void> _removeBundle({
       _deletedDirs.add(dir);
       stdout.writeln('  đã xoá  $dir');
     }
+    // modules/<id>/ is left empty once its last layer is gone.
+    for (final dir in dirs) {
+      final parent = Directory(dir).parent;
+      if (parent.existsSync() && parent.listSync().isEmpty) {
+        parent.deleteSync();
+        stdout.writeln('  đã xoá  ${parent.path}');
+      }
+    }
   } catch (e) {
     stderr.writeln('[ERROR] Thất bại giữa chừng: $e');
     stderr.writeln('[INFO] Đang khôi phục các file dùng chung...');

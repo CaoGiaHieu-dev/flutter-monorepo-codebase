@@ -14,6 +14,21 @@ class ResponsiveConstants {
   static const double DEFAULT_DESIGN_WIDTH = 360;
   static const double DEFAULT_DESIGN_HEIGHT = 690;
 
+  /// The scale factor at which a design value is drawn at exactly its design
+  /// size — the window matches the artboard on that axis.
+  ///
+  /// The pivot of every scaling policy: below it values shrink, above it they
+  /// grow. `ScaleBounds.downOnly()` caps at it, so a window wider than the
+  /// artboard draws the design 1:1 instead of blowing it up.
+  static const double DESIGN_SCALE_FACTOR = 1;
+
+  /// The lowest scale factor a `ScaleBounds` may allow: a factor below zero
+  /// would mirror a value, which no layout means.
+  static const double MIN_SCALE_FACTOR = 0;
+
+  /// The highest scale factor a `ScaleBounds` may allow: no cap at all.
+  static const double MAX_SCALE_FACTOR = double.infinity;
+
   /// Window-width breakpoints, in logical pixels — the Material 3 window
   /// size classes. A window narrower than [BREAKPOINT_MEDIUM] is compact.
   static const double BREAKPOINT_MEDIUM = 600;

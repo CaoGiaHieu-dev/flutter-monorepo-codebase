@@ -7,6 +7,13 @@ import 'package:flutter_test/flutter_test.dart';
 const _design = Size(360, 690);
 const _double = Size(720, 1380);
 
+/// Metrics with the bounds lifted.
+///
+/// These tests are about the raw ratio maths — which axis feeds which
+/// helper, what splitScreenMode does to the height — so they pass
+/// [ScaleBounds.unbounded] explicitly rather than inherit the down-only
+/// default, which would flatten every factor above 1 and hide a wrong axis.
+/// The bounds themselves are covered in `scale_policy_test.dart`.
 ResponsiveMetrics _metrics({
   Size screen = _double,
   bool splitScreenMode = false,
@@ -19,6 +26,8 @@ ResponsiveMetrics _metrics({
     splitScreenMode: splitScreenMode,
     minTextAdapt: minTextAdapt,
     fontSizeResolver: fontSizeResolver,
+    scaleBounds: const ScaleBounds.unbounded(),
+    textScaleBounds: const ScaleBounds.unbounded(),
   );
 }
 

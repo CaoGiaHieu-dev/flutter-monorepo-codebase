@@ -231,7 +231,7 @@ Provides the **mechanism only**. It defines no keys and no presets.
 | Export | Purpose |
 |:--|:--|
 | `StorageInterface` | Backend contract |
-| `StorageManager` | `@singleton`; resolves a backend by `StorageType`, initializes all backends in parallel via `@PostConstruct(preResolve: true)` |
+| `StorageManager` | `@singleton`; resolves a backend by `StorageType`, initializes the secure backend, then the others, via `@PostConstruct(preResolve: true)` — secure first because its first-launch wipe shares a keystore namespace with the pref backend's master key |
 | `StorageValue<T>` | Reactive wrapper over one key — `ChangeNotifier` + broadcast `Stream`, in-memory cache, auto-persist on write |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (hardware-backed) |
 | `ObfuscatedString` / `ObfuscatedBytes` | RAM obfuscation |

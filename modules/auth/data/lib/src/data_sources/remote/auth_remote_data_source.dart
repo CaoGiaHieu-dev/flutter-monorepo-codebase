@@ -28,9 +28,14 @@ abstract class AuthRemoteDataSource {
 
   /// Refreshes the current authentication token.
   ///
-  /// Runs *inside* a refresh; a `401` from it reacting with another refresh
-  /// would wait on itself forever.
+  /// Runs *inside* a refresh, or at boot: a `401` from it reacting with
+  /// another refresh would wait on itself forever, and a timeout raising the
+  /// retry dialog would block boot on the user's answer. It fails fast
+  /// instead, and the caller decides.
   @POST(AuthApiConstants.REFRESH_TOKEN)
-  @Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})
+  @Extra({
+    NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+    NetworkConstants.EXTRA_CAN_RETRY: false,
+  })
   Future<BaseEntity<UserModel>> refreshToken();
 }

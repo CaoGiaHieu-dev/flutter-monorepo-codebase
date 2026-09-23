@@ -59,7 +59,7 @@ class AppRouter {
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/_empty_dashboard',
+              path: _emptyDestinationPath,
               builder: (_, _) => const SizedBox.shrink(),
             ),
           ],
@@ -71,20 +71,28 @@ class AppRouter {
     ];
   }
 
-  /// Where the app lands when no module claims the destination.
+  /// The placeholder branch registered when no module contributes a
+  /// destination, so there is always a real route to land on.
+  static const _emptyDestinationPath = '/_empty_dashboard';
+
+  /// The app's home: the first destination, or the placeholder branch when
+  /// no module contributes one. Always a registered route.
   ///
-  /// The single definition. It is used as `initialLocation` at boot, by
-  /// [back] when there is nothing to pop, by `UndefineRouteWidget`, and by
-  /// `NavigatorWrapperWidget` after sign-in when no `HomeNavigator` is
-  /// registered. `UndefineRouteWidget` used to carry its own copy of this
-  /// logic, and the post-sign-in case did not exist at all.
+  /// Used by [back] when there is nothing to pop, by `UndefineRouteWidget`,
+  /// and by `NavigatorWrapperWidget` after sign-in when no `HomeNavigator` is
+  /// registered. It is deliberately *not* the cold-start entry point: that is
+  /// onboarding when composed, and sending a signed-in user back to
+  /// onboarding — or a "go home" tap there — would be wrong.
   String get fallbackLocation {
-    final entry = getItOrNull<IAppEntryLocation>()?.path;
-    if (entry != null) return entry;
     final tabs = _destinations;
     if (tabs.isNotEmpty) return tabs.first.path;
-    return '/';
+    return _emptyDestinationPath;
   }
+
+  /// Where a cold start lands: the registered [IAppEntryLocation]
+  /// (onboarding, when composed), else [fallbackLocation].
+  String get entryLocation =>
+      getItOrNull<IAppEntryLocation>()?.path ?? fallbackLocation;
 
   /// GoRouter instance compiled modularly from individual feature routes
   late final GoRouter router = GoRouter(
@@ -94,7 +102,7 @@ class AppRouter {
     errorPageBuilder: (context, state) {
       return NoTransitionPage(child: UndefineRouteWidget(state: state));
     },
-    initialLocation: fallbackLocation,
+    initialLocation: entryLocation,
     routes: [
       ShellRoute(
         navigatorKey: NavigatorKeys.appKey,

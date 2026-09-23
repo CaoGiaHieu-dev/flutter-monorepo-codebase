@@ -1,25 +1,19 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.buildlog/
-.history
-.svn/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# Flutter/Dart related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# Package-specific Dart/Flutter ignore
 .dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
 .pub-cache/
 .pub/
-build/
+/build/
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.module.dart
+**/gen/**
+**/generated/**
+
+# Lock files
+pubspec.lock

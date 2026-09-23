@@ -22,7 +22,7 @@ Năm tham số vị trí được đọc bởi
 | :-- | :-- | :-- |
 | 1 | `1` | Loại module — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
 | 2 | `profile` | Tên module (snake_case). Package thành `feature_profile` tại `modules/profile/feature` |
-| 3 | `""` | Thư mục tuỳ chỉnh — chỉ dùng khi loại là `5`. Truyền `""` cho loại 1–4 |
+| 3 | `""` | Tiền tố package tuỳ chỉnh — chỉ dùng khi loại là `5` (`<tiền_tố>_<tên>` tại `platform/<tên>`). Truyền `""` cho loại 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` không dùng |
 | 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` không sinh |
 

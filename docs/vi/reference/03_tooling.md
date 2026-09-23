@@ -149,7 +149,7 @@ dart tools/module_generator/generate.dart <type> <name> [<dir>] [<sm>] [<route>]
 |---|---|
 | `<type>` | `1` feature · `2` domain · `3` data · `4` core · `5` custom |
 | `<name>` | tên thư mục trần (`profile`) — package sẽ thành `feature_profile` |
-| `<dir>` | chỉ dùng cho type `5` |
+| `<dir>` | chỉ cho type `5` — tiền tố tên package: `<dir>_<name>` tại `platform/<name>`. Từ chỉ tầng (`feature`, `domain`, `data`, `core`) bị từ chối; hãy dùng type 1–4 |
 | `<sm>` | chỉ feature — `1` Provider · `2` BLoC · `3` không dùng |
 | `<route>` | chỉ feature — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` không |
 
@@ -162,16 +162,16 @@ dart tools/module_generator/generate.dart 3 payment          # data micro-packag
 
 Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 
-**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, rồi chạy dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply`.
+**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply` trên package mới.
 
 > [!IMPORTANT]
-> Nó vẫn thêm package vào danh sách `workspace:` ở root, nhưng **không còn** sửa `pubspec.yaml` hay `lib/di/injection.dart` của app nào. Các file đó nằm giữa marker `composer:managed` — chạy `dart tools/composer/composer.dart sync` để sinh lại. Sửa tay sẽ tạo drift mà CI Gate 0 chặn.
+> Nó không bao giờ tự ghi danh sách `workspace:` ở root, `pubspec.yaml` hay `lib/di/injection.dart` của app. Các file đó nằm giữa marker `composer:managed` và chỉ `composer sync` ghi chúng — một dòng thêm ngoài marker là dòng composer không bao giờ xoá, còn sửa tay bên trong là drift mà CI Gate 0 chặn.
 
 **Hành vi an toàn**
 
 - **Kiểm tra toolchain trước tiên.** `assertToolchainAvailable()` chạy trước khi động vào bất cứ file dùng chung nào, nên thiếu SDK là fail ngay lập tức thay vì chết ở bước 8.
 - **Từ chối thư mục đã tồn tại.** Nó sẽ không âm thầm ghi đè lên package có sẵn.
-- **Rollback khi thất bại.** Các file dùng chung mà tool sửa — `pubspec.yaml` gốc và mọi `app_manifest.yaml` — được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
+- **Rollback khi thất bại.** Các file dùng chung bị thay đổi — mọi `app_manifest.yaml`, và những gì `composer sync` ghi lại (`pubspec.yaml` gốc, `pubspec.yaml` và `lib/di/injection.dart` của từng app) — được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
 - **Tự phát hiện FVM**, yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
 > [!NOTE]

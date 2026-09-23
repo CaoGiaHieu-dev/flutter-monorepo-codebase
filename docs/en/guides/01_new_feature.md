@@ -22,7 +22,7 @@ The five positional arguments are read by
 | :-- | :-- | :-- |
 | 1 | `1` | Module type — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
 | 2 | `profile` | Module name (snake_case). Package becomes `feature_profile` at `modules/profile/feature` |
-| 3 | `""` | Custom directory — only used when type is `5`. Pass `""` for types 1–4 |
+| 3 | `""` | Custom package prefix — only used when type is `5` (`<prefix>_<name>` at `platform/<name>`). Pass `""` for types 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` none |
 | 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` none |
 

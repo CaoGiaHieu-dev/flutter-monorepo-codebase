@@ -168,12 +168,20 @@ List<String> _dartFilesUnderLib(String packageRoot) {
 ///
 /// Naming is already enforced (§4), so the name is the more reliable signal,
 /// and it survives any relayout.
+///
+/// The one exception is an app, which is recognised by the marker `composer`
+/// uses — an `app_manifest.yaml` beside its pubspec — because app packages
+/// are named for the product (`app`, `admin_app`), not for a layer. Matching
+/// `app` / `app_*` by name classified a second app called `admin_app` as
+/// core: R1 then flagged its composition root and R10 skipped it entirely.
 String _layerOf(MonorepoPackage pkg) {
   final name = pkg.name;
+  if (File(p.join(pkg.rootPath, 'app_manifest.yaml')).existsSync()) {
+    return 'app';
+  }
   if (name.startsWith('domain_')) return 'domain';
   if (name.startsWith('data_')) return 'data';
   if (name.startsWith('feature_')) return 'features';
-  if (name == 'app' || name.startsWith('app_')) return 'app';
   if (name == 'core_tools') return 'tools';
   // platform_kernel, core_*, *_state_management: the infrastructure ring.
   return 'core';

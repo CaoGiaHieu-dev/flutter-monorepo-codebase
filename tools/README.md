@@ -11,7 +11,14 @@ Thư mục này chứa các công cụ CLI dành cho lập trình viên, hỗ tr
 ```text
 tools/
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
-│   └── check.dart                   # R1-R9: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
+│   └── check.dart                   # R1-R10: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
+├── composer/                        # 🧩 Ghép app từ app_manifest.yaml (Gate 0 của CI)
+│   └── composer.dart                # sync / verify / list — sinh workspace list, dependency của app, injection.dart
+├── docs_check/                      # 📚 Mọi đường dẫn docs nhắc tới phải tồn tại (Gate 5 của CI)
+│   ├── check.dart
+│   └── allowlist.txt                # Đường dẫn vắng mặt có chủ đích, kèm lý do
+├── shared/                          # 🔗 Code dùng chung giữa các tool
+│   └── app_locator.dart             # Tìm app qua app_manifest.yaml, chọn app bằng --app <id>
 ├── sample_cleanup/                  # 🧹 Phân loại và gỡ code mẫu an toàn
 │   └── remove_sample.dart           # --list / dry-run / --apply, có rollback
 ├── sample_manifest.yaml             # 📑 Nguồn chân lý: package nào là sample/framework/shell
@@ -171,11 +178,13 @@ dart tools/unused_checker/check_unused_file.dart
 # Thiết lập workspace:
 dart tools/workspace_setup/configure.dart   # đa nền tảng
 
-# Firebase config:
-dart tools/firebase/firebase_config.dart
+# Firebase config (ghi vào apps/<id>/lib/firebase/, ios/, android/ của app đó):
+dart tools/firebase/firebase_config.dart --app mobile
 
 # Theme (splash + icons):
-dart tools/theme_generator/theme_setting.dart
+dart tools/theme_generator/theme_setting.dart --app mobile
+
+# Workspace chỉ có một app thì bỏ được --app.
 ```
 
 ---

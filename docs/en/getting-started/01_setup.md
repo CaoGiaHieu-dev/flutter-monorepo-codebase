@@ -65,7 +65,7 @@ If you see per-package `pubspec.lock` files appear, something ran `pub get` from
 > [!CAUTION]
 > **A fresh clone will not compile.** This is the single most common first-run failure.
 
-`platform/common/lib/src/firebase/firebase_module.dart` imports three files by name:
+`apps/mobile/lib/firebase/firebase_module.dart` imports three files by name:
 
 ```dart
 import 'firebase_options_dev.dart' as dev;
@@ -73,33 +73,41 @@ import 'firebase_options_prod.dart' as prod;
 import 'firebase_options_staging.dart' as stg;
 ```
 
-Those three files are **generated per-project and git-ignored** (`platform/common/.gitignore` ignores `firebase_options_*.dart`), because they carry your own Firebase project identifiers. Until you generate them you will get:
+Those three files are **generated per-project and git-ignored** (`apps/mobile/.gitignore` ignores `firebase_options_*.dart`), because they carry your own Firebase project identifiers.
+
+They belong to the **app**, not to `platform/`: Firebase options name one bundle ID, so each app that uses Firebase owns its own `lib/firebase/`. They used to live in `core_common`, which handed the mobile app's options to every other app in the workspace. Until you generate them you will get:
 
 ```
 Target of URI doesn't exist: 'firebase_options_dev.dart'
 Undefined name 'DefaultFirebaseOptions'
 ```
 
-**Fix — run FlutterFire once per environment:**
+**Fix — run the helper script from the repository root:**
+
+```bash
+dart tools/firebase/firebase_config.dart --app mobile
+```
+
+It finds the app through its `app_manifest.yaml`, then runs `flutterfire configure` inside `apps/mobile/` for every flavor and build mode, writing `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` and `android/app/src/<flavor>/google-services.json`. `--app` may be omitted while the workspace has a single app.
+
+To do it by hand instead, run FlutterFire once per environment **from `apps/mobile/`**:
 
 ```bash
 dart pub global activate flutterfire_cli
+cd apps/mobile
 
-# Repeat for each flavor, writing into core_common with the matching file name:
 flutterfire configure \
   --project=<your-dev-firebase-project> \
-  --out=platform/common/lib/src/firebase/firebase_options_dev.dart
+  --out=lib/firebase/firebase_options_dev.dart
 
 flutterfire configure \
   --project=<your-staging-firebase-project> \
-  --out=platform/common/lib/src/firebase/firebase_options_staging.dart
+  --out=lib/firebase/firebase_options_staging.dart
 
 flutterfire configure \
   --project=<your-prod-firebase-project> \
-  --out=platform/common/lib/src/firebase/firebase_options_prod.dart
+  --out=lib/firebase/firebase_options_prod.dart
 ```
-
-There is also a helper script: `dart tools/firebase/firebase_config.dart`.
 
 All three files must exist even if you only intend to run `dev` — `firebase_module.dart` imports all three unconditionally, so a missing `prod` file breaks the `dev` build too.
 

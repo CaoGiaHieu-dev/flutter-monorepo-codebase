@@ -30,7 +30,6 @@ The bottom of the infrastructure stack. It declares two workspace dependencies �
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
 | Utils **and constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
-| Firebase | `src/firebase/` | `FirebaseModule` providing per-flavor `FirebaseOptions` |
 
 ### What does *not* belong here, and why
 
@@ -46,6 +45,8 @@ Exactly two constants files live here, and both are genuinely global: `ApiStatus
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.
+
+**Firebase options are not here either.** They name one bundle ID, so they belong to one app: each app that uses Firebase owns a `lib/firebase/firebase_module.dart` registering its per-flavour `FirebaseOptions` (the sample's is [`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)). While that module sat in `core_common`, a second app would have inherited the mobile app's Firebase identity.
 
 ---
 
@@ -285,6 +286,8 @@ Connection hardening (`foreign_keys = ON`, WAL journal mode, busy timeout) and t
 
 `PushNotificationService` wraps Firebase Messaging and `flutter_local_notifications`. Channel IDs and payload types live in `src/utils/notification_constants.dart`, with the package that consumes them — a notification channel ID has no business being readable by every package in the app.
 
+The service is an eager `@singleton` that injects `FirebaseOptions`, which each app registers from its own `lib/firebase/firebase_module.dart`. That is why an app's manifest lists `core_notifications` in a `notifications` group with `phase: after` rather than in `core`: `before` runs ahead of the app's own registrations. An app without push notifications leaves the group out.
+
 ---
 
 ## 10. State management — two branches, **not at parity**
@@ -318,15 +321,20 @@ Local (workspace) dependencies only — pub.dev packages omitted.
 
 | Package | Depends on |
 |:--|:--|
+| `domain_core` | *(none)* |
 | `core_database` | *(none)* |
+| `core_di` | *(none)* |
 | `core_responsive` | *(none)* |
-| `core_common` | `core_responsive`, `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
-| `core_network` | `core_common` |
+| `platform_kernel` | `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
+| `core_common` | `platform_kernel`, `core_responsive` |
+| `core_network` | `platform_kernel` |
+| `core_notifications` | `platform_kernel` |
 | `core_storage` | `core_common` |
-| `core_notifications` | `core_common` |
+| `data_core` | `platform_kernel`, `core_database`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
 | `bloc_state_management` | `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `domain_core` *(approved exception)* |
 | `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
+| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_storage`, `core_ui_kit`, `provider_state_management` |
 
 No arrow in this table points at `modules/*/feature` or `modules/*/data` — that is the invariant to preserve.

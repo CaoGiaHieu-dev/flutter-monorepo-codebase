@@ -213,7 +213,7 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 > [!NOTE]
 > Ở local đường dẫn dart-define là `env.dev` (tương đối so với `apps/mobile/`), còn CI ghi file env ra thư mục gốc và trỏ tới nó bằng đường dẫn tuyệt đối — `$GITHUB_WORKSPACE` trên GitHub và `$(Build.SourcesDirectory)` trên Azure. Cùng cơ chế, khác vị trí — và cố ý dùng tuyệt đối, vì việc đếm `../` từ thư mục app đã hỏng ngay khi app lùi xuống sâu hơn một cấp.
 
-Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configure` — các file `firebase_options_*.dart` sinh ra bị gitignore, mà `platform/common/lib/src/firebase/firebase_module.dart` import cả ba file đó vô điều kiện. Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configure` — các file `firebase_options_*.dart` sinh ra bị gitignore, mà `apps/mobile/lib/firebase/firebase_module.dart` import cả ba file đó vô điều kiện. (`pr_quality_check.yml` tạo stub cho mọi app có `lib/firebase/firebase_module.dart` — đủ cho analyze và test, nhưng không đủ cho một bản build thật.) Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 

@@ -145,38 +145,39 @@ class MyProvider extends BaseProvider<MyEntity> {
 Constructor injection only — **never** call `getIt<T>()` inside a ViewModel, Repository or
 UseCase.
 
-### Step 3: Register the Package Module in Host App (`app`)
-*Note: The `module_generator` tool automates this step.*
-1. Open `apps/mobile/lib/di/injection.dart`.
-2. Import the generated micro-package module (e.g., `import 'package:my_package/di/module.module.dart';`).
-3. Add `ExternalModule(MyPackageModule)` into the **correct** constant list:
+### Step 3: Compose the package into the app — through its manifest
+*Note: `module_generator` adds a new module to every `app_manifest.yaml` for you.*
 
-| List | Phase | When to use |
+`apps/<id>/lib/di/injection.dart` is **generated** between `composer:managed` markers — never
+edit it. The order lives in `apps/<id>/app_manifest.yaml`:
+
+- A **module** package (`domain_*`, `data_*`, `feature_*`) is listed under `modules:` with
+  the layers the app takes, e.g. `- { id: payment, layers: [domain, data, feature] }`. Its
+  group comes from `from_modules:` in `di_groups`.
+- A **platform** package goes into the right `di_groups` entry by name:
+
+| Group | Phase | When to use |
 |------|-------|-------------|
-| `_coreModules` | `externalPackageModulesBefore` | Core infra with no dependency on the shell's adapters (`CoreCommon`, `CoreNetwork`, `CoreNotifications`, `CoreStorage`, `CoreDatabase`, `CoreDi`) |
-| `_shellModules` | after, **first** | `PlatformAppShellPackageModule` — the storage adapters, `NetworkConfig`, the router |
-| `_uiModules` | after | **`CoreBaseUiPackageModule` only** — injects the shell's `ILanguageStorage` / `IThemeStorage` |
-| `_domainModules` | after | `domain_*` micro-packages |
-| `_dataModules` | after | `data_*` micro-packages |
-| `_featureModules` | after | `feature_*` packages |
-| `_otherModules` | after | State-management cores (`ProviderStateManagement`, `BlocStateManagement`) |
+| `core` | `before` | Core infra that depends on nothing the app or shell registers (`core_common`, `core_network`, `core_storage`, `core_database`, `core_di`) |
+| *(the app's own `lib/`)* | between | Only what identifies the app — its per-flavour `FirebaseOptions` (`lib/firebase/firebase_module.dart`) |
+| `notifications` | after, **first** | `core_notifications` — its eager `PushNotificationService` injects the app's `FirebaseOptions` |
+| `shell` | after | `platform_app_shell` — the storage adapters, `NetworkConfig`, the router |
+| `ui` | after | **`core_base_ui` only** — injects the shell's `ILanguageStorage` / `IThemeStorage` |
+| `domain` | after | `domain_core`, then modules' `domain` layers |
+| `data` | after | `data_core`, then modules' `data` layers |
+| `feature` | after | modules' `feature` layers |
+| `other` | after | State-management cores (`provider_state_management`, `bloc_state_management`) |
 
-```dart
-@InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],
-  externalPackageModulesAfter: [
-    ..._uiModules,
-    ..._domainModules,
-    ..._dataModules,
-    ..._featureModules,
-    ..._otherModules,
-  ],
-)
+Then regenerate:
+
+```bash
+dart tools/composer/composer.dart sync --app <id>
 ```
 
 **ABSOLUTELY FORBIDDEN:**
-- Putting `CoreBaseUiPackageModule` in `_coreModules` / `externalPackageModulesBefore` (Language/Theme providers will fail to resolve storage interfaces).
-- Inlining `ExternalModule(...)` directly inside `@InjectableInit` arrays — always use the named lists + spread.
+- Putting `core_base_ui` in `core` / `phase: before` (Language/Theme providers will fail to resolve storage interfaces).
+- Putting `core_notifications` in `core` (it would resolve `FirebaseOptions` before the app registers them).
+- Hand-editing `injection.dart`, the app's managed path dependencies, or the root `workspace:` list — `composer verify` (CI Gate 0) fails on drift.
 
 App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
 `NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_app_shell` and register through

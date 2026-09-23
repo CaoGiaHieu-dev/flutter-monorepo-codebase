@@ -138,12 +138,14 @@ Resolution order in the generated `injection.config.dart`:
 
 | # | Registered | Notes |
 |:-:|:--|:--|
-| 1 | `_coreModules` | `core_common`, `core_network`, `core_notifications`, `core_storage`, `core_database`, `core_di` |
-| 2 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
-| 3 | `_uiModules` | `core_base_ui` |
-| 4 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
+| 1 | `_coreModules` | `core_common`, `core_network`, `core_storage`, `core_database`, `core_di` |
+| – | the app's own `lib/` | `FirebaseModule` — per-flavour `FirebaseOptions` ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
+| 2 | `_notificationsModules` | `core_notifications` — its eager `PushNotificationService` injects those `FirebaseOptions`, so it must come after them |
+| 3 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
+| 4 | `_uiModules` | `core_base_ui` |
+| 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
 
-The app package itself registers nothing. Everything it needs arrives through a group.
+The app package registers only what identifies it: its Firebase options, which name one bundle ID and so cannot live in `platform/`. Everything else arrives through a group.
 
 ### Why `shell` comes before `ui`
 

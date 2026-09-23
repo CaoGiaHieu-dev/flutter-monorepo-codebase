@@ -21,14 +21,14 @@ dependencies:
     path: ../../platform/common
   core_network:
     path: ../../platform/network
-  core_notifications:
-    path: ../../platform/notifications
   core_storage:
     path: ../../platform/storage
   core_database:
     path: ../../platform/database
   core_di:
     path: ../../platform/di
+  core_notifications:
+    path: ../../platform/notifications
   platform_app_shell:
     path: ../../platform/app_shell
   core_base_ui:

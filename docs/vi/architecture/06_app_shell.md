@@ -140,12 +140,14 @@ Thứ tự resolve trong file sinh ra `injection.config.dart`:
 
 | # | Đăng ký | Ghi chú |
 |:-:|:--|:--|
-| 1 | `_coreModules` | `core_common`, `core_network`, `core_notifications`, `core_storage`, `core_database`, `core_di` |
-| 2 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
-| 3 | `_uiModules` | `core_base_ui` |
-| 4 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
+| 1 | `_coreModules` | `core_common`, `core_network`, `core_storage`, `core_database`, `core_di` |
+| – | `lib/` của chính app | `FirebaseModule` — `FirebaseOptions` theo flavor ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
+| 2 | `_notificationsModules` | `core_notifications` — `PushNotificationService` (eager) inject chính các `FirebaseOptions` đó, nên phải đứng sau |
+| 3 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
+| 4 | `_uiModules` | `core_base_ui` |
+| 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
 
-Bản thân package app không đăng ký gì. Mọi thứ nó cần đều đến qua một nhóm.
+Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn gắn với một bundle ID nên không thể nằm trong `platform/`. Mọi thứ khác đều đến qua một nhóm.
 
 ### Vì sao `shell` đứng trước `ui`
 

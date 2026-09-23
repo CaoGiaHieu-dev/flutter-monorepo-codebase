@@ -4,6 +4,12 @@ import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
 import 'monorepo_helper.dart';
 
+/// A class-level injectable annotation at the start of a line.
+final _injectableAnnotation = RegExp(
+  r'^@(?:module|injectable|singleton|lazySingleton|Injectable|Singleton|LazySingleton)\b',
+  multiLine: true,
+);
+
 // --- Configuration ---
 // Files matching these patterns (relative to package root) will be excluded from the check entirely.
 final _excludedFilePatterns = <Glob>[
@@ -78,6 +84,18 @@ void main() async {
     if (name.contains('route') || name.contains('routing')) {
       entryPoints.add(file);
       continue;
+    }
+
+    // Injectable registrations. The generator finds these by annotation, not
+    // by import, so nothing hand-written need reference them — an app's
+    // `lib/firebase/firebase_module.dart` is reachable from no import at all
+    // and would otherwise be reported as orphaned.
+    try {
+      if (_injectableAnnotation.hasMatch(File(file).readAsStringSync())) {
+        entryPoints.add(file);
+      }
+    } on FileSystemException {
+      // Unreadable: leave it to the reachability pass to report.
     }
   }
 

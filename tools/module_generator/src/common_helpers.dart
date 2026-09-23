@@ -93,16 +93,23 @@ class CommonHelpers {
   // Rollback of shared-file mutations
   // ---------------------------------------------------------------------------
 
-  /// Files outside the new module that generation rewrites in place.
+  /// Files outside the new module that generation rewrites in place: the
+  /// root `workspace:` list ([registerInRootWorkspace]) and every app's
+  /// `app_manifest.yaml` ([registerInAppManifests]).
   ///
   /// A failure partway through would leave these half-edited — a module
   /// registered in the workspace whose directory was never finished building,
   /// which then breaks `pub get` for everyone. Hence the backup-and-restore
   /// around them.
-  static const List<String> sharedMutatedFiles = [
+  ///
+  /// This used to list `apps/mobile/pubspec.yaml` and
+  /// `apps/mobile/lib/di/injection.dart`, which generation stopped writing
+  /// when `composer` took them over, and not the manifests, which it does
+  /// write — so a rollback restored two untouched files and left every
+  /// manifest naming a module that no longer existed.
+  static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
-    'apps/mobile/pubspec.yaml',
-    'apps/mobile/lib/di/injection.dart',
+    for (final manifest in _findManifests(Directory('.'))) manifest.path,
   ];
 
   static final Map<String, String?> _sharedFileSnapshots = {};
@@ -517,55 +524,6 @@ class CommonHelpers {
 
     stdout.writeln(
       '  -> Đã tạo template mã nguồn cho ${config.smType.name.toUpperCase()}, Route và Page',
-    );
-  }
-
-
-
-  static void registerLocalizationsDelegateInApp(String moduleName) {
-    // Không còn cần thiết, GetIt getAll đã đảm nhận.
-    final file = File('platform/app_shell/lib/presentation/root_app.dart');
-    if (!file.existsSync()) return;
-
-    final lines = file.readAsLinesSync();
-    final pascalName = toPascalCase(moduleName);
-    final delegateClass = 'Feature${pascalName}Localizations';
-
-    if (lines.any((line) => line.contains('$delegateClass.delegate'))) return;
-
-    final importLine =
-        "import 'package:$moduleName/src/l10n/generated/app_localizations_$moduleName.dart';";
-
-    // 1. Add import if not exists
-    final lastImportIndex = lines.lastIndexWhere(
-      (line) => line.startsWith('import '),
-    );
-    if (lastImportIndex != -1) {
-      if (!lines.any((l) => l.trim() == importLine)) {
-        lines.insert(lastImportIndex + 1, importLine);
-      }
-    }
-
-    // 2. Add delegate to localizationsDelegates list
-    final delegateListIndex = lines.indexWhere(
-      (line) => line.contains('localizationsDelegates: ['),
-    );
-    if (delegateListIndex != -1) {
-      int insertIndex = delegateListIndex + 1;
-      lines.insert(insertIndex, '        $delegateClass.delegate,');
-    } else {
-      // try multiline format if single line doesn't match
-      final delegateIndex = lines.indexWhere(
-        (line) => line.contains('localizationsDelegates:'),
-      );
-      if (delegateIndex != -1) {
-        lines.insert(delegateIndex + 1, '        $delegateClass.delegate,');
-      }
-    }
-
-    file.writeAsStringSync('${lines.join('\n')}\n');
-    stdout.writeln(
-      '  -> Đã đăng ký $delegateClass.delegate vào platform/app_shell/lib/presentation/root_app.dart',
     );
   }
 }

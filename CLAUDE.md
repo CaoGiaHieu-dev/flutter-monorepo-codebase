@@ -203,8 +203,10 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 
 ```dart
 @InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],  // core_common, network, notifications, storage, di
+  externalPackageModulesBefore: [..._coreModules],  // core_common, network, storage, database, di
+  // (the app's own lib/ registers here, between the phases: FirebaseModule)
   externalPackageModulesAfter: [
+    ..._notificationsModules, // CoreNotificationsPackageModule — injects the app's FirebaseOptions
     ..._shellModules,    // PlatformAppShellPackageModule — storage adapters, NetworkConfig, router
     ..._uiModules,       // CoreBaseUiPackageModule (injects the shell's storage adapters)
     ..._domainModules,   // domain_core, domain_auth

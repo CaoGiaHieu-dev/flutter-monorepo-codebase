@@ -214,7 +214,7 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 > [!NOTE]
 > Locally the dart-define path is `env.dev` (relative to `apps/mobile/`), while CI writes its env file to the repo root and addresses it absolutely, through `$GITHUB_WORKSPACE` on GitHub and `$(Build.SourcesDirectory)` on Azure. Same mechanism, different location — and absolute on purpose, because counting `../` from the app broke the moment the app moved one directory deeper.
 
-A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files are gitignored and `platform/common/lib/src/firebase/firebase_module.dart` imports all three unconditionally. See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files are gitignored and `apps/mobile/lib/firebase/firebase_module.dart` imports all three unconditionally. (`pr_quality_check.yml` stubs them for every app that has a `lib/firebase/firebase_module.dart`, which is enough for analysis and tests but not for a real build.) See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 

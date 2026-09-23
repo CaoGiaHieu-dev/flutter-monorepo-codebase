@@ -35,15 +35,18 @@ jobs:
           channel: "stable"
           cache: true
 
-      # `platform/common/lib/src/firebase/firebase_module.dart`
-      # imports three generated `firebase_options_*.dart` files that are
-      # gitignored, so a clean checkout does not compile. Analysis and
+      # Each app that uses Firebase owns `lib/firebase/firebase_module.dart`,
+      # which imports three generated `firebase_options_*.dart` files that
+      # are gitignored, so a clean checkout does not compile. Analysis and
       # unit tests never reach Firebase, so a stub is enough to build —
       # it is written only when the real file is absent, so a workflow
-      # that does restore real options keeps them.
+      # that does restore real options keeps them. An app without that
+      # module does not use Firebase and gets no stub.
       - name: Stub Firebase options (compile only)
         run: |
-          dir="platform/common/lib/src/firebase"
+          for module in apps/*/lib/firebase/firebase_module.dart; do
+          [ -f "$module" ] || continue
+          dir="$(dirname "$module")"
           for env in dev staging prod; do
             file="$dir/firebase_options_$env.dart"
             if [ -f "$file" ]; then
@@ -66,6 +69,7 @@ jobs:
           }
           DART
             echo "stubbed $file"
+          done
           done
 
       - name: Install dependencies and run code generation

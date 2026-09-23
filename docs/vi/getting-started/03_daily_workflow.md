@@ -98,7 +98,7 @@ Tool cũng tự sửa các mục `path:` bị gãy của package trong workspace
 
 | Tool | Lệnh | Dùng khi |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [thư_mục] [SM] [route]` | Dựng khung package Feature / Domain / Data / Core mới. Nó tự đăng ký package vào workspace gốc và thêm vào mọi `app_manifest.yaml`; chạy `dart tools/composer/composer.dart sync` sau đó. Chạy không tham số để vào chế độ tương tác. |
+| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [thư_mục] [SM] [route]` | Dựng khung package Feature / Domain / Data / Core mới. Nó thêm module vào mọi `app_manifest.yaml` rồi chạy `composer sync`, bước này đăng ký package vào workspace và mọi app ghép nó. Chạy không tham số để vào chế độ tương tác. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Dọn dẹp định kỳ. Có lệnh con riêng cho asset, file, package, translation. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Trước một đợt nâng version — liệt kê thứ pub.dev đã có bản mới. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Rà soát tuỳ chọn trước khi mở PR. Cần Gemini API key trong `tools/code_review/code_review_config.json`. Hỗ trợ thêm `--all`, `--file <đường_dẫn>`, `--focus architecture,security`. |

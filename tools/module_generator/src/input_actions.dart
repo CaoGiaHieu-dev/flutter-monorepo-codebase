@@ -19,7 +19,7 @@ class InputActions {
       stdout.writeln('2. Domain Micro-Package (modules/<name>/domain/)');
       stdout.writeln('3. Data Micro-Package (modules/<name>/data/)');
       stdout.writeln('4. Core Package (platform/)');
-      stdout.writeln('5. Custom Package (custom name)');
+      stdout.writeln('5. Custom Package (platform/<name>, tiền tố tự chọn)');
       stdout.write('Nhập lựa chọn: ');
       typeInput = stdin.readLineSync()?.trim();
     }
@@ -46,7 +46,7 @@ class InputActions {
       typeName = 'core';
     } else if (typeInput == '5') {
       type = ModuleType.custom;
-      typeDir = 'packages';
+      typeDir = 'platform';
       typeName = '';
     } else {
       stderr.writeln('[ERROR] Lựa chọn không hợp lệ.');
@@ -55,20 +55,26 @@ class InputActions {
 
     if (type == ModuleType.custom) {
       if (args.length < 3) {
-        stdout.write('\nNhập tên thư mục (ví dụ: features, core, domain): ');
+        stdout.write('\nNhập tiền tố tên package (ví dụ: analytics, payments): ');
         typeDirInput = stdin.readLineSync()?.trim();
       }
       if (typeDirInput == null || typeDirInput.isEmpty) {
         stderr.writeln('[ERROR] Tên thư mục không được để trống.');
         exit(1);
       }
+      // A layer prefix would make arch_check classify a platform package as
+      // that layer, and a module layer belongs at modules/<name>/<layer> —
+      // types 1-3 build exactly that.
+      const reserved = {'feature', 'features', 'domain', 'data', 'core'};
+      if (reserved.contains(typeDirInput)) {
+        stderr.writeln(
+          '[ERROR] "$typeDirInput" là tiền tố của một tầng — dùng loại 1-4.',
+        );
+        exit(1);
+      }
+      // A custom package is a platform package with its own name prefix:
+      // `<prefix>_<name>` at `platform/<name>`.
       typeName = typeDirInput;
-      typeDir = 'modules/$typeName';
-
-      if (typeDirInput == 'features') type = ModuleType.feature;
-      if (typeDirInput == 'domain') type = ModuleType.domain;
-      if (typeDirInput == 'data') type = ModuleType.data;
-      if (typeDirInput == 'core') type = ModuleType.core;
     }
 
     if (args.length < 2) {
@@ -136,8 +142,8 @@ class InputActions {
 
     final moduleName = typeName.isEmpty ? nameInput : '${typeName}_$nameInput';
     // A module's layers sit side by side under the module:
-    // `modules/<name>/{domain,data,feature}`. Core and custom packages keep
-    // `<dir>/<name>`.
+    // `modules/<name>/{domain,data,feature}`. Core and custom packages live
+    // at `platform/<name>`.
     final isModuleLayer =
         typeInput == '1' || typeInput == '2' || typeInput == '3';
     final modulePath = isModuleLayer
@@ -145,16 +151,14 @@ class InputActions {
         : '$typeDir/$nameInput';
     final moduleDir = Directory(modulePath);
 
+    // Never overwrite: deleting an existing package here would happen before
+    // the rollback snapshot, so nothing could restore it.
     if (moduleDir.existsSync()) {
-      stderr.writeln('[WARNING] Module "$modulePath" đã tồn tại.');
-      stderr.writeln('Bạn có muốn ghi đè không ? (y/n)');
-
-      final confirmInput = stdin.readLineSync()?.trim();
-      if (confirmInput == 'y' || confirmInput == 'Y') {
-        moduleDir.deleteSync(recursive: true);
-      } else {
-        exit(1);
-      }
+      stderr.writeln(
+        '[ERROR] Thư mục "$modulePath" đã tồn tại. '
+        'Xoá nó hoặc chọn tên module khác trước khi chạy lại.',
+      );
+      exit(1);
     }
 
     return ModuleConfig(

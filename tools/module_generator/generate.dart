@@ -145,17 +145,21 @@ void main(List<String> args) async {
       '${config.modulePath}/lib/di/module.dart',
     ).writeAsStringSync(diTemplate.renderString({}));
 
-    // 6. Register in Root pubspec.yaml
-    stdout.writeln('[!] Đang đăng ký vào root workspace...');
-    CommonHelpers.registerInRootWorkspace(config.modulePath);
-
-    // 7. Register in App shell
-    stdout.writeln('[!] Đang đăng ký vào app shell...');
+    // 6. Register in every app manifest — the only hand-edited composition
+    // input.
+    stdout.writeln('[!] Đang đăng ký vào app_manifest.yaml...');
     CommonHelpers.registerInAppManifests(
       config.moduleName,
       config.type,
       config.nameInput,
     );
+
+    // 7. Regenerate what the manifests drive: the root `workspace:` list, each
+    // app's path dependencies and `injection.dart`, all between
+    // `composer:managed` markers. Writing any of them by hand would leave an
+    // entry outside the markers that composer never removes.
+    stdout.writeln('[!] Đang chạy composer sync...');
+    await CommonHelpers.runDart(['tools/composer/composer.dart', 'sync']);
 
     // 8. Run dependency_sync.dart
     stdout.writeln('[!] Đang đồng bộ dependencies với dependency_sync...');
@@ -189,7 +193,10 @@ void main(List<String> args) async {
     ]);
 
     stdout.writeln('[!] Đang sửa lỗi import với dart fix...');
-    await CommonHelpers.runDart(['fix', '--apply']);
+    await CommonHelpers.runDart(
+      ['fix', '--apply'],
+      workingDirectory: config.modulePath,
+    );
 
     stdout.writeln('\n==========================================');
     stdout.writeln('[V] Module "${config.moduleName}" đã được tạo thành công!');

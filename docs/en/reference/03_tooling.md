@@ -149,7 +149,7 @@ dart tools/module_generator/generate.dart <type> <name> [<dir>] [<sm>] [<route>]
 |---|---|
 | `<type>` | `1` feature · `2` domain · `3` data · `4` core · `5` custom |
 | `<name>` | bare directory name (`profile`) — the package becomes `feature_profile` |
-| `<dir>` | only for type `5` |
+| `<dir>` | type `5` only — the package-name prefix: `<dir>_<name>` at `platform/<name>`. A layer word (`feature`, `domain`, `data`, `core`) is refused; use types 1–4 |
 | `<sm>` | feature only — `1` Provider · `2` BLoC · `3` none |
 | `<route>` | feature only — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none |
 
@@ -162,16 +162,16 @@ dart tools/module_generator/generate.dart 3 payment          # data micro-packag
 
 Run with fewer arguments and it prompts interactively.
 
-**What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the module to every `app_manifest.yaml`, then runs dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply`.
+**What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the module to every `app_manifest.yaml`, runs `composer sync` (which regenerates the root `workspace:` list and each app's `pubspec.yaml` and `lib/di/injection.dart`), then dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply` on the new package.
 
 > [!IMPORTANT]
-> It still adds the package to the root `workspace:` list, but no longer edits any app's `pubspec.yaml` or `lib/di/injection.dart`. Those sit between `composer:managed` markers — run `dart tools/composer/composer.dart sync` to regenerate them. Editing them by hand puts the tree into the drift CI Gate 0 fails on.
+> It never writes the root `workspace:` list, an app's `pubspec.yaml` or `lib/di/injection.dart` itself. Those sit between `composer:managed` markers, and only `composer sync` writes them — an entry added outside the markers is one composer never removes, and hand edits inside them are the drift CI Gate 0 fails on.
 
 **Safety behaviour**
 
 - **Toolchain is verified first.** `assertToolchainAvailable()` runs before anything shared is touched, so a missing SDK fails immediately instead of at step 8.
 - **Existing directories are refused.** It will not silently overwrite a package.
-- **Rollback on failure.** The shared files it edits — the root `pubspec.yaml` and every `app_manifest.yaml` — are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
+- **Rollback on failure.** The shared files it changes — every `app_manifest.yaml`, and what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
 - **FVM is auto-detected**, requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
 > [!NOTE]

@@ -93,23 +93,22 @@ class CommonHelpers {
   // Rollback of shared-file mutations
   // ---------------------------------------------------------------------------
 
-  /// Files outside the new module that generation rewrites in place: the
-  /// root `workspace:` list ([registerInRootWorkspace]) and every app's
-  /// `app_manifest.yaml` ([registerInAppManifests]).
+  /// Files outside the new module that generation rewrites in place: every
+  /// app's `app_manifest.yaml` ([registerInAppManifests]), and what
+  /// `composer sync` regenerates from them — the root `pubspec.yaml`, each
+  /// app's `pubspec.yaml` and `lib/di/injection.dart`.
   ///
   /// A failure partway through would leave these half-edited — a module
   /// registered in the workspace whose directory was never finished building,
   /// which then breaks `pub get` for everyone. Hence the backup-and-restore
   /// around them.
-  ///
-  /// This used to list `apps/mobile/pubspec.yaml` and
-  /// `apps/mobile/lib/di/injection.dart`, which generation stopped writing
-  /// when `composer` took them over, and not the manifests, which it does
-  /// write — so a rollback restored two untouched files and left every
-  /// manifest naming a module that no longer existed.
   static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
-    for (final manifest in _findManifests(Directory('.'))) manifest.path,
+    for (final manifest in _findManifests(Directory('.'))) ...[
+      manifest.path,
+      '${manifest.parent.path}/pubspec.yaml',
+      '${manifest.parent.path}/lib/di/injection.dart',
+    ],
   ];
 
   static final Map<String, String?> _sharedFileSnapshots = {};
@@ -172,33 +171,6 @@ class CommonHelpers {
     }
   }
 
-  static void registerInRootWorkspace(String path) {
-    final rootPubspec = File('pubspec.yaml');
-    if (!rootPubspec.existsSync()) return;
-
-    final lines = rootPubspec.readAsLinesSync();
-    final workspaceIndex = lines.indexWhere(
-      (line) => line.trim() == 'workspace:',
-    );
-
-    if (workspaceIndex != -1) {
-      final normalizedPath = path.replaceAll('\\\\', '/');
-      if (lines.any((line) => line.contains(normalizedPath))) {
-        stdout.writeln('  (Module đã được đăng ký trong workspace)');
-        return;
-      }
-
-      int insertIndex = workspaceIndex + 1;
-      while (insertIndex < lines.length &&
-          lines[insertIndex].trim().startsWith('-')) {
-        insertIndex++;
-      }
-      lines.insert(insertIndex, '  - $normalizedPath');
-      rootPubspec.writeAsStringSync('${lines.join('\n')}\n');
-      stdout.writeln('  -> Đã đăng ký module vào root pubspec.yaml');
-    }
-  }
-
   static String toPascalCase(String snakeCase) {
     return snakeCase
         .split('_')
@@ -248,8 +220,8 @@ class CommonHelpers {
   /// for (`externalPackageModulesBefore: [`) no longer exists, so it had
   /// silently stopped working.
   ///
-  /// The manifest is the only hand-edited input now; `composer sync`
-  /// regenerates the rest.
+  /// The manifest is the only hand-edited input; `generate.dart` runs
+  /// `composer sync` next to regenerate the rest.
   static void registerInAppManifests(
     String packageName,
     ModuleType moduleType,
@@ -285,9 +257,6 @@ class CommonHelpers {
       stdout.writeln('  -> Đã thêm vào ${manifest.path}');
     }
 
-    stdout.writeln('');
-    stdout.writeln('  Chạy tiếp để sinh lại phần ghép nối:');
-    stdout.writeln('    dart tools/composer/composer.dart sync');
   }
 
   /// `- { id: <name>, layers: [...] }` — appended, or extended if present.
@@ -300,7 +269,14 @@ class CommonHelpers {
       (l) => l.trimLeft().startsWith('- { id: $moduleName,'),
     );
     if (existing != -1) {
-      if (!lines[existing].contains(layer)) {
+      final layers = RegExp(r'layers:\s*\[([^\]]*)\]')
+              .firstMatch(lines[existing])
+              ?.group(1)
+              ?.split(',')
+              .map((l) => l.trim())
+              .toSet() ??
+          const <String>{};
+      if (!layers.contains(layer)) {
         lines[existing] = lines[existing].replaceFirst(
           'layers: [',
           'layers: [$layer, ',

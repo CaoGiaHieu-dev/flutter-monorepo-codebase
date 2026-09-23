@@ -270,7 +270,7 @@ Mọi văn bản hiển thị cho người dùng đều phải dịch; hardcode 
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó cũng thêm package mới vào danh sách `workspace:` ở root, nhưng không còn đụng `pubspec.yaml` hay `injection.dart` của app nào — `composer sync` sinh lại chúng. Sau đó:
+Generator tạo package, thêm vào mọi `app_manifest.yaml` rồi chạy `composer sync` — bước này sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `injection.dart` của từng app. Sau khi bạn tự thêm file:
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib

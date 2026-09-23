@@ -270,7 +270,7 @@ All user-facing text is translated; hardcoded strings are forbidden. See [locali
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-The generator creates the package and adds it to every `app_manifest.yaml`. It also adds the new package to the root `workspace:` list, but no longer touches any app's `pubspec.yaml` or `injection.dart` — `composer sync` regenerates those. Then:
+The generator creates the package, adds it to every `app_manifest.yaml` and runs `composer sync`, which regenerates the root `workspace:` list and each app's `pubspec.yaml` and `injection.dart`. After you add files by hand:
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib

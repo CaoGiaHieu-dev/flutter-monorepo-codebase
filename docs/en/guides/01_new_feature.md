@@ -356,7 +356,7 @@ class HomeNavigatorImpl implements HomeNavigator {
 }
 ```
 
-Callers use `getIt<ProfileNavigator>().toProfile(context)` — never a hardcoded path, never
+Callers in other packages use `getItOrNull<ProfileNavigator>()?.toProfile(context)` (arch_check R8) — never a hardcoded path, never
 `context.go('/profile')`. Always pass `BuildContext` from the calling widget rather than reading it
 from `NavigatorKeys`.
 

@@ -355,7 +355,7 @@ class HomeNavigatorImpl implements HomeNavigator {
 }
 ```
 
-Bên gọi dùng `getIt<ProfileNavigator>().toProfile(context)` — không hardcode path, không
+Bên gọi ở package khác dùng `getItOrNull<ProfileNavigator>()?.toProfile(context)` (arch_check R8) — không hardcode path, không
 `context.go('/profile')`. Luôn truyền `BuildContext` từ widget gọi, đừng lấy từ `NavigatorKeys`.
 
 ---

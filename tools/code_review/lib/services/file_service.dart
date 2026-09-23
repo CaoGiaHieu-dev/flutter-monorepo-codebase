@@ -58,7 +58,7 @@ class FileService {
 
     // Remove duplicates and filter
     final uniqueFiles = files.toSet().toList();
-    return FileAnalyzer.filterFiles(uniqueFiles, excludePatterns);
+    return await FileAnalyzer.filterFiles(uniqueFiles, excludePatterns);
   }
 
   /// Read multiple files content

@@ -14,7 +14,7 @@ Một công cụ đánh giá code thông minh, chính xác được cung cấp b
 ## 🚀 Hướng Dẫn Nhanh
 
 ### 1. Lấy API Key
-Lấy Gemini API key miễn phí của bạn tại: https://makersuite.google.com/app/apikey
+Lấy Gemini API key miễn phí của bạn tại: https://aistudio.google.com/app/apikey
 
 ### 2. Thiết Lập API Key
 **Cách 1: Biến môi trường (Khuyến khích)**
@@ -66,16 +66,18 @@ dart tools/code_review/code_review.dart --changed
 
 - **Loại trừ file**:
   ```bash
-  # Loại trừ các file được tạo tự động
-  dart tools/code_review/code_review.dart --all --exclude "**/*.g.dart"
+  # Loại trừ thêm theo glob
+  dart tools/code_review/code_review.dart --all --exclude "**/routing/**"
   ```
+  File sinh tự động (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gen.dart`, `*.mocks.dart`, `lib/src/gen/**`, `firebase_options_*.dart`), file test và mọi file bị git ignore **luôn** bị loại, dù có `--exclude` hay không.
 
 - **Tùy chọn Ngôn ngữ & Định dạng**:
   ```bash
   # Báo cáo bằng tiếng Việt
   dart tools/code_review/code_review.dart --all --language vi
   ```
-  Báo cáo luôn được ghi ra Markdown (`code_review_reports/code_review_report_<ngày>_<giờ>.md`); `--format` chỉ lưu lựa chọn vào cấu hình.
+  `--language` chỉ áp dụng cho lần chạy đó — không ghi vào `code_review_config.json`; đổi mặc định bằng `--config`.
+  Báo cáo luôn là Markdown (`code_review_reports/code_review_report_<ngày>_<giờ>.md`). `--format` chỉ nhận `markdown` — giữ lại để các script đang truyền `--format markdown` không vỡ.
 
 ### Quy trình làm việc hiệu quả
 
@@ -110,7 +112,6 @@ dart tools/code_review/code_review.dart --changed
   ```
 - **Các tùy chọn cấu hình**:
   - `reportLanguage`: Ngôn ngữ báo cáo (`en`, `vi`, `ja`, `ko`, `zh`, `fr`, `de`, `es`).
-  - `outputFormat`: được lưu nhưng hiện chưa dùng — báo cáo luôn là Markdown.
   - `batchSize`: Số lượng file xử lý song song trong một lô (1-20).
   - `delayBetweenBatches`: Thời gian chờ (ms) giữa các lô để tránh giới hạn API.
 

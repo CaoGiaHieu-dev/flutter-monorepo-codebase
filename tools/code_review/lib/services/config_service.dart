@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../core/constants.dart';
+import 'api_key_service.dart';
 
 /// Service for managing configuration settings
 class ConfigService {
@@ -51,8 +52,17 @@ class ConfigService {
     }
   }
 
-  /// Get report language from config
+  /// A `--language` given for this run; wins over the saved setting and is
+  /// never written back.
+  static String? languageOverride;
+
+  /// Get report language: this run's `--language`, else the config's.
   static String getReportLanguage() {
+    final override = languageOverride;
+    if (override != null &&
+        CodeReviewConstants.supportedLanguages.contains(override)) {
+      return override;
+    }
     final config = getConfig();
     final language = config['reportLanguage'] as String? ?? 'en';
 
@@ -72,24 +82,6 @@ class ConfigService {
 
     final config = getConfig();
     config['reportLanguage'] = language;
-    await saveConfig(config);
-  }
-
-  /// Get output format from config
-  static String getOutputFormat() {
-    final config = getConfig();
-    return config['outputFormat'] as String? ?? 'markdown';
-  }
-
-  /// Set output format
-  static Future<void> setOutputFormat(String format) async {
-    final supportedFormats = ['markdown', 'html', 'json', 'txt'];
-    if (!supportedFormats.contains(format)) {
-      throw ArgumentError('Unsupported format: $format');
-    }
-
-    final config = getConfig();
-    config['outputFormat'] = format;
     await saveConfig(config);
   }
 
@@ -123,7 +115,6 @@ class ConfigService {
   static Map<String, dynamic> _getDefaultConfig() {
     return {
       'reportLanguage': 'en',
-      'outputFormat': 'markdown',
       'includeTimestamps': true,
       'detailedOutput': true,
       'batchSize': 5,
@@ -175,7 +166,9 @@ class ConfigService {
     final languageName =
         CodeReviewConstants.languageNames[languageCode] ?? languageCode;
     stdout.writeln('🌐 Report Language: $languageName ($languageCode)');
-    stdout.writeln('📄 Output Format: ${config['outputFormat']}');
+    stdout.writeln(
+      '📄 Output Format: ${CodeReviewConstants.reportFormat} (the only one implemented)',
+    );
     stdout.writeln('⏰ Include Timestamps: ${config['includeTimestamps']}');
     stdout.writeln('📊 Detailed Output: ${config['detailedOutput']}');
     stdout.writeln('📦 Batch Size: ${config['batchSize']}');
@@ -183,9 +176,9 @@ class ConfigService {
       '⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms',
     );
 
-    if (config.containsKey('geminiApiKey')) {
-      final apiKey = config['geminiApiKey'] as String;
-      stdout.writeln('🔑 API Key: ${apiKey.substring(0, 8)}...');
+    final apiKey = config['geminiApiKey'];
+    if (apiKey is String && apiKey.isNotEmpty) {
+      stdout.writeln('🔑 API Key: ${ApiKeyService.mask(apiKey)}');
     }
     stdout.writeln('');
   }

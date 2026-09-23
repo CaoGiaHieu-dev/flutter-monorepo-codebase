@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:mustache_template/mustache.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import '../../unused_checker/monorepo_helper.dart';
 import 'module_type.dart';
@@ -22,8 +23,11 @@ class PubspecGenerator {
     ).readAsStringSync();
     final template = Template(templateString);
 
+    final environment = _rootEnvironment();
     final values = {
       'moduleName': config.moduleName,
+      'sdkConstraint': environment.sdk,
+      'flutterConstraint': environment.flutter,
       'isFeature': config.type == ModuleType.feature,
       'isDomain': config.type == ModuleType.domain,
       'isData': config.type == ModuleType.data,
@@ -43,6 +47,25 @@ class PubspecGenerator {
     };
 
     return template.renderString(values);
+  }
+
+  /// The root `pubspec.yaml`'s `environment:` — every workspace member
+  /// declares the same one, so a new package copies it instead of carrying a
+  /// literal in the template that drifts from `.fvmrc` (it once said
+  /// `>=3.47.0` while the repo pinned 3.47.4).
+  static ({String sdk, String flutter}) _rootEnvironment() {
+    const fallback = (sdk: '>=3.13.3 <4.0.0', flutter: '>=3.47.4');
+    try {
+      final env = (loadYaml(
+        File('pubspec.yaml').readAsStringSync(),
+      ) as Map)['environment'];
+      if (env is Map && env['sdk'] is String && env['flutter'] is String) {
+        return (sdk: env['sdk'] as String, flutter: env['flutter'] as String);
+      }
+    } catch (_) {
+      // Unreadable root pubspec: fall through to the pinned default.
+    }
+    return fallback;
   }
 
   /// The workspace packages a new module of this type starts with.

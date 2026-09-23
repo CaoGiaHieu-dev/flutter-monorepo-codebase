@@ -13,7 +13,7 @@
 # Anything else is drift: fix the document instead.
 
 # --- (1) Generated ---------------------------------------------------------
-# Written by `dart run build_runner build -d --workspace`. The docs cite it
+# Written by `dart run build_runner build --workspace`. The docs cite it
 # constantly because it is the only place an eager-singleton ordering bug
 # (AGENTS.md §18) is visible.
 apps/mobile/lib/di/injection.config.dart

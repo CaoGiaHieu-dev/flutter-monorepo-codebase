@@ -40,17 +40,61 @@ String _endMarker(String region) => 'composer:end:$region';
 
 void main(List<String> args) {
   if (args.isEmpty || args.contains('--help') || args.contains('-h')) {
-    _printHelp();
+    _printHelp(args.isEmpty ? stderr : stdout);
     exit(args.isEmpty ? 1 : 0);
   }
 
   final command = args.first;
-  final strict = args.contains('--strict');
-  final appFilter = _valueOf(args, '--app');
+  if (!const {'list', 'sync', 'verify'}.contains(command)) {
+    OutputFormatter.printError('Unknown command `$command`.');
+    _printHelp(stderr);
+    exit(64);
+  }
+
+  // Every argument after the command must be one this tool knows. An
+  // unknown flag used to be ignored, so `sync --stritc` ran a lenient sync.
+  var strict = false;
+  String? appFilter;
+  for (var i = 1; i < args.length; i++) {
+    switch (args[i]) {
+      case '--strict':
+        strict = true;
+      case '--app':
+        if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+          OutputFormatter.printError('`--app` needs an app id.');
+          exit(64);
+        }
+        appFilter = args[++i];
+      default:
+        OutputFormatter.printError('Unknown argument `${args[i]}`.');
+        _printHelp(stderr);
+        exit(64);
+    }
+  }
+
   final root = p.posix.normalize(
     Directory.current.path.replaceAll(r'\', '/'),
   );
 
+  try {
+    _run(command, root, appFilter, strict);
+  } on YamlException catch (e) {
+    // A pubspec or manifest that is not valid YAML — a duplicate key is the
+    // usual one. Pub rejects it too, so nothing resolves until it is fixed.
+    final where = e.span == null
+        ? ''
+        : '${_relativeSource(e.span!.sourceUrl, root)}:'
+              '${e.span!.start.line + 1}: ';
+    OutputFormatter.printError(
+      'Refusing to compose: ${where}not valid YAML — ${_trimDot(e.message)}. Pub '
+      'rejects this file as well, so nothing in the workspace resolves until '
+      'it is fixed.',
+    );
+    exit(1);
+  }
+}
+
+void _run(String command, String root, String? appFilter, bool strict) {
   final packages = _discoverPackages(root);
   final apps = _discoverApps(root);
 
@@ -61,24 +105,60 @@ void main(List<String> args) {
     exit(1);
   }
 
+  // Before anything else reports on the tree: a pubspec that pub will not
+  // parse makes every other result moot. An app pubspec that lists a managed
+  // package by hand as well gets the specific refusal from `_sync`.
+  if (_invalidYaml.isNotEmpty && command == 'list') {
+    _reportInvalidYaml(root);
+    exit(1);
+  }
+
   switch (command) {
     case 'list':
-      _list(apps, packages);
+      _list(apps, packages, appFilter);
     case 'sync':
       _sync(root, apps, packages, appFilter, strict, dryRun: false);
     case 'verify':
       _sync(root, apps, packages, appFilter, true, dryRun: true);
-    default:
-      OutputFormatter.printError('Unknown command `$command`.');
-      _printHelp();
-      exit(1);
   }
 }
 
-String? _valueOf(List<String> args, String flag) {
-  final i = args.indexOf(flag);
-  return (i == -1 || i + 1 >= args.length) ? null : args[i + 1];
+/// Pubspecs that failed to parse during discovery, path -> error.
+///
+/// Discovery keeps going past them — reading the `name:` line alone — so the
+/// check that explains the usual cause (a package declared both by hand and
+/// inside the managed region: a duplicate key) still gets to run.
+final Map<String, YamlException> _invalidYaml = {};
+
+void _reportInvalidYaml(String root) {
+  for (final entry in _invalidYaml.entries) {
+    final e = entry.value;
+    final line = e.span == null ? '' : ':${e.span!.start.line + 1}';
+    OutputFormatter.printError(
+      'Refusing to compose: ${p.posix.relative(entry.key, from: root)}$line '
+      'is not valid YAML — ${_trimDot(e.message)}. Pub rejects it as well, so nothing '
+      'in the workspace resolves until it is fixed.',
+    );
+  }
 }
+
+/// `Duplicate mapping key.` -> `Duplicate mapping key`, so the sentence it
+/// is dropped into does not end in `..`.
+String _trimDot(String message) => message.replaceFirst(RegExp(r'\.+$'), '');
+
+String _relativeSource(Uri? source, String root) {
+  if (source == null) return '<unknown>';
+  final path = source.scheme == 'file'
+      ? source.toFilePath().replaceAll(r'\', '/')
+      : source.toString();
+  return p.posix.isAbsolute(path) ? p.posix.relative(path, from: root) : path;
+}
+
+/// `loadYaml` with the file's path attached, so a parse error can name it.
+dynamic _loadYamlFile(String path) => loadYaml(
+  File(path).readAsStringSync(),
+  sourceUrl: Uri.file(p.absolute(path)),
+);
 
 // ---------------------------------------------------------------------------
 // Discovery
@@ -105,13 +185,21 @@ Map<String, String> _discoverPackages(String root) {
         if (skip.contains(name)) continue;
         walk(e);
       } else if (e is File && name == 'pubspec.yaml') {
-        final doc = loadYaml(e.readAsStringSync());
-        if (doc is! YamlMap) continue;
-        final pkg = doc['name'];
+        final path = p.posix.normalize(e.path.replaceAll(r'\', '/'));
+        Object? pkg;
+        try {
+          final doc = _loadYamlFile(path);
+          if (doc is! YamlMap) continue;
+          pkg = doc['name'];
+        } on YamlException catch (error) {
+          _invalidYaml[path] = error;
+          pkg = RegExp(
+            r'^name:\s*([A-Za-z_]\w*)\s*$',
+            multiLine: true,
+          ).firstMatch(e.readAsStringSync())?.group(1);
+        }
         if (pkg is! String) continue;
-        out[pkg] = p.posix.dirname(
-          p.posix.normalize(e.path.replaceAll(r'\', '/')),
-        );
+        out[pkg] = p.posix.dirname(path);
       }
     }
   }
@@ -138,9 +226,9 @@ Set<String> _closure(Iterable<String> seeds, Map<String, String> packages) {
     if (!out.add(pkg)) continue;
     final dir = packages[pkg];
     if (dir == null) continue;
-    final doc = loadYaml(
-      File(p.posix.join(dir, 'pubspec.yaml')).readAsStringSync(),
-    );
+    final path = p.posix.join(dir, 'pubspec.yaml');
+    if (_invalidYaml.containsKey(path)) continue; // reported by the caller
+    final doc = _loadYamlFile(path);
     if (doc is! YamlMap) continue;
     for (final section in const ['dependencies', 'dev_dependencies']) {
       final deps = doc[section];
@@ -175,7 +263,7 @@ List<AppManifest> _discoverApps(String root) {
         if (skip.contains(name)) continue;
         walk(e);
       } else if (e is File && name == 'app_manifest.yaml') {
-        final doc = loadYaml(e.readAsStringSync()) as YamlMap;
+        final doc = _loadYamlFile(e.path) as YamlMap;
         final id = (doc['app'] as YamlMap)['id'] as String;
         out.add(
           AppManifest(
@@ -299,10 +387,12 @@ String _moduleClass(String packageName) {
 /// Checked rather than assumed: `platform_kernel` has no DI module, and naming
 /// it in `injection.dart` would be a compile error.
 ///
-/// Matched **without** the parentheses on purpose. Three packages here pass
-/// arguments — `@InjectableInit.microPackage(ignoreUnregisteredTypesInPackages:
-/// [...])` — and an exact `...()` match silently dropped all three, which is
-/// the kind of omission that only shows up at boot.
+/// Matched **without** the parentheses on purpose. A package may pass
+/// arguments — `core_notifications` declares
+/// `@InjectableInit.microPackage(ignoreUnregisteredTypesInPackages:
+/// ['firebase_core'])`, because the app registers `FirebaseOptions` — and an
+/// exact `...()` match would silently drop it, the kind of omission that only
+/// shows up at boot.
 bool _hasDiModule(String packageDir) {
   final f = File(p.posix.join(packageDir, 'lib', 'di', 'module.dart'));
   return f.existsSync() &&
@@ -419,9 +509,26 @@ String _appDepsBody(
 // Commands
 // ---------------------------------------------------------------------------
 
-void _list(List<AppManifest> apps, Map<String, String> packages) {
-  OutputFormatter.printHeader('Composer', subtitle: '${apps.length} app(s)');
-  for (final app in apps) {
+void _list(
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  String? appFilter,
+) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+  OutputFormatter.printHeader(
+    'Composer',
+    subtitle: '${selected.length} app(s)',
+  );
+  for (final app in selected) {
     final warnings = <String>[];
     final r = _resolve(app, packages, warnings);
     stdout.writeln('  ${app.id}  (${app.kind})  ->  ${app.dir}');
@@ -456,11 +563,32 @@ void _sync(
       ? apps
       : apps.where((a) => a.id == appFilter).toList();
   if (selected.isEmpty) {
-    OutputFormatter.printError('No app matches `--app $appFilter`.');
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+
+  // The specific refusal first: a managed package also declared by hand is
+  // a duplicate key, the usual reason a pubspec stops parsing.
+  for (final app in selected) {
+    final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
+    _refuseHandDeclared(
+      appPubspec,
+      _resolve(app, packages, <String>[]).allPackages.toSet(),
+      root,
+    );
+  }
+  if (_invalidYaml.isNotEmpty) {
+    _reportInvalidYaml(root);
     exit(1);
   }
 
   final warnings = <String>[];
+  // Files whose managed region differs from what the manifest generates:
+  // drift under `verify`, and under `sync` the files actually rewritten —
+  // what the partial-composition warning names, and nothing else.
   final drift = <String>[];
   final workspace = <String>{};
   // Missing packages across *every* app: the root workspace list is written
@@ -501,18 +629,6 @@ void _sync(
     final r = _resolve(app, packages, <String>[]);
 
     final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
-    final clashes = _declaredOutsideManaged(appPubspec, r.allPackages.toSet());
-    if (clashes.isNotEmpty) {
-      OutputFormatter.printError(
-        '${p.posix.relative(appPubspec, from: root)} declares '
-        '${clashes.join(', ')} by hand as well as inside the '
-        '`composer:managed:deps` region. Pub rejects a duplicate key, so '
-        'nothing in the workspace resolves. Delete the hand-written entry — '
-        'the manifest owns it.',
-      );
-      exit(1);
-    }
-
     _write(
       appPubspec,
       '#',
@@ -585,7 +701,7 @@ void _sync(
       '${ordered.length} workspace members.',
     );
     if (missingCount > 0) {
-      _warnPartialComposition(root, selected, missingCount);
+      _warnPartialComposition(root, selected, missingCount, drift);
     }
   }
 }
@@ -602,21 +718,11 @@ void _warnPartialComposition(
   String root,
   List<AppManifest> selected,
   int missingCount,
+  List<String> written,
 ) {
-  final touched = <String>[
-    p.posix.relative(p.posix.join(root, 'pubspec.yaml'), from: root),
-  ];
-  for (final app in selected) {
-    touched.add(
-      p.posix.relative(p.posix.join(app.dir, 'pubspec.yaml'), from: root),
-    );
-    touched.add(
-      p.posix.relative(
-        p.posix.join(app.dir, 'lib', 'di', 'injection.dart'),
-        from: root,
-      ),
-    );
-  }
+  // Only what this run rewrote. Listing every candidate — byte-identical
+  // ones included — told people to `git checkout` files that had not changed.
+  final touched = written.toSet().toList();
 
   stdout.writeln('');
   OutputFormatter.printWarning(
@@ -629,12 +735,38 @@ void _warnPartialComposition(
     'other\n'
     '  modules from the app for everyone.\n',
   );
+  if (touched.isEmpty) {
+    stdout.writeln(
+      '  Files changed by this run: none — they already held this partial\n'
+      '  composition. `git status` shows whether an earlier sync left it there.\n',
+    );
+    return;
+  }
   stdout.writeln('  Files changed:');
   for (final t in touched) {
     stdout.writeln('    $t');
   }
   stdout.writeln('\n  Restore them before you commit:');
   stdout.writeln('    git checkout -- ${touched.join(' ')}\n');
+}
+
+/// Exits with the specific refusal when [pubspecPath] declares a package of
+/// [managed] by hand as well — see [_declaredOutsideManaged].
+void _refuseHandDeclared(
+  String pubspecPath,
+  Set<String> managed,
+  String root,
+) {
+  final clashes = _declaredOutsideManaged(pubspecPath, managed);
+  if (clashes.isEmpty) return;
+  OutputFormatter.printError(
+    '${p.posix.relative(pubspecPath, from: root)} declares '
+    '${clashes.join(', ')} by hand as well as inside the '
+    '`composer:managed:deps` region. Pub rejects a duplicate key, so '
+    'nothing in the workspace resolves. Delete the hand-written entry — '
+    'the manifest owns it.',
+  );
+  exit(1);
 }
 
 /// Packages [managed] that [pubspecPath] also declares *outside* the managed
@@ -703,16 +835,15 @@ void _write(
     return;
   }
   if (updated == current) return;
-  if (dryRun) {
-    drift.add(rel);
-  } else {
+  drift.add(rel);
+  if (!dryRun) {
     file.writeAsStringSync(updated);
     stdout.writeln('    wrote $rel');
   }
 }
 
-void _printHelp() {
-  stdout.writeln('''
+void _printHelp([IOSink? sink]) {
+  (sink ?? stdout).writeln('''
 Composer — generates an app's composition from `app_manifest.yaml`.
 
 USAGE
@@ -728,7 +859,8 @@ COMMANDS
                     Also implies --strict. Use in CI.
 
 OPTIONS
-  --app <id>        Only this app.
+  --app <id>        Only this app (list, sync, verify). The root `workspace:`
+                    list is still computed from every app.
   --strict          A module declared in a manifest but absent from disk is an
                     error instead of a warning. CI runs with this, so a release
                     can never silently ship without a module.

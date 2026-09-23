@@ -17,7 +17,43 @@ import '../shared/toolchain.dart';
 ///   own `lib/firebase/firebase_module.dart`
 /// - `ios/flavors/<flavor>/GoogleService-Info.plist`
 /// - `android/app/src/<flavor>/google-services.json`
+const _usage = '''
+Usage: dart tools/firebase/firebase_config.dart [--app <id>]
+
+Generates one app's per-flavor Firebase configuration with the FlutterFire CLI:
+  <app>/lib/firebase/firebase_options_<flavor>.dart
+  <app>/ios/flavors/<flavor>/GoogleService-Info.plist
+  <app>/android/app/src/<flavor>/google-services.json
+
+Options:
+  --app <id>   The app to configure (its app_manifest.yaml `app.id`). Required
+               when the workspace holds more than one app.
+  -h, --help   Show this help.
+
+Interactive: it prompts for the Firebase project ID, the base bundle ID and the
+flavors. Requires the Firebase CLI, logged in (`firebase login`), and installs
+the FlutterFire CLI through `dart pub global activate` when it is missing.''';
+
+/// How many times an unauthenticated run offers `firebase login` before it
+/// gives up. `firebase login` exits 0 without logging in when it cannot open
+/// a prompt, so an unbounded retry loop never ended.
+const _maxLoginAttempts = 2;
+
 void main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(_usage);
+    return;
+  }
+  for (var i = 0; i < args.length; i++) {
+    if (args[i] == '--app') {
+      i++; // its value; selectApp validates it
+      continue;
+    }
+    stderr.writeln('[ERROR] Unknown argument: ${args[i]}');
+    stderr.writeln(_usage);
+    exit(64);
+  }
+
   stdout.writeln('==========================================');
   stdout.writeln('    FlutterFire Config Setup Script');
   stdout.writeln('==========================================');
@@ -41,26 +77,48 @@ void main(List<String> args) async {
     );
   }
 
+  // The project ID, bundle ID and flavors are prompted for — there is no
+  // flag form — so a run without a terminal could only fail later.
+  if (!stdin.hasTerminal) {
+    stderr.writeln(
+      '[X] This script is interactive and stdin is not a terminal. Run it '
+      'from a terminal, after `firebase login`.',
+    );
+    exit(1);
+  }
+
   reportToolchain();
   final dartCmd = dartExecutable;
 
-  // 1. Check if Firebase CLI is installed
+  // 1. The Firebase CLI is a global npm package. Installing it is the
+  // user's call, not this script's.
   if (!_isCommandAvailable('firebase')) {
-    stdout.writeln('[!] Firebase CLI not found. Installing via npm...');
-    await _runCommand('npm', ['install', '-g', 'firebase-tools']);
+    stderr.writeln('[X] Firebase CLI (`firebase`) not found in PATH.');
+    stderr.writeln('    Install it, then log in and re-run this script:');
+    stderr.writeln('      npm install -g firebase-tools');
+    stderr.writeln(
+      '      (or see https://firebase.google.com/docs/cli#install_the_firebase_cli)',
+    );
+    stderr.writeln('      firebase login');
+    exit(1);
   }
 
   // Check login status
   stdout.writeln('Checking Firebase login status...');
-  while (true) {
-    final loginCheck = await Process.run('firebase', [
-      'projects:list',
-    ], runInShell: true);
-    if (loginCheck.exitCode == 0) {
-      break;
+  var attempts = 0;
+  while (!await _isLoggedIn()) {
+    if (attempts == _maxLoginAttempts) {
+      stderr.writeln(
+        '[X] Still not logged in to Firebase after $attempts '
+        '`firebase login` attempt(s). Run `firebase login` yourself, check '
+        '`firebase projects:list` works, then re-run this script.',
+      );
+      exit(1);
     }
+    attempts++;
     stdout.writeln(
-      '[!] Firebase is not logged in or session expired. Running \'firebase login\'...',
+      '[!] Firebase is not logged in or session expired. Running '
+      '\'firebase login\' (attempt $attempts of $_maxLoginAttempts)...',
     );
     await _runCommand('firebase', ['login']);
   }
@@ -155,6 +213,14 @@ void main(List<String> args) async {
   stdout.writeln('==========================================');
   stdout.writeln('[V] All configurations completed successfully!');
   stdout.writeln('==========================================');
+}
+
+/// `firebase projects:list` succeeds only with a valid session.
+Future<bool> _isLoggedIn() async {
+  final result = await Process.run('firebase', [
+    'projects:list',
+  ], runInShell: true);
+  return result.exitCode == 0;
 }
 
 bool _isCommandAvailable(String command) {

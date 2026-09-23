@@ -5,6 +5,8 @@ part 'cache_entry_entity.freezed.dart';
 /// Domain entity for a locally cached key-value row stored in Drift.
 @freezed
 abstract class CacheEntryEntity with _$CacheEntryEntity {
+  const CacheEntryEntity._();
+
   const factory CacheEntryEntity({
     required String key,
     required String value,

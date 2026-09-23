@@ -24,7 +24,11 @@ export 'package:flutter_bloc/flutter_bloc.dart';
 ///   emit(const BlocViewState.loading());
 ///   final result = await _useCase(const NoParams());
 ///   result.when(
-///     success: (data) => emit(BlocViewState.success(data)),
+///     // `Result.success` carries a nullable payload: decide what "no data"
+///     // means for this screen instead of forcing it non-null.
+///     success: (data) => data == null
+///         ? emit(const BlocViewState.initial())
+///         : emit(BlocViewState.success(data)),
 ///     failure: (f) => emit(BlocViewState.error(f)),
 ///     none: () => emit(const BlocViewState.initial()),
 ///     cancel: () {},

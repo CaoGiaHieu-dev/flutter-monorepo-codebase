@@ -248,19 +248,35 @@ Set<String> _typesDeclaredIn(String packageRoot) {
   return out;
 }
 
-/// Maps each contract type to the feature packages that implement it.
+/// The module a package belongs to — `auth` for `modules/auth/data` — or
+/// `null` for a package outside `modules/`.
 ///
-/// A contract implemented only by a feature is a contract whose registration
-/// disappears with that feature — which is exactly the set R8 governs. A
-/// contract implemented in the app shell (`IThemeStorage`) is always present,
-/// so it is deliberately not in this map and never trips the rule.
-Map<String, Set<String>> _featureImplementers(
+/// Everything under `modules/` is removable, and a module is removed whole:
+/// `remove_sample.dart auth` takes its domain, data and feature packages
+/// together. So the module, not the single package, is what owns a contract.
+String? _moduleOf(MonorepoPackage pkg) {
+  final segments = p.posix.split(pkg.rootPath.replaceAll(r'\', '/'));
+  final i = segments.lastIndexOf('modules');
+  return (i == -1 || i + 1 >= segments.length) ? null : segments[i + 1];
+}
+
+/// Maps each contract type to the modules whose packages implement it.
+///
+/// A contract implemented only inside `modules/` is a contract whose
+/// registration disappears with that module — which is exactly the set R8
+/// governs. That includes a data-layer implementer: `IAuthSessionGateway`
+/// lives in `data_auth`, and a throwing lookup of it crashes a build
+/// without auth just as surely as one of a feature's contract. A contract
+/// implemented in the app shell (`IThemeStorage`) is always present, so it
+/// is deliberately not in this map and never trips the rule.
+Map<String, Set<String>> _moduleImplementers(
   Iterable<MonorepoPackage> packages,
   Set<String> contractTypes,
 ) {
   final out = <String, Set<String>>{};
   for (final pkg in packages) {
-    if (_layerOf(pkg) != 'features') continue;
+    final module = _moduleOf(pkg);
+    if (module == null) continue;
     for (final file in _dartFilesUnderLib(pkg.rootPath)) {
       if (_isGenerated(file)) continue;
       final content = File(file).readAsStringSync();
@@ -268,7 +284,7 @@ Map<String, Set<String>> _featureImplementers(
         for (final raw in m.group(1)!.split(',')) {
           final name = raw.trim();
           if (contractTypes.contains(name)) {
-            (out[name] ??= <String>{}).add(pkg.name);
+            (out[name] ??= <String>{}).add(module);
           }
         }
       }
@@ -313,8 +329,8 @@ void main(List<String> args) {
   final warnings = <Violation>[];
 
   // R8 needs a repo-wide view before the per-package pass: which `core_di`
-  // contracts are implemented *only* by a feature, and therefore vanish when
-  // that feature is removed.
+  // contracts are implemented *only* inside a module, and therefore vanish
+  // when that module is removed.
   // No `firstOrNull` here: it is a `package:collection` extension and this
   // tool deliberately depends only on `dart:io` and `package:path`.
   MonorepoPackage? coreDi;
@@ -326,7 +342,7 @@ void main(List<String> args) {
   }
   final removableContracts = coreDi == null
       ? const <String, Set<String>>{}
-      : _featureImplementers(
+      : _moduleImplementers(
           packages.values,
           _typesDeclaredIn(coreDi.rootPath),
         );
@@ -557,9 +573,9 @@ void main(List<String> args) {
 
     // --- R8: removable contracts resolve optionally ------------------------
     // `getAll<T>()` throws when `T` is unregistered and `getIt<T>()` throws
-    // when nothing implements it. For a contract whose only implementer is a
-    // feature package, that is a crash the moment the feature is removed —
-    // and features are removable by design (AGENTS §22). The failure is
+    // when nothing implements it. For a contract whose only implementers
+    // live in a module, that is a crash the moment the module is removed —
+    // and modules are removable by design (AGENTS §22). The failure is
     // invisible to `flutter analyze` because the lookup type-checks fine; it
     // surfaces at runtime, on whichever screen happens to call it.
     for (final file in files) {
@@ -571,16 +587,17 @@ void main(List<String> args) {
           final type = m.group(1)!;
           final owners = removableContracts[type];
           if (owners == null) continue;
-          // The owning feature may resolve its own contract eagerly: if the
-          // package is in the build at all, so is its registration.
-          if (owners.contains(pkg.name)) continue;
+          // The owning module may resolve its own contract eagerly: if one
+          // of its packages is in the build, so is the registration.
+          final module = _moduleOf(pkg);
+          if (module != null && owners.contains(module)) continue;
 
           blocking.add(
             Violation(
               'R8',
               '${p.posix.relative(file, from: root)}:${i + 1}',
-              '`$type` is implemented only by ${owners.join(', ')}, which is '
-                  'a removable feature — a throwing lookup here crashes any '
+              '`$type` is implemented only in modules/${owners.join(', modules/')}, '
+                  'which is removable — a throwing lookup here crashes any '
                   'build without it. Use `getItOrNull<$type>()` (or '
                   '`getAllOrEmpty`) and handle the null case.',
             ),
@@ -770,11 +787,12 @@ RULES CHECKED
       Checked in files that mention core_responsive (in practice: import it).
 
   R8  Removable contracts resolve optionally
-      A `core_di` contract implemented in modules/*/feature disappears when
-      that feature is removed. `getIt<T>()` and `getAll<T>()` throw in that
-      case, so such a type must be resolved with `getItOrNull<T>()` /
-      `getAllOrEmpty<T>()` and a fallback. The implementing feature may still
-      resolve its own contract eagerly.
+      A `core_di` contract implemented only under modules/ (any layer — a
+      data package's gateway as much as a feature's navigator) disappears
+      when that module is removed. `getIt<T>()` and `getAll<T>()` throw in
+      that case, so such a type must be resolved with `getItOrNull<T>()` /
+      `getAllOrEmpty<T>()` and a fallback. Packages of the implementing
+      module may still resolve its contracts eagerly.
       Invisible to `flutter analyze`: the lookup type-checks, then crashes at
       runtime on whichever screen calls it.
 

@@ -6,7 +6,12 @@ import 'package:provider_state_management/provider_state_management.dart';
 class {{pascalNameInput}}Provider extends BaseProvider<Object> {
   {{pascalNameInput}}Provider();
 
-  Future<void> init() async {
+  /// Called once, right after construction — `BaseProvider` schedules it.
+  /// A method with any other name would never run, and the page would show
+  /// its loading state forever.
+  @override
+  Future<void> initialize() async {
+    await super.initialize();
     await executeOperation(
       OperationConfig(
         operation: () async {

@@ -83,7 +83,10 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: context.colorScheme.primary, width: 2),
+        borderSide: BorderSide(
+          color: context.colorScheme.primary,
+          width: context.r(2),
+        ),
       ),
     );
   }
@@ -135,7 +138,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
                 ? SizedBox(
                     width: context.w(20),
                     height: context.h(20),
-                    child: const CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: context.r(2)),
                   )
                 : Text(
                     widget.submitButtonText,

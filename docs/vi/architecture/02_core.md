@@ -241,7 +241,7 @@ Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng h
 | Kết nối | `src/connection/` | `DatabaseConnectionFactory` — phân giải file, executor nền |
 | **Truy cập** | `src/access/` | `IDatabaseHandle`, `DatabaseHandle` |
 | **Migration** | `src/migration/` | `IDatabaseMigration`, `DatabaseMigrationRunner`, `driftMigrationStrategy` |
-| Constants | `src/utils/database_constants.dart` | `DEFAULT_READ_POOL`, `BUSY_TIMEOUT_MS`, `CORRUPT_FILE_SUFFIX`, corruption / environment error markers |
+| Constants | `src/utils/database_constants.dart` | `DEFAULT_READ_POOL`, `BUSY_TIMEOUT_MS`, `CORRUPT_FILE_SUFFIX`, các marker lỗi hỏng file / lỗi môi trường |
 
 Drift phân giải `@DriftDatabase(tables:)` lúc biên dịch và bắt buộc DAO phải là `part of` thư viện database của nó, nên một database khai ở đây sẽ phải gọi tên bảng của bất kỳ package nào sở hữu chúng. Giữ database thuộc về từng package mua được một tính chất: xoá package là xoá luôn database của nó, và không package nào khác với tới được các dòng dữ liệu đó. Cái giá phải trả là SQL không join xuyên ranh giới package — vượt qua một bounded context là việc của tầng repository, không phải của một câu truy vấn.
 

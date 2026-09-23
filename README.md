@@ -87,7 +87,7 @@ graph TD
 > domain package declares the Flutter SDK — `AppFailure` lives in `domain_core` alongside
 > `Result<T>`. Core may depend on Domain — Domain is the innermost ring, so that direction is
 > correct. Exactly **three** such edges are approved: `platform_kernel → domain_core`,
-> `provider_state_management → domain_core`
+> `provider_state_management → domain_core` and
 > `bloc_state_management → domain_core`. They are hard-coded in
 > `tools/arch_check/check.dart` and printed on every run, each with its reason; a fourth fails the
 > build. See [`reference/01_rules.md`](docs/en/reference/01_rules.md).

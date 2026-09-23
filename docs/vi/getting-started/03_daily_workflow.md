@@ -37,7 +37,7 @@ Chạy mỗi khi bạn thêm, xoá hoặc sửa bất kỳ thứ nào sau đây:
 | `@JsonSerializable`, `fromJson` / `toJson` | `json_serializable` | `*.g.dart` |
 | `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `apps/mobile/lib/di/injection.config.dart` |
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
-| `@DriftDatabase`, `@DriftAccessor`, thêm bảng | `drift_dev` | `<tên>_database.g.dart` (ví dụ `cache_database.g.dart`) |
+| `@DriftDatabase`, `@DriftAccessor`, thêm bảng | `drift_dev` | `<tên>_database.g.dart`, cạnh file database của bạn (ví dụ `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
 | Thêm asset mới vào `platform/base_ui/assets/` | `flutter_gen_runner` (chỉ `core_base_ui` khai) | `lib/src/gen/assets.gen.dart` |
 

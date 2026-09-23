@@ -18,7 +18,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 |:---|:---|
 | `domain_*` | Use case, entity, repository interface |
 | `core_di` | Hợp đồng Navigator / action handler / routing / stream |
-| `core_common` | Hằng số, `AppFailure`, helper, các hàm `getIt` |
+| `core_common` | Hằng số, `ErrorHandler`, helper, các hàm `getIt` — và bản re-export `AppFailure` từ `domain_core` |
 | `core_base_ui` | Design token, theme, `ThemeProvider` / `LanguageProvider` |
 | `core_responsive` | Extension scale trên `BuildContext` (`context.w/h/r/sp`) — bắt buộc với mọi file có đặt kích thước widget; `context.adaptive`, `AdaptiveLayout` và các widget thích ứng khác cho màn hình có layout đổi theo cửa sổ |
 | `provider_state_management` **hoặc** `bloc_state_management` | Tuỳ hướng state feature chọn |
@@ -156,7 +156,7 @@ Widget build(BuildContext context) {
 
 Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả.
 
-Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — điện thoại xoay ngang, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md).
+Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — điện thoại xoay ngang, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-layout-thích-ứng-tablet-máy-gập-chia-đôi-màn-hình).
 
 ### Dashboard KHÔNG được phép
 

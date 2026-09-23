@@ -111,6 +111,9 @@ flutterfire configure \
 
 Phải có đủ **cả ba** file kể cả khi bạn chỉ định chạy `dev` — vì `firebase_module.dart` import cả ba một cách vô điều kiện, thiếu file `prod` là bản `dev` cũng gãy.
 
+> [!IMPORTANT]
+> Ba file Dart là đủ để **biên dịch** — analyze và test (CI tạo stub đúng cho mục đích đó). **Build app Android** còn cần `apps/mobile/android/app/src/<flavor>/google-services.json`: thiếu nó, plugin Gradle Google Services sẽ fail ở `process<Flavor>DebugGoogleServices`. Script helper tự ghi file này; các lệnh thủ công ở trên thì không, trừ khi bạn thêm `--android-package-name` (`com.example.codebase.dev`, `.stg`, prod thì không có hậu tố) và `--android-out=android/app/src/<flavor>/google-services.json`.
+
 ---
 
 ## 4. Chạy code generation

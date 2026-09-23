@@ -111,6 +111,9 @@ flutterfire configure \
 
 All three files must exist even if you only intend to run `dev` — `firebase_module.dart` imports all three unconditionally, so a missing `prod` file breaks the `dev` build too.
 
+> [!IMPORTANT]
+> The three Dart files are enough to **compile** — analyze and tests (CI stubs them for exactly that). **Building an Android app** also needs `apps/mobile/android/app/src/<flavor>/google-services.json`: without it the Google Services Gradle plugin fails `process<Flavor>DebugGoogleServices`. The helper script writes it; the manual commands above do not unless you add `--android-package-name` (`com.example.codebase.dev`, `.stg`, none for prod) and `--android-out=android/app/src/<flavor>/google-services.json`.
+
 ---
 
 ## 4. Run code generation

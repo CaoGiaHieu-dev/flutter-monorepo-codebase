@@ -430,8 +430,21 @@ void _sync(
       workspace.add(p.posix.relative(packages[pkg]!, from: root));
     }
 
+    final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
+    final clashes = _declaredOutsideManaged(appPubspec, r.allPackages.toSet());
+    if (clashes.isNotEmpty) {
+      OutputFormatter.printError(
+        '${p.posix.relative(appPubspec, from: root)} declares '
+        '${clashes.join(', ')} by hand as well as inside the '
+        '`composer:managed:deps` region. Pub rejects a duplicate key, so '
+        'nothing in the workspace resolves. Delete the hand-written entry — '
+        'the manifest owns it.',
+      );
+      exit(1);
+    }
+
     _write(
-      p.posix.join(app.dir, 'pubspec.yaml'),
+      appPubspec,
       '#',
       'deps',
       _appDepsBody(r.allPackages, packages, app.dir),
@@ -541,6 +554,48 @@ void _warnPartialComposition(
   }
   stdout.writeln('\n  Restore them before you commit:');
   stdout.writeln('    git checkout -- ${touched.join(' ')}\n');
+}
+
+/// Packages [managed] that [pubspecPath] also declares *outside* the managed
+/// region, under `dependencies:` or `dev_dependencies:`.
+///
+/// Exists because composer once produced exactly this: `extra_dependencies`
+/// put `core_responsive` into the generated block while the hand-written
+/// block below still had it. YAML parsers disagree about duplicate keys —
+/// several keep the last one silently — but pub rejects them, so the whole
+/// workspace stopped resolving while every check written against a lenient
+/// parser still read clean.
+List<String> _declaredOutsideManaged(String pubspecPath, Set<String> managed) {
+  final file = File(pubspecPath);
+  if (!file.existsSync()) return const [];
+
+  final top = RegExp(r'^([A-Za-z_]\w*):');
+  final dep = RegExp(r'^  ([a-z_][a-z0-9_]*):');
+  final clashes = <String>{};
+  var section = '';
+  var inManaged = false;
+
+  for (final line in file.readAsLinesSync()) {
+    if (line.contains('composer:managed:deps')) {
+      inManaged = true;
+      continue;
+    }
+    if (line.contains('composer:end:deps')) {
+      inManaged = false;
+      continue;
+    }
+    if (inManaged) continue;
+
+    final t = top.firstMatch(line);
+    if (t != null) {
+      section = t.group(1)!;
+      continue;
+    }
+    if (section != 'dependencies' && section != 'dev_dependencies') continue;
+    final d = dep.firstMatch(line);
+    if (d != null && managed.contains(d.group(1))) clashes.add(d.group(1)!);
+  }
+  return clashes.toList()..sort();
 }
 
 void _write(

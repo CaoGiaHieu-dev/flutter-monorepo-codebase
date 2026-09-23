@@ -80,6 +80,8 @@ Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No
 
 `--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find — which is what lets a developer work with only their own module checked out.
 
+Both `sync` and `verify` also **refuse** an app pubspec that declares a managed package by hand outside the markers. Pub rejects a duplicate key, so that one mistake stops the whole workspace resolving — and it is exactly the mistake composer itself once made.
+
 A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block: the three committed files it just rewrote, and the `git checkout --` line that restores them. The composition it wrote is correct locally and wrong to commit, and CI Gate 0 catches it either way, because `verify` regenerates from the manifest on a runner where every module is present. See [`12_module_isolation.md`](../guides/12_module_isolation.md).
 
 ---

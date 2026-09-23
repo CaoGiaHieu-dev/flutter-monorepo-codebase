@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:jumping_dot/jumping_dot.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:refresh_sticky/refresh_sticky.dart';
@@ -73,7 +74,7 @@ class RefreshStickyCustom extends StatelessWidget {
       reverse: reverse,
 
       /// The size of the refresh indicator in pixels.
-      size: 30,
+      size: context.r(30),
 
       /// The controller for the scroll view.
       controller: controller,
@@ -89,10 +90,10 @@ class RefreshStickyCustom extends StatelessWidget {
           color: context.primary,
 
           /// The radius of the dots.
-          radius: 10,
+          radius: context.r(10),
 
           /// The vertical offset of the dots.
-          verticalOffset: 10,
+          verticalOffset: context.h(10),
 
           /// The number of dots to display.
           numberOfDots: 3,
@@ -113,7 +114,7 @@ class RefreshStickyCustom extends StatelessWidget {
                 color: context.primary,
 
                 /// The radius of the dot.
-                radius: 10,
+                radius: context.r(10),
               ),
             ),
           ).toList(),

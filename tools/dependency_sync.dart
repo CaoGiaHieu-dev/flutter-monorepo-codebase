@@ -1,6 +1,23 @@
 import 'dart:io';
 
 Future<void> main(List<String> arguments) async {
+  if (arguments.contains('--help') || arguments.contains('-h')) {
+    stdout.writeln('''
+Dependency Sync — aligns every workspace pubspec with pubspec_dependencies.yaml.
+
+USAGE
+  dart tools/dependency_sync.dart           rewrite drifted versions, then pub get
+  dart tools/dependency_sync.dart --check   report drift only; exit 1 on any (CI Gate 4)
+''');
+    exit(0);
+  }
+  // An unknown flag used to fall through to a real sync — `--help` included,
+  // which rewrote pubspecs and ran `pub get` for someone asking for usage.
+  final unknown = arguments.where((a) => a != '--check').toList();
+  if (unknown.isNotEmpty) {
+    stderr.writeln('❌ Unknown argument(s): ${unknown.join(' ')}. See --help.');
+    exit(64);
+  }
   final bool isCheckMode = arguments.contains('--check');
   stdout.writeln(
     '================================================================',

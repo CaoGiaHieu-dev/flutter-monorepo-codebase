@@ -47,6 +47,12 @@ void main(List<String> args) {
   }
 
   var dir = Directory(targetDir);
+  // Ask for another path only when a person is there to answer. An agent or
+  // a CI step passing a wrong path used to block forever on stdin.
+  if (!dir.existsSync() && (args.isNotEmpty || !stdin.hasTerminal)) {
+    stderr.writeln('[ERROR] Thư mục "$targetDir" không tồn tại!');
+    exit(2);
+  }
   while (!dir.existsSync()) {
     stderr.writeln('[ERROR] Thư mục "$targetDir" không tồn tại!');
     stdout.write(

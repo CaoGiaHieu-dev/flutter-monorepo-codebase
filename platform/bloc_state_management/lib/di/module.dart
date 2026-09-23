@@ -1,4 +1,4 @@
 import 'package:injectable/injectable.dart';
 
-@InjectableInit.microPackage(ignoreUnregisteredTypesInPackages: ['domain'])
+@InjectableInit.microPackage()
 void initMicroPackage() {}

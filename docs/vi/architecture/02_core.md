@@ -39,7 +39,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Extension | `src/extensions/` | `Dio` |
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transition |
-| Utils | `src/utils/` | `AppUtils`, `Debounce`, `DownloadImage`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
+| Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
 
 ### Những gì *không* thuộc về đây, và vì sao
 
@@ -167,7 +167,6 @@ class SharedUiConstants {
 
   static const Duration DIALOG_TRANSITION_DURATION = Duration(milliseconds: 200);
   static const Duration TOAST_DURATION = Duration(seconds: 3);
-  static const Duration MEDIA_ERROR_TOAST_DURATION = Duration(seconds: 2);
   static const Color DIALOG_BARRIER_COLOR = Color(0x80000000);
 }
 ```

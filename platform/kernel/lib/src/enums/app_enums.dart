@@ -14,15 +14,6 @@ enum UpdateStatus {
   invalidVersion,
 }
 
-/// WebSocket connection state
-enum SocketState {
-  /// Socket is connected
-  connected,
-
-  /// Socket is disconnected
-  disconnected,
-}
-
 /// Application build flavors/environments
 @JsonEnum(alwaysCreate: true)
 enum Flavor {

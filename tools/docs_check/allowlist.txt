@@ -27,6 +27,9 @@ apps/mobile/env.prod
 # Android release signing. `01_cicd.md` explains how CI materialises both.
 apps/mobile/android/keystore.jks
 apps/mobile/android/key.properties
+# Per-flavor Firebase config written by tools/firebase/firebase_config.dart;
+# gitignored because it carries the project's own Firebase identifiers.
+apps/mobile/android/app/src/<flavor>/google-services.json
 # A Gemini API key the code_review tool saves when asked to; gitignored.
 tools/code_review/.gemini_api_key
 # Fastlane credentials. The repo ships `apps/mobile/fastlane/Config.example.yaml`.

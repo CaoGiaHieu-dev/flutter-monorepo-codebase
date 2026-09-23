@@ -346,7 +346,7 @@ Future<void> _loadAvatar() async {
 
 ❌ **Wrong** — an internal override silently discards the caller's value:
 ```dart
-// platform/ui_kit/lib/navigation/app_bar_custom.dart
+// what platform/ui_kit/lib/navigation/app_bar_custom.dart once did
 @override
 double? get leadingWidth => context.w(64);   // overrides super.leadingWidth forever
 ```

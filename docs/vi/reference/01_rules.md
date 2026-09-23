@@ -346,7 +346,7 @@ Future<void> _loadAvatar() async {
 
 ❌ **Sai** — một lệnh ghi đè bên trong âm thầm vứt bỏ giá trị của caller:
 ```dart
-// platform/ui_kit/lib/navigation/app_bar_custom.dart
+// điều platform/ui_kit/lib/navigation/app_bar_custom.dart từng làm
 @override
 double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩnh viễn
 ```

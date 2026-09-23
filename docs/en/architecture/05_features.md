@@ -144,7 +144,7 @@ class HomeNavDestination extends INavDestinationModule {
   String get path => HomePath.HOME;
 
   @override
-  List<RouteBase> get routes => [$homeShellRoute];
+  List<RouteBase> get routes => [$homeRoute];
 
   @override
   NavDestination destination(BuildContext context) => NavDestination(

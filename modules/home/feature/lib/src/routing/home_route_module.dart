@@ -9,18 +9,9 @@ import '../utils/home_path.dart';
 
 part 'home_route_module.g.dart';
 
-@TypedShellRoute<HomeShellRoute>(
-  routes: [TypedGoRoute<HomeRoute>(path: HomePath.HOME)],
-)
-class HomeShellRoute extends ShellRouteData {
-  const HomeShellRoute();
-
-  @override
-  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
-    return navigator;
-  }
-}
-
+/// SAMPLE — a tab's route is an ordinary typed route; the shell turns each
+/// destination's routes into a `StatefulShellBranch`.
+@TypedGoRoute<HomeRoute>(path: HomePath.HOME)
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   const HomeRoute();
 

@@ -64,11 +64,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 > # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
->     path: ../core
+>     path: ../../../platform/domain_core
 >   get_it: ^9.2.1
 >   injectable: ^3.0.0
->   freezed_annotation: ^3.1.0
->   json_annotation: ^4.12.0
+>   freezed_annotation: "^3.1.0"
+>   json_annotation: "^4.12.0"
 > ```
 >
 > Bản thân `domain_core` **không** có phụ thuộc workspace nào cả. Vì vậy một dòng `import 'package:flutter/…'` thêm vào file domain sẽ không phân giải được, thay vì lặng lẽ biên dịch trót lọt. Hãy giữ nguyên như thế: đừng bao giờ thêm `flutter` hay một package `core_*` vào pubspec của domain.
@@ -293,9 +293,6 @@ abstract class UserEntity with _$UserEntity {
     String? email,
     // …
   }) = _UserEntity;
-
-  factory UserEntity.fromJson(Map<String, dynamic> json) =>
-      _$UserEntityFromJson(json);
 }
 ```
 

@@ -126,9 +126,9 @@ Two files. First the routes themselves — real code from
 
 ```dart
 import 'package:core_common/core_common.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../bloc/home_profile_bloc.dart';
 import '../pages/pages.dart';
@@ -136,18 +136,9 @@ import '../utils/home_path.dart';
 
 part 'home_route_module.g.dart';
 
-@TypedShellRoute<HomeShellRoute>(
-  routes: [TypedGoRoute<HomeRoute>(path: HomePath.HOME)],
-)
-class HomeShellRoute extends ShellRouteData {
-  const HomeShellRoute();
-
-  @override
-  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
-    return navigator;
-  }
-}
-
+/// SAMPLE — a tab's route is an ordinary typed route; the shell turns each
+/// destination's routes into a `StatefulShellBranch`.
+@TypedGoRoute<HomeRoute>(path: HomePath.HOME)
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   const HomeRoute();
 
@@ -183,7 +174,7 @@ class HomeNavDestination extends INavDestinationModule {
   String get path => HomePath.HOME;
 
   @override
-  List<RouteBase> get routes => [$homeShellRoute];
+  List<RouteBase> get routes => [$homeRoute];
 
   @override
   NavDestination destination(BuildContext context) => NavDestination(

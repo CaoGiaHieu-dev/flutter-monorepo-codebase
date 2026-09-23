@@ -64,11 +64,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 > # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
->     path: ../core
+>     path: ../../../platform/domain_core
 >   get_it: ^9.2.1
 >   injectable: ^3.0.0
->   freezed_annotation: ^3.1.0
->   json_annotation: ^4.12.0
+>   freezed_annotation: "^3.1.0"
+>   json_annotation: "^4.12.0"
 > ```
 >
 > `domain_core` itself has **no** workspace dependency at all. An `import 'package:flutter/…'` added to a domain file therefore fails to resolve rather than quietly compiling. Keep it that way: never add `flutter` or a `core_*` package to a domain pubspec.
@@ -291,9 +291,6 @@ abstract class UserEntity with _$UserEntity {
     String? email,
     // …
   }) = _UserEntity;
-
-  factory UserEntity.fromJson(Map<String, dynamic> json) =>
-      _$UserEntityFromJson(json);
 }
 ```
 

@@ -4,6 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _design = Size(360, 690);
 
+/// An unbounded [ResponsiveInit] around [child].
+///
+/// These tests check that the context extensions reach the right axis and
+/// that the scope rebuilds its dependents, so they lift the bounds: under the
+/// down-only default every factor above 1 flattens to 1, and a doubled width
+/// would be indistinguishable from an unchanged one. The bounds themselves
+/// are covered in `scale_policy_test.dart`.
+Widget _init(Widget child, {bool minTextAdapt = false}) => ResponsiveInit(
+  designSize: _design,
+  minTextAdapt: minTextAdapt,
+  scaleBounds: const ScaleBounds.unbounded(),
+  textScaleBounds: const ScaleBounds.unbounded(),
+  child: Directionality(textDirection: TextDirection.ltr, child: child),
+);
+
 /// Pumps [child] under a [ResponsiveInit] at a known surface size.
 Future<void> _pumpAt(
   WidgetTester tester,
@@ -16,13 +31,7 @@ Future<void> _pumpAt(
     ..devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(
-    ResponsiveInit(
-      designSize: _design,
-      minTextAdapt: minTextAdapt,
-      child: Directionality(textDirection: TextDirection.ltr, child: child),
-    ),
-  );
+  await tester.pumpWidget(_init(child, minTextAdapt: minTextAdapt));
 }
 
 void main() {
@@ -85,12 +94,7 @@ void main() {
 
     // Resize: the scope publishes new metrics, the dependent rebuilds.
     tester.view.physicalSize = const Size(720, 690);
-    await tester.pumpWidget(
-      ResponsiveInit(
-        designSize: _design,
-        child: Directionality(textDirection: TextDirection.ltr, child: probe()),
-      ),
-    );
+    await tester.pumpWidget(_init(probe()));
 
     expect(widths, [10.0, 20.0]);
   });

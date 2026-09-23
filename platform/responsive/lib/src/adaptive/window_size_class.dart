@@ -73,8 +73,12 @@ class ResponsiveBreakpoints {
          'Height breakpoints must be positive and ascending.',
        );
 
-  /// The Material 3 window size classes.
-  static const ResponsiveBreakpoints material3 = ResponsiveBreakpoints();
+  /// The Material 3 window size classes — the same values as the default
+  /// constructor, named for call sites that want to say so.
+  ///
+  /// A named constructor rather than a `static const`: arch_check R4 keeps
+  /// public constants in `utils/`.
+  const ResponsiveBreakpoints.material3() : this();
 
   /// First width of [WindowSizeClass.medium].
   final double medium;

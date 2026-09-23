@@ -132,13 +132,12 @@ class ThemeProvider extends ChangeNotifier
 
     /// Scales one font size through the context-aware extension.
     ///
-    /// `spMin`, not `sp`: text shrinks on a screen narrower than the design
-    /// but never grows past it. Every app shares this theme, desktop ones
-    /// included, and `sp` scales by width — a 1280-wide window would triple
-    /// every font. Null-tolerant so the `TextStyle.fontSize` chain stays
-    /// readable.
+    /// `sp`, so type follows the app's `textScaleBounds`: by default it
+    /// shrinks below the design width and never grows past it, and a window
+    /// class whose `ResponsiveProfile` opts into growth gets bigger type too.
+    /// Null-tolerant so the `TextStyle.fontSize` chain stays readable.
     double? scaleFont(double? size) =>
-        size == null ? null : context.spMin(size);
+        size == null ? null : context.sp(size);
 
     /// Scales the font sizes of the text theme to the device's screen size.
     final textTheme = defaultTheme

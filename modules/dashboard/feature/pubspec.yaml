@@ -13,6 +13,8 @@ dependencies:
   material_ui: ^1.1.1
   core_di:
     path: ../../../platform/di
+  core_responsive:
+    path: ../../../platform/responsive
   platform_kernel:
     path: ../../../platform/kernel
   flutter:

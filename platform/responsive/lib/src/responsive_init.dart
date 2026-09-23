@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'adaptive/window_size_class.dart';
 import 'responsive_metrics.dart';
 import 'responsive_scope.dart';
+import 'scaling/responsive_profile.dart';
+import 'scaling/scale_bounds.dart';
 import 'utils/responsive_constants.dart';
 
 /// Installs responsive scaling for the subtree. Mount it once, above
@@ -13,6 +15,22 @@ import 'utils/responsive_constants.dart';
 ///   designSize: const Size(360, 690),
 ///   minTextAdapt: true,
 ///   splitScreenMode: true,
+///   // Both default to ScaleBounds.downOnly(): shrink on a window smaller than
+///   // the design, draw 1:1 on a larger one. Opt in to bounded growth:
+///   scaleBounds: const ScaleBounds(max: 1.25),
+///   profiles: const {
+///     // Tablets: their own artboard, text allowed to grow a little too.
+///     WindowSizeClass.medium: ResponsiveProfile(
+///       designSize: Size(600, 960),
+///       textScaleBounds: ScaleBounds(max: 1.15),
+///     ),
+///     // Desktop windows (and anything wider, until it declares its own):
+///     // real logical pixels, no scaling in either direction.
+///     WindowSizeClass.expanded: ResponsiveProfile(
+///       scaleBounds: ScaleBounds.fixed(),
+///       textScaleBounds: ScaleBounds.fixed(),
+///     ),
+///   },
 ///   child: const RootApp(),
 /// )
 /// ```
@@ -34,11 +52,15 @@ class ResponsiveInit extends StatelessWidget {
     this.splitScreenMode = false,
     this.minTextAdapt = false,
     this.fontSizeResolver,
-    this.breakpoints = ResponsiveBreakpoints.material3,
+    this.breakpoints = const ResponsiveBreakpoints.material3(),
+    this.scaleBounds = const ScaleBounds.downOnly(),
+    this.textScaleBounds = const ScaleBounds.downOnly(),
+    this.profiles = const <WindowSizeClass, ResponsiveProfile>{},
     super.key,
   });
 
-  /// The artboard the design was drawn at.
+  /// The base artboard the design was drawn at. See
+  /// [ResponsiveMetrics.designSize].
   final Size designSize;
 
   /// See [ResponsiveMetrics.splitScreenMode].
@@ -47,11 +69,22 @@ class ResponsiveInit extends StatelessWidget {
   /// See [ResponsiveMetrics.minTextAdapt].
   final bool minTextAdapt;
 
-  /// See [ResponsiveMetrics.fontSizeResolver].
+  /// See [ResponsiveMetrics.fontSizeResolver]. Not clamped by any bounds.
   final FontSizeResolver? fontSizeResolver;
 
   /// See [ResponsiveMetrics.breakpoints].
   final ResponsiveBreakpoints breakpoints;
+
+  /// See [ResponsiveMetrics.scaleBounds]. Defaults to
+  /// [ScaleBounds.downOnly].
+  final ScaleBounds scaleBounds;
+
+  /// See [ResponsiveMetrics.textScaleBounds]. Defaults to
+  /// [ScaleBounds.downOnly].
+  final ScaleBounds textScaleBounds;
+
+  /// See [ResponsiveMetrics.profiles] and [ResponsiveProfile].
+  final Map<WindowSizeClass, ResponsiveProfile> profiles;
 
   final Widget child;
 
@@ -65,6 +98,9 @@ class ResponsiveInit extends StatelessWidget {
         minTextAdapt: minTextAdapt,
         fontSizeResolver: fontSizeResolver,
         breakpoints: breakpoints,
+        scaleBounds: scaleBounds,
+        textScaleBounds: textScaleBounds,
+        profiles: profiles,
       ),
       child: child,
     );

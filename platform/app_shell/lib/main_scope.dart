@@ -106,16 +106,25 @@ class _ResponsiveWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ResponsiveInit(
+      // The phone artboard every window class starts from.
       designSize: AppConfig.design,
-      // Text scales by the width ratio, like horizontal spacing — the
-      // package default while `minTextAdapt` is false.
-      //
-      // This used to be a `fontSizeResolver` computing the same ratio from
-      // `View.of(context).display`: the *physical display*, not this window.
-      // On a full-screen phone the two agree; in split-screen or a resized
-      // window every other dimension followed the window while text kept
-      // scaling to the whole display. `ResponsiveInit` already measures the
-      // window, so the default is both simpler and right.
+      // Left at their defaults, `scaleBounds` and `textScaleBounds` are
+      // `ScaleBounds.downOnly()`: a phone narrower than the artboard scales
+      // the design down to fit, and nothing ever scales up — a tablet or a
+      // desktop window draws it 1:1 and gives the extra room to the layout
+      // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
+      // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
+      profiles: const {
+        // Tablets in landscape, unfolded foldables and desktop windows are
+        // laid out in real logical pixels. Without this, a laptop window
+        // shorter than the 812-tall phone artboard would still shrink every
+        // vertical gap and radius.
+        WindowSizeClass.expanded: ResponsiveProfile(
+          scaleBounds: ScaleBounds.fixed(),
+          textScaleBounds: ScaleBounds.fixed(),
+        ),
+      },
+      // Keeps height scaling sane when the app is a short split-screen pane.
       splitScreenMode: true,
       child: child,
     );

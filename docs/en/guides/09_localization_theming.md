@@ -247,6 +247,8 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 
 Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-height multiplier, `flex` is a ratio.
 
+By default nothing scales past the design size: a tablet or desktop window draws the design 1:1, and the room it adds is spent on layout, chosen by window size class. The scale policy and the adaptive widgets are in [`11_design_system.md`](11_design_system.md) §6–§7.
+
 ## 10. A widget scales its own constants, never its parameters
 
 > [!CAUTION]

@@ -353,13 +353,27 @@ double? get leadingWidth => context.w(64);   // overrides super.leadingWidth for
 
 ✅ **Right** — accept the constructor parameter, let the caller scale it.
 
+**Sizes do not grow on a tablet.** Every factor is clamped by a `ScaleBounds`, and the default, `ScaleBounds.downOnly()`, stops at 1:1: a window smaller than the artboard shrinks the design, a larger one draws it at design size. Do not tune a screen expecting `context.w(16)` to come out bigger on an iPad — spend the extra room on layout. Where a window class genuinely should grow, opt in for that class with a capped bound (`ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))` in `_ResponsiveWrapper`'s `profiles`). See [design system §6](../guides/11_design_system.md#6-scale-policy-down-by-default-up-on-opt-in-per-window-class).
+
+**Choose a layout by window size class, never by device.** Use `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` or `AdaptiveSplitView` — never a device model, `Platform.isIOS`, or an ad-hoc `shortestSide` check. One device shows many windows — an iPad in Split View, a foldable's cover screen, a desktop window dragged narrow — and only the window class sees them. The dashboard's bottom bar / rail switch is the reference; see [design system §7](../guides/11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
+
+❌ **Wrong** — an ad-hoc tablet test: its own threshold, blind to the app's breakpoints, and it asks "is this a tablet?" instead of "is this window wide enough for two panes?":
+```dart
+final twoPane = MediaQuery.sizeOf(context).shortestSide >= 600;
+```
+
+✅ **Right** — the window's width class, on the app's breakpoints:
+```dart
+final twoPane = context.isExpandedOrWider;
+```
+
 **Verify**
 
 ```bash
 dart tools/arch_check/check.dart      # rule R7 — blocks on any bare sizing extension
 ```
 
-This rule is **enforced by machine**, not by review: R7 runs as Gate 1 of `pr_quality_check.yml` on every PR and prints `file:line` for each violation.
+The bare-extension half of this rule is **enforced by machine**, not by review: R7 runs as Gate 1 of `pr_quality_check.yml` on every PR and prints `file:line` for each violation. The raw-double, scale-policy and window-class points are review-held.
 
 ---
 

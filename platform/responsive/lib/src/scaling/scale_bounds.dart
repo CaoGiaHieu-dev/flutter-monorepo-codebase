@@ -6,8 +6,8 @@ import '../utils/responsive_constants.dart';
 ///
 /// A scale factor is the ratio between the window and the design artboard on
 /// one axis. Left alone, that ratio grows without limit: a 1280-wide desktop
-/// window against a 375-wide phone design is 3.4x, so a 20 px app-bar title
-/// renders at 68 px and clips. The ratio is the right answer when the window
+/// window against a 375-wide phone design is 3.4x, so a 16 px app-bar title
+/// renders at 55 px and clips. The ratio is the right answer when the window
 /// is *smaller* than the design — the design must shrink to fit — and almost
 /// never the right answer when it is larger, where the extra space belongs to
 /// the layout (more columns, a side rail), not to bigger pixels.

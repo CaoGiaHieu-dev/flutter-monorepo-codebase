@@ -271,18 +271,28 @@ Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự
 
 ---
 
-## 9. `core_responsive` — scale theo khung thiết kế, gắn với `BuildContext`
+## 9. `core_responsive` — scale theo khung thiết kế và layout thích ứng, gắn với `BuildContext`
 
-Cơ chế scale mà mọi widget trong app đều đi qua. Nó nằm tại `platform/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, cũng không package bên thứ ba nào.
+Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kích thước cửa sổ và widget thích ứng dùng để chọn layout. Nó nằm tại `platform/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, không package bên thứ ba nào, và cũng không import `material`.
 
 | Thành phần export | Đường dẫn | Mục đích |
 |:--|:--|:--|
-| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 360×690), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
+| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 360×690), `scaleBounds` và `textScaleBounds` (cùng mặc định `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (mặc định `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
 | `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` mang `ResponsiveMetrics`; `maybeOf(context)` trả nullable, `of(context)` assert khi thiếu |
-| `ResponsiveMetrics` | `src/responsive_metrics.dart` | Value object bất biến: `screenSize`, `designSize`, `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` cùng các phép `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin` |
-| `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` |
-| `ResponsiveContext` | `src/context_extension.dart` | Extension trên `BuildContext` — **lối duy nhất** để scale |
-| Constants | `src/utils/responsive_constants.dart` | `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690) |
+| `ResponsiveMetrics` | `src/responsive_metrics.dart` | Value object bất biến với các phép `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; cho thấy giá trị đã resolve `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, cùng `windowSizeClass`, `windowHeightClass`, `orientation` |
+| `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` — kết quả không bị bound nào kẹp |
+| `ScaleBounds` | `src/scaling/scale_bounds.dart` | Khoảng mà một hệ số scale được phép nhận: `downOnly()` (mặc định — thu nhỏ, không bao giờ phóng to), `fixed()`, `unbounded()`, hoặc `ScaleBounds(min:, max:)` |
+| `ResponsiveProfile` | `src/scaling/responsive_profile.dart` | Ghi đè `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` cho một `WindowSizeClass` (`null` là kế thừa); `resolve` chọn đúng lớp, không có thì lớp nhỏ hơn gần nhất |
+| `WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints` | `src/adaptive/window_size_class.dart` | Lớp chiều rộng của cửa sổ (`compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge`), lớp chiều cao, và nơi chúng bắt đầu |
+| `ResponsiveContext` | `src/context_extension.dart` | Extension trên `BuildContext` — **lối duy nhất** để scale; cộng `responsive`, `windowSizeClass`, `windowHeightClass` |
+| `AdaptiveContext` | `src/adaptive/adaptive_context_extension.dart` | Extension trên `BuildContext` — `adaptive(compact:, medium:, …)`, `isCompactWindow`, `isExpandedOrWider`, `separatingDisplayFeature`, `foldPosture` |
+| `AdaptiveBuilder` / `AdaptiveLayout` | `src/adaptive/adaptive_builder.dart` | Một builder, hoặc mỗi lớp cửa sổ một builder |
+| `AdaptiveSplitView` | `src/adaptive/adaptive_split_view.dart` | Master–detail: hai ô tại nếp gập, bản lề hoặc từ `splitAt`, một ô trong các trường hợp còn lại; `AdaptiveSplitView.isSplit(context)` |
+| `AdaptiveContent` | `src/adaptive/adaptive_content.dart` | Chặn nội dung ở chiều rộng dễ đọc (640, không scale) |
+| `FoldPosture` | `src/adaptive/fold_posture.dart` | `flat` / `book` / `tabletop` |
+| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690), các giá trị `BREAKPOINT_*`; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `CONTENT_MAX_WIDTH` (640) |
+
+Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống: cửa sổ nhỏ hơn khung thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ 1:1 và để chỗ dư cho layout. Phóng to là opt-in, có chặn, theo từng lớp cửa sổ.
 
 ### Vì sao metrics đi qua `InheritedWidget`
 
@@ -290,7 +300,7 @@ Cơ chế scale mà mọi widget trong app đều đi qua. Nó nằm tại `plat
 
 `ResponsiveInit` là `StatelessWidget` có chủ đích: nó đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — nên rebuild khi resize và bỏ qua thay đổi brightness / textScale / padding. Không cần `WidgetsBindingObserver`, không `setState`.
 
-`ResponsiveScope.of(context)` assert với thông điệp `"No ResponsiveInit found above this context."` khi thiếu. Fail to tiếng là cố ý: một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị.
+`ResponsiveScope.of(context)` assert với thông điệp `"No ResponsiveInit found above this context."` khi thiếu. Fail to tiếng là cố ý: một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị. Các thành viên về layout — `context.windowSizeClass` và mọi thứ adaptive — là ngoại lệ: chọn layout là câu hỏi về cửa sổ, nên thiếu `ResponsiveInit` chúng phân lớp cửa sổ theo mặc định Material 3.
 
 ### Extension trên `BuildContext`
 
@@ -314,9 +324,9 @@ Cơ chế scale mà mọi widget trong app đều đi qua. Nó nằm tại `plat
 Luật **R7** của `dart tools/arch_check/check.dart` chặn mọi dạng bare (`[\d)].(w|h|r|sp|spMin|dg|dm)`) trong file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
 
 > [!NOTE]
-> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Bản thân package có 19 test tại `platform/responsive/test/`.
+> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/responsive/test/`.
 
-Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục và đổi khung thiết kế nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md).
+Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 

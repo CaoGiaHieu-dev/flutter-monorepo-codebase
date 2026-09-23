@@ -1,8 +1,8 @@
 # Guide: Configuring the design system
 
-**This page answers:** where every colour, font, spacing step and corner radius is defined, and exactly which file to edit to make the template look like *your* product instead of the sample.
+**This page answers:** where every colour, font, spacing step and corner radius is defined, exactly which file to edit to make the template look like *your* product instead of the sample, and how the UI scales and adapts from a phone to a tablet, a foldable or a desktop window.
 
-**After reading you can:** swap the brand palette, change the typeface, retune the spacing and radius scales, move the design canvas size, and add a brand-new token that reaches widgets through `context`.
+**After reading you can:** swap the brand palette, change the typeface, retune the spacing and radius scales, move the design canvas size, decide how far each window class may scale, lay a screen out for tablets, foldables and split screen, and add a brand-new token that reaches widgets through `context`.
 
 This is the **configuration** guide. For the rules about *using* tokens in day-to-day widget code — no hard-coded colours, reusable widgets take raw values — see [`09_localization_theming.md`](09_localization_theming.md).
 
@@ -25,7 +25,7 @@ Two different things live in `core_base_ui`, and mixing them up is the most comm
 | `AppRadius` | `styles/app_radius.dart` | corner radii, plus ready-made `BorderRadius` |
 | `AppTextStyles` | `styles/app_text_styles.dart` | typography, resolved from the active theme |
 | `AppGradients` | `styles/app_gradients.dart` | gradients, resolved from the active theme |
-| `AppShadows` | `styles/app_shadows.dart` | elevation shadows (not theme-aware — see §7) |
+| `AppShadows` | `styles/app_shadows.dart` | elevation shadows (not theme-aware — see §9) |
 | `ThemeSystemInterface` | `theme/theme_system_interface.dart` | the **contract**: which colour slots exist |
 | `ThemeSystemExtension` | `theme/theme_system_extensions.dart` | the **values**: light and dark palettes |
 | `ThemeProvider` | `theme/theme_provider.dart` | builds `ThemeData`, owns light/dark switching |
@@ -134,7 +134,9 @@ The template uses Google Fonts:
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-// The M3 type scale's sizes. `ThemeData().textTheme` carries colours only.
+// The type scale's sizes. A Material 3 `ThemeData().textTheme` carries
+// colours only — its sizes are merged in later, when MaterialApp
+// …
 final geometry = Typography.material2021().englishLike;
 
 TextTheme applyGoogleFont(TextTheme colors) {
@@ -167,10 +169,10 @@ The sizes come from `Typography.material2021().englishLike` — the Material 3 t
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
 double? scaleFont(double? size) =>
-    size == null ? null : context.spMin(size);
+    size == null ? null : context.sp(size);
 ```
 
-`spMin`, not `sp`: text shrinks on a screen narrower than the 375-wide design and never grows past the design size. `sp` scales by width, and every app shares this theme — on a 1280-wide desktop window it would triple every font. On a phone 375 or wider, text is simply the design size.
+`sp`, so type follows the app's `textScaleBounds` ([§6](#6-scale-policy-down-by-default-up-on-opt-in-per-window-class)). With the default, `ScaleBounds.downOnly()`, text shrinks on a window narrower than the 375-wide design and never grows past the design size; a window class whose `ResponsiveProfile` opts into growth gets bigger type too. With this app's configuration, text is the design size on every window 375 wide or more — phone, tablet or desktop.
 
 That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `platform/app_shell/lib/presentation/app_material_wrapper.dart`, which has one.
 
@@ -216,11 +218,11 @@ static const double rawMd = 8;
 
 | Extension | Scales against | Use for |
 |---|---|---|
-| `context.w(x)` | screen **width** | padding, margins, horizontal gaps, widths |
-| `context.h(x)` | screen **height** | vertical gaps, fixed heights |
+| `context.w(x)` | window **width** ratio, clamped by `scaleBounds` | padding, margins, horizontal gaps, widths |
+| `context.h(x)` | window **height** ratio, clamped by `scaleBounds` | vertical gaps, fixed heights |
 | `context.r(x)` | **min** of the width and height factors | corner radii, circles, anything that must stay round |
-| `context.sp(x)` | font scaling | font sizes only |
-| `context.spMin(x)` | font scaling, capped at the raw value | fonts that must never grow on large screens |
+| `context.sp(x)` | text ratio, clamped by `textScaleBounds` | font sizes only |
+| `context.spMin(x)` | `sp`, capped at the design value | text that must stay at the design size even where a profile (or a `fontSizeResolver`) lets text grow — under the default bounds it equals `sp` |
 
 `r` uses the smaller of the two factors on purpose — scaling a radius on one axis alone would turn a circle into an ellipse on a tall or wide device.
 
@@ -259,28 +261,91 @@ Everything above scales *relative to a reference canvas*: the screen size your d
 static Size get design => const Size(375, 812);
 ```
 
-It is handed to the package once, at the root of the tree:
+It is handed to `ResponsiveInit` once, at the very root of the tree — `_ResponsiveWrapper` in `platform/app_shell/lib/main_scope.dart` wraps everything, including `AppMaterialWrapper`; the full call is in §6. It is the artboard **every window class** measures against unless a profile names its own: `context.w(16)` means "16 logical pixels on the 375-wide design".
+
+> [!CAUTION]
+> **Changing `designSize` re-scales the entire app at once.** Every `context.w/h/r/sp` call resolves against it, and a window narrower or shorter than the artboard shrinks the design by that ratio — moving from 375×812 to 390×844 shrinks everything on a 375-wide phone. Change it only when your design source of truth actually changed, then sweep the app on a small phone, a tall phone and a tablet.
+
+---
+
+## 6. Scale policy: down by default, up on opt-in, per window class
+
+A scale factor is the window-to-artboard ratio on one axis. Left alone it grows without limit: a 1280-wide desktop window against the 375-wide artboard is 3.4×, so 20 px text renders at 68 px and a title clips. `core_responsive` therefore clamps every factor with a `ScaleBounds`:
+
+| Bounds | Range | Use for |
+|---|---|---|
+| `ScaleBounds.downOnly()` — **the default** | 0 – 1 | Shrink on a window smaller than the artboard, draw 1:1 on a larger one. The extra room goes to the layout (§7), not to bigger pixels |
+| `ScaleBounds(max: 1.2)` | 0 – 1.2 | Opt-in, capped growth. Add `min:` to stop shrinking where text would stop being readable or targets tappable |
+| `ScaleBounds.fixed()` | 1 – 1 | Always the design size — for a class laid out in real logical pixels |
+| `ScaleBounds.unbounded()` | 0 – ∞ | The raw ratio, the behaviour before bounds existed. Rarely right for an app that runs on more than one form factor |
+
+Layout and text are bounded **separately**: `scaleBounds` clamps `w` and `h` (and the `r` / `dg` / `dm` built from them), `textScaleBounds` clamps the factor behind `sp`. A tablet can afford wider gutters long before it can afford bigger body text.
+
+A **`ResponsiveProfile`** overrides the artboard, both bounds and `minTextAdapt` for one `WindowSizeClass` (§7); a field left `null` inherits the top-level value. The profile that applies is the one keyed by the window's class, else the one keyed by the nearest **smaller** class, else none — so a profile at `expanded` also covers `large` and `extraLarge` until they declare their own, the way a `min-width` media query cascades.
+
+This is the app's whole configuration:
 
 ```dart
-// platform/app_shell/lib/main_scope.dart
+// platform/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
+  // The phone artboard every window class starts from.
   designSize: AppConfig.design,
+  // Left at their defaults, `scaleBounds` and `textScaleBounds` are
+  // `ScaleBounds.downOnly()`: a phone narrower than the artboard scales
+  // the design down to fit, and nothing ever scales up — a tablet or a
+  // desktop window draws it 1:1 and gives the extra room to the layout
+  // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
+  // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
+  profiles: const {
+    // Tablets in landscape, unfolded foldables, desktop windows — and
+    // most phones in landscape, which are 840 or wider — are laid out
+    // in real logical pixels. Without this, a laptop window
+    // shorter than the 812-tall phone artboard would still shrink every
+    // vertical gap and radius.
+    WindowSizeClass.expanded: ResponsiveProfile(
+      scaleBounds: ScaleBounds.fixed(),
+      textScaleBounds: ScaleBounds.fixed(),
+    ),
+  },
+  // Keeps height scaling sane when the app is a short split-screen pane.
   splitScreenMode: true,
   child: child,
 );
 ```
 
-| Parameter | What it does |
-|---|---|
-| `designSize` | The reference canvas (`core_responsive` defaults to 360×690; this app passes `AppConfig.design`). `context.w(16)` means "16 logical pixels **on a 375-wide design**", rescaled to the real device. |
-| `minTextAdapt` | Not set here (default `false`), so `sp` uses the **width** factor — text scales with the same ratio as horizontal spacing. `true` switches to the **smaller** of the width and height factors, which keeps text from ballooning on wide, short windows but shrinks it in landscape. |
-| `fontSizeResolver` | Not set here. Overrides how `sp` is computed, **entirely** — while it is set, `minTextAdapt` is inert. Compute from the `metrics` it receives: they measure this window, so split-screen and resizing stay correct. |
-| `splitScreenMode` | Floors the height used for scaling at `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), keeping scaling sane when the app is a split-screen pane rather than full-screen. |
+What that gives, window by window:
 
-> [!CAUTION]
-> **Changing `designSize` re-scales the entire app at once.** Every `context.w/h/r/sp` call resolves against it, so a UI tuned at 375×812 will not simply "look bigger" at 390×844 — proportions shift. Change it only when your design source of truth actually changed, then sweep the app on a small phone, a tall phone and a tablet.
+| Window | Class | Result |
+|---|---|---|
+| Phone narrower than 375 | `compact` | Shrinks to fit: `w` and `sp` by the width ratio, `h` by the height ratio |
+| Phone 375 wide or more | `compact` | `w` and `sp` 1:1. `h` and `r` still shrink on a phone shorter than 812 — never below 700/812, thanks to `splitScreenMode` |
+| 600–839 wide | `medium` | As the row above: `downOnly` stops every factor at 1 |
+| 840 wide or more | `expanded` and up | 1:1 on every axis (`fixed`), however short the window |
 
-`ResponsiveInit` sits at the very root (`_ResponsiveWrapper` in `main_scope.dart` wraps everything, including `AppMaterialWrapper`), so every widget context in the app can use the context-aware extensions.
+| Parameter | Default | This app | What it does |
+|---|---|---|---|
+| `designSize` | 360×690 | `AppConfig.design` (375×812) | The artboard every class measures against, unless its profile names another |
+| `scaleBounds` | `ScaleBounds.downOnly()` | default | Range of the layout factors: `w`, `h`, and the `r` / `dg` / `dm` built from them |
+| `textScaleBounds` | `ScaleBounds.downOnly()` | default | Range of the text factor behind `sp`. Independent of `scaleBounds` |
+| `profiles` | `{}` | `expanded` → `fixed` / `fixed` | `Map<WindowSizeClass, ResponsiveProfile>`: per-class `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` (`null` inherits). Exact class first, else the nearest smaller one |
+| `breakpoints` | `ResponsiveBreakpoints.material3()` | default | Where each window size class begins (§7). The profiles and `context.windowSizeClass` both classify with it |
+| `minTextAdapt` | `false` | default | `true` scales text by the **smaller** of the width and height ratios instead of the width — no ballooning on a wide, short window, but smaller text in landscape |
+| `splitScreenMode` | `false` | `true` | Floors the height used for vertical scaling at `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), so a short split-screen pane does not collapse every `h` |
+| `fontSizeResolver` | `null` | not set | Replaces text scaling **entirely**, and its result is **never clamped** — no `textScaleBounds`, no profile, no `minTextAdapt`. Read `metrics.effectiveTextScaleBounds` inside it to honour the bounds |
+
+**Opting into growth** is one profile per class that should grow, with a cap:
+
+```dart
+// Illustrative — not in the template: medium windows may grow 20 %, text 10 %.
+WindowSizeClass.medium: ResponsiveProfile(
+  scaleBounds: ScaleBounds(max: 1.2),
+  textScaleBounds: ScaleBounds(max: 1.1),
+),
+```
+
+Check two things when you do. A class that grows meets its neighbour in a **visible step**: next to this app's `fixed` expanded profile, the example lays out at 1.2× at 839 wide and at 1× at 840. And a profile `designSize` wider than the first width of its class (600 for `medium`, 840 for `expanded`) makes everything shrink the moment the window enters that class; one no wider starts at a ratio of 1 or more, which `downOnly` draws 1:1 on both sides of the boundary.
+
+`context.responsive` exposes what was resolved — `activeProfile`, `effectiveDesignSize`, `effectiveScaleBounds`, `effectiveTextScaleBounds`, `effectiveMinTextAdapt`, `windowSizeClass`, `orientation` — for a debug overlay or a test.
 
 > [!NOTE]
 > Rebuilding needs no configuration. `ResponsiveInit` is a `StatelessWidget` that reads `MediaQuery.sizeOf(context)` — a size-only dependency — and publishes `ResponsiveMetrics` through the `ResponsiveScope` `InheritedWidget`. Every `context.w/h/r/sp` call registers a dependency on that scope, so Flutter rebuilds exactly the widgets that read a scaled value. This is why there is no `num` extension: `16.w` could only read a global, and a global cannot notify anyone. `arch_check` rule R7 enforces it.
@@ -290,7 +355,132 @@ return ResponsiveInit(
 
 ---
 
-## 6. Add a new token class
+## 7. Adaptive layouts: tablets, foldables, split screen
+
+§6 decides how big to draw; this section decides **what** to draw with the room a larger window gives — more columns, a side rail, a second pane. Everything here lives in `core_responsive` (`platform/responsive/lib/src/adaptive/`) and classifies the **window**, not the device: an iPad in Split View, a desktop window dragged narrow and a foldable's cover screen each get the class of the space the app actually has. Unlike `context.w`, none of it needs a `ResponsiveInit` — without one, the window is classified with the Material 3 defaults.
+
+### Window size classes
+
+| `WindowSizeClass` | Width (logical px) | Typical window |
+|---|---|---|
+| `compact` | < 600 | Phone in portrait; a flip phone, open or half folded; a narrow split-screen pane |
+| `medium` | 600 – 839 | Tablet or foldable in portrait; a half-screen split on a large tablet |
+| `expanded` | 840 – 1199 | Tablet in landscape (iPad); an unfolded foldable; a small desktop window |
+| `large` | 1200 – 1599 | Large tablet in landscape; a desktop window |
+| `extraLarge` | ≥ 1600 | A large desktop window |
+
+A phone in landscape is `medium` or `expanded` by width. `context.windowHeightClass` tells it apart: `WindowHeightClass.compact` below 480, `medium` 480–899, `expanded` from 900.
+
+The boundaries are a `ResponsiveBreakpoints` — `const ResponsiveBreakpoints.material3()` by default, values in `ResponsiveConstants.BREAKPOINT_*`. Pass another set to `ResponsiveInit(breakpoints:)` and the scale profiles, `context.windowSizeClass` and every widget below move together. Compare classes with `isAtLeast` / `isSmallerThan`, never with raw widths.
+
+### A value per class: `context.adaptive`
+
+```dart
+// from the doc comment in platform/responsive/lib/src/adaptive/adaptive_context_extension.dart
+final columns = context.adaptive(compact: 1, expanded: 3);
+// compact 1 · medium 1 · expanded 3 · large 3 · extraLarge 3
+```
+
+A class given no value falls back to the nearest **smaller** class that has one, ending at the required `compact` — so adding a breakpoint never changes the narrower layouts that already work. Shorthands: `context.isCompactWindow`, `context.isExpandedOrWider`.
+
+### A subtree per class: `AdaptiveLayout`
+
+```dart
+AdaptiveLayout(
+  compact: (_) => const InboxList(),
+  expanded: (_) => const InboxWithPreview(),
+)
+```
+
+Same fallback: `medium` shows the list, `large` and `extraLarge` the preview. Slots are builders, so only the layout on screen is built — and crossing into a class served by another builder replaces the subtree, taking scroll offsets and typed text with it. Keep state that must survive a rotation or a resize in the route-level controller, above this widget. `AdaptiveBuilder(builder: (context, windowSizeClass) => …)` does the same for a branch written in code.
+
+### Master–detail: `AdaptiveSplitView`
+
+```dart
+// from the doc comment in platform/responsive/lib/src/adaptive/adaptive_split_view.dart
+AdaptiveSplitView(
+  primary: MailList(
+    // `itemContext` is the tapped item's: below the split view.
+    onOpen: (itemContext, id) => AdaptiveSplitView.isSplit(itemContext)
+        ? setState(() => _openId = id) // shown in the secondary pane
+        : MailRoute(id: id).push(itemContext), // one pane: push it
+  ),
+  secondary: _openId == null ? null : MailView(id: _openId!),
+  secondaryPlaceholder: const NothingSelected(),
+)
+```
+
+It splits by the first rule that applies:
+
+1. **A vertical fold or hinge** (`FoldPosture.book`) — side by side, divided exactly at it, nothing drawn under it. Wins even below `splitAt`: a half-opened foldable has two physical halves.
+2. **A horizontal fold** (`FoldPosture.tabletop`) while `tabletopSplit` is `true` (the default) — `primary` above, `secondary` below. Turn it off for content that must not be cut in half, such as a form.
+3. **A window of `splitAt` or wider** (default `WindowSizeClass.expanded`) — side by side, `primary` taking `primaryWidth` or `primaryFraction` (0.4) of the width, with an optional `divider`.
+4. **Otherwise** — `primary` alone. `secondary` is not built, so the app pushes the item's route instead; `AdaptiveSplitView.isSplit(context)` is how the list item knows which to do. Its `context` must be *below* the view — inside a pane, or through a `Builder`.
+
+`primary` sits at the start edge (the right, under RTL). Both panes keep their place in the tree whichever rule applies, so the list's scroll offset and any typed text survive a rotation or the device being unfolded. The view needs a bounded box — not directly inside a scroll view or an unconstrained `Row` / `Column`.
+
+**Folds.** `context.separatingDisplayFeature` is the fold or hinge dividing the window: a hinge always; a fold only while half opened (`DisplayFeatureState.postureHalfOpened`), because opened flat it is one continuous screen; a camera cutout never — `SafeArea` handles those. `context.foldPosture` names the result: `FoldPosture.flat`, `book` (a Galaxy Z Fold or Pixel Fold half open) or `tabletop` (a Galaxy Z Flip half folded on a table).
+
+> [!WARNING]
+> **The fold rules apply only when the view spans the window along the fold.** A fold's bounds are in window coordinates, and a widget cannot learn where it sits until after layout. So rule 1 needs the view exactly as wide as the window and rule 2 exactly as tall; anywhere else the fold is ignored and rules 3–4 decide. Make the view the route's full body and put side chrome inside `primary`. Inside a dashboard tab that costs one rule each: from `medium` up the rail takes width, so a book fold is ignored; on `compact` the bottom bar takes height, so a tabletop fold is. A split view that must honour both belongs in a stack route (`IFeatureRouteModule`) whose whole body is the view.
+
+### A readable width: `AdaptiveContent`
+
+```dart
+// modules/auth/feature/lib/src/pages/login_page.dart
+child: SingleChildScrollView(
+  padding: EdgeInsets.all(AppSpacing.xl(context)),
+  // On a tablet or desktop window the form keeps a readable width
+  // instead of stretching across the screen.
+  child: AdaptiveContent(
+    child: Consumer<AuthProvider>(
+      // …
+    ),
+  ),
+),
+```
+
+It caps its child at `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 640 — and places it at the top centre of the space left. On a phone the window is narrower than the cap, so nothing changes. `maxWidth` is in **window pixels and never scaled**: it answers how long a line may get, which the reader's eye settles, not the artboard — wrapped in `context.w`, it would grow with the very ratio it exists to stop. `padding`, like any reusable widget's parameter, is used as given: scale it at the call site.
+
+### The reference: navigation chrome per window class
+
+`feature_dashboard` switches its chrome on the window size class: a bottom bar on `compact`, a `NavigationRail` from `medium` up, extended (labels beside the icons) from `large` up. Both are built from the same `NavDestination`s each tab contributes through `INavDestinationModule`, so no tab knows which one is showing.
+
+```dart
+// modules/dashboard/feature/lib/src/pages/dashboard_page.dart
+final sizeClass = context.windowSizeClass;
+if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
+  return Scaffold(
+    body: navigationShell,
+    bottomNavigationBar: BottomNavigationBar(
+      // …
+    ),
+  );
+}
+
+final extended = sizeClass.isAtLeast(WindowSizeClass.large);
+return Scaffold(
+  body: Row(
+    children: [
+      SafeArea(
+        right: false,
+        child: NavigationRail(
+          // …
+          extended: extended,
+          // …
+        ),
+      ),
+      Expanded(child: navigationShell),
+    ],
+  ),
+);
+```
+
+The whole page, and what the dashboard must not own: [`../architecture/05_features.md`](../architecture/05_features.md#4-feature_dashboard-is-chrome-only).
+
+---
+
+## 8. Add a new token class
 
 Say you want `AppElevation`. Follow the shape the existing classes use — private constructor, `raw*` constants, context-taking accessors.
 
@@ -329,7 +519,7 @@ Material(elevation: AppElevation.raised(context), child: …)
 
 ---
 
-## 7. Gradients and shadows
+## 9. Gradients and shadows
 
 `AppGradients` reads live theme colours, so gradients recolour with the palette automatically:
 
@@ -365,7 +555,7 @@ static List<BoxShadow> get sm => [
 
 ---
 
-## 8. The rules that stay
+## 10. The rules that stay
 
 Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of these a machine holds is stated per rule, because it changes how much you can rely on review catching it.
 
@@ -374,6 +564,8 @@ Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of th
 - **A widget scales its own constants, never its parameters.** A `core_ui_kit` widget receives already-scaled values — the caller scaled them — so using a parameter raw is correct and `context.w(widget.width)` is a double-scale bug. Its *own* padding and radii it must scale, or it is not responsive. `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`. *Review-held.*
 - **Do not scale an already-scaled value.** `AppSpacing.lg(context)` is final; `context.w(AppSpacing.lg(context))` is a double-scale bug. Likewise `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` already scaled every step, so overriding the size discards the scale and pins a number the design system cannot change. Reach for a different step instead. *Review-held.*
 - **Edit `raw*`, not the accessor**, when retuning a scale.
+- **Do not expect sizes to grow on a tablet.** Every factor stops at 1:1 by default; spend the extra room on layout (§7). Growth is an opt-in per window class, with a cap (§6). *Held by `ResponsiveInit`'s defaults.*
+- **Choose a layout by window size class** — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — never by device model, `Platform.isIOS` or an ad-hoc `shortestSide` check. One device shows many windows: Split View, a cover screen, a resized desktop window. *Review-held.*
 
 > [!NOTE]
 > **Why the colour and font-size rules are not machine-checked.**
@@ -384,7 +576,7 @@ Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of th
 
 ---
 
-## 9. Quick lookup
+## 11. Quick lookup
 
 | I want to change… | Edit |
 |---|---|
@@ -397,7 +589,8 @@ Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of th
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
 | The design canvas | `platform/common/lib/src/config/app_config.dart` → `design` |
-| Scaling behaviour (`minTextAdapt`, `fontSizeResolver` — neither set today) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` |
+| How far a window class may scale (bounds, profiles, breakpoints) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` (§6) |
+| The layout on a tablet, foldable or split screen | the page — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
 ---
@@ -405,5 +598,5 @@ Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of th
 ## See also
 
 - [`09_localization_theming.md`](09_localization_theming.md) — using tokens in widget code, and per-feature translations
-- [`../architecture/02_core.md`](../architecture/02_core.md) — where `core_base_ui` sits, and why it ships zero widgets
+- [`../architecture/02_core.md`](../architecture/02_core.md) — where `core_base_ui` sits, and why it ships zero widgets; the `core_responsive` public API
 - [`../reference/01_rules.md`](../reference/01_rules.md) — the enforced rules, with the commands that verify them

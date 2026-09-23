@@ -176,19 +176,29 @@ They are defaults, not policy — a caller that needs a different value passes i
 
 ---
 
-## 5. `core_responsive` — responsive sizing
+## 5. `core_responsive` — responsive sizing and adaptive layout
 
-The scaling mechanism every widget in the app resolves through. It lives at `platform/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package.
+The scaling mechanism every widget in the app resolves through, and the window size classes and adaptive widgets that choose a layout. It lives at `platform/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package, and no `material` import either.
 
 | Piece | What it is |
 |:--|:--|
-| `ResponsiveInit` | `StatelessWidget` mounted once above `MaterialApp`. Params: `child`, `designSize` (default 360×690), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
+| `ResponsiveInit` | `StatelessWidget` mounted once above `MaterialApp`. Params: `child`, `designSize` (default 360×690), `scaleBounds` and `textScaleBounds` (both default `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (default `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
 | `ResponsiveScope` | `InheritedWidget` carrying the metrics — `maybeOf(context)` / `of(context)` |
-| `ResponsiveMetrics` | Immutable value object computing `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin` |
-| `ResponsiveContext` | Extension on `BuildContext` — `context.w/h/r/sp/spMin/dg/dm`, `edgeInsets`, `borderRadius`, `verticalSpace`, `horizontalSpace` |
-| `ResponsiveConstants` | `SPLIT_SCREEN_MIN_HEIGHT = 700`, `DEFAULT_DESIGN_WIDTH = 360`, `DEFAULT_DESIGN_HEIGHT = 690` — in `src/utils/`, like every other package's constants |
+| `ResponsiveMetrics` | Immutable value object computing `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; exposes the resolved `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, plus `windowSizeClass`, `windowHeightClass`, `orientation` |
+| `ScaleBounds` | The range a scale factor may take: `downOnly()` (the default — shrink, never grow), `fixed()`, `unbounded()`, or `ScaleBounds(min:, max:)` |
+| `ResponsiveProfile` | Overrides `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` for one `WindowSizeClass` (`null` inherits); `resolve` picks the exact class, else the nearest smaller one |
+| `WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints` | The window's width class (`compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge`) and height class, and where they begin |
+| `ResponsiveContext` | Extension on `BuildContext` — `context.w/h/r/sp/spMin/dg/dm`, `edgeInsets`, `borderRadius`, `verticalSpace`, `horizontalSpace`, `responsive`, `windowSizeClass`, `windowHeightClass` |
+| `AdaptiveContext` | Extension on `BuildContext` — `adaptive(compact:, medium:, …)`, `isCompactWindow`, `isExpandedOrWider`, `separatingDisplayFeature`, `foldPosture` |
+| `AdaptiveBuilder` / `AdaptiveLayout` | A builder, or one builder per window class |
+| `AdaptiveSplitView` | Master–detail: two panes at a fold, hinge or from `splitAt`, one pane otherwise; `AdaptiveSplitView.isSplit(context)` |
+| `AdaptiveContent` | Caps content at a readable width (640, not scaled) |
+| `FoldPosture` | `flat` / `book` / `tabletop` |
+| `ResponsiveConstants` / `AdaptiveConstants` | `SPLIT_SCREEN_MIN_HEIGHT = 700`, `DEFAULT_DESIGN_WIDTH = 360`, `DEFAULT_DESIGN_HEIGHT = 690`, the `BREAKPOINT_*` values; `SPLIT_PRIMARY_FRACTION = 0.4`, `CONTENT_MAX_WIDTH = 640` — in `src/utils/`, like every other package's constants |
 
 `ResponsiveInit` is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. No `WidgetsBindingObserver`, no `setState`.
+
+Every factor is clamped, and by default only downward: a window smaller than the artboard shrinks the design, a larger one draws it 1:1 and leaves the extra room to the layout. Growth is opt-in and capped, per window class.
 
 ### There is deliberately no `num` extension
 
@@ -197,9 +207,9 @@ The scaling mechanism every widget in the app resolves through. It lives at `pla
 There is no global instance, no imperative `init()`, no `setWidth()` helper and no rebuild flag — rebuild targeting is Flutter's job once the metrics live in an `InheritedWidget`.
 
 > [!NOTE]
-> `ResponsiveScope.of(context)` **asserts** — *"No ResponsiveInit found above this context."* — rather than falling back to unscaled values. A silent fallback would ship a layout that is wrong on every device. A widget test that scales must therefore wrap its subject in `ResponsiveInit`.
+> `ResponsiveScope.of(context)` **asserts** — *"No ResponsiveInit found above this context."* — rather than falling back to unscaled values. A silent fallback would ship a layout that is wrong on every device. A widget test that scales must therefore wrap its subject in `ResponsiveInit`. The layout members — `context.windowSizeClass` and everything adaptive — are the exception: choosing a layout is a question about the window, so without a `ResponsiveInit` they classify it with the Material 3 defaults.
 
-Configuration (design canvas, `fontSizeResolver`) is documented in [`../guides/11_design_system.md`](../guides/11_design_system.md).
+The scale policy and its parameters, and the adaptive widgets with their rules, are documented in [`../guides/11_design_system.md`](../guides/11_design_system.md) §6–§7.
 
 ---
 

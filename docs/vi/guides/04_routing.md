@@ -48,7 +48,7 @@ Tất cả nằm ở `platform/di/lib/src/routing/`.
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
 | `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
 | `IAppEntryLocation` | Điểm bắt đầu khi khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
-| `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar) | n/a | **chỉ** `feature_dashboard` |
+| `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
 
 ### 2.1 `IFeatureRouteModule`
 
@@ -116,15 +116,23 @@ class HomeNavDestination extends INavDestinationModule {
 
 ### 2.3 Dashboard chỉ là chrome
 
-`feature_dashboard` chỉ phụ thuộc `core_di` và `platform_kernel` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
+Trong các package của workspace, `feature_dashboard` chỉ phụ thuộc `core_di`, `core_responsive` và `platform_kernel` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng điều hướng từ DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`): bottom bar trên cửa sổ `compact`, `NavigationRail` từ `medium` trở lên.
 
 ```dart
 final tabs = getAllOrEmpty<INavDestinationModule>().toList()
   ..sort((a, b) => a.order.compareTo(b.order));
-return Scaffold(
-  body: navigationShell,
-  bottomNavigationBar: tabs.length < 2 ? null : BottomNavigationBar(...),
-);
+if (tabs.length < 2) return Scaffold(body: navigationShell);
+// …
+final sizeClass = context.windowSizeClass;
+if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
+  return Scaffold(
+    body: navigationShell,
+    bottomNavigationBar: BottomNavigationBar(
+      // …
+    ),
+  );
+}
+// … otherwise a NavigationRail beside the navigationShell
 ```
 
 Dashboard **không được**:
@@ -133,7 +141,7 @@ Dashboard **không được**:
 - hardcode danh sách destination thay vì đọc DI
 - tự đăng ký `INavDestinationModule` để tạo tab "giả"
 
-Chú ý `tabs.length < 2` ẩn hẳn thanh bar khi có ít hơn hai tab — một phần của cơ chế suy giảm mềm ở §6.
+Chú ý `tabs.length < 2` bỏ hẳn bar (hoặc rail) khi có ít hơn hai tab — một phần của cơ chế suy giảm mềm ở §6. `destination` của một tab là một `NavDestination` trung lập, nên cùng một đóng góp hiển thị được thành mục của bar hay của rail; vì sao chrome đổi theo lớp kích thước cửa sổ thì xem [`11_design_system.md`](11_design_system.md) §7.
 
 ---
 

@@ -48,7 +48,7 @@ All live in `platform/di/lib/src/routing/`.
 | `IFeatureRouteModule` | Top-level / stack routes under the app shell | No — GoRouter matches by path | auth, onboarding, … |
 | `INavDestinationModule` | One primary destination + its `StatefulShellBranch` | **Yes** — ascending `order` | home, settings, … |
 | `IAppEntryLocation` | Cold-start location (`initialLocation`) | n/a | usually onboarding |
-| `DashboardRouteModule` | Dashboard chrome (scaffold + bottom bar host) | n/a | **only** `feature_dashboard` |
+| `DashboardRouteModule` | Dashboard chrome (scaffold + bottom bar / rail host) | n/a | **only** `feature_dashboard` |
 
 ### 2.1 `IFeatureRouteModule`
 
@@ -116,15 +116,23 @@ class HomeNavDestination extends INavDestinationModule {
 
 ### 2.3 Dashboard is chrome only
 
-`feature_dashboard` depends on just `core_di` and `platform_kernel` — it physically **cannot** import another feature. Its page builds the bar from DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
+Among workspace packages `feature_dashboard` depends on just `core_di`, `core_responsive` and `platform_kernel` — it physically **cannot** import another feature. Its page builds the navigation from DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`): a bottom bar on a `compact` window, a `NavigationRail` from `medium` up.
 
 ```dart
 final tabs = getAllOrEmpty<INavDestinationModule>().toList()
   ..sort((a, b) => a.order.compareTo(b.order));
-return Scaffold(
-  body: navigationShell,
-  bottomNavigationBar: tabs.length < 2 ? null : BottomNavigationBar(...),
-);
+if (tabs.length < 2) return Scaffold(body: navigationShell);
+// …
+final sizeClass = context.windowSizeClass;
+if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
+  return Scaffold(
+    body: navigationShell,
+    bottomNavigationBar: BottomNavigationBar(
+      // …
+    ),
+  );
+}
+// … otherwise a NavigationRail beside the navigationShell
 ```
 
 The dashboard **must not**:
@@ -133,7 +141,7 @@ The dashboard **must not**:
 - hardcode a destination list instead of reading DI
 - register `INavDestinationModule` itself for a "fake" tab
 
-Note `tabs.length < 2` hides the bar entirely when fewer than two tabs are registered — part of the graceful-degradation story in §6.
+Note `tabs.length < 2` drops the bar (or rail) entirely when fewer than two tabs are registered — part of the graceful-degradation story in §6. A tab's `destination` is a neutral `NavDestination`, so the same contribution renders as a bar item or a rail item; why the chrome switches on window size class is in [`11_design_system.md`](11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
 
 ---
 

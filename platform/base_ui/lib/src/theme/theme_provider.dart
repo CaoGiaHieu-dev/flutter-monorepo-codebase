@@ -136,8 +136,7 @@ class ThemeProvider extends ChangeNotifier
     /// shrinks below the design width and never grows past it, and a window
     /// class whose `ResponsiveProfile` opts into growth gets bigger type too.
     /// Null-tolerant so the `TextStyle.fontSize` chain stays readable.
-    double? scaleFont(double? size) =>
-        size == null ? null : context.sp(size);
+    double? scaleFont(double? size) => size == null ? null : context.sp(size);
 
     /// Scales the font sizes of the text theme to the device's screen size.
     final textTheme = defaultTheme

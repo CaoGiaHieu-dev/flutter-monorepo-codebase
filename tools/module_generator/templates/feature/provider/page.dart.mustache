@@ -1,3 +1,4 @@
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
@@ -15,8 +16,16 @@ class {{pascalNameInput}}Page extends StatelessWidget {
       ),
       body: BaseViewWidget<{{pascalNameInput}}Provider, Object>(
         builder: (context, data, child) {
+          // Sizes and type come from the design system, already scaled —
+          // never a raw number (rule 12).
           return Center(
-            child: Text(context.l10n{{pascalNameInput}}.title),
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.lg(context)),
+              child: Text(
+                context.l10n{{pascalNameInput}}.title,
+                style: AppTextStyles.bodyMediumStyle(context),
+              ),
+            ),
           );
         },
       ),

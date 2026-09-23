@@ -156,9 +156,9 @@ Hướng dẫn đầy đủ: [`../guides/06_storage.md`](../guides/06_storage.md
 
 **Luật.** Một `@Singleton` eager tuyệt đối không được phụ thuộc type do module khởi tạo **sau** nó trong `configureDependencies()`. Dùng `@LazySingleton` khi phụ thuộc đến từ module chạy sau.
 
-**Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`: `externalPackageModulesBefore` → đăng ký cục bộ của app → `externalPackageModulesAfter`.
+**Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`, được sinh từ `di_groups` của manifest: `core` (before), rồi `shell`, `ui`, `domain`, `data`, `feature`, `other` (after).
 
-Ví dụ thật: `NetworkConfigImpl` là `@LazySingleton(as: NetworkConfig)` vì nó inject `AuthLocalDataSource` từ `data_auth`, mà module này chạy sau khối app-local. Consumer duy nhất của nó (`ApiClient`) cũng lazy, nên hoãn khởi tạo là an toàn.
+Ràng buộc đang có hiệu lực ở đây là `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_app_shell` đăng ký. Đảo hai nhóm là app hỏng lúc boot. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `IAuthSessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
 
 > [!CAUTION]
 > **`flutter analyze` KHÔNG bắt được loại lỗi này.** Nó chỉ lộ ra lúc chạy thật, trên một lần boot thật.
@@ -282,7 +282,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 
 ## 11. Routing
 
-**Luật.** Tuyệt đối không sửa `apps/mobile/lib/presentation/navigation/app_router.dart` để thêm route. Thay vào đó feature tự đăng ký một hợp đồng `core_di`:
+**Luật.** Tuyệt đối không sửa `platform/app_shell/lib/presentation/navigation/app_router.dart` để thêm route. Thay vào đó feature tự đăng ký một hợp đồng `core_di`:
 
 | Hợp đồng | Mục đích | Có thứ tự? |
 |---|---|---|
@@ -365,7 +365,7 @@ Luật này được **cưỡng chế bằng máy**, không dựa vào review: R
 
 **Luật.** Toàn bộ chữ hiển thị cho người dùng phải được dịch — cấm hardcode chuỗi UI. Mỗi feature sở hữu file `.arb` trong `assets/language/` của mình và đăng ký `IFeatureLocalization` qua DI. Truy cập qua extension của feature: `context.l10nAuth.someKey`.
 
-Feature **không được** sửa `apps/mobile/lib/presentation/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
+Feature **không được** sửa `platform/app_shell/lib/presentation/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
 
 Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** định nghĩa `.arb` riêng — nó dùng của `core_base_ui`.
 
@@ -406,7 +406,7 @@ abstract class AuthModule {
 Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, còn mọi feature khác chỉ nhìn thấy interface.
 
 > [!NOTE]
-> GetIt phân giải theo **đúng type**, không bao giờ theo supertype. Đăng ký `Impl as InterfaceA` **không** làm cho `getIt<InterfaceB>()` chạy được, kể cả khi `InterfaceA implements InterfaceB` — phải bind riêng từng cái. Xem `apps/mobile/lib/di/network_binding_module.dart`, nơi `SslPinningConfig` cần binding riêng dù `NetworkConfig implements SslPinningConfig`.
+> GetIt phân giải theo **đúng type**, không bao giờ theo supertype. Đăng ký `Impl as InterfaceA` **không** làm cho `getIt<InterfaceB>()` chạy được, kể cả khi `InterfaceA implements InterfaceB` — phải bind riêng từng cái. Xem `platform/app_shell/lib/di/network_binding_module.dart`, nơi `SslPinningConfig` cần binding riêng dù `NetworkConfig implements SslPinningConfig`.
 
 Đừng dùng Action Handler cho điều hướng thuần (dùng Navigator) hay cho logic thuần Domain (dùng UseCase).
 

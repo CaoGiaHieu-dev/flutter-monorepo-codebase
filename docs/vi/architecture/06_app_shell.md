@@ -1,32 +1,43 @@
-# App Shell (`apps/mobile/`)
+# App Shell (`platform/app_shell/` + `apps/<id>/`)
 
-Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cục bộ cho app, và hiểu vì sao thứ tự module trong `injection.dart` không hề tuỳ tiện.
+Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cho shell, và hiểu vì sao thứ tự các nhóm DI trong `app_manifest.yaml` không hề tuỳ tiện.
 
-App shell là **điểm lắp ráp (composition root)**. Đây là nơi duy nhất được phép phụ thuộc mọi tầng, và cũng là nơi duy nhất biết danh sách đầy đủ các package.
+Shell được tách làm hai, có chủ đích:
+
+- **`apps/<id>/`** là **điểm lắp ráp (composition root)** — nơi duy nhất được phép phụ thuộc mọi tầng, và nơi duy nhất biết danh sách đầy đủ các module. Nó chỉ chứa những gì thực sự khác nhau giữa các app, ngoài ra không có gì khác.
+- **`platform/app_shell/`** (`platform_app_shell`) là mọi thứ app nào cũng cần và lẽ ra phải copy: boot scope, lắp ráp router, material wrapper, các storage adapter và `NetworkConfigImpl`. Nó không import module nào — `arch_check` R1 giữ điều đó, vì đây là một package `platform/`.
+
+Trước khi tách, thêm app thứ hai nghĩa là copy 1.369 dòng qua 24 file. Giờ một app chỉ là một `main.dart`, một manifest, và một `injection.dart` được sinh ra.
 
 ---
 
-## 1. Trong này có gì
+## 1. Cái gì nằm ở đâu
 
 ```
-apps/mobile/lib/
-├── main.dart                    điểm khởi động, vùng bắt lỗi
-├── main_scope.dart              chuyển tiếp splash → init → root
-├── app.dart                     barrel
+apps/mobile/                         điểm lắp ráp
+├── app_manifest.yaml                module nào, thứ tự nhóm DI ra sao
+├── lib/
+│   ├── main.dart                    entry point, error zone
+│   └── di/injection.dart            do composer sinh — không bao giờ sửa tay
+├── android/  ios/  fastlane/        project native và lane phát hành
+└── env.dev  env.stg                 giá trị theo flavor (env.prod bạn tự tạo)
+
+platform/app_shell/lib/              dùng chung cho mọi app
+├── main_scope.dart                  splash → init → chuyển sang root
 ├── di/
-│   ├── injection.dart           lắp ráp DI (thứ tự module rất quan trọng)
+│   ├── module.dart                  @InjectableInit.microPackage — nhóm DI `shell`
 │   ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
 │   ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
-│   ├── app_boot_storage.dart        cờ khởi động     → StorageValue<bool>
+│   ├── app_boot_storage.dart        cờ khởi động    → StorageValue<bool>
 │   ├── network_config_impl.dart     NetworkConfig
 │   ├── network_binding_module.dart  binding SslPinningConfig
-│   └── utils/                   storage key do shell sở hữu
+│   └── utils/                       storage key do shell sở hữu
 └── presentation/
-    ├── root_app.dart            MaterialApp có router
-    ├── app_material_wrapper.dart cấu hình MaterialApp dùng chung
-    ├── navigation/app_router.dart lắp ráp GoRouter
-    ├── providers/               AppProvider, DeeplinkProvider
-    └── widgets/                 NavigatorWrapperWidget, UndefineRouteWidget
+    ├── root_app.dart                MaterialApp có router
+    ├── app_material_wrapper.dart    cấu hình MaterialApp dùng chung
+    ├── navigation/app_router.dart   lắp ráp GoRouter
+    ├── providers/                   AppProvider, DeeplinkProvider
+    └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
 ```
 
 ---
@@ -111,35 +122,38 @@ Việc scale vẫn phải đi qua `BuildContext` — `core_responsive` **không 
 
 ## 3. Lắp ráp DI — và vì sao thứ tự quan trọng
 
-[`apps/mobile/lib/di/injection.dart`](../../../apps/mobile/lib/di/injection.dart) khai báo thứ tự module:
+Thứ tự được khai trong [`apps/mobile/app_manifest.yaml`](../../../apps/mobile/app_manifest.yaml) ở mục `di_groups`, rồi `composer sync` sinh nó vào [`apps/mobile/lib/di/injection.dart`](../../../apps/mobile/lib/di/injection.dart):
 
 ```dart
-@InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],
-  externalPackageModulesAfter: [
-    ..._uiModules,       // CoreBaseUiPackageModule
+const _externalModulesBefore = [..._coreModules];
+const _externalModulesAfter = [
+    ..._shellModules,
+    ..._uiModules,
     ..._domainModules,
     ..._dataModules,
     ..._featureModules,
     ..._otherModules,
-  ],
-)
+];
 ```
 
-Thứ tự phân giải trong file sinh ra `injection.config.dart`:
+Thứ tự resolve trong file sinh ra `injection.config.dart`:
 
 | # | Đăng ký | Ghi chú |
 |:-:|:--|:--|
 | 1 | `_coreModules` | `core_common`, `core_network`, `core_notifications`, `core_storage`, `core_database`, `core_di` |
-| 2 | **binding cục bộ của app** | `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
+| 2 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
 | 3 | `_uiModules` | `core_base_ui` |
 | 4 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
 
-### Vì sao `CoreBaseUiPackageModule` nằm ở `_uiModules` chứ không phải `_coreModules`
+Bản thân package app không đăng ký gì. Mọi thứ nó cần đều đến qua một nhóm.
 
-Đây là luật ngầm quan trọng nhất trong toàn bộ hệ DI, và chính file nguồn cũng ghi chú điều này.
+### Vì sao `shell` đứng trước `ui`
 
-`core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai lớp này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực **cục bộ trong app** (`theme_storage_impl.dart`, `language_storage_impl.dart`) — chúng không thuộc package core nào. Các binding cục bộ được sinh ra *ở giữa* `…Before` và `…After`, nên `core_base_ui` buộc phải chạy ở nhóm `…After`. Chuyển nó vào `_coreModules` thì app sẽ chết lúc khởi động với lỗi "IThemeStorage is not registered".
+Đây là luật ngầm quan trọng nhất trong phần DI, và manifest có ghi rõ trong một comment.
+
+`core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai provider này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực trong `platform_app_shell` (`theme_storage_impl.dart`, `language_storage_impl.dart`), không phải trong package core nào mà các provider có thể phụ thuộc trực tiếp. Vì vậy `shell` phải khởi tạo trước. Đảo hai nhóm là app hỏng lúc khởi động với lỗi "IThemeStorage is not registered".
+
+Đây cũng đúng là vị trí mà các đăng ký này chiếm trước khi shell thành package. Trước đây chúng là đăng ký cục bộ của app, thứ mà injectable chạy *giữa* `…Before` và `…After`; giờ `shell` là nhóm đầu tiên của `…After`. Thứ tự app khởi động không đổi — chỉ chỗ đặt code là đổi.
 
 ### Cái bẫy thứ tự với eager singleton
 
@@ -148,7 +162,7 @@ Thứ tự phân giải trong file sinh ra `injection.config.dart`:
 >
 > `flutter analyze` không thể phát hiện lỗi này — đây là lỗi thứ tự lúc chạy. Hãy kiểm chứng bằng cách đọc file sinh ra `apps/mobile/lib/di/injection.config.dart` và xác nhận mọi phụ thuộc xuất hiện *phía trên* nơi tiêu thụ nó.
 
-Ví dụ thật: `NetworkConfigImpl` phụ thuộc `AuthLocalDataSource` nằm trong `data_auth` — đăng ký ở bước 4, sau khối cục bộ ở bước 2. Vì vậy nó được khai `@LazySingleton(as: NetworkConfig)` để hoãn việc dựng tới lần dùng đầu tiên. Nơi tiêu thụ duy nhất của nó là `ApiClient` cũng lazy, nên không mất gì.
+Ví dụ thật: `ThemeProvider` của `core_base_ui` inject `IThemeStorage`, do nhóm `shell` đăng ký. Đó là lý do `shell` được xếp trước `ui` trong `di_groups` của mọi app — đảo lại là app hỏng lúc boot. (`NetworkConfigImpl` từng là ví dụ ở đây, vì inject `AuthLocalDataSource` từ một module chạy sau. Giờ nó resolve `IAuthSessionGateway` ngay lúc gọi, và không còn dependency constructor nào xuyên module.)
 
 ### `AppRouter` là eager, nhưng router của nó thì không
 
@@ -162,9 +176,9 @@ late final GoRouter router = GoRouter( … );
 
 ---
 
-## 4. Adapter cục bộ của app
+## 4. Adapter của shell
 
-Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `apps/mobile/lib/di/utils/`.
+Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `platform/app_shell/lib/di/utils/`.
 
 | File | Hiện thực | Sở hữu | Cách đăng ký |
 |:--|:--|:--|:--|
@@ -194,7 +208,7 @@ Tham số khai kiểu `NetworkConfig` nên phép upcast được trình biên d�
 
 ## 5. Lắp ráp router
 
-[`app_router.dart`](../../../apps/mobile/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
+[`app_router.dart`](../../../platform/app_shell/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [

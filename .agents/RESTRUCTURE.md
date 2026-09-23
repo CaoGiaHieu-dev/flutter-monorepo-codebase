@@ -248,14 +248,14 @@ is what CI runs, so a release can never silently drop a module.
 
 **Gate:** `generate module demo && composer sync` produces a running app with zero hand edits.
 
-### Step 7 — Second app  *(7a done: ownership; 7b blocked on the shell extraction)*
+### Step 7 — Second app  *(7a, 7b done; 7c — the app itself — needs a toolchain)*
 
 `apps/admin` composing a **different subset** of the same modules is the only real test of the
 composition design — and the direct answer to whether a team can detach and reattach modules
 freely. An admin app with auth + settings and no dashboard, splash or onboarding exercises every
 `getItOrNull` / `getAllOrEmpty` fallback at once, permanently, in-repo.
 
-#### 7b — extract the shell first (prerequisite)
+#### 7b — extract the shell first (prerequisite) ✅ done
 
 A second app today means copying **1,369 lines across 24 files**. That is not a second app, it is
 a fork. The shell has to become a package before `apps/admin` is worth writing.
@@ -280,6 +280,19 @@ Two things the move must get right:
 2. **DI group order.** `core_base_ui` depends on `ILanguageStorage` / `IThemeStorage`, so the new
    group sits between `core` and `ui` in each `app_manifest.yaml`. Get this wrong and boot throws
    `"<Type> is not registered"` — invisible to `flutter analyze` (AGENTS §18).
+
+**Done as planned**, with two corrections to the plan above. `app.dart` did not stay: it was a
+barrel over files that all moved, so it was deleted and `platform_app_shell.dart` replaces it. And
+`main.dart`'s three relative imports became one package import, not four.
+
+The DI order is unchanged, which was the risk. The storage adapters, `NetworkConfigImpl` and
+`AppRouter` used to be app-local registrations, which injectable runs *between* the `before` and
+`after` phases. They now register through `platform_app_shell`'s own module in a new `shell` DI
+group, placed first in `after` — the same slot. `ui` still initialises after them.
+
+`injection.dart`, the app's path dependencies and the root workspace list were regenerated with a
+Python port of composer's generation logic, validated first by reproducing the three committed
+artifacts byte for byte. `composer verify` should therefore agree; it is still the check to trust.
 
 #### 7c — then the app itself
 
@@ -392,6 +405,7 @@ that does not exist.
 | 2026-09-21 | 3a | Introduced `AuthPrincipal` in `core_di`; contracts stopped carrying `UserEntity`. Removed `domain_auth` from `core_di` and `feature_home` pubspecs, and the `core_di -> domain_auth` approved edge from `arch_check` (4 → 3). | ⚠️ not run |
 | 2026-09-21 | 2b | Trimmed `feature_auth` 1,731 → 739 LOC (−57%): deleted register + forgot-password pages, the social and footer widgets, and a dead `clearValidationErrors()`; folded three copies of one `InputDecoration` into one; replaced ~110 lines of generic doc comment with one line per file naming the mechanism it shows. Pruned `AuthNavigator` and `AuthPath` to the surviving route. ARB: 41 → 11 keys per locale (three were duplicates of `core_base_ui` globals). | ⚠️ not run |
 | 2026-09-21 | 9 | **Semantic doc audit** — the path checker proves references *resolve*, not that prose is *true*, so the checkable claims were re-derived from code: 24 workspace members / 22 packages, `platform_kernel`'s 7 dependencies, `Result`'s 4 variants vs Provider `ViewState`'s 5, the interceptor order (Auth → RefreshToken → Retry → Logging), `AppRouter` being `@singleton`, `NavigatorKeys`' members. All held. Two stale: `CLAUDE.md` still advertised `--help` as `R1-R9`, and **R10 was machine-enforced but documented nowhere** — §4 rule 5 of this contract says a rule that becomes machine-checked must say so and name its id. Now in `AGENTS.md` §22 and both rules references. | ⚠️ not run |
+| 2026-09-23 | 7b | **The app shell is a package.** 20 files moved from `apps/mobile/lib/` to `platform/app_shell/` (`platform_app_shell`); what stays is `main.dart` and the generated `injection.dart`. New `shell` DI group, first in `after` — the slot app-local registrations always occupied, so boot order is unchanged. The package imports no module, and now R1 holds that instead of R10. Regenerated artifacts with a composer port validated byte-for-byte against the committed output. Docs rewritten rather than patched: `06_app_shell.md` (both locales) now describes the two-part shell; `05_di.md` §3 had described a `_databaseModules` group that does not exist and a `CoreDatabasePackageModule` that "runs LAST" while `injection.dart` runs it first; and 19 places still said `NetworkConfigImpl` injects `AuthLocalDataSource`, untrue since step 3c. | ⚠️ not run |
 | 2026-09-23 | 5+ | **Fixed a build-breaking bug step 5 introduced, and the blind spot that hid it.** `apps/mobile/pubspec.yaml` declared `core_responsive` twice — once in the `composer:managed:deps` region (composer adds `extra_dependencies` there) and once in the hand-written block below. Pub rejects a duplicate key, so the workspace has not resolved since commit `f7dfd2f`. Every audit on this branch missed it because they parsed YAML with PyYAML, which keeps the last duplicate silently. Removed the hand-written entry; `composer sync` and `verify` now refuse any managed package also declared outside the markers; the verification table gains check 10, a strict-loader scan of all 50 YAML files, validated against the broken file as a control. | ⚠️ not run |
 | 2026-09-23 | 2f | **Deleted the asset picker** (repo owner's decision, §5). 1,003 LOC, six `core_ui_kit` dependencies, three catalog pins, 29 global ARB keys. It could not have run as shipped — no photo-library permission was declared on either platform. Four docs re-pointed at an illustrative snippet; the setup guide's KGP note no longer lists `firebase_auth` / `photo_manager` / `google_sign_in` as current. | ⚠️ not run |
 | 2026-09-21 | 9 | **A rule the docs stated backwards, in eight places.** "Reusable widgets in `core_ui_kit` take **unscaled** values — caller scales before passing in" cannot both be true: if the caller scales, the widget receives a value that is already scaled. The operative half was right (never scale a parameter), the description was not, and it also implied widgets never scale at all — which would make them non-responsive. `custom_input_field.dart` has done it correctly the whole time: `widget.paddingBottom ?? context.h(10)` — parameter as received, own default scaled. Corrected in both locales across the rules reference, architecture, design-system guide, localization guide, review checklist, AGENTS.md, CLAUDE.md and an agent skill. Also recorded *why* the colour and font-size rules are review-held rather than machine-held: seven legitimate literal-colour uses against two real ones, and no suppression comments allowed — a rule whose exception list outweighs its findings teaches people to skim it. | ⚠️ not run |

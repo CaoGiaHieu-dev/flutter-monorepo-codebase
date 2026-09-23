@@ -158,7 +158,7 @@ Mọi kích thước trong `TextTheme` đều được scale lại qua context-a
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
-Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `apps/mobile/lib/presentation/app_material_wrapper.dart`, nơi có sẵn context.
+Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `platform/app_shell/lib/presentation/app_material_wrapper.dart`, nơi có sẵn context.
 
 `AppTextStyles` sau đó chỉ việc đọc lại theme đã dựng xong:
 
@@ -248,7 +248,7 @@ static Size get design => const Size(375, 812);
 Giá trị này được truyền cho package đúng một lần, ở gốc cây widget:
 
 ```dart
-// apps/mobile/lib/main_scope.dart
+// platform/app_shell/lib/main_scope.dart
 return ResponsiveInit(
   designSize: AppConfig.design,
   minTextAdapt: true,
@@ -390,7 +390,7 @@ Danh sách đầy đủ trong [`../reference/01_rules.md`](../reference/01_rules
 | Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
 | Một shadow | `styles/app_shadows.dart` |
 | Khung thiết kế gốc | `platform/common/lib/src/config/app_config.dart` → `design` |
-| Cách scale (`minTextAdapt`, `fontSizeResolver`) | `apps/mobile/lib/main_scope.dart` → `ResponsiveInit` |
+| Cách scale (`minTextAdapt`, `fontSizeResolver`) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` |
 | Thêm hẳn một class token mới | file mới trong `styles/`, rồi chạy barrel generator |
 
 ---

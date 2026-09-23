@@ -18,7 +18,7 @@ Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước v
 
 ## 🚀 1. Khởi tạo
 
-Đã được wire sẵn ở `apps/mobile/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình.
+Đã được wire sẵn ở `platform/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình.
 
 ```dart
 ResponsiveInit(

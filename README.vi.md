@@ -99,20 +99,17 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 ├── .github/                       # Luồng tích hợp liên tục (CI Workflows)
 │   └── workflows/
 │       └── fastlane.yml           # CI Github Action chạy Fastlane tự động
-├── apps/mobile/                           # Host Application (Vỏ ứng dụng chính)
-│   ├── android/                   # Dự án Android bản địa
-│   ├── ios/                       # Dự án iOS bản địa
-│   ├── lib/
-│   │   ├── config/                # Cấu hình môi trường (Flavors dev, staging, prod)
-│   │   ├── di/                    # Điểm đăng ký DI trung tâm (injection.dart)
-│   │   ├── presentation/
-│   │   │   ├── navigation/        # Lắp ráp GoRouter (app_router.dart) + shell widgets
-│   │   │   ├── providers/         # Global App Shell (AppProvider, DeeplinkProvider)
-│   │   │   └── widgets/           # NavigatorWrapperWidget, UndefineRouteWidget
-│   │   ├── main.dart              # Điểm chạy app chính (entrypoint)
-│   │   └── main_scope.dart        # Quản lý Boot Lifecycle (Splash → RootApp)
-│   └── pubspec.yaml               # Cấu hình Host App (liên kết tất cả packages con)
+├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
+│   └── mobile/
+│       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
+│       ├── lib/
+│       │   ├── main.dart          # Entry point, error zone
+│       │   └── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       ├── android/  ios/         # Project native
+│       ├── fastlane/              # Lane phát hành
+│       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
+│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter — dùng chung cho mọi app
 │   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
 │   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
 │   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
@@ -336,7 +333,7 @@ Future<void> configureDependencies({String? environment}) async {
 >
 > **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
 > không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
-> qua `@module` (xem `apps/mobile/lib/di/network_binding_module.dart`).
+> qua `@module` (xem `platform/app_shell/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -351,7 +348,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)
-`apps/mobile/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
+`platform/app_shell/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`

@@ -156,9 +156,9 @@ Full walkthrough: [`../guides/06_storage.md`](../guides/06_storage.md).
 
 **Rule.** An eager `@Singleton` must never depend on a type registered by a module that initialises **later** in `configureDependencies()`. Use `@LazySingleton` when the dependency comes from a later module.
 
-**Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`: `externalPackageModulesBefore` → app-local registrations → `externalPackageModulesAfter`.
+**Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`, which is generated from the manifest's `di_groups`: `core` (before), then `shell`, `ui`, `domain`, `data`, `feature`, `other` (after).
 
-Reference: `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it injects `AuthLocalDataSource` from `data_auth`, whose module runs after the app-local block. Its only consumer (`ApiClient`) is itself lazy, so deferring is safe.
+The live constraint here is `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_app_shell` registers. Swap the two groups and boot throws. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `IAuthSessionGateway` at call time and has no such dependency.)
 
 > [!CAUTION]
 > **`flutter analyze` cannot detect this class of bug.** It only appears at runtime, on a real boot.
@@ -282,7 +282,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 
 ## 11. Routing
 
-**Rule.** Never edit `apps/mobile/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
+**Rule.** Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
 
 | Contract | Purpose | Ordered? |
 |---|---|---|
@@ -365,7 +365,7 @@ This rule is **enforced by machine**, not by review: R7 runs as Gate 1 of `pr_qu
 
 **Rule.** All user-facing text is translated — hardcoded UI strings are forbidden. Each feature owns its `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI. Access through the feature extension: `context.l10nAuth.someKey`.
 
-Features **must not** edit `apps/mobile/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
+Features **must not** edit `platform/app_shell/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
 
 Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own `.arb` files — it uses `core_base_ui`'s.
 
@@ -406,7 +406,7 @@ abstract class AuthModule {
 This lets the owner inject the concrete type through its constructor while every other feature sees only the interface.
 
 > [!NOTE]
-> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `apps/mobile/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
+> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `platform/app_shell/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
 
 Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-only logic (use a UseCase).
 

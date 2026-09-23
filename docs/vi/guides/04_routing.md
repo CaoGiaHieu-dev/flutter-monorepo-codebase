@@ -8,7 +8,7 @@
 
 ## 1. Ý tưởng cốt lõi: routing là phi tập trung
 
-`apps/mobile/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
+`platform/app_shell/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
 
 ```dart
 List<INavDestinationModule> get _dashboardTabs {

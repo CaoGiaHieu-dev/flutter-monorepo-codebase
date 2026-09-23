@@ -378,7 +378,7 @@ Ba chi tiết gánh toàn bộ sức nặng:
 | Chi tiết | Vì sao quan trọng |
 |:---|:---|
 | `successCondition` | Thiếu nó, `execute` coi **mọi** response không ném exception là thành công. Một API báo lỗi trong body 200 sẽ cho người dùng đăng nhập được |
-| `onSuccess` lưu token | `NetworkConfig.getToken()` đọc token từ `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt |
+| `onSuccess` lưu token | `NetworkConfig.getToken()` đọc lại token qua `IAuthSessionGateway`, do `data_auth` hiện thực trên nền `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt |
 | `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên — có hẳn một test khẳng định điều đó |
 
 `logout` dùng `executeSync` chứ không phải `execute`: nó chỉ xoá storage, không có gì để await.

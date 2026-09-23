@@ -29,6 +29,8 @@ dependencies:
     path: ../../platform/database
   core_di:
     path: ../../platform/di
+  platform_app_shell:
+    path: ../../platform/app_shell
   core_base_ui:
     path: ../../platform/base_ui
   domain_core:

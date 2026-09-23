@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import '../app.dart';
+import 'providers/providers.dart';
 
 /// A wrapper around [MaterialApp] and [MaterialApp.router] to avoid code duplication
 /// of common configurations like title, debugShowCheckedModeBanner, and showPerformanceOverlay.

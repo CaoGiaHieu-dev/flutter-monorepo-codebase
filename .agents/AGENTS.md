@@ -85,8 +85,8 @@ This monorepo uses **Pub Workspaces** and is divided into two top-level territor
      - Consumers call `getIt<I*ActionHandler>().method(context)`. Do **not** use Action Handlers for pure route navigation (use Navigators) or Domain-only logic (use UseCases).
 4. **UI vs. Business State Workflows (Bypassing Domain)**:
    - **Pure UI State (e.g., ThemeMode, Locale)**: Cannot pass through the Domain layer because Domain must be Pure Dart (cannot import `flutter/material.dart`). UI Providers bypass Domain and persist via a DI storage Interface implemented in the App Shell:
-     - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`apps/mobile/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`apps/mobile/lib/di/utils/theme_storage_keys.dart`)
-     - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`apps/mobile/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`apps/mobile/lib/di/utils/language_storage_keys.dart`)
+     - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`platform/app_shell/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`platform/app_shell/lib/di/utils/theme_storage_keys.dart`)
+     - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`platform/app_shell/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`platform/app_shell/lib/di/utils/language_storage_keys.dart`)
 
 ---
 
@@ -247,7 +247,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
 - **ARB keys MUST be `lowerCamelCase`.** `flutter gen-l10n` copies each key straight through into a Dart getter, so `welcome_back` yields `context.l10nAuth.welcome_back` at every call site — an identifier that breaks Dart's naming convention. Generated files are excluded from `analysis_options.yaml`, so nothing will warn you; the `.arb` is the only place the casing is decided.
-- **Decentralized Delegation**: Feature packages MUST NOT modify `apps/mobile/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The root app dynamically collects all delegates using `getIt.getAll<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
+- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@LazySingleton(as: IFeatureLocalization)`). The root app dynamically collects all delegates using `getIt.getAll<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
 
 ---
 
@@ -316,7 +316,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - **No `BuildContext` in scope?** In an `async` method, read the value from context **before the first `await`** and pass it forward — never hold a context across an await. Read `context.w(96)` first, `await` second, and check `mounted` before touching state afterwards — see the snippet in `docs/en/reference/01_rules.md` §12.
 - **Design tokens take context too.** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter. Their `raw*` constants are the single source of the numbers; edit `raw*`, not the accessors.
 - **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They **MUST NOT** scale incoming parameter values internally: it is the *caller's* responsibility to scale arguments *before* passing them in, so a parameter arrives already in device pixels and is used as-is. A widget's **own** constants — its padding, its default gap — it must still scale, or it is not responsive; `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`.
-- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `apps/mobile/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `platform/app_shell/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
 - **A widget test that scales must wrap the widget under test in `ResponsiveInit`.** Without it `ResponsiveScope.of` asserts — deliberately. A silent unscaled fallback would ship a layout that is wrong on every device except the design artboard, with nothing pointing at the cause.
 - **Helper scaling axes:**
 
@@ -347,7 +347,7 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ## 🗂️ 16. Mandatory `utils/` Folder for Package Constants
 
-- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `apps/mobile/lib/di/utils/`.
+- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `platform/app_shell/lib/di/utils/`.
 - **ABSOLUTELY FORBIDDEN** to create a shared cross-domain constants file that many packages import. A constant belongs to exactly one owner.
 - `core_common/lib/src/utils/` is reserved for constants that are **genuinely global** — today only `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
 - **Precedent — constants that were evicted from `core_common`,** so nobody re-adds them:
@@ -407,9 +407,9 @@ class AuthLocalDataSource {
 
 ## 🧨 18. DI Registration Order & Eager Singletons
 
-- `configureDependencies()` initializes modules **in the order declared** in `apps/mobile/lib/di/injection.dart` (`externalPackageModulesBefore` → app-local registrations → `externalPackageModulesAfter`).
+- `configureDependencies()` initializes modules **in the order declared** in `apps/mobile/lib/di/injection.dart`: `externalPackageModulesBefore` (the `core` group) → `externalPackageModulesAfter` (`shell`, `ui`, `domain`, `data`, `feature`, `other`, in that order). That order comes from the manifest's `di_groups`, and the app package itself registers nothing.
 - **ABSOLUTELY FORBIDDEN** for an eager `@Singleton` to depend on a type registered by a module that runs **later** — GetIt throws `"<Type> is not registered"` during boot.
-- Use `@LazySingleton` whenever a dependency comes from a later module. Reference: `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it injects `AuthLocalDataSource` from `data_auth`, whose module initializes after the app-local block. Its only consumer (`ApiClient`) is itself lazy, so deferring construction is safe.
+- Use `@LazySingleton` whenever a dependency comes from a later module. The live constraint in this template is `shell` before `ui`: `ThemeProvider` / `LanguageProvider` in `core_base_ui` inject the storage adapters `platform_app_shell` registers, so the `shell` group must come first — the manifest's `di_groups` order is what guarantees it. (`NetworkConfigImpl` used to be the textbook example, injecting `AuthLocalDataSource` from `data_auth`; it now reads the session through `IAuthSessionGateway` at call time and has no cross-module constructor dependency at all.)
 - `flutter analyze` **cannot** detect this class of bug — it only appears at runtime. After changing any DI annotation or constructor, **verify the generated `apps/mobile/lib/di/injection.config.dart`**: confirm each eager registration's dependencies appear earlier in `init()`.
 - `@PostConstruct(preResolve: true)` on a `@lazySingleton` is awaited during module init and then re-registered as a plain sync lazy singleton, so downstream `gh<T>()` sync lookups are safe.
 
@@ -448,7 +448,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
    - Real bug: `NetworkConfigImpl` was registered only `as NetworkConfig`, so `getItOrNull<SslPinningConfig>()` in `AppInitializer._setupHttpOverrides` returned `null` and **certificate pinning was silently skipped on staging and production**.
    - Fix pattern — bind the second type through a `@module`, typed so the compiler checks the upcast (no `as`):
      ```dart
-     // apps/mobile/lib/di/network_binding_module.dart
+     // platform/app_shell/lib/di/network_binding_module.dart
      @module
      abstract class NetworkBindingModule {
        @lazySingleton

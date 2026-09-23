@@ -141,7 +141,8 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Layer | Path | Responsibility |
 |:------|:-----|:---------------|
-| **App Shell** | `apps/mobile/` | Entrypoint, flavors, central DI assembly (`injection.dart`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes) |
+| **Apps** | `apps/<id>/` | What genuinely differs per app: `main.dart`, flavors, `app_manifest.yaml`, and the `injection.dart` generated from it |
+| **App Shell** | `platform/app_shell/` | Shared by every app: boot scope, **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes), material wrapper, storage adapters, `NetworkConfigImpl` |
 | **Core** | `platform/*` | Infrastructure shared across all layers |
 | **Domain** | `modules/*/domain` | **Pure Dart** business logic — entities, use cases, repository interfaces |
 | **Data** | `modules/*/data` | Repository implementations, DTOs/models, data sources (remote + local) |
@@ -152,10 +153,11 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | Package | Purpose | Key Notes |
 |:--------|:--------|:----------|
 | `platform_kernel` | **Depend on this, not `core_common`, unless you need something Flutter-bound.** Pure Dart, zero Flutter. `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `ApiStatusConstants`, `EnvConstants` | 7 dependencies, none Flutter-bound — enforced by arch_check **R9**. Everything else may depend on it |
+| `platform_app_shell` | The reusable app shell — `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the `ILanguageStorage`/`IThemeStorage` adapters, `AppBootStorage`, `NetworkConfigImpl` | Every app composes it instead of copying it. Its DI group runs **after `core`, before `ui`**. Imports no module — arch_check R1 holds that |
 | `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` lives in `domain_core`; a re-export shim at `src/error/failures.dart` re-exports it for convenience |
 | `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
-| `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in app shell |
+| `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_app_shell` |
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
 | `core_database` | **Mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener` | **Owns no database/table/DAO**; its DI module registers nothing. Each package declares its own database — see [Database System](#database-system-package-owned-drift--sqlite) |
 | `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
@@ -203,7 +205,8 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 @InjectableInit(
   externalPackageModulesBefore: [..._coreModules],  // core_common, network, notifications, storage, di
   externalPackageModulesAfter: [
-    ..._uiModules,       // CoreBaseUiPackageModule (depends on app-local storage interfaces)
+    ..._shellModules,    // PlatformAppShellPackageModule — storage adapters, NetworkConfig, router
+    ..._uiModules,       // CoreBaseUiPackageModule (injects the shell's storage adapters)
     ..._domainModules,   // domain_core, domain_auth
     ..._dataModules,     // data_core, data_auth
     ..._featureModules,  // feature_auth, feature_dashboard, feature_home, etc.
@@ -225,15 +228,15 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 ### Critical DI Rules
 
 1. **Constructor Injection only** — no `getIt<T>()` inside business logic (VMs, Repos, UseCases)
-2. **CoreBaseUiPackageModule** must be in `externalPackageModulesAfter` (depends on app-local `ILanguageStorage`/`IThemeStorage`)
+2. **`CoreBaseUiPackageModule` must run after the `shell` group** — it injects `ILanguageStorage`/`IThemeStorage`, which `platform_app_shell` registers. The manifest's `di_groups` order is what enforces this
 3. Never create monolithic `DomainPackageModule`/`DataPackageModule` — register each micro-package module separately
 4. Categorize new modules into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, or `_otherModules`
 5. When using `ignoreUnregisteredTypes`, use **relative imports** from the package's barrel file
-6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` for exactly this reason (it injects `AuthLocalDataSource` from `data_auth`). `flutter analyze` cannot catch this — verify in generated `apps/mobile/lib/di/injection.config.dart`
+6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `flutter analyze` cannot catch this — verify in generated `apps/mobile/lib/di/injection.config.dart`
 7. **`getAll<T>()` THROWS when `T` is unregistered** — use `getAllOrEmpty<T>()` for optional contributions, and `getItOrNull<T>()` + fallback for single ones
 8. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable even if `InterfaceA implements InterfaceB`. Bind the second type via `@module`:
    ```dart
-   // apps/mobile/lib/di/network_binding_module.dart
+   // platform/app_shell/lib/di/network_binding_module.dart
    @module
    abstract class NetworkBindingModule {
      @lazySingleton
@@ -242,9 +245,9 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
    ```
    Miss it and SSL pinning silently no-ops on staging/prod — the app still builds and still makes requests.
 
-### App-Shell Storage Adapters
+### App-Shell Storage Adapters (`platform_app_shell`)
 
-`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `apps/mobile/lib/di/` and each owns its **own** `StorageValue` (no shared preset object); their keys live in `apps/mobile/lib/di/utils/`:
+`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `platform/app_shell/lib/di/` — shared by every app — and each owns its **own** `StorageValue` (no shared preset object); their keys live in `platform/app_shell/lib/di/utils/`:
 - `language_storage_impl.dart` → own `StorageValue<String>` @ `LanguageStorageKeys.LOCALE`
 - `theme_storage_impl.dart` → own `StorageValue<ThemeMode>` @ `ThemeStorageKeys.THEME_MODE`
 - `app_boot_storage.dart` → own `StorageValue<bool>` @ `AppBootStorageKeys.VIEWED_ONBOARD`
@@ -313,7 +316,7 @@ Widget build(BuildContext context, GoRouterState state) {
 ### Key Router Components
 
 - **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart` — its own file now, and `homeKey` was deleted as unused. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
-- **`NavigatorWrapperWidget`**: App shell widget at `apps/mobile/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
+- **`NavigatorWrapperWidget`**: App shell widget at `platform/app_shell/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
 - **`UndefineRouteWidget`**: GoRouter's `errorPageBuilder` child — never use inline anonymous widgets
 - **SplashPage**: Manually managed by `MainScope` (`AppMaterialWrapper`), NOT a GoRouter route
 
@@ -451,7 +454,7 @@ abstract class AuthModule {
 - **No context in an async method?** Read the value *before the first `await`*, then pass it on. Then check `mounted` after the `await`, before touching state
 - **Reusable widgets** in `core_ui_kit` receive **already-scaled** values and use them as-is (the caller scales); they scale only their *own* constants. `context.w(widget.width)` double-scales
 - **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
-- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `apps/mobile/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `platform/app_shell/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
 - **Widget tests that scale must wrap the subject in `ResponsiveInit`** — otherwise `ResponsiveScope.of` asserts, deliberately, rather than silently falling back to unscaled values
 - **Enforced by machine:** `dart tools/arch_check/check.dart` rule **R7** blocks any bare sizing extension in a file importing `core_responsive`
 - **Enforced:** `dart tools/arch_check/check.dart` rule **R7** blocks the build on any bare sizing extension (Gate 1 of `pr_quality_check.yml`)
@@ -608,7 +611,7 @@ abstract class RegisterModule {
 
 Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_client.dart`):
 
-1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it from its owner, `AuthLocalDataSource` — `core_network` never touches storage). Also sends the locale under the non-standard header key `language`
+1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it through `IAuthSessionGateway`, resolved with `getItOrNull` — `core_network` never touches storage, and a build with no auth module simply sends no token). Also sends the locale under the non-standard header key `language`
 2. **RefreshTokenInterceptor**: added **only when `NetworkConfig.onRefreshToken != null`**; catches 401 and replays. Sits **before** Retry so a 401 is never retried with a dead token. `RefreshTokenHandler` serialises concurrent 401s behind one `Completer`, and marks a replayed request so `dio.fetch` re-entering the same interceptor cannot recurse
 3. **RetryInterceptor**: retries timeout/connection errors only (not HTTP status codes); honours the per-request `canRetry` extra; groups concurrent failures into a single retry dialog
 4. **LoggingInterceptor**: JSON-formatted logs via `dynamic_logger`, `kDebugMode`-gated on **all three** hooks (including `onError`), with `Authorization`/`Cookie` headers redacted
@@ -620,7 +623,7 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 - **Staging/Prod:** strict SPKI hash matching
 - > [!CAUTION]
   > Pinning needs **two** things or it silently no-ops (the initializer logs an ERROR in each case):
-  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `apps/mobile/lib/di/network_binding_module.dart` binds it.
+  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `platform/app_shell/lib/di/network_binding_module.dart` binds it.
   > 2. `sslPinningHashes` must be **non-empty**. It currently returns `const []`, i.e. **pinning is off** until you fill it in. See the `openssl` recipe in `network_config_impl.dart`; pin at least two keys (leaf + backup) so cert rotation cannot lock every client out.
 
 ### Data Standardization
@@ -720,7 +723,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
 17. **Core never depends on features or data.** No `platform/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
-19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead — e.g. `NetworkConfigImpl` is `@LazySingleton(as: NetworkConfig)` because it depends on `AuthLocalDataSource` from `data_auth`. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
+19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead. The live ordering constraint in this template is `shell` before `ui`: `ThemeProvider` injects `IThemeStorage`, which the shell registers. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.
 21. **`getAll<T>()` throws when `T` is unregistered.** Use `getAllOrEmpty<T>()` for optional multi-instance contributions and `getItOrNull<T>()` + fallback for single ones — otherwise removing a feature crashes the app at boot — `IFeatureLocalization` is the usual casualty, and it takes `MaterialApp` construction down with it.
 22. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable. Bind the second type through a `@module` — miss it and SSL pinning silently no-ops.

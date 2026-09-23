@@ -19,6 +19,7 @@ import 'package:feature_onboarding/di/module.module.dart';
 import 'package:feature_settings/di/module.module.dart';
 import 'package:feature_splash/di/module.module.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_app_shell/di/module.module.dart';
 import 'package:provider_state_management/di/module.module.dart';
 
 import 'injection.config.dart';
@@ -54,6 +55,10 @@ const _coreModules = [
   ExternalModule(CoreDiPackageModule),
 ];
 
+const _shellModules = [
+  ExternalModule(PlatformAppShellPackageModule),
+];
+
 const _uiModules = [
   ExternalModule(CoreBaseUiPackageModule),
 ];
@@ -84,6 +89,7 @@ const _otherModules = [
 
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
+    ..._shellModules,
     ..._uiModules,
     ..._domainModules,
     ..._dataModules,

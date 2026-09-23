@@ -190,7 +190,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-Đây là pattern thật lấy từ `apps/mobile/lib/presentation/widgets/navigator_wrapper_widget.dart` — chú ý nó điều hướng qua **Navigator interface resolve bằng `getItOrNull`**, không bao giờ hardcode path. Xem [`04_routing.md`](04_routing.md).
+Đây là pattern thật lấy từ `platform/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart` — chú ý nó điều hướng qua **Navigator interface resolve bằng `getItOrNull`**, không bao giờ hardcode path. Xem [`04_routing.md`](04_routing.md).
 
 `MultiProviderStateListener` cho phép lồng nhiều listener mà không tạo kim tự tháp widget.
 

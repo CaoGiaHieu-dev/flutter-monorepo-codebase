@@ -30,6 +30,10 @@
 # negotiation between modules, not a unilateral edit, so it gets its own rule.
 /platform/di/                   @your-org/infra @your-org/architects
 
+# The shared app shell. Infra maintains it, but every app boots through it, so
+# the people who own the apps review changes to it too.
+/platform/app_shell/            @your-org/infra @your-org/tech-leads
+
 # ---------------------------------------------------------------------------
 # Modules — one vertical slice, one owning team.
 #

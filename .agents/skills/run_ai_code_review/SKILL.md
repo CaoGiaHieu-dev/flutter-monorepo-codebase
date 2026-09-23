@@ -39,8 +39,9 @@ When a task involves "review code", "audit codebase", "verify architecture", etc
 Useful extras: `--focus <area>` (repeatable, restricted to the tool's allowed focus areas),
 `--exclude <glob>` (repeatable), `--verbose`, `--output-dir <dir>`.
 
-Requires a Gemini API key — either `--api-key` or the `GEMINI_API_KEY` environment variable
-(`tools/code_review/code_review_config.json` ships empty on purpose).
+Requires a Gemini API key — `--api-key`, the `GEMINI_API_KEY` environment variable, or the
+gitignored `tools/code_review/.gemini_api_key` the tool writes when the user agrees to save one.
+Never put a key in the tracked `code_review_config.json`.
 
 Use the `run_command` tool to run the commands above. After execution, analyze the summary output printed to the terminal and advise the user on how to resolve any architectural violations.
 

@@ -13,8 +13,7 @@ class FileService {
       }
       return null;
     } catch (e) {
-      // ignore: avoid_print
-      print('Error reading file $filePath: $e');
+      stdout.writeln('Error reading file $filePath: $e');
       return null;
     }
   }
@@ -39,8 +38,7 @@ class FileService {
         if (await File(file).exists()) {
           files.add(file);
         } else {
-          // ignore: avoid_print
-          print('⚠️  File not found: $file');
+          stdout.writeln('⚠️  File not found: $file');
         }
       }
     }

@@ -101,7 +101,7 @@ dart tools/unused_checker/check_unused_packages.dart    # unused packages only
 dart tools/unused_checker/check_unused_translate.dart   # unused translation keys
 dart tools/unused_checker/check_unused_file.dart        # orphaned files
 
-# AI-powered code review (requires Gemini API key in code_review_config.json)
+# AI-powered code review (Gemini API key via GEMINI_API_KEY, --api-key, or the gitignored tools/code_review/.gemini_api_key)
 dart tools/code_review/code_review.dart --all
 dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --changed

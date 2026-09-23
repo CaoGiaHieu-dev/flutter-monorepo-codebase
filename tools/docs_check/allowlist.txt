@@ -21,12 +21,14 @@ apps/mobile/lib/di/injection.config.dart
 apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.apk
 
 # --- (2) Secrets -----------------------------------------------------------
-# Production env values. `apps/mobile/env.dev` and `apps/mobile/env.staging` ARE committed;
+# Production env values. `apps/mobile/env.dev` and `apps/mobile/env.stg` ARE committed;
 # prod is not, which is the point the setup guide is making.
 apps/mobile/env.prod
 # Android release signing. `01_cicd.md` explains how CI materialises both.
 apps/mobile/android/keystore.jks
 apps/mobile/android/key.properties
+# A Gemini API key the code_review tool saves when asked to; gitignored.
+tools/code_review/.gemini_api_key
 # Fastlane credentials. The repo ships `apps/mobile/fastlane/Config.example.yaml`.
 apps/mobile/fastlane/Config.yaml
 

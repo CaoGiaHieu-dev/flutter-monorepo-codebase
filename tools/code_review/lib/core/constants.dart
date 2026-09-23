@@ -9,6 +9,7 @@ class CodeReviewConstants {
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
   static const String configFileName = 'code_review_config.json';
+  static const String apiKeyFileName = '.gemini_api_key';
   static const String promptFileName = 'review_prompt.md';
   static const String defaultOutputDir = 'code_review_reports';
 
@@ -23,6 +24,7 @@ class CodeReviewConstants {
     '.g.dart',
     '.config.dart',
     '.freezed.dart',
+    '.module.dart',
     '.mocks.dart',
     'test/',
   ];

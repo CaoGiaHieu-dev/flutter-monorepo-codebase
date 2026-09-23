@@ -17,8 +17,7 @@ class ReportService {
   }) async {
     if (reviewResults.isEmpty) return;
 
-    // ignore: avoid_print
-    print('📊 Generating comprehensive review report...');
+    stdout.writeln('📊 Generating comprehensive review report...');
 
     try {
       final outputDirectory = outputDir ?? CodeReviewConstants.defaultOutputDir;
@@ -37,11 +36,9 @@ class ReportService {
       );
       await _writeComprehensiveReport(reportPath, reviewResults);
 
-      // ignore: avoid_print
-      print('✅ Comprehensive review report saved to: $reportPath');
+      stdout.writeln('✅ Comprehensive review report saved to: $reportPath');
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error generating review report: $e');
+      stdout.writeln('❌ Error generating review report: $e');
     }
   }
 
@@ -305,8 +302,7 @@ class ReportService {
     required List<String> filePaths,
     String? outputDir,
   }) async {
-    // ignore: avoid_print
-    print('📊 Generating batch review report...');
+    stdout.writeln('📊 Generating batch review report...');
 
     try {
       final outputDirectory = outputDir ?? CodeReviewConstants.defaultOutputDir;
@@ -345,11 +341,9 @@ class ReportService {
 
       await FileService.writeFile(reportPath, buffer.toString());
 
-      // ignore: avoid_print
-      print('✅ Batch review report saved to: $reportPath');
+      stdout.writeln('✅ Batch review report saved to: $reportPath');
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error generating batch report: $e');
+      stdout.writeln('❌ Error generating batch report: $e');
     }
   }
 }

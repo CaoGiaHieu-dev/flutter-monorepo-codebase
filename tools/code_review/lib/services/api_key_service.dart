@@ -11,6 +11,13 @@ class ApiKeyService {
     CodeReviewConstants.configFileName,
   );
 
+  /// Where a saved key goes: a gitignored file next to the tool, never the
+  /// tracked `code_review_config.json`.
+  static String get _keyFilePath => path.join(
+    CodeReviewConstants.toolDir,
+    CodeReviewConstants.apiKeyFileName,
+  );
+
   /// Get API key from environment, arguments, config, or prompt user
   static String getApiKey(ArgResults args) {
     // Try from command line argument first
@@ -25,7 +32,11 @@ class ApiKeyService {
       return envKey;
     }
 
-    // Try from config file
+    // Try the saved key file, then the config file
+    final savedKey = _getSavedApiKey();
+    if (savedKey.isNotEmpty) {
+      return savedKey;
+    }
     final configKey = _getApiKeyFromConfig();
     if (configKey.isNotEmpty) {
       return configKey;
@@ -33,6 +44,15 @@ class ApiKeyService {
 
     // Prompt user for API key
     return _promptForApiKey();
+  }
+
+  static String _getSavedApiKey() {
+    try {
+      final file = File(_keyFilePath);
+      return file.existsSync() ? file.readAsStringSync().trim() : '';
+    } catch (e) {
+      return '';
+    }
   }
 
   /// Get API key from config file
@@ -55,42 +75,34 @@ class ApiKeyService {
 
   /// Prompt user for API key and optionally save it
   static String _promptForApiKey() {
-    // ignore: avoid_print
-    print('🔑 Gemini API key not found!');
-    // ignore: avoid_print
-    print('');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('🔑 Gemini API key not found!');
+    stdout.writeln('');
+    stdout.writeln(
       '📋 You can get your API key at: https://makersuite.google.com/app/apikey',
     );
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     stdout.write('🔐 Please enter your Gemini API key: ');
     final apiKey = stdin.readLineSync()?.trim() ?? '';
 
     if (apiKey.isEmpty) {
-      // ignore: avoid_print
-      print('❌ No API key provided. Exiting...');
+      stdout.writeln('❌ No API key provided. Exiting...');
       exit(1);
     }
 
     // Validate API key format (basic check)
     if (!_isValidApiKeyFormat(apiKey)) {
-      // ignore: avoid_print
-      print('⚠️  Warning: The API key format doesn\'t look correct.');
+      stdout.writeln('⚠️  Warning: The API key format doesn\'t look correct.');
       stdout.write('Continue anyway? (y/N): ');
       final confirm = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
       if (confirm != 'y' && confirm != 'yes') {
-        // ignore: avoid_print
-        print('❌ Cancelled by user. Exiting...');
+        stdout.writeln('❌ Cancelled by user. Exiting...');
         exit(1);
       }
     }
 
     // Ask if user wants to save the key
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
     stdout.write('💾 Save this API key to config file for future use? (y/N): ');
     final saveKey = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
 
@@ -107,36 +119,16 @@ class ApiKeyService {
     return apiKey.startsWith('AIza') && apiKey.length >= 35;
   }
 
-  /// Save API key to config file
+  /// Save API key to the gitignored key file
   static void _saveApiKeyToConfig(String apiKey) {
     try {
-      final configFile = File(_configPath);
-      Map<String, dynamic> config = {};
-
-      // Read existing config if it exists
-      if (configFile.existsSync()) {
-        final configContent = configFile.readAsStringSync();
-        config = jsonDecode(configContent) as Map<String, dynamic>;
-      }
-
-      // Add API key to config
-      config['geminiApiKey'] = apiKey;
-
-      // Write updated config
-      const encoder = JsonEncoder.withIndent('    ');
-      configFile.writeAsStringSync(encoder.convert(config));
-
-      // ignore: avoid_print
-      print('✅ API key saved to config file successfully!');
-      // ignore: avoid_print
-      print('💡 You can remove it later by editing: $_configPath');
+      File(_keyFilePath).writeAsStringSync('$apiKey\n');
+      stdout.writeln('✅ API key saved to $_keyFilePath (gitignored).');
     } catch (e) {
-      // ignore: avoid_print
-      print('⚠️  Could not save API key to config: $e');
-      // ignore: avoid_print
-      print('💡 You can manually add it to $_configPath:');
-      // ignore: avoid_print
-      print('   "geminiApiKey": "your_api_key_here"');
+      stdout.writeln('⚠️  Could not save API key: $e');
+      stdout.writeln(
+        '💡 Export it instead: export GEMINI_API_KEY=your_api_key_here',
+      );
     }
   }
 }

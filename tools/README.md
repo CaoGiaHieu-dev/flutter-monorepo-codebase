@@ -35,7 +35,7 @@ tools/
 │   ├── code_review.dart            # Script review chính
 │   ├── lib/                        # Phần lõi của tool
 │   ├── review_prompt.md            # Prompt AI chi tiết
-│   ├── code_review_config.json     # Cấu hình (API key, scope, etc.)
+│   ├── code_review_config.json     # Cấu hình (ngôn ngữ, batch) — không chứa API key
 │   └── README.md                   # Tài liệu chi tiết
 ├── unused_checker/                 # 🧹 Phân tích & dọn dẹp tài nguyên dư thừa
 │   ├── check_script.dart           # Chạy tất cả kiểm tra cùng lúc

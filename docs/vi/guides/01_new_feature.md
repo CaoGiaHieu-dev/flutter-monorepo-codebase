@@ -157,7 +157,7 @@ Rồi tới phần đóng góp qua DI — code thật từ
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 
@@ -343,7 +343,7 @@ Cài đặt nó ngay trong `routing/` của bạn — code thật từ
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:injectable/injectable.dart';
 
 import 'home_route_module.dart';

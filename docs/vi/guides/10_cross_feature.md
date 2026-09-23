@@ -211,7 +211,7 @@ Interface — code thật từ
 [`platform/di/lib/src/theme/i_theme_storage.dart`](../../../platform/di/lib/src/theme/i_theme_storage.dart):
 
 ```dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Interface for theme storage, decoupling ThemeProvider from the actual storage implementation.
 abstract class IThemeStorage {

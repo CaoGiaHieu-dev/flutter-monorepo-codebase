@@ -330,14 +330,6 @@ class CacheEntryRepositoryImpl extends IBaseRepository
   Future<Result<void>> save(CacheEntryParams params) {
     return execute<void, void>(() => _local.save(params.key, params.value));
   }
-
-  @override
-  Future<Result<List<CacheEntryEntity>>> getAll() {
-    return execute<List<CacheEntryModel>, List<CacheEntryEntity>>(
-      _local.getAll,
-      mapper: (models) => models.map((model) => model.toEntity()).toList(),
-    );
-  }
 }
 ```
 

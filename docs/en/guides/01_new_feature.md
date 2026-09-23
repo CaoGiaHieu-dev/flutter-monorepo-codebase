@@ -157,7 +157,7 @@ Then the DI contribution — real code from
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 
@@ -344,7 +344,7 @@ Implement it inside your own `routing/` — real code from
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:injectable/injectable.dart';
 
 import 'home_route_module.dart';

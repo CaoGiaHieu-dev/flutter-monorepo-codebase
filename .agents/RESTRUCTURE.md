@@ -319,14 +319,17 @@ generated `injection.dart`, because the boot sequence moved into `runShellApp()`
 other app's packages); tabs without a dashboard rendered `SizedBox.shrink()` — a blank screen;
 and the module generator's rollback snapshotted files it no longer writes. All fixed.
 
-⏳ **Still open, and each needs a toolchain:** generate its desktop runners (`flutter create
---platforms=…`, see its README) and build it; per-app flavor handling
-(`AppConfig.appFlavor` → injected `IAppEnvironment`) and a CI build matrix. Done without one:
-the `app` package is now `mobile_app`, matching `admin_app`.
+✅ **Renamed `app` → `mobile_app`**, matching `admin_app`.
 
-`AppConfig.appFlavor` — a global reading `services.appFlavor` — becomes an injected
-`IAppEnvironment`, because two apps cannot share one global flavor. CI becomes a matrix. The app
-package is renamed `mobile_app` (done — see below).
+✖ **Dropped from the plan: `AppConfig.appFlavor` → an injected `IAppEnvironment`.** The reason
+given was that two apps cannot share one global flavor. They never share it: each app is its own
+process, and `services.appFlavor` is the flavor *that build* was made with. A global reading it
+is correct per app. What does differ per app is the set of flavors each one defines, and that
+lives in each app's native project, not in Dart.
+
+⏳ **Still open, and each needs a toolchain:** generate `apps/admin`'s desktop runners
+(`flutter create --platforms=…`, see its README), build it, and add it to CI as a second build
+job — which is what the gate below asks for.
 
 **Gate:** one workspace builds both `mobile` and `admin` from one set of modules, and the admin
 build contains no `feature_dashboard`, `feature_splash` or `feature_onboarding`.

@@ -32,10 +32,6 @@ class AuthProvider extends BaseProvider<UserEntity>
   final RefreshTokenUseCase _refreshTokenUseCase;
   final AuthStatusStreamImpl _authStream;
 
-  bool get isAuthenticated => isSuccess && data != null;
-
-  UserEntity? get currentUser => isAuthenticated ? data : null;
-
   StreamSubscription<ViewStateModel<UserEntity>>? _authSubscription;
 
   final _failureController = StreamController<AuthSessionFailure>.broadcast();

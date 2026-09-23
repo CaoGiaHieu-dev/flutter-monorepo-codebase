@@ -87,20 +87,25 @@ Code thật từ
 ```dart
 abstract class IAuthStatusStream {
   /// Emits on every authentication state change; `null` means signed out.
-  Stream<UserEntity?> get authStatusStream;
+  Stream<AuthPrincipal?> get authStatusStream;
 
-  /// The currently signed-in user, or `null` when signed out.
-  UserEntity? get currentUser;
+  /// The currently signed-in principal, or `null` when signed out.
+  ///
+  /// Read this for the state at subscription time — [authStatusStream] is a
+  /// broadcast stream and does not replay its last value to new listeners.
+  AuthPrincipal? get currentUser;
 }
 ```
 
 Hai quyết định thiết kế đáng hiểu rõ:
 
-**Vì sao dùng `UserEntity` cụ thể chứ không phải generic `<T>`.** Bên tiêu thụ giữ được type safety
-đầy đủ, không phải ép kiểu. Theo `.agents/AGENTS.md` §8.4, khi một neutral stream mang domain
-entity thì interface ở `core_di` **bắt buộc** gọi tên kiểu đó tường minh thay vì lùi về `<T>` — và
-`core_di` được *cho phép tường minh* phụ thuộc các micro-package `domain_*` để làm việc đó.
-`core_di` là DI Hub chứ không phải business logic, nên điều này không biến nó thành tầng domain.
+**Vì sao là `AuthPrincipal` chứ không phải `UserEntity`.** Hợp đồng ở `core_di` không được gọi
+tên một kiểu thuộc package `domain_*` (`.agents/AGENTS.md` §8.4): import đó khiến mọi bên tiêu thụ
+phụ thuộc `domain_auth` ngay lúc biên dịch, và `getItOrNull` không gỡ được điều đó. Vì vậy `core_di`
+sở hữu một value type nhỏ,
+[`AuthPrincipal`](../../../platform/di/lib/src/agnostic_streams/auth_principal.dart), và feature
+auth thu hẹp entity của mình về kiểu đó tại ranh giới (`toPrincipal` ở bước 2). Hợp đồng cố ý nhỏ
+hơn entity — bên tiêu thụ chỉ hỏi *ai đang đăng nhập* sẽ không bao giờ thấy phần còn lại.
 
 **Vì sao có `currentUser` bên cạnh stream.** `authStatusStream` là stream *broadcast*: nó không
 phát lại giá trị cuối cho listener mới. Một bên đăng ký sau khi đã đăng nhập sẽ "mù" cho tới lần
@@ -115,19 +120,31 @@ Code thật từ
 /// Implementation of [IAuthStatusStream] provided by `feature_auth`.
 @singleton
 class AuthStatusStreamImpl implements IAuthStatusStream {
-  final _controller = StreamController<UserEntity?>.broadcast();
-  UserEntity? _currentUser;
+  final _controller = StreamController<AuthPrincipal?>.broadcast();
+  AuthPrincipal? _currentUser;
 
   @override
-  Stream<UserEntity?> get authStatusStream => _controller.stream;
+  Stream<AuthPrincipal?> get authStatusStream => _controller.stream;
 
   @override
-  UserEntity? get currentUser => _currentUser;
+  AuthPrincipal? get currentUser => _currentUser;
 
-  /// Internal method used by `feature_auth` to update the state.
+  /// Called by `feature_auth` when the session settles.
   void updateAuthStatus(UserEntity? user) {
-    _currentUser = user;
-    _controller.add(user);
+    final principal = toPrincipal(user);
+    _currentUser = principal;
+    _controller.add(principal);
+  }
+
+  /// The one place `UserEntity` is narrowed for the outside world.
+  static AuthPrincipal? toPrincipal(UserEntity? user) {
+    if (user == null) return null;
+    return AuthPrincipal(
+      id: user.id,
+      displayName: user.name,
+      email: user.email,
+      roles: {if (user.role != null) user.role!.name},
+    );
   }
 }
 ```
@@ -161,14 +178,14 @@ Code thật từ
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream)
     : super(const BlocViewState.initial()) {
     // …
   }
 
   final IAuthStatusStream _authStatusStream;
-  StreamSubscription<UserEntity?>? _subscription;
+  StreamSubscription<AuthPrincipal?>? _subscription;
 ```
 
 `feature_home` chỉ phụ thuộc `core_di` — không phụ thuộc `feature_auth`, và cũng không phụ thuộc `domain_auth`: hợp đồng mang `AuthPrincipal`, kiểu do chính `core_di` sở hữu, nên không có package domain nào đi qua ranh giới.
@@ -341,7 +358,7 @@ getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
 | `getIt<KiểuDoFeatureSởHữu>()` | Ném lỗi khi feature đó bị gỡ | `getItOrNull<T>()` + fallback |
 | Dùng Action Handler để điều hướng | Sai công cụ; mất type-safe route | Navigator interface |
 | Đặt logic nghiệp vụ dùng chung vào `core_ui_kit` | Đó là package UI | Một UseCase ở domain |
-| Dùng generic `<T>` cho stream mang domain entity | Mất type safety, trái AGENTS.md §8.4 | Gọi tên kiểu entity |
+| Hợp đồng `core_di` gọi tên entity của `domain_*` | Mọi bên tiêu thụ phải phụ thuộc package domain đó; trái AGENTS.md §8.4 | Value type do hợp đồng sở hữu (`AuthPrincipal`) |
 
 ---
 

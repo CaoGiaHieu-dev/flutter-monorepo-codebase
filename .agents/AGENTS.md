@@ -199,7 +199,7 @@ The codebase supports multiple state management frameworks (Provider, BLoC). To 
 1. **Global UI State**: Global app state (Theme, AppLanguage, DeepLink...) must be unified using a single state management utility (ChangeNotifier / ValueNotifier or pure Streams) so feature modules are not forced to import unwanted libraries.
 2. **Neutral Streams on DI Hub**:
    - If Feature A (using BLoC) needs to share state with Feature B (using Provider), do NOT expose the BLoC/Provider instance directly.
-   - Create a neutral communication interface containing pure Dart `Stream` or `ValueListenable` properties, register it in DI, and have Feature B retrieve and listen to it (`getIt<INeutralStreamService>()`).
+   - Create a neutral communication interface containing pure Dart `Stream` or `ValueListenable` properties, register it in DI, and have Feature B inject it through its constructor and listen to it. Resolve it with `getItOrNull` wherever a lookup is unavoidable — the owner is removable (R8).
 3. **Dual Registration for Owner Feature**:
    - The feature that owns and writes to the neutral stream MUST register its implementation as a concrete `@singleton` (e.g., `AuthStatusStreamImpl`).
    - Use a DI `@module` to bind the pure interface to the concrete instance (e.g., `IAuthStatusStream bind(AuthStatusStreamImpl impl) => impl;`).
@@ -207,7 +207,7 @@ The codebase supports multiple state management frameworks (Provider, BLoC). To 
 4. **A Neutral Stream MUST NOT carry a Domain Entity**:
    - **ABSOLUTELY FORBIDDEN** for a `core_di` contract to name a type from a `domain_*` package. Doing so makes the DI Hub — and therefore every consumer of it — depend on one feature's domain package for a *type*, which `getItOrNull` cannot soften: an unresolved import fails at compile time, not at lookup time.
    - Declare a **contract-owned** value type instead, and have the owning feature map to it at its boundary. Reference: `AuthPrincipal` (`core_di/lib/src/agnostic_streams/auth_principal.dart`), which `AuthStatusStreamImpl.toPrincipal` produces from `UserEntity`.
-   - The contract is deliberately **smaller** than the entity. `UserEntity` carries `bankName`, `bankAccount` and `fcmToken`; a module that only needs to know whether someone is signed in has no business reading those. Add a field to the contract only when a *second* module genuinely needs it.
+   - The contract is deliberately **smaller** than the entity: whatever field the owning module later adds to `UserEntity` stays invisible to a module that only needs to know who is signed in. Add a field to the contract only when a *second* module genuinely needs it.
    - `core_di` therefore declares **no** `domain_*` dependency.
 
 ---

@@ -78,7 +78,8 @@ class CacheDatabase extends _$CacheDatabase {
   ///
   /// To change this schema: edit the table, bump [schemaVersion], then
   /// implement [IDatabaseMigration] with `version` set to the new number and
-  /// register it with `@LazySingleton(as: IDatabaseMigration)`. Nothing in
+  /// register it with `@LazySingleton(as: IDatabaseMigration<CacheDatabase>)`.
+  /// Nothing in
   /// this file changes — that is the point of the contract.
   @override
   MigrationStrategy get migration =>

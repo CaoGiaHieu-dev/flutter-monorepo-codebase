@@ -1,12 +1,11 @@
-import 'dart:convert';
 
-import 'package:core_common/core_common.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../contracts/storage_codec.dart';
 import '../../contracts/storage_interface.dart';
 
 /// A class for managing shared preferences storage.
@@ -85,17 +84,7 @@ class PrefStorageImpl extends StorageInterface {
       await delete(key); // Delete the value if it's null
       return;
     }
-    final dataStorage = jsonEncode(
-      value,
-      toEncodable: (nonEncodable) {
-        if (nonEncodable is Enum) {
-          return nonEncodable.name; // Encode enum as string
-        } else if (nonEncodable is List) {
-          return nonEncodable.map((e) => e.toString()).toList();
-        }
-        return jsonEncode(nonEncodable); // Encode other non-encodable types
-      },
-    );
+    final dataStorage = StorageCodec.encode(value);
 
     await _preferences.setString(key, encryptData(dataStorage)); // Store data
   }
@@ -125,30 +114,7 @@ class PrefStorageImpl extends StorageInterface {
       if (data == null) return null; // Return null if data is not found
 
       final decrypted = decryptData(data);
-      var tType = TypeHelper<T>(); // Get type helper for type T
-
-      if (tType is TypeHelper<List>) {
-        final decoded = json.decode(decrypted);
-        if (decoded is List) {
-          if (reviver != null) {
-            return reviver.call(key, decoded);
-          }
-          return decoded as T;
-        }
-      }
-
-      return json.decode(
-        decrypted,
-        reviver: (key, value) {
-          if (TypeHelper.supportType(tType)) {
-            if (tType is TypeHelper<Enum>) {
-              return reviver?.call(key, value); // Use reviver for enums
-            }
-            return value; // Return value for supported types
-          }
-          return reviver?.call(key, value); // Use reviver for other types
-        },
-      ); // Decode data
+      return StorageCodec.decode<T>(decrypted, key, reviver: reviver);
     } catch (e) {
       DynamicLogger.log(
         'Failed to read or decrypt key: $key. Error: ${e.runtimeType}',

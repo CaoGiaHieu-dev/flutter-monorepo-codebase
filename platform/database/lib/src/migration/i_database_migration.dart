@@ -8,8 +8,9 @@ import 'package:drift/drift.dart';
 /// routes through `IFeatureRouteModule`:
 ///
 /// ```dart
-/// @LazySingleton(as: IDatabaseMigration)
-/// class AddExpiresAtToCacheEntries implements IDatabaseMigration {
+/// @LazySingleton(as: IDatabaseMigration<CacheDatabase>)
+/// class AddExpiresAtToCacheEntries
+///     implements IDatabaseMigration<CacheDatabase> {
 ///   @override
 ///   int get version => 2;
 ///
@@ -36,7 +37,16 @@ import 'package:drift/drift.dart';
 ///
 /// Registering two migrations with the same [version] is a programming error
 /// and is rejected at startup rather than silently applying one of them.
-abstract class IDatabaseMigration {
+///
+/// ## Scoped by database
+///
+/// `TDb` names the database the step belongs to, and the registration uses
+/// the same type (`as: IDatabaseMigration<CacheDatabase>`). GetIt keys a
+/// registration by its exact type, so a database collecting
+/// `IDatabaseMigration<ItsOwnType>` never receives another package's steps —
+/// which it would otherwise run against its own schema, or reject as a
+/// duplicate version the moment two packages both ship a version 2.
+abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   ///
   /// Version 1 is the initial schema created by `Migrator.createAll()`, so

@@ -96,7 +96,7 @@ Hai tham số kiểu, và chúng **không** giống nhau:
 - **`T`** — thứ Domain mong đợi (một Entity, danh sách Entity, `void`)
 - **`mapper`** — cầu nối `R → T`, thường là `(model) => model.toEntity()`
 
-Nếu `T` nullable và không truyền `mapper`, hàm trả `Success(null as T)` — đó là cách các thao tác `Future<Result<void>>` hoạt động mà không cần thủ tục thừa.
+Nếu lời gọi trả về `null`, `T` nullable và không truyền `mapper`, hàm trả `Success(null as T)` — đó là cách các thao tác `Future<Result<void>>` hoạt động mà không cần thủ tục thừa. Response khác `null` vẫn được trả về dưới dạng `T` kể cả khi `T` nullable.
 
 ### `executeSync<R, T>()` — đồng bộ
 

@@ -224,7 +224,7 @@ App-shell key classes live in `platform/app_shell/lib/di/utils/`.
 
 ## 6. Non-primitive types need a `reviver`
 
-`StorageValue<T>` supports primitives directly. For enums, JSON objects and lists you must supply `reviver`, otherwise the constructor throws `ArgumentError`.
+`StorageValue<T>` reads `num`, `String`, `bool`, `Map<String, dynamic>` and lists of those back directly — a `List<String>` is cast element-wise, no reviver needed. An **enum** is stored by `name`, so it needs a `reviver` to turn the name back into a value. Any **other type** is stored through its `toJson()` and needs a `reviver` to rebuild it; without one the constructor throws `ArgumentError`. All paths share `StorageCodec` (`platform/storage/lib/src/contracts/storage_codec.dart`), so a value reads back the way it was written.
 
 **Enum:**
 
@@ -254,7 +254,7 @@ late final viewedOnboard = StorageValue<bool>(
 );
 ```
 
-Always handle `value == null` in a `reviver` — it is called on a cold cache too.
+A `reviver` is called **once**, with the decoded root value, and never with `null` — a missing value reads as `null` before it runs. The `value == null` branches above are defensive, not required.
 
 ---
 
@@ -351,7 +351,7 @@ Any key starting with `_internal_` is rejected. `StorageValue`'s constructor cal
 - [ ] Backend chosen deliberately (`secure` for anything sensitive)
 - [ ] Owner is a **singleton**, not `@injectable`
 - [ ] `@PostConstruct(preResolve: true)` awaits `readFromStorage()`
-- [ ] `reviver` provided for enum / JSON / list, and handles `null`
+- [ ] `reviver` provided for an enum or a custom type (primitives, `Map<String, dynamic>` and typed lists need none)
 - [ ] Cross-package access goes through a `core_di` interface, never a direct dependency
 - [ ] Key does not start with `_internal_`
 

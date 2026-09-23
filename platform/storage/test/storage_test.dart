@@ -62,6 +62,26 @@ void main() {
       expect(result, isNotNull);
       expect(result?['name'], equals('Antigravity'));
     });
+
+    test('reads a typed list back without a reviver', () async {
+      await prefStorage.write('tags', <String>['a', 'b']);
+
+      final tags = await prefStorage.read<List<String>>('tags');
+
+      expect(tags, equals(<String>['a', 'b']));
+    });
+
+    test('stores an object through toJson and revives it once', () async {
+      await prefStorage.write('point', const _Point(1, 2));
+
+      final point = await prefStorage.read<_Point>(
+        'point',
+        reviver: (key, value) =>
+            _Point.fromJson(value! as Map<String, dynamic>),
+      );
+
+      expect(point, equals(const _Point(1, 2)));
+    });
   });
 
   group('SecureStorageImpl', () {
@@ -421,3 +441,22 @@ void main() {
 }
 
 enum _TestThemeMode { system, light, dark }
+
+class _Point {
+  const _Point(this.x, this.y);
+
+  factory _Point.fromJson(Map<String, dynamic> json) =>
+      _Point(json['x'] as int, json['y'] as int);
+
+  final int x;
+  final int y;
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y};
+
+  @override
+  bool operator ==(Object other) =>
+      other is _Point && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+}

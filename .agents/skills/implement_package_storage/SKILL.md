@@ -86,7 +86,7 @@ class AuthLocalDataSource {
 * `StorageType.pref` — SharedPreferences (settings, flags)
 * `StorageType.secure` — encrypted secure storage (tokens, sensitive data)
 
-Use a `reviver` callback for anything that is not a plain `String`/`num`/`bool`/`Map`/`List` — Enums, nested objects, typed lists.
+Use a `reviver` callback for Enums and custom types (stored through their `toJson()`). `String`/`num`/`bool`/`Map<String, dynamic>` and typed lists such as `List<String>` read back without one. The reviver is called once, with the decoded root value.
 
 ### Step 3: Hydrate at startup — and register as a **singleton**
 
@@ -194,7 +194,7 @@ class ThemeStorageImpl implements IThemeStorage {
 - [ ] Key lives in the **owning package's** `utils/` folder — not `core_common`
 - [ ] `StorageValue` is declared inside the class that owns the data
 - [ ] Correct `StorageType` (`secure` for tokens/PII, `pref` for settings/flags)
-- [ ] `reviver` supplied for Enums / objects / lists
+- [ ] `reviver` supplied for Enums / custom types
 - [ ] Added to `@PostConstruct(preResolve: true)` hydration
 - [ ] Owner registered as a **singleton**, never `@injectable`
 - [ ] Cross-package access goes through a `core_di` interface, never the raw `StorageValue`

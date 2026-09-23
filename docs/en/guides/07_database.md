@@ -221,10 +221,10 @@ abstract class DataCacheDiModule {
   /// Reads contributed migrations without throwing when none are registered.
   static Iterable<IDatabaseMigration> _registeredMigrations() {
     final getIt = GetIt.instance;
-    if (!getIt.isRegistered<IDatabaseMigration>()) {
+    if (!getIt.isRegistered<IDatabaseMigration<CacheDatabase>>()) {
       return const <IDatabaseMigration>[];
     }
-    return getIt.getAll<IDatabaseMigration>();
+    return getIt.getAll<IDatabaseMigration<CacheDatabase>>();
   }
 }
 ```
@@ -328,7 +328,7 @@ You never edit another package's database file to change your schema. You implem
 
 ```dart
 // platform/database/lib/src/migration/i_database_migration.dart
-abstract class IDatabaseMigration {
+abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   int get version;
 
@@ -341,11 +341,12 @@ abstract class IDatabaseMigration {
 }
 ```
 
-Registered exactly like a route module:
+Registered like a route module, typed to the database it belongs to — GetIt keys a registration by its exact type, so `CacheDatabase` collects only `IDatabaseMigration<CacheDatabase>` and another package's steps never reach it:
 
 ```dart
-@LazySingleton(as: IDatabaseMigration)
-class AddExpiresAtToCacheEntries implements IDatabaseMigration {
+@LazySingleton(as: IDatabaseMigration<CacheDatabase>)
+class AddExpiresAtToCacheEntries
+    implements IDatabaseMigration<CacheDatabase> {
   @override
   int get version => 2;
 
@@ -472,7 +473,7 @@ Three deliberate decisions:
 /// an older one is replaced so repeated failures cannot fill the disk.
 ```
 
-The `-wal` / `-shm` sidecars are removed too — they belong to the quarantined database and would otherwise be applied to the new one.
+The `-wal` / `-shm` sidecars move with it, to `<fileName>.corrupt-wal` / `.corrupt-shm`: they belong to the quarantined database and must not be applied to the new one, and the WAL holds committed transactions not yet checkpointed — deleting it would lose the newest data.
 
 **An environment marker vetoes a corruption match.**
 
@@ -559,7 +560,7 @@ Two habits worth copying:
 - [ ] `_registeredMigrations()` guards with `isRegistered` before `getAll`
 - [ ] Data sources take `IDatabaseHandle<TDb>`, not the database
 - [ ] Signatures return a **Model**; no Drift row class in the public API
-- [ ] New schema step = new `IDatabaseMigration` with `version >= 2`, registered via `@LazySingleton(as: IDatabaseMigration)`; `schemaVersion` bumped to match
+- [ ] New schema step = new `IDatabaseMigration` with `version >= 2`, registered via `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` bumped to match
 - [ ] `downgrade` implemented, or throws a descriptive error when irreversible
 - [ ] Barrels regenerated and `build_runner` run
 

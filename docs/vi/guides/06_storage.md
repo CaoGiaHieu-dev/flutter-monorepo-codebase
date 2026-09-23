@@ -224,7 +224,7 @@ Class key của app shell nằm ở `platform/app_shell/lib/di/utils/`.
 
 ## 6. Kiểu phức tạp cần `reviver`
 
-`StorageValue<T>` hỗ trợ sẵn kiểu nguyên thuỷ. Với enum, JSON object và list bạn **bắt buộc** truyền `reviver`, nếu không constructor ném `ArgumentError`.
+`StorageValue<T>` đọc lại trực tiếp `num`, `String`, `bool`, `Map<String, dynamic>` và list của các kiểu đó — `List<String>` được cast từng phần tử, không cần reviver. **Enum** được lưu bằng `name`, nên cần `reviver` để đổi tên về lại giá trị. **Mọi kiểu khác** được lưu qua `toJson()` và cần `reviver` để dựng lại; thiếu nó constructor ném `ArgumentError`. Mọi đường đọc/ghi dùng chung `StorageCodec` (`platform/storage/lib/src/contracts/storage_codec.dart`), nên giá trị đọc ra đúng như lúc ghi.
 
 **Enum:**
 
@@ -254,7 +254,7 @@ late final viewedOnboard = StorageValue<bool>(
 );
 ```
 
-Luôn xử lý `value == null` trong `reviver` — nó được gọi cả khi cache còn rỗng.
+`reviver` được gọi **một lần**, với giá trị gốc đã decode, và không bao giờ nhận `null` — giá trị không tồn tại được đọc thành `null` trước khi reviver chạy. Nhánh `value == null` ở trên chỉ là phòng thủ, không bắt buộc.
 
 ---
 
@@ -351,7 +351,7 @@ Mọi key bắt đầu bằng `_internal_` đều bị từ chối. Constructor 
 - [ ] Backend được chọn có cân nhắc (`secure` cho mọi thứ nhạy cảm)
 - [ ] Owner là **singleton**, không phải `@injectable`
 - [ ] `@PostConstruct(preResolve: true)` có `await readFromStorage()`
-- [ ] Có `reviver` cho enum / JSON / list, và có xử lý `null`
+- [ ] Có `reviver` cho enum hoặc kiểu tuỳ biến (kiểu nguyên thuỷ, `Map<String, dynamic>` và list có kiểu thì không cần)
 - [ ] Truy cập xuyên package đi qua interface ở `core_di`, không phụ thuộc trực tiếp
 - [ ] Key không bắt đầu bằng `_internal_`
 

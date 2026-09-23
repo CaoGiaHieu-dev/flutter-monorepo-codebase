@@ -25,7 +25,8 @@
 /// Schema evolution:
 /// - [IDatabaseMigration] — contract a package implements, next to its own
 ///   tables, to contribute one upgrade/downgrade step; register it with
-///   `@LazySingleton(as: IDatabaseMigration)`
+///   `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` — typed, so each
+///   database collects only its own steps
 /// - [DatabaseMigrationRunner] — orders, validates and replays those steps
 /// - [driftMigrationStrategy] — the shared `MigrationStrategy`, including the
 ///   per-connection `PRAGMA` settings every database needs

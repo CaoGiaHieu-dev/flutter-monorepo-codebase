@@ -1,12 +1,11 @@
-import 'dart:convert';
 
-import 'package:core_common/core_common.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../contracts/storage_codec.dart';
 import '../../contracts/storage_interface.dart';
 
 // ---------------------------------------------------------------------------
@@ -115,15 +114,7 @@ class SecureStorageImpl extends StorageInterface {
       return;
     }
 
-    final dataString = jsonEncode(
-      value,
-      toEncodable: (nonEncodable) {
-        if (nonEncodable is Enum) {
-          return nonEncodable.name;
-        }
-        return jsonEncode(nonEncodable);
-      },
-    );
+    final dataString = StorageCodec.encode(value);
 
     // Encrypt using our software layer (with dynamic IV)
     // before passing to the hardware-backed secure storage.
@@ -149,30 +140,7 @@ class SecureStorageImpl extends StorageInterface {
       // Decrypt using software layer (extracts IV from the string)
       final decryptedData = decryptData(encryptedData);
 
-      var tType = TypeHelper<T>();
-
-      if (tType is TypeHelper<List>) {
-        final decoded = json.decode(decryptedData);
-        if (decoded is List) {
-          if (reviver != null) {
-            return reviver.call(key, decoded);
-          }
-          return decoded as T;
-        }
-      }
-
-      return jsonDecode(
-        decryptedData,
-        reviver: (key, value) {
-          if (TypeHelper.supportType(tType)) {
-            if (tType is TypeHelper<Enum>) {
-              return reviver?.call(key, value);
-            }
-            return value;
-          }
-          return reviver?.call(key, value);
-        },
-      );
+      return StorageCodec.decode<T>(decryptedData, key, reviver: reviver);
     } catch (e) {
       DynamicLogger.log(
         'Failed to read or decrypt key: $key. Error: ${e.runtimeType}',

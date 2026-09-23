@@ -54,6 +54,7 @@ Các package hiện có:
 |:---|:---|
 | `data_core` | `IBaseRepository`, `BaseModel`, request model |
 | `data_auth` | `UserModel`, data source auth, `AuthRepositoryImpl` |
+| `data_cache` | `CacheDatabase` (database Drift do package tự sở hữu), `CacheEntryModel`, local data source, `CacheEntryRepositoryImpl` |
 
 ---
 
@@ -103,7 +104,7 @@ Cùng hình dạng, dành cho công việc cục bộ không bất đồng bộ.
 
 ### Cơ chế chuyển đổi lỗi
 
-Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` của `core_common`, và hàm này trả về một `AppFailure`.
+Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` của `platform_kernel` (cũng tới được qua re-export của `core_common`), và hàm này trả về một `AppFailure`.
 
 > [!NOTE]
 > `ErrorHandler` là điểm chuyển đổi duy nhất. Không hề có `AppFailure.fromException()` — đừng bịa ra một cái, và cũng đừng tự nặn failure tại chỗ gọi. Khi buộc phải tạo tường minh, hãy dùng các hàm trợ giúp `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)`…

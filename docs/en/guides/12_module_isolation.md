@@ -81,7 +81,11 @@ In a partial checkout it writes a partial composition into them. That is correct
 `sync` says so, names the files, and prints the restore command:
 
 ```
-⚠ PARTIAL COMPOSITION — 12 declared package(s) are not on disk.
+⚠️ PARTIAL COMPOSITION — 7 declared package(s) are not on disk.
+  What was just written composes only what is present, which is exactly right
+  for working on one module. It is wrong to commit: it would drop the other
+  modules from the app for everyone.
+
   Files changed:
     pubspec.yaml
     apps/mobile/pubspec.yaml

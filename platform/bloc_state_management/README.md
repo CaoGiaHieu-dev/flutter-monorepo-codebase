@@ -96,7 +96,8 @@ Widget build(BuildContext context) {
     listener: (context, state) {
       state.maybeWhen(
         success: (user) {
-          getIt<AuthNavigator>().toHome();
+          // Navigator của feature khác: luôn `getItOrNull` (arch_check R8).
+          getItOrNull<HomeNavigator>()?.toHome(context);
         },
         error: (failure) {
           AppOverlay.showToast(content: failure.message);

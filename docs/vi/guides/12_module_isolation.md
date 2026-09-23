@@ -81,7 +81,11 @@ Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thi
 `sync` nói thẳng điều đó, gọi tên các file, và in ra lệnh khôi phục:
 
 ```
-⚠ PARTIAL COMPOSITION — 12 declared package(s) are not on disk.
+⚠️ PARTIAL COMPOSITION — 7 declared package(s) are not on disk.
+  What was just written composes only what is present, which is exactly right
+  for working on one module. It is wrong to commit: it would drop the other
+  modules from the app for everyone.
+
   Files changed:
     pubspec.yaml
     apps/mobile/pubspec.yaml

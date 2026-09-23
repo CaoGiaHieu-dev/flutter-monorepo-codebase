@@ -160,7 +160,7 @@ BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
     return state.when(
       initial: () => const SizedBox.shrink(),
       loading: () => const Center(child: CircularProgressIndicator()),
-      success: (user) => Text(user?.name ?? ''),
+      success: (user) => Text(user?.displayName ?? ''),
       error: (failure) => Text(failure.message),
     );
   },

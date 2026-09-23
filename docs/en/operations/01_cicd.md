@@ -71,7 +71,7 @@ The job runs on `macos-latest` even though it only builds Android. macOS runners
 
 Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart`) and posts results back to the pull request.
 
-**Triggers**: pull requests to `main` / `develop` / `master` touching `apps/mobile/lib/**/*.dart`, `modules/**/*.dart` or `platform/**/*.dart` (generated files excluded), plus manual dispatch with a scope selector (`changed` / `all` / `domain` / `data` / `presentation`) and a report language (`en` / `vi` / `ja` / `ko` / `zh`).
+**Triggers**: pull requests to `main` / `develop` / `master` touching `apps/*/lib/**/*.dart`, `modules/**/*.dart` or `platform/**/*.dart` (generated files excluded), plus manual dispatch with a scope selector (`changed` / `all` / `domain` / `data` / `platform` / `presentation`) and a report language (`en` / `vi` / `ja` / `ko` / `zh`).
 
 **What it does**: resolves changed files with `tj-actions/changed-files`, runs the reviewer, uploads the Markdown report as an artifact (30-day retention), then parses that report and posts **inline review comments** on the exact lines when they fall inside the PR diff. Findings outside the diff are grouped into a separate per-file comment.
 

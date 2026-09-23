@@ -60,9 +60,9 @@ Chính `getAllOrEmpty` là thứ khiến feature có thể gỡ bỏ được: x
   "@@locale": "en",
   "home": "Home",
   "tabLabel": "Home",
-  "user_logged_in": "User is Logged In",
-  "user_logged_out": "User is Logged Out",
-  "refresh_profile": "Refresh profile"
+  "userLoggedIn": "User is Logged In",
+  "userLoggedOut": "User is Logged Out",
+  "refreshProfile": "Refresh profile"
 }
 ```
 

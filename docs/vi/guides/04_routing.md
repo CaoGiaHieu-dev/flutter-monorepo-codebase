@@ -11,7 +11,7 @@
 `platform/app_shell/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
 
 ```dart
-List<INavDestinationModule> get _dashboardTabs {
+List<INavDestinationModule> get _destinations {
   return getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order));
 }
@@ -211,8 +211,8 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 @override
 Widget build(BuildContext context, GoRouterState state) {
   return ChangeNotifierProvider(
-    create: (context) => getIt<OnboardingProvider>(),
-    child: const OnboardingPage(),
+    create: (context) => getIt<ProfileProvider>(),
+    child: const ProfilePage(),
   );
 }
 ```
@@ -251,9 +251,11 @@ class AuthNavigatorImpl implements AuthNavigator {
 **3. Gọi từ bất kỳ đâu:**
 
 ```dart
-getIt<AuthNavigator>().toLogin(context);
-// hoặc, khi feature đó có thể bị gỡ:
+// Từ mọi package khác package sở hữu — package sở hữu có thể bị gỡ:
 getItOrNull<AuthNavigator>()?.toLogin(context);
+
+// Chỉ bên trong chính feature_auth, nơi nó không thể vắng mặt:
+getIt<AuthNavigator>().toLogin(context);
 ```
 
 ### Quy tắc

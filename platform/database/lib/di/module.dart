@@ -9,6 +9,7 @@ import 'package:injectable/injectable.dart';
 /// owns them.
 ///
 /// The package that owns data registers its own database instead; see
-/// `data_core`'s DI module for the reference wiring.
+/// `data_cache`'s DI module (`modules/cache/data/lib/di/module.dart`) for the
+/// reference wiring.
 @InjectableInit.microPackage()
 void initMicroPackage() {}

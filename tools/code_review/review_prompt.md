@@ -17,7 +17,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
     - **Params** and **Entities (Domain Layer)** can use `freezed` or pure Dart classes (using `freezed` for Params is recommended for immutability but not strictly required).
     - If using `freezed`, the class **MUST** have an `abstract class` definition and a private constructor `const ClassName._();`.
 3.  **Async Logic (executeOperation)**:
-    - Providers must use the `executeOperation()` method from `BaseProvider` to handle async tasks. Manual `isLoading = true/false` or manual `try-catch` blocks in Providers are forbidden.
+    - Providers must use the `executeOperation()` method from `BaseProvider` for async work that can fail. Manual `isLoading = true/false` flags or `try-catch` around a use case in a Provider are forbidden. Two legitimate exceptions: `updateState(state: const ViewState.loading())` before `executeOperation` to force a spinner when data already exists, and a synchronous call that cannot fail (see `AuthProvider.logout`).
 4.  **Layer Isolation**:
     - **Domain Layer** must be 100% pure Dart. No imports of `package:flutter`, `dio`, or any data-layer library (except `injectable` and `freezed_annotation`).
     - **Repository Implementation** must catch all exceptions and return a `Result<T>` (never throw).
@@ -48,9 +48,9 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
     - **ABSOLUTELY FORBIDDEN** for Features to modify `root_app.dart` to inject `LocalizationsDelegates`.
     - Feature packages MUST implement the `IFeatureLocalization` interface and register it with local DI (`@Injectable(as: IFeatureLocalization)`) so the app shell can collect them via `getAllOrEmpty<IFeatureLocalization>()` (never `getIt.getAll`, which throws when none is registered).
     - **ABSOLUTELY FORBIDDEN** to hardcode new feature `$…Route` / `StatefulShellBranch` lists in `app_router.dart`. Register `IFeatureRouteModule` (no order) or `INavDestinationModule` (with order) via DI; optional `IAppEntryLocation`. `feature_dashboard` may only implement `DashboardRouteModule` (chrome) — never own tab pages. See `docs/en/guides/04_routing.md`.
-    10. **Centralized DI Registration (`injection.dart`)**:
-    - **ABSOLUTELY FORBIDDEN** to directly declare `ExternalModule` inside the `externalPackageModulesBefore` / `externalPackageModulesAfter` arrays. Categorize into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, `_otherModules` and spread them.
-    - `CoreBaseUiPackageModule` MUST be in `_uiModules` → `externalPackageModulesAfter` (depends on app-local `ILanguageStorage` / `IThemeStorage`).
+10. **Generated DI Registration (`injection.dart`)**:
+    - `apps/<id>/lib/di/injection.dart` is **generated** by `dart tools/composer/composer.dart sync` from `apps/<id>/app_manifest.yaml` (between `composer:managed` markers). Flag any hand edit to it — change the manifest's `di_groups` / `modules` instead; CI Gate 0 (`composer verify`) fails on drift.
+    - Group order is load-bearing: `core` (before), then `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `CoreBaseUiPackageModule` (`ui`) must follow `shell`, because `platform_app_shell` registers the `ILanguageStorage` / `IThemeStorage` it injects.
 
 ---
 

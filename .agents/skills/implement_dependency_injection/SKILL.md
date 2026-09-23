@@ -16,9 +16,10 @@ Use this skill when requested to: "register a new Service/Repository in DI", "in
    - **DO NOT USE** `@singleton` or `@lazySingleton` for feature view models or UI controllers.
 2. **Global app controllers** (e.g. `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`):
    - Allowed to use `@lazySingleton` / `@singleton`.
-3. **Repositories / Services / UseCases**:
+3. **Repositories / Services**:
    - Use `@lazySingleton` (lazily instantiated and cached) or `@singleton`.
    - If registering an implementation class for an interface: `@LazySingleton(as: IMyRepository)`.
+   - **UseCases are `@injectable`** — a use case is a factory, never a singleton (every one in the template is).
 4. **Storage owners** (a class holding `StorageValue` fields):
    - **Must** be a singleton + `@PostConstruct(preResolve: true)`. `@injectable` would hand
      out fresh instances with an empty RAM cache. See `implement_package_storage`.

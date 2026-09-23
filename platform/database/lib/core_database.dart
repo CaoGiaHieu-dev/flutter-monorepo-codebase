@@ -9,7 +9,7 @@
 ///
 /// Instead, **each package that owns persisted data declares its own
 /// database** next to its tables, DAO and data source, and opens it with the
-/// pieces below. `data_core`'s `CacheDatabase` is the reference wiring.
+/// pieces below. `data_cache`'s `CacheDatabase` is the reference wiring.
 ///
 /// The property this buys: deleting a package deletes its database with it.
 /// Nothing else refers to it, and no other package can reach its rows.

@@ -54,6 +54,7 @@ Current packages:
 |:---|:---|
 | `data_core` | `IBaseRepository`, `BaseModel`, request models |
 | `data_auth` | `UserModel`, auth data sources, `AuthRepositoryImpl` |
+| `data_cache` | `CacheDatabase` (a package-owned Drift database), `CacheEntryModel`, local data source, `CacheEntryRepositoryImpl` |
 
 ---
 
@@ -103,7 +104,7 @@ Same shape for local, non-async work. `onFailure` here receives the thrown `Obje
 
 ### Error conversion
 
-Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `core_common`, which returns an `AppFailure`.
+Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `platform_kernel` (also reachable through `core_common`'s re-export), which returns an `AppFailure`.
 
 > [!NOTE]
 > `ErrorHandler` is the only conversion point. There is no `AppFailure.fromException()` — do not invent one, and do not hand-roll a failure at the call site. When you must construct one explicitly, use the helpers `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)` and so on.

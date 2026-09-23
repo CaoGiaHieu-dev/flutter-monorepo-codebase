@@ -13,7 +13,7 @@ This is the **lookup** copy. For step-by-step instructions see [`../guides/`](..
 
 ## 1. Dependency direction
 
-**Rule.** Dependencies point inward. `Feature → Domain ← Data`, with `core/*` as infrastructure underneath. **No `core/*` package may depend on `feature_*` or `data_*`** — neither by import nor by a `pubspec.yaml` entry.
+**Rule.** Dependencies point inward. `Feature → Domain ← Data`, with `core/*` as infrastructure underneath. **No `core/*` package may depend on `feature_*`, `data_*` or `domain_*`** — neither by import nor by a `pubspec.yaml` entry — except the approved `→ domain_core` edges below. `arch_check` rule **R1** blocks every other edge.
 
 **Why.** Core is the innermost infrastructure ring. If core reaches upward, the ring closes into a cycle and nothing above it can be removed or reused independently.
 
@@ -40,15 +40,19 @@ Only these three exist. Adding a fourth requires updating `AGENTS.md` and the al
 **Verify**
 
 ```bash
-# core must never name a feature or data package
+# R1 — the authoritative check; prints the approved edges on every run
+dart tools/arch_check/check.dart
+
+# core must never name a feature, data or product domain package
 grep -rn "package:feature_\|package:data_" platform/*/lib
 grep -lE "^  (feature_|data_)" platform/*/pubspec.yaml
+grep -rn "package:domain_" platform/*/lib | grep -v "package:domain_core"
 
 # domain must never touch Flutter
 grep -rn "package:flutter" modules/*/domain/lib
 ```
 
-All three commands must return nothing.
+`arch_check` must pass, and the four greps must return nothing.
 
 ❌ **Wrong** — a core package borrowing a feature widget:
 ```dart
@@ -69,17 +73,18 @@ import 'default_state_widgets.dart';   // ships with the package
 
 **Why.** Pub Workspaces share one `package_config.json`, so an undeclared import **still compiles locally**. The breakage only appears when the package is extracted or published — and stale entries create phantom coupling that hides real layering violations.
 
-**Verify**
+**Verify** — the two halves are checked by two tools:
 
 ```bash
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/arch_check/check.dart                      # R5: imported under lib/ but missing from `dependencies:` (dev_dependencies does not count)
+dart tools/unused_checker/check_unused_packages.dart  # declared in `dependencies:` but never imported
 ```
 
 ---
 
-## 3. Mandatory `utils/` folder
+## 3. Constants live in `utils/`
 
-**Rule.** Every package, at every layer, keeps its own constants in a `utils/` folder inside that package. A constant has exactly **one** owner. Creating a shared cross-domain constants file is forbidden.
+**Rule.** Every package, at every layer, keeps its own public constants in a `utils/` folder inside that package. A package with no constants needs no `utils/` folder — `arch_check` rule **R4** flags a public `static const` outside `utils/` (or `styles/`) and never asks for an empty folder. A constant has exactly **one** owner. Creating a shared cross-domain constants file is forbidden.
 
 **Why.** A shared constants file lets any package read — and typo — another domain's keys. Storage keys and API endpoints are the two that most invite such a god-object; both belong to the package that owns the data.
 
@@ -163,11 +168,12 @@ Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_bas
 > [!CAUTION]
 > **`flutter analyze` cannot detect this class of bug.** It only appears at runtime, on a real boot.
 
-**Verify** — after changing any DI annotation or constructor, read the generated file and confirm each eager registration's dependencies appear *earlier* in `init()`:
+**Verify** — after changing any DI annotation or constructor, read two generated files. `apps/mobile/lib/di/injection.config.dart` holds only the **module order** (one `…PackageModule().init(gh)` per package, plus the app's own `FirebaseOptions`); the per-type registrations — and the `gh<Dep>()` calls each constructor makes — are in each package's own `lib/di/module.module.dart`. An eager `gh.singleton…` (including `singletonAsync`) is safe only when every `gh<Dep>()` it makes is registered above it in that file or by a module whose `init` runs earlier:
 
 ```bash
 dart run build_runner build -d --workspace
-grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
+grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart       # module order
+grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # eager registrations and their gh<Dep>() calls
 ```
 
 `@PostConstruct(preResolve: true)` on a `@lazySingleton` is awaited during module init and re-registered as a plain sync lazy singleton, so later `gh<T>()` sync lookups are safe.
@@ -193,13 +199,13 @@ Everything the shell consumes at runtime resolves through a `core_di` contract w
 > [!WARNING]
 > `getAll<T>()` and `getAllOrEmpty<T>()` differ exactly here. `getAll` throws on an unregistered type, so a bare `getAll<IFeatureLocalization>()` crashes during `MaterialApp` construction in any build where no feature contributes one.
 
-**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract whose only implementer lives in a `modules/*/feature` package, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
+**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract implemented by a package under `modules/` — any layer: `IAuthSessionGateway` in `data_auth` counts as much as a feature's navigator — keyed by the implementing module, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
 
 ```bash
 dart tools/arch_check/check.dart      # rule R8 — Gate 1 of pr_quality_check.yml
 ```
 
-This is not a style rule. The throwing lookup **compiles**: the calling package depends on `core_di`, not on the feature that implements the contract, so `flutter analyze` sees nothing wrong. It fails at runtime, in a build without that feature, on whichever screen happens to call it. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; a feature is exempt from its own contract.
+This is not a style rule. The throwing lookup **compiles**: the calling package depends on `core_di`, not on the feature that implements the contract, so `flutter analyze` sees nothing wrong. It fails at runtime, in a build without that feature, on whichever screen happens to call it. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set. A module is removed whole, so every package of the implementing module may resolve its own contracts eagerly.
 
 **Removing a feature** — the manifest is the only hand-edited file:
 
@@ -238,7 +244,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 - Directories are `data_sources/remote/` and `data_sources/local/` — **snake_case, plural `data_sources`**, never `datasources/`.
 - `RepositoryImpl` extends `IBaseRepository` and wraps work in `execute()` (async) or `executeSync()`.
 - Errors convert through `ErrorHandler.handleError(e)`. **Never** `AppFailure.fromException()`.
-- **DataSources return Models, never Entities** — and never a class generated by Drift.
+- **DataSources return Models, never Entities** — and never a class generated by Drift. The one allowed wrapper is `domain_core`'s `BaseEntity<T>` response envelope: `AuthRemoteDataSource` returns `Future<BaseEntity<UserModel>>`, and the repository unwraps it in `execute`'s `mapper`.
 - Never `throw` from Data to UI; return `Result.failure(AppFailure)`.
 
 **Why the Model rule.** Returning a Drift row class leaks the persistence library into every consumer of the package. `CacheEntryModel` (`modules/cache/data/lib/src/models/cache_entry_model.dart`) exists purely as that boundary.
@@ -446,13 +452,14 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 
 | Check | Command |
 |---|---|
-| Unused / undeclared dependencies | `dart tools/unused_checker/check_unused_packages.dart` |
+| Undeclared dependencies (imported, not in `dependencies:`) | `dart tools/arch_check/check.dart` (R5) |
+| Unused dependencies (declared, never imported) | `dart tools/unused_checker/check_unused_packages.dart` |
 | Version catalog drift | `dart tools/dependency_sync.dart --check` |
 | Unused assets, files, translations | `dart tools/unused_checker/check_script.dart` |
 | Static analysis | `flutter analyze` |
 | Codegen up to date | `dart run build_runner build -d --workspace` |
-| DI order safety | read `apps/mobile/lib/di/injection.config.dart` |
-| core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
+| DI order safety | module order in `apps/mobile/lib/di/injection.config.dart`; per-type registrations in each package's `lib/di/module.module.dart` |
+| core ⇏ feature / data / product domain | `dart tools/arch_check/check.dart` (R1) |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
 | The app shell imports no module | `dart tools/arch_check/check.dart` (R10) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |

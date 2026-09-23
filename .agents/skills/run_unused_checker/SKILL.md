@@ -23,12 +23,12 @@ When a developer requests to "clean up project", "find dead code", "check unused
    - Unused assets: `dart tools/unused_checker/check_unused_assets.dart`
    - Unused translations: `dart tools/unused_checker/check_unused_translate.dart`
 
-Use the `run_command` tool to execute the scripts. After completion, present a summary of the cleanup recommendations.
+Run the scripts in the shell, from the repository root. After completion, present a summary of the cleanup recommendations.
 
 ## Notes
 
 - `check_unused_packages.dart` finds dependencies a package **declares but never imports**
-  (it scans `lib/`, `bin/` and `test/`). The opposite mistake — importing a package you never
+  (it scans `lib/`, `bin/`, `test/` and `tool/`, and reads a package with no `lib/` — `core_tools` — whole). The opposite mistake — importing a package you never
   declared, which still compiles because Pub Workspaces share one `package_config.json` — is
   caught by `dart tools/arch_check/check.dart` rule **R5**, not by this tool.
 - Results are **advisory**. Verify before deleting: a file can look orphaned while being

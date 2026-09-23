@@ -10,34 +10,40 @@ Bỏ qua phần nào PR không đụng tới. Mục nào có dòng **Kiểm ch�
 
 ## 0. Cổng tự động — chạy trước tiên
 
+Đúng các cổng mà `.github/workflows/pr_quality_check.yml` chạy, theo đúng thứ tự (trước đó CI chạy `dart tools/workspace_setup/configure.dart` — pub get, gen-l10n, build_runner, barrel):
+
 ```bash
-dart tools/dependency_sync.dart --check              # lệch version catalog
-dart tools/unused_checker/check_unused_packages.dart # dependency thừa / thiếu khai
 dart run build_runner build -d --workspace           # code sinh đã cập nhật
-flutter analyze                                      # phân tích tĩnh
+dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
+dart tools/arch_check/check.dart                     # Gate 1 — luật phân tầng R1–R10 (R5: import thiếu khai)
+flutter analyze                                      # Gate 2 — phân tích tĩnh
+# Gate 3 — `flutter test` ở mọi package có thư mục test/
+dart tools/dependency_sync.dart --check              # Gate 4 — lệch version catalog
+dart tools/docs_check/check.dart                     # Gate 5 — mọi đường dẫn repo mà docs nhắc tới đều tồn tại
+dart tools/unused_checker/check_unused_packages.dart # tham khảo — đã khai mà không import
 ```
 
-- [ ] Cả bốn lệnh đều sạch
-- [ ] Test pass ở mọi package bị đụng — `cd modules/<module>/<layer> && flutter test`
+- [ ] Gate 0–5 đều sạch (bước kiểm dependency thừa chỉ mang tính tham khảo)
+- [ ] Test pass ở mọi package bị đụng có thư mục `test/` — `cd modules/<module>/<layer> && flutter test`
 - [ ] Không file nào trong `lib/` bị sửa tay nếu nó kết thúc bằng `.g.dart`, `.freezed.dart`, `.module.dart` hoặc `.config.dart`
-- [ ] Đã chạy lại barrel generator nếu có file được thêm, đổi tên hoặc xoá
+- [ ] Đã chạy lại barrel generator — sau `build_runner` / `gen-l10n` — nếu có file được thêm, đổi tên hoặc xoá
 
 ---
 
 ## 1. Cấu trúc package
 
 - [ ] Package mới khai `resolution: workspace` trong `pubspec.yaml` của nó
-- [ ] Package mới có mặt trong khối `workspace:` của `pubspec.yaml` gốc
+- [ ] Package mới có mặt trong khối `workspace:` của `pubspec.yaml` gốc — do `dart tools/composer/composer.dart sync` ghi (module generator tự chạy lệnh này); sửa tay ở đó sẽ làm fail Gate 0
 - [ ] API công khai được export qua barrel `lib/<package_name>.dart`; phần cài đặt nằm trong `src/`
 - [ ] Tên package khớp tiền tố tầng — `core_` / `domain_` / `data_` / `feature_`
-- [ ] Package có thư mục `utils/` giữ hằng số **của chính nó** ([luật 3](01_rules.md#3-bắt-buộc-có-thư-mục-utils))
+- [ ] Hằng số public của package nằm trong thư mục `utils/` **của chính nó** — package không có hằng số thì không cần thư mục này ([luật 3](01_rules.md#3-hằng-số-nằm-trong-utils))
 
 ---
 
 ## 2. Hướng phụ thuộc
 
-- [ ] Không package `core/*` nào import hay khai `feature_*` / `data_*`
-- [ ] Mọi phụ thuộc hướng lên mới đều nằm trong ba ngoại lệ đã duyệt, hoặc `AGENTS.md` được cập nhật trong cùng PR
+- [ ] Không package `core/*` nào import hay khai `feature_*`, `data_*` hay `domain_*`, trừ ba cạnh `→ domain_core` đã duyệt (`arch_check` R1)
+- [ ] Mọi cạnh core → `domain_core` mới đều được thêm vào danh sách cho phép trong `tools/arch_check/check.dart` và vào `AGENTS.md` trong cùng PR
 - [ ] Mọi `package:` import trong `lib/` đều có mục tương ứng trong `pubspec.yaml`
 - [ ] Import phục vụ production nằm ở `dependencies`, không phải `dev_dependencies`
 - [ ] Code bị xoá thì dependency không còn dùng cũng được gỡ theo
@@ -45,8 +51,9 @@ flutter analyze                                      # phân tích tĩnh
 **Kiểm chứng**
 
 ```bash
+dart tools/arch_check/check.dart                            # R1 hướng phụ thuộc, R5 import thiếu khai
 grep -rn "package:feature_\|package:data_" platform/*/lib   # phải rỗng
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/unused_checker/check_unused_packages.dart        # đã khai mà không dùng
 ```
 
 ---
@@ -70,7 +77,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 ## 4. Tầng Data
 
 - [ ] Thư mục là `data_sources/remote/` và `data_sources/local/` — không phải `datasources/`
-- [ ] **DataSource trả Model, không bao giờ trả Entity**
+- [ ] **DataSource trả Model, không bao giờ trả Entity** — lớp bọc duy nhất được phép là envelope phản hồi `BaseEntity<T>` của `domain_core`
 - [ ] Không class nào do Drift sinh xuất hiện trong chữ ký công khai — chuyển đổi ở lớp biên (`CacheEntryModel`)
 - [ ] Model có `.toEntity()` và implement `BaseModel<E>`
 - [ ] `RepositoryImpl` kế thừa `IBaseRepository` và bọc công việc trong `execute()` / `executeSync()`
@@ -93,17 +100,18 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 ## 6. Dependency injection
 
 - [ ] Package mới khai `@InjectableInit.microPackage()` tại `lib/di/module.dart`
-- [ ] Module của nó được khai đúng nhóm trong mỗi `apps/<id>/app_manifest.yaml`, và `composer verify` sạch
+- [ ] Nó được ghép trong mỗi `apps/<id>/app_manifest.yaml` — module thì nằm dưới `modules:`, package platform thì nằm đúng mục `di_groups` — và `composer verify` sạch
 - [ ] Controller gắn màn hình là `@injectable` — **không bao giờ** `@singleton` / `@lazySingleton`
 - [ ] Controller singleton phải thực sự dùng toàn app
 - [ ] Không `@Singleton` eager nào phụ thuộc type đăng ký ở module chạy sau ([luật 5](01_rules.md#5-thứ-tự-đăng-ký-di))
 - [ ] Phụ thuộc đi qua constructor; không gọi `getIt<T>()` trong ViewModel, Repository hay UseCase
 - [ ] Bind một impl cho interface thứ hai phải dùng `@module` tường minh — GetIt không phân giải theo supertype
 
-**Kiểm chứng** — sau bất kỳ thay đổi DI nào, đọc file lắp ráp sinh ra và xác nhận phụ thuộc của mỗi đăng ký eager xuất hiện trước nó trong `init()`:
+**Kiểm chứng** — sau bất kỳ thay đổi DI nào, đọc các file sinh ra: `apps/mobile/lib/di/injection.config.dart` chỉ chứa thứ tự module; `lib/di/module.module.dart` của từng package mới chứa đăng ký theo type và các lệnh `gh<Dep>()` mà mỗi đăng ký gọi. Mọi phụ thuộc của một `gh.singleton…` eager phải được đăng ký phía trên nó, hoặc bởi một module có `init` chạy sớm hơn:
 
 ```bash
-grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
+grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart
+grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
 ```
 
 ---
@@ -148,7 +156,7 @@ flutter analyze
 - [ ] Event của BLoC là subclass private dùng `part` / `part of`
 - [ ] Mọi handler `on<Event>` đều `async` và nhận `(event, emit)`
 - [ ] Dùng đúng loại `ViewState` — `BlocViewState<T>` cho nhánh BLoC, `ViewState` cho nhánh Provider
-- [ ] Contract do feature removable sở hữu được resolve bằng `getItOrNull` / `getAllOrEmpty` — `arch_check` R8 sạch
+- [ ] Contract `core_di` được implement dưới `modules/` (ở bất kỳ tầng nào) được resolve bằng `getItOrNull` / `getAllOrEmpty` khi ở ngoài chính module đó — `arch_check` R8 sạch
 - [ ] Không file nào trong app shell ngoài `injection.dart` import package module — `arch_check` R10 sạch
 - [ ] Mọi kích thước đi qua `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; không double thô, không dạng bare `16.h` (`arch_check` R7 chặn)
 - [ ] Design token gọi kèm context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, không dùng getter trần, không scale hai lần

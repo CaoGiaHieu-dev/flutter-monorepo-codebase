@@ -305,11 +305,11 @@ dart tools/module_generator/generate.dart 2 payment
 
 # 2. Write entity → params → repository interface → use case
 
-# 3. Refresh the barrel files
-dart tools/barrel_generator/generate.dart modules/payment/domain/lib
-
-# 4. Generate Freezed + injectable code
+# 3. Generate Freezed + injectable code
 dart run build_runner build -d --workspace
+
+# 4. Refresh the barrel files — after codegen, since barrels export generated files too
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 ```
 
 Checklist before you open a PR:

@@ -47,11 +47,16 @@ Deferring is safe whenever every consumer is itself lazy — nothing resolves it
 
 > [!CAUTION]
 > **`flutter analyze` cannot catch this** — it is a runtime ordering fault, not a type error.
-> Verify by reading the generated graph after `build_runner`:
+> Verify by reading the generated files after `build_runner`. `apps/mobile/lib/di/injection.config.dart`
+> holds only the **module order** (one `…PackageModule().init(gh)` per package); your type's
+> registration, and the `gh<Dep>()` calls its constructor makes, are in its package's
+> `lib/di/module.module.dart`:
 > ```bash
-> grep -n "YourType" apps/mobile/lib/di/injection.config.dart
+> grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart   # module order
+> grep -rn -A4 "YourType" modules/*/*/lib/di/module.module.dart platform/*/lib/di/module.module.dart
 > ```
-> Check that everything your eager singleton needs is registered on an *earlier* line.
+> Check that every `gh<Dep>()` your eager singleton makes is registered on an *earlier* line of
+> the same file, or by a module whose `init` runs earlier.
 
 ## ⚠️ Trap 2 — GetIt does not resolve supertypes
 
@@ -211,7 +216,8 @@ matching `pubspec.yaml` entry, in `dependencies` (not `dev_dependencies`) when p
 code uses it. Verify with:
 
 ```bash
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/arch_check/check.dart                      # R5: imported but not in `dependencies:` (blocking)
+dart tools/unused_checker/check_unused_packages.dart  # the reverse: declared but never imported
 ```
 
 ---

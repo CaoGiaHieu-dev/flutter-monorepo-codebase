@@ -43,7 +43,7 @@ Requires a Gemini API key — `--api-key`, the `GEMINI_API_KEY` environment vari
 gitignored `tools/code_review/.gemini_api_key` the tool writes when the user agrees to save one.
 Never put a key in the tracked `code_review_config.json`.
 
-Use the `run_command` tool to run the commands above. After execution, analyze the summary output printed to the terminal and advise the user on how to resolve any architectural violations.
+Run the commands above in the shell, from the repository root. After execution, analyze the summary output printed to the terminal and advise the user on how to resolve any architectural violations.
 
 ## Key rules to check while reviewing
 

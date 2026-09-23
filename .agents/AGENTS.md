@@ -42,13 +42,13 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
 
 ## 🧱 2. Strict Layer Isolation
 
-0. **Core Layer must never depend on Features (or Data)**:
-   - **ABSOLUTELY FORBIDDEN** for any `platform/*` package to import `package:feature_*/...` or `package:data_*/...`, or to declare them in its `pubspec.yaml`. Core is the innermost infrastructure ring — nothing above it may own it.
-   - **Core → Domain is not an upward edge.** Domain is the innermost ring: it depends on nothing, and every other layer may depend on it. The exceptions below are recorded so the graph stays auditable, not because they are violations. Verify the full list at any time with:
+0. **Core Layer must never depend on Features, Data or product Domain packages**:
+   - **ABSOLUTELY FORBIDDEN** for any `platform/*` package to import `package:feature_*/...`, `package:data_*/...` or `package:domain_*/...`, or to declare them in its `pubspec.yaml` — **except** the approved `→ domain_core` edges listed below. Core is the innermost infrastructure ring — nothing above it may own it.
+   - **Enforced by machine.** `arch_check` rule **R1** blocks every core → `feature_*` / `data_*` / `domain_*` edge, by import and by pubspec, that is not in the `_approvedUpwardEdges` allow-list at the top of `tools/arch_check/check.dart`. Depending on `domain_core` is the correct Clean Architecture direction (it is the `Result` contract and depends on nothing), but each such edge is still allow-listed one by one; a core package may **never** depend on a product domain package (`domain_auth`, `domain_cache`, …) — that module is removable. Verify the full list at any time with:
      ```bash
      grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml
      ```
-   - The grep also prints `platform/data_core → domain_core`; that is a data → domain edge (`data_core` is the data layer's foundation that happens to live under `platform/`). Among core packages, currently **three** core → domain edges exist, and no `core → data` or `core → feature` edge may ever be added:
+   - The grep also prints `platform/data_core → domain_core`; that is a data → domain edge (`data_core` is the data layer's foundation that happens to live under `platform/`, and R1 classifies it as data, not core). Among core packages, exactly **three** core → domain edges are approved; adding a fourth means updating this list and the allow-list in `check.dart` in the same PR, and no `core → data` or `core → feature` edge may ever be added:
      - `provider_state_management → domain_core` — needs `Result<T>` / `PaginatedEntity<T>`.
      - `bloc_state_management → domain_core` — needs `AppFailure` for `BlocViewState.error`. It must import `domain_core` **directly**, not via `core_common`'s re-export shim: the shim's `show` clause cannot carry the Freezed-generated `$AppFailureCopyWith`, and the resulting breakage is invisible to `flutter analyze` (§ 23).
      - `platform_kernel → domain_core` — `ErrorHandler` produces `AppFailure`, which now lives in Domain.
@@ -69,7 +69,7 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
    - Data source directories must be named `data_sources/` (snake_case), NOT `datasources/`.
    - Categorize into `data_sources/remote/` (Retrofit) and `data_sources/local/` (Storage/DB).
    - RepositoryImpl classes should inherit from `IBaseRepository` in `data_core` and use the helper methods `execute()` or `executeSync()` wrappers to automatically handle error conversion. API calls are not required to return `BaseEntity`; when the payload is wrapped, unwrap and map it via the `mapper` parameter.
-   - **DataSources return Models, never Entities**, and never leak a generated type. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `modules/cache/data/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
+   - **DataSources return Models, never Entities**, and never leak a generated type. The one wrapper allowed around a Model is `domain_core`'s `BaseEntity<T>` response envelope — the reference `AuthRemoteDataSource` returns `Future<BaseEntity<UserModel>>`, and `AuthRepositoryImpl` unwraps it in `execute`'s `mapper`. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `modules/cache/data/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
    - Error handling must use `ErrorHandler.handleError(e)` from `platform_kernel` (re-exported by `core_common`). **DO NOT** invent an `AppFailure.fromException()` — no such constructor exists.
    - ⚠️ Known gap: `ErrorHandler` has no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch, so every Firebase error collapses to `ServerFailure(code: 9999)` (`"Unknown error occurred"` in release). Add a branch before relying on Firebase error codes in UI.
 3. **Feature Module Boundary**:
@@ -130,8 +130,8 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
 3. Constructor Injection:
    - Do not call `getIt<T>()` inside business logic (ViewModels, Repositories, UseCases).
    - Pass all dependencies through the constructor to enable easy unit testing and mocking.
-4. **Micro-package DI & Relative Imports**:
-   - When declaring `@InjectableInit.microPackage()` with `ignoreUnregisteredTypes`, always import the ignored type using a **relative import** from the package's public API barrel file (e.g. `import '../domain_auth.dart';` inside `lib/di/module.dart`) instead of a `package:` import. This ensures compatibility with the `prefer_relative_imports` lint rule.
+4. **Micro-package DI module**:
+   - A package's DI module is `@InjectableInit.microPackage()` in `lib/di/module.dart`, with no arguments. The one exception is `core_notifications`, which passes `ignoreUnregisteredTypesInPackages: ['firebase_core']`: the `FirebaseOptions` it injects is registered by each app (`lib/firebase/firebase_module.dart`), never by a package module. Do not add such an argument to silence a genuinely missing registration.
 
 ---
 
@@ -167,7 +167,7 @@ All files and class names must strictly adhere to the following naming conventio
    - Do not use `print()` in CLI tools.
    - Use `stdout.writeln()` for standard messages and `stderr.writeln()` for errors.
 2. **Lint Warning Annotations**:
-   - Avoid using comments like `// ignore_for_file: avoid_print` unless absolutely necessary.
+   - **ABSOLUTELY FORBIDDEN** to add a lint suppression — `// ignore: ...`, `// ignore_for_file: ...` or a rule disabled in `analysis_options.yaml`. Fix the cause (for deprecations, see § 10). Generated files carry their generator's own `ignore_for_file` headers; that is not hand-written code.
 3. **FVM is optional — never hardcode the `fvm` prefix**:
    - The repo pins a version in `.fvmrc`, but that file does **not** guarantee `fvm` is installed on the current machine. Blindly prefixing `fvm` fails on a plain Flutter install.
    - Write commands **without** the prefix (`flutter pub get`, `dart run build_runner build -d --workspace`). Add `fvm ` yourself only if your own machine uses it.
@@ -185,7 +185,8 @@ All files and class names must strictly adhere to the following naming conventio
 - ⚠️ **The generator DELETES every hand-written `export '...';` line in a barrel.** It strips all lines starting with `export '` and re-emits its own sorted list (`tools/barrel_generator/generate.dart`, the `line.trim().startsWith("export '")` filter).
   - **ABSOLUTELY FORBIDDEN** to hand-add an `export` to a barrel file — it will silently vanish on the next run.
   - Need a deliberate re-export? Put it in a **normal source file**, which the generator then picks up. Reference: `platform/kernel/lib/src/error/failures.dart` is a plain file whose whole body is the `AppFailure` compatibility re-export.
-- The generator also skips `part of` files and generated output (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`). Run it **before** `build_runner`, one package at a time.
+- The generator skips `part of` files, `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart` and `firebase_options*`, but it **does export every other generated file present on disk**: `module.module.dart`, `injection.config.dart`, and the gen-l10n / flutter_gen output under `lib/src/gen/`. Some of those exports are load-bearing and committed although their targets are gitignored — `platform/base_ui/lib/src/src.dart` exports `gen/gen.dart`, which is how `core_ui_kit` reaches `Assets`.
+- **Run it AFTER `gen-l10n` and `build_runner`**, one package at a time — the order `tools/workspace_setup/configure.dart` uses. It rewrites each barrel from what is on disk, so run before them on a clean checkout it drops the generated exports above. An extra run before codegen is harmless; the last run must come after.
 
 ---
 
@@ -222,11 +223,11 @@ The codebase supports multiple state management frameworks (Provider, BLoC). To 
 ## 🚀 9. Creating New Modules (Quick Reference)
 
 ```bash
-# Feature (Provider):
-dart tools/module_generator/generate.dart 1 <name> "" 1
+# Feature (Provider), routes as IFeatureRouteModule:
+dart tools/module_generator/generate.dart 1 <name> "" 1 1
 
-# Feature (BLoC):
-dart tools/module_generator/generate.dart 1 <name> "" 2
+# Feature (BLoC), routes as a bottom-nav INavDestinationModule:
+dart tools/module_generator/generate.dart 1 <name> "" 2 2
 
 # Domain micro-package:
 dart tools/module_generator/generate.dart 2 <name>
@@ -234,9 +235,14 @@ dart tools/module_generator/generate.dart 2 <name>
 # Data micro-package:
 dart tools/module_generator/generate.dart 3 <name>
 
-# Core package:
+# Core package → core_<name> at platform/<name>:
 dart tools/module_generator/generate.dart 4 <name>
+
+# Custom package → <prefix>_<name> at platform/<name>:
+dart tools/module_generator/generate.dart 5 <name> <prefix>
 ```
+
+For a feature, **always pass all five arguments** (state management: `1` Provider · `2` BLoC · `3` none; route: `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none). With fewer than four the generator prompts on stdin, which blocks an agent. For type `5` the third argument is a package-name prefix, not a directory — a layer word (`feature`, `domain`, `data`, `core`) is refused.
 
 ---
 
@@ -255,7 +261,7 @@ dart tools/module_generator/generate.dart 4 <name>
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
 - **ARB keys MUST be `lowerCamelCase`.** `flutter gen-l10n` copies each key straight through into a Dart getter, so `welcome_back` yields `context.l10nAuth.welcome_back` at every call site — an identifier that breaks Dart's naming convention. Generated files are excluded from `analysis_options.yaml`, so nothing will warn you; the `.arb` is the only place the casing is decided.
-- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@Injectable(as: IFeatureLocalization)`). The shell's `app_material_wrapper.dart` collects all delegates using `getAllOrEmpty<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with empty/`SizedBox` fallbacks so removing a feature package does not crash the host.
+- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@Injectable(as: IFeatureLocalization)`). The shell's `app_material_wrapper.dart` collects all delegates using `getAllOrEmpty<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with fallbacks so removing a feature package does not crash the host: no route modules → an empty list; no `IAppEntryLocation` → the first destination's path, or the placeholder branch `/_empty_dashboard` when no destination is registered either; no `DashboardRouteModule` → the bare `navigationShell`, tabs without chrome (`platform/app_shell/lib/presentation/navigation/app_router.dart`).
 
 ---
 
@@ -278,10 +284,12 @@ dart tools/module_generator/generate.dart 4 <name>
    - The main BLoC file (`_bloc.dart`) declares:
      ```dart
      part '_event.dart';
-     // Include `_state.dart` when using a custom Freezed UI state (omit if using BlocViewState<T>).
+     // The module generator always emits `_state.dart`: with BlocViewState it holds the
+     // Freezed `…StateData` payload (`BlocViewState<…StateData>`); with a custom state, that state.
      part '_state.dart';
      part '_bloc.freezed.dart';
      ```
+     Drop `_state.dart` only when the payload type lives elsewhere — `HomeProfileBloc` uses `BlocViewState<AuthPrincipal?>` and has no state file.
    - The corresponding event/state files (`_event.dart`, `_state.dart`) declare:
      ```dart
      part of '_bloc.dart';
@@ -355,9 +363,9 @@ dart tools/module_generator/generate.dart 4 <name>
 
 ---
 
-## 🗂️ 16. Mandatory `utils/` Folder for Package Constants
+## 🗂️ 16. Package Constants Live in `utils/`
 
-- **EVERY package, at EVERY layer** (core / domain / data / features / app shell), MUST keep its own constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `platform/app_shell/lib/di/utils/`.
+- **Every package, at every layer** (core / domain / data / features / app shell), MUST keep its own public constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `platform/app_shell/lib/di/utils/`. A package with no constants needs no `utils/` folder: `arch_check` **R4** flags a public `static const` outside `utils/` (or `styles/`), and never asks for an empty folder.
 - **ABSOLUTELY FORBIDDEN** to create a shared cross-domain constants file that many packages import. A constant belongs to exactly one owner.
 - `platform_kernel`'s `lib/src/utils/` (re-exported through `core_common`) is reserved for constants that are **genuinely global** — today only `EnvConstants` (`String.fromEnvironment` values). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
 - **Precedent — constants that were evicted from `core_common`,** so nobody re-adds them:
@@ -420,7 +428,10 @@ class AuthLocalDataSource {
 - `configureDependencies()` initializes modules **in the order declared** in `apps/mobile/lib/di/injection.dart`: `externalPackageModulesBefore` (the `core` group) → `externalPackageModulesAfter` (`notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other`, in that order). That order comes from the manifest's `di_groups`. The app package's own registrations run *between* the two phases, and it keeps that slot for what identifies it: `FirebaseModule` (`apps/mobile/lib/firebase/firebase_module.dart`), which is why `core_notifications` — whose eager `PushNotificationService` injects `FirebaseOptions` — sits in `after`, not `core`.
 - **ABSOLUTELY FORBIDDEN** for an eager `@Singleton` to depend on a type registered by a module that runs **later** — GetIt throws `"<Type> is not registered"` during boot.
 - Use `@LazySingleton` whenever a dependency comes from a later module. One live constraint in this template is `shell` before `ui` (the other: `notifications` after the app's own `FirebaseModule`, see above): `ThemeProvider` / `LanguageProvider` in `core_base_ui` inject the storage adapters `platform_app_shell` registers, so the `shell` group must come first — the manifest's `di_groups` order is what guarantees it. (`NetworkConfigImpl` used to be the textbook example, injecting `AuthLocalDataSource` from `data_auth`; it now reads the session through `IAuthSessionGateway` at call time and has no cross-module constructor dependency at all.)
-- `flutter analyze` **cannot** detect this class of bug — it only appears at runtime. After changing any DI annotation or constructor, **verify the generated `apps/mobile/lib/di/injection.config.dart`**: confirm each eager registration's dependencies appear earlier in `init()`.
+- `flutter analyze` **cannot** detect this class of bug — it only appears at runtime. After changing any DI annotation or constructor, read two generated files:
+  - `apps/mobile/lib/di/injection.config.dart` holds only the **module order** — one `…PackageModule().init(gh)` call per package, plus the app's own `FirebaseModule` registrations between the phases.
+  - Each package's `lib/di/module.module.dart` holds the **per-type registrations**: find your type's `gh.singleton<…>` / `gh.lazySingleton<…>` / `gh.factory<…>` and the `gh<Dep>()` calls in its constructor.
+  An eager `gh.singleton` is safe only if every `gh<Dep>()` it makes is registered earlier in its own `module.module.dart` or by a package module whose `init` comes earlier in `injection.config.dart`.
 - `@PostConstruct(preResolve: true)` on a `@lazySingleton` is awaited during module init and then re-registered as a plain sync lazy singleton, so downstream `gh<T>()` sync lookups are safe.
 
 ---
@@ -431,9 +442,10 @@ class AuthLocalDataSource {
 - **MANDATORY**: every `package:` import used under `lib/` must have a matching entry in that package's `pubspec.yaml`.
 - Production-code imports belong in `dependencies`. **ABSOLUTELY FORBIDDEN** to satisfy a production import from `dev_dependencies`.
 - Remove dependencies that are no longer used — stale entries create phantom coupling between layers.
-- Verify before every PR:
+- Verify before every PR — the two halves are checked by two different tools:
   ```bash
-  dart tools/unused_checker/check_unused_packages.dart
+  dart tools/arch_check/check.dart                      # R5: imported under lib/ but not in `dependencies:` (dev_dependencies does not count) — blocking, Gate 1
+  dart tools/unused_checker/check_unused_packages.dart  # declared in `dependencies:` but never imported — advisory
   ```
 
 ---
@@ -444,15 +456,18 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 
 1. **`getAll<T>()` THROWS when `T` is unregistered — `getAllOrEmpty<T>()` does not.**
    - Both live in `platform/kernel/lib/src/di/service_locator.dart`; `platform/common/lib/di/module.dart` re-exports them. `getAllOrEmpty` guards with `getIt.isRegistered<T>()` and returns `const []`.
-   - **MANDATORY**: every optional multi-instance contribution (`IFeatureRouteModule`, `INavDestinationModule`, `IFeatureLocalization`, `IAppTreeWrapper`, `IDatabaseMigration`) MUST be collected with `getAllOrEmpty`.
+   - **MANDATORY**: every optional multi-instance contribution (`IFeatureRouteModule`, `INavDestinationModule`, `IFeatureLocalization`, `IAppTreeWrapper`) MUST be collected with `getAllOrEmpty`. `IDatabaseMigration<TDb>` is collected with the same guard written out: the database's own DI module checks `GetIt.instance.isRegistered<IDatabaseMigration<CacheDatabase>>()` and calls `getAll` only when it is true (`modules/cache/data/lib/di/module.dart`). Either form is fine; a bare `getAll` is not.
    - Real bug: `app_material_wrapper.dart` used `getIt.getAll<IFeatureLocalization>()`; with no feature contributing one, `MaterialApp` construction threw and the app died at boot.
    - Same rule for single instances: `getItOrNull<T>()` + a fallback, never bare `getIt<T>()`, whenever `T` is owned by a removable feature.
    - **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R8** derives every `core_di`
-     contract whose only implementer lives in `modules/*/feature`, then blocks a throwing
-     `getIt<T>()` / `getAll<T>()` against one. Contracts implemented in the app shell
-     (`IThemeStorage`, `ILanguageStorage`) are always registered and stay outside the set; the owning
-     feature is exempt from its own contract. `flutter analyze` cannot see this class of bug —
-     the lookup type-checks against `core_di` and only crashes at runtime.
+     contract implemented under `modules/` — in **any** layer: a data package's gateway
+     (`IAuthSessionGateway` in `data_auth`) as much as a feature's navigator — keyed by the module
+     that implements it, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one.
+     Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always
+     registered and stay outside the set. A module is removed whole, so any package of the
+     implementing module (e.g. `feature_auth` for `data_auth`'s gateway) may still resolve its
+     contracts eagerly. `flutter analyze` cannot see this class of bug — the lookup type-checks
+     against `core_di` and only crashes at runtime.
 
 2. **GetIt does NOT resolve supertypes.** Registering `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB`.
    - Real bug: `NetworkConfigImpl` was registered only `as NetworkConfig`, so `getItOrNull<SslPinningConfig>()` in `AppInitializer._setupHttpOverrides` returned `null` and **certificate pinning was silently skipped on staging and production**.
@@ -477,7 +492,8 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 
 - **Why**: Drift resolves `@DriftDatabase(tables: [...], daos: [...])` at compile time and a DAO must be `part of` its database library. A single shared `AppDatabase` therefore forces whichever package declares it to own **every** table — reproducing the god-object that § 16/§ 17 exist to prevent.
 - **Rule**: a package that needs relational storage declares **its own database** beside its own tables and DAO. Reference: `modules/cache/data/lib/src/database/` holds `CacheDatabase`, `tables/cache_entries_table.dart` and `dao/cache_entries_dao.dart`.
-- `core_database` supplies: `IDatabaseHandle<TDb extends GeneratedDatabase>` (hand a package only the accessor it asks for, plus `transaction`), `IDatabaseMigration` (a package contributes its own upgrade/downgrade steps), `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`.
+- `core_database` supplies: `IDatabaseHandle<TDb extends GeneratedDatabase>` (hand a package only the accessor it asks for, plus `transaction`), `IDatabaseMigration<TDb>` (a package contributes its own upgrade/downgrade steps), `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`.
+- **Register a migration typed to its database**: `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`. GetIt keys a registration by its exact type and the database's module collects only `IDatabaseMigration<YourDatabase>`, so an untyped `as: IDatabaseMigration` registration is never collected and the step silently never runs (`docs/en/guides/07_database.md` § 4). The contributing module must also initialise **before** the module that opens the database, which runs its migrations inside its `@preResolve` factory.
 - **Accepted trade-off**: SQL cannot join across package boundaries. That is deliberate — crossing a bounded context belongs at the repository layer, not in a query.
 - **Removability**: deleting a package deletes its database with it. A database must open normally when **no** `IDatabaseMigration` is registered.
 - Drift limits worth knowing: there is **no `onDowngrade` callback** (downgrade is routed through `onUpgrade` by comparing `from`/`to`), and **no runtime table registration** — a package cannot add a table to another package's database.
@@ -509,7 +525,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   | `IAuthSessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` |
 
 - Contracts in `core_di` MUST stay state-management agnostic: `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature can return `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other.
-- Prefer a plain Dart 3 `sealed class` over Freezed for `core_di` contracts (see `AuthSessionFailure`) — `core_di` runs no codegen, and adding a `part` would make every consumer wait on `build_runner`.
+- Prefer a plain Dart 3 `sealed class` over Freezed for `core_di` contracts (see `AuthSessionFailure`) — `core_di` runs only injectable's codegen (its `lib/di/module.module.dart`), no Freezed or other `part`-file codegen, and adding a `part` to a contract would make every consumer wait on `build_runner`.
 - The shared widget library is **not** a removable feature: it lives at `platform/ui_kit` as `core_ui_kit`, so `modules/*/feature/` contains only genuinely removable product surfaces.
 
 ---
@@ -524,8 +540,8 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   ```bash
   dart run build_runner build -d --workspace
   flutter analyze
-  cd modules/<module>/<layer> && flutter test      # per package
+  cd modules/<module>/<layer> && flutter test      # per package that has a test/ directory
   cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
   ```
-  The build step is **not optional** — it is the only gate that sees generated code.
+  The build step is **not optional** — it is the only gate that sees generated code. Run `flutter test` only in a package that has a `test/` directory (CI Gate 3 does the same). The APK build needs two gitignored inputs a fresh clone lacks: the `firebase_options_<flavor>.dart` files in `apps/mobile/lib/firebase/` and `apps/mobile/android/app/src/<flavor>/google-services.json` — create them as described in `docs/en/getting-started/01_setup.md` § 3 before building.
 - Corollary: when a type consumed by generated code moves package, **import its new home directly**. Do not rely on a `show`-limited re-export.

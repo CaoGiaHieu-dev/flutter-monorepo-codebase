@@ -24,13 +24,21 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 ### Step 1: Initialize Structure using the Automated Tool
 
 ```bash
-# Syntax: dart tools/module_generator/generate.dart <type> <module_name> <directory> [sm] [route_contribution]
-# <type>: 1 (Feature), 2 (Domain), 3 (Data), 4 (Core), 5 (Custom)
+# Syntax: dart tools/module_generator/generate.dart <type> <module_name> [prefix] [sm] [route_contribution]
+# <type>: 1 (Feature), 2 (Domain), 3 (Data), 4 (Core → core_<name> at platform/<name>), 5 (Custom)
 # <module_name>: Business entity name (e.g., profile, payment, logging)
-# <directory>: Usually left empty "" (only used for Custom)
+# [prefix]: pass "" except for Custom — there it is the package-name PREFIX, not a directory:
+#           the package is <prefix>_<name>, always at platform/<name>. A layer word
+#           (feature, domain, data, core) is refused.
 # [sm]: (Feature only) 1 (Provider), 2 (BLoC), 3 (None)
 # [route_contribution]: (Feature only) 1 (IFeatureRouteModule), 2 (INavDestinationModule), 3 (none)
 ```
+
+> [!IMPORTANT]
+> For a **feature, always pass all five arguments**. With fewer than four the generator asks
+> for the state management on stdin, which blocks an agent; with exactly four it silently
+> picks route `1`. Types 2–4 need only `<type> <module_name>`; type 5 needs the prefix as the
+> third argument (or it prompts for it).
 
 **Examples:**
 
@@ -49,15 +57,20 @@ dart tools/module_generator/generate.dart 1 chat "" 2 2
 dart tools/module_generator/generate.dart 2 payment
 ```
 
+4. Custom platform package `acme_billing` (created at platform/billing):
+```bash
+dart tools/module_generator/generate.dart 5 billing acme
+```
+
 ### What the tool guarantees
 
 | Behaviour | Detail |
 | :--- | :--- |
-| `lib/src/utils/` | Created for **every** module type — the repo requires each package to own its constants there. For a feature with routes, `<name>_path.dart` is written into `utils/`, not `routing/`. |
+| `lib/src/utils/` | Created for **every** module type, because a package's constants belong there (a package that ends up with none may drop the empty folder — `arch_check` R4 never asks for one). For a feature with routes, `<name>_path.dart` is written into `utils/`, not `routing/`. |
 | State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, matching `feature_auth` / `feature_home`. |
 | Toolchain detection | Auto-detects FVM: uses it only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise falls back to global `dart` / `flutter`. |
 | Fail-safe | `assertToolchainAvailable()` runs **before any write**; an existing module directory aborts instead of being silently overwritten. |
-| Rollback | The shared files it edits — the root `pubspec.yaml` and every `app_manifest.yaml` — are snapshotted first; any later failure restores them and deletes the new module directory. |
+| Rollback | The shared files it touches — every `app_manifest.yaml`, plus what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted first; any later failure restores them and deletes the new module directory. |
 
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)
 The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_nav_destination.dart` according to `[route_contribution]`.
@@ -73,7 +86,9 @@ The tool generates the basic directory structure (including `assets/language` an
 
 For Features, complete the TypedGoRoute file (e.g. `lib/src/routing/*_route_module.dart`) and fill the DI contribution stub:
 
-**If using Provider:**
+**If using Provider:** the generated `*Provider` already overrides `initialize()` — the hook
+`BaseProvider` calls after construction. Put setup there; a method named anything else (e.g.
+`init()`) never runs.
 ```dart
 @TypedGoRoute<ProfileRoute>(path: ProfilePath.PROFILE)
 class ProfileRoute extends GoRouteDataCustom with $ProfileRoute {

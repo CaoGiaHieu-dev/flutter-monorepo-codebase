@@ -17,7 +17,9 @@ When a developer adds, deletes, or renames files under a package's `lib` directo
    ```
    *Example: `dart tools/barrel_generator/generate.dart modules/home/feature/lib`*
 
-Use the `run_command` tool to execute the command and report the status.
+Run the command in the shell, from the repository root, and report the status. A path that does
+not exist exits with code `2` (it prompts for another path only when run with no argument on a
+terminal), so check the exit code.
 
 ## Notes
 

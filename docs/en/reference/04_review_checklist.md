@@ -10,34 +10,40 @@ Skip sections the PR does not touch. Anything with a **Verify** line should be *
 
 ## 0. Automated gate — run these first
 
+The same gates `.github/workflows/pr_quality_check.yml` runs, in its order (CI first runs `dart tools/workspace_setup/configure.dart` — pub get, gen-l10n, build_runner, barrels):
+
 ```bash
-dart tools/dependency_sync.dart --check              # version catalog drift
-dart tools/unused_checker/check_unused_packages.dart # unused / undeclared deps
 dart run build_runner build -d --workspace           # generated code up to date
-flutter analyze                                      # static analysis
+dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
+dart tools/arch_check/check.dart                     # Gate 1 — layering rules R1–R10 (R5: undeclared imports)
+flutter analyze                                      # Gate 2 — static analysis
+# Gate 3 — `flutter test` in every package that has a test/ directory
+dart tools/dependency_sync.dart --check              # Gate 4 — version catalog drift
+dart tools/docs_check/check.dart                     # Gate 5 — every repo path the docs name exists
+dart tools/unused_checker/check_unused_packages.dart # advisory — declared but never imported
 ```
 
-- [ ] All four pass clean
-- [ ] Tests pass in every touched package — `cd modules/<module>/<layer> && flutter test`
+- [ ] Gates 0–5 pass clean (the unused-dependency audit is advisory)
+- [ ] Tests pass in every touched package that has a `test/` directory — `cd modules/<module>/<layer> && flutter test`
 - [ ] No file under `lib/` was hand-edited if it ends in `.g.dart`, `.freezed.dart`, `.module.dart` or `.config.dart`
-- [ ] Barrel generator was re-run if any file was added, renamed or deleted
+- [ ] Barrel generator was re-run — after `build_runner` / `gen-l10n` — if any file was added, renamed or deleted
 
 ---
 
 ## 1. Package structure
 
 - [ ] New package declares `resolution: workspace` in its `pubspec.yaml`
-- [ ] New package is listed in the root `pubspec.yaml` `workspace:` block
+- [ ] New package is listed in the root `pubspec.yaml` `workspace:` block — written by `dart tools/composer/composer.dart sync` (the module generator runs it); a hand edit there fails Gate 0
 - [ ] Public API is exported through the barrel `lib/<package_name>.dart`; implementation stays under `src/`
 - [ ] Package name matches its layer prefix — `core_` / `domain_` / `data_` / `feature_`
-- [ ] Package has a `utils/` folder holding **its own** constants ([rule 3](01_rules.md#3-mandatory-utils-folder))
+- [ ] The package's public constants live in its own `utils/` folder — a package with no constants needs none ([rule 3](01_rules.md#3-constants-live-in-utils))
 
 ---
 
 ## 2. Dependency direction
 
-- [ ] No `core/*` package imports or declares `feature_*` / `data_*`
-- [ ] Any new upward dependency is one of the three approved exceptions, or `AGENTS.md` was updated in the same PR
+- [ ] No `core/*` package imports or declares `feature_*`, `data_*` or `domain_*`, except the three approved `→ domain_core` edges (`arch_check` R1)
+- [ ] Any new core → `domain_core` edge was added to the allow-list in `tools/arch_check/check.dart` and to `AGENTS.md` in the same PR
 - [ ] Every `package:` import under `lib/` has a matching `pubspec.yaml` entry
 - [ ] Production imports are in `dependencies`, not `dev_dependencies`
 - [ ] Removed code also removed its now-unused dependency entries
@@ -45,8 +51,9 @@ flutter analyze                                      # static analysis
 **Verify**
 
 ```bash
+dart tools/arch_check/check.dart                            # R1 dependency direction, R5 undeclared imports
 grep -rn "package:feature_\|package:data_" platform/*/lib   # must be empty
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/unused_checker/check_unused_packages.dart        # declared but unused
 ```
 
 ---
@@ -70,7 +77,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 ## 4. Data layer
 
 - [ ] Directories are `data_sources/remote/` and `data_sources/local/` — not `datasources/`
-- [ ] **DataSources return Models, never Entities**
+- [ ] **DataSources return Models, never Entities** — the only allowed wrapper is `domain_core`'s `BaseEntity<T>` response envelope
 - [ ] No Drift-generated class appears in a public signature — convert at the boundary (`CacheEntryModel`)
 - [ ] Models provide `.toEntity()` and implement `BaseModel<E>`
 - [ ] `RepositoryImpl` extends `IBaseRepository` and wraps work in `execute()` / `executeSync()`
@@ -93,17 +100,18 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 ## 6. Dependency injection
 
 - [ ] New package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`
-- [ ] Its module is declared in the right group in each `apps/<id>/app_manifest.yaml`, and `composer verify` is clean
+- [ ] It is composed in each `apps/<id>/app_manifest.yaml` — a module under `modules:`, a platform package in the right `di_groups` entry — and `composer verify` is clean
 - [ ] Screen-scoped controllers are `@injectable` — **never** `@singleton` / `@lazySingleton`
 - [ ] Global controllers that are singletons are genuinely app-wide
 - [ ] No eager `@Singleton` depends on a type registered by a later module ([rule 5](01_rules.md#5-di-registration-order))
 - [ ] Dependencies arrive via constructor; no `getIt<T>()` inside a ViewModel, Repository or UseCase
 - [ ] Binding an impl to a second interface uses an explicit `@module` — GetIt does not resolve supertypes
 
-**Verify** — after any DI change, read the generated assembly and confirm each eager registration's dependencies appear earlier in `init()`:
+**Verify** — after any DI change, read the generated files: `apps/mobile/lib/di/injection.config.dart` holds only the module order; each package's `lib/di/module.module.dart` holds its per-type registrations and the `gh<Dep>()` calls each makes. Every dependency of an eager `gh.singleton…` must be registered above it or by a module whose `init` runs earlier:
 
 ```bash
-grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
+grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart
+grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
 ```
 
 ---
@@ -148,7 +156,7 @@ flutter analyze
 - [ ] BLoC events are private subclasses using `part` / `part of`
 - [ ] Every `on<Event>` handler is `async` and takes `(event, emit)`
 - [ ] The right `ViewState` is used — `BlocViewState<T>` on the BLoC side, `ViewState` on the Provider side
-- [ ] A contract owned by a removable feature is resolved with `getItOrNull` / `getAllOrEmpty` — `arch_check` R8 is clean
+- [ ] A `core_di` contract implemented under `modules/` (any layer) is resolved with `getItOrNull` / `getAllOrEmpty` outside its own module — `arch_check` R8 is clean
 - [ ] No app-shell file outside `injection.dart` imports a module package — `arch_check` R10 is clean
 - [ ] All sizing goes through `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; no raw doubles, no bare `16.h` form (`arch_check` R7 blocks it)
 - [ ] Design tokens called with context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, never a bare getter, never double-scaled

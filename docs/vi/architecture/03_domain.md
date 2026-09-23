@@ -307,11 +307,11 @@ dart tools/module_generator/generate.dart 2 payment
 
 # 2. Viết entity → params → repository interface → use case
 
-# 3. Cập nhật barrel
-dart tools/barrel_generator/generate.dart modules/payment/domain/lib
-
-# 4. Sinh code Freezed + injectable
+# 3. Sinh code Freezed + injectable
 dart run build_runner build -d --workspace
+
+# 4. Cập nhật barrel — sau codegen, vì barrel cũng export file sinh ra
+dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 ```
 
 Checklist trước khi mở PR:

@@ -39,7 +39,8 @@ dart tools/unused_checker/check_unused_packages.dart    # declared but unused
 Fix by adding the missing entry to the consuming `pubspec.yaml` (in `dependencies`, not
 `dev_dependencies`, when production code uses it), or removing the unused one.
 
-Use the `run_command` tool to execute the scripts. Remind the user to run `flutter pub get` if modifications were made to the `pubspec.yaml` files.
+Run the scripts in the shell, from the repository root. `dart tools/dependency_sync.dart --help`
+prints usage; any other unknown flag exits `64` without syncing. Remind the user to run `flutter pub get` if modifications were made to the `pubspec.yaml` files.
 
 ## Notes
 

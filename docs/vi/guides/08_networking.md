@@ -497,7 +497,7 @@ Repository bóc các lớp bao này thành `Result<T>` qua `execute()` — xem [
 - [ ] Login, refresh, và mọi call có `401` không mang nghĩa "hết phiên" thì set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] Impl `NetworkConfig` giữ `@LazySingleton` (không bao giờ eager)
 - [ ] `sslPinningHashes` đã điền ≥2 pin trước khi phát hành
-- [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra `injection.config.dart`
+- [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra file sinh ra `lib/di/module.module.dart` của `platform_app_shell`
 - [ ] Không log nguyên văn bất kỳ thông tin đăng nhập nào
 
 ## Xem thêm

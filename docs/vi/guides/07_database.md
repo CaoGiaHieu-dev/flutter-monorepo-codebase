@@ -221,10 +221,10 @@ abstract class DataCacheDiModule {
   /// Reads contributed migrations without throwing when none are registered.
   static Iterable<IDatabaseMigration> _registeredMigrations() {
     final getIt = GetIt.instance;
-    if (!getIt.isRegistered<IDatabaseMigration>()) {
+    if (!getIt.isRegistered<IDatabaseMigration<CacheDatabase>>()) {
       return const <IDatabaseMigration>[];
     }
-    return getIt.getAll<IDatabaseMigration>();
+    return getIt.getAll<IDatabaseMigration<CacheDatabase>>();
   }
 }
 ```
@@ -328,7 +328,7 @@ Bạn không bao giờ sửa file database của package khác để đổi sche
 
 ```dart
 // platform/database/lib/src/migration/i_database_migration.dart
-abstract class IDatabaseMigration {
+abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   int get version;
 
@@ -341,11 +341,12 @@ abstract class IDatabaseMigration {
 }
 ```
 
-Đăng ký y hệt một route module:
+Đăng ký như một route module, nhưng gắn kiểu với database mà nó thuộc về — GetIt định danh một đăng ký theo đúng kiểu của nó, nên `CacheDatabase` chỉ thu về `IDatabaseMigration<CacheDatabase>` và bước migration của package khác không bao giờ tới được nó:
 
 ```dart
-@LazySingleton(as: IDatabaseMigration)
-class AddExpiresAtToCacheEntries implements IDatabaseMigration {
+@LazySingleton(as: IDatabaseMigration<CacheDatabase>)
+class AddExpiresAtToCacheEntries
+    implements IDatabaseMigration<CacheDatabase> {
   @override
   int get version => 2;
 
@@ -472,7 +473,7 @@ Ba quyết định có chủ đích:
 /// an older one is replaced so repeated failures cannot fill the disk.
 ```
 
-Các sidecar `-wal` / `-shm` cũng bị xoá — chúng thuộc về database đã bị cách ly và nếu để lại sẽ được áp vào database mới.
+Các sidecar `-wal` / `-shm` được chuyển theo, thành `<fileName>.corrupt-wal` / `.corrupt-shm`: chúng thuộc về database đã bị cách ly và không được áp vào database mới, còn WAL chứa các transaction đã commit mà chưa checkpoint — xoá nó là mất đúng phần dữ liệu mới nhất.
 
 **Marker môi trường phủ quyết kết luận "hỏng file".**
 
@@ -559,7 +560,7 @@ Hai thói quen đáng học:
 - [ ] `_registeredMigrations()` có guard `isRegistered` trước khi gọi `getAll`
 - [ ] Data source nhận `IDatabaseHandle<TDb>`, không nhận database
 - [ ] Chữ ký trả về **Model**; không có class row của Drift trong API công khai
-- [ ] Bước schema mới = một `IDatabaseMigration` mới với `version >= 2`, đăng ký bằng `@LazySingleton(as: IDatabaseMigration)`; `schemaVersion` được bump cho khớp
+- [ ] Bước schema mới = một `IDatabaseMigration` mới với `version >= 2`, đăng ký bằng `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` được bump cho khớp
 - [ ] `downgrade` đã implement, hoặc ném lỗi có mô tả khi không đảo ngược được
 - [ ] Đã chạy lại barrel và `build_runner`
 

@@ -35,11 +35,14 @@ abstract class DataCacheDiModule {
       DatabaseHandle<CacheDatabase>(database);
 
   /// Reads contributed migrations without throwing when none are registered.
+  ///
+  /// Typed to [CacheDatabase]: a step another package registers for its own
+  /// database is a different GetIt type and never reaches this one.
   static Iterable<IDatabaseMigration> _registeredMigrations() {
     final getIt = GetIt.instance;
-    if (!getIt.isRegistered<IDatabaseMigration>()) {
+    if (!getIt.isRegistered<IDatabaseMigration<CacheDatabase>>()) {
       return const <IDatabaseMigration>[];
     }
-    return getIt.getAll<IDatabaseMigration>();
+    return getIt.getAll<IDatabaseMigration<CacheDatabase>>();
   }
 }

@@ -96,7 +96,7 @@ Two type parameters, and they are not the same thing:
 - **`T`** — what Domain expects (an Entity, a list of Entities, `void`)
 - **`mapper`** — the `R → T` bridge, normally `(model) => model.toEntity()`
 
-If `T` is nullable and no `mapper` is supplied, `Success(null as T)` is returned — that is how `Future<Result<void>>` operations work without ceremony.
+If the call returns `null`, `T` is nullable and no `mapper` is supplied, `Success(null as T)` is returned — that is how `Future<Result<void>>` operations work without ceremony. A non-null response is passed through as `T` even when `T` is nullable.
 
 ### `executeSync<R, T>()` — synchronous
 

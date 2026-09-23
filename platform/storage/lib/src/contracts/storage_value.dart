@@ -6,6 +6,7 @@ import 'package:core_common/core_common.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 
+import 'storage_codec.dart';
 import 'storage_interface.dart';
 
 /// Container that obfuscates a String in RAM using dynamic XOR masking.
@@ -127,27 +128,8 @@ class StorageValue<T> extends ChangeNotifier with DisposeGuard {
   }
 
   /// Decodes and revives the deserialized value.
-  T? _revive(Object? decoded) {
-    if (decoded == null) return null;
-    var tType = TypeHelper<T>();
-
-    if (tType is TypeHelper<List>) {
-      if (decoded is List) {
-        if (reviver != null) {
-          return reviver!.call(key, decoded);
-        }
-        return decoded as T;
-      }
-    }
-
-    if (TypeHelper.supportType(tType)) {
-      if (tType is TypeHelper<Enum>) {
-        return reviver?.call(key, decoded);
-      }
-      return decoded as T?;
-    }
-    return reviver?.call(key, decoded);
-  }
+  T? _revive(Object? decoded) =>
+      StorageCodec.revive<T>(decoded, key, reviver: reviver);
 
   /// Updates the in-memory obfuscated cache.
   void _updateCache(T? newValue) {
@@ -158,15 +140,7 @@ class StorageValue<T> extends ChangeNotifier with DisposeGuard {
       }
 
       if (newValue != null) {
-        final jsonStr = jsonEncode(
-          newValue,
-          toEncodable: (nonEncodable) {
-            if (nonEncodable is Enum) {
-              return nonEncodable.name;
-            }
-            return jsonEncode(nonEncodable);
-          },
-        );
+        final jsonStr = StorageCodec.encode(newValue);
         _obfuscatedValue = ObfuscatedString(jsonStr);
       }
     } catch (e, s) {

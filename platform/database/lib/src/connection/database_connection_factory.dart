@@ -34,8 +34,11 @@ abstract final class DatabaseConnectionFactory {
   /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;
   /// an older one is replaced so repeated failures cannot fill the disk.
   ///
-  /// Also removes the `-wal` / `-shm` sidecar files, which belong to the
-  /// quarantined database and would otherwise be applied to the new one.
+  /// The `-wal` / `-shm` sidecars move with it (`<fileName>.corrupt-wal`,
+  /// `.corrupt-shm`): they belong to the quarantined database and must not be
+  /// applied to the new one, and the WAL holds committed transactions not yet
+  /// checkpointed — deleting it would lose exactly the newest data the
+  /// quarantine exists to keep recoverable.
   ///
   /// Returns the quarantined [File], or `null` when there was nothing to
   /// move (the database had not been created yet).
@@ -47,15 +50,15 @@ abstract final class DatabaseConnectionFactory {
 
     final quarantinePath =
         '${file.path}${DatabaseConstants.CORRUPT_FILE_SUFFIX}';
-    final previous = File(quarantinePath);
-    if (previous.existsSync()) {
-      await previous.delete();
+    for (final suffix in const ['', '-wal', '-shm']) {
+      final previous = File('$quarantinePath$suffix');
+      if (previous.existsSync()) await previous.delete();
     }
 
     for (final suffix in const ['-wal', '-shm']) {
       final sidecar = File('${file.path}$suffix');
       if (sidecar.existsSync()) {
-        await sidecar.delete();
+        await sidecar.rename('$quarantinePath$suffix');
       }
     }
 

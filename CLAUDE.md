@@ -503,7 +503,7 @@ declare `data_auth` in its pubspec simply cannot reach `AuthStorageKeys`.
 3. Register the owner as a **singleton** (`@singleton` / `@lazySingleton` / `@Singleton(as: IFoo)`)
    with `@PostConstruct(preResolve: true)` to hydrate at startup.
    **Never `@injectable` (factory)** — each injection would get an empty cache.
-4. Use a `reviver` callback for complex types (Enums, JSON objects, Lists).
+4. Use a `reviver` callback for an enum or a custom type (stored through its `toJson()`); primitives, `Map<String, dynamic>` and typed lists read back without one.
 5. Run `dart run build_runner build -d --workspace`.
 
 ```dart

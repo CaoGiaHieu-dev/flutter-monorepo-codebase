@@ -385,7 +385,7 @@ dart tools/module_generator/generate.dart 4 <name>
 2. **Register the owner as a singleton** — `@singleton`, `@lazySingleton`, or `@Singleton(as: IFoo)` — combined with `@PostConstruct(preResolve: true)` so the in-memory cache is hydrated from disk before first use.
    **ABSOLUTELY FORBIDDEN** to register a storage owner as `@injectable` (factory): every injection would produce a new instance with an empty cache, so synchronous getters would silently return `null`.
 3. **Never expose one package's `StorageValue` to another package.** If another layer needs the value, publish an interface on `core_di` (as done for `IThemeStorage` / `ILanguageStorage`) instead of sharing the storage object.
-4. Choose the backend explicitly: `StorageType.secure` for tokens/PII, `StorageType.pref` for settings and flags. Use the `reviver` callback for Enums, JSON objects, and Lists.
+4. Choose the backend explicitly: `StorageType.secure` for tokens/PII, `StorageType.pref` for settings and flags. Use the `reviver` callback for Enums and custom types (stored through their `toJson()`); primitives, `Map<String, dynamic>` and typed lists read back without one.
 
 ```dart
 @lazySingleton

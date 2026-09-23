@@ -78,9 +78,10 @@ class StateManager<T> extends ChangeNotifier with DisposeGuard {
   /// Set data directly without changing state
   ///
   /// This method allows updating just the data while keeping
-  /// the current state and message unchanged.
+  /// the current state and message unchanged. `setData(null)` clears it —
+  /// through [setState]'s default it would have kept the old value.
   void setData(T? data) {
-    setState(data: data);
+    setState(data: data, retainOldData: false);
   }
 
   @override

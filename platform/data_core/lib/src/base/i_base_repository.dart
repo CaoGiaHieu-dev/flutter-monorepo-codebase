@@ -27,7 +27,7 @@ abstract class IBaseRepository {
         await onSuccess?.call(response);
 
         // Handle void, Null, or nullable types when no mapping is needed
-        if (null is T && mapper == null) {
+        if (response == null && null is T && mapper == null) {
           return Success(null as T);
         }
 
@@ -76,7 +76,7 @@ abstract class IBaseRepository {
       onSuccess?.call(result);
 
       // Handle void, Null, or nullable types when no mapping is needed
-      if (null is T && mapper == null) {
+      if (result == null && null is T && mapper == null) {
         return Success(null as T);
       }
 

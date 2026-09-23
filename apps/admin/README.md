@@ -15,10 +15,6 @@ permanently, instead of only in a thought experiment:
 | `core_notifications` + Firebase | nothing: no `notifications` DI group, no `lib/firebase/` |
 | `cache` (the Drift sample) | no SQLite file is opened at boot |
 
-Two of those rows were bugs until this app was planned — a first launch without onboarding
-skipped the login redirect, and a sign-in without home stayed on the login screen. A third,
-the blank screen without a dashboard, was found while writing it.
-
 ## What is in here
 
 ```

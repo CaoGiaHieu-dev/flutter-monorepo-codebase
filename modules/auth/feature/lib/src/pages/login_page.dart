@@ -1,4 +1,5 @@
 import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
@@ -19,6 +20,8 @@ import '../widgets/auth_header_widget.dart';
 /// - **No navigation on success.** `AuthProvider` publishes the session change,
 ///   the app shell listens and routes. A page that navigates itself would
 ///   double-navigate the moment the shell does its job.
+/// - **`AdaptiveContent`** caps the form's width on a tablet or desktop
+///   window; on a phone it changes nothing.
 ///
 /// Replace it with a real screen, or delete the package — nothing in the
 /// framework references it.
@@ -54,26 +57,30 @@ class _LoginPageState extends State<LoginPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(AppSpacing.xl(context)),
-          child: Consumer<AuthProvider>(
-            builder: (context, authProvider, _) {
-              return Column(
-                children: [
-                  SizedBox(height: AppSpacing.xxlH(context)),
-                  AuthHeaderWidget(
-                    title: context.l10nAuth.welcomeBack,
-                    subtitle: context.l10nAuth.signInSubtitle,
-                  ),
-                  SizedBox(height: AppSpacing.xxlH(context)),
-                  AuthFormWidget(
-                    emailController: _emailController,
-                    passwordController: _passwordController,
-                    submitButtonText: context.l10nAuth.signIn,
-                    isLoading: authProvider.isLoading,
-                    onSubmit: _onLoginPressed,
-                  ),
-                ],
-              );
-            },
+          // On a tablet or desktop window the form keeps a readable width
+          // instead of stretching across the screen.
+          child: AdaptiveContent(
+            child: Consumer<AuthProvider>(
+              builder: (context, authProvider, _) {
+                return Column(
+                  children: [
+                    SizedBox(height: AppSpacing.xxlH(context)),
+                    AuthHeaderWidget(
+                      title: context.l10nAuth.welcomeBack,
+                      subtitle: context.l10nAuth.signInSubtitle,
+                    ),
+                    SizedBox(height: AppSpacing.xxlH(context)),
+                    AuthFormWidget(
+                      emailController: _emailController,
+                      passwordController: _passwordController,
+                      submitButtonText: context.l10nAuth.signIn,
+                      isLoading: authProvider.isLoading,
+                      onSubmit: _onLoginPressed,
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

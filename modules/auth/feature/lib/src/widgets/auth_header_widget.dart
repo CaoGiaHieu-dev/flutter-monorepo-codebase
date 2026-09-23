@@ -22,8 +22,10 @@ class AuthHeaderWidget extends StatelessWidget {
     return Column(
       children: [
         Container(
-          width: context.w(96),
-          height: context.h(96),
+          // Same scale on both axes, or the square stretches on a wide
+          // window: `r` scales by the smaller of the two factors.
+          width: context.r(96),
+          height: context.r(96),
           decoration: BoxDecoration(
             borderRadius: AppRadius.xlRadius(context),
             color: context.colorScheme.primaryContainer,

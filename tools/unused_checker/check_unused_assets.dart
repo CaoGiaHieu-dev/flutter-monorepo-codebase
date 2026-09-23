@@ -43,52 +43,35 @@ void main() async {
   // Locate all packages in the workspace
   final packages = MonorepoHelper.getPackages(projectRootPosix);
 
-  final allGeneratedVariableNames = <String>{};
-  final allGeneratedAssetPaths = <String>{}; // Set<Absolute Path>
   final allDeclaredPaths = <String>{};
   final declaredFontPaths = <String>{};
   final declaredAssetPaths = <String>{};
-  final generatedMappingsByPath =
-      <String, String>{}; // absolute path -> variable name
+  // Absolute asset path -> how code can reach it: the flutter_gen accessor
+  // (`Assets.icons.logo`) and the package-relative path (`assets/icons/logo.svg`).
+  final accessorByPath = <String, String>{};
+  final relativeByPath = <String, String>{};
 
   for (final pkg in packages.values) {
-    // 1a. From assets.gen.dart
-    final generatedAssetMappings = await getGeneratedAssetMappings(
-      pkg.rootPath,
-    );
-    for (final entry in generatedAssetMappings.entries) {
-      allGeneratedVariableNames.add(entry.key);
-      allGeneratedAssetPaths.add(entry.value);
-      generatedMappingsByPath[entry.value] = entry.key;
-    }
-
-    // 1b. From pubspec.yaml
     final declaredAssetsResult = await getAssetsFromPubspec(pkg.rootPath);
-    if (declaredAssetsResult != null) {
-      declaredAssetPaths.addAll(declaredAssetsResult.filePaths);
-      declaredFontPaths.addAll(declaredAssetsResult.fontPaths);
-      allDeclaredPaths.addAll(declaredAssetsResult.filePaths);
-      allDeclaredPaths.addAll(declaredAssetsResult.fontPaths);
+    if (declaredAssetsResult == null) continue;
+    declaredAssetPaths.addAll(declaredAssetsResult.filePaths);
+    declaredFontPaths.addAll(declaredAssetsResult.fontPaths);
+    allDeclaredPaths.addAll(declaredAssetsResult.filePaths);
+    allDeclaredPaths.addAll(declaredAssetsResult.fontPaths);
+    for (final asset in declaredAssetsResult.filePaths) {
+      final rel = p.posix.relative(asset, from: pkg.rootPath);
+      relativeByPath[asset] = rel;
+      final accessor = flutterGenAccessor(rel);
+      if (accessor != null) accessorByPath[asset] = accessor;
     }
   }
 
-  OutputFormatter.printSuccess(
-    'Found ${allGeneratedVariableNames.length} asset variables in assets.gen.dart across workspace',
-    icon: '🔢',
-  );
   OutputFormatter.printSuccess(
     'Found ${declaredAssetPaths.length} non-font assets and ${declaredFontPaths.length} font assets in pubspec.yaml across workspace',
     icon: '📄',
   );
 
-  final allKnownAssetAbsolutePaths = {
-    ...allGeneratedAssetPaths,
-    ...allDeclaredPaths,
-  };
-  OutputFormatter.printInfo(
-    'Total unique known asset paths: ${allKnownAssetAbsolutePaths.length}',
-    icon: '📊',
-  );
+  final allKnownAssetAbsolutePaths = {...allDeclaredPaths};
 
   // 2. Check Asset Existence
   OutputFormatter.printSection('Checking File Existence', icon: '🔍');
@@ -113,68 +96,68 @@ void main() async {
   // 3. Scan for Asset Usage across entire workspace
   OutputFormatter.printSection('Scanning for Asset Usage', icon: '🔎');
 
-  // Get all Dart files in the workspace
   final allDartFiles = MonorepoHelper.getAllDartFilesToScan(
     projectRootPosix,
     _excludedSourceFilePatterns,
   );
   final allYamlFiles = getAllYamlFilesToScan(projectRootPosix);
-  final allFilesToScanForVariables = {...allDartFiles, ...allYamlFiles};
-
-  OutputFormatter.printInfo(
-    'Scanning ${allDartFiles.length} Dart files and ${allYamlFiles.length} YAML files for Assets.variable usage',
-    icon: '🔍',
-  );
-
-  // Find usage via Assets.variableName
-  final usedVariableNames = findUsedAssetVariables(
-    allFilesToScanForVariables,
-    allGeneratedVariableNames,
-  );
-
-  final usedPathsFromVariables = <String>{};
-  for (final entry in generatedMappingsByPath.entries) {
-    if (usedVariableNames.contains(entry.value)) {
-      usedPathsFromVariables.add(entry.key);
+  final sources = <String>[];
+  for (final file in {...allDartFiles, ...allYamlFiles}) {
+    try {
+      sources.add(File(file).readAsStringSync());
+    } catch (_) {
+      // Unreadable file: nothing to find in it.
     }
   }
 
-  // Find usage via literal string paths in YAML files
-  final usedPathsFromYamlStrings = findUsedAssetStringPaths(
-    allYamlFiles,
-    allKnownAssetAbsolutePaths,
-    projectRootPosix,
+  OutputFormatter.printInfo(
+    'Scanning ${allDartFiles.length} Dart files and ${allYamlFiles.length} YAML files',
+    icon: '🔍',
   );
 
-  final allUsedAbsolutePaths = {
-    ...usedPathsFromVariables,
-    ...usedPathsFromYamlStrings,
-  };
+  // An asset is used when some source names its flutter_gen accessor or its
+  // path. Nested accessors are matched as a whole chain, so `Assets.icons`
+  // alone does not mark every icon used.
+  final allUsedAbsolutePaths = <String>{};
+  for (final asset in declaredAssetPaths) {
+    final accessor = accessorByPath[asset];
+    final accessorRegex = accessor == null
+        ? null
+        : RegExp('${RegExp.escape(accessor)}(?![\\w])');
+    final rel = relativeByPath[asset]!;
+    for (final content in sources) {
+      if (content.contains(rel) ||
+          (accessorRegex != null && accessorRegex.hasMatch(content))) {
+        allUsedAbsolutePaths.add(asset);
+        break;
+      }
+    }
+  }
   OutputFormatter.printInfo(
     'Total unique used asset paths found: ${allUsedAbsolutePaths.length}',
     icon: '🔎',
   );
 
-  // Determine Unused
-  final potentiallyUnusedGeneratedPaths = allGeneratedAssetPaths.difference(
-    allUsedAbsolutePaths,
-  );
-  final reportableUnusedGeneratedPaths = potentiallyUnusedGeneratedPaths
-      .difference(declaredFontPaths);
+  // Determine Unused (fonts are referenced by family name, not path)
+  final reportableUnusedPaths = declaredAssetPaths
+      .difference(allUsedAbsolutePaths)
+      .difference(declaredFontPaths)
+      .difference(nonExistentDeclaredPaths);
 
   final finalProblemPaths = <String>{};
   finalProblemPaths.addAll(nonExistentDeclaredPaths);
-  finalProblemPaths.addAll(reportableUnusedGeneratedPaths);
+  finalProblemPaths.addAll(reportableUnusedPaths);
 
   // Apply Exclusions
   final reportablePathsAfterExclusions = <String>{};
   for (final assetPath in finalProblemPaths) {
     // Find which package this asset belongs to
+    // Longest matching root: a package nested inside another must win.
     String? pkgRoot;
     for (final pkg in packages.values) {
-      if (assetPath.startsWith(pkg.rootPath)) {
+      if (assetPath.startsWith('${pkg.rootPath}/') &&
+          (pkgRoot == null || pkg.rootPath.length > pkgRoot.length)) {
         pkgRoot = pkg.rootPath;
-        break;
       }
     }
     pkgRoot ??= projectRootPosix;
@@ -193,7 +176,6 @@ void main() async {
 
   final stats = {
     'Total Known Assets': allKnownAssetAbsolutePaths.length,
-    'Generated Variables': allGeneratedVariableNames.length,
     'Declared Assets': allDeclaredPaths.length,
     'Missing Files': nonExistentDeclaredPaths.length,
     'Issues Found': reportablePathsAfterExclusions.length,
@@ -255,7 +237,7 @@ void main() async {
     if (unusedByPackage.isNotEmpty) {
       for (final entry in unusedByPackage.entries) {
         OutputFormatter.printBox(
-          '🗑️ Unused Generated Assets in ${entry.key} (${entry.value.length})',
+          '🗑️ Unused Assets in ${entry.key} (${entry.value.length})',
           entry.value.map((path) => '🖼️ $path').toList(),
           color: 'yellow',
         );
@@ -360,49 +342,25 @@ Future<PubspecAssetsResult?> getAssetsFromPubspec(String baseUiRoot) async {
   }
 }
 
-Future<Map<String, String>> getGeneratedAssetMappings(String baseUiRoot) async {
-  final generatedFilePath = p.posix.join(
-    baseUiRoot,
-    'lib/src/gen/assets.gen.dart',
-  );
-  final generatedFile = File(generatedFilePath);
-  final mappings = <String, String>{};
+/// The accessor flutter_gen generates for [relativePath] with its default
+/// nested style: `assets/icons/logo.svg` -> `Assets.icons.logo`. `null` for a
+/// path outside `assets/`, which flutter_gen does not expose that way.
+String? flutterGenAccessor(String relativePath) {
+  final segments = relativePath.split('/');
+  if (segments.length < 2 || segments.first != 'assets') return null;
+  final dirs = segments.sublist(1, segments.length - 1);
+  final file = p.posix.basenameWithoutExtension(segments.last);
+  return ['Assets', ...dirs.map(_camelCase), _camelCase(file)].join('.');
+}
 
-  if (!generatedFile.existsSync()) {
-    stdout.writeln(
-      'Warning: Generated assets file not found at $generatedFilePath.',
-    );
-    return mappings;
-  }
-
-  try {
-    final content = generatedFile.readAsStringSync();
-    final regex = RegExp(
-      r'''^\s*static\s+const\s+(?:[\w\.<>]+)\s+(\w+)[\s\S]*?(?:'([^']*)'|"([^"]*)")[\s\S]*?;''',
-      multiLine: true,
-    );
-    final matches = regex.allMatches(content);
-
-    for (final match in matches) {
-      final variableName = match.group(1);
-      final relativeAssetPath = match.group(2) ?? match.group(3);
-      if (variableName != null && relativeAssetPath != null) {
-        if (relativeAssetPath.contains('assets/')) {
-          final relativeAssetPathPosix = relativeAssetPath.replaceAll(
-            r'\',
-            '/',
-          );
-          mappings[variableName] = p.posix.normalize(
-            p.posix.join(baseUiRoot, relativeAssetPathPosix),
-          );
-        }
-      }
-    }
-    return mappings;
-  } catch (e) {
-    stderr.writeln('Error reading or parsing $generatedFilePath: $e');
-    return mappings;
-  }
+String _camelCase(String value) {
+  final words = value
+      .split(RegExp(r'[_\-\s.]+'))
+      .where((w) => w.isNotEmpty)
+      .toList();
+  if (words.isEmpty) return value;
+  return words.first.toLowerCase() +
+      words.skip(1).map((w) => w[0].toUpperCase() + w.substring(1)).join();
 }
 
 Set<String> getAllYamlFilesToScan(String projectRootPosix) {
@@ -426,62 +384,4 @@ Set<String> getAllYamlFilesToScan(String projectRootPosix) {
     // Ignore listing errors
   }
   return yamlFiles;
-}
-
-Set<String> findUsedAssetVariables(
-  Set<String> allFilesToScan,
-  Set<String> allVariableNames,
-) {
-  final usedVariableNames = <String>{};
-  final usageRegexes = <String, RegExp>{};
-
-  for (final variableName in allVariableNames) {
-    usageRegexes[variableName] = RegExp(
-      r'(?<![\w\.])Assets\s*\.\s*' + RegExp.escape(variableName) + r'(?!\w)',
-    );
-  }
-
-  for (final sourceFile in allFilesToScan) {
-    try {
-      final fileContent = File(sourceFile).readAsStringSync();
-      if (!fileContent.contains('Assets.')) continue;
-
-      for (final variableName in allVariableNames) {
-        if (usedVariableNames.contains(variableName)) continue;
-
-        if (usageRegexes[variableName]!.hasMatch(fileContent)) {
-          usedVariableNames.add(variableName);
-        }
-      }
-    } catch (e) {
-      // Ignore reading errors
-    }
-  }
-  return usedVariableNames;
-}
-
-Set<String> findUsedAssetStringPaths(
-  Set<String> allYamlFiles,
-  Set<String> allKnownAssetAbsolutePaths,
-  String projectRootPosix,
-) {
-  final usedPaths = <String>{};
-
-  for (final yamlFile in allYamlFiles) {
-    try {
-      final content = File(yamlFile).readAsStringSync();
-      for (final assetPath in allKnownAssetAbsolutePaths) {
-        final relativePath = p.posix.relative(
-          assetPath,
-          from: projectRootPosix,
-        );
-        if (content.contains(relativePath)) {
-          usedPaths.add(assetPath);
-        }
-      }
-    } catch (e) {
-      // Ignore reading errors
-    }
-  }
-  return usedPaths;
 }

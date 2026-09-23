@@ -47,7 +47,7 @@ class OutputFormatter {
   /// Print error message
   static void printError(String message, {String? icon}) {
     final displayIcon = icon ?? '❌';
-    stdout.writeln('$_red$_bold$displayIcon $message$_reset');
+    stderr.writeln('$_red$_bold$displayIcon $message$_reset');
   }
 
   /// Print info message

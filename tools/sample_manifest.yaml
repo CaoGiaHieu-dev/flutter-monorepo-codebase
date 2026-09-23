@@ -12,7 +12,7 @@
 #
 # Usage:
 #   dart tools/sample_cleanup/remove_sample.dart --list
-#   dart tools/sample_cleanup/remove_sample.dart auth --dry-run
+#   dart tools/sample_cleanup/remove_sample.dart auth            # dry run (default)
 #   dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 # ---------------------------------------------------------------------------
@@ -35,6 +35,7 @@ packages:
   core_database: { kind: framework, path: platform/database }
   core_notifications: { kind: framework, path: platform/notifications }
   core_ui_kit: { kind: framework, path: platform/ui_kit }
+  core_responsive: { kind: framework, path: platform/responsive }
   provider_state_management:
     { kind: framework, path: platform/provider_state_management }
   bloc_state_management:

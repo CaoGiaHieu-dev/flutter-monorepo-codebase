@@ -30,10 +30,11 @@ dart tools/check_outdated.dart
 
 ### 3. Detect Undeclared / Unused Package Dependencies
 Pub Workspaces share a single `package_config.json`, so a package you **use but never
-declare** still compiles — and breaks as soon as it is extracted or published. Catch this
-with:
+declare** still compiles — and breaks as soon as it is extracted or published. Two tools
+cover the two directions:
 ```bash
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/arch_check/check.dart                        # R5: used but undeclared
+dart tools/unused_checker/check_unused_packages.dart    # declared but unused
 ```
 Fix by adding the missing entry to the consuming `pubspec.yaml` (in `dependencies`, not
 `dev_dependencies`, when production code uses it), or removing the unused one.

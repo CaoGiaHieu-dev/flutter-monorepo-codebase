@@ -41,24 +41,24 @@ dart tools/arch_check/check.dart --help   # full rule descriptions
 
 | Rule | What it checks |
 |---|---|
-| R1 | Dependency direction — no `core/*` may import or declare `feature_*` / `data_*` / `domain_*`, except the approved edges |
+| R1 | Dependency direction — no `platform/*` package may import or declare `feature_*` / `data_*` / `domain_*`, except the approved edges |
 | R2 | Domain is pure Dart — no `flutter` / `dio` / `retrofit` import, no `flutter` under `dependencies:` |
 | R3 | Feature boundaries — no feature imports another feature or a `data_*` package |
-| R4 | Public `static const` live in the package's `utils/` |
+| R4 | Public `static const` live in a `utils/` directory (files under `styles/` — `core_base_ui`'s design tokens — are exempt) |
 | R5 | Every `package:` import used in `lib/` is declared in that package's `pubspec.yaml` |
 | R6 | Generated files still carry their generator header (advisory) |
-| R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file using `core_responsive` |
-| R8 | A `core_di` contract implemented only by a feature is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll` |
+| R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file that mentions `core_responsive` |
+| R8 | A `core_di` contract implemented in a feature package is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll` |
 | R9 | `platform_kernel` and every `*_contracts` package neither import nor **declare** a Flutter-bound package |
 | R10 | Nothing in an app (`apps/<id>/`) imports a module — only `injection.dart`, the composition root, may name one. (`platform/app_shell` is core, so R1 covers it) |
 
-The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fourth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
+The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fourth means editing the allow-list in `check.dart` — without that the build fails — and recording the edge in `.agents/AGENTS.md` §2, which the tool does not read.
 
 R7 exists because `flutter analyze` cannot see the difference. `core_responsive` ships no `num` extension, so `16.h` cannot resolve against it — but an extension declared in another package, or one someone adds locally, would type-check fine while reading a global that never notifies anyone. Only `context.h(16)` registers an `InheritedWidget` dependency on `ResponsiveScope` and therefore rebuilds when metrics change. The bare form is a silent stale-value bug, and a linter has no rule for it. The check only runs on files that reference `core_responsive`, and matches a numeric or closing-paren receiver followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 
 R10 exists because removability is a promise the template makes in four documents and nothing was checking. `network_config_impl.dart` imported `data_auth` and `domain_auth` to read and refresh the session token, so deleting the auth module broke the app shell at compile time — the one place in the shell that undid what every other file was careful to preserve. `getItOrNull` cannot help: it guards a *lookup*, and the failure here is an *import*, which the compiler resolves long before any lookup runs. The fix is a contract (`IAuthSessionGateway` in `core_di`, implemented by `data_auth`), and the check is one line of policy — an app may import a module package in exactly one file, the composition root, because that file's job is to name what it composes.
 
-R8 exists because removability is a property the app shell depends on, and nothing was holding it. The tool derives the set at run time: every type declared in `core_di`, narrowed to those whose only `implements` / `extends` / `as:` binding sits in a `modules/*/feature` package. A throwing lookup against one of those compiles — the calling package depends on `core_di`, not on the feature — and then crashes at runtime in any build without that feature. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered, so they are deliberately outside the set. The owning feature is exempt from its own contract: if the package is in the build, so is its registration.
+R8 exists because removability is a property the app shell depends on, and nothing was holding it. The tool derives the set at run time: every type declared in `core_di`, narrowed to those with an `implements` / `extends` / `as:` binding in a `modules/*/feature` package. A throwing lookup against one of those compiles — the calling package depends on `core_di`, not on the feature — and then crashes at runtime in any build without that feature. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered, so they are deliberately outside the set. The owning feature is exempt from its own contract: if the package is in the build, so is its registration.
 
 R5 is the mirror image of `unused_checker`: that tool finds dependencies *declared but unused*, this one finds them *used but undeclared*. Pub Workspaces hide the second kind entirely — everything resolves locally through the shared `package_config.json` and only breaks when a package is extracted or published.
 
@@ -104,7 +104,7 @@ Two kinds of reference are checked in every Markdown file in the repository — 
 
 The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
 
-Spans containing a space, a `*`, a `{` or a `<` are skipped too: they are shell lines, globs or placeholders, and each describes a *set* rather than one file.
+Spans containing a space are skipped: they are shell lines. Spans containing a `*`, a `{` or a `<` are globs or placeholders, each describing a *set* rather than one file — they are checked as globs (`<name>` matches like `*`) and pass when at least one path fits. The top-level list also keeps `packages/` and a bare `app/`, where nothing lives any more, so a document still pointing there fails instead of being skipped.
 
 Paths that are correctly absent live in `tools/docs_check/allowlist.txt`, one per line, each with the reason it is not on disk. Exactly three reasons qualify:
 
@@ -185,9 +185,9 @@ Run with fewer arguments and it prompts interactively.
 dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 ```
 
-Regenerates `*.dart` barrels for every directory under the given path, then formats. Run it after **any** file add / rename / delete under `lib/`.
+Regenerates `*.dart` barrels for every directory under the given path, then formats. Run it after **any** file add / rename / delete under `lib/` — and after `build_runner` / `gen-l10n`, because generated files present on disk are exported too (`core_ui_kit` reaches `core_base_ui`'s generated `Assets` that way).
 
-Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, and files declaring `part of`.
+Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, and files declaring `part of`.
 
 > [!CAUTION]
 > It **removes every hand-written `export` line** from a barrel before regenerating. If you need to re-export something from another package, put the `export` in a regular source file and let the barrel pick that file up.
@@ -220,7 +220,7 @@ dart tools/unused_checker/check_unused_file.dart         # orphaned Dart files
 dart tools/unused_checker/check_unused_packages.dart     # declared but unused deps
 ```
 
-`check_unused_packages.dart` is the one that enforces [rule 2](01_rules.md#2-explicit-dependency-declaration) — run it before every PR.
+[Rule 2](01_rules.md#2-explicit-dependency-declaration) has two halves: `arch_check` R5 catches a package imported but not declared; `check_unused_packages.dart` catches one declared but never imported (it scans `lib/`, `bin/` and `test/`, so a dependency used only by tests counts as used). Run both before every PR.
 
 > [!WARNING]
 > The asset / file / translation checkers work by textual reference and will report false positives for anything reached dynamically (a string-built asset path, a key looked up at runtime). Confirm before deleting.

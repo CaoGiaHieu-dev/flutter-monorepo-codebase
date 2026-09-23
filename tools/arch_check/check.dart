@@ -30,16 +30,6 @@ const _approvedUpwardEdges = <String, String>{
       'BlocViewState.error carries AppFailure directly.',
 };
 
-/// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
-/// binding anywhere in their dependency closure.
-///
-/// `platform_kernel` is the foundation every other package may depend on, so
-/// its dependency list becomes everyone's — the reason it is held to a harder
-/// line than `core_*`. A `*_contracts` package is the public surface between
-/// two modules and stays here for the same reason: an interface that cannot
-/// import `BuildContext` cannot quietly become a widget API.
-///
-/// `modules/*/domain` is covered by R2 instead, which predates this rule.
 /// The one file in an app that is allowed to name the modules it composes.
 ///
 /// Matched by basename rather than path so it keeps working wherever apps
@@ -60,6 +50,16 @@ bool _isModulePackage(String packageName) =>
     packageName != 'domain_core' &&
     packageName != 'data_core';
 
+/// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
+/// binding anywhere in their dependency closure.
+///
+/// `platform_kernel` is the foundation every other package may depend on, so
+/// its dependency list becomes everyone's — the reason it is held to a harder
+/// line than `core_*`. A `*_contracts` package is the public surface between
+/// two modules and stays here for the same reason: an interface that cannot
+/// import `BuildContext` cannot quietly become a widget API.
+///
+/// `modules/*/domain` is covered by R2 instead, which predates this rule.
 bool _isPureDartTier(String packageName) =>
     packageName == 'platform_kernel' || packageName.endsWith('_contracts');
 
@@ -739,11 +739,11 @@ RULES CHECKED
       Cross-feature work goes through a contract in core_di.
 
   R4  Package constants live in utils/
-      A *public* `static const` must sit under lib/utils/ or lib/src/utils/.
-      Private `_name` constants may stay beside the code that uses them, and
-      core_base_ui/src/styles/ is an approved exception for design tokens.
-      A package with no shared constants needs no utils/ directory — this rule
-      never asks for an empty folder.
+      A *public* `static const` must sit in a `utils/` directory (in practice
+      lib/src/utils/). Files under a `styles/` directory are exempt — that is
+      where core_base_ui keeps its design tokens. Private `_name` constants may
+      stay beside the code that uses them. A package with no shared constants
+      needs no utils/ directory — this rule never asks for an empty folder.
 
   R5  Every import is declared
       Every `package:X` used under lib/ must appear in that package's
@@ -751,30 +751,35 @@ RULES CHECKED
       undeclared import still compiles locally and only breaks on extraction.
 
   R6  Generated files are not hand-edited  (warning only, never blocks)
-  R9  The pure-Dart tier stays pure
-  R10 The app shell composes modules, it does not import them — only
-      the composition root may name one
-      `platform_kernel` and every `*_contracts` package must neither import a
-      Flutter-bound package nor declare one in `pubspec.yaml`. The pubspec half
-      matters: a package can declare a Flutter plugin and never write
-      `import 'package:flutter/...'`, which R2 would pass.
-
-  R8  Removable contracts resolve optionally
-      A `core_di` contract whose only implementer lives in modules/*/feature
-      disappears when that feature is removed. `getIt<T>()` and `getAll<T>()`
-      throw in that case, so such a type must be resolved with
-      `getItOrNull<T>()` / `getAllOrEmpty<T>()` and a fallback. The owning
-      feature may still resolve its own contract eagerly.
-      Invisible to `flutter analyze`: the lookup type-checks, then crashes at
-      runtime on whichever screen calls it.
+      Files named *.g.dart / *.freezed.dart / *.config.dart / *.module.dart
+      should carry their generator header.
 
   R7  Responsive sizing goes through BuildContext
       `16.w` and `context.w(16)` compute the same number, but only the
       second registers an InheritedWidget dependency, so only the second
       rebuilds when metrics change (rotation, split-screen, resize).
-      Checked only in files that import core_responsive.
-      Files named *.g.dart / *.freezed.dart / *.config.dart / *.module.dart
-      should carry their generator header.
+      Checked in files that mention core_responsive (in practice: import it).
+
+  R8  Removable contracts resolve optionally
+      A `core_di` contract implemented in modules/*/feature disappears when
+      that feature is removed. `getIt<T>()` and `getAll<T>()` throw in that
+      case, so such a type must be resolved with `getItOrNull<T>()` /
+      `getAllOrEmpty<T>()` and a fallback. The implementing feature may still
+      resolve its own contract eagerly.
+      Invisible to `flutter analyze`: the lookup type-checks, then crashes at
+      runtime on whichever screen calls it.
+
+  R9  The pure-Dart tier stays pure
+      `platform_kernel` and every `*_contracts` package must neither import a
+      Flutter-bound package nor declare one in `pubspec.yaml`. The pubspec half
+      matters: a package can declare a Flutter plugin and never write
+      `import 'package:flutter/...'`, which R2 would pass.
+
+  R10 The app shell composes modules, it does not import them
+      In an app (a package with app_manifest.yaml), only lib/di/injection.dart
+      — the composition root — may import a domain_*, data_* or feature_*
+      package. Anywhere else a module import is an unguardable compile-time
+      dependency: the build breaks the moment that module is removed.
 
 EXCLUDED FROM SCANNING
   Generated output: *.g.dart, *.freezed.dart, *.config.dart, *.module.dart,

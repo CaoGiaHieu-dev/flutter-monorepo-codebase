@@ -4,10 +4,10 @@ import 'package:core_responsive/core_responsive.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../gen/fonts.gen.dart';
 import '../utils/base_ui_constants.dart';
 import 'theme_system_extensions.dart';
 
@@ -112,20 +112,18 @@ class ThemeProvider extends ChangeNotifier
     // [scaleFont] real numbers (the same M3 sizes MaterialApp would add).
     final geometry = Typography.material2021().englishLike;
 
-    TextTheme applyGoogleFont(TextTheme colors) {
-      final font = GoogleFonts.plusJakartaSans();
-      return geometry
-          .merge(colors)
-          .apply(
-            fontFamily: font.fontFamily,
-            fontFamilyFallback: font.fontFamilyFallback,
-          );
-    }
+    // The typeface ships in this package, one file per weight under a
+    // single family (see pubspec.yaml), so a style's fontWeight — including
+    // a later `copyWith(fontWeight: FontWeight.bold)` — selects the real
+    // face. `google_fonts` named one family per weight instead, which left
+    // every such copy rendering regular glyphs emboldened by the engine.
+    TextTheme applyFont(TextTheme colors) =>
+        geometry.merge(colors).apply(fontFamily: FontFamily.plusJakartaSans);
 
     final defaultTheme = switch (mode) {
-      ThemeMode.dark => applyGoogleFont(ThemeData.dark().textTheme),
-      ThemeMode.light => applyGoogleFont(ThemeData.light().textTheme),
-      ThemeMode.system => applyGoogleFont(
+      ThemeMode.dark => applyFont(ThemeData.dark().textTheme),
+      ThemeMode.light => applyFont(ThemeData.light().textTheme),
+      ThemeMode.system => applyFont(
         ThemeData.from(colorScheme: colorScheme).textTheme,
       ),
     };

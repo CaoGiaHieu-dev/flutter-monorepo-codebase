@@ -17,7 +17,6 @@ dependencies:
     sdk: flutter
   core_responsive:
     path: ../responsive
-  google_fonts: "^8.2.1"
   flutter_svg: ^2.3.0
   get_it: ^9.2.1
   injectable: ^3.0.0
@@ -40,6 +39,23 @@ flutter:
     - assets/
     - assets/images/
     - assets/icons/
+    # Shipped with the font, as its licence requires; registered with
+    # LicenseRegistry by `registerBaseUiLicenses()`.
+    - assets/fonts/plus_jakarta_sans/OFL.txt
+  # Bundled, one family with a file per weight: Flutter picks the file that
+  # matches a style's fontWeight, so bold text is the real bold face — not
+  # regular synthesised bold — and no font is downloaded at runtime.
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Bold.ttf
+          weight: 700
 
 flutter_gen:
   output: lib/src/gen/
@@ -48,5 +64,10 @@ flutter_gen:
       class_name: Assets
       package_parameter_enabled: true
       style: "dot-delimiter"
+  fonts:
+    outputs:
+      # Prefix the family with `packages/core_base_ui/`: a font declared by
+      # a package resolves only under that name in the app.
+      package_parameter_enabled: true
   integrations:
     flutter_svg: true

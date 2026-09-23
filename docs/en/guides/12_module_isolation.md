@@ -55,7 +55,7 @@ A developer on the auth team clones the monorepo without other teams' sources:
 ```bash
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # only theirs
-dart tools/composer/composer.dart sync        # compose what is present
+dart tools/composer/composer.dart sync --app mobile   # compose what is present
 dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
 cd apps/mobile && flutter run --flavor dev
 ```
@@ -68,11 +68,13 @@ Other teams' code is not merely unbuilt — it is **not on the disk**, and `modu
 
 ## 4. The one hazard, and what catches it
 
-`composer sync` edits three files that are **committed**:
+`composer sync` edits files that are **committed**:
 
 - the root `pubspec.yaml` `workspace:` list
-- `apps/<id>/pubspec.yaml` path dependencies
-- `apps/<id>/lib/di/injection.dart`
+- `apps/<id>/pubspec.yaml` path dependencies, for each app it syncs
+- `apps/<id>/lib/di/injection.dart`, likewise
+
+Without `--app` that is every app — five files with `mobile` and `admin`.
 
 In a partial checkout it writes a partial composition into them. That is correct locally and wrong to commit: it would drop the other modules from the app for everyone.
 

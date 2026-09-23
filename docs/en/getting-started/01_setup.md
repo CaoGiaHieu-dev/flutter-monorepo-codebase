@@ -259,7 +259,7 @@ depend on.
 
 ```bash
 flutter analyze                     # expect: No issues found!
-cd platform/storage && flutter test && cd ../../..
+cd platform/storage && flutter test && cd ../..
 ```
 
 If `flutter analyze` reports missing `firebase_options_*.dart`, go back to [step 3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it).

@@ -19,7 +19,7 @@ Template có **năm** pipeline — bốn trên GitHub Actions, một trên Azure
 | **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — chặn merge |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (chỉ chạy tay) | APK prod → Firebase |
 
-`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Nó chạy bốn gate chặn theo thứ tự — luật kiến trúc, `flutter analyze`, test từng package, lệch catalog — cộng một audit chỉ cảnh báo. Xem [§6](#6-quality-gate).
+`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Nó chạy sáu gate chặn theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cộng một audit chỉ cảnh báo. Xem [§6](#6-quality-gate).
 
 ---
 
@@ -141,20 +141,22 @@ Các task build và distribute cho iOS có mặt nhưng đã bị comment toàn 
 
 | # | Gate | Lệnh | Chặn merge |
 |:--|:---|:---|:---|
+| 0 | Composition khớp manifest của mọi app | `dart tools/composer/composer.dart verify` | có |
 | 1 | Luật kiến trúc | `dart tools/arch_check/check.dart` | có |
 | 2 | Phân tích tĩnh | `flutter analyze` | có |
-| 3 | Test theo từng package | `flutter test` trong mỗi `modules/*/*/test` | có |
+| 3 | Test theo từng package | `flutter test` trong mọi package có thư mục `test/` | có |
 | 4 | Lệch catalog version | `dart tools/dependency_sync.dart --check` | có |
+| 5 | Độ chính xác của docs | `dart tools/docs_check/check.dart` | có |
 | — | Audit dependency thừa | `dart tools/unused_checker/check_unused_packages.dart` | không (chỉ cảnh báo) |
 
-Gate 1 chạy đầu tiên là có chủ đích: nó chỉ đọc import và pubspec, không cần codegen, xong trong khoảng 200 ms — nên lỗi phân tầng fail sau vài giây thay vì sau cả chu kỳ analyze và test. Nó cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
+Gate 0 và 1 chạy đầu tiên là có chủ đích: chúng chỉ đọc manifest, import và pubspec, không cần codegen, xong trong khoảng 200 ms — nên lỗi phân tầng fail sau vài giây thay vì sau cả chu kỳ analyze và test. Gate 1 cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
 
-Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm ở `modules/<module>/<layer>/test/`, chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
+Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm trong `test/` của từng package — hiện phần lớn ở `platform/*/test/` — nên chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
 
 > [!IMPORTANT]
 > `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Chuyển một type sang package khác là đủ để một file `.freezed.dart` tham chiếu tới symbol nó không thấy được: analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.
 
-**Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 1–4 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
+**Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 0–5 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
 
 ---
 
@@ -194,9 +196,11 @@ Chạy những lệnh này trước khi push; chúng đúng là những lệnh p
 dart tools/workspace_setup/configure.dart
 
 # 2. Đúng các gate mà pr_quality_check.yml chạy, theo đúng thứ tự
+dart tools/composer/composer.dart verify
 dart tools/arch_check/check.dart
 flutter analyze
 dart tools/dependency_sync.dart --check
+dart tools/docs_check/check.dart
 
 # 3. Test theo từng package (gate 3 — xem §6)
 (cd platform/storage && flutter test)
@@ -223,7 +227,7 @@ Các mục còn mở, theo thứ tự ưu tiên tương đối:
 
 - [ ] `azure-ci-cd.yml` — thêm secure file + bước copy cho `.env`; build prod hiện không nhận được dart-define nào
 - [ ] `fastlane.yml` — bỏ tham số `auto_increment:` đang bị bỏ qua, hoặc cho một lane đọc nó
-- [ ] `flutter_build.yml` — chạy bốn gate của `pr_quality_check.yml` trước khi build, để một lần dispatch thủ công không thể ship code chưa kiểm
+- [ ] `flutter_build.yml` — chạy sáu gate của `pr_quality_check.yml` trước khi build, để một lần dispatch thủ công không thể ship code chưa kiểm
 - [ ] `code_review.yml` — quyết định có bỏ comment `exit 1` hay không (chỉ sau khi tin tưởng tỷ lệ báo nhầm của nó)
 - [ ] `flutter_build.yml` — cân nhắc `ubuntu-latest` thay cho `macos-latest` với build chỉ cho Android
 

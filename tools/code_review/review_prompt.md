@@ -46,7 +46,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 9.  **Localization & Decentralized Delegation**:
     - **ABSOLUTELY FORBIDDEN** to hardcode UI text strings. Must use the localization system.
     - **ABSOLUTELY FORBIDDEN** for Features to modify `root_app.dart` to inject `LocalizationsDelegates`.
-    - Feature packages MUST implement the `IFeatureLocalization` interface and register it with local DI (`@Injectable(as: IFeatureLocalization)`) so the Host App can automatically collect them via `getIt.getAll`.
+    - Feature packages MUST implement the `IFeatureLocalization` interface and register it with local DI (`@Injectable(as: IFeatureLocalization)`) so the app shell can collect them via `getAllOrEmpty<IFeatureLocalization>()` (never `getIt.getAll`, which throws when none is registered).
     - **ABSOLUTELY FORBIDDEN** to hardcode new feature `$…Route` / `StatefulShellBranch` lists in `app_router.dart`. Register `IFeatureRouteModule` (no order) or `INavDestinationModule` (with order) via DI; optional `IAppEntryLocation`. `feature_dashboard` may only implement `DashboardRouteModule` (chrome) — never own tab pages. See `docs/en/guides/04_routing.md`.
     10. **Centralized DI Registration (`injection.dart`)**:
     - **ABSOLUTELY FORBIDDEN** to directly declare `ExternalModule` inside the `externalPackageModulesBefore` / `externalPackageModulesAfter` arrays. Categorize into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, `_otherModules` and spread them.

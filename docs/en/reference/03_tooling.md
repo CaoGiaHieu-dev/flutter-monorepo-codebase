@@ -23,8 +23,8 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 | Suspect dead assets / files / translations / packages | `dart tools/unused_checker/check_script.dart` |
 | Want to know what is outdated on pub.dev | `dart tools/check_outdated.dart` |
 | Fresh clone, need everything wired up | `dart tools/workspace_setup/configure.dart` |
-| Set up Firebase for dev / staging / prod | `dart tools/firebase/firebase_config.dart` |
-| Regenerate splash screen and app icons | `dart tools/theme_generator/theme_setting.dart` |
+| Set up Firebase for dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
+| Regenerate splash screen and app icons | `dart tools/theme_generator/theme_setting.dart --app mobile` |
 | Check Android 15+ 16 KB page-size compliance | `./tools/android_compliance/16kb_ckeck.sh` |
 | AI review of a change | `dart tools/code_review/code_review.dart --changed` |
 
@@ -50,7 +50,7 @@ dart tools/arch_check/check.dart --help   # full rule descriptions
 | R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file using `core_responsive` |
 | R8 | A `core_di` contract implemented only by a feature is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll` |
 | R9 | `platform_kernel` and every `*_contracts` package neither import nor **declare** a Flutter-bound package |
-| R10 | The app shell imports no module — only `injection.dart`, the composition root, may name one |
+| R10 | Nothing in an app (`apps/<id>/`) imports a module — only `injection.dart`, the composition root, may name one. (`platform/app_shell` is core, so R1 covers it) |
 
 The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fourth means editing both `.agents/AGENTS.md` and the allow-list in `check.dart`, or the build fails.
 
@@ -74,7 +74,7 @@ dart tools/composer/composer.dart verify            # CI gate 0 — fails on dri
 
 Three things had to agree and were maintained by hand: the root `workspace:` list, an app's path dependencies, and its `lib/di/injection.dart`. Adding a module meant editing all three in step, and getting it wrong fails at boot with `"<Type> is not registered"` — invisible to `flutter analyze`.
 
-`composer` generates all three from `apps/mobile/app_manifest.yaml`, but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
+`composer` generates all three from the apps' `app_manifest.yaml` files — each app's own files from its manifest, and the shared root `workspace:` list from all of them together — but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
 
 Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No directory is encoded anywhere, so moving packages needs no change to the tool or to any manifest. Module packages are matched under either naming convention — `domain_auth` and `auth_domain` both resolve.
 
@@ -82,7 +82,7 @@ Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No
 
 Both `sync` and `verify` also **refuse** an app pubspec that declares a managed package by hand outside the markers. Pub rejects a duplicate key, so that one mistake stops the whole workspace resolving — and it is exactly the mistake composer itself once made.
 
-A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block: the three committed files it just rewrote, and the `git checkout --` line that restores them. The composition it wrote is correct locally and wrong to commit, and CI Gate 0 catches it either way, because `verify` regenerates from the manifest on a runner where every module is present. See [`12_module_isolation.md`](../guides/12_module_isolation.md).
+A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block: the committed files it just rewrote (the root `pubspec.yaml`, plus the `pubspec.yaml` and `injection.dart` of each app it synced), and the `git checkout --` line that restores them. The composition it wrote is correct locally and wrong to commit, and CI Gate 0 catches it either way, because `verify` regenerates from the manifest on a runner where every module is present. See [`12_module_isolation.md`](../guides/12_module_isolation.md).
 
 ---
 
@@ -165,7 +165,7 @@ Run with fewer arguments and it prompts interactively.
 **What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the module to every `app_manifest.yaml`, then runs dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply`.
 
 > [!IMPORTANT]
-> It no longer edits `apps/mobile/pubspec.yaml`, the root `workspace:` list or `apps/mobile/lib/di/injection.dart`. Those three sit between `composer:managed` markers — run `dart tools/composer/composer.dart sync` to regenerate them. Editing them by hand puts the tree into the drift CI Gate 0 fails on.
+> It still adds the package to the root `workspace:` list, but no longer edits any app's `pubspec.yaml` or `lib/di/injection.dart`. Those sit between `composer:managed` markers — run `dart tools/composer/composer.dart sync` to regenerate them. Editing them by hand puts the tree into the drift CI Gate 0 fails on.
 
 **Safety behaviour**
 

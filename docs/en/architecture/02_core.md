@@ -10,7 +10,7 @@ Core packages are **infrastructure**. They provide mechanisms; they never encode
 
 Three rules apply to everything on this page.
 
-**Core must not depend on features or data.** Four approved exceptions exist, listed in [the overview](01_overview.md#the-approved-exceptions). `tools/arch_check/check.dart` enforces the list on every PR.
+**Core must not depend on features or data.** Three approved exceptions exist, listed in [the overview](01_overview.md#the-approved-exceptions). `tools/arch_check/check.dart` enforces the list on every PR.
 
 **Core provides mechanism, not policy.** `core_storage` gives you `StorageValue<T>`; it does not decide that a key called `token` exists. `core_database` gives you a connection and a migration contract; it does not know your tables' business meaning. Whenever a core package starts naming a specific domain concept, that name belongs somewhere else.
 
@@ -18,18 +18,30 @@ Three rules apply to everything on this page.
 
 ---
 
-## 1. `core_common` — shared primitives
+## 1. `platform_kernel` and `core_common` — shared primitives
 
-The bottom of the infrastructure stack. It declares two workspace dependencies — `domain_core`, for the `AppFailure` that `ErrorHandler` produces, and `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`. Everything else may depend on it.
+The bottom of the infrastructure stack is two packages, split by one question: *does it need Flutter?*
+
+**`platform_kernel`** is pure Dart — no `flutter` in its dependencies, enforced by `arch_check` R9. Its only workspace dependency is `domain_core`, for the `AppFailure` that `ErrorHandler` produces. Depend on it directly unless you need something Flutter-bound.
 
 | Area | Path | Contents |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation, system UI), `SslPinningConfig` |
+| Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
+| Config | `src/config/` | `SslPinningConfig` |
+| Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
 | Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`) |
-| Extensions | `src/extensions/` | `bool`, `DateTime`, `Dio`, `Enum`, `List`, `num`, `String` |
+| Extensions | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
+| Utils **and constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+
+**`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above, and `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`.
+
+| Area | Path | Contents |
+|:--|:--|:--|
+| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation, system UI) |
+| Extensions | `src/extensions/` | `Dio` |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
-| Utils **and constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
+| Utils | `src/utils/` | `AppUtils`, `Debounce`, `DownloadImage`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
 
 ### What does *not* belong here, and why
 
@@ -38,10 +50,10 @@ The bottom of the infrastructure stack. It declares two workspace dependencies �
 | Kind of constant | Where it belongs | Why not here |
 |:--|:--|:--|
 | Storage keys (`TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | with the class that owns the value — see [the storage guide](../guides/06_storage.md) | Listed together, every package can read and overwrite every other feature's storage key. |
-| REST endpoints (`/user/login`, `/user/register`, `/user/refresh-token`…) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
+| REST endpoints (`/user/login`, `/user/refresh-token`) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Exactly two constants files live here, and both are genuinely global: `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Both sit in `src/utils/`, the one place this package keeps such values.
+Exactly two constants files live at the bottom of the stack, and both are genuinely global: `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` values). Both sit in `platform_kernel`'s `src/utils/`, the one place it keeps such values.
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.

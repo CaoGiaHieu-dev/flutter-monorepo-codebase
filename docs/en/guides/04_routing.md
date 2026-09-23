@@ -116,7 +116,7 @@ class HomeNavDestination extends INavDestinationModule {
 
 ### 2.3 Dashboard is chrome only
 
-`feature_dashboard` depends on just `core_di` and `core_common` — it physically **cannot** import another feature. Its page builds the bar from DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
+`feature_dashboard` depends on just `core_di` and `platform_kernel` — it physically **cannot** import another feature. Its page builds the bar from DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
 
 ```dart
 final tabs = getAllOrEmpty<INavDestinationModule>().toList()
@@ -149,8 +149,6 @@ Path constants live in the feature's `src/utils/` folder, not in `routing/` — 
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
-  static const String REGISTER = '/auth/register';
-  static const String FORGOT_PASSWORD = '/auth/forgot-password';
 }
 ```
 
@@ -290,7 +288,7 @@ class NavigatorKeys {
 }
 ```
 
-A `ShellRoute` and its child routes must reference the **same** `GlobalKey` instance. The shell is assembled by the app shell; the child routes are declared inside feature packages. Putting the keys on either side creates a cycle — the app shell already depends on every feature, so a feature cannot depend back on the shell. `core_di`, which both sides already depend on, is the neutral home.
+A `ShellRoute` and its child routes must reference the **same** `GlobalKey` instance. The shell is assembled by the app shell; the child routes are declared inside feature packages. Putting the keys on either side breaks a rule — the shell (`platform_app_shell`) is core and may not depend on a feature (R1), and a feature may not depend on the shell. `core_di`, which both sides already depend on, is the neutral home.
 
 The DI Hub declares no feature-named key. `nested(id)` hands back the same instance for the same id, so a shell route and its children agree without anything central being declared — and `core_di`'s public surface never grows a product vocabulary.
 

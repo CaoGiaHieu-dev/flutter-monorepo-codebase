@@ -53,7 +53,7 @@ flutter-monorepo-codebase/
 ├── docs/                   # Chính bộ tài liệu này (en/ + vi/)
 ├── .agents/                # Luật AGENTS.md + skills cho AI agent
 │
-├── pubspec.yaml            # Gốc workspace — liệt kê đủ 24 thành viên
+├── pubspec.yaml            # Gốc workspace — liệt kê đủ 26 thành viên
 ├── pubspec_dependencies.yaml  # Catalog version — nguồn chân lý duy nhất
 ├── pubspec.lock            # MỘT file lock cho cả workspace
 └── analysis_options.yaml
@@ -71,7 +71,9 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `core_common` | `platform/common` | `AppConfig`, `AppInitializer`, enum, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), extension, mixin, `EnvConstants`, `ApiStatusConstants`, module Firebase options |
+| `platform_kernel` | `platform/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants`, `ApiStatusConstants` |
+| `platform_app_shell` | `platform/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, các storage adapter cho theme/ngôn ngữ/cờ boot, `NetworkConfigImpl`. Không import module nào |
+| `core_common` | `platform/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom` + page transition, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants`, `ApiStatusConstants` |
 | `core_di` | `platform/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `platform/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
 | `core_ui_kit` | `platform/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
@@ -107,7 +109,7 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `feature_auth` | `modules/auth/feature` | Trang Login / Register / Forgot-password, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
+| `feature_auth` | `modules/auth/feature` | Một trang login duy nhất, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
 | `feature_home` | `modules/home/feature` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination` |
 | `feature_settings` | `modules/settings/feature` | Tab Settings, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Luồng onboarding, hiện thực `IAppEntryLocation` |
@@ -158,7 +160,7 @@ graph BT
 
 ### Core không được phụ thuộc feature
 
-`tools/arch_check/check.dart` cưỡng chế luật này ở mọi PR (Gate 1 của `pr_quality_check.yml`). Bốn cạnh `core_* → domain_*` được duyệt — Domain là vòng trong cùng, nên phụ thuộc vào nó là hợp lệ:
+`tools/arch_check/check.dart` cưỡng chế luật này ở mọi PR (Gate 1 của `pr_quality_check.yml`). Ba cạnh hạ tầng → `domain_core` được duyệt — Domain là vòng trong cùng, nên phụ thuộc vào nó là hợp lệ:
 
 | Ngoại lệ được phép | Lý do |
 | :--- | :--- |
@@ -181,11 +183,15 @@ dart tools/unused_checker/check_unused_packages.dart
 
 ```yaml
 workspace:
-  - app
-  - tools
-  - platform/common
-  # … và 20 package nữa
+  # composer:managed:workspace — generated from app_manifest.yaml
+  - apps/admin
+  - apps/mobile
+  - modules/auth/data
+  # … và 23 thành viên nữa, kể cả tools
+  # composer:end:workspace
 ```
+
+Danh sách này do `composer sync` sinh ra từ manifest của mọi app — hãy sửa manifest, đừng sửa danh sách.
 
 Mỗi thành viên khai `resolution: workspace` trong `pubspec.yaml` của chính nó.
 

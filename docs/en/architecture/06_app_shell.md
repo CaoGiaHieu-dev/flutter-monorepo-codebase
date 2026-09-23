@@ -44,7 +44,7 @@ platform/app_shell/lib/              shared by every app
 
 ### A second app: `apps/admin`
 
-[`apps/admin`](../../../apps/admin/README.md) is the same shell composing a different subset — `auth` and `settings`, with no dashboard, splash, onboarding, home or Firebase. Its whole `lib/` is `main.dart` and the generated `di/injection.dart`. Every optional lookup in this package has a missing contribution there, so the fallbacks described below have a real composition that relies on them — once someone runs it; nothing in CI builds it yet.
+[`apps/admin`](../../../apps/admin/README.md) is the same shell composing a different subset — `auth` and `settings`, with no dashboard, splash, onboarding, home or Firebase. Its whole `lib/` is `main.dart` and `di/` — the generated `injection.dart` and its barrel. Every optional lookup in this package has a missing contribution there, so the fallbacks described below have a real composition that relies on them — once someone runs it; nothing in CI builds it yet.
 
 ---
 
@@ -133,6 +133,7 @@ The order is declared in [`apps/mobile/app_manifest.yaml`](../../../apps/mobile/
 ```dart
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
+    ..._notificationsModules,
     ..._shellModules,
     ..._uiModules,
     ..._domainModules,
@@ -161,7 +162,7 @@ This is the single most important implicit rule in the DI setup, and the manifes
 
 `core_base_ui` registers `ThemeProvider` and `LanguageProvider`, which inject `IThemeStorage` and `ILanguageStorage`. Those two interfaces are implemented in `platform_app_shell` (`theme_storage_impl.dart`, `language_storage_impl.dart`), not in any core package the providers could depend on directly. So `shell` must initialise first. Swap the two groups and startup fails with "IThemeStorage is not registered".
 
-It is also the same slot these registrations occupied before the shell became a package. They used to be app-local, which injectable runs *between* `…Before` and `…After`; `shell` is now the first group of `…After`. The order the app boots in did not change — only where the code lives.
+It is also the same slot these registrations occupied before the shell became a package. They used to be app-local, which injectable runs *between* `…Before` and `…After`; `shell` now runs early in `…After` — first in `apps/admin`, right after `notifications` in `apps/mobile`. The order the app boots in did not change — only where the code lives.
 
 ### The eager-singleton ordering trap
 
@@ -252,7 +253,7 @@ Deleting a feature package therefore cannot crash the shell.
 > [!CAUTION]
 > **Never hardcode a feature route in `app_router.dart`.** Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<AuthProvider>()` makes GoRouter re-evaluate redirects when auth state changes. `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
+`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-evaluate redirects when auth state changes. `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
 
 ---
 
@@ -264,16 +265,16 @@ Sits inside the app `ShellRoute` and wraps every in-app route. It splits navigat
 
 ```dart
 WidgetsBinding.instance.endOfFrame.whenComplete(() async {
-  await authProvider.ensureInitialized();
+  await _session?.ensureInitialized(); // IAuthSessionState, via getItOrNull
   if (!mounted) return;
   // onboarding? → login? → home
   _bootCompleted = true;
 });
 ```
 
-Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state.
+Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state. With no auth module composed, `_session` is null and the app is treated as signed out.
 
-**Later transitions** are handled by a `ProviderStateListener<AuthProvider, UserEntity>` in `build`, gated on `_bootCompleted && authProvider.hasRestoredSession`. The gate exists so the listener does not fight the boot redirect over the very first navigation.
+**Later transitions** arrive through two stream subscriptions opened in `initState` — `IAuthSessionState.sessionChanges` and `.sessionFailures` — and are ignored until `_bootCompleted && _session.hasRestoredSession`. The gate exists so they do not fight the boot redirect over the very first navigation. `build` itself is just `Overlay.wrap(child: widget.child)`.
 
 > [!WARNING]
 > `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written even when the method returns `false` because a user is already signed in — that is, without the onboarding screen ever being shown. Harmless today, but the flag does not mean quite what its name suggests.
@@ -291,17 +292,18 @@ MultiProvider(ThemeProvider, LanguageProvider)
 └── Consumer2<ThemeProvider, LanguageProvider>
     └── AnnotatedRegion<SystemUiOverlayStyle>
         └── TooltipVisibility(visible: false)
-            └── MultiProvider(AppProvider, AuthProvider, DeeplinkProvider)
-                └── MaterialApp[.router]
+            └── MultiProvider(AppProvider, DeeplinkProvider)
+                └── every IAppTreeWrapper (e.g. feature_auth's AuthProvider)
+                    └── MaterialApp[.router]
 ```
 
 The outer `Consumer2` is what makes theme and locale changes propagate app-wide.
 
-Localization delegates are collected from DI, so features never edit this file:
+Localization delegates are collected from DI with `getAllOrEmpty` — an app with no feature registering one still resolves the global delegates — so features never edit this file:
 
 ```dart
 final delegates = [
-  ...getIt.getAll<IFeatureLocalization>().map((e) => e.delegate),
+  ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
   ...AppLocalizations.localizationsDelegates,
 ];
 ```

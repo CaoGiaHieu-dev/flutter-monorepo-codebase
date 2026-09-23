@@ -7,7 +7,7 @@ Welcome to the core technical documentation of the **Codebase Provider Monorepo*
 
 This project uses Dart's native **Pub Workspaces**, allowing for dependency optimization, feature independence, and automated CI/CD right at the project root.
 
-> **Template disclaimer:** Feature / domain / data packages shipped in this repo (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language, etc.) are **sample reference code** that demonstrate Clean Architecture wiring. Treat them as patterns to copy or delete when building a real product — not as production business logic. Agent rules live in [`.agents/AGENTS.md`](.agents/AGENTS.md).
+> **Template disclaimer:** Feature / domain / data packages shipped in this repo (Auth, Home, Settings, Onboarding, Splash, Dashboard) are **sample reference code** that demonstrate Clean Architecture wiring. Treat them as patterns to copy or delete when building a real product — not as production business logic. Agent rules live in [`.agents/AGENTS.md`](.agents/AGENTS.md).
 
 ---
 
@@ -32,13 +32,13 @@ graph TD
         FeatDash["dashboard"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (modules/*/data)"]
+    subgraph DataLayer ["🔌 Data Layer (platform/data_core + modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (modules/*/domain)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (platform/domain_core + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
@@ -46,6 +46,8 @@ graph TD
 
     subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
         direction LR
+        CoreKern["platform_kernel"]:::core
+        CoreShell["platform_app_shell"]:::core
         CoreUI["core_base_ui"]:::core
         CoreCom["core_common"]:::core
         CoreNet["core_network"]:::core
@@ -73,10 +75,9 @@ graph TD
 
     %% Domain sits at the centre and depends on NOTHING.
     %% Core may depend on Domain — never the reverse.
-    CoreCom -.->|"Uses Result / AppFailure"| DomCore
+    CoreKern -.->|"ErrorHandler produces AppFailure"| DomCore
     CoreProv -.->|"Uses Result / AppFailure"| DomCore
     CoreBloc -.->|"Uses AppFailure in BlocViewState"| DomCore
-    CoreDI -.->|"Uses UserEntity in contracts"| DomAuth
 ```
 
 > [!IMPORTANT]
@@ -201,8 +202,8 @@ All tools can be run from the root directory.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    dart tools/theme_generator/theme_setting.dart
-    dart tools/firebase/firebase_config.dart
+    dart tools/theme_generator/theme_setting.dart --app mobile
+    dart tools/firebase/firebase_config.dart --app mobile
     ```
 
 ---
@@ -212,7 +213,7 @@ All tools can be run from the root directory.
 ### Separation of Concerns
 1. **Domain Layer (`modules/*/domain`)**:
    - **Pure Dart, enforced by the package graph** — not merely by convention. `domain_core` has
-     **zero** workspace dependencies and none of the three domain packages declares the Flutter SDK.
+     **zero** workspace dependencies and neither domain package declares the Flutter SDK.
    - Do not import `flutter/material.dart`, `dio`, `retrofit`, or any UI/Network library.
    - Defines `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` and `AppFailure`.
 2. **Data Layer (`modules/*/data`)**:

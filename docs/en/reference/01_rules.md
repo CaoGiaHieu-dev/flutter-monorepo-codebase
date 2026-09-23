@@ -42,13 +42,13 @@ Only these three exist. Adding a fourth requires updating `AGENTS.md` and the al
 ```bash
 # core must never name a feature or data package
 grep -rn "package:feature_\|package:data_" platform/*/lib
-grep -l "feature_\|data_" platform/*/pubspec.yaml
+grep -lE "^  (feature_|data_)" platform/*/pubspec.yaml
 
 # domain must never touch Flutter
 grep -rn "package:flutter" modules/*/domain/lib
 ```
 
-All four commands must return nothing.
+All three commands must return nothing.
 
 ❌ **Wrong** — a core package borrowing a feature widget:
 ```dart
@@ -108,7 +108,7 @@ class AuthStorageKeys {
 >
 > They are the public API of the design system, and `styles/` carries that meaning where `utils/` reads as "miscellaneous". Moving them would break every doc reference for no gain. **Do not "fix" this in a future audit.**
 
-`core_common` keeps only genuinely global values — currently `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` wiring), both under `lib/src/utils/`.
+The bottom of the stack keeps only genuinely global values — currently `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` wiring), both under `platform_kernel`'s `lib/src/utils/` and re-exported by `core_common`.
 
 ---
 
@@ -156,9 +156,9 @@ Full walkthrough: [`../guides/06_storage.md`](../guides/06_storage.md).
 
 **Rule.** An eager `@Singleton` must never depend on a type registered by a module that initialises **later** in `configureDependencies()`. Use `@LazySingleton` when the dependency comes from a later module.
 
-**Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`, which is generated from the manifest's `di_groups`: `core` (before), then `shell`, `ui`, `domain`, `data`, `feature`, `other` (after).
+**Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`, which is generated from the manifest's `di_groups`: `core` (before), then — after the app's own registrations — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` has no `notifications` group.
 
-The live constraint here is `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_app_shell` registers. Swap the two groups and boot throws. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `IAuthSessionGateway` at call time and has no such dependency.)
+Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_app_shell` registers — swap the two groups and boot throws. And `notifications` after the app's own registrations: `PushNotificationService` is eager and injects the `FirebaseOptions` the app registers, so `core_notifications` cannot sit in `core`. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `IAuthSessionGateway` at call time and has no such dependency.)
 
 > [!CAUTION]
 > **`flutter analyze` cannot detect this class of bug.** It only appears at runtime, on a real boot.

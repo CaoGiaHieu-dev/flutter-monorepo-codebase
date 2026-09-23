@@ -211,9 +211,9 @@ Mỗi package tiêu thụ tự khai `StorageValue` của mình qua `StorageManag
 | Chủ sở hữu | Package | Key | Backend |
 |:--|:--|:--|:--|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `ThemeStorageImpl` | `app` | `themeMode` | pref |
-| `LanguageStorageImpl` | `app` | `locale` | pref |
-| `AppBootStorage` | `app` | `viewed_onboard` | pref |
+| `ThemeStorageImpl` | `platform_app_shell` | `themeMode` | pref |
+| `LanguageStorageImpl` | `platform_app_shell` | `locale` | pref |
+| `AppBootStorage` | `platform_app_shell` | `viewed_onboard` | pref |
 
 Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước cụ thể.
 

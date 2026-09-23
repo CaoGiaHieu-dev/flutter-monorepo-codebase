@@ -48,7 +48,7 @@ packages:
   data_core: { kind: framework, path: platform/data_core }
 
   # --- Shell ---------------------------------------------------------------
-  app:
+  mobile_app:
     kind: shell
     path: apps/mobile
     note: >-

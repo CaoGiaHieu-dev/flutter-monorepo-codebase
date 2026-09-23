@@ -4,7 +4,7 @@ Reusable, feature-agnostic presentation widgets. Import via `package:core_ui_kit
 
 Lives under `platform/` rather than `modules/*/feature/` on purpose: it is a shared library every feature may depend on, not a removable feature. It depends only on other core packages and never on a feature.
 
-> **Do not** import `package:app/presentation/shared/...` — that path does not exist. Widgets live in this package only.
+> **Do not** import a shared widget from an app package (`package:mobile_app/...`) — apps hold no widgets. Widgets live in this package only.
 
 `core_base_ui` holds theme tokens, assets, and global l10n — **not** widgets.
 

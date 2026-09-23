@@ -1,4 +1,4 @@
-name: app
+name: mobile_app
 description: "Native Shell / Application Entry Point"
 publish_to: "none"
 version: 1.0.0+1

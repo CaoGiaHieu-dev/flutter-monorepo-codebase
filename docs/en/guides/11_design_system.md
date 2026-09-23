@@ -257,14 +257,6 @@ It is handed to the package once, at the root of the tree:
 // platform/app_shell/lib/main_scope.dart
 return ResponsiveInit(
   designSize: AppConfig.design,
-  minTextAdapt: true,
-  fontSizeResolver: (fontSize, metrics) {
-    final display = View.of(context).display;
-    final screenSize = display.size / display.devicePixelRatio;
-    final scaleWidth = screenSize.width / AppConfig.design.width;
-
-    return fontSize * scaleWidth;
-  },
   splitScreenMode: true,
   child: child,
 );
@@ -273,8 +265,8 @@ return ResponsiveInit(
 | Parameter | What it does |
 |---|---|
 | `designSize` | The reference canvas (`core_responsive` defaults to 360×690; this app passes `AppConfig.design`). `context.w(16)` means "16 logical pixels **on a 375-wide design**", rescaled to the real device. |
-| `minTextAdapt` | Computes `sp` from the **smaller** of the width and height factors, so long strings do not overflow on small screens. |
-| `fontSizeResolver` | Overrides how `sp` is computed, **entirely** — while it is set, `minTextAdapt` is inert. This template resolves fonts purely against **width ratio**, so text scales with the same factor as horizontal spacing rather than drifting on tall screens. |
+| `minTextAdapt` | Not set here (default `false`), so `sp` uses the **width** factor — text scales with the same ratio as horizontal spacing. `true` switches to the **smaller** of the width and height factors, which keeps text from ballooning on wide, short windows but shrinks it in landscape. |
+| `fontSizeResolver` | Not set here. Overrides how `sp` is computed, **entirely** — while it is set, `minTextAdapt` is inert. Compute from the `metrics` it receives: they measure this window, so split-screen and resizing stay correct. |
 | `splitScreenMode` | Floors the height used for scaling at `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), keeping scaling sane when the app is a split-screen pane rather than full-screen. |
 
 > [!CAUTION]
@@ -397,7 +389,7 @@ Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of th
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
 | The design canvas | `platform/common/lib/src/config/app_config.dart` → `design` |
-| Scaling behaviour (`minTextAdapt`, `fontSizeResolver`) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` |
+| Scaling behaviour (`minTextAdapt`, `fontSizeResolver` — neither set today) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
 ---

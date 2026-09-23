@@ -257,14 +257,6 @@ Giá trị này được truyền cho package đúng một lần, ở gốc cây
 // platform/app_shell/lib/main_scope.dart
 return ResponsiveInit(
   designSize: AppConfig.design,
-  minTextAdapt: true,
-  fontSizeResolver: (fontSize, metrics) {
-    final display = View.of(context).display;
-    final screenSize = display.size / display.devicePixelRatio;
-    final scaleWidth = screenSize.width / AppConfig.design.width;
-
-    return fontSize * scaleWidth;
-  },
   splitScreenMode: true,
   child: child,
 );
@@ -273,8 +265,8 @@ return ResponsiveInit(
 | Tham số | Ý nghĩa |
 |---|---|
 | `designSize` | Khung tham chiếu (`core_responsive` mặc định 360×690; app này truyền `AppConfig.design`). `context.w(16)` nghĩa là "16 logical pixel **trên khung rộng 375**", rồi quy đổi sang thiết bị thật. |
-| `minTextAdapt` | Tính `sp` theo hệ số **nhỏ hơn** trong hai hệ số rộng/cao, để chuỗi dài không tràn trên màn hình nhỏ. |
-| `fontSizeResolver` | Ghi đè **hoàn toàn** cách tính `sp` — khi nó được đặt thì `minTextAdapt` nằm im. Template này quy đổi font hoàn toàn theo **tỉ lệ chiều rộng**, nên chữ scale cùng hệ số với spacing ngang thay vì lệch đi trên màn hình cao. |
+| `minTextAdapt` | Không đặt ở đây (mặc định `false`), nên `sp` dùng hệ số **chiều rộng** — chữ scale cùng tỉ lệ với spacing ngang. `true` chuyển sang hệ số **nhỏ hơn** giữa rộng và cao: chữ không phình to trên cửa sổ rộng mà thấp, nhưng bị thu nhỏ khi xoay ngang. |
+| `fontSizeResolver` | Không đặt ở đây. Ghi đè **hoàn toàn** cách tính `sp` — khi nó được đặt thì `minTextAdapt` nằm im. Hãy tính từ `metrics` mà nó nhận: chúng đo chính cửa sổ này, nên split-screen và đổi kích thước vẫn đúng. |
 | `splitScreenMode` | Chặn dưới chiều cao dùng để scale ở `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), giữ cho việc scale còn hợp lý khi app chạy ở dạng cửa sổ chia đôi thay vì toàn màn hình. |
 
 > [!CAUTION]
@@ -396,7 +388,7 @@ Danh sách đầy đủ trong [`../reference/01_rules.md`](../reference/01_rules
 | Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
 | Một shadow | `styles/app_shadows.dart` |
 | Khung thiết kế gốc | `platform/common/lib/src/config/app_config.dart` → `design` |
-| Cách scale (`minTextAdapt`, `fontSizeResolver`) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` |
+| Cách scale (`minTextAdapt`, `fontSizeResolver` — hiện không đặt cái nào) | `platform/app_shell/lib/main_scope.dart` → `ResponsiveInit` |
 | Thêm hẳn một class token mới | file mới trong `styles/`, rồi chạy barrel generator |
 
 ---

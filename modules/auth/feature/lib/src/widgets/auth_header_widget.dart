@@ -25,7 +25,7 @@ class AuthHeaderWidget extends StatelessWidget {
           width: context.w(96),
           height: context.h(96),
           decoration: BoxDecoration(
-            borderRadius: context.borderRadius(all: 20),
+            borderRadius: AppRadius.xlRadius(context),
             color: context.colorScheme.primaryContainer,
           ),
           child: Icon(
@@ -34,7 +34,7 @@ class AuthHeaderWidget extends StatelessWidget {
             color: context.colorScheme.onPrimaryContainer,
           ),
         ),
-        context.verticalSpace(24),
+        SizedBox(height: AppSpacing.xlH(context)),
         Text(
           title,
           textAlign: TextAlign.center,
@@ -42,7 +42,7 @@ class AuthHeaderWidget extends StatelessWidget {
             context,
           ).copyWith(fontWeight: FontWeight.bold),
         ),
-        context.verticalSpace(8),
+        SizedBox(height: AppSpacing.smH(context)),
         Text(
           subtitle,
           textAlign: TextAlign.center,

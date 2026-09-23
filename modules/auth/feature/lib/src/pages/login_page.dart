@@ -1,5 +1,4 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
@@ -54,17 +53,17 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: context.colorScheme.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: context.edgeInsets(all: 24),
+          padding: EdgeInsets.all(AppSpacing.xl(context)),
           child: Consumer<AuthProvider>(
             builder: (context, authProvider, _) {
               return Column(
                 children: [
-                  context.verticalSpace(40),
+                  SizedBox(height: AppSpacing.xxlH(context)),
                   AuthHeaderWidget(
                     title: context.l10nAuth.welcomeBack,
                     subtitle: context.l10nAuth.signInSubtitle,
                   ),
-                  context.verticalSpace(40),
+                  SizedBox(height: AppSpacing.xxlH(context)),
                   AuthFormWidget(
                     emailController: _emailController,
                     passwordController: _passwordController,

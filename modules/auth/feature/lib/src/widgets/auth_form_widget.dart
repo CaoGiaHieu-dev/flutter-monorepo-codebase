@@ -68,7 +68,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
     required IconData icon,
     Widget? suffix,
   }) {
-    final radius = context.borderRadius(all: 12);
+    final radius = AppRadius.lgRadius(context);
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -105,7 +105,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
               icon: Icons.email_outlined,
             ),
           ),
-          context.verticalSpace(16),
+          SizedBox(height: AppSpacing.lgH(context)),
           TextFormField(
             controller: widget.passwordController,
             obscureText: _obscurePassword,
@@ -125,7 +125,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
               ),
             ),
           ),
-          context.verticalSpace(24),
+          SizedBox(height: AppSpacing.xlH(context)),
           CustomButton.rectangle(
             onPressed: () {
               if (widget.isLoading) return;

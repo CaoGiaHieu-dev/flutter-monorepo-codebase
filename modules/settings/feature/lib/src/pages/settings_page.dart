@@ -1,7 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
@@ -49,7 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10nSettings.settings)),
       body: ListView(
-        padding: context.edgeInsets(all: 16),
+        padding: EdgeInsets.all(AppSpacing.lg(context)),
         children: [
           ListTile(
             key: languageButtonKey,

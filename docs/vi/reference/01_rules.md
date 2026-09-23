@@ -42,13 +42,13 @@ Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật `AGEN
 ```bash
 # core tuyệt đối không được nhắc tên package feature hay data
 grep -rn "package:feature_\|package:data_" platform/*/lib
-grep -l "feature_\|data_" platform/*/pubspec.yaml
+grep -lE "^  (feature_|data_)" platform/*/pubspec.yaml
 
 # domain tuyệt đối không chạm Flutter
 grep -rn "package:flutter" modules/*/domain/lib
 ```
 
-Cả bốn lệnh phải không trả về gì.
+Cả ba lệnh phải không trả về gì.
 
 ❌ **Sai** — package core mượn widget của feature:
 ```dart
@@ -108,7 +108,7 @@ class AuthStorageKeys {
 >
 > Chúng là API công khai của design system, và `styles/` mang đúng ngữ nghĩa đó trong khi `utils/` đọc lên là "linh tinh". Di chuyển sẽ làm hỏng mọi tham chiếu trong docs mà chẳng được gì. **Đừng "sửa" chỗ này ở lần audit sau.**
 
-`core_common` chỉ giữ giá trị thực sự dùng chung toàn cục — hiện là `ApiStatusConstants` (mã HTTP) và `EnvConstants` (nối `String.fromEnvironment`), cả hai nằm trong `lib/src/utils/`.
+Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục — hiện là `ApiStatusConstants` (mã HTTP) và `EnvConstants` (nối `String.fromEnvironment`), cả hai nằm trong `lib/src/utils/` của `platform_kernel` và được `core_common` re-export.
 
 ---
 
@@ -156,9 +156,9 @@ Hướng dẫn đầy đủ: [`../guides/06_storage.md`](../guides/06_storage.md
 
 **Luật.** Một `@Singleton` eager tuyệt đối không được phụ thuộc type do module khởi tạo **sau** nó trong `configureDependencies()`. Dùng `@LazySingleton` khi phụ thuộc đến từ module chạy sau.
 
-**Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`, được sinh từ `di_groups` của manifest: `core` (before), rồi `shell`, `ui`, `domain`, `data`, `feature`, `other` (after).
+**Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`, được sinh từ `di_groups` của manifest: `core` (before), rồi — sau phần đăng ký của chính app — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` không có nhóm `notifications`.
 
-Ràng buộc đang có hiệu lực ở đây là `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_app_shell` đăng ký. Đảo hai nhóm là app hỏng lúc boot. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `IAuthSessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
+Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_app_shell` đăng ký — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `IAuthSessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
 
 > [!CAUTION]
 > **`flutter analyze` KHÔNG bắt được loại lỗi này.** Nó chỉ lộ ra lúc chạy thật, trên một lần boot thật.

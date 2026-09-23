@@ -31,7 +31,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 > - **Không bao giờ import feature package khác.** Không có ngoại lệ — widget dùng chung lấy từ `core_ui_kit`, vốn nằm ở core. Nhu cầu liên feature phải đi qua hợp đồng ở `core_di` — xem [giao tiếp giữa các feature](../guides/10_cross_feature.md).
 > - **Không bao giờ sửa `platform/app_shell/lib/presentation/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
 
-Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ khai `core_di` và `core_common`, nên nó *về mặt vật lý không thể* import một feature khác.
+Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ khai `core_di` và `platform_kernel`, nên nó *về mặt vật lý không thể* import một feature khác.
 
 ---
 
@@ -71,8 +71,6 @@ modules/<name>/feature/
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
-  static const String REGISTER = '/auth/register';
-  static const String FORGOT_PASSWORD = '/auth/forgot-password';
 }
 ```
 
@@ -82,12 +80,14 @@ class AuthPath {
 
 | Package | Mối quan tâm | State management | Đăng ký |
 |:---|:---|:---|:---|
-| `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation` |
-| `feature_auth` | Đăng nhập / đăng ký / quên mật khẩu | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthActionHandler` |
+| `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation`, `OnboardingNavigator` |
+| `feature_auth` | Đăng nhập (một màn hình) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
 | `feature_dashboard` | Khung chrome bottom-nav | không | `DashboardRouteModule` |
 | `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
 | `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1), `SettingsNavigator` |
-| `feature_splash` | Màn hình splash | không | chỉ `IFeatureLocalization` — **không phải route** |
+| `feature_splash` | Màn hình splash | không | `IAppSplashScreen` — **không phải route**; do `MainScope` hiển thị |
+
+Mọi feature đều đăng ký thêm `IFeatureLocalization` của mình. `IAuthSessionGateway` do `data_auth` đăng ký, không phải feature.
 
 `feature_auth` và `feature_home` được xây trên **hai** hướng state khác nhau một cách có chủ đích, để template minh hoạ cả hai. Xem [state management](../guides/03_state_management.md) — và hãy đọc phần so sánh trung thực ở đó trước khi chọn, vì hai nhánh **không** được trang bị ngang nhau.
 
@@ -270,7 +270,7 @@ Mọi văn bản hiển thị cho người dùng đều phải dịch; hardcode 
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó không còn đụng `apps/mobile/pubspec.yaml`, danh sách workspace ở root hay `apps/mobile/lib/di/injection.dart`. Sau đó:
+Generator tạo package và thêm vào mọi `app_manifest.yaml`. Nó cũng thêm package mới vào danh sách `workspace:` ở root, nhưng không còn đụng `pubspec.yaml` hay `injection.dart` của app nào — `composer sync` sinh lại chúng. Sau đó:
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib

@@ -122,4 +122,4 @@ Build, ký và phát hành.
 - Nơi nào một luật có ngoại lệ đã được duyệt, ngoại lệ đó được ghi lại kèm lý do — để lần audit sau không ai "sửa" nhầm.
 
 > [!NOTE]
-> Các package feature / domain / data có sẵn ở đây (auth, home, settings, onboarding, splash, dashboard, language) là **mã mẫu tham chiếu**. Chúng minh hoạ cách wiring; đó là pattern để copy hoặc xoá, không phải business logic production. Luật dành cho AI Agent nằm ở [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md).
+> Các package feature / domain / data có sẵn ở đây (auth, home, settings, onboarding, splash, dashboard) là **mã mẫu tham chiếu**. Chúng minh hoạ cách wiring; đó là pattern để copy hoặc xoá, không phải business logic production. Luật dành cho AI Agent nằm ở [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md).

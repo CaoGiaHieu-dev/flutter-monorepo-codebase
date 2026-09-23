@@ -16,7 +16,7 @@ lib/
 ├── inputs/            # CustomInputField
 ├── feedback/          # LoadingWidget, EmptyWidget, LoadingMoreWidget
 ├── navigation/        # AppBarCustom, DotDivider
-├── media/             # Network image + assets picker helpers
+├── media/             # Cached network image
 ├── layout/            # KeepAlive, refresh, text scale helpers
 ├── dialogs/           # AppDialog, overlays, toast, bottom sheets
 ├── di/                # Micro-package DI module

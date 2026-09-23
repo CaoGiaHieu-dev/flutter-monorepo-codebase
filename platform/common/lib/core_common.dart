@@ -5,7 +5,7 @@
 /// used to. New code that needs only the pure-Dart foundation — a service
 /// locator, `ErrorHandler`, a primitive extension, a global constant — should
 /// import `package:platform_kernel/platform_kernel.dart` directly instead and
-/// avoid pulling Flutter, Firebase and go_router in with it.
+/// avoid pulling Flutter and go_router in with it.
 library;
 
 export 'package:platform_kernel/platform_kernel.dart';

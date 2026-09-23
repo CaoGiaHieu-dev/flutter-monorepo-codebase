@@ -31,7 +31,7 @@ The practical test: *if this screen were cut from the product, would the package
 > - **Never import another feature package.** There is no exception — shared widgets come from `core_ui_kit`, which lives in core. Cross-feature needs go through a contract in `core_di` — see [cross-feature communication](../guides/10_cross_feature.md).
 > - **Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart`** to add your routes, and never edit `root_app.dart` to add a localization delegate. Both are assembled from DI contributions.
 
-The pubspec enforces most of this: `feature_dashboard` declares only `core_di` and `core_common`, so it *physically cannot* import another feature.
+The pubspec enforces most of this: `feature_dashboard` declares only `core_di` and `platform_kernel`, so it *physically cannot* import another feature.
 
 ---
 
@@ -71,8 +71,6 @@ modules/<name>/feature/
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
-  static const String REGISTER = '/auth/register';
-  static const String FORGOT_PASSWORD = '/auth/forgot-password';
 }
 ```
 
@@ -82,12 +80,14 @@ class AuthPath {
 
 | Package | Concern | State management | Registers |
 |:---|:---|:---|:---|
-| `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation` |
-| `feature_auth` | Login / register / forgot password | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthActionHandler` |
+| `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation`, `OnboardingNavigator` |
+| `feature_auth` | Login (one screen) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
 | `feature_dashboard` | Bottom-nav shell chrome | none | `DashboardRouteModule` |
 | `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
 | `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1), `SettingsNavigator` |
-| `feature_splash` | Splash screen | none | `IFeatureLocalization` only — **not a route** |
+| `feature_splash` | Splash screen | none | `IAppSplashScreen` — **not a route**; shown by `MainScope` |
+
+Every one of them also registers its `IFeatureLocalization`. `IAuthSessionGateway` is registered by `data_auth`, not by the feature.
 
 `feature_auth` and `feature_home` are deliberately built on **different** state approaches so the template demonstrates both. See [state management](../guides/03_state_management.md) — and read the honest comparison there before choosing, because the two branches are not equally equipped.
 
@@ -270,7 +270,7 @@ All user-facing text is translated; hardcoded strings are forbidden. See [locali
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 
-The generator creates the package and adds it to every `app_manifest.yaml`. It no longer touches `apps/mobile/pubspec.yaml`, the root workspace list or `apps/mobile/lib/di/injection.dart`. Then:
+The generator creates the package and adds it to every `app_manifest.yaml`. It also adds the new package to the root `workspace:` list, but no longer touches any app's `pubspec.yaml` or `injection.dart` — `composer sync` regenerates those. Then:
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib

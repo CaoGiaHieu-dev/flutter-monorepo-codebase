@@ -181,7 +181,7 @@ dart tools/composer/composer.dart sync --app <id>
 
 App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
 `NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_app_shell` and register through
-its own micro-package module, in the `shell` group — first in `after`, so they exist **before**
+its own micro-package module, in the `shell` group — early in `after` (after `notifications` where an app has one), so they exist **before**
 `_uiModules` run.
 
 ### Step 3b: Ordering when a module opens a database

@@ -419,14 +419,14 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > **These steps are not always sufficient.** The shell degrades gracefully — it resolves
 > everything through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks — but
 > *other samples* may hold a hard dependency on the one you are deleting. Removing `auth` breaks
-> two of them:
+> one of them, and another degrades safely:
 >
 > | Consumer | How it couples | Result |
 > |---|---|---|
-> | `feature_settings` (`settings_page.dart:60`) | `getIt<IAuthActionHandler>()` — the **throwing** lookup | Tapping logout throws at runtime |
-> | `feature_home` (`home_profile_bloc.dart:35`) | `IAuthStatusStream` via **constructor injection** | DI cannot build `HomeProfileBloc` at all |
+> | `feature_home` (`home_profile_bloc.dart:25`) | `IAuthStatusStream` via **constructor injection** | DI cannot build `HomeProfileBloc` at all |
+> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` | The logout row is simply hidden |
 >
-> The dry-run prints these, plus the `core_di` contracts that become dead code. Read it before
+> The dry-run prints both, plus the `core_di` contracts that become dead code. Read it before
 > deleting anything.
 
 > [!NOTE]

@@ -8,26 +8,26 @@ Package này tuân thủ nguyên tắc **Idiomatic BLoC** (tối giản, không 
 
 ## 🌟 Tính Năng Cốt Lõi
 
-- **`ViewState<T>`**: State agnostic sẵn có (`initial`, `loading`, `success`, `error`) — **khuyến nghị** cho màn hình đơn giản; **không bắt buộc**. Feature phức tạp có thể dùng Freezed state riêng với `BaseBloc<Event, CustomState>`.
+- **`BlocViewState<T>`**: State agnostic sẵn có (`initial`, `loading`, `success`, `error`) — **khuyến nghị** cho màn hình đơn giản; **không bắt buộc**. Feature phức tạp có thể dùng Freezed state riêng với `BaseBloc<Event, CustomState>`.
 - **`BaseBloc<Event, State>`**: Base class của Bloc — **lựa chọn mặc định** cho feature dùng BLoC (event-driven).
 - **`BaseCubit<State>`**: Chỉ dùng khi luồng thực sự không cần Event (toggle/local UI đơn giản). Không mặc định Cubit cho feature mới.
 - **Agnostic & Decoupled**: Hoàn toàn tách biệt khỏi logic của `provider_state_management`.
 
 ---
 
-## 🚀 1. Quản lý Trạng thái UI qua `ViewState` (khuyến nghị) hoặc State riêng
+## 🚀 1. Quản lý Trạng thái UI qua `BlocViewState` (khuyến nghị) hoặc State riêng
 
-**`ViewState<T>` không bắt buộc** với BLoC. Đây là state agnostic sẵn có (giống Provider) cho màn hình CRUD / load-success-error đơn giản.
+**`BlocViewState<T>` không bắt buộc** với BLoC. Đây là state agnostic sẵn có (giống Provider) cho màn hình CRUD / load-success-error đơn giản.
 
-- **Nên dùng `ViewState<T>`** khi UI chỉ cần `initial` / `loading` / `success` / `error` quanh một payload `T`.
+- **Nên dùng `BlocViewState<T>`** khi UI chỉ cần `initial` / `loading` / `success` / `error` quanh một payload `T`.
 - **Được phép (và khuyến khích) tự tạo Freezed state riêng** khi feature cần state phức tạp hơn (nhiều field, wizard, form dirty, pagination + filter kết hợp, v.v.). Khi đó `BaseBloc<Event, YourCustomState>` là hợp lệ — chỉ cần giữ Event Freezed private theo AGENTS §13.
 
 Kết hợp Pattern Matching (`when` / `maybeWhen`) trên Freezed state để UI type-safe.
 
-**Khai báo Bloc với `ViewState` (mẫu đơn giản):**
+**Khai báo Bloc với `BlocViewState` (mẫu đơn giản):**
 ```dart
 import 'package:bloc_state_management/bloc_state_management.dart';
-import 'package:domain/domain.dart';
+import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, UserEntity
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
 
@@ -35,8 +35,8 @@ part 'login_event.dart';
 part 'login_bloc.freezed.dart';
 
 @injectable
-class LoginBloc extends BaseBloc<LoginEvent, ViewState<UserEntity>> {
-  LoginBloc(this._loginUseCase) : super(const ViewState.initial()) {
+class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>> {
+  LoginBloc(this._loginUseCase) : super(const BlocViewState.initial()) {
     on<_LoginSubmitted>(_onSubmitted);
   }
 
@@ -44,15 +44,15 @@ class LoginBloc extends BaseBloc<LoginEvent, ViewState<UserEntity>> {
 
   Future<void> _onSubmitted(
     _LoginSubmitted event,
-    Emitter<ViewState<UserEntity>> emit,
+    Emitter<BlocViewState<UserEntity>> emit,
   ) async {
-    emit(const ViewState.loading());
+    emit(const BlocViewState.loading());
     final result = await _loginUseCase(
       LoginParams(email: event.email, password: event.password),
     );
     result.when(
-      success: (user) => emit(ViewState.success(user!)),
-      failure: (appFailure) => emit(ViewState.error(appFailure)),
+      success: (user) => emit(BlocViewState.success(user!)),
+      failure: (appFailure) => emit(BlocViewState.error(appFailure)),
       none: () {},
       cancel: () {},
     );
@@ -65,7 +65,7 @@ class LoginBloc extends BaseBloc<LoginEvent, ViewState<UserEntity>> {
 class LoginPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<LoginBloc, ViewState<UserEntity>>(
+    return BlocBuilder<LoginBloc, BlocViewState<UserEntity>>(
       builder: (context, state) {
         return state.when(
           initial: () => MyLoginForm(),
@@ -81,7 +81,7 @@ class LoginPage extends StatelessWidget {
 
 *(Ghi chú: Khác với `Provider` tự động bọc thẻ `loading` ở BaseViewWidget, đối với `BLoC` chúng ta sử dụng triết lý "Trực quan 100%" - dev sẽ tự return `CircularProgressIndicator` ở node `loading` của hàm `when`).*
 
-**State riêng (được phép):** Khi màn hình cần nhiều hơn 4 trạng thái chuẩn, định nghĩa Freezed state trong feature (`part '_state.dart'`) và dùng `BaseBloc<Event, CheckoutState>` — không bắt buộc bọc lại bằng `ViewState`.
+**State riêng (được phép):** Khi màn hình cần nhiều hơn 4 trạng thái chuẩn, định nghĩa Freezed state trong feature (`part '_state.dart'`) và dùng `BaseBloc<Event, CheckoutState>` — không bắt buộc bọc lại bằng `BlocViewState`.
 
 ---
 
@@ -92,7 +92,7 @@ class LoginPage extends StatelessWidget {
 ```dart
 @override
 Widget build(BuildContext context) {
-  return BlocListener<LoginBloc, ViewState<UserEntity>>(
+  return BlocListener<LoginBloc, BlocViewState<UserEntity>>(
     listener: (context, state) {
       state.maybeWhen(
         success: (user) {
@@ -104,7 +104,7 @@ Widget build(BuildContext context) {
         orElse: () {},
       );
     },
-    child: BlocBuilder<LoginBloc, ViewState<UserEntity>>(
+    child: BlocBuilder<LoginBloc, BlocViewState<UserEntity>>(
       // UI building...
     ),
   );
@@ -115,7 +115,7 @@ Widget build(BuildContext context) {
 
 ## 🔒 3. Quản Lý Lỗi Nghiệp Vụ Chuyên Biệt (Custom Error State)
 
-Mặc định, biến số `error` trong `ViewState.error(error)` có kiểu là `AppFailure`. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa Custom Error State cho feature của mình:
+Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa Custom Error State cho feature của mình:
 
 ```dart
 import 'package:core_common/core_common.dart';
@@ -140,7 +140,7 @@ Sau đó trong Bloc:
           network: (...) => const AuthErrorState.userNotFound(),
         ) ?? const AuthErrorState.invalidCredentials();
         
-        emit(ViewState.error(customError));
+        emit(BlocViewState.error(customError));
       },
 ```
 

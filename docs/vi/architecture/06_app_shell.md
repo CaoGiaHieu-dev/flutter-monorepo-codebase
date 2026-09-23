@@ -44,7 +44,7 @@ platform/app_shell/lib/              dùng chung cho mọi app
 
 ### App thứ hai: `apps/admin`
 
-[`apps/admin`](../../../apps/admin/README.md) là cùng shell này ghép một tập con khác — `auth` và `settings`, không có dashboard, splash, onboarding, home hay Firebase. Toàn bộ `lib/` của nó là `main.dart` và `di/injection.dart` được sinh ra. Mọi lookup tuỳ chọn trong package này đều thiếu đóng góp ở đó, nên các fallback mô tả bên dưới có một bản ghép thật dựa vào chúng — khi có người chạy nó; hiện CI chưa build app này.
+[`apps/admin`](../../../apps/admin/README.md) là cùng shell này ghép một tập con khác — `auth` và `settings`, không có dashboard, splash, onboarding, home hay Firebase. Toàn bộ `lib/` của nó là `main.dart` và `di/` — `injection.dart` được sinh ra cùng barrel của nó. Mọi lookup tuỳ chọn trong package này đều thiếu đóng góp ở đó, nên các fallback mô tả bên dưới có một bản ghép thật dựa vào chúng — khi có người chạy nó; hiện CI chưa build app này.
 
 ---
 
@@ -135,6 +135,7 @@ Thứ tự được khai trong [`apps/mobile/app_manifest.yaml`](../../../apps/m
 ```dart
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
+    ..._notificationsModules,
     ..._shellModules,
     ..._uiModules,
     ..._domainModules,
@@ -163,7 +164,7 @@ Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn g�
 
 `core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai provider này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực trong `platform_app_shell` (`theme_storage_impl.dart`, `language_storage_impl.dart`), không phải trong package core nào mà các provider có thể phụ thuộc trực tiếp. Vì vậy `shell` phải khởi tạo trước. Đảo hai nhóm là app hỏng lúc khởi động với lỗi "IThemeStorage is not registered".
 
-Đây cũng đúng là vị trí mà các đăng ký này chiếm trước khi shell thành package. Trước đây chúng là đăng ký cục bộ của app, thứ mà injectable chạy *giữa* `…Before` và `…After`; giờ `shell` là nhóm đầu tiên của `…After`. Thứ tự app khởi động không đổi — chỉ chỗ đặt code là đổi.
+Đây cũng đúng là vị trí mà các đăng ký này chiếm trước khi shell thành package. Trước đây chúng là đăng ký cục bộ của app, thứ mà injectable chạy *giữa* `…Before` và `…After`; giờ `shell` chạy sớm trong `…After` — đầu tiên ở `apps/admin`, ngay sau `notifications` ở `apps/mobile`. Thứ tự app khởi động không đổi — chỉ chỗ đặt code là đổi.
 
 ### Cái bẫy thứ tự với eager singleton
 
@@ -254,7 +255,7 @@ Nhờ vậy, xoá một feature package không thể làm sập shell.
 > [!CAUTION]
 > **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Hãy đăng ký `IFeatureRouteModule` hoặc `INavDestinationModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<AuthProvider>()` khiến GoRouter đánh giá lại redirect khi trạng thái đăng nhập đổi. `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
+`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter đánh giá lại redirect khi trạng thái đăng nhập đổi. `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
 
 ---
 
@@ -266,16 +267,16 @@ Nằm bên trong app `ShellRoute` và bọc mọi route trong app. Nó tách đi
 
 ```dart
 WidgetsBinding.instance.endOfFrame.whenComplete(() async {
-  await authProvider.ensureInitialized();
+  await _session?.ensureInitialized(); // IAuthSessionState, via getItOrNull
   if (!mounted) return;
   // onboarding? → login? → home
   _bootCompleted = true;
 });
 ```
 
-Chờ `endOfFrame` bảo đảm khung hình đầu tiên đã lên màn hình trước mọi redirect, còn `ensureInitialized()` chờ việc khôi phục phiên hoàn tất để quyết định được đưa ra dựa trên trạng thái thật.
+Chờ `endOfFrame` bảo đảm khung hình đầu tiên đã lên màn hình trước mọi redirect, còn `ensureInitialized()` chờ việc khôi phục phiên hoàn tất để quyết định được đưa ra dựa trên trạng thái thật. Không ghép module auth nào thì `_session` là null và app được coi như chưa đăng nhập.
 
-**Các chuyển đổi về sau** do `ProviderStateListener<AuthProvider, UserEntity>` trong `build` xử lý, có điều kiện `_bootCompleted && authProvider.hasRestoredSession`. Điều kiện này tồn tại để listener không tranh giành lần điều hướng đầu tiên với redirect khởi động.
+**Các chuyển đổi về sau** đến qua hai stream subscription mở trong `initState` — `IAuthSessionState.sessionChanges` và `.sessionFailures` — và bị bỏ qua cho tới khi `_bootCompleted && _session.hasRestoredSession`. Điều kiện này tồn tại để chúng không tranh giành lần điều hướng đầu tiên với redirect khởi động. Bản thân `build` chỉ là `Overlay.wrap(child: widget.child)`.
 
 > [!WARNING]
 > `_goToOnboarding()` gán `viewedOnboard.value = true` trong khối `finally`, nên cờ vẫn được ghi ngay cả khi hàm trả về `false` vì người dùng đã đăng nhập sẵn. Trong trường hợp đó màn onboarding chưa từng được hiển thị. Hiện tại vô hại, nhưng cờ này không mang đúng ý nghĩa như tên gọi của nó.
@@ -293,17 +294,18 @@ MultiProvider(ThemeProvider, LanguageProvider)
 └── Consumer2<ThemeProvider, LanguageProvider>
     └── AnnotatedRegion<SystemUiOverlayStyle>
         └── TooltipVisibility(visible: false)
-            └── MultiProvider(AppProvider, AuthProvider, DeeplinkProvider)
-                └── MaterialApp[.router]
+            └── MultiProvider(AppProvider, DeeplinkProvider)
+                └── every IAppTreeWrapper (e.g. feature_auth's AuthProvider)
+                    └── MaterialApp[.router]
 ```
 
 Chính `Consumer2` ở lớp ngoài là thứ khiến thay đổi theme và ngôn ngữ lan ra toàn app.
 
-Các delegate localization được gom từ DI, nên feature không bao giờ phải sửa file này:
+Các delegate localization được gom từ DI bằng `getAllOrEmpty` — app không có feature nào đăng ký delegate vẫn resolve được bộ delegate toàn cục — nên feature không bao giờ phải sửa file này:
 
 ```dart
 final delegates = [
-  ...getIt.getAll<IFeatureLocalization>().map((e) => e.delegate),
+  ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
   ...AppLocalizations.localizationsDelegates,
 ];
 ```

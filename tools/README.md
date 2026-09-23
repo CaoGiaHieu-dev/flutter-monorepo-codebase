@@ -28,7 +28,7 @@ tools/
 │       ├── input_actions.dart       # Xử lý tham số CLI & interactive input
 │       ├── module_type.dart         # Enum ModuleType, StateManagementType, ModuleConfig
 │       ├── pubspec_generator.dart   # Sinh pubspec.yaml với dependencies đúng tầng
-│       └── common_helpers.dart      # Tạo thư mục, đăng ký workspace/DI, chạy CLI
+│       └── common_helpers.dart      # Tạo thư mục, ghi workspace + app_manifest.yaml, chạy CLI
 ├── barrel_generator/               # 📦 Sinh barrel files (export *.dart)
 │   └── generate.dart               # Quét lib/ và tạo file barrel tự động
 ├── code_review/                    # 🤖 AI-powered code review (Gemini)
@@ -60,7 +60,7 @@ tools/
 
 ### 🛡️ Architecture Check (Cưỡng chế luật phân tầng)
 ```bash
-# Kiểm tra 7 luật kiến trúc — exit 1 nếu có vi phạm (dùng được cho CI):
+# Kiểm tra 10 luật kiến trúc (R1–R10) — exit 1 nếu có vi phạm (dùng được cho CI):
 dart tools/arch_check/check.dart
 
 # Xem mô tả đầy đủ từng luật:
@@ -152,7 +152,7 @@ dart tools/check_outdated.dart
 dart tools/code_review/code_review.dart --all
 
 # Review file cụ thể:
-dart tools/code_review/code_review.dart --file lib/main.dart
+dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 
 # Review files đã thay đổi:
 dart tools/code_review/code_review.dart --changed

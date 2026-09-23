@@ -7,7 +7,7 @@ Chào mừng bạn đến với tài liệu kỹ thuật cốt lõi của **Code
 
 Dự án này sử dụng **Pub Workspaces** bản địa của Dart, cho phép tối ưu phụ thuộc, độc lập tính năng và tự động hóa CI/CD ngay tại thư mục gốc của dự án.
 
-> **Lưu ý template:** Các package feature / domain / data có sẵn (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language, …) là **mã mẫu tham chiếu** minh họa wiring Clean Architecture. Hãy coi chúng là pattern để copy hoặc xóa khi làm sản phẩm thật — không phải business logic production. Quy tắc cho AI Agent nằm ở [`.agents/AGENTS.md`](.agents/AGENTS.md).
+> **Lưu ý template:** Các package feature / domain / data có sẵn (Auth, Home, Settings, Onboarding, Splash, Dashboard) là **mã mẫu tham chiếu** minh họa wiring Clean Architecture. Hãy coi chúng là pattern để copy hoặc xóa khi làm sản phẩm thật — không phải business logic production. Quy tắc cho AI Agent nằm ở [`.agents/AGENTS.md`](.agents/AGENTS.md).
 
 ---
 
@@ -32,13 +32,13 @@ graph TD
         FeatDash["dashboard"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (modules/*/data)"]
+    subgraph DataLayer ["🔌 Data Layer (platform/data_core + modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (modules/*/domain)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (platform/domain_core + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
@@ -46,6 +46,8 @@ graph TD
 
     subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
         direction LR
+        CoreKern["platform_kernel"]:::core
+        CoreShell["platform_app_shell"]:::core
         CoreUI["core_base_ui"]:::core
         CoreCom["core_common"]:::core
         CoreNet["core_network"]:::core
@@ -73,10 +75,9 @@ graph TD
 
     %% Domain nằm ở tâm và KHÔNG phụ thuộc gì cả.
     %% Core được phép phụ thuộc Domain — không bao giờ ngược lại.
-    CoreCom -.->|"Dùng Result / AppFailure"| DomCore
+    CoreKern -.->|"ErrorHandler sinh ra AppFailure"| DomCore
     CoreProv -.->|"Dùng Result / AppFailure"| DomCore
     CoreBloc -.->|"Dùng AppFailure trong BlocViewState"| DomCore
-    CoreDI -.->|"Dùng UserEntity trong contract"| DomAuth
 ```
 
 > [!IMPORTANT]
@@ -200,8 +201,8 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    dart tools/theme_generator/theme_setting.dart
-    dart tools/firebase/firebase_config.dart
+    dart tools/theme_generator/theme_setting.dart --app mobile
+    dart tools/firebase/firebase_config.dart --app mobile
     ```
 
 ---

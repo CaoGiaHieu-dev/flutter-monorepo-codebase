@@ -194,24 +194,27 @@ Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, th
 // platform/app_shell/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
-  NetworkConfigImpl(
-    this._authLocalDataSource,
-    this._languageStorage,
-    this._refreshTokenUseCase,
-  );
+  NetworkConfigImpl(this._languageStorage);
+
+  final ILanguageStorage _languageStorage;
+
+  /// Null in a build that composes no auth module.
+  IAuthSessionGateway? get _session => getItOrNull<IAuthSessionGateway>();
 
   @override
-  String? Function() get getToken => _authLocalDataSource.getUserToken;
+  String? Function() get getToken => () => _session?.readToken();
 
   @override
   String? Function() get getLocale =>
       () => _languageStorage.getLanguage().languageCode;
 
   @override
-  Future<String?> Function()? get onRefreshToken => _refreshSession;
+  Future<String?> Function()? get onRefreshToken =>
+      _session == null ? null : _refreshSession;
 
   @override
-  Future<void> Function()? get onRefreshFailed => _clearSession;
+  Future<void> Function()? get onRefreshFailed =>
+      _session == null ? null : _clearSession;
 ```
 
 > [!IMPORTANT]
@@ -221,15 +224,18 @@ class NetworkConfigImpl implements NetworkConfig {
 
 ## 4. Luồng refresh token
 
-`_refreshSession` chạy use case ở tầng domain, rồi đọc lại token từ chủ sở hữu — bản thân config không lưu gì cả:
+`_refreshSession` giao việc cho `IAuthSessionGateway`, do `data_auth` hiện thực: repository refresh và lưu thông tin đăng nhập, còn gateway đọc lại token từ chủ sở hữu. Bản thân config không lưu gì cả:
 
 ```dart
 // platform/app_shell/lib/di/network_config_impl.dart
-Future<String?> _refreshSession() async {
-  final result = await _refreshTokenUseCase(const NoParams());
-  if (!result.isSuccess) return null;
+Future<String?> _refreshSession() async => await _session?.refreshToken();
 
-  return _authLocalDataSource.getUserToken();
+// modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
+@override
+Future<String?> refreshToken() async {
+  final result = await _repository.refreshToken();
+  if (!result.isSuccess) return null;
+  return _local.getUserToken();
 }
 ```
 
@@ -385,9 +391,7 @@ class AuthApiConstants {
   AuthApiConstants._();
 
   static const String LOGIN = '/user/login';
-  static const String REGISTER = '/user/register';
   static const String REFRESH_TOKEN = '/user/refresh-token';
-  // ...
 }
 ```
 

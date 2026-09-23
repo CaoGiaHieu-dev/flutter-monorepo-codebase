@@ -414,14 +414,14 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 ```
 
 > [!CAUTION]
-> **Năm bước trên không phải lúc nào cũng đủ.** App shell thì suy biến an toàn — nó phân giải mọi
+> **Các bước trên không phải lúc nào cũng đủ.** App shell thì suy biến an toàn — nó phân giải mọi
 > thứ qua hợp đồng `core_di` kèm fallback `getAllOrEmpty` / `getItOrNull` — nhưng *các sample khác*
-> có thể đang phụ thuộc cứng vào cái bạn định xoá. Gỡ `auth` làm vỡ hai chỗ:
+> có thể đang phụ thuộc cứng vào cái bạn định xoá. Gỡ `auth` làm vỡ một chỗ, và một chỗ khác xuống cấp an toàn:
 >
 > | Nơi tiêu thụ | Kiểu phụ thuộc | Hậu quả |
 > |---|---|---|
-> | `feature_settings` (`settings_page.dart:60`) | `getIt<IAuthActionHandler>()` — bản **ném lỗi** | Bấm logout là crash lúc chạy |
-> | `feature_home` (`home_profile_bloc.dart:35`) | `IAuthStatusStream` qua **constructor injection** | DI không dựng nổi `HomeProfileBloc` |
+> | `feature_home` (`home_profile_bloc.dart:25`) | `IAuthStatusStream` qua **constructor injection** | DI không dựng nổi `HomeProfileBloc` |
+> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` | Dòng logout đơn giản bị ẩn đi |
 >
 > Dry-run in ra cả hai chỗ này, cộng các contract trong `core_di` trở thành code chết. Hãy đọc nó
 > trước khi xoá bất cứ thứ gì.

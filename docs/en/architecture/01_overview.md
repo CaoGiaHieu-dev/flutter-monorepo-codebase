@@ -63,7 +63,7 @@ When domain logic needs something that *looks* UI-shaped — a colour, an icon, 
 
 ### The approved exceptions
 
-Three packages under `platform/` depend on `domain_core`. All are deliberate and documented; do not "clean them up". `tools/arch_check/check.dart` holds the same list, prints it on every run, and fails the build on a fourth.
+Three infrastructure packages under `platform/` depend on `domain_core`. (`data_core` does too, but it is the data layer's foundation that happens to live under `platform/` — a data package depending on domain is the normal direction, not an exception.) All three are deliberate and documented; do not "clean them up". `tools/arch_check/check.dart` holds the same list, prints it on every run, and fails the build on a fourth.
 
 Note every one of them points at `domain_core` — the innermost ring — and none at a *product* domain. That is the line: core may know what a `Result` or an `AppFailure` is, never what an account is.
 
@@ -73,13 +73,13 @@ Note every one of them points at `domain_core` — the innermost ring — and no
 | `bloc_state_management` → `domain_core` | `BlocViewState.error` carries an `AppFailure`, which is part of the `Result` contract and therefore lives in `domain_core`. |
 | `platform_kernel` → `domain_core` | `ErrorHandler.handleError()` produces an `AppFailure`. Its declaration sits with `Result<T>` in `domain_core`, and `core_common` re-exports the kernel wholesale so existing importers never noticed the move. |
 
-Everything else in `platform/*` has **zero** local-package dependencies beyond other `core_*` packages. `core_database`, notably, depends on no other workspace package at all.
+Everything else in `platform/*` has **zero** local-package dependencies beyond other infrastructure packages (`platform_kernel`, `core_*`). `core_database`, notably, depends on no other workspace package at all.
 
 ---
 
 ## 3. Why a Pub Workspace monorepo
 
-Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 24 members today. One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
+Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 26 members today (23 packages, two apps, and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
 
 **What you gain:** fast incremental compilation, no version drift between packages, refactors that cross package boundaries in a single commit, and physical enforcement of layering — a feature package *cannot* import `data_auth` if its `pubspec.yaml` does not declare it.
 
@@ -126,11 +126,11 @@ submodule per module possible.
 | Decision | Alternative rejected | Why |
 |:--|:--|:--|
 | **`Result<T>` instead of thrown exceptions** across layer boundaries | `throw` / `try-catch` at the call site | An exception is invisible in a function signature — the caller has no way to know it must handle failure. `Future<Result<UserEntity>>` puts the failure case *in the type*, so the compiler reminds you. The Data layer never lets an exception escape; `IBaseRepository.execute()` converts it into `Result.failure(AppFailure)`. |
-| **Decentralized DI via micro-package modules** | One giant `injection.dart` listing every registration | Each package owns `lib/di/module.dart` with `@InjectableInit.microPackage()`. Adding a package means adding one line to the app shell, not editing a 500-line central file. Deleting a package removes its registrations with it. |
+| **Decentralized DI via micro-package modules** | One giant `injection.dart` listing every registration | Each package owns `lib/di/module.dart` with `@InjectableInit.microPackage()`. Adding a package means one line in an app's `app_manifest.yaml` (then `composer sync`), not editing a 500-line central file. Deleting a package removes its registrations with it. |
 | **Decentralized routing via DI contracts** | Hardcoding every `GoRoute` in `app_router.dart` | Features register [`IFeatureRouteModule`](../../../platform/di/lib/src/routing/routing_interfaces.dart) / `INavDestinationModule`; `AppRouter` collects them with `getAllOrEmpty<T>()`. A feature can be deleted from the workspace without touching the app shell — the router simply collects one contribution fewer and falls back gracefully. |
 | **Package-owned storage keys** | A single shared "presets" object holding every key | A shared object hands *every* injector read/write access to *every* other feature's data. Each package declares its own `StorageValue` instances with its own keys in its own `utils/` folder. See [the storage guide](../guides/06_storage.md). |
 | **Package-owned database access** | One shared app-wide database injected everywhere | Same reasoning: a shared database object exposes every DAO to every injector, and forces whichever package declares it to own every table. Packages depend on [`IDatabaseHandle`](../../../platform/database/lib/src/access/i_database_handle.dart) and receive only the accessor they ask for. See [the database guide](../guides/07_database.md). |
-| **Constants live in each package's `utils/`** | A central `constants/` folder in `core_common` | A central constants file becomes a god object: auth endpoints, chat channel IDs and theme keys all sitting where every package can read them. `core_common` keeps only genuinely global values (`ApiStatusConstants`, `EnvConstants`). |
+| **Constants live in each package's `utils/`** | A central `constants/` folder in `core_common` | A central constants file becomes a god object: auth endpoints, chat channel IDs and theme keys all sitting where every package can read them. The bottom of the stack keeps only genuinely global values (`ApiStatusConstants`, `EnvConstants`, in `platform_kernel`). |
 
 ---
 
@@ -145,4 +145,4 @@ submodule per module possible.
 | Check a rule before a PR | [`../reference/01_rules.md`](../reference/01_rules.md) · [`../reference/04_review_checklist.md`](../reference/04_review_checklist.md) |
 
 > [!NOTE]
-> The packages under `modules/*/domain`, `modules/*/data` and `modules/*/feature` (Auth, Home, Settings, Onboarding, Splash, Dashboard, Language) ship as **sample implementations**. They demonstrate the wiring, not production business rules — copy the shape, then replace or delete them.
+> The packages under `modules/*/domain`, `modules/*/data` and `modules/*/feature` (Auth, Home, Settings, Onboarding, Splash, Dashboard) ship as **sample implementations**. They demonstrate the wiring, not production business rules — copy the shape, then replace or delete them.

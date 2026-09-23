@@ -51,7 +51,7 @@ dart tools/code_review/code_review.dart --changed
 - **Review theo thư mục**:
   ```bash
   # Chỉ review domain layer (quan trọng nhất)
-  dart tools/code_review/code_review.dart --folder lib/domain
+  dart tools/code_review/code_review.dart --folder modules/auth/domain
   ```
 - **Review các file đã dàn dựng (staged) cho commit**:
   ```bash
@@ -92,10 +92,10 @@ dart tools/code_review/code_review.dart --changed
 2.  **Review theo Tầng (hàng tuần)**:
     ```bash
     # Thứ 2: Review domain layer
-    dart tools/code_review/code_review.dart --folder lib/domain --focus architecture,solid
+    dart tools/code_review/code_review.dart --folder modules/auth/domain --focus architecture,solid
 
     # Thứ 4: Review data layer
-    dart tools/code_review/code_review.dart --folder lib/data
+    dart tools/code_review/code_review.dart --folder modules/auth/data
     ```
 3.  **Trước khi Release**:
     ```bash
@@ -121,24 +121,7 @@ dart tools/code_review/code_review.dart --changed
 
 ## 🔗 Tích Hợp CI/CD
 
-Sử dụng công cụ này trong GitHub Actions để tự động review code trên mỗi Pull Request.
-
-```yaml
-# .github/workflows/code_review.yml
-name: AI Code Review
-on: [pull_request]
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-      - name: Run Code Review
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          dart tools/code_review/code_review.dart --changed --format json
-```
+Workflow thật là [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): trên mỗi Pull Request chạm tới file Dart trong `apps/*/lib`, `modules/` hoặc `platform/`, nó chạy tool với `--file` cho từng file thay đổi, tải report lên thành artifact và đăng gợi ý inline lên PR. Secret cần có: `GEMINI_API_KEY`. Workflow này không chặn merge.
 
 ## 🐛 Xử Lý Sự Cố
 
@@ -165,41 +148,12 @@ Sử dụng checklist này để tự review code của bạn.
 - [ ] **Lớp Domain Thuần Túy**: Lớp Domain có import `flutter` hoặc `dart:ui` không? (Cấm).
 
 ### 🧬 Theo Từng Lớp
-- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `core/*` KHÔNG được phụ thuộc `feature_*`.
+- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `platform/*` KHÔNG được phụ thuộc `feature_*` hay `data_*`.
 - **Domain**: `Entity` phải thuần túy (không có `statusCode`, `message`). `Repository` phải trả về `Future<Result<T>>`.
-- **Data**: `Repository` phải `implement` interface từ Domain. Mọi lệnh gọi API phải dùng `executeApi`.
+- **Data**: `RepositoryImpl` phải `implement` interface từ Domain và bọc mọi lệnh gọi trong `execute()` / `executeSync()` của `IBaseRepository` (`data_core`).
 - **Presentation**: `Provider` KHÔNG được chứa controller UI. Các lệnh gọi bất đồng bộ phải dùng `executeOperation`.
 
 ### 💅 Đặt Tên & Style
 - **Hằng Số**: Biến `static const` phải ở dạng `UPPER_SNAKE_CASE`.
 - **Thành Viên Private**: Phải bắt đầu bằng `_`.
 - **`final`**: Các biến không gán lại phải là `final`.
-
----
-
-## 🎓 Phụ Lục B: Case Study - Refactor Tính Năng Auth
-
-Đây là một ví dụ thực tế về việc xác định và sửa các lỗi kiến trúc.
-
-### 1. Các Vi Phạm Ban Đầu
-
-- **`BaseEntity` trong Domain**: `lib/domain/entities/base/base_entity.dart` chứa các trường của API như `statusCode`, `message`.
-  - **Tác động**: Lớp Domain bị phụ thuộc vào cấu trúc của API.
-- **`Repository` trả về `BaseEntity`**: `Future<BaseEntity<UserEntity>> login(...)`.
-  - **Tác động**: Gây ra việc phải "mở gói" (unwrap) dữ liệu 2 lần ở UseCase và Provider.
-- **Không có Interface cho `DataSource`**: `AuthRemoteDataSource` là một lớp cụ thể, không có interface.
-  - **Tác động**: Không thể mock để test, vi phạm Dependency Inversion.
-
-### 2. Kế hoạch Refactor
-
-1.  **Tạo `ApiResponse` DTO**: Tạo một Data Transfer Object trong lớp Data để đại diện cho phản hồi thô từ API.
-2.  **Tạo Interface cho `DataSource`**: Tạo `IAuthRemoteDataSource` và `IAuthLocalDataSource` trong lớp Domain.
-3.  **Cập nhật `Repository`**: Sửa lại interface và implementation của `AuthRepository` để trả về `Future<Result<UserEntity>>`.
-4.  **Cập nhật `UseCase`**: `LoginUseCase` giờ sẽ trả về trực tiếp `Result<UserEntity>` từ repository.
-5.  **Cập nhật `Provider`**: Logic trong `AuthProvider` trở nên đơn giản hơn vì chỉ cần xử lý `Result<UserEntity>`.
-
-### 3. Kết Quả
-
-- **Kiến trúc Sạch sẽ**: Lớp Domain trở nên hoàn toàn độc lập.
-- **Code Đơn giản**: `UseCase` và `Provider` giảm đáng kể độ phức tạp.
-- **Dễ Test**: Có thể dễ dàng mock `DataSource` và `Repository` để viết unit test.

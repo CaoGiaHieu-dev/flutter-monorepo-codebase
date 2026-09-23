@@ -16,18 +16,30 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 ---
 
-## 1. `core_common` — nguyên thuỷ dùng chung
+## 1. `platform_kernel` và `core_common` — nguyên thuỷ dùng chung
 
-Đáy của ngăn xếp hạ tầng. Nó khai đúng hai phụ thuộc trong workspace — `domain_core`, để lấy `AppFailure` mà `ErrorHandler` sinh ra, và `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`. Mọi thứ còn lại đều có thể phụ thuộc nó.
+Đáy của ngăn xếp hạ tầng là hai package, tách theo đúng một câu hỏi: *có cần Flutter không?*
+
+**`platform_kernel`** là Dart thuần — không có `flutter` trong dependency, `arch_check` R9 cưỡng chế điều đó. Phụ thuộc workspace duy nhất của nó là `domain_core`, để lấy `AppFailure` mà `ErrorHandler` sinh ra. Hãy phụ thuộc thẳng vào nó, trừ khi bạn cần thứ gì gắn với Flutter.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình, system UI), `SslPinningConfig` |
+| Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
+| Config | `src/config/` | `SslPinningConfig` |
+| Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
 | Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`) |
-| Extension | `src/extensions/` | `bool`, `DateTime`, `Dio`, `Enum`, `List`, `num`, `String` |
+| Extension | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
+| Utils **và constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+
+**`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên, và `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`.
+
+| Nhóm | Đường dẫn | Nội dung |
+|:--|:--|:--|
+| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình, system UI) |
+| Extension | `src/extensions/` | `Dio` |
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transition |
-| Utils **và constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
+| Utils | `src/utils/` | `AppUtils`, `Debounce`, `DownloadImage`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
 
 ### Những gì *không* thuộc về đây, và vì sao
 
@@ -36,10 +48,10 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Loại hằng số | Nơi nó thuộc về | Vì sao không phải ở đây |
 |:--|:--|:--|
 | Key storage (`TOKEN`, `AUTH_USER`, `LOCALE`, `THEME_MODE`, `VIEWED_ONBOARD`) | cùng chỗ với class sở hữu giá trị đó — xem [hướng dẫn storage](../guides/06_storage.md) | Liệt kê chung một chỗ thì mọi package đọc và ghi đè được key storage của mọi feature khác. |
-| Endpoint REST (`/user/login`, `/user/register`, `/user/refresh-token`…) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
+| Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
-Đúng hai file constants nằm ở đây, và cả hai đều thật sự toàn cục: `ApiStatusConstants` (mã trạng thái HTTP) và `EnvConstants` (giá trị `String.fromEnvironment`). Cả hai đặt trong `src/utils/`, nơi duy nhất package này giữ loại giá trị đó.
+Đúng hai file constants nằm ở đáy ngăn xếp, và cả hai đều thật sự toàn cục: `ApiStatusConstants` (mã trạng thái HTTP) và `EnvConstants` (giá trị `String.fromEnvironment`). Cả hai đặt trong `src/utils/` của `platform_kernel`, nơi duy nhất nó giữ loại giá trị đó.
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.

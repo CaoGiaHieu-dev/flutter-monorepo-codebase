@@ -23,7 +23,7 @@ ViewModel không được viết thủ công các câu lệnh dọn dẹp biến
 
 ```dart
 import 'package:provider_state_management/provider_state_management.dart';
-import 'package:domain/domain.dart';
+import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
 import 'package:injectable/injectable.dart';
 
 @injectable

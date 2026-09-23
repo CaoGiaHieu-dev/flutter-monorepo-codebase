@@ -55,7 +55,7 @@ Một dev thuộc team auth clone monorepo mà không lấy source của team kh
 ```bash
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # chỉ của họ
-dart tools/composer/composer.dart sync        # lắp ráp những gì đang có
+dart tools/composer/composer.dart sync --app mobile   # lắp ráp những gì đang có
 dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
 cd apps/mobile && flutter run --flavor dev
 ```
@@ -68,11 +68,13 @@ Code của team khác không chỉ là "không được build" — nó **không 
 
 ## 4. Một cạm bẫy duy nhất, và thứ bắt được nó
 
-`composer sync` sửa ba file **đã được commit**:
+`composer sync` sửa những file **đã được commit**:
 
 - danh sách `workspace:` trong `pubspec.yaml` gốc
-- path dependency trong `apps/<id>/pubspec.yaml`
-- `apps/<id>/lib/di/injection.dart`
+- path dependency trong `apps/<id>/pubspec.yaml`, cho mỗi app được sync
+- `apps/<id>/lib/di/injection.dart`, cũng vậy
+
+Không truyền `--app` thì là mọi app — năm file khi có `mobile` và `admin`.
 
 Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thiếu module. Điều đó đúng ở local và sai khi commit: nó sẽ xoá các module khác khỏi app của tất cả mọi người.
 

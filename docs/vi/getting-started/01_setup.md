@@ -257,7 +257,7 @@ báo hơn danh sách ở trang này: nó được tính từ những gì bạn t
 
 ```bash
 flutter analyze                     # kỳ vọng: No issues found!
-cd platform/storage && flutter test && cd ../../..
+cd platform/storage && flutter test && cd ../..
 ```
 
 Nếu `flutter analyze` báo thiếu `firebase_options_*.dart`, quay lại [bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được).

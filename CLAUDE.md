@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Repo Is
 
-A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + SOLID + MVVM** with dual state management support (**Provider** and **BLoC**). The shipped feature/domain/data packages (auth, home, settings, onboarding, splash, dashboard, language) are **sample reference code** demonstrating the wiring — patterns to copy or delete, not production logic.
+A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + SOLID + MVVM** with dual state management support (**Provider** and **BLoC**). The shipped feature/domain/data packages (auth, home, settings, onboarding, splash, dashboard) are **sample reference code** demonstrating the wiring — patterns to copy or delete, not production logic.
 
 **Author:** CaoGiaHieu-dev. **Docs hub:** `docs/en/` (and `docs/vi/`), grouped by purpose:
 
@@ -46,7 +46,7 @@ dart tools/workspace_setup/configure.dart
 
 ### Tests
 
-Tests live per-package under `modules/<module>/<layer>/test/`. Run from the package directory:
+Tests live per-package in a `test/` directory — today mostly under `platform/*/test/`, plus `modules/auth/data/test/`. Run from the package directory:
 
 ```bash
 cd platform/common
@@ -103,7 +103,7 @@ dart tools/unused_checker/check_unused_file.dart        # orphaned files
 
 # AI-powered code review (requires Gemini API key in code_review_config.json)
 dart tools/code_review/code_review.dart --all
-dart tools/code_review/code_review.dart --file lib/main.dart
+dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --changed
 dart tools/code_review/code_review.dart --all --focus architecture,security
 
@@ -111,10 +111,10 @@ dart tools/code_review/code_review.dart --all --focus architecture,security
 dart tools/workspace_setup/configure.dart
 
 # Firebase multi-environment config
-dart tools/firebase/firebase_config.dart
+dart tools/firebase/firebase_config.dart --app mobile   # --app is required once there are 2+ apps
 
 # Theme (splash screen + app icons)
-dart tools/theme_generator/theme_setting.dart
+dart tools/theme_generator/theme_setting.dart --app mobile
 
 # Android 15+ 16KB page size compliance check
 .\tools\android_compliance\16kb_ckeck.bat   # Windows
@@ -154,7 +154,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 |:--------|:--------|:----------|
 | `platform_kernel` | **Depend on this, not `core_common`, unless you need something Flutter-bound.** Pure Dart, zero Flutter. `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `ApiStatusConstants`, `EnvConstants` | 7 dependencies, none Flutter-bound — enforced by arch_check **R9**. Everything else may depend on it |
 | `platform_app_shell` | The reusable app shell — `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the `ILanguageStorage`/`IThemeStorage` adapters, `AppBootStorage`, `NetworkConfigImpl` | Every app composes it instead of copying it. Its DI group runs **after `core`, before `ui`**. Imports no module — arch_check R1 holds that |
-| `core_common` | **Globally shared** constants only (`ApiStatusConstants`, `EnvConstants` — under `lib/src/utils/`), enums, `ErrorHandler`, `AppConfig`, `AppInitializer`, mixins, utils | Host helpers: `getItOrNull`, `getAll`, `getAllOrEmpty`. `AppFailure` lives in `domain_core`; a re-export shim at `src/error/failures.dart` re-exports it for convenience |
+| `core_common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, `AppUtils`, `Debounce`, formatters, dialog helpers | Re-exports `platform_kernel` wholesale, so `getItOrNull`, `ErrorHandler`, `ApiStatusConstants`, `EnvConstants` etc. still resolve through it — but they live in the kernel (`platform/kernel/lib/src/`), as does the `AppFailure` re-export shim at `src/error/failures.dart` (`AppFailure` itself lives in `domain_core`) |
 | `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_app_shell` |
@@ -232,7 +232,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 1. **Constructor Injection only** — no `getIt<T>()` inside business logic (VMs, Repos, UseCases)
 2. **`CoreBaseUiPackageModule` must run after the `shell` group** — it injects `ILanguageStorage`/`IThemeStorage`, which `platform_app_shell` registers. The manifest's `di_groups` order is what enforces this
 3. Never create monolithic `DomainPackageModule`/`DataPackageModule` — register each micro-package module separately
-4. Categorize new modules into `_coreModules`, `_uiModules`, `_domainModules`, `_dataModules`, `_featureModules`, or `_otherModules`
+4. Put a new module in the right `di_groups` entry of each `apps/<id>/app_manifest.yaml` (`core`, `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other`) and run `composer sync` — the `_<group>Modules` lists in `injection.dart` are generated from it
 5. When using `ignoreUnregisteredTypes`, use **relative imports** from the package's barrel file
 6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `flutter analyze` cannot catch this — verify in generated `apps/mobile/lib/di/injection.config.dart`
 7. **`getAll<T>()` THROWS when `T` is unregistered** — use `getAllOrEmpty<T>()` for optional contributions, and `getItOrNull<T>()` + fallback for single ones
@@ -443,7 +443,7 @@ abstract class AuthModule {
 - **Feature-scoped:** Each feature owns `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI
 - **Global strings only** in `core_base_ui`; `core_ui_kit` uses `core_base_ui` translations, does NOT define its own ARBs
 - Access via feature extension: `context.l10nAuth.translationKey`
-- Features **MUST NOT** edit `root_app.dart` to add delegates — root app collects via `getIt.getAll<IFeatureLocalization>()`
+- Features **MUST NOT** edit `root_app.dart` to add delegates — the shell's `app_material_wrapper.dart` collects them via `getAllOrEmpty<IFeatureLocalization>()`
 
 ---
 
@@ -679,10 +679,10 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
 
 **`apps/mobile/lib/di/injection.dart` is the app shell's only intentional hard reference to features** — as the composition root it must name what it composes. Every other shell file resolves features through `core_di` contracts with `getAllOrEmpty` / `getItOrNull` fallbacks.
 
-**To drop a feature**: remove it from `apps/mobile/app_manifest.yaml`, then
+**To drop a feature**: remove it from every `apps/<id>/app_manifest.yaml` that composes it, then
 
 ```bash
-dart tools/composer/composer.dart sync --app mobile
+dart tools/composer/composer.dart sync
 flutter pub get && dart run build_runner build -d --workspace
 ```
 
@@ -725,11 +725,11 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
 17. **Core never depends on features or data.** No `platform/*` may import or declare `feature_*` / `data_*`. Core → **Domain** is fine (Domain is the innermost ring); three such edges exist today: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **Every package has a `utils/` folder** holding that package's constants. No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
-19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead. The live ordering constraint in this template is `shell` before `ui`: `ThemeProvider` injects `IThemeStorage`, which the shell registers. `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
+19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead. Two live ordering constraints in this template: `shell` before `ui` (`ThemeProvider` injects `IThemeStorage`, which the shell registers), and `notifications` after the app's own registrations (`PushNotificationService` injects the app's `FirebaseOptions`). `flutter analyze` cannot catch this; verify in generated `injection.config.dart`.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. Verify with `dart tools/unused_checker/check_unused_packages.dart`.
 21. **`getAll<T>()` throws when `T` is unregistered.** Use `getAllOrEmpty<T>()` for optional multi-instance contributions and `getItOrNull<T>()` + fallback for single ones — otherwise removing a feature crashes the app at boot — `IFeatureLocalization` is the usual casualty, and it takes `MaterialApp` construction down with it.
 22. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable. Bind the second type through a `@module` — miss it and SSL pinning silently no-ops.
-23. **Barrel generator deletes hand-written `export` lines.** Never hand-add an export to a barrel; put deliberate re-exports in a normal source file (see `core_common/lib/src/error/failures.dart`).
+23. **Barrel generator deletes hand-written `export` lines.** Never hand-add an export to a barrel; put deliberate re-exports in a normal source file (see `platform/kernel/lib/src/error/failures.dart`).
 24. **`flutter analyze` cannot see generated code** — `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart`, `**.module.dart`. A clean analyze does **not** mean the app builds. Always finish with a real `flutter build apk`. Moving `AppFailure` between packages broke `bloc_view_state.freezed.dart` while analyze stayed green.
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
 26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.

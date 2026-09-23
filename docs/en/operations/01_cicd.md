@@ -19,7 +19,7 @@ Five pipelines ship with the template — four on GitHub Actions, one on Azure D
 | **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — blocks the merge |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (manual only) | Prod APK artifact → Firebase |
 
-`pr_quality_check.yml` is the only pipeline that gates a merge. It runs four blocking gates in order — architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift — plus one advisory audit. See [§6](#6-the-quality-gate).
+`pr_quality_check.yml` is the only pipeline that gates a merge. It runs six blocking gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — plus one advisory audit. See [§6](#6-the-quality-gate).
 
 ---
 
@@ -142,20 +142,22 @@ The iOS build and iOS distribute tasks are present but fully commented out.
 
 | # | Gate | Command | Blocking |
 |:--|:---|:---|:---|
+| 0 | Composition matches every app's manifest | `dart tools/composer/composer.dart verify` | yes |
 | 1 | Architecture rules | `dart tools/arch_check/check.dart` | yes |
 | 2 | Static analysis | `flutter analyze` | yes |
-| 3 | Tests, per package | `flutter test` in each `modules/*/*/test` | yes |
+| 3 | Tests, per package | `flutter test` in every package that has a `test/` directory | yes |
 | 4 | Catalog drift | `dart tools/dependency_sync.dart --check` | yes |
+| 5 | Documentation accuracy | `dart tools/docs_check/check.dart` | yes |
 | — | Unused dependency audit | `dart tools/unused_checker/check_unused_packages.dart` | no (advisory) |
 
-Gate 1 runs first on purpose: it only reads imports and pubspecs, needs no codegen, and finishes in about 200 ms — so a layering mistake fails in seconds instead of after a full analyze-and-test cycle. It is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
+Gates 0 and 1 run first on purpose: they only read manifests, imports and pubspecs, needs no codegen, and finishes in about 200 ms — so a composition or layering mistake fails in seconds instead of after a full analyze-and-test cycle. Gate 1 is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
 
-Gate 3 loops per package because this is a Pub Workspace: tests live under `modules/<module>/<layer>/test/`, and a single `flutter test` at the root does not pick them up.
+Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — today mostly under `platform/*/test/` — and a single `flutter test` at the root does not pick them up.
 
 > [!IMPORTANT]
 > A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. Move a type between packages and a `.freezed.dart` file can end up referencing a symbol it cannot see: analyze stays green while the APK build fails. Only a real build catches that class of error.
 
-**Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 1–4 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
+**Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 0–5 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
 
 ---
 
@@ -195,9 +197,11 @@ Run these before pushing; they are the same commands the pipelines use.
 dart tools/workspace_setup/configure.dart
 
 # 2. The same gates pr_quality_check.yml runs, in the same order
+dart tools/composer/composer.dart verify
 dart tools/arch_check/check.dart
 flutter analyze
 dart tools/dependency_sync.dart --check
+dart tools/docs_check/check.dart
 
 # 3. Tests, per package (gate 3 — see §6)
 (cd platform/storage && flutter test)
@@ -224,7 +228,7 @@ Open items, in rough priority order:
 
 - [ ] `azure-ci-cd.yml` — add a secure file + copy step for `.env`; the prod build currently gets no dart-defines
 - [ ] `fastlane.yml` — drop the ignored `auto_increment:` argument, or make a lane read it
-- [ ] `flutter_build.yml` — run the four `pr_quality_check.yml` gates before building, so a manual dispatch cannot ship unverified code
+- [ ] `flutter_build.yml` — run the six `pr_quality_check.yml` gates before building, so a manual dispatch cannot ship unverified code
 - [ ] `code_review.yml` — decide whether to uncomment `exit 1` (only after you trust the reviewer's false-positive rate)
 - [ ] `flutter_build.yml` — consider `ubuntu-latest` instead of `macos-latest` for Android-only builds
 

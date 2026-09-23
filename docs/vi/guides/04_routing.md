@@ -119,7 +119,7 @@ class HomeNavDestination extends INavDestinationModule {
 
 ### 2.3 Dashboard chỉ là chrome
 
-`feature_dashboard` chỉ phụ thuộc `core_di` và `core_common` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
+`feature_dashboard` chỉ phụ thuộc `core_di` và `platform_kernel` — nó **về mặt vật lý không thể** import feature khác. Page của nó dựng bottom bar từ DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`):
 
 ```dart
 final tabs = getAllOrEmpty<INavDestinationModule>().toList()
@@ -152,8 +152,6 @@ Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm t
 class AuthPath {
   AuthPath._();
   static const String LOGIN = '/auth/login';
-  static const String REGISTER = '/auth/register';
-  static const String FORGOT_PASSWORD = '/auth/forgot-password';
 }
 ```
 
@@ -293,7 +291,7 @@ class NavigatorKeys {
 }
 ```
 
-Một `ShellRoute` và các route con của nó phải tham chiếu **cùng một** instance `GlobalKey`. Shell do app shell lắp ráp; route con lại khai bên trong feature package. Đặt key ở một trong hai phía sẽ tạo vòng phụ thuộc — app shell vốn đã phụ thuộc mọi feature, nên feature không thể phụ thuộc ngược lại app shell để lấy key. `core_di`, thứ mà cả hai phía đều đã phụ thuộc, là nơi trung lập.
+Một `ShellRoute` và các route con của nó phải tham chiếu **cùng một** instance `GlobalKey`. Shell do app shell lắp ráp; route con lại khai bên trong feature package. Đặt key ở một trong hai phía đều phạm luật — shell (`platform_app_shell`) là core nên không được phụ thuộc feature (R1), còn feature thì không được phụ thuộc shell. `core_di`, thứ mà cả hai phía đều đã phụ thuộc, là nơi trung lập.
 
 DI Hub không khai key nào mang tên feature. `nested(id)` trả về đúng cùng một instance cho cùng một id, nên shell route và route con khớp nhau mà không cần khai báo tập trung — và bề mặt công khai của `core_di` không phình thêm từ vựng sản phẩm.
 

@@ -23,8 +23,8 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | Nghi có asset / file / translation / package chết | `dart tools/unused_checker/check_script.dart` |
 | Muốn biết gì đã lỗi thời trên pub.dev | `dart tools/check_outdated.dart` |
 | Vừa clone về, cần dựng mọi thứ | `dart tools/workspace_setup/configure.dart` |
-| Cấu hình Firebase cho dev / staging / prod | `dart tools/firebase/firebase_config.dart` |
-| Sinh lại splash screen và app icon | `dart tools/theme_generator/theme_setting.dart` |
+| Cấu hình Firebase cho dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
+| Sinh lại splash screen và app icon | `dart tools/theme_generator/theme_setting.dart --app mobile` |
 | Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_ckeck.sh` |
 | Nhờ AI review một thay đổi | `dart tools/code_review/code_review.dart --changed` |
 
@@ -50,7 +50,7 @@ dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
 | R7 | Scale responsive phải qua `BuildContext` — cấm receiver trần `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`, trong mọi file dùng `core_responsive` |
 | R8 | Contract của `core_di` mà chỉ feature implement thì phải resolve bằng `getItOrNull` / `getAllOrEmpty`, cấm `getIt` / `getAll` (dạng ném lỗi) |
 | R9 | `platform_kernel` và mọi package `*_contracts` không import **và không khai** package kéo theo Flutter |
-| R10 | App shell không import module nào — chỉ `injection.dart`, điểm lắp ráp, được phép gọi tên một module |
+| R10 | Không file nào trong một app (`apps/<id>/`) import module — chỉ `injection.dart`, điểm lắp ráp, được phép gọi tên một module. (`platform/app_shell` là core nên do R1 phủ) |
 
 Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ tư nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
 
@@ -74,7 +74,7 @@ dart tools/composer/composer.dart verify            # gate 0 của CI — fail k
 
 Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `workspace:` ở root, dependency dạng path của app, và `lib/di/injection.dart` của nó. Thêm một module nghĩa là sửa cả ba cho khớp, và sai thì vỡ lúc boot với `"<Type> is not registered"` — thứ `flutter analyze` không thấy được.
 
-`composer` sinh cả ba từ `apps/mobile/app_manifest.yaml`, nhưng **chỉ** phần nằm giữa marker `composer:managed:<region>` và `composer:end:<region>`. Dependency ngoài, flavor và khai báo asset vẫn viết tay.
+`composer` sinh cả ba từ các `app_manifest.yaml` — file riêng của mỗi app từ manifest của chính nó, còn danh sách `workspace:` dùng chung ở root từ tất cả manifest gộp lại — nhưng **chỉ** phần nằm giữa marker `composer:managed:<region>` và `composer:end:<region>`. Dependency ngoài, flavor và khai báo asset vẫn viết tay.
 
 Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.yaml`. Không chỗ nào mã hoá đường dẫn, nên di chuyển package không phải sửa tool hay manifest. Package của module khớp được cả hai quy ước đặt tên — `domain_auth` và `auth_domain` đều nhận.
 
@@ -82,7 +82,7 @@ Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.ya
 
 Cả `sync` lẫn `verify` còn **từ chối** một pubspec của app khai báo tay một package do composer quản lý ở ngoài vùng marker. Pub từ chối key trùng, nên chỉ một lỗi đó là cả workspace ngừng resolve — và đó chính là lỗi composer từng tự gây ra.
 
-Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`PARTIAL COMPOSITION`**: ba file đã-commit mà nó vừa ghi đè, cùng dòng `git checkout --` để khôi phục. Phép lắp ráp nó viết ra đúng ở local và sai khi commit, và CI Gate 0 bắt được trong mọi trường hợp, vì `verify` sinh lại từ manifest trên runner có đủ mọi module. Xem [`12_module_isolation.md`](../guides/12_module_isolation.md).
+Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`PARTIAL COMPOSITION`**: các file đã-commit mà nó vừa ghi đè (`pubspec.yaml` gốc, cùng `pubspec.yaml` và `injection.dart` của mỗi app được sync), cùng dòng `git checkout --` để khôi phục. Phép lắp ráp nó viết ra đúng ở local và sai khi commit, và CI Gate 0 bắt được trong mọi trường hợp, vì `verify` sinh lại từ manifest trên runner có đủ mọi module. Xem [`12_module_isolation.md`](../guides/12_module_isolation.md).
 
 ---
 
@@ -165,7 +165,7 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 **Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, rồi chạy dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply`.
 
 > [!IMPORTANT]
-> Nó **không còn** sửa `apps/mobile/pubspec.yaml`, danh sách `workspace:` ở root hay `apps/mobile/lib/di/injection.dart`. Ba file đó nằm giữa marker `composer:managed` — chạy `dart tools/composer/composer.dart sync` để sinh lại. Sửa tay sẽ tạo drift mà CI Gate 0 chặn.
+> Nó vẫn thêm package vào danh sách `workspace:` ở root, nhưng **không còn** sửa `pubspec.yaml` hay `lib/di/injection.dart` của app nào. Các file đó nằm giữa marker `composer:managed` — chạy `dart tools/composer/composer.dart sync` để sinh lại. Sửa tay sẽ tạo drift mà CI Gate 0 chặn.
 
 **Hành vi an toàn**
 

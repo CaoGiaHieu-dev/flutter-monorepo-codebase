@@ -216,13 +216,17 @@ class NetworkConfigImpl implements NetworkConfig {
   String? Function() get getLocale =>
       () => _languageStorage.getLanguage().languageCode;
 
+  /// Whether an auth module is composed — without resolving it: resolving
+  /// the gateway while `Dio` is being built closes a dependency cycle.
+  bool get _hasSession => getIt.isRegistered<IAuthSessionGateway>();
+
   @override
   Future<String?> Function()? get onRefreshToken =>
-      _session == null ? null : _refreshSession;
+      _hasSession ? _refreshSession : null;
 
   @override
   Future<void> Function()? get onRefreshFailed =>
-      _session == null ? null : _clearSession;
+      _hasSession ? _clearSession : null;
 ```
 
 > [!IMPORTANT]

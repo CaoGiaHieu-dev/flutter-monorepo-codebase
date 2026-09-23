@@ -6,4 +6,5 @@
 /// rule R9 keeps it that way.
 library;
 
+// Auto-generated exports, do not edit manually.
 export 'src/src.dart';

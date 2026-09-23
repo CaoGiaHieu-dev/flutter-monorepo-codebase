@@ -340,6 +340,10 @@ String _appDepsBody(
   ];
   for (final list in withDi.values) {
     for (final pkg in list) {
+      // `core_common.dart`, imported above, already re-exports its own
+      // `di/module.module.dart`; importing it again is an
+      // `unnecessary_import`, which `flutter analyze` fails on.
+      if (pkg == 'core_common') continue;
       imports.add("import 'package:$pkg/di/module.module.dart';");
     }
   }
@@ -365,12 +369,15 @@ String _appDepsBody(
       .join(', ');
   final after = r.diGroups
       .where((g) => g.phase == 'after' && withDi.containsKey(g.name))
-      .map((g) => '    ..._${g.name}Modules,')
+      .map((g) => '  ..._${g.name}Modules,')
       .join('\n');
 
   buf.writeln('const _externalModulesBefore = [$before];');
   buf.writeln('const _externalModulesAfter = [\n$after\n];');
-  return (imports: '${imports.join('\n')}\n', modules: buf.toString());
+  // Both regions are emitted exactly as `dart format` would leave them —
+  // two-space list indent, a blank line after the last import — so a format
+  // pass over the app cannot put the file out of step with `composer verify`.
+  return (imports: '${imports.join('\n')}\n\n', modules: buf.toString());
 }
 
 // ---------------------------------------------------------------------------

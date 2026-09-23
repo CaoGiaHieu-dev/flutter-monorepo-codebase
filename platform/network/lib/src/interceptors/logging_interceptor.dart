@@ -57,12 +57,13 @@ class LoggingInterceptor extends Interceptor {
     if (data is Map) {
       return {
         for (final entry in data.entries)
-          entry.key: _redactedBodyKeys.contains(
-                    entry.key.toString().toLowerCase().replaceAll(
-                      RegExp('[_-]'),
-                      '',
-                    ),
-                  )
+          entry.key:
+              _redactedBodyKeys.contains(
+                entry.key.toString().toLowerCase().replaceAll(
+                  RegExp('[_-]'),
+                  '',
+                ),
+              )
               ? '***REDACTED***'
               : _redactBody(entry.value),
       };

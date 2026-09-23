@@ -2,7 +2,6 @@
 import 'package:bloc_state_management/di/module.module.dart';
 import 'package:core_base_ui/di/module.module.dart';
 import 'package:core_common/core_common.dart';
-import 'package:core_common/di/module.module.dart';
 import 'package:core_di/di/module.module.dart';
 import 'package:core_network/di/module.module.dart';
 import 'package:core_storage/di/module.module.dart';
@@ -17,6 +16,7 @@ import 'package:platform_app_shell/di/module.module.dart';
 import 'package:provider_state_management/di/module.module.dart';
 
 import 'injection.config.dart';
+
 // composer:end:imports
 
 /// Dependency injection for the `admin` app.
@@ -77,12 +77,12 @@ const _otherModules = [
 
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
-    ..._shellModules,
-    ..._uiModules,
-    ..._domainModules,
-    ..._dataModules,
-    ..._featureModules,
-    ..._otherModules,
+  ..._shellModules,
+  ..._uiModules,
+  ..._domainModules,
+  ..._dataModules,
+  ..._featureModules,
+  ..._otherModules,
 ];
 // composer:end:modules
 

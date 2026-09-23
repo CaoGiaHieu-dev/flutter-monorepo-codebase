@@ -1,6 +1,7 @@
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../utils/cache_constants.dart';
 import 'tables/cache_entries_table.dart';

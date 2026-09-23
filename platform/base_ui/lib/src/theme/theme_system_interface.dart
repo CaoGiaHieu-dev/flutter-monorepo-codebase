@@ -29,7 +29,6 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
   final Color warning;
   final Color info;
 
-
   // Theme Gradients
   final List<Color> primaryGradientColors;
   final List<Color> liquidOnboardingColors;

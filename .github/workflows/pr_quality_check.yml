@@ -86,9 +86,9 @@ jobs:
         run: dart tools/composer/composer.dart verify
 
       # Gate 1 — architecture rules.
-      # Runs first and needs no codegen: it reads imports and pubspecs, so
-      # it fails in seconds on a layering mistake instead of after a full
-      # analyze+test cycle. `flutter analyze` cannot see these rules at
+      # Needs no codegen of its own: it reads imports and pubspecs, so it
+      # runs straight after setup and fails in seconds on a layering mistake
+      # instead of after a full analyze+test cycle. `flutter analyze` cannot see these rules at
       # all — nothing in analysis_options.yaml knows that core must not
       # import a feature.
       - name: Architecture rules
@@ -137,13 +137,15 @@ jobs:
       # Gate 5 — the documentation describes this tree, not a previous one.
       # Prose rots silently: a package gets renamed and every guide pointing at
       # it keeps the old name, which `flutter analyze` can never see. This
-      # resolves every repo path the docs name and fails on the first dead one.
+      # resolves every repo path the docs name, lists every dead one, and
+      # fails if there is any.
       # Paths that are correctly absent (generated, secret, or a file the
       # reader is told to create) live in tools/docs_check/allowlist.txt.
       - name: Documentation accuracy
         run: dart tools/docs_check/check.dart
 
-      # Advisory: undeclared/unused package dependencies. Not a hard gate
+      # Advisory: declared-but-unused package dependencies (an undeclared
+      # import is Gate 1's rule R5). Not a hard gate
       # because the checker cannot see intentional scaffolding — see
       # .agents/skills/run_unused_checker/SKILL.md for what is deliberately
       # unused and must not be deleted on the tool's word.

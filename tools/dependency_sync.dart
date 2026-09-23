@@ -142,7 +142,15 @@ Future<void> main(List<String> arguments) async {
       if (activeSection.isNotEmpty && trimmed.contains(':') && indent > 0) {
         final parts = trimmed.split(':');
         final depName = parts[0].trim();
-        final currentVersion = parts.sublist(1).join(':').trim();
+        final rawValue = parts.sublist(1).join(':');
+        // A trailing `# comment` is not part of the version: comparing it
+        // would report drift on every commented line, and a rewrite would
+        // drop the comment.
+        final comment = RegExp(r'\s+#.*$').firstMatch(rawValue);
+        final trailingComment = comment == null ? '' : comment.group(0)!;
+        final currentVersion =
+            (comment == null ? rawValue : rawValue.substring(0, comment.start))
+                .trim();
 
         // Block-style dependency parent (e.g. `core_common:` + nested `path:`)
         // Empty version on a workspace package — wait for nested `path:`.
@@ -167,7 +175,9 @@ Future<void> main(List<String> arguments) async {
                 '⚡ Syncing missing: [$relativePath] -> $depName: "$targetVersion"',
               );
               final leadingIndent = ' ' * indent;
-              newLines.add('$leadingIndent$depName: "$targetVersion"');
+              newLines.add(
+                '$leadingIndent$depName: "$targetVersion"$trailingComment',
+              );
               fileModified = true;
             }
             continue;
@@ -200,7 +210,7 @@ Future<void> main(List<String> arguments) async {
                   '🔧 Repairing local path: [$relativePath] $pendingBlockDepName -> path: "$expectedPath"',
                 );
                 final leadingIndent = ' ' * indent;
-                newLines.add('$leadingIndent$depName: $expectedPath');
+                newLines.add('$leadingIndent$depName: $expectedPath$trailingComment');
                 fileModified = true;
                 totalRepairedPaths++;
               }
@@ -237,7 +247,9 @@ Future<void> main(List<String> arguments) async {
                 '⚡ Syncing: [$relativePath] -> $depName from "$cleanedCurrentVersion" to "$targetVersion"',
               );
               final leadingIndent = ' ' * indent;
-              newLines.add('$leadingIndent$depName: "$targetVersion"');
+              newLines.add(
+                '$leadingIndent$depName: "$targetVersion"$trailingComment',
+              );
               fileModified = true;
             }
             continue;
@@ -273,6 +285,9 @@ Future<void> main(List<String> arguments) async {
         '✅ Success: All packages in the workspace are in perfect sync with the catalog!',
       );
     }
+    // `--check` is read-only: no `pub get`, so it cannot touch the lockfile
+    // or `.dart_tool/`.
+    return;
   } else {
     if (totalSynced > 0) {
       stdout.writeln(
@@ -290,21 +305,19 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
-  stdout.writeln(
-    '💡 Running `flutter pub get` to apply the updates...',
-  );
+  stdout.writeln('💡 Running `dart pub get` to apply the updates...');
 
-  /// If fvm is setup then run with fvm
+  // The `dart` running this script, so the SDK that resolves matches the one
+  // the script was started with (FVM's included).
   final executable = Platform.resolvedExecutable;
   final getArgs = ['pub', 'get'];
-  // 3. Chạy pub get (ẩn log trừ khi lỗi)
   final getResult = await Process.run(
     executable,
     getArgs,
   );
 
   if (getResult.exitCode != 0) {
-    stderr.writeln('❌ Failed to resolve dependencies in sandbox!');
+    stderr.writeln('❌ `dart pub get` failed after syncing:');
     stderr.writeln(getResult.stderr);
     exit(1);
   }

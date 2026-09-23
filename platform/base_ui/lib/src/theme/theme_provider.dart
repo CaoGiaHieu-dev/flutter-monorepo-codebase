@@ -205,6 +205,21 @@ class ThemeProvider extends ChangeNotifier
         surface: themeSystem.surface,
       ),
 
+      /// The side rail tablets and desktops navigate with (see the
+      /// dashboard). Left to Material, its selection indicator takes the
+      /// scheme's `secondaryContainer` — the stock aqua of
+      /// `ColorScheme.light()`, not this palette — while the phone's
+      /// bottom bar selects in the brand colour. Both now agree.
+      navigationRailTheme: NavigationRailThemeData(
+        indicatorColor: themeSystem.primary.withValues(
+          alpha: BaseUiConstants.NAV_RAIL_INDICATOR_ALPHA,
+        ),
+        selectedIconTheme: IconThemeData(color: themeSystem.primary),
+        selectedLabelTextStyle: textTheme.labelMedium?.copyWith(
+          color: themeSystem.primary,
+        ),
+      ),
+
       /// Sets the page transitions theme for the theme.
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{

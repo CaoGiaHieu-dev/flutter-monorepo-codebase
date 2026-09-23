@@ -73,7 +73,7 @@ The consumer MUST NOT import the owning feature package.
 ### Step 4: Barrels + Code Gen
 ```bash
 dart tools/barrel_generator/generate.dart platform/di/lib            # so the feature can import the new interface
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart platform/di/lib            # final pass, after codegen
 dart tools/barrel_generator/generate.dart modules/<owner>/feature/lib
 ```

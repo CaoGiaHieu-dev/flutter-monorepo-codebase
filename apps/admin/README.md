@@ -37,8 +37,12 @@ To change what it is made of, edit `app_manifest.yaml`, then from the repository
 ```bash
 dart tools/composer/composer.dart sync --app admin
 flutter pub get
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
+
+On a fresh clone, run `dart tools/workspace_setup/configure.dart` once first. It is the workspace
+setup step, and `pub get` + `build_runner` alone leave the generated barrels missing. See
+[`docs/en/getting-started/01_setup.md`](../../docs/en/getting-started/01_setup.md) § 2.
 
 ## Running it
 
@@ -50,8 +54,16 @@ cd apps/admin
 flutter create --platforms=macos,windows,linux --org com.example --project-name admin_app .
 ```
 
-`flutter create` leaves existing files alone and adds what is missing. It also writes a
-`test/widget_test.dart` for a counter app that does not exist here — delete it.
+`flutter create` leaves existing files alone and adds what is missing. It also writes two files
+to delete:
+
+- `test/widget_test.dart`, a test for a counter app that does not exist here.
+- `analysis_options.yaml`, whose `flutter_lints` include replaces the repository-root analysis
+  options for everything under `apps/admin/`.
+
+```bash
+rm test/widget_test.dart analysis_options.yaml
+```
 
 Then, still from `apps/admin/`:
 

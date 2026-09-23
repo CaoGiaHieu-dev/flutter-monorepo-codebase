@@ -115,7 +115,7 @@ unnecessary). Note the BLoC branch has no `executeOperation` — see `implement_
 ### Step 4: Run Code Generation & Sync
 ```bash
 dart tools/dependency_sync.dart
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
 Then **hot restart** the app (new DI registrations are not applied by hot reload).
 

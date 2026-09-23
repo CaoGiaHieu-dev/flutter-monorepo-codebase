@@ -138,7 +138,7 @@ Sinh bằng `dart tools/barrel_generator/generate.dart <path>/lib`. Generator b�
 **Không bao giờ sửa tay.** Hãy đổi annotation ở file nguồn rồi chạy lại:
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
 
 ---

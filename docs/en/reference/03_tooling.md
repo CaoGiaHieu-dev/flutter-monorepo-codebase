@@ -162,7 +162,7 @@ dart tools/module_generator/generate.dart 2 payment          # domain micro-pack
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
 ```
 
-Run with fewer arguments and it prompts interactively.
+Run with fewer arguments and it prompts interactively. The prompts and many progress and error messages are in Vietnamese, as is the output of `barrel_generator` and `sample_cleanup`.
 
 **What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates, adds the module to every `app_manifest.yaml`, runs `composer sync` (which regenerates the root `workspace:` list and each app's `pubspec.yaml` and `lib/di/injection.dart`), then dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, and `dart fix --apply` on the new package.
 
@@ -246,7 +246,7 @@ Reports packages in `pubspec_dependencies.yaml` with newer versions on pub.dev. 
 dart tools/workspace_setup/configure.dart
 ```
 
-Full setup for a fresh clone: activates `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, then the barrel generator for every package.
+Full setup for a fresh clone. It runs, in order: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` in every package with an `l10n.yaml`, `build_runner build --workspace`, then the barrel generator for every package with a `lib/` (apps skipped). It is **the** setup step. `pub get` + `build_runner` alone leaves the gitignored `lib/src/gen/gen.dart` barrels missing, and `flutter analyze` then fails on `gen/gen.dart`, `AppLocalizations` and `Assets`.
 
 > [!CAUTION]
 > There is **no** `configure.sh` and **no** `configure.bat`. Only `configure.dart` exists — invoke it with `dart`, never through a shell wrapper.
@@ -266,6 +266,8 @@ Runs `flutterfire configure` inside the chosen app for each flavour and build mo
 > Those generated files are git-ignored, and `firebase_module.dart` imports **all three unconditionally**. A fresh clone therefore does not compile until this has been run — even for a dev-only build. See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 Must be run from the repository root; the script checks for `pubspec.yaml` and exits otherwise.
+
+It needs the **Firebase CLI installed and logged in**: Node.js + npm, `npm install -g firebase-tools`, and an interactive `firebase login` with a Google account that can access your Firebase project. If the CLI is missing, the script prints install instructions and exits. It prompts for one project ID, which it uses for **every** flavor. For one project per flavor, or for compile-only stubs when you have no Firebase project, see [`../getting-started/01_setup.md`](../getting-started/01_setup.md) § 3.
 
 ---
 

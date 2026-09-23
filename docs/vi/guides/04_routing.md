@@ -147,7 +147,7 @@ Chú ý `tabs.length < 2` bỏ hẳn bar (hoặc rail) khi có ít hơn hai tab 
 
 ## 3. Route type-safe với `go_router_builder`
 
-Route được khai bằng annotation và sinh ra `*_route_module.g.dart`. **Phải chạy `dart run build_runner build -d --workspace` sau mỗi thay đổi.**
+Route được khai bằng annotation và sinh ra `*_route_module.g.dart`. **Phải chạy `dart run build_runner build --workspace` sau mỗi thay đổi.**
 
 Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm trong `routing/` — mọi package đều giữ constants của mình dưới `utils/`:
 
@@ -351,7 +351,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 2. **Class route** → `lib/src/routing/<feature>_route_module.dart` với `@TypedGoRoute` / `@TypedShellRoute`; tạo controller trong `build()`.
 3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
 4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`.
-5. **Sinh code** → `dart run build_runner build -d --workspace`.
+5. **Sinh code** → `dart run build_runner build --workspace`.
 6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
 ## Checklist

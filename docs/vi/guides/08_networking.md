@@ -423,7 +423,7 @@ abstract class AuthRemoteDataSource {
 
 `@Extra` đặt cờ theo từng request mà interceptor đọc (`NetworkConstants` trong `core_network`): `EXTRA_CAN_REFRESH_TOKEN: false` để `401` không kích hoạt refresh token, `EXTRA_CAN_RETRY: false` để timeout không bật dialog retry. Cả hai mặc định là `true` khi không khai.
 
-Các bước: khai abstract class → thêm `part 'x.g.dart';` → chạy `dart run build_runner build -d --workspace`.
+Các bước: khai abstract class → thêm `part 'x.g.dart';` → chạy `dart run build_runner build --workspace`.
 
 > [!IMPORTANT]
 > `AuthRemoteDataSource` **chính là** đường chạy thật: `AuthRepositoryImpl` gọi nó cho login và refresh token, qua `execute()`. Hãy trỏ `AuthApiConstants` vào endpoint thật của bạn, hoặc đổi transport (Firebase, GraphQL) bên trong repository và giữ nguyên hình dạng.

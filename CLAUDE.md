@@ -27,21 +27,27 @@ A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + S
 **FVM is optional — do not hardcode an `fvm` prefix.** `.fvmrc` pins a version, but that does not mean `fvm` is installed on the current machine. Write commands bare (`flutter pub get`); add `fvm ` yourself only if your machine uses it. Tools that shell out must **detect** FVM through `tools/shared/toolchain.dart` (`useFvm`, `dartExecutable`/`dartArgs`, `flutterExecutable`/`flutterArgs`).
 
 ```bash
-# Install all workspace dependencies (single pubspec.lock at root)
+# Full workspace setup — THE setup step on a fresh clone. Runs, in order:
+# activate flutterfire_cli → flutter clean → flutter pub get → gen-l10n in every
+# package with an l10n.yaml → build_runner build --workspace → barrel generator
+# for every package with a lib/ (apps skipped). pub get + build_runner alone is
+# NOT enough: the gitignored lib/src/gen/gen.dart barrels only exist after the
+# barrel pass, and without them `flutter analyze` fails on `gen/gen.dart`,
+# `AppLocalizations` and `Assets`.
+dart tools/workspace_setup/configure.dart
+
+# Install all workspace dependencies (single pubspec.lock at root, committed)
 flutter pub get
 
 # Code generation across the whole workspace (injectable, freezed, json_serializable, retrofit, go_router_builder, drift)
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 
-# Run the app (flavors: dev / staging / prod)
-flutter run -t apps/mobile/lib/main.dart --flavor dev
+# Run the app (flavors: dev / staging / prod) — from apps/mobile, the root has no android/ or ios/
+cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 
 # Static analysis
 flutter analyze
 dart fix --apply
-
-# Full workspace setup (pub get + build_runner + l10n)
-dart tools/workspace_setup/configure.dart
 ```
 
 ### Tests
@@ -520,7 +526,7 @@ declare `data_auth` in its pubspec simply cannot reach `AuthStorageKeys`.
    with `@PostConstruct(preResolve: true)` to hydrate at startup.
    **Never `@injectable` (factory)** — each injection would get an empty cache.
 4. Use a `reviver` callback for an enum or a custom type (stored through its `toJson()`); primitives, `Map<String, dynamic>` and typed lists read back without one.
-5. Run `dart run build_runner build -d --workspace`.
+5. Run `dart run build_runner build --workspace`.
 
 ```dart
 // modules/auth/data/lib/src/utils/auth_storage_keys.dart
@@ -599,7 +605,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 2. Create the DAO as `part of` **your** database library (not someone else's)
 3. Register table + DAO in **your** `@DriftDatabase` annotation
 4. Bump your `schemaVersion` and contribute an `IDatabaseMigration` implementation registered **typed to your database**: `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`. An untyped `as: IDatabaseMigration` registration is never collected — the database's module looks up exactly `IDatabaseMigration<YourDatabase>` (see `docs/en/guides/07_database.md` § 4)
-5. Run `dart run build_runner build -d --workspace`
+5. Run `dart run build_runner build --workspace`
 6. Add Local DataSource → Repository → UseCase following the cache sample. **DataSource returns a Model** (`CacheEntryModel`), never the Drift row type
 
 > [!NOTE]
@@ -706,7 +712,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
 
 ```bash
 dart tools/composer/composer.dart sync
-flutter pub get && dart run build_runner build -d --workspace
+flutter pub get && dart run build_runner build --workspace
 ```
 
 `injection.dart`, `apps/mobile/pubspec.yaml`'s path deps and the root `workspace:` list are generated between `composer:managed` markers — never edit them by hand. `composer verify` is Gate 0 in CI.
@@ -744,7 +750,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 12. **No `throw` from Data layer to UI** — wrap in `Result.failure(AppFailure)`.
 13. **Module generator** adds the new module to every `app_manifest.yaml` and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the workspace list, each app's dependencies and `injection.dart`. Never hand-edit those three — they sit between `composer:managed` markers and CI Gate 0 fails on drift.
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files — and **after** `gen-l10n` / `build_runner`, because it also exports generated files present on disk (`module.module.dart`, `lib/src/gen/**`; `core_base_ui`'s `src.dart` exports `gen/gen.dart`). An extra run before codegen is harmless; the last run must come after.
-15. **Build runner flag:** Use `-d` (replaces deprecated `--delete-conflicting-outputs`).
+15. **Build runner flags:** plain `dart run build_runner build --workspace`. `--delete-conflicting-outputs` (short form `-d`) was removed from build_runner and is ignored with a warning — do not pass it.
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
 17. **Core never depends on features, data or product domain packages.** No `platform/*` may import or declare `feature_*`, `data_*` or `domain_*` — except the three approved `→ domain_core` edges: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. `arch_check` R1 blocks any other edge (allow-list `_approvedUpwardEdges` in `tools/arch_check/check.dart`); a fourth needs that list and AGENTS.md updated together. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml` — it also prints `data_core → domain_core`, a data → domain edge from the data layer's foundation, which lives under `platform/`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **A package's constants live in its own `utils/` folder** — a package with no constants needs none (`arch_check` R4 flags a public `static const` outside `utils/`/`styles/`, and never asks for an empty folder). No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
@@ -807,7 +813,7 @@ dart tools/module_generator/generate.dart 3 payment
 # 2. Implement: Entities → Repository Interfaces → UseCases → Models → DataSources → RepositoryImpl
 
 # 3. Generate DI / Freezed / JSON code:
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 
 # 4. Generate barrel files — after build_runner, since barrels export generated files too:
 dart tools/barrel_generator/generate.dart modules/payment/domain/lib
@@ -817,13 +823,13 @@ dart tools/barrel_generator/generate.dart modules/payment/data/lib
 dart tools/module_generator/generate.dart 1 payment "" 2 1
 
 # 6. Verify — all four steps; analyze alone does not cover generated code:
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 flutter analyze
 cd modules/payment/data && flutter test && cd -   # only if the package has a test/ directory
 cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
-The APK build needs the gitignored `firebase_options_<flavor>.dart` files in `apps/mobile/lib/firebase/` and `apps/mobile/android/app/src/<flavor>/google-services.json`; a fresh clone has neither — create them per `docs/en/getting-started/01_setup.md` § 3.
+The APK build needs the gitignored `firebase_options_<flavor>.dart` files in `apps/mobile/lib/firebase/` and `apps/mobile/android/app/src/<flavor>/google-services.json`; a fresh clone has neither — create them per `docs/en/getting-started/01_setup.md` § 3 (which also gives compile-only stubs for when you have no Firebase project).
 
 ---
 

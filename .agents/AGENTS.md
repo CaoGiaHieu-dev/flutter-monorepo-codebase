@@ -170,9 +170,12 @@ All files and class names must strictly adhere to the following naming conventio
    - **ABSOLUTELY FORBIDDEN** to add a lint suppression — `// ignore: ...`, `// ignore_for_file: ...` or a rule disabled in `analysis_options.yaml`. Fix the cause (for deprecations, see § 10). Generated files carry their generator's own `ignore_for_file` headers; that is not hand-written code.
 3. **FVM is optional — never hardcode the `fvm` prefix**:
    - The repo pins a version in `.fvmrc`, but that file does **not** guarantee `fvm` is installed on the current machine. Blindly prefixing `fvm` fails on a plain Flutter install.
-   - Write commands **without** the prefix (`flutter pub get`, `dart run build_runner build -d --workspace`). Add `fvm ` yourself only if your own machine uses it.
+   - Write commands **without** the prefix (`flutter pub get`, `dart run build_runner build --workspace`). Add `fvm ` yourself only if your own machine uses it.
    - A tool that shells out to the toolchain **MUST detect FVM at runtime**, not assume it. Use the shared helper `tools/shared/toolchain.dart` (`useFvm`, `dartExecutable` + `dartArgs`, `flutterExecutable` + `flutterArgs`): it requires **both** a config file (`.fvmrc` or `.fvm/fvm_config.json`) **and** a successful `fvm --version`. Every tool that shells out goes through it.
 4. **No PowerShell scripts** (`.ps1`) — Windows execution policy blocks them. Prefer a cross-platform `.dart` script (as `tools/workspace_setup/configure.dart` does); use `.sh`/`.bat` pairs only when a Dart script cannot do the job.
+5. **Workspace setup is `dart tools/workspace_setup/configure.dart`**, never just `flutter pub get` + `build_runner`. It runs `flutter clean` → `pub get` → `gen-l10n` per package → `build_runner build --workspace` → the barrel generator per package. The gitignored `lib/src/gen/gen.dart` barrels only exist after that last step, and without them `flutter analyze` fails on `gen/gen.dart`, `AppLocalizations` and `Assets`.
+6. **build_runner takes no `-d`.** Write `dart run build_runner build --workspace`. `--delete-conflicting-outputs` (short `-d`) was removed from build_runner and is ignored with a warning.
+7. **Run and build the app from `apps/<id>/`**, for example `cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev`. The workspace root has no `android/` or `ios/`, so `flutter run -t apps/mobile/lib/main.dart` from the root cannot work.
 
 ---
 
@@ -508,7 +511,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
 - To drop a feature, delete its entry from **every** `apps/<id>/app_manifest.yaml` that composes it (`auth` and `settings` appear in both `mobile` and `admin`) and run:
   ```bash
   dart tools/composer/composer.dart sync
-  flutter pub get && dart run build_runner build -d --workspace
+  flutter pub get && dart run build_runner build --workspace
   ```
   `composer` regenerates three artifacts — each app's `lib/di/injection.dart`, each app's `pubspec.yaml` path dependencies, and the root `workspace:` list — each between `composer:managed` markers. `composer verify` is Gate 0 of `pr_quality_check.yml`, so drift between the manifest and those files fails CI.
   **Only the manifest is edited by hand.**
@@ -538,7 +541,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
 - Real incident: moving `AppFailure` from `core_common` to `domain_core` broke `bloc_view_state.freezed.dart`, which needs the generated `$AppFailureCopyWith`. The `core_common` re-export shim lists concrete failure types in its `show` clause and cannot carry the generated companion. `flutter analyze` reported **No issues found**; the APK build failed with `Type '$AppFailureCopyWith' not found`. Fix was to depend on `domain_core` directly.
 - **MANDATORY verification order** after any change to DI annotations, package dependencies, or the location of a Freezed/JSON type:
   ```bash
-  dart run build_runner build -d --workspace
+  dart run build_runner build --workspace
   flutter analyze
   cd modules/<module>/<layer> && flutter test      # per package that has a test/ directory
   cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev

@@ -56,8 +56,8 @@ A developer on the auth team clones the monorepo without other teams' sources:
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # only theirs
 dart tools/composer/composer.dart sync --app mobile   # compose what is present
-dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
-cd apps/mobile && flutter run --flavor dev
+dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barrels
+cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
 The app runs. It has no home screen, no settings, no dashboard — and it boots, because every shell lookup for a module-owned contract is `getItOrNull` or `getAllOrEmpty` (`arch_check` R8), and no shell file imports a module (`arch_check` R10).

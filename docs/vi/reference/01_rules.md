@@ -171,7 +171,7 @@ Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvid
 **Kiểm chứng** — sau khi đổi bất kỳ annotation DI hay constructor nào, đọc hai loại file sinh ra. `apps/mobile/lib/di/injection.config.dart` chỉ chứa **thứ tự module** (mỗi package một lệnh `…PackageModule().init(gh)`, cộng phần `FirebaseOptions` của chính app); còn đăng ký theo từng type — kèm các lệnh `gh<Dep>()` mà constructor của nó gọi — nằm trong `lib/di/module.module.dart` của từng package. Một `gh.singleton…` eager (kể cả `singletonAsync`) chỉ an toàn khi mọi `gh<Dep>()` nó gọi đã được đăng ký phía trên nó trong chính file đó, hoặc bởi một module có `init` chạy sớm hơn:
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart       # thứ tự module
 grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # đăng ký eager và các lệnh gh<Dep>() của nó
 ```
@@ -211,7 +211,7 @@ dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_ch
 
 1. dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó;
 2. `dart tools/composer/composer.dart sync`, lệnh này sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root;
-3. `flutter pub get` + `dart run build_runner build -d --workspace`.
+3. `flutter pub get` + `dart run build_runner build --workspace`.
 
 Các import trong `injection.dart` là **tham chiếu cứng có chủ đích duy nhất** của app shell tới feature — với vai trò composition root, nó buộc phải gọi tên những gì nó lắp ráp. Mọi consumer khác đều đi qua `core_di`.
 
@@ -220,7 +220,7 @@ Các import trong `injection.dart` là **tham chiếu cứng có chủ đích du
 ```bash
 # sau khi gỡ một feature
 dart tools/composer/composer.dart sync
-flutter pub get && dart run build_runner build -d --workspace
+flutter pub get && dart run build_runner build --workspace
 dart tools/arch_check/check.dart
 flutter analyze
 ```
@@ -457,7 +457,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | Lệch version catalog | `dart tools/dependency_sync.dart --check` |
 | Asset, file, translation thừa | `dart tools/unused_checker/check_script.dart` |
 | Phân tích tĩnh | `flutter analyze` |
-| Code sinh đã cập nhật chưa | `dart run build_runner build -d --workspace` |
+| Code sinh đã cập nhật chưa | `dart run build_runner build --workspace` |
 | An toàn thứ tự DI | thứ tự module trong `apps/mobile/lib/di/injection.config.dart`; đăng ký theo type trong `lib/di/module.module.dart` của từng package |
 | core ⇏ feature / data / domain của sản phẩm | `dart tools/arch_check/check.dart` (R1) |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |

@@ -12,7 +12,7 @@
 flutter-monorepo-codebase/
 ├── apps/                          # One directory per app — the composition roots
 │   ├── admin/                     # Second app: auth + settings only — see apps/admin/README.md
-│   └── mobile/
+│   └── mobile/                    # Every sample module — see apps/mobile/README.md
 │       ├── app_manifest.yaml      # Which modules this app composes, and the DI group order
 │       ├── lib/
 │       │   ├── main.dart          # One line: runShellApp(configureDependencies: …)
@@ -56,7 +56,7 @@ flutter-monorepo-codebase/
 │
 ├── pubspec.yaml            # Workspace root — lists all 28 members
 ├── pubspec_dependencies.yaml  # Version catalog — the single source of truth
-├── pubspec.lock            # ONE lock file for the whole workspace
+├── pubspec.lock            # ONE lock file for the whole workspace — committed
 └── analysis_options.yaml
 ```
 
@@ -202,7 +202,7 @@ Consequences you must know:
 
 | Consequence | What it means for you |
 | :--- | :--- |
-| One `pubspec.lock` at the root | Run `flutter pub get` **only** at the root |
+| One `pubspec.lock` at the root, committed | Run `flutter pub get` **only** at the root, and commit the lock file when a dependency change moves it |
 | One shared `.dart_tool/package_config.json` | A package that **forgets** to declare a dependency still compiles — the architecture is silently broken. Always declare every import in your `pubspec.yaml`. |
 | One version per dependency, repo-wide | Never hardcode versions; edit `pubspec_dependencies.yaml` then run `dart tools/dependency_sync.dart` |
 | `build_runner` runs with `--workspace` | Codegen is a single pass over all packages |

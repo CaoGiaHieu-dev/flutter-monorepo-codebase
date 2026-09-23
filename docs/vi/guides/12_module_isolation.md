@@ -56,8 +56,8 @@ Một dev thuộc team auth clone monorepo mà không lấy source của team kh
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # chỉ của họ
 dart tools/composer/composer.dart sync --app mobile   # lắp ráp những gì đang có
-dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
-cd apps/mobile && flutter run --flavor dev
+dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barrels
+cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
 App chạy. Nó không có màn hình home, không settings, không dashboard — và vẫn boot được, vì mọi lần shell tra cứu một hợp đồng do module sở hữu đều là `getItOrNull` hoặc `getAllOrEmpty` (`arch_check` R8), và không file nào của shell import một module (`arch_check` R10).

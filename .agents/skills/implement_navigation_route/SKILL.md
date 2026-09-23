@@ -90,7 +90,7 @@ Pick **one** contribution type:
 3. **Never** append `$fooRoute` into `app_router.dart` manually — host already uses `getAllOrEmpty` / `getItOrNull`.
 4. Codegen, then barrels (after `build_runner` — they export generated files too), then **hot restart**:
    ```bash
-   dart run build_runner build -d --workspace
+   dart run build_runner build --workspace
    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    ```
 

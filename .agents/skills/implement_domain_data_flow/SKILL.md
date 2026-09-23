@@ -218,7 +218,7 @@ class GetProductsUseCase extends BaseUseCase<List<ProductEntity>, NoParams> {
 
 ### Step 8: Run Code Generation & Regenerate Barrel Files
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart modules/<module>/domain/lib
 dart tools/barrel_generator/generate.dart modules/<module>/data/lib
 ```

@@ -171,7 +171,7 @@ Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_bas
 **Verify** — after changing any DI annotation or constructor, read two generated files. `apps/mobile/lib/di/injection.config.dart` holds only the **module order** (one `…PackageModule().init(gh)` per package, plus the app's own `FirebaseOptions`); the per-type registrations — and the `gh<Dep>()` calls each constructor makes — are in each package's own `lib/di/module.module.dart`. An eager `gh.singleton…` (including `singletonAsync`) is safe only when every `gh<Dep>()` it makes is registered above it in that file or by a module whose `init` runs earlier:
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart       # module order
 grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # eager registrations and their gh<Dep>() calls
 ```
@@ -211,7 +211,7 @@ This is not a style rule. The throwing lookup **compiles**: the calling package 
 
 1. its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it;
 2. `dart tools/composer/composer.dart sync`, which regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list;
-3. `flutter pub get` + `dart run build_runner build -d --workspace`.
+3. `flutter pub get` + `dart run build_runner build --workspace`.
 
 The `injection.dart` imports are the shell's **only intentional hard reference** to features — as the composition root it must name what it composes. Every other consumer goes through `core_di`.
 
@@ -220,7 +220,7 @@ The `injection.dart` imports are the shell's **only intentional hard reference**
 ```bash
 # after removing a feature
 dart tools/composer/composer.dart sync
-flutter pub get && dart run build_runner build -d --workspace
+flutter pub get && dart run build_runner build --workspace
 dart tools/arch_check/check.dart
 flutter analyze
 ```
@@ -457,7 +457,7 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | Version catalog drift | `dart tools/dependency_sync.dart --check` |
 | Unused assets, files, translations | `dart tools/unused_checker/check_script.dart` |
 | Static analysis | `flutter analyze` |
-| Codegen up to date | `dart run build_runner build -d --workspace` |
+| Codegen up to date | `dart run build_runner build --workspace` |
 | DI order safety | module order in `apps/mobile/lib/di/injection.config.dart`; per-type registrations in each package's `lib/di/module.module.dart` |
 | core ⇏ feature / data / product domain | `dart tools/arch_check/check.dart` (R1) |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |

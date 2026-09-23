@@ -11,7 +11,7 @@
 ```text
    sửa code
         │
-        ├─ có đụng annotation?  ──► dart run build_runner build -d --workspace
+        ├─ có đụng annotation?  ──► dart run build_runner build --workspace
         │
         ├─ có thêm/đổi tên/xoá file trong lib/?  ──► dart tools/barrel_generator/generate.dart <pkg>/lib
         │
@@ -26,7 +26,7 @@
 ## 2. `build_runner` — sau khi đụng vào annotation
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
 
 Chạy mỗi khi bạn thêm, xoá hoặc sửa bất kỳ thứ nào sau đây:
@@ -52,7 +52,7 @@ Chạy mỗi khi bạn thêm, xoá hoặc sửa bất kỳ thứ nào sau đây:
 Cho vòng lặp sửa–chạy liên tục:
 
 ```bash
-dart run build_runner watch -d --workspace
+dart run build_runner watch --workspace
 ```
 
 ---
@@ -98,11 +98,11 @@ Tool cũng tự sửa các mục `path:` bị gãy của package trong workspace
 
 | Tool | Lệnh | Dùng khi |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [thư_mục] [SM] [route]` | Dựng khung package Feature / Domain / Data / Core mới. Nó thêm module vào mọi `app_manifest.yaml` rồi chạy `composer sync`, bước này đăng ký package vào workspace và mọi app ghép nó. Chạy không tham số để vào chế độ tương tác. |
+| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>]` | Dựng khung package Feature / Domain / Data / Core / Custom mới. Nó thêm module vào **mọi** `app_manifest.yaml`, cả `apps/mobile` lẫn `apps/admin`, rồi chạy `composer sync` để đăng ký package vào workspace và vào mọi app. `apps/admin` chỉ ghép auth + settings. Nếu module mới không thuộc về đó, hãy xoá mục của nó khỏi `apps/admin/app_manifest.yaml` rồi chạy `dart tools/composer/composer.dart sync`. Chạy không tham số để vào chế độ tương tác. Câu hỏi và thông báo tiến trình một phần bằng tiếng Việt. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Dọn dẹp định kỳ. Có lệnh con riêng cho asset, file, package, translation. |
-| **Outdated checker** | `dart tools/check_outdated.dart` | Trước một đợt nâng version — liệt kê thứ pub.dev đã có bản mới. |
+| **Outdated checker** | `dart tools/check_outdated.dart` | Trước một đợt nâng version. Tool liệt kê thứ pub.dev đã có bản mới. Trên terminal, nó hiện tiếp một checklist tương tác: `a` ghi các version đã chọn vào catalog rồi chạy `dependency_sync` + `pub get`, còn `q` để thoát. Không có TTY (CI, pipe) thì nó chỉ báo cáo. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Rà soát tuỳ chọn trước khi mở PR. Cần Gemini API key (`GEMINI_API_KEY`, `--api-key`, hoặc lưu khi tool hỏi). Hỗ trợ thêm `--all`, `--file <đường_dẫn>`, `--focus architecture,security`. |
-| **Workspace setup** | `dart tools/workspace_setup/configure.dart` | Sau một lần rebase lớn, hoặc khi mọi thứ hỏng không rõ lý do — gộp clean + pub get + l10n + build_runner trong một lượt. |
+| **Workspace setup** | `dart tools/workspace_setup/configure.dart` | Lần setup đầu tiên của một bản clone, sau một lần rebase lớn, hoặc khi mọi thứ hỏng không rõ lý do. Script chạy theo thứ tự: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `flutter gen-l10n` trong mọi package có `l10n.yaml` → `dart run build_runner build --workspace` → barrel generator cho mọi package có `lib/` (bỏ qua các app). Dừng ngay ở bước đầu tiên bị lỗi. |
 
 Ví dụ module generator:
 
@@ -167,7 +167,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 
 | Bẫy | Triệu chứng | Cách xử lý |
 | :--- | :--- | :--- |
-| Quên `build_runner` sau khi đổi annotation | `Undefined class '_$…Impl'`, type không đăng ký được trong DI | `dart run build_runner build -d --workspace` |
+| Quên `build_runner` sau khi đổi annotation | `Undefined class '_$…Impl'`, type không đăng ký được trong DI | `dart run build_runner build --workspace` |
 | Quên barrel generator sau khi thêm file | Class mới vô hình bên ngoài package | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Sửa tay file sinh ra | Thay đổi biến mất ở lần codegen kế tiếp | Sửa file nguồn có annotation |
 | Chạy `pub get` bên trong package con | Xuất hiện `pubspec.lock` lạc chỗ | Xoá chúng đi, chạy `flutter pub get` tại root |

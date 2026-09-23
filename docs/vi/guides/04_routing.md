@@ -47,11 +47,8 @@ Tất cả nằm ở `platform/di/lib/src/routing/`.
 |---|---|---|---|
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
 | `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
-| `IAppEntryLocation` | Boot bắt đầu ở đường dẫn của tab đầu tiên, rồi tới `/`. Lần mở đầu không còn *đứng lại* ở đó nữa: không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp sang bước kiểm tra login |
-| `HomeNavigator` | Sau khi đăng nhập, app chuyển tới `fallbackLocation` thay vì kẹt lại ở màn login |
+| `IAppEntryLocation` | Điểm bắt đầu khi khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
 | `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar) | n/a | **chỉ** `feature_dashboard` |
-
-`fallbackLocation` là public và chỉ được định nghĩa một lần. `UndefineRouteWidget` từng giữ một bản sao riêng của logic này, còn `NavigatorWrapperWidget` thì hoàn toàn không dùng nó sau khi đăng nhập — đó là lý do cả hai lỗi trong bảng trên sống sót được: mọi app mẫu đều ghép onboarding và home, nên chưa từng có gì chạy vào trường hợp thiếu chúng.
 
 ### 2.1 `IFeatureRouteModule`
 
@@ -302,12 +299,13 @@ Mọi lần tra cứu trong `app_router.dart` đều chịu được việc thi�
 
 ```dart
 String get fallbackLocation {
-  final entry = getItOrNull<IAppEntryLocation>()?.path;
-  if (entry != null) return entry;
   final tabs = _destinations;
   if (tabs.isNotEmpty) return tabs.first.path;
-  return '/';
+  return _emptyDestinationPath;
 }
+
+String get entryLocation =>
+    getItOrNull<IAppEntryLocation>()?.path ?? fallbackLocation;
 ```
 
 ```dart
@@ -326,8 +324,10 @@ builder: (context, state, navigationShell) {
 | Toàn bộ `IFeatureRouteModule` | Không có route stack; app vẫn dựng được |
 | Toàn bộ `INavDestinationModule` | Một branch giữ chỗ `/_empty_dashboard` giữ `StatefulShellRoute` hợp lệ |
 | `DashboardRouteModule` | Các tab vẫn hiển thị, chỉ là không có chrome — `navigationShell` hiển thị nhánh hiện tại. (Trước đây là `SizedBox.shrink()`: app có tab mà không có dashboard sẽ mở ra màn hình trắng) |
-| `IAppEntryLocation` | Boot bắt đầu ở path của tab đầu tiên, rồi tới `/`. Lần mở đầu tiên không còn *dừng* ở đó nữa: không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
+| `IAppEntryLocation` | Boot bắt đầu ở `fallbackLocation` — tab đầu tiên, hoặc branch giữ chỗ. Không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
 | `HomeNavigator` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
+
+Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `HomeNavigator`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
 
 Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
 

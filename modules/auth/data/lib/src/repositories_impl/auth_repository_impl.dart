@@ -31,9 +31,20 @@ class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
     );
   }
 
+  /// With no stored token there is no session to renew: answer without a
+  /// network call — which at boot would otherwise hit the API on every fresh
+  /// install. A refusal from the server (401/403) ends the stored session
+  /// too, so an expired token is not attached to every later request.
   @override
-  Future<Result<UserEntity>> refreshToken() {
-    return _authenticate(_remote.refreshToken);
+  Future<Result<UserEntity>> refreshToken() async {
+    if (_local.getUserToken() == null) {
+      return const Result.failure(
+        AppFailure.auth(message: 'No stored session', code: 401),
+      );
+    }
+    final result = await _authenticate(_remote.refreshToken);
+    if (result.errorOrNull is AuthFailure) _local.clearAllAuthData();
+    return result;
   }
 
   @override

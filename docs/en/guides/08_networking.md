@@ -320,7 +320,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 ```
 
 > [!NOTE]
-> The sample's refresh *is* an HTTP call through this same client (`AuthRemoteDataSource.refreshToken`), so it and `login` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (guard 1). Without it, a `401` from the refresh call enters `RefreshTokenHandler` while that handler's own refresh is still in flight, and waits on itself forever. Any endpoint of yours whose `401` means something other than "session expired" needs the same flag.
+> The sample's refresh *is* an HTTP call through this same client (`AuthRemoteDataSource.refreshToken`), so it and `login` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (guard 1); the refresh call also sets `EXTRA_CAN_RETRY: false`, because it runs at boot and inside another request's 401 and must fail fast rather than wait on a retry dialog. With no stored token `AuthRepositoryImpl.refreshToken` answers without a network call at all. Without it, a `401` from the refresh call enters `RefreshTokenHandler` while that handler's own refresh is still in flight, and waits on itself forever. Any endpoint of yours whose `401` means something other than "session expired" needs the same flag.
 
 ---
 

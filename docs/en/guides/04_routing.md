@@ -299,12 +299,13 @@ Every lookup in `app_router.dart` tolerates a missing contribution — this is w
 
 ```dart
 String get fallbackLocation {
-  final entry = getItOrNull<IAppEntryLocation>()?.path;
-  if (entry != null) return entry;
   final tabs = _destinations;
   if (tabs.isNotEmpty) return tabs.first.path;
-  return '/';
+  return _emptyDestinationPath;
 }
+
+String get entryLocation =>
+    getItOrNull<IAppEntryLocation>()?.path ?? fallbackLocation;
 ```
 
 ```dart
@@ -323,10 +324,10 @@ builder: (context, state, navigationShell) {
 | All `IFeatureRouteModule` | No stack routes; app still builds |
 | All `INavDestinationModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
 | `DashboardRouteModule` | The destinations render without chrome — `navigationShell` shows the current branch. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
-| `IAppEntryLocation` | Boot starts on the first tab's path, then `/`. First launch no longer *stays* there: with no entry location there is no onboarding to show, so boot goes on to the login check |
+| `IAppEntryLocation` | Boot starts on `fallbackLocation` — the first tab, else the placeholder branch. With no entry location there is no onboarding to show, so boot goes on to the login check |
 | `HomeNavigator` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
 
-`fallbackLocation` is public and defined once. `UndefineRouteWidget` used to carry its own copy of this logic, and `NavigatorWrapperWidget` did not use it at all after sign-in — which is how both bugs in the table above survived: every sample app composed onboarding and home, so nothing ever exercised the missing case.
+There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `HomeNavigator` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
 
 Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
 

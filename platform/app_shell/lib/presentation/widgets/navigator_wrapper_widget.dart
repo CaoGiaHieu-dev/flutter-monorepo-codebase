@@ -71,7 +71,6 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
       }
 
       _goToHome();
-      deeplinkProvider.initAppLink();
       _bootCompleted = true;
     });
   }
@@ -127,7 +126,12 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// decides" — which only holds at boot. After a sign-in nothing navigated
   /// at all, so a build without `feature_home` left a signed-in user on the
   /// login screen.
+  ///
+  /// Also starts deep-link routing — here rather than only at boot, so a user
+  /// who started signed out gets it after signing in. `initAppLink` is
+  /// idempotent.
   void _goToHome() {
+    deeplinkProvider.initAppLink();
     final home = getItOrNull<HomeNavigator>();
     if (home != null) {
       home.toHome(context);

@@ -5,8 +5,8 @@ import 'storage_type.dart';
 
 /// Central coordinator for all registered storage backends.
 ///
-/// Handles asynchronous initialization of all backends in parallel
-/// and acts as a factory provider based on [StorageType].
+/// Initializes every backend (secure first, see [initialize]) and acts as a
+/// factory provider based on [StorageType].
 @singleton
 class StorageManager {
   final Map<StorageType, StorageInterface> _backends;
@@ -26,9 +26,21 @@ class StorageManager {
     return backend;
   }
 
-  /// Initialize all registered storage backends in parallel.
+  /// Initialize every registered backend — the secure one first.
+  ///
+  /// On a first launch the secure backend wipes its keystore namespace, and
+  /// the pref backend keeps its own master key in that same namespace. Run in
+  /// parallel, the wipe could land after pref had written its new key: the
+  /// session would still work from RAM, but on the next launch the key is
+  /// gone, a new one is generated, and every stored preference fails to
+  /// decrypt and is deleted — onboarding, theme and language reset.
   @PostConstruct(preResolve: true)
   Future<void> initialize() async {
-    await Future.wait(_backends.values.map((backend) => backend.init()));
+    await _backends[StorageType.secure]?.init();
+    await Future.wait(
+      _backends.entries
+          .where((entry) => entry.key != StorageType.secure)
+          .map((entry) => entry.value.init()),
+    );
   }
 }

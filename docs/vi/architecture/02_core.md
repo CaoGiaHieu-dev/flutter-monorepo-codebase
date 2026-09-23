@@ -202,7 +202,7 @@ Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa pres
 | Thành phần export | Mục đích |
 |:--|:--|
 | `StorageInterface` | Hợp đồng cho backend |
-| `StorageManager` | `@singleton`; phân giải backend theo `StorageType`, khởi tạo song song mọi backend qua `@PostConstruct(preResolve: true)` |
+| `StorageManager` | `@singleton`; phân giải backend theo `StorageType`, khởi tạo backend secure trước rồi tới các backend khác qua `@PostConstruct(preResolve: true)` — secure đi trước vì lần mở đầu tiên nó xoá sạch namespace keystore, nơi cũng chứa master key của backend pref |
 | `StorageValue<T>` | Bọc phản ứng quanh một key — `ChangeNotifier` + `Stream` broadcast, cache trong RAM, tự ghi xuống đĩa khi set |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (có phần cứng hỗ trợ) |
 | `ObfuscatedString` / `ObfuscatedBytes` | Che dữ liệu trong RAM |

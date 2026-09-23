@@ -179,16 +179,31 @@ Code thật từ
 @injectable
 class HomeProfileBloc
     extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(this._authStatusStream)
+  HomeProfileBloc(@factoryParam this._authStatusStream)
     : super(const BlocViewState.initial()) {
     // …
   }
 
-  final IAuthStatusStream _authStatusStream;
+  final IAuthStatusStream? _authStatusStream;
   StreamSubscription<AuthPrincipal?>? _subscription;
 ```
 
 `feature_home` chỉ phụ thuộc `core_di` — không phụ thuộc `feature_auth`, và cũng không phụ thuộc `domain_auth`: hợp đồng mang `AuthPrincipal`, kiểu do chính `core_di` sở hữu, nên không có package domain nào đi qua ranh giới.
+
+Stream này **tuỳ chọn** có chủ đích. `IAuthStatusStream` do `feature_auth` đăng ký, và một app có thể không ghép nó, nên bloc nhận nó qua `@factoryParam` và route cung cấp — code thật từ [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
+
+```dart
+    return BlocProvider(
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
+      child: const HomePage(),
+    );
+```
+
+Một tham số constructor bắt buộc cũng compile được y như vậy — nhưng rồi DI sẽ không dựng nổi `HomeProfileBloc` trong bản build không có auth. Constructor vẫn nhận dependency của nó (không lookup trong business logic); chỉ việc lookup *tuỳ chọn* chuyển lên route.
 
 > [!CAUTION]
 > Luôn huỷ subscription trong `close()` / `dispose()`. Stream broadcast sẽ vô tư giữ sống một

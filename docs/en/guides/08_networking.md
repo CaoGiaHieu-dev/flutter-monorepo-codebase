@@ -402,15 +402,26 @@ abstract class AuthRemoteDataSource {
   factory AuthRemoteDataSource(Dio dio, {String? baseUrl}) =
       _AuthRemoteDataSource;
 
-  /// Authenticates user with provided credentials
+  /// Authenticates user with provided credentials.
+  ///
+  /// A `401` here means wrong credentials, not an expired session — so it
+  /// must not start a token refresh.
   @POST(AuthApiConstants.LOGIN)
+  @Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})
   Future<BaseEntity<UserModel>> login(@Body() Map<String, dynamic> loginData);
 
-  /// Refreshes the current authentication token
+  /// Refreshes the current authentication token.
+  /// … (fails fast: no refresh, no retry dialog)
   @POST(AuthApiConstants.REFRESH_TOKEN)
+  @Extra({
+    NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false,
+    NetworkConstants.EXTRA_CAN_RETRY: false,
+  })
   Future<BaseEntity<UserModel>> refreshToken();
 }
 ```
+
+`@Extra` sets per-request flags the interceptors read (`NetworkConstants` in `core_network`): `EXTRA_CAN_REFRESH_TOKEN: false` keeps a `401` from starting a token refresh, `EXTRA_CAN_RETRY: false` keeps a timeout from raising the retry dialog. Both default to `true` when absent.
 
 Steps: declare the abstract class → `part 'x.g.dart';` → run `dart run build_runner build -d --workspace`.
 

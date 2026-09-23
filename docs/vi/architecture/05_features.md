@@ -196,7 +196,11 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
-      create: (_) => getIt<HomeProfileBloc>(),
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
       child: const HomePage(),
     );
   }
@@ -237,7 +241,7 @@ Kiểu của nhánh BLoC được đặt tên là `BlocViewState<T>` chứ khôn
 @injectable
 class HomeProfileBloc
     extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(this._authStatusStream)
+  HomeProfileBloc(@factoryParam this._authStatusStream)
     : super(const BlocViewState.initial()) { … }
 ```
 

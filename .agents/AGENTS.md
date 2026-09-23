@@ -114,7 +114,11 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
      @override
      Widget build(BuildContext context, GoRouterState state) {
        return BlocProvider(
-         create: (context) => getIt<HomeProfileBloc>(),
+         // Auth is optional: an app composed without `feature_auth` registers
+         // no IAuthStatusStream, and Home then shows the signed-out state.
+         create: (_) => getIt<HomeProfileBloc>(
+           param1: getItOrNull<IAuthStatusStream>(),
+         ),
          child: const HomePage(),
        );
      }

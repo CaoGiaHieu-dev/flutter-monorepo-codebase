@@ -157,15 +157,10 @@ bundles:
       - platform/di/lib/src/navigators/auth_navigator.dart
     orphaned_keys:
       - "NavigatorKeys.nested('auth') in platform/di/lib/src/routing/navigator_keys.dart"
-    breaks:
-      - sample: feature_home
-        at: modules/home/feature/lib/src/bloc/home_profile_bloc.dart:25
-        why: >-
-          HomeProfileBloc takes IAuthStatusStream through the constructor, so
-          DI cannot build it at all once nothing registers that contract.
-        fix: Drop the dependency from the bloc, or remove feature_home too.
+    breaks: []
     safe_couplings:
-      - "feature_onboarding -> AuthNavigator (getItOrNull + fallback, degrades quietly)"
+      - "feature_home -> IAuthStatusStream (getItOrNull at the route, passed as a factory param; Home shows the signed-out state)"
+      - "feature_onboarding -> AuthNavigator (getItOrNull; the button goes to HomeNavigator instead)"
       - "feature_settings -> IAuthActionHandler (getItOrNull; the logout row is hidden)"
 
   home:
@@ -175,6 +170,7 @@ bundles:
     breaks: []
     safe_couplings:
       - "platform_app_shell -> HomeNavigator (getItOrNull; after sign-in the app goes to AppRouter.fallbackLocation)"
+      - "feature_onboarding -> HomeNavigator (getItOrNull; only used when auth is absent too, and then the button does nothing)"
     note: >-
       Removing every INavDestinationModule leaves the dashboard with no tabs;
       AppRouter falls back to an empty branch rather than crashing.

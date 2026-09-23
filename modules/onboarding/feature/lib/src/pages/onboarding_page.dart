@@ -7,9 +7,10 @@ import '../extensions/extensions.dart';
 
 /// SAMPLE — the app's cold-start location, contributed via `IAppEntryLocation`.
 ///
-/// The button reaches auth through `getItOrNull<AuthNavigator>()`, so a build
-/// without `feature_auth` still renders this screen; the button simply does
-/// nothing. That null-tolerance is what makes a feature removable.
+/// The button reaches auth through `getItOrNull<AuthNavigator>()` and, in a
+/// build without `feature_auth`, falls back to `HomeNavigator` — so first
+/// launch never strands the user here. Only with neither module composed does
+/// it do nothing. That null-tolerance is what makes a feature removable.
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
 
@@ -27,7 +28,12 @@ class OnboardingPage extends StatelessWidget {
             SizedBox(height: AppSpacing.xlH(context)),
             ElevatedButton(
               onPressed: () {
-                getItOrNull<AuthNavigator>()?.toLogin(context);
+                final auth = getItOrNull<AuthNavigator>();
+                if (auth != null) {
+                  auth.toLogin(context);
+                } else {
+                  getItOrNull<HomeNavigator>()?.toHome(context);
+                }
               },
               child: Text(context.l10nOnboarding.getStarted),
             ),

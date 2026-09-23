@@ -219,8 +219,8 @@ Future<void> initialize() async {
 @injectable
 class HomeProfileBloc
     extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(this._authStatusStream)
-      : super(const BlocViewState.initial()) {
+  HomeProfileBloc(@factoryParam this._authStatusStream)
+    : super(const BlocViewState.initial()) {
     on<_HomeProfileStarted>(_onStarted);
     on<_HomeProfileRefreshed>(_onRefreshed);
     on<_HomeProfileAuthStatusChanged>(_onAuthStatusChanged);
@@ -228,7 +228,7 @@ class HomeProfileBloc
     add(const HomeProfileEvent.started());
   }
 
-  final IAuthStatusStream _authStatusStream;
+  final IAuthStatusStream? _authStatusStream;
   StreamSubscription<AuthPrincipal?>? _subscription;
 
   Future<void> _onStarted(
@@ -236,10 +236,10 @@ class HomeProfileBloc
     Emitter<BlocViewState<AuthPrincipal?>> emit,
   ) async {
     await _subscription?.cancel();
-    _subscription = _authStatusStream.authStatusStream.listen((user) {
+    _subscription = _authStatusStream?.authStatusStream.listen((user) {
       add(HomeProfileEvent.authStatusChanged(user));
     });
-    emit(BlocViewState.success(_authStatusStream.currentUser));
+    emit(BlocViewState.success(_authStatusStream?.currentUser));
   }
 
   @override
@@ -376,7 +376,11 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
-      create: (_) => getIt<HomeProfileBloc>(),
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
       child: const HomePage(),
     );
   }

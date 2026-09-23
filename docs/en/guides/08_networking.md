@@ -169,6 +169,8 @@ Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
 }
 ```
 
+Bodies are masked too, at any depth: a value under `password`, `token`, `access_token` / `accessToken`, `refresh_token`, `id_token`, `secret` or `client_secret` prints as `***REDACTED***` — a login request carries the password in its body and the response returns the token in its body.
+
 ---
 
 ## 3. `NetworkConfig` — the app shell supplies the details

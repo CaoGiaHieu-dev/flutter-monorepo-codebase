@@ -243,7 +243,7 @@ Liệt kê package có version mới hơn trên pub.dev. Cập nhật `pubspec_d
 dart tools/workspace_setup/configure.dart
 ```
 
-Dựng đầy đủ cho một bản clone mới: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`.
+Dựng đầy đủ cho một bản clone mới: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, rồi barrel generator cho từng package.
 
 > [!CAUTION]
 > **Không có** `configure.sh` và **không có** `configure.bat`. Chỉ tồn tại `configure.dart` — gọi nó bằng `dart`, đừng bao giờ qua một wrapper shell.

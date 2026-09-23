@@ -30,7 +30,7 @@ modules/payment/domain/lib/src/     entities/  usecases/  repositories/
 modules/payment/data/lib/src/       models/    data_sources/  repositories_impl/
 ```
 
-Bạn tự thêm `utils/` cho mỗi package — mọi package tự giữ hằng số của mình ở đó
+Mỗi package cũng có sẵn một thư mục `utils/` rỗng — mọi package tự giữ hằng số của mình ở đó
 ([`../reference/01_rules.md`](../reference/01_rules.md)).
 
 ---
@@ -39,15 +39,15 @@ Bạn tự thêm `utils/` cho mỗi package — mọi package tự giữ hằng 
 
 Mỗi bước chỉ phụ thuộc các bước phía trên, nên không phải làm lại:
 
-| # | Tầng | Thành phần | Đặt ở đâu |
+| # | Tầng | Thành phần | Đặt ở đâu, trong `modules/` |
 | :-- | :-- | :-- | :-- |
-| 1 | Domain | Entity | `domain/payment/lib/src/entities/` |
-| 2 | Domain | Params | `domain/payment/lib/src/params/` |
-| 3 | Domain | **Interface** Repository | `domain/payment/lib/src/repositories/` |
-| 4 | Domain | UseCase | `domain/payment/lib/src/usecases/` |
-| 5 | Data | Model | `data/payment/lib/src/models/` |
-| 6 | Data | DataSource | `data/payment/lib/src/data_sources/{remote,local}/` |
-| 7 | Data | RepositoryImpl | `data/payment/lib/src/repositories_impl/` |
+| 1 | Domain | Entity | `payment/domain/lib/src/entities/` |
+| 2 | Domain | Params | `payment/domain/lib/src/params/` |
+| 3 | Domain | **Interface** Repository | `payment/domain/lib/src/repositories/` |
+| 4 | Domain | UseCase | `payment/domain/lib/src/usecases/` |
+| 5 | Data | Model | `payment/data/lib/src/models/` |
+| 6 | Data | DataSource | `payment/data/lib/src/data_sources/{remote,local}/` |
+| 7 | Data | RepositoryImpl | `payment/data/lib/src/repositories_impl/` |
 
 > [!CAUTION]
 > Tầng domain là **Dart thuần**. Cấm import `package:flutter/...`, `package:dio/...` hay
@@ -192,9 +192,13 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
     @JsonKey(name: 'email') String? email,
     @JsonKey(name: 'name') String? name,
     @JsonKey(name: 'role', unknownEnumValue: UserRole.unknown) UserRole? role,
-    @JsonKey(name: 'bankName') String? bankName,
-    @JsonKey(name: 'bankAccount') String? bankAccount,
-    @JsonKey(name: 'fcmToken') String? fcmToken,
+
+    /// Session credential from the login/refresh response.
+    ///
+    /// Deliberately absent from [UserEntity]: a token is something the
+    /// transport hands back, not part of who the user is. It is read once
+    /// here, handed to the local data source, and never travels upward.
+    @JsonKey(name: 'token') String? token,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -207,9 +211,6 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
       email: email,
       name: name,
       role: role,
-      bankName: bankName,
-      bankAccount: bankAccount,
-      fcmToken: fcmToken,
     );
   }
 
@@ -219,9 +220,6 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
       email: entity.email,
       name: entity.name,
       role: entity.role,
-      bankName: entity.bankName,
-      bankAccount: entity.bankAccount,
-      fcmToken: entity.fcmToken,
     );
   }
 }
@@ -362,7 +360,7 @@ Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handle
 >
 > ```dart
 > return ServerFailure(
->   message: kDebugMode ? error.toString() : 'Unknown error occurred',
+>   message: _isDebug ? error.toString() : 'Unknown error occurred',
 >   code: 9999,
 > );
 > ```
@@ -380,14 +378,14 @@ Khai báo dependency tường minh ở cả hai `pubspec.yaml`:
 ```yaml
 # modules/payment/data/pubspec.yaml
 dependencies:
-  core_common:
-    path: ../../core/common
+  platform_kernel:
+    path: ../../../platform/kernel
   data_core:
-    path: ../core
+    path: ../../../platform/data_core
   domain_core:
-    path: ../../domain/core
+    path: ../../../platform/domain_core
   domain_payment:
-    path: ../../domain/payment
+    path: ../domain
 ```
 
 > [!WARNING]

@@ -93,7 +93,7 @@ Auth runs first so the token is attached before anything else; refresh sits ahea
 
 ### Per-request opt-outs
 
-Both flags live in `RequestOptions.extra` and default to `true`:
+All three flags live in `RequestOptions.extra` and default to `true`:
 
 ```dart
 // platform/network/lib/src/utils/network_constants.dart
@@ -102,6 +102,12 @@ static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
 /// Set `false` to opt a request out of [RetryInterceptor].
 static const String EXTRA_CAN_RETRY = 'canRetry';
+
+/// Set `false` on a request whose `401` must never start a token refresh —
+/// the login and refresh calls themselves. The bearer token is still
+/// attached; only the refresh reaction is skipped. Without it a `401` from
+/// the refresh call waits on the refresh that is waiting on it.
+static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
 ```
 
 ### `AuthInterceptor`
@@ -275,8 +281,9 @@ return await _retryRequest(err, handler);
 // platform/network/lib/src/interceptors/refresh_token_interceptor.dart
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
-///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) are ignored, so
-///    the refresh call itself never triggers a refresh.
+///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
+///    refresh ([NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] `= false`) are
+///    ignored, so the login and refresh calls never trigger a refresh.
 /// 2. A request already replayed after a refresh is marked with
 ///    [NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] and is not refreshed a
 ///    second time.
@@ -294,7 +301,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 ```
 
 > [!NOTE]
-> If your refresh endpoint is itself an HTTP call through this client, set `extra[EXTRA_NEED_AUTHENTICATION] = false` on it (guard 1). The current implementation calls Firebase directly, so this does not apply here.
+> The sample's refresh *is* an HTTP call through this same client (`AuthRemoteDataSource.refreshToken`), so it and `login` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (guard 1). Without it, a `401` from the refresh call enters `RefreshTokenHandler` while that handler's own refresh is still in flight, and waits on itself forever. Any endpoint of yours whose `401` means something other than "session expired" needs the same flag.
 
 ---
 
@@ -449,6 +456,7 @@ Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_doma
 - [ ] Endpoint constants live in the owning data package's `utils/`, never in `core_common`
 - [ ] Retrofit service declared, `part` added, `build_runner` run
 - [ ] Requests that must not carry a token set `EXTRA_NEED_AUTHENTICATION = false`
+- [ ] Login, refresh, and any call whose `401` is not "session expired" set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] `NetworkConfig` impl stays `@LazySingleton` (never eager)
 - [ ] `sslPinningHashes` populated with ≥2 pins before shipping
 - [ ] `SslPinningConfig` bound explicitly in a `@module` — check `injection.config.dart`

@@ -11,8 +11,9 @@ import '../utils/network_constants.dart';
 ///
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
-///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) are ignored, so
-///    the refresh call itself never triggers a refresh.
+///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
+///    refresh ([NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] `= false`) are
+///    ignored, so the login and refresh calls never trigger a refresh.
 /// 2. A request already replayed after a refresh is marked with
 ///    [NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] and is not refreshed a
 ///    second time.
@@ -49,6 +50,10 @@ class RefreshTokenInterceptor extends Interceptor {
     final needAuthentication =
         extra[NetworkConstants.EXTRA_NEED_AUTHENTICATION] as bool? ?? true;
     if (!needAuthentication) return false;
+
+    final canRefresh =
+        extra[NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] as bool? ?? true;
+    if (!canRefresh) return false;
 
     final alreadyAttempted =
         extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] as bool? ?? false;

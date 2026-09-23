@@ -92,6 +92,20 @@ void main() {
       expect(handler.rejected, isTrue);
     });
 
+    test('ignores a 401 on a request that opted out of refresh', () async {
+      final interceptor = buildInterceptor(newToken: 'fresh');
+      final handler = _RecordingErrorHandler();
+
+      // Login and refresh set this: their own 401 must not start a refresh.
+      interceptor.onError(
+        _unauthorized(extra: {'canRefreshToken': false}),
+        handler,
+      );
+
+      expect(refreshCalls, 0);
+      expect(handler.rejected, isTrue);
+    });
+
     test('does not refresh a request it has already replayed', () async {
       final interceptor = buildInterceptor(newToken: 'fresh');
       final handler = _RecordingErrorHandler();

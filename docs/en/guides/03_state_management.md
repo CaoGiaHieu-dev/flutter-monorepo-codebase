@@ -187,7 +187,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-That is the real pattern from `platform/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart` — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md).
+An illustrative listener, as a screen inside `feature_auth` would write it — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md). The app shell does the same job without this widget: [`navigator_wrapper_widget.dart`](../../../platform/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`, so it subscribes to `IAuthSessionState.sessionChanges` / `sessionFailures` from `core_di` instead.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 

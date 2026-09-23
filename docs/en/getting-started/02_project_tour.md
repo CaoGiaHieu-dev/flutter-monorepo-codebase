@@ -92,7 +92,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, cache entry entity/usecases |
+| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
 | `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
 | `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
@@ -190,7 +190,7 @@ workspace:
   - apps/admin
   - apps/mobile
   - modules/auth/data
-  # … 23 more, tools included
+  # … 25 more, tools included
   # composer:end:workspace
 ```
 

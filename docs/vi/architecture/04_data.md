@@ -117,7 +117,7 @@ Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` 
 >
 > ```dart
 > return ServerFailure(
->   message: kDebugMode ? error.toString() : 'Unknown error occurred',
+>   message: _isDebug ? error.toString() : 'Unknown error occurred',
 >   code: 9999,
 > );
 > ```
@@ -339,11 +339,7 @@ abstract class RegisterModule {
 Dựng ở đây thay vì bên trong repository giữ cho dependency hiển lộ với container — đó chính là khe hở để test truyền một fake vào.
 
 > [!NOTE]
-> **Trước đây file này gọi thẳng Firebase.**
->
-> Cho tới gần đây `AuthRepositoryImpl` dùng `FirebaseAuth`, `GoogleSignIn` và `FacebookAuth`, và hoàn toàn không đụng tới `AuthRemoteDataSource` — template ship đúng cái pattern nó dạy, nhưng bỏ không, bên cạnh một implementation phớt lờ nó. Năm trong tám method (`registerWithEmail`, `loginWithGoogle`, `loginWithFacebook`, `getCurrentUser`, `updateUserProfile`) không có nơi nào gọi trong cả workspace.
->
-> Nó cũng khiến mọi lỗi auth hiện ra thành *"Unknown error occurred"*, vì `ErrorHandler` không có nhánh Firebase (§4). Nếu sản phẩm của bạn xác thực qua Firebase, cứ đổi transport lại — nhưng hãy thêm nhánh đó trước, và giữ nguyên hình dạng bên dưới.
+> **Muốn xác thực qua Firebase?** Đổi transport bên trong `AuthRepositoryImpl` và giữ nguyên hình dạng bên dưới — nhưng hãy thêm nhánh Firebase vào `ErrorHandler` trước (§4). Thiếu nhánh đó, mọi lỗi Firebase đều thành *"Unknown error occurred"* ở bản release.
 
 ### Lưu giữ phiên đăng nhập
 

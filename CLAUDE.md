@@ -30,7 +30,7 @@ A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + S
 # Install all workspace dependencies (single pubspec.lock at root)
 flutter pub get
 
-# Code generation across the whole workspace (injectable, freezed, retrofit, go_router_builder, l10n)
+# Code generation across the whole workspace (injectable, freezed, json_serializable, retrofit, go_router_builder, drift)
 dart run build_runner build -d --workspace
 
 # Run the app (flavors: dev / staging / prod)
@@ -46,7 +46,7 @@ dart tools/workspace_setup/configure.dart
 
 ### Tests
 
-Tests live per-package in a `test/` directory — today mostly under `platform/*/test/`, plus `modules/auth/data/test/`. Run from the package directory:
+Tests live per-package in a `test/` directory — today mostly under `platform/*/test/`, plus `modules/auth/data/test/` and `modules/cache/data/test/`. Run from the package directory:
 
 ```bash
 cd platform/common
@@ -317,7 +317,7 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ### Key Router Components
 
-- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart` — its own file now, and `homeKey` was deleted as unused. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
+- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart`. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
 - **`NavigatorWrapperWidget`**: App shell widget at `platform/app_shell/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
 - **`UndefineRouteWidget`**: GoRouter's `errorPageBuilder` child — never use inline anonymous widgets
 - **SplashPage**: Manually managed by `MainScope` (`AppMaterialWrapper`), NOT a GoRouter route
@@ -615,7 +615,7 @@ abstract class RegisterModule {
 Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_client.dart`):
 
 1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it through `IAuthSessionGateway`, resolved with `getItOrNull` — `core_network` never touches storage, and a build with no auth module simply sends no token). Also sends the locale under the non-standard header key `language`
-2. **RefreshTokenInterceptor**: added **only when `NetworkConfig.onRefreshToken != null`**; catches 401 and replays. Sits **before** Retry so a 401 is never retried with a dead token. `RefreshTokenHandler` serialises concurrent 401s behind one `Completer`, and marks a replayed request so `dio.fetch` re-entering the same interceptor cannot recurse
+2. **RefreshTokenInterceptor**: added **only when `NetworkConfig.onRefreshToken != null`**; catches 401 and replays. Sits **before** Retry so a 401 is never retried with a dead token. `RefreshTokenHandler` serialises concurrent 401s behind one `Completer`, and marks a replayed request so `dio.fetch` re-entering the same interceptor cannot recurse. `login` and `refreshToken` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` — a `401` from the refresh call would otherwise wait on its own refresh forever
 3. **RetryInterceptor**: retries timeout/connection errors only (not HTTP status codes); honours the per-request `canRetry` extra; groups concurrent failures into a single retry dialog
 4. **LoggingInterceptor**: JSON-formatted logs via `dynamic_logger`, `kDebugMode`-gated on **all three** hooks (including `onError`), with `Authorization`/`Cookie` headers redacted
 

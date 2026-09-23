@@ -40,7 +40,7 @@ The pubspec enforces most of this: `feature_dashboard` declares only `core_di` a
 ```
 modules/<name>/feature/
 ├── assets/
-│   └── language/            # <name>_en.arb, <name>_vi.arb
+│   └── language/            # en.arb, vi.arb
 ├── lib/
 │   ├── feature_<name>.dart  # public barrel
 │   ├── di/
@@ -236,7 +236,7 @@ The BLoC type is named `BlocViewState<T>` rather than `ViewState` so that a file
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream)
     : super(const BlocViewState.initial()) { … }
 ```

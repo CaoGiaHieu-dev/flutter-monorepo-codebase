@@ -52,6 +52,12 @@ class NetworkConstants {
   /// Set `false` to opt a request out of [RetryInterceptor].
   static const String EXTRA_CAN_RETRY = 'canRetry';
 
+  /// Set `false` on a request whose `401` must never start a token refresh —
+  /// the login and refresh calls themselves. The bearer token is still
+  /// attached; only the refresh reaction is skipped. Without it a `401` from
+  /// the refresh call waits on the refresh that is waiting on it.
+  static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
+
   /// Set by [RefreshTokenInterceptor] on a request it has already replayed
   /// after a token refresh. Its presence stops a second `401` on the replayed
   /// request from starting another refresh, which would otherwise recurse.

@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   core_di:
     path: ../../../platform/di
+  core_network:
+    path: ../../../platform/network
   core_storage:
     path: ../../../platform/storage
   domain_core:

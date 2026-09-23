@@ -42,6 +42,10 @@ platform/app_shell/lib/              shared by every app
     └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
 ```
 
+### A second app: `apps/admin`
+
+[`apps/admin`](../../../apps/admin/README.md) is the same shell composing a different subset — `auth` and `settings`, with no dashboard, splash, onboarding, home or Firebase. Its whole `lib/` is `main.dart` and the generated `di/injection.dart`. Every optional lookup in this package has a missing contribution there, so the fallbacks described below have a real composition that relies on them — once someone runs it; nothing in CI builds it yet.
+
 ---
 
 ## 2. Boot lifecycle

@@ -33,10 +33,10 @@ tools/
 │   └── generate.dart               # Quét lib/ và tạo file barrel tự động
 ├── code_review/                    # 🤖 AI-powered code review (Gemini)
 │   ├── code_review.dart            # Script review chính
+│   ├── lib/                        # Phần lõi của tool
 │   ├── review_prompt.md            # Prompt AI chi tiết
 │   ├── code_review_config.json     # Cấu hình (API key, scope, etc.)
-│   ├── CODE_REVIEW_README.md       # Tài liệu chi tiết
-│   └── QUICK_START.md              # Hướng dẫn nhanh
+│   └── README.md                   # Tài liệu chi tiết
 ├── unused_checker/                 # 🧹 Phân tích & dọn dẹp tài nguyên dư thừa
 │   ├── check_script.dart           # Chạy tất cả kiểm tra cùng lúc
 │   ├── check_unused_assets.dart    # Phát hiện assets không sử dụng

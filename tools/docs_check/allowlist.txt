@@ -45,8 +45,8 @@ modules/x/data/lib
 # `.agents/RESTRUCTURE.md` is the migration plan: these are the directories a
 # later step creates. They are removed from this list as each step lands, which
 # is what stops the plan from quietly describing a tree nobody built —
-# `apps/mobile` came off this list the moment step 6b created it.
-apps/admin
+# `apps/mobile` came off this list the moment step 6b created it, and
+# `apps/admin` when step 7c did.
 modules/catalog
 
 # --- Patterns (spans containing <placeholder>, * or {a,b}) -----------------

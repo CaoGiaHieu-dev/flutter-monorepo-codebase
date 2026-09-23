@@ -28,7 +28,24 @@ import 'package:path/path.dart' as p;
 ///
 /// Exit code 0 = clean, 1 = at least one dead reference.
 
-const _docRoots = <String>['docs', '.agents', 'README.md', 'CLAUDE.md'];
+/// Directories never walked for Markdown: tool state, build output, and the
+/// native dependency trees Flutter and CocoaPods fetch.
+///
+/// Every other `.md` in the repository is checked. The scope used to be four
+/// roots (`docs`, `.agents`, `README.md`, `CLAUDE.md`), which left
+/// `README.vi.md`, `tools/README.md`, the `.github` guides and every package
+/// README unchecked — 11 dead links had collected there when it was widened.
+const _skippedDirs = <String>{
+  '.git',
+  '.dart_tool',
+  '.fvm',
+  '.idea',
+  '.symlinks',
+  'build',
+  'ephemeral',
+  'node_modules',
+  'Pods',
+};
 
 /// A backtick span is only treated as a path when it starts with one of
 /// these. Everything else in backticks is a symbol, a command, or a
@@ -75,7 +92,7 @@ void main(List<String> args) {
   final docs = _collectDocs(repoRoot);
 
   if (docs.isEmpty) {
-    stderr.writeln('docs_check: no Markdown files found under $_docRoots');
+    stderr.writeln('docs_check: no Markdown files found under $repoRoot');
     exit(1);
   }
 
@@ -179,7 +196,7 @@ Verify that every path the documentation names exists in this repository.
 
   dart tools/docs_check/check.dart [--verbose]
 
-Checks Markdown under ${_docRoots.join(', ')}:
+Checks every Markdown file in the repository (skipping ${_skippedDirs.join(', ')}):
   * backticked spans beginning with a real top-level directory
   * markdown links, resolved relative to the file containing them
 
@@ -218,18 +235,18 @@ Set<String> _readAllowlist(String repoRoot) {
 
 List<File> _collectDocs(String repoRoot) {
   final out = <File>[];
-  for (final root in _docRoots) {
-    final path = p.join(repoRoot, root);
-    if (File(path).existsSync()) {
-      out.add(File(path));
-      continue;
-    }
-    final dir = Directory(path);
-    if (!dir.existsSync()) continue;
-    for (final entity in dir.listSync(recursive: true)) {
-      if (entity is File && entity.path.endsWith('.md')) out.add(entity);
+  void walk(Directory dir) {
+    for (final entity in dir.listSync(followLinks: false)) {
+      if (entity is Directory) {
+        if (_skippedDirs.contains(p.basename(entity.path))) continue;
+        walk(entity);
+      } else if (entity is File && entity.path.endsWith('.md')) {
+        out.add(entity);
+      }
     }
   }
+
+  walk(Directory(repoRoot));
   out.sort((a, b) => a.path.compareTo(b.path));
   return out;
 }

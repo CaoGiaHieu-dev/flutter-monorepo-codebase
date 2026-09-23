@@ -6,6 +6,7 @@ environment:
 
 workspace:
   # composer:managed:workspace — generated from app_manifest.yaml
+  - apps/admin
   - apps/mobile
   - modules/auth/data
   - modules/auth/domain

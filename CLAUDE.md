@@ -141,8 +141,8 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Layer | Path | Responsibility |
 |:------|:-----|:---------------|
-| **Apps** | `apps/<id>/` | What genuinely differs per app: `main.dart`, flavors, `app_manifest.yaml`, and the `injection.dart` generated from it |
-| **App Shell** | `platform/app_shell/` | Shared by every app: boot scope, **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes), material wrapper, storage adapters, `NetworkConfigImpl` |
+| **Apps** | `apps/<id>/` | What genuinely differs per app: `app_manifest.yaml`, the `injection.dart` generated from it, a one-line `main.dart` (`runShellApp`), flavors, and what identifies it (`lib/firebase/`). Two today: `apps/mobile` (every sample module) and `apps/admin` (auth + settings) |
+| **App Shell** | `platform/app_shell/` | Shared by every app: boot (`runShellApp`, `MainScope`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes), material wrapper, storage adapters, `NetworkConfigImpl` |
 | **Core** | `platform/*` | Infrastructure shared across all layers |
 | **Domain** | `modules/*/domain` | **Pure Dart** business logic — entities, use cases, repository interfaces |
 | **Data** | `modules/*/data` | Repository implementations, DTOs/models, data sources (remote + local) |

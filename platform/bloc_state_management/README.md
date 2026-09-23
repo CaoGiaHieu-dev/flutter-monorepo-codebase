@@ -153,7 +153,7 @@ Nếu Feature của bạn dùng **BLoC**, nhưng bạn cần lắng nghe sự th
 **TUYỆT ĐỐI KHÔNG** import trực tiếp Bloc hoặc Provider vào code của nhau.
 **HÃY SỬ DỤNG Neutral Streams**: Đăng ký một Dart `Stream` thuần túy lên GetIt (DI Hub), sau đó `BaseBloc` của bạn chỉ việc lắng nghe Stream đó thay vì lắng nghe Provider.
 
-*(Xem chi tiết kiến trúc này tại tài liệu `docs/04_presentation_layer.md` - Mục 3: Giao Tiếp Chéo Hệ Lạ).*
+*(Xem chi tiết kiến trúc này tại [`docs/vi/guides/10_cross_feature.md`](../../docs/vi/guides/10_cross_feature.md) — Mô hình 3: Agnostic Stream.)*
 
 Nếu chỉ là liên kết Bloc-đến-Bloc cùng Feature, bạn hoàn toàn có thể truyền instance thông qua constructor và dùng `StreamSubscription` lắng nghe bên trong thân Bloc.
 

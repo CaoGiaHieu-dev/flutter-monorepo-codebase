@@ -11,11 +11,13 @@
 ```text
 flutter-monorepo-codebase/
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
+│   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
 │   └── mobile/
 │       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
 │       ├── lib/
-│       │   ├── main.dart          # Entry point, error zone
-│       │   └── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       │   ├── main.dart          # Một dòng: runShellApp(configureDependencies: …)
+│       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
 │       ├── android/  ios/         # Project native — build APK từ apps/mobile/, không phải từ gốc
 │       ├── fastlane/              # Lane phát hành
 │       ├── env.dev  env.stg       # File env theo flavor (env.prod KHÔNG có trong repo)
@@ -122,7 +124,7 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 ```mermaid
 graph BT
     subgraph Outer
-        App["apps/mobile/ — host shell"]
+        App["apps/* — các điểm lắp ráp"]
     end
     subgraph UI
         Features["modules/*/feature"]
@@ -152,7 +154,7 @@ graph BT
 - `Domain` là trung tâm. Ngoài `domain_core` mà các package domain dùng chung, nó không phụ thuộc bất kỳ package nào trong workspace.
 - `Data` hiện thực hợp đồng domain và nói chuyện với `core_network` / `core_storage` / `core_database`.
 - `Features` tiêu thụ use case của domain; chúng không bao giờ nhìn thấy `data_*`.
-- `apps/mobile/` nằm ngoài cùng và là nơi duy nhất được phép biết tất cả cùng lúc.
+- Mỗi app trong `apps/` nằm ngoài cùng và là nơi duy nhất được phép biết tất cả cùng lúc — `apps/mobile/` và `apps/admin/` ghép hai tập con khác nhau của cùng các module.
 
 ### Core không được phụ thuộc feature
 

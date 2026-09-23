@@ -21,7 +21,7 @@
 # kind: framework | sample | shell
 #   framework — infrastructure. Keep. Deleting breaks the template.
 #   sample    — reference implementation. Delete freely once you understand it.
-#   shell     — the host app. Keep, but you edit it whenever you add/remove a feature.
+#   shell     — an app. Keep, but you edit its manifest whenever you add/remove a feature.
 
 packages:
   # --- Framework: core infrastructure -------------------------------------
@@ -56,6 +56,13 @@ packages:
       is the one intentional hard reference from shell to modules. It is
       generated: to add or remove a module, edit `app_manifest.yaml` and run
       `dart tools/composer/composer.dart sync`, never the file itself.
+  admin_app:
+    kind: shell
+    path: apps/admin
+    note: >-
+      The second app: auth + settings, and no dashboard, splash, onboarding,
+      home or Firebase. It keeps every optional lookup in platform_app_shell
+      exercised by a real composition. Removing a bundle edits its manifest too.
 
   # --- Samples: features ---------------------------------------------------
   feature_auth:
@@ -232,16 +239,19 @@ bundles:
       - platform/di/lib/src/app/i_app_splash_screen.dart
     breaks: []
     note: >-
-      main.dart resolves it with getItOrNull, so the app simply keeps the
-      native splash until the first frame.
+      runShellApp (platform_app_shell) resolves it with getItOrNull, so the
+      app simply keeps the native splash until the first frame.
 
 # ---------------------------------------------------------------------------
 # Shared files every bundle removal edits
 # ---------------------------------------------------------------------------
+# Documentation only: remove_sample.dart computes the list from every
+# app_manifest.yaml it finds, so a new app is covered without editing this.
 shared_files:
   - pubspec.yaml # workspace: entry per package
-  - apps/mobile/pubspec.yaml # dependency entry per package
-  - apps/mobile/lib/di/injection.dart # import + ExternalModule entry per feature
+  - apps/<id>/app_manifest.yaml # modules: entry per bundle — the source of truth
+  - apps/<id>/pubspec.yaml # generated dependency entry per package
+  - apps/<id>/lib/di/injection.dart # generated import + ExternalModule entry
 
 # Contracts that survive every removal: they are generic mechanisms, not
 # feature-specific. Do not delete these while chasing orphans.

@@ -12,7 +12,7 @@ The project follows **Clean Architecture**: dependencies always point *inward*, 
 
 ```mermaid
 graph TD
-    App["<b>App Shell</b><br/><code>apps/mobile/</code><br/><i>composition root</i>"]
+    App["<b>Apps</b><br/><code>apps/mobile/</code> · <code>apps/admin/</code><br/><i>composition roots</i>"]
     Feature["<b>Feature</b><br/><code>modules/*/feature</code><br/><i>UI + state</i>"]
     Domain["<b>Domain</b><br/><code>modules/*/domain</code><br/><i>pure Dart business rules</i>"]
     Data["<b>Data</b><br/><code>modules/*/data</code><br/><i>repository impls, DTOs</i>"]
@@ -45,7 +45,8 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 
 | Layer | Path | Responsibility | May import | Must **never** import |
 |:--|:--|:--|:--|:--|
-| **App Shell** | `apps/mobile/` | Entry point, flavors, DI assembly, router assembly | everything | — |
+| **App** | `apps/<id>/` | Composition root: `app_manifest.yaml`, the generated `injection.dart`, a one-line `main.dart`, what identifies the app (Firebase options) | everything | — |
+| **App shell** | `platform/app_shell/` | Boot sequence, router assembly, material wrapper, storage adapters — shared by every app | core packages | any module (`arch_check` R1) |
 | **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, one state-management package | `data_*`, another feature package |
 | **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |

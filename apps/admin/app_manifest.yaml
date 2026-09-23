@@ -1,0 +1,76 @@
+# Composition manifest for the `admin` app.
+#
+# A second app composing a *different subset* of the same modules — the test
+# the composition design has to pass. It takes auth and settings, and none of
+# dashboard, splash, onboarding or home, so every `getItOrNull` /
+# `getAllOrEmpty` fallback in `platform_app_shell` has a real composition
+# relying on it:
+#
+#   no splash       -> native splash is kept through boot
+#   no onboarding   -> no entry location; boot goes straight to the login check
+#   no home         -> after sign-in the app goes to the router's fallback,
+#                      the first destination (settings)
+#   no dashboard    -> destinations render without chrome
+#
+# Generated from this file, between `composer:managed` markers:
+#
+#   dart tools/composer/composer.dart sync --app admin
+#
+# See apps/mobile/app_manifest.yaml for what each key means.
+
+app:
+  id: admin
+  kind: flutter
+  entrypoint: lib/main.dart
+
+di_groups:
+  - name: core
+    phase: before
+    packages:
+      - core_common
+      - core_network
+      - core_storage
+      - core_database
+      - core_di
+
+  # No `notifications` group: this app sends no push notifications, so it
+  # composes no `core_notifications` and needs no `lib/firebase/`.
+
+  - name: shell
+    phase: after
+    packages: [platform_app_shell]
+
+  - name: ui
+    phase: after
+    packages: [core_base_ui]
+
+  - name: domain
+    phase: after
+    packages: [domain_core]
+    from_modules: domain
+
+  - name: data
+    phase: after
+    packages: [data_core]
+    from_modules: data
+
+  - name: feature
+    phase: after
+    from_modules: feature
+
+  - name: other
+    phase: after
+    packages:
+      - provider_state_management
+      - bloc_state_management
+
+modules:
+  - { id: auth, layers: [domain, data, feature] }
+  - { id: settings, layers: [feature] }
+
+# Workspace members this app needs that contribute no DI module. They are
+# listed so that this app alone still yields a complete `workspace:` list.
+extra_dependencies:
+  - platform_kernel
+  - core_responsive
+  - core_ui_kit

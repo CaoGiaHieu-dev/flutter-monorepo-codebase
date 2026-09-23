@@ -12,7 +12,7 @@ Dự án theo **Clean Architecture**: phụ thuộc luôn hướng *vào trong*,
 
 ```mermaid
 graph TD
-    App["<b>App Shell</b><br/><code>apps/mobile/</code><br/><i>điểm lắp ráp</i>"]
+    App["<b>Các app</b><br/><code>apps/mobile/</code> · <code>apps/admin/</code><br/><i>điểm lắp ráp</i>"]
     Feature["<b>Feature</b><br/><code>modules/*/feature</code><br/><i>UI + state</i>"]
     Domain["<b>Domain</b><br/><code>modules/*/domain</code><br/><i>nghiệp vụ Dart thuần</i>"]
     Data["<b>Data</b><br/><code>modules/*/data</code><br/><i>repository impl, DTO</i>"]
@@ -45,7 +45,8 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 
 | Tầng | Đường dẫn | Trách nhiệm | Được import | **Cấm** import |
 |:--|:--|:--|:--|:--|
-| **App Shell** | `apps/mobile/` | Điểm khởi động, flavor, lắp ráp DI và router | tất cả | — |
+| **App** | `apps/<id>/` | Điểm lắp ráp: `app_manifest.yaml`, `injection.dart` được sinh, `main.dart` một dòng, thứ định danh app (Firebase options) | tất cả | — |
+| **App shell** | `platform/app_shell/` | Trình tự boot, lắp ráp router, material wrapper, storage adapter — dùng chung cho mọi app | các package core | mọi module (`arch_check` R1) |
 | **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, một package state-management | `data_*`, feature package khác |
 | **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
 | **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |

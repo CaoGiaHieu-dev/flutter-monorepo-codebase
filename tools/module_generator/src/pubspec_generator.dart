@@ -35,7 +35,8 @@ class PubspecGenerator {
       'isBloc': config.smType == StateManagementType.bloc,
       // Entities, models and BLoC events are all Freezed; core/custom
       // packages carry no codegen'd data classes by default.
-      'usesFreezed': config.type == ModuleType.feature ||
+      'usesFreezed':
+          config.type == ModuleType.feature ||
           config.type == ModuleType.domain ||
           config.type == ModuleType.data,
       'internalDependencies': _internalDependencies(config),
@@ -46,10 +47,13 @@ class PubspecGenerator {
 
   /// The workspace packages a new module of this type starts with.
   ///
-  /// Mirrors what the shipped packages actually declare. Note `domain` gets
-  /// `domain_core` and nothing else: a domain package that depends on a `core_*`
-  /// package stops being pure Dart, which rule 26 forbids and `arch_check` R2
-  /// blocks.
+  /// Only what the rendered templates import, so a fresh module passes
+  /// `check_unused_packages` — add `core_responsive`, `core_ui_kit` and the
+  /// rest when the code needs them. The exception is a domain/data/core
+  /// scaffold, which ships no code yet and pre-declares its layer's base
+  /// package. Note `domain` gets `domain_core` and nothing else: a domain
+  /// package that depends on a `core_*` package stops being pure Dart, which
+  /// rule 26 forbids and `arch_check` R2 blocks.
   List<String> _dependencyNames(ModuleConfig config) {
     switch (config.type) {
       case ModuleType.feature:
@@ -57,8 +61,6 @@ class PubspecGenerator {
           'core_di',
           'core_common',
           'core_base_ui',
-          'core_responsive',
-          'core_ui_kit',
           if (config.smType == StateManagementType.provider) ...[
             'provider_state_management',
             // The provider template returns a `Result` from domain_core.

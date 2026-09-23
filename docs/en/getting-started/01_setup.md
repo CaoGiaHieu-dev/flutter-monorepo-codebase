@@ -156,34 +156,26 @@ Three flavors ship with the template: `dev`, `staging`, `prod`. Values reach Dar
 It is not in the repo — production secrets are yours to supply. Copy the **key names** below (values redacted; read `apps/mobile/env.dev` for the shape):
 
 ```properties
-GOOGLE_MAP_API=
-FACEBOOK_APP_ID=
-FACEBOOK_TOKEN=
-GOOGLE_APP=
 BASE_URL=
-SOCKET=
 WEB_DOMAIN=
 APP_LINK_MODE=
-APP_SCHEMA=
-APP_SCHEMA_VERSION=
 APP_NAME=
 ```
 
-Most of these surface in Dart through `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
+Three of them surface in Dart through `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
   EnvConstants._();
 
-  static const String GOOGLE_MAP_API = String.fromEnvironment('GOOGLE_MAP_API');
   static const String BASE_URL = String.fromEnvironment('BASE_URL');
-  static const String SOCKET = String.fromEnvironment('SOCKET');
-  // …
+  static const String WEB_DOMAIN = String.fromEnvironment('WEB_DOMAIN');
+  static const String APP_NAME = String.fromEnvironment('APP_NAME');
 }
 ```
 
 > [!NOTE]
-> `APP_SCHEMA` and `APP_LINK_MODE` are **not** declared in `EnvConstants`. `APP_SCHEMA` is consumed on the Android side only, as a `resValue` string in `apps/mobile/android/app/build.gradle.kts`. Keep them in the env file even though Dart never reads them directly.
+> `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
 
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are currently **tracked by git** — the `.gitignore` pattern `*.env` does not match a file named `env.dev`. Treat their contents as non-secret sample values, and do not put real production credentials in `apps/mobile/env.prod` until you have confirmed it is ignored.

@@ -156,34 +156,26 @@ Template có sẵn ba flavor: `dev`, `staging`, `prod`. Giá trị đi vào Dart
 File này không nằm trong repo — secret production là của bạn. Chép danh sách **tên key** dưới đây (giá trị đã ẩn; xem `apps/mobile/env.dev` để biết định dạng):
 
 ```properties
-GOOGLE_MAP_API=
-FACEBOOK_APP_ID=
-FACEBOOK_TOKEN=
-GOOGLE_APP=
 BASE_URL=
-SOCKET=
 WEB_DOMAIN=
 APP_LINK_MODE=
-APP_SCHEMA=
-APP_SCHEMA_VERSION=
 APP_NAME=
 ```
 
-Phần lớn các key này xuất hiện trong Dart qua `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
+Ba trong số đó xuất hiện trong Dart qua `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
   EnvConstants._();
 
-  static const String GOOGLE_MAP_API = String.fromEnvironment('GOOGLE_MAP_API');
   static const String BASE_URL = String.fromEnvironment('BASE_URL');
-  static const String SOCKET = String.fromEnvironment('SOCKET');
-  // …
+  static const String WEB_DOMAIN = String.fromEnvironment('WEB_DOMAIN');
+  static const String APP_NAME = String.fromEnvironment('APP_NAME');
 }
 ```
 
 > [!NOTE]
-> `APP_SCHEMA` và `APP_LINK_MODE` **không** được khai trong `EnvConstants`. Riêng `APP_SCHEMA` chỉ được phía Android dùng, dưới dạng `resValue` string trong `apps/mobile/android/app/build.gradle.kts`. Vẫn phải giữ chúng trong file env dù Dart không đọc trực tiếp.
+> `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
 
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` hiện **đang được git theo dõi** — mẫu `*.env` trong `.gitignore` không khớp với tên file `env.dev`. Hãy coi nội dung của chúng là giá trị mẫu không bí mật, và đừng đặt credential production thật vào `apps/mobile/env.prod` cho tới khi bạn xác nhận file đó đã được ignore.

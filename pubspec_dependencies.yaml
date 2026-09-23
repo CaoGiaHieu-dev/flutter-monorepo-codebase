@@ -45,7 +45,6 @@ dependencies:
   # Device Info & Permissions
   device_info_plus: "^13.2.0"
   package_info_plus: "^10.2.1"
-  permission_handler: "^13.0.1"
 
   # UI Components & Styling
   material_ui: "^1.1.1"

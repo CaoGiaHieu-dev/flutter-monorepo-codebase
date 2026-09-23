@@ -168,8 +168,7 @@ The sizes come from `Typography.material2021().englishLike` — the Material 3 t
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-double? scaleFont(double? size) =>
-    size == null ? null : context.sp(size);
+double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
 `sp`, so type follows the app's `textScaleBounds` ([§6](#6-scale-policy-down-by-default-up-on-opt-in-per-window-class)). With the default, `ScaleBounds.downOnly()`, text shrinks on a window narrower than the 375-wide design and never grows past the design size; a window class whose `ResponsiveProfile` opts into growth gets bigger type too. With this app's configuration, text is the design size on every window 375 wide or more — phone, tablet or desktop.

@@ -471,7 +471,7 @@ abstract class AuthModule {
 ## Design System (core_base_ui)
 
 - **Colors:** `context.colors.textPrimary`, `context.colors.surface`, `context.colors.primary` — auto-switch Light/Dark
-- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled; do **not** re-apply `context.sp()` at the call site
+- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled (`spMin`: shrinks below the design width, never grows past it); do **not** re-apply `context.sp()` at the call site
 - **Spacing:** `AppSpacing.xs(context)`, `.sm(context)`, `.md(context)`, `.lg(context)`, `.xl(context)` (scaled with `w`); `H` variants (`lgH`) scale with `h`
 - **Radius:** `AppRadius.sm(context)`, `.md(context)`, `.circular(context)` (scaled with `r`); `AppRadius.smRadius(context)` for `BorderRadius` objects
 - **All three take `BuildContext`** — they are methods, not getters. Numbers live in their `raw*` constants: edit `raw*`, never the accessor

@@ -117,7 +117,7 @@ Cả hai đường đều `await Future.wait([initService(), Future.delayed(_min
 
 ### `_ResponsiveWrapper`
 
-Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`) với `AppConfig.design` (375×812) và `splitScreenMode: true`. Chữ scale theo tỉ lệ chiều rộng của cửa sổ — mặc định của package. Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`) với `AppConfig.design` (375×812) và `splitScreenMode: true`. `context.sp` scale theo tỉ lệ chiều rộng của cửa sổ — mặc định của package; text style của theme dùng `spMin`, không bao giờ vượt cỡ thiết kế (xem [`11_design_system.md`](../guides/11_design_system.md)). Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
 
 `ResponsiveInit` là `StatelessWidget`: nó đọc `MediaQuery.sizeOf(context)` — dependency **chỉ theo size** — nên tự rebuild khi màn hình đổi kích thước và bỏ qua thay đổi brightness / textScale / padding. Metrics được phát xuống qua `ResponsiveScope`, một `InheritedWidget`, nên widget nào đọc metrics là tự đăng ký theo dõi chúng — không có cờ rebuild nào để tinh chỉnh.
 

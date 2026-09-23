@@ -134,12 +134,17 @@ The template uses Google Fonts:
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-TextTheme applyGoogleFont(TextTheme base) {
+// The M3 type scale's sizes. `ThemeData().textTheme` carries colours only.
+final geometry = Typography.material2021().englishLike;
+
+TextTheme applyGoogleFont(TextTheme colors) {
   final font = GoogleFonts.plusJakartaSans();
-  return base.apply(
-    fontFamily: font.fontFamily,
-    fontFamilyFallback: font.fontFamilyFallback,
-  );
+  return geometry
+      .merge(colors)
+      .apply(
+        fontFamily: font.fontFamily,
+        fontFamilyFallback: font.fontFamilyFallback,
+      );
 }
 
 final defaultTheme = switch (mode) {
@@ -153,16 +158,19 @@ final defaultTheme = switch (mode) {
 
 **Another Google font:** change the one line `GoogleFonts.plusJakartaSans()` inside `applyGoogleFont` to any `GoogleFonts.<name>()`; all three branches go through it.
 
-**A bundled font:** declare it under `flutter: fonts:` in [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), then make `applyGoogleFont` return `base.apply(fontFamily: 'YourFont')`. Drop the `google_fonts` dependency once nothing uses it — `dart tools/unused_checker/check_unused_packages.dart` reports it as declared-but-unused.
+**A bundled font:** declare it under `flutter: fonts:` in [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), then make `applyGoogleFont` return `geometry.merge(colors).apply(fontFamily: 'YourFont')` — keep the `geometry.merge`, it is where the sizes come from. Drop the `google_fonts` dependency once nothing uses it — `dart tools/unused_checker/check_unused_packages.dart` reports it as declared-but-unused.
 
 ### How font scaling works
 
-Every size in the `TextTheme` is re-scaled through the context-aware extension:
+The sizes come from `Typography.material2021().englishLike` — the Material 3 type scale — because `ThemeData().textTheme` carries colours only (Material adds the sizes later, when `MaterialApp` localizes the theme; scaling the colour-only theme scaled nothing). Every size is then re-scaled through the context-aware extension, as is the app-bar title (`BaseUiConstants.APP_BAR_TITLE_FONT_SIZE`):
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-double? scaleFont(double? size) => size == null ? null : context.sp(size);
+double? scaleFont(double? size) =>
+    size == null ? null : context.spMin(size);
 ```
+
+`spMin`, not `sp`: text shrinks on a screen narrower than the 375-wide design and never grows past the design size. `sp` scales by width, and every app shares this theme — on a 1280-wide desktop window it would triple every font. On a phone 375 or wider, text is simply the design size.
 
 That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `platform/app_shell/lib/presentation/app_material_wrapper.dart`, which has one.
 

@@ -75,7 +75,7 @@ di_groups:
 
   # A module that opens a database with `@preResolve` runs its collected
   # `IDatabaseMigration` steps during its own initialisation, so anything
-  # contributing a step must appear before it. `data_core` opens CacheDatabase
+  # contributing a step must appear before it. `data_cache` opens CacheDatabase
   # here, which means a migration contributed by a *feature* would be missed.
   - name: data
     phase: after
@@ -107,6 +107,7 @@ modules:
   - { id: onboarding, layers: [feature] }
   - { id: splash, layers: [feature] }
   - { id: dashboard, layers: [feature] }
+  - { id: cache, layers: [domain, data] }
 
 # Packages the app depends on that contribute no DI module of their own.
 extra_dependencies:

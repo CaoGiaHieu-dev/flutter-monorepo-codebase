@@ -9,8 +9,10 @@ import 'package:core_network/di/module.module.dart';
 import 'package:core_notifications/di/module.module.dart';
 import 'package:core_storage/di/module.module.dart';
 import 'package:data_auth/di/module.module.dart';
+import 'package:data_cache/di/module.module.dart';
 import 'package:data_core/di/module.module.dart';
 import 'package:domain_auth/di/module.module.dart';
+import 'package:domain_cache/di/module.module.dart';
 import 'package:domain_core/di/module.module.dart';
 import 'package:feature_auth/di/module.module.dart';
 import 'package:feature_dashboard/di/module.module.dart';
@@ -69,11 +71,13 @@ const _uiModules = [
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
+  ExternalModule(DomainCachePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
+  ExternalModule(DataCachePackageModule),
 ];
 
 const _featureModules = [

@@ -66,7 +66,7 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
    - Data source directories must be named `data_sources/` (snake_case), NOT `datasources/`.
    - Categorize into `data_sources/remote/` (Retrofit) and `data_sources/local/` (Storage/DB).
    - RepositoryImpl classes should inherit from `BaseRepository` in `data_core` and use the helper methods `execute()` or `executeSync()` wrappers to automatically handle error conversion. API calls are not required to return `BaseEntity`; when the payload is wrapped, unwrap and map it via the `mapper` parameter.
-   - **DataSources return Models, never Entities**, and never leak a generated type. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `platform/data_core/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
+   - **DataSources return Models, never Entities**, and never leak a generated type. A Drift row class must be converted at the package boundary — see `CacheEntryModel.fromRow` in `modules/cache/data/lib/src/models/cache_entry_model.dart`; `ICacheEntryLocalDataSource` speaks only in `CacheEntryModel`.
    - Error handling must use `ErrorHandler.handleError(e)` from `core_common`. **DO NOT** invent an `AppFailure.fromException()` — no such constructor exists.
    - ⚠️ Known gap: `ErrorHandler` has no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch, so every Firebase error collapses to `ServerFailure(code: 9999)` (`"Unknown error occurred"` in release). Add a branch before relying on Firebase error codes in UI.
 3. **Feature Module Boundary**:
@@ -467,7 +467,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 `core_database` provides the **mechanism only** and owns no database, table or DAO — its generated module body is literally `init(gh) {}`.
 
 - **Why**: Drift resolves `@DriftDatabase(tables: [...], daos: [...])` at compile time and a DAO must be `part of` its database library. A single shared `AppDatabase` therefore forces whichever package declares it to own **every** table — reproducing the god-object that § 16/§ 17 exist to prevent.
-- **Rule**: a package that needs relational storage declares **its own database** beside its own tables and DAO. Reference: `platform/data_core/lib/src/database/` holds `CacheDatabase`, `tables/cache_entries_table.dart` and `dao/cache_entries_dao.dart`.
+- **Rule**: a package that needs relational storage declares **its own database** beside its own tables and DAO. Reference: `modules/cache/data/lib/src/database/` holds `CacheDatabase`, `tables/cache_entries_table.dart` and `dao/cache_entries_dao.dart`.
 - `core_database` supplies: `IDatabaseHandle<TDb extends GeneratedDatabase>` (hand a package only the accessor it asks for, plus `transaction`), `IDatabaseMigration` (a package contributes its own upgrade/downgrade steps), `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`.
 - **Accepted trade-off**: SQL cannot join across package boundaries. That is deliberate — crossing a bounded context belongs at the repository layer, not in a query.
 - **Removability**: deleting a package deletes its database with it. A database must open normally when **no** `IDatabaseMigration` is registered.

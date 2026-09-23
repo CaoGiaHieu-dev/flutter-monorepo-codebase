@@ -35,7 +35,7 @@ Use the `run_command` tool to execute the scripts. After completion, present a s
   reachable only through a barrel, a `part` directive, or `build_runner` output; an asset can
   be referenced from an `.arb` file or from native Android/iOS code.
 - Known intentional "unused" items in the template — do **not** delete on the tool's word alone:
-  - the sample cache chain (`CacheEntriesDao` → `CacheEntryLocalDataSource` →
-    `CacheEntryRepositoryImpl` → the three cache use cases) is reference/test scaffolding with
-    no production caller;
+  - the `cache` sample module (`CacheEntriesDao` → `CacheEntryLocalDataSource` →
+    `CacheEntryRepositoryImpl` → the two cache use cases) is reference/test scaffolding with
+    no production caller — remove it with `remove_sample.dart cache` if you do not want it;
 - Run it before a release and after removing a feature package.

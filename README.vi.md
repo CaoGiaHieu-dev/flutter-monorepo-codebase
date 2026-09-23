@@ -36,12 +36,14 @@ graph TD
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
+        DataCache["data_cache"]:::data
     end
 
     subgraph DomainLayer ["⚙️ Domain Layer (platform/domain_core + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
+        DomCache["domain_cache"]:::domain
     end
 
     subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
@@ -126,12 +128,13 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │   ├── storage/                   # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
 │   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
 │   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository + CacheDatabase (tự sở hữu table/DAO của nó)
+│   └── data_core/                 # IBaseRepository, BaseModel, request model
 ├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
 │   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
 │   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
 │   │   ├── data/                  # Model, DataSource, RepositoryImpl
 │   │   └── feature/               # UI + Provider, chỉ còn màn login
+│   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
 │   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
 │   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
@@ -300,11 +303,13 @@ const _uiModules = [
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
+  ExternalModule(DomainCachePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
+  ExternalModule(DataCachePackageModule),
 ];
 
 // Tham chiếu cứng DUY NHẤT có chủ đích của app tới feature package —

@@ -554,7 +554,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 
 **Why:** Drift resolves `@DriftDatabase(tables:, daos:)` at compile time, and a DAO must be `part of` its database library. One shared database therefore forces whichever package declares it to own *every* table — the same god-object coupling the storage rules forbid.
 
-**Rule:** a package needing relational storage declares **its own database** next to its own tables and DAO. Reference: `platform/data_core/lib/src/database/` → `cache_database.dart`, `tables/cache_entries_table.dart`, `dao/cache_entries_dao.dart`.
+**Rule:** a package needing relational storage declares **its own database** next to its own tables and DAO. Reference: `modules/cache/data/lib/src/database/` → `cache_database.dart`, `tables/cache_entries_table.dart`, `dao/cache_entries_dao.dart`.
 
 `core_database` supplies:
 
@@ -586,7 +586,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 6. Add Local DataSource → Repository → UseCase following the cache sample. **DataSource returns a Model** (`CacheEntryModel`), never the Drift row type
 
 > [!NOTE]
-> The cache chain (`CacheEntries` → DAO → DataSource → Repository → 3 UseCases) is **sample scaffolding with no runtime consumer** — it also serves as the test fixture. Do not delete it on the word of `unused_checker`.
+> The cache chain (`CacheEntries` → DAO → DataSource → Repository → 2 UseCases) is the **`cache` sample module** (`modules/cache/{domain,data}`) with no runtime consumer — it also serves as the database tests' fixture. `apps/mobile` composes it, `apps/admin` does not. Remove it with `remove_sample.dart cache`, not on the word of `unused_checker`.
 
 ---
 

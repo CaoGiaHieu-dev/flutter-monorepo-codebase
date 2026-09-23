@@ -188,7 +188,7 @@ its own micro-package module, in the `shell` group — early in `after` (after `
 
 A module that opens a database with `@preResolve` runs its collected `IDatabaseMigration`
 steps **during its own initialisation**, so any package contributing a step must be
-registered before it. `data_core` opens `CacheDatabase` inside `_dataModules`, which means a
+registered before it. `data_cache` opens `CacheDatabase` inside `_dataModules`, which means a
 migration contributed by a *feature* would not be seen — features initialise afterwards.
 
 Nothing in the template hits this yet. When it does: move that feature's module ahead of the

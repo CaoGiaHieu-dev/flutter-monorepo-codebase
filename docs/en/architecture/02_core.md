@@ -264,7 +264,7 @@ See [`../guides/06_storage.md`](../guides/06_storage.md) for the step-by-step.
 
 Runs on a background isolate via `NativeDatabase.createInBackground`. Depends on **no other workspace package**.
 
-This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing. Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. `data_core`'s `CacheDatabase` (`platform/data_core/lib/src/database/`) is the reference wiring.
+This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing. Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. The `cache` sample module's `CacheDatabase` (`modules/cache/data/lib/src/database/`) is the reference wiring.
 
 | Area | Path | Contents |
 |:--|:--|:--|
@@ -288,7 +288,7 @@ ProfileLocalDataSource(IDatabaseHandle handle)
 ```
 
 > [!NOTE]
-> Within one database this is **API-surface isolation, not enforced isolation**: the factory callback still receives the database object, so a determined caller can reach any DAO on it. The value is that crossing that line becomes a deliberate, reviewable act rather than an ordinary constructor parameter. Isolation *between* packages is the real barrier, and it is enforced by the package graph — a package that does not declare `data_core` cannot name `CacheDatabase` at all.
+> Within one database this is **API-surface isolation, not enforced isolation**: the factory callback still receives the database object, so a determined caller can reach any DAO on it. The value is that crossing that line becomes a deliberate, reviewable act rather than an ordinary constructor parameter. Isolation *between* packages is the real barrier, and it is enforced by the package graph — a package that does not declare `data_cache` cannot name `CacheDatabase` at all.
 
 Connection hardening (`foreign_keys = ON`, WAL journal mode, busy timeout) and the corruption-quarantine strategy are covered in [`../guides/07_database.md`](../guides/07_database.md).
 
@@ -342,7 +342,7 @@ Local (workspace) dependencies only — pub.dev packages omitted.
 | `core_network` | `platform_kernel` |
 | `core_notifications` | `platform_kernel` |
 | `core_storage` | `core_common` |
-| `data_core` | `platform_kernel`, `core_database`, `domain_core` |
+| `data_core` | `platform_kernel`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
 | `bloc_state_management` | `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `domain_core` *(approved exception)* |

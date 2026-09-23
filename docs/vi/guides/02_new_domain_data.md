@@ -240,16 +240,14 @@ Thư mục là `data_sources/remote/` (Retrofit) và `data_sources/local/` (stor
 > DataSource trả về **Model**, không trả Entity — việc map sang entity là của repository. Nó cũng
 > không được để lộ kiểu *sinh tự động* trong chữ ký hàm: một class row của Drift hay một envelope
 > của Retrofit lọt qua interface sẽ trói mọi bên tiêu thụ vào thư viện đó. Mẫu cache trong
-> `data_core` cho thấy pattern này — interface chỉ nói bằng `CacheEntryModel` của chính nó, và
+> `data_cache` cho thấy pattern này — interface chỉ nói bằng `CacheEntryModel` của chính nó, và
 > chuyển đổi row Drift ngay tại biên:
 >
 > ```dart
 > abstract class ICacheEntryLocalDataSource {
 >   Future<void> save(String key, String value);
->   Future<String?> get(String key);
+>
 >   Future<CacheEntryModel?> getEntry(String key);
->   Future<void> delete(String key);
->   Future<List<CacheEntryModel>> getAll();
 > }
 > ```
 
@@ -311,7 +309,7 @@ class AuthLocalDataSource {
 
 Kế thừa `IBaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
 `executeSync()` (đồng bộ). Code thật từ
-[`platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
+[`modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
 @LazySingleton(as: ICacheEntryRepository)

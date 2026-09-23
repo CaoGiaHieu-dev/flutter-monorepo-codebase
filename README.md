@@ -36,12 +36,14 @@ graph TD
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
+        DataCache["data_cache"]:::data
     end
 
     subgraph DomainLayer ["⚙️ Domain Layer (platform/domain_core + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
+        DomCache["domain_cache"]:::domain
     end
 
     subgraph CoreLayer ["🛠️ Core Infrastructure Layer (platform/*)"]
@@ -127,12 +129,13 @@ Below is the complete physical organization structure of the Workspace:
 │   ├── storage/                   # StorageManager + StorageValue<T> (defines NO keys)
 │   ├── ui_kit/                    # core_ui_kit — reusable widgets every module may use
 │   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository + CacheDatabase (owns its own tables/DAO)
+│   └── data_core/                 # IBaseRepository, BaseModel, request models
 ├── modules/                       # One vertical slice per bounded context, one per team
 │   ├── auth/                      # Sample: the full three-layer slice
 │   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
 │   │   ├── data/                  # Models, DataSources, RepositoryImpl
 │   │   └── feature/               # UI + Provider, login only
+│   ├── cache/                     # Sample: a package-owned Drift database (domain + data, no UI)
 │   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
 │   ├── settings/feature/          # Sample: consuming another module's contract
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom-bar host)
@@ -213,7 +216,7 @@ All tools can be run from the root directory.
 ### Separation of Concerns
 1. **Domain Layer (`modules/*/domain`)**:
    - **Pure Dart, enforced by the package graph** — not merely by convention. `domain_core` has
-     **zero** workspace dependencies and neither domain package declares the Flutter SDK.
+     **zero** workspace dependencies and no domain package declares the Flutter SDK.
    - Do not import `flutter/material.dart`, `dio`, `retrofit`, or any UI/Network library.
    - Defines `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` and `AppFailure`.
 2. **Data Layer (`modules/*/data`)**:
@@ -301,11 +304,13 @@ const _uiModules = [
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
+  ExternalModule(DomainCachePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
+  ExternalModule(DataCachePackageModule),
 ];
 
 // The app's ONLY intentional hard reference to feature packages —

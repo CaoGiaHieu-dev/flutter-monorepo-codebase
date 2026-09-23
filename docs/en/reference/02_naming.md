@@ -22,7 +22,7 @@ Every example below is a real path in this repository — open it to see the con
 | Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user/user_entity.dart` |
 | Repository interface | `i_<name>_repository.dart` | prefix `I` | `modules/auth/domain/lib/src/repositories/i_auth_repository.dart` |
 | Repository impl | `_repository_impl.dart` | `RepositoryImpl` | `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart` |
-| Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `platform/data_core/lib/src/models/cache_entry_model.dart` |
+| Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `modules/cache/data/lib/src/models/cache_entry_model.dart` |
 | Request DTO | `_request.dart` | `Request` | `platform/data_core/lib/src/models/base_request.dart` |
 | Data source | `_data_source.dart` | `DataSource` | `modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart` |
 | Navigator interface | `<name>_navigator.dart` | `Navigator` | `platform/di/lib/src/navigators/auth_navigator.dart` |

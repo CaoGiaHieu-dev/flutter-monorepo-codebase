@@ -79,7 +79,7 @@ Everything else in `platform/*` has **zero** local-package dependencies beyond o
 
 ## 3. Why a Pub Workspace monorepo
 
-Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 26 members today (23 packages, two apps, and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
+Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 28 members today (25 packages, two apps, and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
 
 **What you gain:** fast incremental compilation, no version drift between packages, refactors that cross package boundaries in a single commit, and physical enforcement of layering — a feature package *cannot* import `data_auth` if its `pubspec.yaml` does not declare it.
 

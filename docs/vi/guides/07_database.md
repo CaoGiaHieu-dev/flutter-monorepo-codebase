@@ -23,7 +23,7 @@
 void initMicroPackage() {}
 ```
 
-**Mỗi package sở hữu dữ liệu lưu trữ sẽ tự khai database của riêng nó**, đặt cạnh bảng, DAO và data source của chính nó. `CacheDatabase` trong `data_core` là bản wiring tham chiếu.
+**Mỗi package sở hữu dữ liệu lưu trữ sẽ tự khai database của riêng nó**, đặt cạnh bảng, DAO và data source của chính nó. `CacheDatabase` của module mẫu `cache` (package `data_cache`, trong `modules/cache/data`) là bản wiring tham chiếu.
 
 ### Vì sao — đây là ràng buộc của Drift, không phải sở thích
 
@@ -67,14 +67,14 @@ Cái giá đó là có chủ đích. Vượt bounded context là việc của t�
 
 ## 3. Cách làm: tạo database riêng cho package của bạn
 
-Làm trọn vẹn theo đúng wiring thật của `data_core`. Thay tên package của bạn vào.
+Làm trọn vẹn theo đúng wiring thật của `data_cache`. Thay tên package của bạn vào.
 
 ### Bước 1 — Định nghĩa bảng
 
 Class kế thừa `Table` là độc lập: nó không tham chiếu database nào, nên nằm ở package của bạn được.
 
 ```dart
-// platform/data_core/lib/src/database/tables/cache_entries_table.dart
+// modules/cache/data/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
 /// Example table — stores arbitrary string payloads keyed by a unique id.
@@ -98,7 +98,7 @@ class CacheEntries extends Table {
 ### Bước 2 — Định nghĩa DAO dưới dạng `part of` database
 
 ```dart
-// platform/data_core/lib/src/database/dao/cache_entries_dao.dart
+// modules/cache/data/lib/src/database/dao/cache_entries_dao.dart
 part of '../cache_database.dart';
 
 /// Data access object for [CacheEntries].
@@ -124,9 +124,6 @@ class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
       cacheEntries,
     )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
-
-  /// Clears the entire cache table.
-  Future<int> clearAll() => delete(cacheEntries).go();
 }
 ```
 
@@ -137,9 +134,9 @@ Dòng `part of` là bắt buộc — đó là yêu cầu của Drift, và là l�
 Theo luật chung của repo, constants nằm ở `utils/` của package sở hữu:
 
 ```dart
-// platform/data_core/lib/src/utils/data_core_constants.dart
-class DataCoreConstants {
-  DataCoreConstants._();
+// modules/cache/data/lib/src/utils/cache_constants.dart
+class CacheConstants {
+  CacheConstants._();
 
   /// On-disk SQLite file for this package's [CacheDatabase], resolved inside
   /// the app documents directory.
@@ -147,7 +144,7 @@ class DataCoreConstants {
   /// Named after its owner rather than the app, because each package that
   /// persists data opens its own file. Changing this value points the package
   /// at a different database and makes existing on-device rows unreachable.
-  static const String CACHE_DATABASE_FILE_NAME = 'data_core_cache.sqlite';
+  static const String DATABASE_FILE_NAME = 'cache.sqlite';
 }
 ```
 
@@ -157,7 +154,7 @@ class DataCoreConstants {
 ### Bước 4 — Khai class database
 
 ```dart
-// platform/data_core/lib/src/database/cache_database.dart
+// modules/cache/data/lib/src/database/cache_database.dart
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
@@ -171,7 +168,7 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Opens the cache database on a background isolate.
   static Future<CacheDatabase> open({
-    String fileName = DataCoreConstants.CACHE_DATABASE_FILE_NAME,
+    String fileName = CacheConstants.DATABASE_FILE_NAME,
     int readPool = DatabaseConstants.DEFAULT_READ_POOL,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
@@ -208,9 +205,9 @@ Hai điểm cần copy nguyên xi:
 ### Bước 5 — Đăng ký trong module DI của bạn
 
 ```dart
-// platform/data_core/lib/di/module.dart
+// modules/cache/data/lib/di/module.dart
 @module
-abstract class DataCoreDiModule {
+abstract class DataCacheDiModule {
   @preResolve
   @lazySingleton
   Future<CacheDatabase> cacheDatabase() =>
@@ -221,8 +218,7 @@ abstract class DataCoreDiModule {
   IDatabaseHandle<CacheDatabase> cacheDatabaseHandle(CacheDatabase database) =>
       DatabaseHandle<CacheDatabase>(database);
 
-  /// Reads contributed migrations without throwing when none are registered,
-  /// matching the `getAllOrEmpty` behaviour the app shell uses for routes.
+  /// Reads contributed migrations without throwing when none are registered.
   static Iterable<IDatabaseMigration> _registeredMigrations() {
     final getIt = GetIt.instance;
     if (!getIt.isRegistered<IDatabaseMigration>()) {
@@ -236,12 +232,12 @@ abstract class DataCoreDiModule {
 Cái guard `isRegistered` rất quan trọng: `getAll<T>()` **ném lỗi** khi chưa có gì đăng ký cho `T`. Không có guard này, một bản build không có migration nào sẽ crash ngay trong `configureDependencies()`.
 
 > [!WARNING]
-> **Thứ tự đăng ký.** `@preResolve` mở database — tức là chạy migration — ngay trong lúc module này khởi tạo. Một `IDatabaseMigration` được đăng ký bởi module khởi tạo *sau đó* sẽ vô hình tại thời điểm ấy. Package nào đóng góp bước migration cho database này phải được wire **trước** `DataCorePackageModule` trong `configureDependencies()` của host. Hiện template chưa chạm phải tình huống này, nhưng nó sẽ cắn ngay khi feature đầu tiên thêm migration cho database của package khác. Xem [`05_di.md`](05_di.md) về thứ tự module.
+> **Thứ tự đăng ký.** `@preResolve` mở database — tức là chạy migration — ngay trong lúc module này khởi tạo. Một `IDatabaseMigration` được đăng ký bởi module khởi tạo *sau đó* sẽ vô hình tại thời điểm ấy. Package nào đóng góp bước migration cho database này phải nằm ở **nhóm DI sớm hơn** `data_cache` trong `app_manifest.yaml` của app. Hiện template chưa chạm phải tình huống này, nhưng nó sẽ cắn ngay khi feature đầu tiên thêm migration cho database của package khác. Xem [`05_di.md`](05_di.md) về thứ tự module.
 
 ### Bước 6 — Dùng qua `IDatabaseHandle`, không dùng thẳng database
 
 ```dart
-// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -275,20 +271,18 @@ await _handle.transaction(() async {
 ### Bước 7 — Trả về Model, không bao giờ trả row của Drift
 
 ```dart
-// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
-  Future<String?> get(String key);
+
   Future<CacheEntryModel?> getEntry(String key);
-  Future<void> delete(String key);
-  Future<List<CacheEntryModel>> getAll();
 }
 ```
 
 `CacheEntry` — class Drift sinh cho một row — không xuất hiện trong bất kỳ chữ ký nào. Việc chuyển đổi diễn ra ngay tại biên:
 
 ```dart
-// platform/data_core/lib/src/models/cache_entry_model.dart
+// modules/cache/data/lib/src/models/cache_entry_model.dart
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -322,7 +316,7 @@ Nó cố ý **không** dùng `json_serializable`: dữ liệu đến từ SQLite
 ### Bước 8 — Chạy codegen và barrel
 
 ```bash
-dart tools/barrel_generator/generate.dart platform/data_core/lib
+dart tools/barrel_generator/generate.dart modules/cache/data/lib
 dart run build_runner build -d --workspace
 ```
 
@@ -436,7 +430,7 @@ beforeOpen: (OpeningDetails details) async {
 | `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi `readPool > 1`; tránh lỗi "database is locked" khi tranh chấp. |
 | `busy_timeout = 5000` | Chờ khoá được nhả thay vì fail ngay với `SQLITE_BUSY`. Mặc định là `0`. |
 
-WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_core` phải chạy trên **file thật**.
+WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_cache` phải chạy trên **file thật**.
 
 Tập trung hoá vì đúng một lý do: một package tự viết `MigrationStrategy` riêng mà quên `foreign_keys = ON` sẽ mất toàn vẹn tham chiếu mà không có lỗi nào báo.
 
@@ -537,8 +531,8 @@ Bộ test hiện có được chia theo đúng vị trí code:
 |---|---|---|
 | `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, registry rỗng |
 | `core_database` | `drift_database_opener_test.dart` | Trực tiếp predicate phát hiện hỏng — gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
-| `data_core` | `cache_database_test.dart` | Round-trip DAO, wiring migration, và hành vi trên **file thật** (WAL, khoá ngoại, dữ liệu sống sót qua close/reopen) |
-| `data_core` | `database_handle_test.dart` | Accessor đọc/ghi, chung một kết nối, transaction commit / rollback / giá trị trả về |
+| `data_cache` | `cache_database_test.dart` | Round-trip DAO, wiring migration, và hành vi trên **file thật** (WAL, khoá ngoại, dữ liệu sống sót qua close/reopen) |
+| `data_cache` | `database_handle_test.dart` | Accessor đọc/ghi, chung một kết nối, transaction commit / rollback / giá trị trả về |
 
 Hai thói quen đáng học:
 
@@ -547,12 +541,12 @@ Hai thói quen đáng học:
 
 ---
 
-## 9. Chuỗi cache là code mẫu
+## 9. Module cache là code mẫu
 
 > [!NOTE]
-> Chuỗi cache — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` / `GetAllCacheEntriesUseCase` — được wire trọn vẹn và đăng ký đầy đủ trong DI, nhưng **không feature nào trong template này tiêu thụ nó**. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
+> Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire trọn vẹn, nhưng **không feature nào trong template này tiêu thụ nó**. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
 >
-> Hãy copy hình dạng này cho bảng thật. Xoá cả chuỗi nếu bạn không cần cache — không gì khác tham chiếu tới nó.
+> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache`. Các test database đi theo nó; chúng kiểm tra `DatabaseHandle` và `driftMigrationStrategy` của `core_database` qua fixture này, nên muốn giữ phần kiểm tra đó thì hãy cho chúng một fixture khác trước khi xoá.
 
 ---
 

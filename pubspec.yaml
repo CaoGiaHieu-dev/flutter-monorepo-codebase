@@ -11,6 +11,8 @@ workspace:
   - modules/auth/data
   - modules/auth/domain
   - modules/auth/feature
+  - modules/cache/data
+  - modules/cache/domain
   - modules/dashboard/feature
   - modules/home/feature
   - modules/onboarding/feature

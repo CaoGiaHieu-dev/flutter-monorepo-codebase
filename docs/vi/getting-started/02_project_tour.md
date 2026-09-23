@@ -38,12 +38,13 @@ flutter-monorepo-codebase/
 │   ├── storage/                   # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
 │   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
 │   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository + CacheDatabase (tự sở hữu table/DAO của nó)
+│   └── data_core/                 # IBaseRepository, BaseModel, request model
 ├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
 │   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
 │   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
 │   │   ├── data/                  # Model, DataSource, RepositoryImpl
 │   │   └── feature/               # UI + Provider, chỉ còn màn login
+│   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
 │   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
 │   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
@@ -53,7 +54,7 @@ flutter-monorepo-codebase/
 ├── docs/                   # Chính bộ tài liệu này (en/ + vi/)
 ├── .agents/                # Luật AGENTS.md + skills cho AI agent
 │
-├── pubspec.yaml            # Gốc workspace — liệt kê đủ 26 thành viên
+├── pubspec.yaml            # Gốc workspace — liệt kê đủ 28 thành viên
 ├── pubspec_dependencies.yaml  # Catalog version — nguồn chân lý duy nhất
 ├── pubspec.lock            # MỘT file lock cho cả workspace
 └── analysis_options.yaml
@@ -92,6 +93,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
 | `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, entity/usecase cache |
+| `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
 | `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
 ### Data — `modules/*/data`
@@ -100,7 +102,8 @@ Hiện thực hợp đồng của domain. Data source trả về **Model**, khô
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, data source + repository cache |
+| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_cache` | `modules/cache/data` | `CacheDatabase` + bảng `CacheEntries` + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
 | `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
 ### Features — `modules/*/feature`
@@ -214,7 +217,7 @@ Những hệ quả bạn bắt buộc phải biết:
 | Thêm quy tắc nghiệp vụ / use case | `modules/<tên>/domain/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
 | Thêm endpoint API | `modules/<tên>/data/lib/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Lưu một cặp key/value | Thư mục `utils/*_storage_keys.dart` của package **sở hữu** | [../guides/06_storage.md](../guides/06_storage.md) |
-| Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `platform/data_core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
+| Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `modules/cache/data/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Đổi màu / khoảng cách / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |

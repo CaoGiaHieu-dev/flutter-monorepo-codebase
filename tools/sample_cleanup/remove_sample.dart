@@ -144,20 +144,6 @@ void _printClassification(YamlMap manifest) {
     }
   }
 
-  final embedded = manifest['embedded_samples'] as YamlMap?;
-  if (embedded != null) {
-    stdout.writeln('');
-    stdout.writeln('SAMPLE NẰM TRONG PACKAGE FRAMEWORK — xoá theo FILE, không xoá package');
-    stdout.writeln('-' * 78);
-    embedded.forEach((name, value) {
-      final entry = value as YamlMap;
-      final files = (entry['files'] as YamlList?)?.length ?? 0;
-      stdout.writeln('  ${(name as String).padRight(28)} '
-          '$files file trong ${(entry['lives_in'] as YamlList).join(', ')}');
-      stdout.writeln('  ${' '.padRight(28)} ${entry['warning']}');
-    });
-  }
-
   final bundles = manifest['bundles'] as YamlMap;
   stdout.writeln('');
   stdout.writeln('BUNDLE GỠ ĐƯỢC: ${bundles.keys.join(', ')}');

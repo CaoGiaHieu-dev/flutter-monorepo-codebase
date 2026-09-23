@@ -46,6 +46,7 @@
 /modules/dashboard/             @your-org/team-shell
 /modules/onboarding/            @your-org/team-shell
 /modules/splash/                @your-org/team-shell
+/modules/cache/                 @your-org/infra
 
 # ---------------------------------------------------------------------------
 # Apps — the composition layer, owned by tech leads.

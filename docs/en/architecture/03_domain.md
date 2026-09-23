@@ -177,13 +177,13 @@ abstract class BaseUseCase<RType, Params> {
 }
 ```
 
-`FutureOr` is deliberate: a use case reading local storage can be fully synchronous (see `GetLanguageUseCase` below) while a network one returns a `Future`.
+`FutureOr` is deliberate: a use case reading local storage can be fully synchronous (`LogoutUseCase` returns a plain `Result<void>`) while a network one returns a `Future`.
 
 Use `NoParams()` when an operation takes no input.
 
 ### Cache sample
 
-`domain_core` also ships a working cache slice — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, and `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` / `GetAllCacheEntriesUseCase`. It is the domain half of the Drift example described in [the database guide](../guides/07_database.md).
+The second sample domain package, `domain_cache` (`modules/cache/domain`), is a smaller slice — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, and `GetCacheEntryUseCase` / `SaveCacheEntryUseCase`. It is the domain half of the Drift example described in [the database guide](../guides/07_database.md).
 
 ---
 

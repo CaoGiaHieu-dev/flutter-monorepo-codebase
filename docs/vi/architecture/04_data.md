@@ -52,7 +52,7 @@ Các package hiện có:
 
 | Package | Nội dung |
 |:---|:---|
-| `data_core` | `IBaseRepository`, `BaseModel`, request model, ví dụ cache |
+| `data_core` | `IBaseRepository`, `BaseModel`, request model |
 | `data_auth` | `UserModel`, data source auth, `AuthRepositoryImpl` |
 
 ---
@@ -178,7 +178,7 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
 ### Model cho database
 
-`platform/data_core/lib/src/models/cache_entry_model.dart` — Freezed, **không** dùng `json_serializable`:
+`modules/cache/data/lib/src/models/cache_entry_model.dart` — Freezed, **không** dùng `json_serializable`:
 
 ```dart
 @freezed
@@ -217,20 +217,18 @@ Nhiệm vụ của data source dừng ở mức "object có kiểu". Ánh xạ s
 
 ### Quy tắc 2 — không để lộ kiểu của tầng vận chuyển
 
-Đây chính là lý do `CacheEntryModel` tồn tại. `platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
+Đây chính là lý do `CacheEntryModel` tồn tại. `modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
 ```dart
 /// Contract for reading/writing cache rows.
 ///
 /// Signatures speak in [CacheEntryModel], never in Drift's generated row
-/// class — that keeps Drift an implementation detail of `data_core` instead
+/// class — that keeps Drift an implementation detail of `data_cache` instead
 /// of leaking it to every consumer of this package.
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
-  Future<String?> get(String key);
+
   Future<CacheEntryModel?> getEntry(String key);
-  Future<void> delete(String key);
-  Future<List<CacheEntryModel>> getAll();
 }
 ```
 
@@ -239,23 +237,19 @@ Lớp hiện thực chuyển đổi ngay tại ranh giới, và nhận **handle 
 ```dart
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
-  CacheEntryLocalDataSource(IDatabaseHandle handle)
+  CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
     : _dao = handle.accessor(CacheEntriesDao.new);
 
   final CacheEntriesDao _dao;
+
+  @override
+  Future<void> save(String key, String value) => _dao.upsert(key, value);
 
   @override
   Future<CacheEntryModel?> getEntry(String key) async {
     final row = await _dao.getEntry(key);
     return row == null ? null : CacheEntryModel.fromRow(row);
   }
-
-  @override
-  Future<List<CacheEntryModel>> getAll() async {
-    final rows = await _dao.getAll();
-    return rows.map(CacheEntryModel.fromRow).toList();
-  }
-  // …
 }
 ```
 

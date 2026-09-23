@@ -241,7 +241,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 - **DataSource trả Model, không bao giờ trả Entity** — và không bao giờ trả class do Drift sinh.
 - Không bao giờ `throw` từ Data lên UI; trả về `Result.failure(AppFailure)`.
 
-**Vì sao có luật Model.** Trả về class row của Drift làm rò rỉ thư viện lưu trữ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`platform/data_core/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
+**Vì sao có luật Model.** Trả về class row của Drift làm rò rỉ thư viện lưu trữ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`modules/cache/data/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
 
 ---
 

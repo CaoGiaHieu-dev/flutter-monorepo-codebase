@@ -86,7 +86,7 @@ abstract class ProductModel with _$ProductModel implements BaseModel<ProductEnti
 
 > [!NOTE]
 > For a **database-backed** source the model wraps the Drift row instead of JSON — see
-> `platform/data_core/lib/src/models/cache_entry_model.dart`, which exposes
+> `modules/cache/data/lib/src/models/cache_entry_model.dart`, which exposes
 > `CacheEntryModel.fromRow(CacheEntry)` so Drift's generated class never leaves the package.
 
 ### Step 2: Configure Retrofit API Service

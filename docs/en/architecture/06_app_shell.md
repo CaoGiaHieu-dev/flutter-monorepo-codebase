@@ -178,7 +178,7 @@ It is also the same slot these registrations occupied before the shell became a 
 > [!CAUTION]
 > An eager `@Singleton` is constructed **at registration time**. If it depends on a type registered by a module that runs *later*, startup throws `… is not registered`.
 >
-> `flutter analyze` cannot detect this — it is a runtime ordering fault. Verify by reading the generated `apps/mobile/lib/di/injection.config.dart` and checking that every dependency appears *above* its consumer.
+> `flutter analyze` cannot detect this — it is a runtime ordering fault. Verify by reading the generated files: `apps/mobile/lib/di/injection.config.dart` gives the module order, and each package's `lib/di/module.module.dart` its per-type registrations — every `gh<Dep>()` an eager singleton makes must be registered *above* it, or by a module that initialises earlier.
 
 Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `IAuthSessionGateway` at call time instead, and has no cross-module constructor dependency.)
 

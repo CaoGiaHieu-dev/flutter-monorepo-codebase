@@ -31,7 +31,9 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
-| Route module | `_route_module.dart` | `RouteModule` | `modules/home/feature/lib/src/routing/home_route_module.dart` |
+| Định nghĩa route (`GoRouteData`) | `_route_module.dart` | `Route` | `modules/home/feature/lib/src/routing/home_route_module.dart` (khai `HomeRoute`) |
+| Đóng góp route stack (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` |
+| Điểm đến điều hướng (`INavDestinationModule`) | `_nav_destination.dart` | `NavDestination` | `modules/home/feature/lib/src/routing/home_nav_destination.dart` |
 | Route path | `<feature>_path.dart` | `Path` | `modules/home/feature/lib/src/utils/home_path.dart` |
 | Storage key | `<owner>_storage_keys.dart` | `StorageKeys` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
 | API endpoint | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
@@ -116,7 +118,7 @@ lib/src/src.dart                  → export barrel của mọi thư mục con
 lib/<package_name>.dart           → API công khai của package
 ```
 
-Sinh bằng `dart tools/barrel_generator/generate.dart <path>/lib`. Generator bỏ qua `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, và mọi file khai `part of` — những file đó được với tới qua thư viện cha.
+Sinh bằng `dart tools/barrel_generator/generate.dart <path>/lib`. Generator bỏ qua `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, và mọi file khai `part of` — những file đó được với tới qua thư viện cha. Các file sinh khác đang có trên đĩa (`module.module.dart`, `injection.config.dart`, `lib/src/gen/**`) *vẫn* được export, nên hãy chạy nó sau `build_runner` / `gen-l10n`.
 
 > [!CAUTION]
 > Generator **xoá sạch mọi dòng `export` viết tay** mỗi lần chạy. Muốn re-export một symbol từ package khác thì đặt `export` trong một file nguồn bình thường (shim), đừng đặt trong barrel.
@@ -127,7 +129,7 @@ Sinh bằng `dart tools/barrel_generator/generate.dart <path>/lib`. Generator b�
 
 | Mẫu tên | Do ai sinh |
 |---|---|
-| `*.g.dart` | `json_serializable`, `retrofit`, `drift` |
+| `*.g.dart` | `json_serializable`, `retrofit`, `drift`, `go_router_builder` (route có kiểu) |
 | `*.freezed.dart` | `freezed` |
 | `*.module.dart` | `injectable` (module từng package) |
 | `*.config.dart` | `injectable` (lắp ráp ở tầng app) |

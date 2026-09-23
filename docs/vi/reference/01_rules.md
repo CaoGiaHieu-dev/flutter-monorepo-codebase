@@ -13,7 +13,7 @@
 
 ## 1. Hướng phụ thuộc
 
-**Luật.** Phụ thuộc luôn hướng vào trong: `Feature → Domain ← Data`, với `core/*` là hạ tầng nằm dưới. **Không package `core/*` nào được phụ thuộc `feature_*` hay `data_*`** — cả bằng import lẫn bằng khai báo trong `pubspec.yaml`.
+**Luật.** Phụ thuộc luôn hướng vào trong: `Feature → Domain ← Data`, với `core/*` là hạ tầng nằm dưới. **Không package `core/*` nào được phụ thuộc `feature_*`, `data_*` hay `domain_*`** — cả bằng import lẫn bằng khai báo trong `pubspec.yaml` — trừ các cạnh `→ domain_core` đã duyệt dưới đây. Luật **R1** của `arch_check` chặn mọi cạnh khác.
 
 **Vì sao.** Core là vòng hạ tầng trong cùng. Nếu core với tay ngược lên trên, vòng tròn khép lại thành chu trình và không tầng nào phía trên có thể gỡ ra hay tái sử dụng độc lập được nữa.
 
@@ -40,15 +40,19 @@ Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật `AGEN
 **Kiểm chứng**
 
 ```bash
-# core tuyệt đối không được nhắc tên package feature hay data
+# R1 — phép kiểm chính thức; mỗi lần chạy đều in ra các cạnh đã duyệt
+dart tools/arch_check/check.dart
+
+# core tuyệt đối không được nhắc tên package feature, data hay domain của sản phẩm
 grep -rn "package:feature_\|package:data_" platform/*/lib
 grep -lE "^  (feature_|data_)" platform/*/pubspec.yaml
+grep -rn "package:domain_" platform/*/lib | grep -v "package:domain_core"
 
 # domain tuyệt đối không chạm Flutter
 grep -rn "package:flutter" modules/*/domain/lib
 ```
 
-Cả ba lệnh phải không trả về gì.
+`arch_check` phải pass, và bốn lệnh grep phải không trả về gì.
 
 ❌ **Sai** — package core mượn widget của feature:
 ```dart
@@ -69,17 +73,18 @@ import 'default_state_widgets.dart';   // đi kèm package
 
 **Vì sao.** Pub Workspaces dùng chung một `package_config.json`, nên import thiếu khai báo **vẫn compile được cục bộ**. Lỗi chỉ lộ ra khi tách package ra hoặc publish — còn mục thừa thì tạo ra ràng buộc ma, che giấu vi phạm phân tầng thật.
 
-**Kiểm chứng**
+**Kiểm chứng** — hai nửa của luật do hai tool kiểm:
 
 ```bash
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/arch_check/check.dart                      # R5: import trong lib/ nhưng thiếu ở `dependencies:` (khai ở dev_dependencies không được tính)
+dart tools/unused_checker/check_unused_packages.dart  # đã khai ở `dependencies:` nhưng không hề import
 ```
 
 ---
 
-## 3. Bắt buộc có thư mục `utils/`
+## 3. Hằng số nằm trong `utils/`
 
-**Luật.** Mọi package, ở mọi tầng, giữ hằng số của chính nó trong thư mục `utils/` bên trong package đó. Một hằng số có đúng **một** chủ sở hữu. Cấm tạo file constants dùng chung xuyên domain.
+**Luật.** Mọi package, ở mọi tầng, giữ hằng số public của chính nó trong thư mục `utils/` bên trong package đó. Package không có hằng số nào thì không cần thư mục `utils/` — luật **R4** của `arch_check` bắt `static const` public nằm ngoài `utils/` (hoặc `styles/`) và không bao giờ đòi một thư mục rỗng. Một hằng số có đúng **một** chủ sở hữu. Cấm tạo file constants dùng chung xuyên domain.
 
 **Vì sao.** File constants dùng chung cho phép bất kỳ package nào đọc — và gõ nhầm — key của domain khác. Storage key và API endpoint là hai thứ dễ bị gom thành god-object nhất; cả hai đều thuộc về package sở hữu dữ liệu.
 
@@ -163,11 +168,12 @@ Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvid
 > [!CAUTION]
 > **`flutter analyze` KHÔNG bắt được loại lỗi này.** Nó chỉ lộ ra lúc chạy thật, trên một lần boot thật.
 
-**Kiểm chứng** — sau khi đổi bất kỳ annotation DI hay constructor nào, đọc file sinh ra và xác nhận phụ thuộc của mỗi đăng ký eager xuất hiện **trước** nó trong `init()`:
+**Kiểm chứng** — sau khi đổi bất kỳ annotation DI hay constructor nào, đọc hai loại file sinh ra. `apps/mobile/lib/di/injection.config.dart` chỉ chứa **thứ tự module** (mỗi package một lệnh `…PackageModule().init(gh)`, cộng phần `FirebaseOptions` của chính app); còn đăng ký theo từng type — kèm các lệnh `gh<Dep>()` mà constructor của nó gọi — nằm trong `lib/di/module.module.dart` của từng package. Một `gh.singleton…` eager (kể cả `singletonAsync`) chỉ an toàn khi mọi `gh<Dep>()` nó gọi đã được đăng ký phía trên nó trong chính file đó, hoặc bởi một module có `init` chạy sớm hơn:
 
 ```bash
 dart run build_runner build -d --workspace
-grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.config.dart
+grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart       # thứ tự module
+grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # đăng ký eager và các lệnh gh<Dep>() của nó
 ```
 
 `@PostConstruct(preResolve: true)` trên `@lazySingleton` được await trong lúc module init rồi đăng ký lại thành lazy singleton đồng bộ thuần, nên các lệnh `gh<T>()` đồng bộ về sau đều an toàn.
@@ -193,13 +199,13 @@ Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng
 > [!WARNING]
 > `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. `getAll` ném lỗi khi type chưa đăng ký, nên một lệnh `getAll<IFeatureLocalization>()` trần sẽ làm app crash ngay lúc dựng `MaterialApp` ở bất kỳ bản build nào không có feature nào đóng góp.
 
-**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` mà implementer duy nhất nằm trong một package `modules/*/feature`, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
+**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` được implement bởi một package dưới `modules/` — ở bất kỳ tầng nào: `IAuthSessionGateway` trong `data_auth` cũng tính như navigator của một feature — gắn với module implement nó, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
 
 ```bash
 dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_check.yml
 ```
 
-Đây không phải luật về phong cách. Lookup ném lỗi vẫn **compile được**: package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature implement contract đó, nên `flutter analyze` không thấy gì sai. Nó chỉ vỡ lúc runtime, ở bản build không có feature đó, trên đúng màn hình nào gọi tới. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký nên nằm ngoài tập hợp này; feature được miễn trừ với chính contract của nó.
+Đây không phải luật về phong cách. Lookup ném lỗi vẫn **compile được**: package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature implement contract đó, nên `flutter analyze` không thấy gì sai. Nó chỉ vỡ lúc runtime, ở bản build không có feature đó, trên đúng màn hình nào gọi tới. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký nên nằm ngoài tập hợp này. Module bị gỡ nguyên khối, nên mọi package của chính module implement được phép resolve contract của nó theo kiểu eager.
 
 **Gỡ một feature** — manifest là file duy nhất sửa bằng tay:
 
@@ -238,7 +244,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 - Thư mục là `data_sources/remote/` và `data_sources/local/` — **snake_case, số nhiều `data_sources`**, không bao giờ là `datasources/`.
 - `RepositoryImpl` kế thừa `IBaseRepository` và bọc công việc trong `execute()` (async) hoặc `executeSync()`.
 - Lỗi chuyển đổi qua `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`.
-- **DataSource trả Model, không bao giờ trả Entity** — và không bao giờ trả class do Drift sinh.
+- **DataSource trả Model, không bao giờ trả Entity** — và không bao giờ trả class do Drift sinh. Lớp bọc duy nhất được phép là envelope phản hồi `BaseEntity<T>` của `domain_core`: `AuthRemoteDataSource` trả `Future<BaseEntity<UserModel>>`, và repository bóc nó ra trong `mapper` của `execute`.
 - Không bao giờ `throw` từ Data lên UI; trả về `Result.failure(AppFailure)`.
 
 **Vì sao có luật Model.** Trả về class row của Drift làm rò rỉ thư viện lưu trữ vào mọi nơi tiêu thụ package. `CacheEntryModel` (`modules/cache/data/lib/src/models/cache_entry_model.dart`) tồn tại thuần tuý làm lớp chắn đó.
@@ -446,13 +452,14 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 
 | Kiểm tra | Lệnh |
 |---|---|
-| Dependency thừa / thiếu khai báo | `dart tools/unused_checker/check_unused_packages.dart` |
+| Dependency thiếu khai báo (import mà không có trong `dependencies:`) | `dart tools/arch_check/check.dart` (R5) |
+| Dependency thừa (đã khai mà không import) | `dart tools/unused_checker/check_unused_packages.dart` |
 | Lệch version catalog | `dart tools/dependency_sync.dart --check` |
 | Asset, file, translation thừa | `dart tools/unused_checker/check_script.dart` |
 | Phân tích tĩnh | `flutter analyze` |
 | Code sinh đã cập nhật chưa | `dart run build_runner build -d --workspace` |
-| An toàn thứ tự DI | đọc `apps/mobile/lib/di/injection.config.dart` |
-| core ⇏ feature | `grep -rn "package:feature_" platform/*/lib` |
+| An toàn thứ tự DI | thứ tự module trong `apps/mobile/lib/di/injection.config.dart`; đăng ký theo type trong `lib/di/module.module.dart` của từng package |
+| core ⇏ feature / data / domain của sản phẩm | `dart tools/arch_check/check.dart` (R1) |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
 | App shell không import module nào | `dart tools/arch_check/check.dart` (R10) |
 | Domain thuần Dart | `grep -rn "package:flutter" modules/*/domain/lib` |

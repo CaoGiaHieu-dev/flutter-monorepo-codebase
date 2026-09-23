@@ -400,9 +400,9 @@ dependencies:
 Rồi sinh lại:
 
 ```bash
+dart run build_runner build -d --workspace
 dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 dart tools/barrel_generator/generate.dart modules/payment/data/lib
-dart run build_runner build -d --workspace
 flutter analyze
 ```
 

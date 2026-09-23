@@ -316,8 +316,8 @@ It is deliberately **not** `json_serializable`: rows come from SQLite, not from 
 ### Step 8 — Run codegen and barrels
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/cache/data/lib
 dart run build_runner build -d --workspace
+dart tools/barrel_generator/generate.dart modules/cache/data/lib
 ```
 
 ---

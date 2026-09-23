@@ -409,8 +409,8 @@ Checklist:
 Sau đó:
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/<name>/data/lib
 dart run build_runner build -d --workspace
+dart tools/barrel_generator/generate.dart modules/<name>/data/lib
 ```
 
 ---

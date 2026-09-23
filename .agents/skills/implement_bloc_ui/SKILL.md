@@ -106,6 +106,20 @@ class HomeProfileBloc
     emit(BlocViewState.success(_authStatusStream?.currentUser));
   }
 
+  Future<void> _onRefreshed(
+    _HomeProfileRefreshed event,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
+  ) async {
+    emit(BlocViewState.success(_authStatusStream?.currentUser));
+  }
+
+  Future<void> _onAuthStatusChanged(
+    _HomeProfileAuthStatusChanged event,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
+  ) async {
+    emit(BlocViewState.success(event.user));
+  }
+
   @override
   Future<void> close() async {
     await _subscription?.cancel();
@@ -130,7 +144,8 @@ abstract class HomeProfileEvent with _$HomeProfileEvent {
 
 ### 3. Unwrapping a `Result<T>` by hand
 
-There is no helper — this is the shape you write in every handler that calls a use case:
+There is no helper — this is the shape you write in every handler that calls a use case
+(the same example as the doc comment in `platform/bloc_state_management/lib/src/base_bloc.dart`):
 
 ```dart
 Future<void> _onStarted(
@@ -140,13 +155,20 @@ Future<void> _onStarted(
   emit(const BlocViewState.loading());
   final result = await _useCase(const NoParams());
   result.when(
-    success: (data) => emit(BlocViewState.success(data)),
+    // `Result.success` carries a nullable payload (`Result.success([T? data])`):
+    // decide what "no data" means for this screen instead of forcing it non-null.
+    success: (data) => data == null
+        ? emit(const BlocViewState.initial())
+        : emit(BlocViewState.success(data)),
     failure: (f) => emit(BlocViewState.error(f)),
     none: () => emit(const BlocViewState.initial()),
     cancel: () {},
   );
 }
 ```
+
+`emit(BlocViewState.success(data))` with the nullable `data` does not compile for a
+non-nullable `Foo`.
 
 > [!NOTE]
 > `Result.none()` and `Result.cancel()` are declared in `domain_core` but no repository in
@@ -174,7 +196,11 @@ BlocListener<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
   listener: (context, state) {
     state.maybeWhen(
       error: (failure) {
-        AppDialog.showError(context, message: failure.message);
+        // `core_ui_kit`'s AppDialog: static, no BuildContext, both strings required.
+        AppDialog.showErrorDialog(
+          title: context.l10nHome.errorTitle, // your feature's ARB key — never a raw string
+          message: failure.message,           // AppFailure.message is a non-null String
+        );
       },
       orElse: () {},
     );

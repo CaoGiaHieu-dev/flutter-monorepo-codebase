@@ -114,7 +114,7 @@ Add the new value to the owner's `@PostConstruct(preResolve: true)` method so it
 dart run build_runner build -d --workspace
 ```
 
-If you created a new file, refresh the barrels first:
+If you created a new file, refresh the barrels **after** `build_runner` (they also export generated files present on disk):
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib

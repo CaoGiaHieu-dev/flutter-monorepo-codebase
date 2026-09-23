@@ -372,8 +372,8 @@ Bên gọi ở package khác dùng `getItOrNull<ProfileNavigator>()?.toProfile(c
 ## 8. Hoàn tất và kiểm chứng
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 dart run build_runner build -d --workspace
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
 

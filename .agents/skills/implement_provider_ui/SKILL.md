@@ -28,9 +28,10 @@ Use this skill when requested to: "implement screen logic using Provider", "auto
 ### 2. BaseProvider (ViewModel)
 ViewModels managing UI state must inherit directly from `BaseProvider<T>` where `T` is the Domain entity type:
 ```dart
-import 'package:provider_state_management/provider_state_management.dart';
+import 'package:domain_core/domain_core.dart'; // NoParams, Result
 import 'package:domain_*/domain_*.dart';
 import 'package:injectable/injectable.dart';
+import 'package:provider_state_management/provider_state_management.dart';
 
 @injectable
 class ProductListProvider extends BaseProvider<List<ProductEntity>> {
@@ -40,6 +41,9 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
 
   // AUTOMATIC INITIALIZATION LIFECYCLE:
   // BaseProvider schedules initialize() via Future.microtask after construction.
+  // It must be an @override of initialize() — a method with any other name (e.g. init())
+  // never runs, and the page shows its loading state forever. The module generator's
+  // Provider template scaffolds exactly this override.
   // Await ALL setup here. ensureInitialized() resolves only after this Future completes.
   // UI / shell: await provider.ensureInitialized() before relying on data.
   @override
@@ -53,7 +57,8 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
     // The Result<List<ProductEntity>> returned from the UseCase aligns with the provider's T type.
     await executeOperation(
       OperationConfig(
-        operation: () => _getProductsUseCase(), // Returns Result<List<ProductEntity>>
+        // BaseUseCase.call takes its Params — `const NoParams()` when there is no input.
+        operation: () => _getProductsUseCase(const NoParams()), // Result<List<ProductEntity>>
         onSuccess: (products) {
           // Extra success side-effect logic (products is List<ProductEntity>?)
         },
@@ -82,7 +87,17 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
 > ```
 
 ### 3. Rendering UI: `BaseViewWidget`
-Use `BaseViewWidget` in the Screen/Page class to automate the rendering of different UI states (Loading, Error, Empty, Success) based on the Domain data type:
+Use `BaseViewWidget` in the Screen/Page class to automate the rendering of the UI states based on the Domain data type. What it actually does (`platform/provider_state_management/lib/src/base_view/base_view_widget.dart`):
+
+| State | Renders |
+| :--- | :--- |
+| `initial` | `initialWidget` → else `loadingWidget` → else `DefaultLoadingWidget` |
+| `loading` | `loadingWidget` → else `DefaultLoadingWidget` |
+| `error` | `onErrorBuilder(context, data, message, child)` → **without one it falls through** to the success/empty branch below, so the last good data stays on screen |
+| `success` / `loadingMore` | `data == null` → `emptyWidget` → else `DefaultEmptyWidget`; otherwise `builder(context, data, child)` |
+
+"Empty" means **`data == null` only**. An empty list is non-null data, so it goes to `builder` —
+handle `products.isEmpty` there.
 ```dart
 class ProductListPage extends StatelessWidget {
   const ProductListPage({super.key});
@@ -94,7 +109,8 @@ class ProductListPage extends StatelessWidget {
         loadingWidget: (context, child) => const MyBrandedLoader(),
         emptyWidget: (context, child) => const MyBrandedEmptyState(),
         builder: (context, products, child) {
-          // Focus exclusively on building the success UI with loaded data
+          // An empty list arrives here, not in emptyWidget — handle it yourself.
+          if (products.isEmpty) return const MyBrandedEmptyState();
           return ListView.builder(
             itemCount: products.length,
             itemBuilder: (context, index) {
@@ -109,14 +125,17 @@ class ProductListPage extends StatelessWidget {
 ```
 
 > [!CAUTION]
-> **Pass `emptyWidget` or you get a blank screen.** `core/*` must never depend on
+> **Pass `emptyWidget` or null data gives a blank screen.** `core/*` must never depend on
 > `core_ui_kit`, so `provider_state_management` cannot use its branded widgets.
 > The built-in fallbacks live in `src/base_view/default_state_widgets.dart` and are
 > deliberately minimal:
 > - `DefaultLoadingWidget` → `Center(child: CircularProgressIndicator.adaptive())`
 > - `DefaultEmptyWidget` → **`SizedBox.shrink()`** — renders *nothing*
 >
-> An empty list with no `emptyWidget` therefore shows an empty screen with no explanation.
+> Null data with no `emptyWidget` — including an error before any data loaded, when there is
+> no `onErrorBuilder` — therefore shows an empty screen with no explanation. Pass
+> `onErrorBuilder` too if the error must be visible in the page rather than only as a
+> `ProviderStateListener` side-effect.
 
 ### 4. Listening for Side-effects: `ProviderStateListener`
 To handle one-off side-effects (e.g., displaying a Dialog, Toast, or navigating to another page), wrap the content with `ProviderStateListener`.
@@ -127,9 +146,13 @@ Use the specialized callback parameters for each state:
 Widget build(BuildContext context) {
   return Scaffold(
     body: ProviderStateListener<ProductListProvider, List<ProductEntity>>(
-      // Triggered on error
+      // Triggered on error. `error` is the optional ErrorState, `message` a String?.
       onError: (context, error, message) {
-        AppDialog.showError(context, message: message);
+        // `core_ui_kit`'s AppDialog: static, no BuildContext, both strings required.
+        AppDialog.showErrorDialog(
+          title: context.l10nProduct.errorTitle,             // your feature's ARB keys —
+          message: message ?? context.l10nProduct.genericError, // never raw strings
+        );
       },
       // Triggered on success
       onSuccess: (context, data) {

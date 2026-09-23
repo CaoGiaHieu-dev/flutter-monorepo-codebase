@@ -34,7 +34,7 @@ abstract class IAuthActionHandler {
   void logout(BuildContext context);
 }
 ```
-Export it from `platform/di/lib/src/actions/actions.dart` (barrel will pick it up via generator).
+Do **not** hand-edit `platform/di/lib/src/actions/actions.dart` — it is a generated barrel, and the generator deletes hand-written `export` lines. Running the barrel generator (Step 4) adds the new file.
 
 ### Step 2: Implement in the Owning Feature
 Create `modules/<owner>/feature/lib/src/handlers/<feature>_action_handler_impl.dart`:
@@ -70,12 +70,17 @@ The consumer MUST NOT import the owning feature package.
 > If the action must visibly do *something* when the owner is absent, branch on the null and
 > show a fallback rather than letting the widget throw.
 
-### Step 4: Barrel + Code Gen
+### Step 4: Barrels + Code Gen
 ```bash
-dart tools/barrel_generator/generate.dart platform/di/lib
-dart tools/barrel_generator/generate.dart modules/<owner>/feature/lib
+dart tools/barrel_generator/generate.dart platform/di/lib            # so the feature can import the new interface
 dart run build_runner build -d --workspace
+dart tools/barrel_generator/generate.dart platform/di/lib            # final pass, after codegen
+dart tools/barrel_generator/generate.dart modules/<owner>/feature/lib
 ```
+The final barrel pass must come **after** `build_runner`, because barrels also export
+generated files present on disk. The extra pass on `platform/di/lib` beforehand is harmless and
+lets the owning feature's `@Injectable(as: I…ActionHandler)` resolve the new interface through
+`core_di`'s barrel during codegen.
 
 ---
 

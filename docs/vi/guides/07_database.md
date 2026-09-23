@@ -316,8 +316,8 @@ Nó cố ý **không** dùng `json_serializable`: dữ liệu đến từ SQLite
 ### Bước 8 — Chạy codegen và barrel
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/cache/data/lib
 dart run build_runner build -d --workspace
+dart tools/barrel_generator/generate.dart modules/cache/data/lib
 ```
 
 ---

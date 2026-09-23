@@ -374,8 +374,8 @@ from `NavigatorKeys`.
 ## 8. Finish and verify
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 dart run build_runner build -d --workspace
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
 

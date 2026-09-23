@@ -497,7 +497,7 @@ Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_doma
 - [ ] Login, refresh, and any call whose `401` is not "session expired" set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] `NetworkConfig` impl stays `@LazySingleton` (never eager)
 - [ ] `sslPinningHashes` populated with ≥2 pins before shipping
-- [ ] `SslPinningConfig` bound explicitly in a `@module` — check `injection.config.dart`
+- [ ] `SslPinningConfig` bound explicitly in a `@module` — check `platform_app_shell`'s generated `lib/di/module.module.dart`
 - [ ] No credential ever logged verbatim
 
 ## See also

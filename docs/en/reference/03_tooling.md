@@ -44,11 +44,11 @@ dart tools/arch_check/check.dart --help   # full rule descriptions
 | R1 | Dependency direction — no `platform/*` package may import or declare `feature_*` / `data_*` / `domain_*`, except the approved edges |
 | R2 | Domain is pure Dart — no `flutter` / `dio` / `retrofit` import, no `flutter` under `dependencies:` |
 | R3 | Feature boundaries — no feature imports another feature or a `data_*` package |
-| R4 | Public `static const` live in a `utils/` directory (files under `styles/` — `core_base_ui`'s design tokens — are exempt) |
-| R5 | Every `package:` import used in `lib/` is declared in that package's `pubspec.yaml` |
+| R4 | Public `static const` live in a `utils/` directory (files under `styles/` — `core_base_ui`'s design tokens — are exempt). A package with no public constants needs no `utils/` |
+| R5 | Every `package:` import used in `lib/` is declared under that package's `dependencies:` — a `dev_dependencies` entry does not count |
 | R6 | Generated files still carry their generator header (advisory) |
 | R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file that mentions `core_responsive` |
-| R8 | A `core_di` contract implemented in a feature package is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll` |
+| R8 | A `core_di` contract implemented under `modules/` — any layer — is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll`, outside the module that implements it |
 | R9 | `platform_kernel` and every `*_contracts` package neither import nor **declare** a Flutter-bound package |
 | R10 | Nothing in an app (`apps/<id>/`) imports a module — only `injection.dart`, the composition root, may name one. (`platform/app_shell` is core, so R1 covers it) |
 
@@ -58,7 +58,7 @@ R7 exists because `flutter analyze` cannot see the difference. `core_responsive`
 
 R10 exists because removability is a promise the template makes in four documents and nothing was checking. `network_config_impl.dart` imported `data_auth` and `domain_auth` to read and refresh the session token, so deleting the auth module broke the app shell at compile time — the one place in the shell that undid what every other file was careful to preserve. `getItOrNull` cannot help: it guards a *lookup*, and the failure here is an *import*, which the compiler resolves long before any lookup runs. The fix is a contract (`IAuthSessionGateway` in `core_di`, implemented by `data_auth`), and the check is one line of policy — an app may import a module package in exactly one file, the composition root, because that file's job is to name what it composes.
 
-R8 exists because removability is a property the app shell depends on, and nothing was holding it. The tool derives the set at run time: every type declared in `core_di`, narrowed to those with an `implements` / `extends` / `as:` binding in a `modules/*/feature` package. A throwing lookup against one of those compiles — the calling package depends on `core_di`, not on the feature — and then crashes at runtime in any build without that feature. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered, so they are deliberately outside the set. The owning feature is exempt from its own contract: if the package is in the build, so is its registration.
+R8 exists because removability is a property the app shell depends on, and nothing was holding it. The tool derives the set at run time: every type declared in `core_di`, narrowed to those with an `implements` / `extends` / `as:` binding in a package under `modules/` — any layer, so `IAuthSessionGateway`, implemented in `data_auth`, is in the set as surely as a feature's navigator — and keyed by the module that implements it. A throwing lookup against one of those compiles — the calling package depends on `core_di`, not on the module — and then crashes at runtime in any build without that module. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered, so they are deliberately outside the set. A module is removed whole, so every package of the implementing module may resolve its contracts eagerly: if one of its packages is in the build, so is the registration.
 
 R5 is the mirror image of `unused_checker`: that tool finds dependencies *declared but unused*, this one finds them *used but undeclared*. Pub Workspaces hide the second kind entirely — everything resolves locally through the shared `package_config.json` and only breaks when a package is extracted or published.
 
@@ -187,9 +187,9 @@ Run with fewer arguments and it prompts interactively.
 dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 ```
 
-Regenerates `*.dart` barrels for every directory under the given path, then formats. Run it after **any** file add / rename / delete under `lib/` — and after `build_runner` / `gen-l10n`, because generated files present on disk are exported too (`core_ui_kit` reaches `core_base_ui`'s generated `Assets` that way).
+Regenerates `*.dart` barrels for every directory under the given path, then formats. Run it after **any** file add / rename / delete under `lib/` — and after `build_runner` / `gen-l10n`, because generated files present on disk are exported too (`core_ui_kit` reaches `core_base_ui`'s generated `Assets` that way). A path that does not exist exits `2`; it prompts for another path only when run with no argument on a terminal.
 
-Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, and files declaring `part of`.
+Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, and files declaring `part of`. Other generated files — `module.module.dart`, `injection.config.dart`, `lib/src/gen/**` — are exported when present.
 
 > [!CAUTION]
 > It **removes every hand-written `export` line** from a barrel before regenerating. If you need to re-export something from another package, put the `export` in a regular source file and let the barrel pick that file up.
@@ -203,6 +203,7 @@ Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_option
 ```bash
 dart tools/dependency_sync.dart          # write versions into every package
 dart tools/dependency_sync.dart --check  # verify only; exits 1 on drift
+dart tools/dependency_sync.dart --help   # usage; any other flag exits 64 without syncing
 ```
 
 Also repairs broken local `path:` entries. Use `--check` in CI and pre-commit.

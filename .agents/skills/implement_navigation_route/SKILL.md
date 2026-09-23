@@ -19,10 +19,14 @@ Navigation across features must not be performed directly via path strings. Decl
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
+  void toProfile(BuildContext context);
   void toEditProfile(BuildContext context);
-  void toSettings(BuildContext context);
 }
 ```
+A navigator holds **only its own feature's routes** — `ProfileNavigator` never gets a
+`toSettings`; a caller wanting Settings asks for `SettingsNavigator`. Real examples:
+`platform/di/lib/src/navigators/home_navigator.dart`, `auth_navigator.dart`.
+
 **Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — put them in `feature_settings`, and add a `SettingsNavigator` contract to `core_di` only once another module needs to navigate there. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
 
 ### Step 2: Put the path constants in `utils/`
@@ -44,10 +48,10 @@ Existing files: `auth_path.dart`, `home_path.dart`, `onboarding_path.dart`,
 ### Step 3: Trigger Navigation inside Feature Page / Widget
 Inject and call the Navigator interface from the UI layer, passing the local `BuildContext`:
 ```dart
-getItOrNull<ProfileNavigator>()?.toSettings(context);
+getItOrNull<ProfileNavigator>()?.toEditProfile(context);
 ```
 Use `getItOrNull` (not `getIt`) so the call degrades to a no-op when the owning feature has
-been removed from the build.
+been removed from the build — `arch_check` R8 blocks a throwing `getIt` outside the owning module.
 
 ### Step 4: Define Route Class using `GoRouteDataCustom`
 Declare a type-safe route in the feature's `routing/*_route_module.dart` file (inherit `GoRouteDataCustom`), importing the path constant from `../utils/`.
@@ -78,40 +82,41 @@ Pick **one** contribution type:
 | :--- | :--- | :--- |
 | Bottom-nav primary tab | `INavDestinationModule` | Requires `order`, `path`, `routes`, `destination`. `order` **must** stay unique and match shell branch index. |
 | Stack / shell sibling (login, onboarding, …) | `IFeatureRouteModule` | **`routes` only — no `order`** (GoRouter matches by path). |
-| Cold-start path | `IAppEntryLocation` | Optional; else first tab path / `/`. |
+| Cold-start path | `IAppEntryLocation` | Optional; else the first destination's path, or the placeholder `/_empty_dashboard` when no destination is registered. |
 | Dashboard scaffold chrome | `DashboardRouteModule` | **Only** in `feature_dashboard`. |
 
 1. Implement the chosen contract with `@LazySingleton(as: …)` (or `@Singleton` for chrome).
 2. Compose the package: list its module in each `apps/<id>/app_manifest.yaml` (the generator does this) and run `dart tools/composer/composer.dart sync` — never hand-edit an app's `pubspec.yaml` or `injection.dart`.
 3. **Never** append `$fooRoute` into `app_router.dart` manually — host already uses `getAllOrEmpty` / `getItOrNull`.
-4. Codegen + **hot restart**:
+4. Codegen, then barrels (after `build_runner` — they export generated files too), then **hot restart**:
    ```bash
-   dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    dart run build_runner build -d --workspace
+   dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    ```
 
 ---
 
 ## 🔑 `NavigatorKeys`
 
-Lives at `platform/di/lib/src/routing/navigator_keys.dart` (moved out of
-`routing_interfaces.dart`, which now holds only `IFeatureRouteModule`):
+Lives at `platform/di/lib/src/routing/navigator_keys.dart`. The whole API:
 
 ```dart
 class NavigatorKeys {
   NavigatorKeys._();
-  static final appKey = GlobalKey<NavigatorState>();
-  static final rootKey = GlobalKey<NavigatorState>();
-  // nested keys are requested by id: NavigatorKeys.nested('auth')
+  static final appKey = GlobalKey<NavigatorState>(debugLabel: 'app');   // the app ShellRoute
+  static final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root'); // GoRouter's own navigator
+  static GlobalKey<NavigatorState> nested(String id) => ...;            // same instance per id
 }
 ```
 
-There are **three** keys — `homeKey` was deleted as dead code. They sit in the DI hub because
-both the shell (which builds the `ShellRoute`) and the feature (which declares child routes)
-must hand GoRouter the *same instance*; putting them on either side would create a cycle.
+The keys sit in the DI hub because both the shell (which builds the `ShellRoute`) and the
+feature (which declares child routes) must hand GoRouter the *same instance*; putting them on
+either side would create a cycle.
 
-Add a key only when a feature needs its own nested back stack — a dashboard tab inside
-`StatefulShellRoute` does not.
+**Never add a key to this class.** A module that needs its own back stack asks for one by id —
+`static final $navigatorKey = NavigatorKeys.nested('auth');` — and gets the same instance every
+time. A dashboard tab inside the `StatefulShellRoute` gets a branch navigator from GoRouter and
+needs no key at all.
 
 ---
 
@@ -132,7 +137,10 @@ The shell must stay buildable when any feature package is deleted. It talks to c
 - Splash is managed by `MainScope`, **not** a GoRouter route; absent `IAppSplashScreen` the
   app falls back to the native splash.
 - Impl classes: `*NavigatorImpl` in `*_navigator_impl.dart` — never `I*Navigator`.
-- Missing modules must not crash: empty routes / `SizedBox.shrink()` / `/`.
+- Missing modules must not crash (`platform/app_shell/lib/presentation/navigation/app_router.dart`):
+  no route modules → empty lists; no destination → a placeholder branch at `/_empty_dashboard`;
+  no `IAppEntryLocation` → the first destination's path (else `/_empty_dashboard`); no
+  `DashboardRouteModule` → the bare `navigationShell`, i.e. tabs without chrome.
 
 ---
 

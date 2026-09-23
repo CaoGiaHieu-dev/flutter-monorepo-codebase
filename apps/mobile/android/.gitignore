@@ -6,11 +6,18 @@ gradle-wrapper.jar
 local.properties
 GeneratedPluginRegistrant.java
 
-# Signing material — never committed, under any name.
-# CI writes `app/android/keystore.jks` (flutter_build.yml) and Gradle reads
-# `key.properties` / `key-dev.properties` / `key-stg.properties`, so the
-# patterns are broad on purpose: a keystore named something else is still
-# a keystore, and one accidental `git add -A` is all it takes.
+# Signing material. Release keys are never committed, under any name: CI
+# writes `apps/mobile/android/keystore.jks` + `key.properties` from secrets
+# (flutter_build.yml, fastlane.yml) and Gradle also reads `key-stg.properties`,
+# so the patterns are broad on purpose — a keystore named something else is
+# still a keystore, and one accidental `git add -A` is all it takes.
+#
+# The ONE exception is deliberate: `keystore-dev.jks` + `key-dev.properties`
+# are tracked (force-added past these patterns) so a fresh clone can build the
+# dev flavor. That key is public — anyone can sign with it — and Gradle falls
+# back to it for staging/prod when `key-stg.properties` / `key.properties` is
+# absent. Never ship a store release with it; see
+# docs/en/operations/02_fastlane_release.md §4.
 *.jks
 *.keystore
 key.properties

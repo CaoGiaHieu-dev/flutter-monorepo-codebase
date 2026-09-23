@@ -1,6 +1,21 @@
+# Fastlane output
+report.xml
 *.xml
+Preview.html
+test_output/
+screenshots/
+# Change-log temp files of the pre-fix lanes; the lanes now use a temp dir
+# outside the repository.
 change_log*.txt
-.p8
-*.json
+
+# Your configuration and every credential it points at. README.md is tracked
+# and hand-written: the Fastfiles set FASTLANE_SKIP_DOCS so fastlane never
+# regenerates it.
 *.yaml
 !Config.example.yaml
+*.json
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+firebase_tester*.txt

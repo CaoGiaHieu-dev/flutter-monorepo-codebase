@@ -5,31 +5,37 @@
 
 # Installation
 
-Make sure you have the latest version of the Xcode command line tools installed:
+Make sure you have the latest version of the Xcode command line tools installed (iOS builds only):
 
 ```sh
 xcode-select --install
 ```
 
-For _fastlane_ installation instructions, see [Installing _fastlane_](https://docs.fastlane.tools/#installing-fastlane)
+Install the gems once, from the repository root or from `apps/mobile/` — both Gemfiles list the same gems and load the plugins from `fastlane/Pluginfile` here:
+
+```sh
+bundle install
+```
+
+Then copy `Config.example.yaml` to `Config.yaml` in this folder and fill it in. Every lane runs identically from the repository root and from `apps/mobile/`.
 
 # Available Actions
 
 ### flutter
 
 ```sh
-[bundle exec] fastlane flutter
+bundle exec fastlane flutter
 ```
 
-
+Build both platforms (iOS, then Android) with one set of inputs.
 
 ### store
 
 ```sh
-[bundle exec] fastlane store
+bundle exec fastlane store
 ```
 
-
+Prod release of both platforms to TestFlight and Google Play.
 
 ----
 
@@ -39,15 +45,23 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 ### ios build
 
 ```sh
-[bundle exec] fastlane ios build
+bundle exec fastlane ios build
 ```
 
 Build and distribute iOS app (interactive)
 
+### ios upload
+
+```sh
+bundle exec fastlane ios upload
+```
+
+Upload existing IPA to store (skip build)
+
 ### ios store
 
 ```sh
-[bundle exec] fastlane ios store
+bundle exec fastlane ios store
 ```
 
 Build and distribute iOS app to TestFlight (Prod flavor)
@@ -60,23 +74,29 @@ Build and distribute iOS app to TestFlight (Prod flavor)
 ### android build
 
 ```sh
-[bundle exec] fastlane android build
+bundle exec fastlane android build
 ```
 
 Build and distribute Android app (interactive)
 
+### android upload
+
+```sh
+bundle exec fastlane android upload
+```
+
+Upload existing artifact to store (skip build)
+
 ### android store
 
 ```sh
-[bundle exec] fastlane android store
+bundle exec fastlane android store
 ```
 
 Build and distribute Android app to Play Store (Prod flavor, AAB)
 
 ----
 
-This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
+This README.md is maintained by hand. Both Fastfiles set `FASTLANE_SKIP_DOCS`, so fastlane no longer regenerates it after a run.
 
 More information about _fastlane_ can be found on [fastlane.tools](https://fastlane.tools).
-
-The documentation of _fastlane_ can be found on [docs.fastlane.tools](https://docs.fastlane.tools).

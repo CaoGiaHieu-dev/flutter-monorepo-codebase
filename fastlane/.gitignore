@@ -1,0 +1,20 @@
+# Written by fastlane when it runs from the repository root. Only Fastfile,
+# Pluginfile and this file belong in git here.
+report.xml
+*.xml
+# Generated after every run unless FASTLANE_SKIP_DOCS is set (both Fastfiles set it).
+README.md
+Preview.html
+test_output/
+screenshots/
+# Change-log temp files of the pre-fix lanes; the lanes now use a temp dir
+# outside the repository.
+change_log*.txt
+# Credentials never belong here — Config.yaml and its credential files live in
+# apps/mobile/fastlane/.
+*.json
+*.yaml
+*.p8
+*.p12
+*.cer
+*.mobileprovision

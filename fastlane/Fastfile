@@ -1,10 +1,17 @@
-# Root Fastlane Entry Point
-# Delegates all lanes and imports to the real modular configuration inside apps/mobile/fastlane
+# Root fastlane entry point — lets `bundle exec fastlane <lane>` run from the
+# repository root. It only imports the real lanes from apps/mobile/fastlane/.
+#
+# There is deliberately no `Dir.chdir` here. fastlane parses a Fastfile inside
+# its own chdir block and restores the directory afterwards, so a chdir in this
+# file was undone before any lane ran (and Ruby warned "conflicting chdir
+# during another chdir block"). The modules resolve every path from their own
+# location instead (FASTLANE_DIR / APP_DIR in helpers.rb), so the working
+# directory does not matter.
 
-# Change directory to apps/mobile/fastlane to align working directories with the app configuration
-Dir.chdir("../apps/mobile/fastlane")
+# fastlane rewrites README.md in the fastlane folder after every run. The one in
+# apps/mobile/fastlane/ is hand-written; one here would be an untracked stray.
+ENV['FASTLANE_SKIP_DOCS'] = '1'
 
-# Import all modules relative to the root fastlane folder
 import "../apps/mobile/fastlane/modules/helpers.rb"
 import "../apps/mobile/fastlane/modules/ios_lanes.rb"
 import "../apps/mobile/fastlane/modules/android_lanes.rb"

@@ -12,8 +12,12 @@ Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế n�
 Fastlane vốn bắt bạn phải đứng đúng thư mục chứa `Fastfile`. Repo này gỡ ràng buộc đó bằng cơ chế proxy hai file.
 
 ```
+Gemfile                        ← ở gốc: fastlane + cocoapods, nạp fastlane/Pluginfile
 fastlane/Fastfile              ← proxy ở gốc
+fastlane/Pluginfile            ← chuyển tiếp sang apps/mobile/fastlane/Pluginfile
+apps/mobile/Gemfile            ← cùng bộ gem, dùng khi chạy từ apps/mobile/
 apps/mobile/fastlane/Fastfile          ← entry point thật
+apps/mobile/fastlane/Pluginfile        ← danh sách plugin DUY NHẤT
 apps/mobile/fastlane/modules/
     helpers.rb                 ← nạp config + toàn bộ logic dùng chung
     android_lanes.rb           ← platform :android
@@ -23,11 +27,10 @@ apps/mobile/fastlane/Config.yaml       ← config CỦA BẠN (gitignore, tự t
 apps/mobile/fastlane/Config.example.yaml
 ```
 
-`fastlane/Fastfile` ở gốc làm đúng hai việc:
+`fastlane/Fastfile` ở gốc chỉ import các module thật:
 
 ```ruby
-# Change directory to apps/mobile/fastlane to align working directories with the app configuration
-Dir.chdir("../apps/mobile/fastlane")
+ENV['FASTLANE_SKIP_DOCS'] = '1'
 
 import "../apps/mobile/fastlane/modules/helpers.rb"
 import "../apps/mobile/fastlane/modules/ios_lanes.rb"
@@ -35,14 +38,17 @@ import "../apps/mobile/fastlane/modules/android_lanes.rb"
 import "../apps/mobile/fastlane/modules/flutter_lanes.rb"
 ```
 
-Đường dẫn bên trong các module sau đó được giải **tuyệt đối theo vị trí của chính file**, không phụ thuộc CWD của người gọi (`apps/mobile/fastlane/modules/helpers.rb`):
+Nó cố ý **không** gọi `Dir.chdir`. Fastlane parse Fastfile bên trong khối `chdir` của chính nó rồi khôi phục thư mục ngay sau đó, nên một lệnh `chdir` đặt ở đây bị huỷ trước khi bất kỳ lane nào chạy — lane chạy trong `<root>/fastlane`, còn action (`sh`, upload) chạy trong `<root>` — và Ruby chỉ in cảnh báo `conflicting chdir during another chdir block`. Thay vào đó, mọi đường dẫn bên trong các module được giải **tuyệt đối theo vị trí của chính file**, không phụ thuộc CWD của người gọi (`apps/mobile/fastlane/modules/helpers.rb`):
 
 ```ruby
-CONFIG_FILE = File.expand_path("../Config.yaml", __dir__)
-APP_DIR     = File.expand_path("../..", __dir__)
+FASTLANE_DIR = File.expand_path("..", __dir__)   # apps/mobile/fastlane
+APP_DIR = File.expand_path("..", FASTLANE_DIR)   # apps/mobile
+CONFIG_FILE = File.join(FASTLANE_DIR, "Config.yaml")
 ```
 
-Chính điều đó khiến `fastlane android build …` chạy giống hệt nhau dù bạn đứng ở thư mục gốc hay trong `apps/mobile/`.
+File dart-define, `ExportOptions.plist`, các artifact build, thư mục `ios/` cho CocoaPods và mọi đường dẫn credential trong `Config.yaml` đều được dựng từ `APP_DIR`, và `flutter build` chạy bên trong `APP_DIR`. Chính điều đó khiến `bundle exec fastlane android build …` chạy giống hệt nhau dù bạn đứng ở thư mục gốc hay trong `apps/mobile/`.
+
+`ENV['FASTLANE_SKIP_DOCS'] = '1'` được đặt trong cả hai Fastfile: thiếu nó, sau mỗi lần chạy fastlane sẽ ghi đè `README.md` trong thư mục fastlane — tức file `apps/mobile/fastlane/README.md` viết tay đang được track, hoặc sinh ra một file lạc ở gốc. `fastlane/.gitignore` (ở gốc) và `apps/mobile/fastlane/.gitignore` bỏ qua những gì một lần chạy ghi ra (`report.xml`, …) cùng mọi file credential.
 
 ---
 
@@ -51,7 +57,7 @@ Chính điều đó khiến `fastlane android build …` chạy giống hệt nh
 `Config.yaml` là **bắt buộc** — `helpers.rb` dừng ngay nếu thiếu:
 
 ```ruby
-UI.user_error!("Configuration file not found at #{CONFIG_FILE}") unless File.exist?(CONFIG_FILE)
+UI.user_error!("Configuration file not found at #{CONFIG_FILE}. Copy Config.example.yaml next to it and fill it in.") unless File.exist?(CONFIG_FILE)
 ```
 
 Tạo một lần:
@@ -60,13 +66,15 @@ Tạo một lần:
 cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 ```
 
-`apps/mobile/fastlane/.gitignore` bỏ qua `*.yaml` kèm ngoại lệ `!Config.example.yaml`, nên `Config.yaml` bạn điền — và mọi file credential `*.json` bên cạnh — đều nằm ngoài git.
+`apps/mobile/fastlane/.gitignore` bỏ qua `*.yaml` kèm ngoại lệ `!Config.example.yaml`, nên `Config.yaml` bạn điền — và mọi file credential `*.json` / `*.p8` bên cạnh — đều nằm ngoài git. Trên CI, `fastlane.yml` ghi file này ra từ secret `FASTLANE_CONFIG_YAML_B64` ([`01_cicd.md` §7](01_cicd.md#7-secrets)).
+
+**Đường dẫn tương đối trong `Config.yaml` được giải theo `apps/mobile/`** — bất kể bạn chạy fastlane từ thư mục nào — nên `fastlane/firebase-auth.json` trong file mẫu nằm trong `apps/mobile/fastlane/`, cạnh `Config.yaml`. Đường dẫn tuyệt đối được giữ nguyên.
 
 ### Các trường cần điền
 
 | Khoá | Ý nghĩa |
 |:---|:---|
-| `flutter.default_version` | Giá trị mặc định cho câu hỏi "Flutter version". `stable` dùng Flutter hệ thống; giá trị khác sẽ chạy qua `fvm` |
+| `flutter.default_version` | Giá trị mặc định cho câu hỏi "Flutter version". `stable` = dùng Flutter mà máy này phân giải được (bản `.fvmrc` ghim nếu có cài fvm, không thì bản trên PATH); một phiên bản cụ thể thì phải khớp với Flutter đó — xem [§7](#7-thiết-lập-toolchain-bên-trong-lane) |
 | `default_app_version` | Giá trị mặc định cho câu hỏi "app version" |
 | `valid_flavors` | Danh sách flavor hợp lệ. `none` luôn được chấp nhận thêm ngoài danh sách này |
 | `app_bundle_ids.ios` / `.android` | Bundle ID **gốc**, chưa có hậu tố flavor |
@@ -79,13 +87,19 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `paths.firebase_testers_file` | File text chứa email tester cho Firebase App Distribution |
 | `paths.google_play_key_prod` / `_dev` | File JSON service-account của Google Play |
 | `paths.app_store_connect_key_filepath` | File API key `.p8` |
-| `paths.change_log_android` / `_ios` | File tạm để Fastlane truyền changelog giữa các lane |
 
-Cài plugin bắt buộc duy nhất:
+Hai khoá cũ `paths.change_log_android` / `_ios` đã bị bỏ (xem [§3](#3-danh-sách-lane)); nếu `Config.yaml` của bạn còn giữ chúng thì chúng bị bỏ qua.
+
+### Gem và plugin
+
+Plugin duy nhất, `fastlane-plugin-firebase_app_distribution`, đã có sẵn trong `apps/mobile/fastlane/Pluginfile`. Cài mọi thứ một lần và luôn chạy qua Bundler:
 
 ```bash
-fastlane add_plugin firebase_app_distribution
+bundle install                         # từ thư mục gốc repo (hoặc từ apps/mobile/)
+bundle exec fastlane android build …   # như nhau từ cả hai thư mục
 ```
+
+Đừng chạy `fastlane add_plugin`: plugin đã có sẵn, lệnh này cần tương tác (fail trên CI), và nó sửa Pluginfile của thư mục fastlane nơi nó được chạy. Muốn thêm plugin mới thì tự thêm vào `apps/mobile/fastlane/Pluginfile`; cả hai Gemfile đều nạp nó — Gemfile ở gốc nạp qua `fastlane/Pluginfile`, điều fastlane bắt buộc phải thấy mới coi là plugin đã được thiết lập.
 
 ---
 
@@ -97,7 +111,7 @@ Mọi lane đều tương tác: tham số nào bạn không truyền thì nó s�
 
 | Lane | Làm gì | Tham số |
 |:---|:---|:---|
-| `android build` | Build APK hoặc AAB rồi phân phối | `flavor`, `build_type` (`apk`/`aab`), `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log`, `skip_setup`, `skip_build` |
+| `android build` | Build APK hoặc AAB rồi phân phối | `flavor`, `build_type` (`apk`/`aab`), `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log`, `change_log_file`, `skip_setup`, `skip_build`, `flutter_upgrade` |
 | `android upload` | Upload artifact **đã build sẵn** lên Play. Ép `skip_build:true`, `skip_setup:true`, `flutter_version:stable`, `distribute_store:true`, `distribute_firebase:false` | `flavor`, `build_type`, `version`, `track` |
 | `android store` | Phát hành prod lên Play. Ép `flavor:prod`, `build_type:aab`, `distribute_store:true`, `distribute_firebase:false` | `version`, `build_number`, `track` |
 
@@ -105,7 +119,7 @@ Mọi lane đều tương tác: tham số nào bạn không truyền thì nó s�
 
 | Lane | Làm gì | Tham số |
 |:---|:---|:---|
-| `ios build` | Build IPA rồi phân phối lên TestFlight và/hoặc Firebase | `flavor`, `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `change_log`, `skip_setup`, `skip_build` |
+| `ios build` | Build IPA rồi phân phối lên TestFlight và/hoặc Firebase | `flavor`, `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `change_log`, `change_log_file`, `skip_setup`, `skip_build`, `flutter_upgrade` |
 | `ios upload` | Upload IPA có sẵn lên TestFlight, không build lại | `flavor`, `version` |
 | `ios store` | Phát hành prod lên TestFlight. Ép `flavor:prod`, `distribute_store:true` | `version`, `build_number` |
 
@@ -113,10 +127,20 @@ Mọi lane đều tương tác: tham số nào bạn không truyền thì nó s�
 
 | Lane | Làm gì | Tham số |
 |:---|:---|:---|
-| `flutter` | Hỏi một lần các tham số chung, thiết lập toolchain một lần, rồi gọi `fastlane ios build` trước, `fastlane android build` sau | `flavor`, `version`, `build_number`, `build_type`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log` |
-| `store` | Cùng cách điều phối nhưng mặc định prod/store: `fastlane ios store` rồi `fastlane android store` | `version`, `build_number`, `track`, `flutter_version`, `change_log` |
+| `flutter` | Hỏi một lần các tham số chung, thiết lập toolchain một lần, rồi gọi `fastlane ios build` trước, `fastlane android build` sau | `flavor`, `version`, `build_number`, `build_type`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log`, `skip_setup`, `flutter_upgrade` |
+| `store` | Cùng cách điều phối nhưng mặc định prod/store: `fastlane ios store` rồi `fastlane android store` | `version`, `build_number`, `track`, `flutter_version`, `change_log`, `skip_setup`, `flutter_upgrade` |
 
-Cả hai lane cross-platform đều **chạy iOS trước và huỷ toàn bộ nếu iOS fail**, nên Android không bao giờ được build cho một bản release mà iOS không dựng nổi. Chúng cũng ghi changelog ra hai file tạm ngay từ đầu để lane con đọc lại thay vì hỏi lại, và xoá các file đó trong khối `ensure`.
+Cả hai lane cross-platform đều **chạy iOS trước và huỷ toàn bộ nếu iOS fail**, nên Android không bao giờ được build cho một bản release mà iOS không dựng nổi. Các tiến trình con chạy từ `apps/mobile/` (khi chạy dưới `bundle exec` chúng thừa hưởng cùng bundle).
+
+### Change log
+
+Một lane lấy change log theo thứ tự sau:
+
+1. `change_log:` — luôn được ưu tiên;
+2. `change_log_file:` — một file mà đường dẫn được truyền **tường minh**. Các lane cross-platform ghi change log một lần vào thư mục tạm **nằm ngoài repo**, truyền nó cho cả hai lane con dưới dạng `change_log_file:`, rồi xoá trong khối `ensure` dù lần chạy thành công hay không;
+3. hỏi tương tác.
+
+Không có gì được đọc ngầm và cũng không có gì được ghi ngược lại. (Trước đây các lane đọc một file cố định `change_log_<platform>.txt` *trước cả khi* xét `change_log:`, nên một file còn sót lại từ lần chạy bị ngắt giữa chừng sẽ âm thầm thay thế change log bạn truyền vào.)
 
 Giá trị hợp lệ do `helpers.rb` kiểm soát:
 
@@ -128,27 +152,36 @@ Giá trị hợp lệ do `helpers.rb` kiểm soát:
 
 ```bash
 # APK dev cho tester qua Firebase
-fastlane android build flavor:dev build_type:apk distribute_firebase:true change_log:"Fix login bug"
+bundle exec fastlane android build flavor:dev build_type:apk distribute_firebase:true change_log:"Fix login bug"
 
 # Chỉ build local — không phân phối, không setup toolchain (nhanh nhất)
-fastlane android build flavor:dev build_type:apk distribute_firebase:false distribute_store:false skip_setup:true
+bundle exec fastlane android build flavor:dev build_type:apk distribute_firebase:false distribute_store:false skip_setup:true
 
 # AAB prod lên track internal của Play
-fastlane android store version:1.2.0 build_number:45 track:internal
+bundle exec fastlane android store version:1.2.0 build_number:45 track:internal
 
 # IPA prod lên TestFlight
-fastlane ios store version:1.2.0 build_number:45
+bundle exec fastlane ios store version:1.2.0 build_number:45
 
 # Cả hai nền tảng, flavor dev, chỉ Firebase
-fastlane flutter flavor:dev version:1.2.0 build_number:auto distribute_firebase:true distribute_store:false
+bundle exec fastlane flutter flavor:dev version:1.2.0 build_number:auto distribute_firebase:true distribute_store:false
 
 # Cả hai nền tảng, prod, lên cả hai store
-fastlane store version:1.2.0 build_number:auto track:internal
+bundle exec fastlane store version:1.2.0 build_number:auto track:internal
 ```
 
 ### Build number
 
-`build_number` nhận một con số hoặc chuỗi `auto`. Với `auto`, `determine_build_number` lấy số cao nhất hiện tại rồi cộng một — từ **TestFlight** (iOS + store), **Google Play** theo track đã chọn (Android + store), hoặc **Firebase App Distribution** trong các trường hợp còn lại. Nếu bạn chọn `auto` mà không đặt đích phân phối nào, nó lùi về hỏi Firebase.
+`build_number` nhận một số nguyên dương hoặc `auto`; giá trị **rỗng** (`build_number:` — thứ mà một input CI để trống sinh ra) cũng có nghĩa là `auto`. Mọi giá trị khác (`0`, `abc`) làm lane dừng lại: trước đây nó thành `"".to_i` = `0` và được build ra với `--build-number=0`. Với `auto`, `determine_build_number` tự tính:
+
+| Phân phối | `auto` thành |
+|:---|:---|
+| store, iOS | build **TestFlight** mới nhất của version đó + 1 |
+| store, Android | version code cao nhất trên track của **Google Play** + 1 |
+| chỉ Firebase | bản phát hành **Firebase App Distribution** mới nhất + 1 |
+| không phân phối (build local) | build number trong `apps/mobile/pubspec.yaml` (`version: 1.0.0+N` → `N`) — không cần credential, không có gì để trùng |
+
+`fastlane.yml` gửi `build_number:auto` khi input của nó để trống.
 
 `versionCode` và `versionName` **không** lấy từ `apps/mobile/pubspec.yaml` khi build qua Fastlane. `apps/mobile/android/app/build.gradle.kts` gắn chúng vào Flutter:
 
@@ -186,7 +219,7 @@ if (keystorePropertiesFile.exists()) {
 ```
 
 > [!CAUTION]
-> **Nếu thiếu `key.properties`, bản build prod sẽ được ký bằng keystore dev đã commit sẵn, và build vẫn báo thành công.** Không có cảnh báo nào. Một bản release ký sai khoá thì sau này **không thể cập nhật** trên Play Store — chữ ký gắn vĩnh viễn với listing đó.
+> **Nếu thiếu `key.properties`, bản build prod sẽ được ký bằng keystore dev đã commit sẵn, và build vẫn báo thành công.** Gradle không cảnh báo gì. (Các workflow CI chặn chuyện này: bản build prod ở đó từ chối chạy nếu thiếu các secret keystore — [`01_cicd.md` §7](01_cicd.md#7-secrets).) Một bản release ký sai khoá thì sau này **không thể cập nhật** trên Play Store — chữ ký gắn vĩnh viễn với listing đó.
 >
 > Trước mọi lần build production, hãy kiểm tra file có tồn tại và trỏ đúng chỗ không:
 > ```bash
@@ -195,7 +228,7 @@ if (keystorePropertiesFile.exists()) {
 
 ### Keystore dev đang nằm trong git
 
-`apps/mobile/android/key-dev.properties` và `apps/mobile/android/keystore-dev.jks` **được track trong git** để clone về là build chạy ngay không cần cấu hình. Với một template thì đó là chủ đích, và dùng cho `dev` thì không sao.
+`apps/mobile/android/key-dev.properties` và `apps/mobile/android/keystore-dev.jks` **được track trong git** để clone về là build chạy ngay không cần cấu hình. Với một template thì đó là chủ đích, và dùng cho `dev` thì không sao. Hai file này được force-add vượt qua `apps/mobile/android/.gitignore`, vốn bỏ qua mọi `*.jks`, `*.keystore`, `key.properties` và `key-*.properties` khác — comment trong file đó ghi rõ điều này.
 
 > [!CAUTION]
 > **Tuyệt đối không phát hành production bằng keystore dev.** Nó công khai trong repo — bất kỳ ai clone được cũng ký được một APK mà hệ điều hành coi là bản cập nhật của app bạn.
@@ -274,15 +307,19 @@ def get_dart_define_file(flavor)
 end
 ```
 
-và từ chối build khi file đó không tồn tại:
+và từ chối build khi file đó không tồn tại — đường dẫn là tuyệt đối, dựng từ `APP_DIR`, nên dù chạy từ entry point nào cũng là cùng một file:
 
 ```ruby
-unless File.exist?("../#{dart_define_file}")
+dart_define_file = File.join(APP_DIR, get_dart_define_file(flavor))
+unless File.exist?(dart_define_file)
   UI.user_error!(
-    "Dart define file 'apps/mobile/#{dart_define_file}' not found for flavor "     "'#{flavor}'. Building without it would ship empty "     "String.fromEnvironment values (API base URL, keys), so this is "     "a hard failure. Create the file first."
+    "Dart define file '#{display_path(dart_define_file)}' not found for flavor " \
+    "'#{flavor}'. Building without it would ship empty " \
+    "String.fromEnvironment values (API base URL, keys), so this is " \
+    "a hard failure. Create the file first."
   )
 end
-build_command += " --dart-define-from-file=#{dart_define_file}"
+build_command += " --dart-define-from-file=#{dart_define_file.shellescape}"
 ```
 
 > [!IMPORTANT]
@@ -290,23 +327,34 @@ build_command += " --dart-define-from-file=#{dart_define_file}"
 >
 > Sao chép danh sách key từ `apps/mobile/env.dev`; `.vscode/launch.json` vốn đã trỏ cấu hình Prod vào `env.prod`.
 
-> [!WARNING]
-> Mẫu `*.env` trong `.gitignore` **không** khớp `env.dev` / `env.stg` / `env.prod` — dấu chấm nằm sai phía — nên `env.dev` và `env.stg` hiện đang bị track trong git. Hãy thêm dòng ignore tường minh trước khi đặt credential thật vào `env.prod`.
+> [!NOTE]
+> `env.prod` vốn đã được ignore — `apps/mobile/.gitignore` liệt kê nó tường minh (mẫu `*.env` trong `.gitignore` ở gốc thì không khớp được: dấu chấm nằm sai phía). `env.dev` và `env.stg` được commit **có chủ đích**: chúng không chứa bí mật nào và một bản clone mới phải build được. Đừng đặt credential thật vào hai file đó. Trên CI, bản build prod nhận `env.prod` từ secret `ENV_PROD_B64`.
 
 ---
 
 ## 7. Thiết lập toolchain bên trong lane
 
-Trừ khi bạn truyền `skip_setup:true`, mọi lane đều gọi `setup_flutter_environment` — hàm này hoặc chuyển Flutter hệ thống sang stable rồi upgrade, hoặc kích hoạt `fvm` và ghim đúng phiên bản yêu cầu. Sau đó nó chạy `install_dependencies`:
+Trừ khi bạn truyền `skip_setup:true`, mọi lane đều gọi `setup_flutter_environment`. **FVM là tuỳ chọn**: nó chỉ được dùng khi workspace ghim phiên bản (`.fvmrc`) **và** máy có cài `fvm` — cùng quy tắc với `tools/shared/toolchain.dart`. Biến `FASTLANE_USE_FVM=true|false` ghi đè kết quả dò này.
+
+| `flutter_version` | Có FVM | Không có FVM |
+|:---|:---|:---|
+| `stable` (hoặc rỗng) | `fvm install` — bản `.fvmrc` ghim | `flutter` trên PATH, giữ nguyên |
+| cụ thể, ví dụ `3.47.4` | phải bằng bản `.fvmrc` ghim, không thì lane dừng (chuyển phiên bản sẽ ghi đè `.fvmrc` đang được track) | phải bằng `flutter --version`, không thì lane dừng |
+
+Không có gì bị nâng cấp ngầm. `flutter_upgrade:true` (phải tự bật, chỉ khi không dùng FVM) chạy `flutter channel stable` + `flutter upgrade --force` trước — trước đây lệnh này chạy ở mọi bản build `stable`, âm thầm thay đổi toolchain của máy. `flutter precache --ios` chỉ chạy cho bản build iOS trên macOS.
+
+Sau đó nó chạy `install_dependencies`, thêm `fvm ` trước `dart` / `flutter` khi dùng FVM:
 
 ```ruby
-sh "#{prefix}dart pub global activate flutterfire_cli"
-sh "#{prefix}dart pub global activate flutter_gen"
-sh "#{prefix}flutter clean"
-sh "#{prefix}flutter pub get"
-# ...rồi flutter gen-l10n cho mọi mọi l10n.yaml trong cây thư mục
-sh "#{prefix}dart run build_runner build -d --workspace"
+sh "#{dart_cmd} pub global activate flutterfire_cli"
+sh "#{dart_cmd} pub global activate flutter_gen"
+sh "#{flutter_cmd} clean"
+sh "#{flutter_cmd} pub get --enforce-lockfile"
+# ...rồi flutter gen-l10n cho mọi l10n.yaml trong cây thư mục
+sh "#{dart_cmd} run build_runner build --workspace"
 ```
+
+`--enforce-lockfile` build đúng theo `pubspec.lock` của workspace đã commit, và fail khi lockfile không còn khớp các pubspec thay vì resolve lại.
 
 
 Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace nên rất chậm. Dùng `skip_setup:true` khi build đi build lại ở local.
@@ -321,17 +369,17 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 4. **Xác nhận `Config.yaml` đã điền đủ**, đặc biệt `firebase.app_ids`, `app_store_connect.apple_ids` và các đường dẫn credential.
 5. **Chạy thử ở local**, không phân phối:
    ```bash
-   fastlane android build flavor:prod build_type:aab \
+   bundle exec fastlane android build flavor:prod build_type:aab \
      distribute_store:false distribute_firebase:false skip_setup:true
    ```
 6. **Phát hành.**
    ```bash
    # Cho tester trước
-   fastlane android build flavor:prod build_type:apk distribute_firebase:true \
+   bundle exec fastlane android build flavor:prod build_type:apk distribute_firebase:true \
      version:1.2.0 build_number:auto change_log:"…"
 
    # Rồi lên store
-   fastlane store version:1.2.0 build_number:auto track:internal
+   bundle exec fastlane store version:1.2.0 build_number:auto track:internal
    ```
 7. **Promote** từ `internal` lên `production` trong Play Console sau khi kiểm thử xong. Lane upload với `release_status: 'draft'`, nên không có gì lên live nếu bạn không chủ động promote.
 
@@ -361,7 +409,8 @@ Những phần **chưa** được nối:
 
 - Bước build và distribute iOS trong `azure-ci-cd.yml` bị comment toàn bộ.
 - Bước build iOS trong `.github/workflows/flutter_build.yml` bị comment; chỉ Android được build và phân phối.
-- Build iOS cần macOS, nên tuỳ chọn `self-hosted` trong `fastlane.yml` bắt buộc phải là máy Mac.
+- Build iOS cần macOS, nên tuỳ chọn `self-hosted` trong `fastlane.yml` bắt buộc phải là máy Mac — và keychain của máy đó phải có sẵn chứng chỉ ký cùng provisioning profile; không workflow nào cài chúng. Chọn `platform: android` trong `fastlane.yml` để chỉ build Android.
+- `ios/flavors/<flavor>/GoogleService-Info.plist` bị gitignore; `fastlane.yml` khôi phục nó từ `GOOGLE_SERVICE_INFO_<FLAVOR>_PLIST_B64` khi secret đó được đặt.
 
 ---
 

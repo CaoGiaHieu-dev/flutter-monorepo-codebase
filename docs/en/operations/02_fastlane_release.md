@@ -12,8 +12,12 @@ This page answers: **how the Fastlane setup is wired, which lanes exist and what
 Fastlane normally forces you into the directory holding its `Fastfile`. This repo removes that constraint with a two-file proxy.
 
 ```
+Gemfile                        ← root: fastlane + cocoapods, loads fastlane/Pluginfile
 fastlane/Fastfile              ← root proxy
+fastlane/Pluginfile            ← forwards to apps/mobile/fastlane/Pluginfile
+apps/mobile/Gemfile            ← same gems, for running from apps/mobile/
 apps/mobile/fastlane/Fastfile          ← real entry point
+apps/mobile/fastlane/Pluginfile        ← the ONE plugin list
 apps/mobile/fastlane/modules/
     helpers.rb                 ← config loading + all shared logic
     android_lanes.rb           ← platform :android
@@ -23,11 +27,10 @@ apps/mobile/fastlane/Config.yaml       ← YOUR config (gitignored, created by y
 apps/mobile/fastlane/Config.example.yaml
 ```
 
-`fastlane/Fastfile` at the root does two things:
+`fastlane/Fastfile` at the root only imports the real modules:
 
 ```ruby
-# Change directory to apps/mobile/fastlane to align working directories with the app configuration
-Dir.chdir("../apps/mobile/fastlane")
+ENV['FASTLANE_SKIP_DOCS'] = '1'
 
 import "../apps/mobile/fastlane/modules/helpers.rb"
 import "../apps/mobile/fastlane/modules/ios_lanes.rb"
@@ -35,14 +38,17 @@ import "../apps/mobile/fastlane/modules/android_lanes.rb"
 import "../apps/mobile/fastlane/modules/flutter_lanes.rb"
 ```
 
-Paths inside the modules are then resolved **absolutely from the file's own location**, never from the caller's CWD (`apps/mobile/fastlane/modules/helpers.rb`):
+It deliberately does **not** `Dir.chdir`. Fastlane parses a Fastfile inside its own `chdir` block and restores the directory afterwards, so a `chdir` there was undone before any lane ran — lanes run in `<root>/fastlane`, actions (`sh`, uploads) in `<root>` — and Ruby only warned `conflicting chdir during another chdir block`. Instead, every path inside the modules is resolved **absolutely from the file's own location**, never from the caller's CWD (`apps/mobile/fastlane/modules/helpers.rb`):
 
 ```ruby
-CONFIG_FILE = File.expand_path("../Config.yaml", __dir__)
-APP_DIR     = File.expand_path("../..", __dir__)
+FASTLANE_DIR = File.expand_path("..", __dir__)   # apps/mobile/fastlane
+APP_DIR = File.expand_path("..", FASTLANE_DIR)   # apps/mobile
+CONFIG_FILE = File.join(FASTLANE_DIR, "Config.yaml")
 ```
 
-That is what makes `fastlane android build …` work identically from the repository root and from `apps/mobile/`.
+The dart-define file, `ExportOptions.plist`, the build artifacts, `ios/` for CocoaPods and every credential path from `Config.yaml` are built from `APP_DIR`, and `flutter build` runs inside `APP_DIR`. That is what makes `bundle exec fastlane android build …` work identically from the repository root and from `apps/mobile/`.
+
+`ENV['FASTLANE_SKIP_DOCS'] = '1'` is set in both Fastfiles: without it fastlane rewrites `README.md` in the fastlane folder after every run — the tracked, hand-written `apps/mobile/fastlane/README.md`, or a stray one at the root. `fastlane/.gitignore` (root) and `apps/mobile/fastlane/.gitignore` ignore what a run writes (`report.xml`, …) and every credential file.
 
 ---
 
@@ -51,7 +57,7 @@ That is what makes `fastlane android build …` work identically from the reposi
 `Config.yaml` is **required** — `helpers.rb` aborts immediately if it is missing:
 
 ```ruby
-UI.user_error!("Configuration file not found at #{CONFIG_FILE}") unless File.exist?(CONFIG_FILE)
+UI.user_error!("Configuration file not found at #{CONFIG_FILE}. Copy Config.example.yaml next to it and fill it in.") unless File.exist?(CONFIG_FILE)
 ```
 
 Create it once:
@@ -60,13 +66,15 @@ Create it once:
 cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 ```
 
-`apps/mobile/fastlane/.gitignore` ignores `*.yaml` with an explicit `!Config.example.yaml` exception, so your filled-in `Config.yaml` — and every `*.json` credential beside it — stays out of git.
+`apps/mobile/fastlane/.gitignore` ignores `*.yaml` with an explicit `!Config.example.yaml` exception, so your filled-in `Config.yaml` — and every `*.json` / `*.p8` credential beside it — stays out of git. In CI, `fastlane.yml` writes it from the `FASTLANE_CONFIG_YAML_B64` secret ([`01_cicd.md` §7](01_cicd.md#7-secrets)).
+
+**Relative paths in `Config.yaml` are resolved against `apps/mobile/`** — whichever directory you run fastlane from — so the example's `fastlane/firebase-auth.json` lands in `apps/mobile/fastlane/`, next to `Config.yaml`. Absolute paths are used as is.
 
 ### Fields to fill in
 
 | Key | Meaning |
 |:---|:---|
-| `flutter.default_version` | Default answer to the "Flutter version" prompt. `stable` uses the system Flutter; anything else drives `fvm` |
+| `flutter.default_version` | Default answer to the "Flutter version" prompt. `stable` = use the Flutter this machine resolves (the `.fvmrc` pin when fvm is installed, else the one on PATH); an exact version must match it — see [§7](#7-toolchain-setup-inside-a-lane) |
 | `default_app_version` | Default answer to the "app version" prompt |
 | `valid_flavors` | Accepted flavor names. `none` is always accepted on top of this list |
 | `app_bundle_ids.ios` / `.android` | **Base** bundle ID, without any flavor suffix |
@@ -79,13 +87,19 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `paths.firebase_testers_file` | Text file of tester emails for Firebase App Distribution |
 | `paths.google_play_key_prod` / `_dev` | Google Play service-account JSON files |
 | `paths.app_store_connect_key_filepath` | The `.p8` API key file |
-| `paths.change_log_android` / `_ios` | Temp files Fastlane uses to pass the changelog between lanes |
 
-Install the one required plugin:
+The former `paths.change_log_android` / `_ios` keys are gone (see [§3](#3-lanes)); if your `Config.yaml` still has them they are ignored.
+
+### Gems and plugins
+
+The one plugin, `fastlane-plugin-firebase_app_distribution`, is already listed in `apps/mobile/fastlane/Pluginfile`. Install everything once and always run through Bundler:
 
 ```bash
-fastlane add_plugin firebase_app_distribution
+bundle install                         # from the repository root (or from apps/mobile/)
+bundle exec fastlane android build …   # same from either directory
 ```
+
+Do not run `fastlane add_plugin`: the plugin is already there, the command is interactive (it fails in CI), and it edits the Pluginfile of whichever fastlane folder it runs in. Add a new plugin by hand to `apps/mobile/fastlane/Pluginfile`; both Gemfiles load it — the root one through `fastlane/Pluginfile`, which fastlane requires in order to consider plugins set up.
 
 ---
 
@@ -97,7 +111,7 @@ Every lane is interactive: any parameter you omit is prompted for. Passing it on
 
 | Lane | What it does | Parameters |
 |:---|:---|:---|
-| `android build` | Build APK or AAB and distribute | `flavor`, `build_type` (`apk`/`aab`), `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log`, `skip_setup`, `skip_build` |
+| `android build` | Build APK or AAB and distribute | `flavor`, `build_type` (`apk`/`aab`), `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log`, `change_log_file`, `skip_setup`, `skip_build`, `flutter_upgrade` |
 | `android upload` | Upload an **already-built** artifact to Play. Forces `skip_build:true`, `skip_setup:true`, `flutter_version:stable`, `distribute_store:true`, `distribute_firebase:false` | `flavor`, `build_type`, `version`, `track` |
 | `android store` | Prod release to Play. Forces `flavor:prod`, `build_type:aab`, `distribute_store:true`, `distribute_firebase:false` | `version`, `build_number`, `track` |
 
@@ -105,7 +119,7 @@ Every lane is interactive: any parameter you omit is prompted for. Passing it on
 
 | Lane | What it does | Parameters |
 |:---|:---|:---|
-| `ios build` | Build IPA and distribute to TestFlight and/or Firebase | `flavor`, `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `change_log`, `skip_setup`, `skip_build` |
+| `ios build` | Build IPA and distribute to TestFlight and/or Firebase | `flavor`, `version`, `build_number`, `flutter_version`, `distribute_store`, `distribute_firebase`, `change_log`, `change_log_file`, `skip_setup`, `skip_build`, `flutter_upgrade` |
 | `ios upload` | Upload an existing IPA to TestFlight, no rebuild | `flavor`, `version` |
 | `ios store` | Prod release to TestFlight. Forces `flavor:prod`, `distribute_store:true` | `version`, `build_number` |
 
@@ -113,10 +127,20 @@ Every lane is interactive: any parameter you omit is prompted for. Passing it on
 
 | Lane | What it does | Parameters |
 |:---|:---|:---|
-| `flutter` | Prompts once for shared inputs, sets up the toolchain once, then shells out to `fastlane ios build` followed by `fastlane android build` | `flavor`, `version`, `build_number`, `build_type`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log` |
-| `store` | Same orchestration but prod/store defaults: `fastlane ios store` then `fastlane android store` | `version`, `build_number`, `track`, `flutter_version`, `change_log` |
+| `flutter` | Prompts once for shared inputs, sets up the toolchain once, then shells out to `fastlane ios build` followed by `fastlane android build` | `flavor`, `version`, `build_number`, `build_type`, `flutter_version`, `distribute_store`, `distribute_firebase`, `track`, `change_log`, `skip_setup`, `flutter_upgrade` |
+| `store` | Same orchestration but prod/store defaults: `fastlane ios store` then `fastlane android store` | `version`, `build_number`, `track`, `flutter_version`, `change_log`, `skip_setup`, `flutter_upgrade` |
 
-Both cross-platform lanes run **iOS first and abort the whole run if it fails**, so Android is never built against a release iOS could not produce. They also write the changelog to the two temp files up front so the child lanes read it instead of re-prompting, and delete those files in an `ensure` block.
+Both cross-platform lanes run **iOS first and abort the whole run if it fails**, so Android is never built against a release iOS could not produce. The child processes run from `apps/mobile/` (under `bundle exec` they inherit the same bundle).
+
+### Change log
+
+A lane takes its change log from, in this order:
+
+1. `change_log:` — always wins;
+2. `change_log_file:` — a file whose path is passed **explicitly**. The cross-platform lanes write the change log once to a temp directory **outside the repository**, pass it to both children as `change_log_file:`, and delete it in an `ensure` block whether the run succeeded or not;
+3. an interactive prompt.
+
+Nothing is read implicitly and nothing is written back. (The lanes used to read a fixed `change_log_<platform>.txt` *before* looking at `change_log:`, so a file left behind by an interrupted run silently replaced the change log you passed.)
 
 Valid values enforced by `helpers.rb`:
 
@@ -128,27 +152,36 @@ Valid values enforced by `helpers.rb`:
 
 ```bash
 # Dev APK to Firebase testers
-fastlane android build flavor:dev build_type:apk distribute_firebase:true change_log:"Fix login bug"
+bundle exec fastlane android build flavor:dev build_type:apk distribute_firebase:true change_log:"Fix login bug"
 
 # Local build only — no distribution, no toolchain setup (fastest)
-fastlane android build flavor:dev build_type:apk distribute_firebase:false distribute_store:false skip_setup:true
+bundle exec fastlane android build flavor:dev build_type:apk distribute_firebase:false distribute_store:false skip_setup:true
 
 # Prod AAB to the Play internal track
-fastlane android store version:1.2.0 build_number:45 track:internal
+bundle exec fastlane android store version:1.2.0 build_number:45 track:internal
 
 # Prod IPA to TestFlight
-fastlane ios store version:1.2.0 build_number:45
+bundle exec fastlane ios store version:1.2.0 build_number:45
 
 # Both platforms, dev flavor, Firebase only
-fastlane flutter flavor:dev version:1.2.0 build_number:auto distribute_firebase:true distribute_store:false
+bundle exec fastlane flutter flavor:dev version:1.2.0 build_number:auto distribute_firebase:true distribute_store:false
 
 # Both platforms, prod, to both stores
-fastlane store version:1.2.0 build_number:auto track:internal
+bundle exec fastlane store version:1.2.0 build_number:auto track:internal
 ```
 
 ### Build numbers
 
-`build_number` accepts a literal number or the string `auto`. With `auto`, `determine_build_number` fetches the current highest and adds one — from **TestFlight** (iOS + store), **Google Play** for the given track (Android + store), or **Firebase App Distribution** otherwise. If you ask for `auto` with no distribution target at all, it falls back to querying Firebase.
+`build_number` accepts a positive integer or `auto`; an **empty** value (`build_number:` — what a CI input left blank produces) also means `auto`. Anything else (`0`, `abc`) stops the lane: it used to become `"".to_i` = `0` and ship as `--build-number=0`. With `auto`, `determine_build_number` works it out:
+
+| Distribution | `auto` resolves to |
+|:---|:---|
+| store, iOS | latest **TestFlight** build for that version + 1 |
+| store, Android | highest **Google Play** version code on the track + 1 |
+| Firebase only | latest **Firebase App Distribution** release + 1 |
+| none (local build) | the build number in `apps/mobile/pubspec.yaml` (`version: 1.0.0+N` → `N`) — no credentials needed, nothing to collide with |
+
+`fastlane.yml` sends `build_number:auto` when its input is left empty.
 
 `versionCode` and `versionName` are **not** read from `apps/mobile/pubspec.yaml` during a Fastlane build. `apps/mobile/android/app/build.gradle.kts` binds them to Flutter:
 
@@ -186,7 +219,7 @@ if (keystorePropertiesFile.exists()) {
 ```
 
 > [!CAUTION]
-> **If `key.properties` is absent, a prod build is signed with the committed dev keystore and the build still succeeds.** There is no warning. A release signed with the wrong key cannot be updated on the Play Store afterwards — the signature is permanent for that listing.
+> **If `key.properties` is absent, a prod build is signed with the committed dev keystore and the build still succeeds.** There is no warning from Gradle. (The CI workflows guard against it: a prod build there refuses to start without the keystore secrets — [`01_cicd.md` §7](01_cicd.md#7-secrets).) A release signed with the wrong key cannot be updated on the Play Store afterwards — the signature is permanent for that listing.
 >
 > Before any production build, verify the file exists and points where you expect:
 > ```bash
@@ -195,7 +228,7 @@ if (keystorePropertiesFile.exists()) {
 
 ### The committed dev keystore
 
-`apps/mobile/android/key-dev.properties` and `apps/mobile/android/keystore-dev.jks` are **tracked in git** so a fresh clone builds and runs without any setup. That is deliberate for a template, and fine for `dev`.
+`apps/mobile/android/key-dev.properties` and `apps/mobile/android/keystore-dev.jks` are **tracked in git** so a fresh clone builds and runs without any setup. That is deliberate for a template, and fine for `dev`. They are force-added past `apps/mobile/android/.gitignore`, which ignores every other `*.jks`, `*.keystore`, `key.properties` and `key-*.properties` — its comment says so.
 
 > [!CAUTION]
 > **Never ship a production release with the dev keystore.** It is public in the repository — anyone who clones it can sign an APK that the OS treats as an update to yours.
@@ -274,15 +307,19 @@ def get_dart_define_file(flavor)
 end
 ```
 
-and refuses to build when that file is missing:
+and refuses to build when that file is missing — the path is absolute, built from `APP_DIR`, so it is the same file from either entry point:
 
 ```ruby
-unless File.exist?("../#{dart_define_file}")
+dart_define_file = File.join(APP_DIR, get_dart_define_file(flavor))
+unless File.exist?(dart_define_file)
   UI.user_error!(
-    "Dart define file 'apps/mobile/#{dart_define_file}' not found for flavor "     "'#{flavor}'. Building without it would ship empty "     "String.fromEnvironment values (API base URL, keys), so this is "     "a hard failure. Create the file first."
+    "Dart define file '#{display_path(dart_define_file)}' not found for flavor " \
+    "'#{flavor}'. Building without it would ship empty " \
+    "String.fromEnvironment values (API base URL, keys), so this is " \
+    "a hard failure. Create the file first."
   )
 end
-build_command += " --dart-define-from-file=#{dart_define_file}"
+build_command += " --dart-define-from-file=#{dart_define_file.shellescape}"
 ```
 
 > [!IMPORTANT]
@@ -290,23 +327,34 @@ build_command += " --dart-define-from-file=#{dart_define_file}"
 >
 > Copy the key names from `apps/mobile/env.dev`; `.vscode/launch.json` already points its Prod configuration at `env.prod`.
 
-> [!WARNING]
-> `.gitignore`'s `*.env` pattern does **not** match `env.dev` / `env.stg` / `env.prod` — the dot is on the wrong side — which is why `env.dev` and `env.stg` are currently tracked in git. Add explicit entries before putting real credentials in `env.prod`.
+> [!NOTE]
+> `env.prod` is already ignored — `apps/mobile/.gitignore` lists it explicitly (the root `.gitignore`'s `*.env` pattern would not match it: the dot is on the wrong side). `env.dev` and `env.stg` are committed **deliberately**: they hold no secrets and a fresh clone must build. Keep real credentials out of them. In CI, prod builds get `env.prod` from the `ENV_PROD_B64` secret.
 
 ---
 
 ## 7. Toolchain setup inside a lane
 
-Unless you pass `skip_setup:true`, every lane calls `setup_flutter_environment`, which either switches the system Flutter to stable and upgrades it, or activates `fvm` and pins the requested version. It then runs `install_dependencies`:
+Unless you pass `skip_setup:true`, every lane calls `setup_flutter_environment`. **FVM is optional**: it is used only when the workspace pins a version (`.fvmrc`) **and** `fvm` is installed — the same rule as `tools/shared/toolchain.dart`. `FASTLANE_USE_FVM=true|false` overrides the detection.
+
+| `flutter_version` | With FVM | Without FVM |
+|:---|:---|:---|
+| `stable` (or empty) | `fvm install` — the `.fvmrc` pin | the `flutter` on PATH, as is |
+| exact, e.g. `3.47.4` | must equal the `.fvmrc` pin, else the lane stops (switching would rewrite the tracked `.fvmrc`) | must equal `flutter --version`, else the lane stops |
+
+Nothing is upgraded implicitly. `flutter_upgrade:true` (opt-in, non-FVM only) runs `flutter channel stable` + `flutter upgrade --force` first — it used to run on every `stable` build, silently moving the machine's toolchain. `flutter precache --ios` runs only for iOS builds on macOS.
+
+It then runs `install_dependencies`, with `fvm ` in front of `dart` / `flutter` when FVM is in use:
 
 ```ruby
-sh "#{prefix}dart pub global activate flutterfire_cli"
-sh "#{prefix}dart pub global activate flutter_gen"
-sh "#{prefix}flutter clean"
-sh "#{prefix}flutter pub get"
-# ...then flutter gen-l10n for every every l10n.yaml in the tree
-sh "#{prefix}dart run build_runner build -d --workspace"
+sh "#{dart_cmd} pub global activate flutterfire_cli"
+sh "#{dart_cmd} pub global activate flutter_gen"
+sh "#{flutter_cmd} clean"
+sh "#{flutter_cmd} pub get --enforce-lockfile"
+# ...then flutter gen-l10n for every l10n.yaml in the tree
+sh "#{dart_cmd} run build_runner build --workspace"
 ```
+
+`--enforce-lockfile` builds from exactly the committed workspace `pubspec.lock`, and fails when it no longer matches the pubspecs instead of re-resolving.
 
 
 Because this runs `flutter clean` and a full workspace `build_runner`, it is slow. Use `skip_setup:true` for iterative local builds.
@@ -321,17 +369,17 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
 4. **Confirm `Config.yaml` is filled in**, particularly `firebase.app_ids`, `app_store_connect.apple_ids` and the credential paths.
 5. **Dry run locally**, no distribution:
    ```bash
-   fastlane android build flavor:prod build_type:aab \
+   bundle exec fastlane android build flavor:prod build_type:aab \
      distribute_store:false distribute_firebase:false skip_setup:true
    ```
 6. **Ship it.**
    ```bash
    # Testers first
-   fastlane android build flavor:prod build_type:apk distribute_firebase:true \
+   bundle exec fastlane android build flavor:prod build_type:apk distribute_firebase:true \
      version:1.2.0 build_number:auto change_log:"…"
 
    # Then the stores
-   fastlane store version:1.2.0 build_number:auto track:internal
+   bundle exec fastlane store version:1.2.0 build_number:auto track:internal
    ```
 7. **Promote** from `internal` to `production` in the Play Console once validated. The lane uploads with `release_status: 'draft'`, so nothing goes live without an explicit promotion.
 
@@ -361,7 +409,8 @@ What is **not** wired up:
 
 - iOS build and distribute steps in `azure-ci-cd.yml` are fully commented out.
 - The iOS build in `.github/workflows/flutter_build.yml` is commented out; only Android is built and distributed.
-- iOS builds require macOS, so the `self-hosted` option in `fastlane.yml` must actually be a Mac.
+- iOS builds require macOS, so the `self-hosted` option in `fastlane.yml` must actually be a Mac — one whose keychain already holds the signing certificates and profiles; no workflow installs them. Pick `platform: android` in `fastlane.yml` to build Android only.
+- `ios/flavors/<flavor>/GoogleService-Info.plist` is gitignored; `fastlane.yml` restores it from `GOOGLE_SERVICE_INFO_<FLAVOR>_PLIST_B64` when that secret is set.
 
 ---
 

@@ -23,7 +23,7 @@
 void initMicroPackage() {}
 ```
 
-**Each package that owns persisted data declares its own database**, next to its own tables, DAO and data source. `data_core`'s `CacheDatabase` is the reference wiring.
+**Each package that owns persisted data declares its own database**, next to its own tables, DAO and data source. The `cache` sample module's `CacheDatabase` (package `data_cache`, in `modules/cache/data`) is the reference wiring.
 
 ### Why — this is forced by Drift, not a preference
 
@@ -67,14 +67,14 @@ Notice every one of these is generic over `GeneratedDatabase`. `core_database` n
 
 ## 3. How to: give your package its own database
 
-Worked end-to-end from the real `data_core` wiring. Substitute your package name throughout.
+Worked end-to-end from the real `data_cache` wiring. Substitute your package name throughout.
 
 ### Step 1 — Define the table
 
 A `Table` subclass is standalone: it references no database, so it lives in your package.
 
 ```dart
-// platform/data_core/lib/src/database/tables/cache_entries_table.dart
+// modules/cache/data/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
 /// Example table — stores arbitrary string payloads keyed by a unique id.
@@ -98,7 +98,7 @@ class CacheEntries extends Table {
 ### Step 2 — Define the DAO as a `part of` your database
 
 ```dart
-// platform/data_core/lib/src/database/dao/cache_entries_dao.dart
+// modules/cache/data/lib/src/database/dao/cache_entries_dao.dart
 part of '../cache_database.dart';
 
 /// Data access object for [CacheEntries].
@@ -124,9 +124,6 @@ class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
       cacheEntries,
     )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
-
-  /// Clears the entire cache table.
-  Future<int> clearAll() => delete(cacheEntries).go();
 }
 ```
 
@@ -137,9 +134,9 @@ The `part of` is mandatory — that is Drift's requirement, and the reason the D
 Per the repo-wide rule, constants live in the owning package's `utils/`:
 
 ```dart
-// platform/data_core/lib/src/utils/data_core_constants.dart
-class DataCoreConstants {
-  DataCoreConstants._();
+// modules/cache/data/lib/src/utils/cache_constants.dart
+class CacheConstants {
+  CacheConstants._();
 
   /// On-disk SQLite file for this package's [CacheDatabase], resolved inside
   /// the app documents directory.
@@ -147,7 +144,7 @@ class DataCoreConstants {
   /// Named after its owner rather than the app, because each package that
   /// persists data opens its own file. Changing this value points the package
   /// at a different database and makes existing on-device rows unreachable.
-  static const String CACHE_DATABASE_FILE_NAME = 'data_core_cache.sqlite';
+  static const String DATABASE_FILE_NAME = 'cache.sqlite';
 }
 ```
 
@@ -157,7 +154,7 @@ class DataCoreConstants {
 ### Step 4 — Declare the database class
 
 ```dart
-// platform/data_core/lib/src/database/cache_database.dart
+// modules/cache/data/lib/src/database/cache_database.dart
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
@@ -171,7 +168,7 @@ class CacheDatabase extends _$CacheDatabase {
 
   /// Opens the cache database on a background isolate.
   static Future<CacheDatabase> open({
-    String fileName = DataCoreConstants.CACHE_DATABASE_FILE_NAME,
+    String fileName = CacheConstants.DATABASE_FILE_NAME,
     int readPool = DatabaseConstants.DEFAULT_READ_POOL,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
@@ -208,9 +205,9 @@ Two things to copy exactly:
 ### Step 5 — Register it in your DI module
 
 ```dart
-// platform/data_core/lib/di/module.dart
+// modules/cache/data/lib/di/module.dart
 @module
-abstract class DataCoreDiModule {
+abstract class DataCacheDiModule {
   @preResolve
   @lazySingleton
   Future<CacheDatabase> cacheDatabase() =>
@@ -221,8 +218,7 @@ abstract class DataCoreDiModule {
   IDatabaseHandle<CacheDatabase> cacheDatabaseHandle(CacheDatabase database) =>
       DatabaseHandle<CacheDatabase>(database);
 
-  /// Reads contributed migrations without throwing when none are registered,
-  /// matching the `getAllOrEmpty` behaviour the app shell uses for routes.
+  /// Reads contributed migrations without throwing when none are registered.
   static Iterable<IDatabaseMigration> _registeredMigrations() {
     final getIt = GetIt.instance;
     if (!getIt.isRegistered<IDatabaseMigration>()) {
@@ -236,12 +232,12 @@ abstract class DataCoreDiModule {
 The `isRegistered` guard matters: `getAll<T>()` **throws** when nothing is registered for `T`. Without the guard, a build with no contributed migration would crash during `configureDependencies()`.
 
 > [!WARNING]
-> **Registration order.** `@preResolve` opens the database — and therefore runs migrations — while this module initialises. An `IDatabaseMigration` registered by a module that initialises *later* is invisible at that moment. A package contributing a step for this database must be wired **ahead of** `DataCorePackageModule` in the host's `configureDependencies()`. Nothing in the template hits this yet, but it will bite the first feature that adds a migration for someone else's database. See [`05_di.md`](05_di.md) for module ordering.
+> **Registration order.** `@preResolve` opens the database — and therefore runs migrations — while this module initialises. An `IDatabaseMigration` registered by a module that initialises *later* is invisible at that moment. A package contributing a step for this database must sit in an **earlier DI group** than `data_cache` in the app's `app_manifest.yaml`. Nothing in the template hits this yet, but it will bite the first feature that adds a migration for someone else's database. See [`05_di.md`](05_di.md) for module ordering.
 
 ### Step 6 — Consume it through `IDatabaseHandle`, not the database
 
 ```dart
-// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -275,20 +271,18 @@ await _handle.transaction(() async {
 ### Step 7 — Return a Model, never a Drift row
 
 ```dart
-// platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
+// modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
-  Future<String?> get(String key);
+
   Future<CacheEntryModel?> getEntry(String key);
-  Future<void> delete(String key);
-  Future<List<CacheEntryModel>> getAll();
 }
 ```
 
 `CacheEntry` — the class Drift generates for a row — never appears in a signature. The conversion happens at the boundary:
 
 ```dart
-// platform/data_core/lib/src/models/cache_entry_model.dart
+// modules/cache/data/lib/src/models/cache_entry_model.dart
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -322,7 +316,7 @@ It is deliberately **not** `json_serializable`: rows come from SQLite, not from 
 ### Step 8 — Run codegen and barrels
 
 ```bash
-dart tools/barrel_generator/generate.dart platform/data_core/lib
+dart tools/barrel_generator/generate.dart modules/cache/data/lib
 dart run build_runner build -d --workspace
 ```
 
@@ -436,7 +430,7 @@ beforeOpen: (OpeningDetails details) async {
 | `journal_mode = WAL` | Readers run concurrently with a writer. Required once `readPool > 1`; avoids "database is locked" under contention. |
 | `busy_timeout = 5000` | Waits for a held lock instead of failing instantly with `SQLITE_BUSY`. Default is `0`. |
 
-WAL adds `-wal` and `-shm` sidecar files next to the database. SQLite converts an existing file automatically and reversibly. In-memory databases (tests) ignore this and stay in `memory` journal mode — which is exactly why the WAL test in `data_core` runs against a **real file**.
+WAL adds `-wal` and `-shm` sidecar files next to the database. SQLite converts an existing file automatically and reversibly. In-memory databases (tests) ignore this and stay in `memory` journal mode — which is exactly why the WAL test in `data_cache` runs against a **real file**.
 
 This is centralised for one reason: a package that wrote its own `MigrationStrategy` and forgot `foreign_keys = ON` would lose referential integrity without any error.
 
@@ -537,8 +531,8 @@ The existing tests are split to follow the code:
 |---|---|---|
 | `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, empty registry |
 | `core_database` | `drift_database_opener_test.dart` | The corruption predicate directly — including the case where an environment marker vetoes a corruption match |
-| `data_core` | `cache_database_test.dart` | DAO round-trips, migration wiring, and **real-file** behaviour (WAL, foreign keys, survival across close/reopen) |
-| `data_core` | `database_handle_test.dart` | Accessor reads/writes, shared connection, transaction commit / rollback / return value |
+| `data_cache` | `cache_database_test.dart` | DAO round-trips, migration wiring, and **real-file** behaviour (WAL, foreign keys, survival across close/reopen) |
+| `data_cache` | `database_handle_test.dart` | Accessor reads/writes, shared connection, transaction commit / rollback / return value |
 
 Two habits worth copying:
 
@@ -547,12 +541,12 @@ Two habits worth copying:
 
 ---
 
-## 9. The cache stack is sample code
+## 9. The cache module is sample code
 
 > [!NOTE]
-> The cache chain — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` / `GetAllCacheEntriesUseCase` — is wired end to end and fully registered in DI, but **no feature in this template consumes it**. It exists as a working reference for the shape above, and as the fixture the database tests run against.
+> The chain — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — is the `cache` module (`modules/cache/domain` + `modules/cache/data`), wired end to end, but **no feature in this template consumes it**. It exists as a working reference for the shape above, and as the fixture the database tests run against.
 >
-> Copy the shape for real tables. Delete the whole chain if you do not need a cache — nothing else references it.
+> It is an ordinary removable module: `apps/mobile` composes it, `apps/admin` does not — so only mobile opens the SQLite file at boot. Copy the shape for real tables, or remove it with `dart tools/sample_cleanup/remove_sample.dart cache`. The database tests go with it; they exercise `core_database`'s `DatabaseHandle` and `driftMigrationStrategy` through this fixture, so give them another before deleting if you want to keep that coverage.
 
 ---
 

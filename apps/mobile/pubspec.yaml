@@ -34,10 +34,14 @@ dependencies:
     path: ../../platform/domain_core
   domain_auth:
     path: ../../modules/auth/domain
+  domain_cache:
+    path: ../../modules/cache/domain
   data_core:
     path: ../../platform/data_core
   data_auth:
     path: ../../modules/auth/data
+  data_cache:
+    path: ../../modules/cache/data
   feature_auth:
     path: ../../modules/auth/feature
   feature_home:

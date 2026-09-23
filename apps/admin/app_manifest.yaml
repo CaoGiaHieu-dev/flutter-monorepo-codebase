@@ -30,7 +30,6 @@ di_groups:
       - core_common
       - core_network
       - core_storage
-      - core_database
       - core_di
 
   # No `notifications` group: this app sends no push notifications, so it

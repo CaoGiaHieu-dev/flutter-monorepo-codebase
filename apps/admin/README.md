@@ -13,6 +13,7 @@ permanently, instead of only in a thought experiment:
 | `feature_home` (`HomeNavigator`) | after sign-in, goes to `AppRouter.fallbackLocation` — the settings tab |
 | `feature_dashboard` (`DashboardRouteModule`) | renders the destinations without chrome |
 | `core_notifications` + Firebase | nothing: no `notifications` DI group, no `lib/firebase/` |
+| `cache` (the Drift sample) | no SQLite file is opened at boot |
 
 Two of those rows were bugs until this app was planned — a first launch without onboarding
 skipped the login redirect, and a sign-in without home stayed on the login screen. A third,
@@ -64,9 +65,10 @@ flutter run -d macos --dart-define-from-file=env.dev
 
 Notes that apply to this app specifically:
 
-- **Why desktop, not web.** `data_core` opens its SQLite cache through `core_database`, which uses
-  `drift/native` — FFI, so it does not compile for the web. `drift/native` also needs a SQLite
-  library at runtime; check the `sqlite3` package's notes for the desktop platform you pick.
+- **Why desktop, not web.** Nothing here has been tried on the web. The shell's `AppInitializer`
+  installs `dart:io` `HttpOverrides` for SSL pinning, which has no web equivalent. This app opens
+  no database: it composes neither the `cache` module nor `core_database`, so no Drift or SQLite
+  code is in its dependency graph.
 - **Flavor.** `AppConfig.appFlavor` reads the flavor the app was built with and falls back to
   `dev` when there is none, so a plain `flutter run` registers the `dev` DI environment.
 - **Branding.** `tools/theme_generator/theme_setting.dart` takes `--app admin`, but runs

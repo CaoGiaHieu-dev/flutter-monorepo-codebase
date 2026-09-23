@@ -235,7 +235,7 @@ Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước 
 
 Chạy trên isolate nền qua `NativeDatabase.createInBackground`. **Không phụ thuộc package nào khác** trong workspace.
 
-Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng hay DAO nào, và DI module của nó không đăng ký gì cả. Package nào cần lưu dữ liệu quan hệ thì tự khai **database của chính mình** ngay cạnh bảng, DAO và data source của nó, rồi mở database đó bằng các mảnh ghép dưới đây. `CacheDatabase` của `data_core` (`platform/data_core/lib/src/database/`) là bản đấu nối tham chiếu.
+Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng hay DAO nào, và DI module của nó không đăng ký gì cả. Package nào cần lưu dữ liệu quan hệ thì tự khai **database của chính mình** ngay cạnh bảng, DAO và data source của nó, rồi mở database đó bằng các mảnh ghép dưới đây. `CacheDatabase` của module mẫu `cache` (`modules/cache/data/lib/src/database/`) là bản đấu nối tham chiếu.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
@@ -259,7 +259,7 @@ ProfileLocalDataSource(IDatabaseHandle handle)
 ```
 
 > [!NOTE]
-> Trong phạm vi **một** database, đây là **cô lập ở mức bề mặt API, không phải cô lập cưỡng chế**: callback factory vẫn nhận được object database, nên một bên gọi cố tình vẫn với tới được mọi DAO trên đó. Giá trị nằm ở chỗ vượt qua ranh giới trở thành hành động cố ý và nhìn thấy được khi review, chứ không phải một tham số constructor bình thường. Cô lập *giữa các package* mới là rào chắn thật, và nó do đồ thị package cưỡng chế — package nào không khai `data_core` thì thậm chí không gọi được tên `CacheDatabase`.
+> Trong phạm vi **một** database, đây là **cô lập ở mức bề mặt API, không phải cô lập cưỡng chế**: callback factory vẫn nhận được object database, nên một bên gọi cố tình vẫn với tới được mọi DAO trên đó. Giá trị nằm ở chỗ vượt qua ranh giới trở thành hành động cố ý và nhìn thấy được khi review, chứ không phải một tham số constructor bình thường. Cô lập *giữa các package* mới là rào chắn thật, và nó do đồ thị package cưỡng chế — package nào không khai `data_cache` thì thậm chí không gọi được tên `CacheDatabase`.
 
 Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout) và chiến lược cách ly file hỏng nằm ở [`../guides/07_database.md`](../guides/07_database.md).
 
@@ -362,7 +362,7 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `core_network` | `platform_kernel` |
 | `core_notifications` | `platform_kernel` |
 | `core_storage` | `core_common` |
-| `data_core` | `platform_kernel`, `core_database`, `domain_core` |
+| `data_core` | `platform_kernel`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
 | `bloc_state_management` | `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `domain_core` *(ngoại lệ đã duyệt)* |

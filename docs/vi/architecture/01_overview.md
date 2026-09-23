@@ -79,7 +79,7 @@ Ngoài ba trường hợp trên, mọi package trong `platform/*` **không** ph�
 
 ## 3. Vì sao dùng Pub Workspace monorepo
 
-Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc — hiện có 26 thành viên (23 package, hai app, và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build` cho cả cây.
+Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc — hiện có 28 thành viên (25 package, hai app, và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build` cho cả cây.
 
 **Cái được:** biên dịch tăng dần nhanh, không lệch version giữa các package, refactor xuyên package gọn trong một commit, và ràng buộc phân tầng ở mức vật lý — một feature package *không thể* import `data_auth` nếu `pubspec.yaml` của nó không khai.
 

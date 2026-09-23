@@ -20,8 +20,6 @@ dependencies:
     path: ../../platform/network
   core_storage:
     path: ../../platform/storage
-  core_database:
-    path: ../../platform/database
   core_di:
     path: ../../platform/di
   platform_app_shell:

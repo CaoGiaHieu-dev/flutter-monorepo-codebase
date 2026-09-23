@@ -179,13 +179,13 @@ abstract class BaseUseCase<RType, Params> {
 }
 ```
 
-`FutureOr` là cố ý: use case đọc storage cục bộ có thể hoàn toàn đồng bộ (xem `GetLanguageUseCase` bên dưới), còn use case gọi mạng thì trả `Future`.
+`FutureOr` là cố ý: use case đọc storage cục bộ có thể hoàn toàn đồng bộ (`LogoutUseCase` trả về một `Result<void>` thường), còn use case gọi mạng thì trả `Future`.
 
 Dùng `NoParams()` khi thao tác không cần đầu vào.
 
 ### Mẫu cache
 
-`domain_core` còn có sẵn một lát cắt cache hoạt động được — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, và `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` / `GetAllCacheEntriesUseCase`. Đây là nửa Domain của ví dụ Drift mô tả trong [hướng dẫn database](../guides/07_database.md).
+Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là một lát cắt nhỏ hơn — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, và `GetCacheEntryUseCase` / `SaveCacheEntryUseCase`. Đây là nửa Domain của ví dụ Drift mô tả trong [hướng dẫn database](../guides/07_database.md).
 
 ---
 

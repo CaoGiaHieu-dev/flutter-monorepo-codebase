@@ -38,12 +38,13 @@ flutter-monorepo-codebase/
 │   ├── storage/                   # StorageManager + StorageValue<T> (defines NO keys)
 │   ├── ui_kit/                    # core_ui_kit — reusable widgets every module may use
 │   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository + CacheDatabase (owns its own tables/DAO)
+│   └── data_core/                 # IBaseRepository, BaseModel, request models
 ├── modules/                       # One vertical slice per bounded context, one per team
 │   ├── auth/                      # Sample: the full three-layer slice
 │   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
 │   │   ├── data/                  # Models, DataSources, RepositoryImpl
 │   │   └── feature/               # UI + Provider, login only
+│   ├── cache/                     # Sample: a package-owned Drift database (domain + data, no UI)
 │   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
 │   ├── settings/feature/          # Sample: consuming another module's contract
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom-bar host)
@@ -53,7 +54,7 @@ flutter-monorepo-codebase/
 ├── docs/                   # This documentation (en/ + vi/)
 ├── .agents/                # AGENTS.md rules + skills for AI agents
 │
-├── pubspec.yaml            # Workspace root — lists all 26 members
+├── pubspec.yaml            # Workspace root — lists all 28 members
 ├── pubspec_dependencies.yaml  # Version catalog — the single source of truth
 ├── pubspec.lock            # ONE lock file for the whole workspace
 └── analysis_options.yaml
@@ -92,6 +93,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | Package | Path | Owns |
 | :--- | :--- | :--- |
 | `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, cache entry entity/usecases |
+| `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
 | `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
 ### Data — `modules/*/data`
@@ -100,7 +102,8 @@ Implements the domain contracts. Data sources return **Models**, never entities,
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `CacheEntryModel`, cache data source + repository |
+| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_cache` | `modules/cache/data` | `CacheDatabase` + `CacheEntries` table + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
 | `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
 ### Features — `modules/*/feature`
@@ -214,7 +217,7 @@ Consequences you must know:
 | Add a business rule / use case | `modules/<name>/domain/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
 | Add an API endpoint | `modules/<name>/data/lib/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Persist a key/value | The **owning** package's `utils/*_storage_keys.dart` | [../guides/06_storage.md](../guides/06_storage.md) |
-| Add a database table | The owning package's own `src/database/tables/` (reference: `platform/data_core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
+| Add a database table | The owning package's own `src/database/tables/` (reference: `modules/cache/data/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Change colors / spacing / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |

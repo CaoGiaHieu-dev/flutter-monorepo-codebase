@@ -3,7 +3,6 @@ import 'package:bloc_state_management/di/module.module.dart';
 import 'package:core_base_ui/di/module.module.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_common/di/module.module.dart';
-import 'package:core_database/di/module.module.dart';
 import 'package:core_di/di/module.module.dart';
 import 'package:core_network/di/module.module.dart';
 import 'package:core_storage/di/module.module.dart';
@@ -45,7 +44,6 @@ const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
   ExternalModule(CoreNetworkPackageModule),
   ExternalModule(CoreStoragePackageModule),
-  ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 

@@ -239,16 +239,14 @@ Directories are `data_sources/remote/` (Retrofit) and `data_sources/local/` (sto
 > A DataSource returns a **Model**, never an Entity — mapping to the entity is the repository's
 > job. It must also never expose a *generated* type in its signatures: a Drift row class or a
 > Retrofit envelope leaking through the interface couples every consumer to that library. The
-> cache sample in `data_core` shows the pattern — its interface speaks only in its own
+> `cache` sample module (`data_cache`) shows the pattern — its interface speaks only in its own
 > `CacheEntryModel`, and converts the Drift row at the boundary:
 >
 > ```dart
 > abstract class ICacheEntryLocalDataSource {
 >   Future<void> save(String key, String value);
->   Future<String?> get(String key);
+>
 >   Future<CacheEntryModel?> getEntry(String key);
->   Future<void> delete(String key);
->   Future<List<CacheEntryModel>> getAll();
 > }
 > ```
 
@@ -310,7 +308,7 @@ class AuthLocalDataSource {
 
 Extends `IBaseRepository` from `data_core` and wraps every call in `execute()` (async) or
 `executeSync()` (sync). Real code from
-[`platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart):
+[`modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
 @LazySingleton(as: ICacheEntryRepository)

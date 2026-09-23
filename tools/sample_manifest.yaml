@@ -42,8 +42,8 @@ packages:
 
   # --- Framework: layer foundations ---------------------------------------
   # These carry the base contracts every domain/data package builds on
-  # (Result<T>, BaseEntity, IBaseRepository). They also happen to contain the
-  # cache sample — see `embedded_samples` below.
+  # (Result<T>, BaseEntity, IBaseRepository). They contain no sample code: the
+  # Drift example that used to live inside them is the `cache` module now.
   domain_core: { kind: framework, path: platform/domain_core }
   data_core: { kind: framework, path: platform/data_core }
 
@@ -122,59 +122,18 @@ packages:
       A Retrofit data source, Freezed models with .toEntity(), a
       package-owned storage key, and a repository wrapping both in execute()
       so nothing throws past the data layer.
-
-# ---------------------------------------------------------------------------
-# Samples living inside framework packages
-# ---------------------------------------------------------------------------
-# These cannot be removed by deleting a package, because the package around
-# them is framework. Delete the listed files instead.
-
-embedded_samples:
-  cache_chain:
-    lives_in: [domain_core, data_core]
+  domain_cache:
+    kind: sample
+    path: modules/cache/domain
+    demonstrates: The domain half of a locally persisted slice — entity, params, contract, two use cases.
+  data_cache:
+    kind: sample
+    path: modules/cache/data
     demonstrates: >-
-      One complete vertical slice — table, DAO, data source, repository,
-      entity, use cases — as a copy-me template for your first real table.
-    warning: >-
-      Nothing in the app consumes it. `unused_checker` will not flag it because
-      it is registered in DI, and the tests use it as a fixture, so it looks
-      alive. It is not.
-    files:
-      - platform/domain_core/lib/src/entities/cache_entry_entity.dart
-      - platform/domain_core/lib/src/params/cache_entry_params.dart
-      - platform/domain_core/lib/src/repositories/i_cache_entry_repository.dart
-      - platform/domain_core/lib/src/usecases/get_cache_entry_usecase.dart
-      - platform/domain_core/lib/src/usecases/get_all_cache_entries_usecase.dart
-      - platform/domain_core/lib/src/usecases/save_cache_entry_usecase.dart
-      - platform/data_core/lib/src/database/cache_database.dart
-      - platform/data_core/lib/src/database/tables/cache_entries_table.dart
-      - platform/data_core/lib/src/database/dao/cache_entries_dao.dart
-      - platform/data_core/lib/src/models/cache_entry_model.dart
-      - platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
-      - platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart
-      - platform/data_core/lib/src/utils/data_core_constants.dart
-    also_edit:
-      # Deleting only the files above does not build: these name them too.
-      - "platform/data_core/lib/di/module.dart — the @preResolve CacheDatabase and cacheDatabaseHandle registrations"
-      - "barrels — regenerate with tools/barrel_generator for domain_core/lib and data_core/lib"
-    also_remove:
-      - platform/data_core/test/cache_database_test.dart
-    rehome_before_removing:
-      # These test framework code in core_database and only borrow the cache
-      # database as a fixture. Give them another fixture; do not delete them.
-      - "platform/data_core/test/database_handle_test.dart — the only test of DatabaseHandle"
-      - "platform/data_core/test/cache_database_test.dart, group 'on a real file' — the only test of WAL and foreign keys under driftMigrationStrategy"
-
-  auth_rest_reference:
-    lives_in: [data_auth]
-    demonstrates: A Retrofit remote data source over the endpoints in utils/.
-    warning: >-
-      Live, not dead: AuthRepositoryImpl calls it for login and refresh, and
-      di/register_module.dart registers it. It goes only with the whole auth
-      bundle — deleting these two files alone breaks data_auth.
-    files:
-      - modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
-      - modules/auth/data/lib/src/utils/auth_api_constants.dart
+      A package-owned Drift database — table, DAO, migrations through
+      core_database — behind IDatabaseHandle, with a Model that keeps Drift's
+      row type out of the public API. Its tests are the fixture for
+      core_database's DatabaseHandle and driftMigrationStrategy.
 
 # ---------------------------------------------------------------------------
 # Removal bundles
@@ -230,14 +189,23 @@ bundles:
       This is the only IAppEntryLocation. Without it the cold-start route falls
       back to the first dashboard tab, then to '/'.
 
+  cache:
+    packages: [domain_cache, data_cache]
+    breaks: []
+    note: >-
+      Nothing consumes it. Removing it also removes the only tests of
+      core_database's DatabaseHandle and of WAL / foreign keys under
+      driftMigrationStrategy (modules/cache/data/test/) — give them another
+      fixture first if you want to keep that coverage.
+
   dashboard:
     packages: [feature_dashboard]
     orphaned_contracts:
       - platform/di/lib/src/routing/dashboard_route_module.dart
     breaks: []
     note: >-
-      Tabs registered by other features have nothing to render into. Remove the
-      tab features as well, or supply your own DashboardRouteModule.
+      Tabs still render, without chrome — AppRouter falls back to the bare
+      navigationShell. apps/admin runs this way.
 
   splash:
     packages: [feature_splash]

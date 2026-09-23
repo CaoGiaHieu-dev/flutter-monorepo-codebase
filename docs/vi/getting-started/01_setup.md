@@ -47,7 +47,7 @@ flutter --version      # phải >= 3.47.4
 
 ## 2. Clone và cài dependencies
 
-Đây là **Pub Workspace**. Toàn bộ 26 thành viên workspace (23 package, hai app, và `tools`) chỉ có **một** lần resolve dependency duy nhất, nên bạn chạy `pub get` **một lần, tại thư mục gốc** — tuyệt đối không chạy bên trong package con.
+Đây là **Pub Workspace**. Toàn bộ 28 thành viên workspace (25 package, hai app, và `tools`) chỉ có **một** lần resolve dependency duy nhất, nên bạn chạy `pub get` **một lần, tại thư mục gốc** — tuyệt đối không chạy bên trong package con.
 
 ```bash
 git clone <repo-url>

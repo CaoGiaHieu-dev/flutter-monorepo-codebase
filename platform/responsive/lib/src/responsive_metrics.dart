@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import 'adaptive/window_size_class.dart';
 import 'utils/responsive_constants.dart';
 
 /// Resolves a font size from the design value and the current [metrics].
@@ -27,6 +28,7 @@ class ResponsiveMetrics {
     this.splitScreenMode = false,
     this.minTextAdapt = false,
     this.fontSizeResolver,
+    this.breakpoints = ResponsiveBreakpoints.material3,
   });
 
   /// The current window size in logical pixels.
@@ -46,6 +48,16 @@ class ResponsiveMetrics {
 
   /// Overrides the default text scaling entirely when supplied.
   final FontSizeResolver? fontSizeResolver;
+
+  /// Where the window size classes begin.
+  final ResponsiveBreakpoints breakpoints;
+
+  /// The width class of the current window.
+  WindowSizeClass get windowSizeClass => breakpoints.classify(screenSize.width);
+
+  /// The height class of the current window.
+  WindowHeightClass get windowHeightClass =>
+      breakpoints.classifyHeight(screenSize.height);
 
   /// Horizontal ratio between the real screen and the design artboard.
   double get scaleWidth => screenSize.width / designSize.width;
@@ -97,7 +109,8 @@ class ResponsiveMetrics {
         other.designSize == designSize &&
         other.splitScreenMode == splitScreenMode &&
         other.minTextAdapt == minTextAdapt &&
-        other.fontSizeResolver == fontSizeResolver;
+        other.fontSizeResolver == fontSizeResolver &&
+        other.breakpoints == breakpoints;
   }
 
   @override
@@ -107,6 +120,7 @@ class ResponsiveMetrics {
     splitScreenMode,
     minTextAdapt,
     fontSizeResolver,
+    breakpoints,
   );
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'adaptive/window_size_class.dart';
 import 'responsive_metrics.dart';
 import 'responsive_scope.dart';
 
@@ -15,6 +16,12 @@ import 'responsive_scope.dart';
 extension ResponsiveContext on BuildContext {
   /// The metrics in scope. Throws if no `ResponsiveInit` is above this context.
   ResponsiveMetrics get responsive => ResponsiveScope.of(this);
+
+  /// The width class of the current window.
+  WindowSizeClass get windowSizeClass => responsive.windowSizeClass;
+
+  /// The height class of the current window.
+  WindowHeightClass get windowHeightClass => responsive.windowHeightClass;
 
   /// Scales a width. Also correct for anything that must stay square.
   double w(num value) => responsive.width(value);

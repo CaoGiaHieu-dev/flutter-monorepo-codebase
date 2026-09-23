@@ -117,12 +117,12 @@ Cả hai đường đều `await Future.wait([initService(), Future.delayed(_min
 
 ### `_ResponsiveWrapper`
 
-Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`) với `AppConfig.design` (375×812), `minTextAdapt: true`, `splitScreenMode: true` và một `fontSizeResolver` tuỳ biến co giãn chữ theo chiều rộng màn hình thật. Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `core_responsive`) với `AppConfig.design` (375×812) và `splitScreenMode: true`. Chữ scale theo tỉ lệ chiều rộng của cửa sổ — mặc định của package. Nó nằm ở đúng gốc cây, nên mọi widget phía dưới đều gọi được `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
 
 `ResponsiveInit` là `StatelessWidget`: nó đọc `MediaQuery.sizeOf(context)` — dependency **chỉ theo size** — nên tự rebuild khi màn hình đổi kích thước và bỏ qua thay đổi brightness / textScale / padding. Metrics được phát xuống qua `ResponsiveScope`, một `InheritedWidget`, nên widget nào đọc metrics là tự đăng ký theo dõi chúng — không có cờ rebuild nào để tinh chỉnh.
 
 > [!NOTE]
-> Ghi chú ngay trong `main_scope.dart` nói rõ: khi đã đặt `fontSizeResolver` thì nó **ghi đè toàn bộ** cách tính cỡ chữ, nên `minTextAdapt: true` ở trên đang nằm im. Bỏ resolver đi thì `minTextAdapt` mới có tác dụng (chữ sẽ scale theo trục nhỏ hơn thay vì theo chiều rộng) — đó là một thay đổi thị giác có chủ đích, không phải một lần dọn dẹp.
+> Trước đây ở đây có một `fontSizeResolver` tính đúng tỉ lệ chiều rộng đó nhưng từ `View.of(context).display` — màn hình vật lý, không phải cửa sổ. Khi toàn màn hình thì hai cái khớp nhau; khi split-screen hay đổi kích thước cửa sổ, chữ scale theo cả màn hình trong khi mọi kích thước khác theo cửa sổ. Mặc định đo cửa sổ qua `MediaQuery`, nên nó thay resolver mà không đổi gì trên điện thoại toàn màn hình.
 
 Việc scale vẫn phải đi qua `BuildContext` — `core_responsive` **không có extension trên `num`**, nên `16.h` đơn giản là không biên dịch được. Xem [luật 12](../reference/01_rules.md#12-responsive-ui), và lưu ý luật R7 của `arch_check` chặn mọi dạng bare còn sót ở mọi PR.
 

@@ -107,23 +107,15 @@ class _ResponsiveWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return ResponsiveInit(
       designSize: AppConfig.design,
-      minTextAdapt: true,
-      // Carried over verbatim from the previous package so type scale does not
-      // shift under existing screens.
+      // Text scales by the width ratio, like horizontal spacing — the
+      // package default while `minTextAdapt` is false.
       //
-      // > [!NOTE]
-      // > Supplying a resolver overrides text scaling completely, so
-      // > `minTextAdapt: true` above is inert while this is set. Drop the
-      // > resolver to let `minTextAdapt` take effect (text would then scale by
-      // > the smaller axis instead of by width) — that is a visual change, so
-      // > make it deliberately rather than as a side effect.
-      fontSizeResolver: (fontSize, metrics) {
-        final display = View.of(context).display;
-        final screenSize = display.size / display.devicePixelRatio;
-        final scaleWidth = screenSize.width / AppConfig.design.width;
-
-        return fontSize * scaleWidth;
-      },
+      // This used to be a `fontSizeResolver` computing the same ratio from
+      // `View.of(context).display`: the *physical display*, not this window.
+      // On a full-screen phone the two agree; in split-screen or a resized
+      // window every other dimension followed the window while text kept
+      // scaling to the whole display. `ResponsiveInit` already measures the
+      // window, so the default is both simpler and right.
       splitScreenMode: true,
       child: child,
     );

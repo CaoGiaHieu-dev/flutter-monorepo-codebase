@@ -57,7 +57,7 @@ MigrationStrategy driftMigrationStrategy({
       await database.customStatement('PRAGMA foreign_keys = ON');
 
       // Write-Ahead Logging lets readers run concurrently with a writer,
-      // which is required once readPool > 1 and avoids "database is locked"
+      // which a read pool (readPool > 0) requires, and avoids "database is locked"
       // under contention. It changes the on-disk layout by adding `-wal` and
       // `-shm` sidecar files; SQLite converts an existing database
       // automatically and reversibly. In-memory databases (tests) ignore

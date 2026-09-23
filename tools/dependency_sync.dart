@@ -40,6 +40,10 @@ Future<void> main(List<String> arguments) async {
       final parts = trimmed.split(':');
       final name = parts[0].trim();
       var version = parts.sublist(1).join(':').trim();
+      // A trailing `# note` documents the entry; it is not part of the
+      // version. Kept in, it made every package using the dependency report
+      // drift, and a sync would have written the comment into their pubspecs.
+      version = version.replaceFirst(RegExp(r'\s+#.*$'), '');
       if ((version.startsWith('"') && version.endsWith('"')) ||
           (version.startsWith("'") && version.endsWith("'"))) {
         version = version.substring(1, version.length - 1);
@@ -210,7 +214,9 @@ Future<void> main(List<String> arguments) async {
                   '🔧 Repairing local path: [$relativePath] $pendingBlockDepName -> path: "$expectedPath"',
                 );
                 final leadingIndent = ' ' * indent;
-                newLines.add('$leadingIndent$depName: $expectedPath$trailingComment');
+                newLines.add(
+                  '$leadingIndent$depName: $expectedPath$trailingComment',
+                );
                 fileModified = true;
                 totalRepairedPaths++;
               }

@@ -74,6 +74,7 @@ dependencies:
 
   # Local Database (Drift + SQLite)
   drift: "^2.34.3"
+  sqlite3: "^3.6.0"   # core_database: per-connection setup for the read pool
 
 dev_dependencies:
   # Build Runner & Code Generators

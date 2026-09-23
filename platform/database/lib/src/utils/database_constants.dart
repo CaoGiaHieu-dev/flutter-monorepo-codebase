@@ -6,14 +6,17 @@
 class DatabaseConstants {
   DatabaseConstants._();
 
-  /// Default number of concurrent read connections for the background
-  /// isolate pool. `1` keeps a single reader (no concurrent reads).
+  /// Default number of read-only connections drift opens next to the writer,
+  /// each on its own isolate. `1` gives one reader, so a `SELECT` never
+  /// queues behind a write (WAL allows that); `0` runs everything on the
+  /// writer.
   static const int DEFAULT_READ_POOL = 1;
 
   /// How long SQLite waits for a held lock before returning
   /// `SQLITE_BUSY` ("database is locked"), in milliseconds.
   ///
-  /// Applied via `PRAGMA busy_timeout` in [MigrationStrategy.beforeOpen].
+  /// Applied via `PRAGMA busy_timeout` on every connection — the writer in
+  /// `MigrationStrategy.beforeOpen`, the read pool when it opens.
   /// Without it the default is `0` — a contended write fails instantly
   /// instead of waiting for the other connection to finish.
   static const int BUSY_TIMEOUT_MS = 5000;

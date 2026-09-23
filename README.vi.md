@@ -195,8 +195,9 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
 
 1.  **Module Generator (`tools/module_generator/`)**:
     ```bash
-    # Tạo Feature package 'profile' sử dụng Provider:
-    dart tools/module_generator/generate.dart 1 profile "" 1
+    # Tạo Feature package 'profile' dùng Provider + route stack. Với feature luôn truyền <SM> và
+    # <route>: thiếu cái nào thì tool hỏi, còn không có terminal thì thoát với mã 64.
+    dart tools/module_generator/generate.dart 1 profile "" 1 1
     # Tạo Domain micro-package 'payment':
     dart tools/module_generator/generate.dart 2 payment
     # Tạo Data micro-package 'payment':
@@ -229,8 +230,12 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 8.  **Theme & Firebase**:
     ```bash
-    dart tools/theme_generator/theme_setting.dart --app mobile
-    dart tools/firebase/firebase_config.dart --app mobile
+    dart tools/theme_generator/theme_setting.dart --app mobile   # cần android/ + ios/ trong app
+    dart tools/firebase/firebase_config.dart --app mobile        # tương tác; cần Firebase CLI đã đăng nhập
+    ```
+9.  **Kiểm tra 16 KB page-size cho Android (`tools/android_compliance/`)**:
+    ```bash
+    ./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
     ```
 
 ---

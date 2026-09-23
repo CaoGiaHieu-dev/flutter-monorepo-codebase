@@ -19,7 +19,9 @@ When a developer adds, deletes, or renames files under a package's `lib` directo
 
 Run the command in the shell, from the repository root, and report the status. A path that does
 not exist exits with code `2` (it prompts for another path only when run with no argument on a
-terminal), so check the exit code.
+terminal); a failing `dart format` (run through the repo's toolchain, FVM when set up) exits `1`
+with the barrels written but unformatted; a flag or a second path exits `64` — a flag is never
+taken for a path. Check the exit code. `--help` prints the usage.
 
 ## Notes
 

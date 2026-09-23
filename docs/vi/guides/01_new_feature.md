@@ -26,11 +26,12 @@ Năm tham số vị trí được đọc bởi
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` không dùng |
 | 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` không sinh |
 
-Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
+Chạy không kèm tham số trên terminal thì tool sẽ hỏi tương tác từng bước; không có terminal thì
+thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra cách dùng.
 
-> [!CAUTION]
-> Nếu `modules/profile/feature` đã tồn tại, tool hỏi ghi đè và **xoá đệ quy toàn bộ thư mục**
-> khi bạn gõ `y`. Kiểm tra kỹ đường dẫn trước khi trả lời.
+> [!NOTE]
+> Nếu `modules/profile/feature` đã tồn tại, tool **từ chối** và thoát với mã 1 — nó không bao giờ
+> ghi đè hay xoá một package có sẵn. Hãy tự xoá hoặc đổi tên trước.
 
 ### Chọn tham số 5 — quyết định hình dạng routing của bạn
 

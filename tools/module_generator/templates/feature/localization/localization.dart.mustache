@@ -4,7 +4,7 @@ import 'package:injectable/injectable.dart';
 
 import '../{{moduleName}}.dart';
 
-@LazySingleton(as: IFeatureLocalization)
+@Injectable(as: IFeatureLocalization)
 class {{pascalName}}LocalizationImpl implements IFeatureLocalization {
   @override
   LocalizationsDelegate<dynamic> get delegate =>

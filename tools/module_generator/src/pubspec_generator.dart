@@ -59,8 +59,11 @@ class PubspecGenerator {
           'core_base_ui',
           'core_responsive',
           'core_ui_kit',
-          if (config.smType == StateManagementType.provider)
+          if (config.smType == StateManagementType.provider) ...[
             'provider_state_management',
+            // The provider template returns a `Result` from domain_core.
+            'domain_core',
+          ],
           if (config.smType == StateManagementType.bloc)
             'bloc_state_management',
         ];

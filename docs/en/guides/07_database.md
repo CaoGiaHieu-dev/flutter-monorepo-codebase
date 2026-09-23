@@ -416,7 +416,7 @@ beforeOpen: (OpeningDetails details) async {
   await database.customStatement('PRAGMA foreign_keys = ON');
 
   // Write-Ahead Logging lets readers run concurrently with a writer,
-  // which is required once readPool > 1 and avoids "database is locked"
+  // which a read pool (readPool > 0) requires, and avoids "database is locked"
   // under contention.
   await database.customStatement('PRAGMA journal_mode = WAL');
 
@@ -428,8 +428,10 @@ beforeOpen: (OpeningDetails details) async {
 | Pragma | Why it matters |
 |---|---|
 | `foreign_keys = ON` | **SQLite defaults this OFF.** Every `references()` you declare is silently ignored without it — a silent trap that surfaces much later as corrupt relations. |
-| `journal_mode = WAL` | Readers run concurrently with a writer. Required once `readPool > 1`; avoids "database is locked" under contention. |
+| `journal_mode = WAL` | Readers run concurrently with a writer. Required by any read pool (`readPool > 0`; the default is `1`); avoids "database is locked" under contention. |
 | `busy_timeout = 5000` | Waits for a held lock instead of failing instantly with `SQLITE_BUSY`. Default is `0`. |
+
+`beforeOpen` runs on the **writer** connection only. The read pool — one more connection per reader, each on its own isolate — never sees it, so `DatabaseConnectionFactory` also passes drift a `setup` callback that applies `busy_timeout` to every connection it opens (`platform/database/test/database_connection_factory_test.dart` reads it back through a reader). `journal_mode` needs no such help: WAL is stored in the file. `foreign_keys` is only enforced on writes, which never reach a reader.
 
 WAL adds `-wal` and `-shm` sidecar files next to the database. SQLite converts an existing file automatically and reversibly. In-memory databases (tests) ignore this and stay in `memory` journal mode — which is exactly why the WAL test in `data_cache` runs against a **real file**.
 

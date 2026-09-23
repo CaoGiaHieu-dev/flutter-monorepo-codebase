@@ -13,6 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   drift: "^2.34.3"
+  sqlite3: "^3.6.0"
   path_provider: "^2.1.6"
   path: "^1.9.1"
   get_it: ^9.2.1

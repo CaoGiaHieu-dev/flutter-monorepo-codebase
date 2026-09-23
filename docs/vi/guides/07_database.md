@@ -416,7 +416,7 @@ beforeOpen: (OpeningDetails details) async {
   await database.customStatement('PRAGMA foreign_keys = ON');
 
   // Write-Ahead Logging lets readers run concurrently with a writer,
-  // which is required once readPool > 1 and avoids "database is locked"
+  // which a read pool (readPool > 0) requires, and avoids "database is locked"
   // under contention.
   await database.customStatement('PRAGMA journal_mode = WAL');
 
@@ -428,8 +428,10 @@ beforeOpen: (OpeningDetails details) async {
 | Pragma | Vì sao quan trọng |
 |---|---|
 | `foreign_keys = ON` | **SQLite mặc định TẮT cái này.** Mọi `references()` bạn khai đều bị bỏ qua âm thầm nếu thiếu nó — một cái bẫy im lặng, chỉ lộ ra rất lâu sau dưới dạng quan hệ hỏng. |
-| `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi `readPool > 1`; tránh lỗi "database is locked" khi tranh chấp. |
+| `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi có read pool (`readPool > 0`; mặc định là `1`); tránh lỗi "database is locked" khi tranh chấp. |
 | `busy_timeout = 5000` | Chờ khoá được nhả thay vì fail ngay với `SQLITE_BUSY`. Mặc định là `0`. |
+
+`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
 
 WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_cache` phải chạy trên **file thật**.
 

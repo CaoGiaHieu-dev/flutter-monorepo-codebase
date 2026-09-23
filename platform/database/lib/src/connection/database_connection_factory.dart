@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' show Database;
 
 import '../utils/database_constants.dart';
 
@@ -19,12 +20,43 @@ abstract final class DatabaseConnectionFactory {
   }
 
   /// Creates a [QueryExecutor] backed by a background isolate.
+  ///
+  /// With [readPool] above zero drift opens one more connection per reader,
+  /// each on its own isolate. `MigrationStrategy.beforeOpen` runs on the
+  /// writer only, so a per-connection `PRAGMA` set there never reaches the
+  /// readers; [_configureConnection] runs on every connection instead.
   static Future<QueryExecutor> createBackgroundExecutor({
     required String fileName,
     int readPool = DatabaseConstants.DEFAULT_READ_POOL,
   }) async {
     final file = await resolveDatabaseFile(fileName: fileName);
-    return NativeDatabase.createInBackground(file, readPool: readPool);
+    return backgroundExecutorFor(file, readPool: readPool);
+  }
+
+  /// [createBackgroundExecutor] for an explicit [file] — the part that does
+  /// not need the path_provider plugin, so a unit test can open a real file.
+  static QueryExecutor backgroundExecutorFor(
+    File file, {
+    int readPool = DatabaseConstants.DEFAULT_READ_POOL,
+  }) {
+    return NativeDatabase.createInBackground(
+      file,
+      readPool: readPool,
+      setup: _configureConnection,
+    );
+  }
+
+  /// Per-connection settings every connection needs, readers included.
+  ///
+  /// Sent to each drift isolate, so it must stay a static function that
+  /// captures nothing. Without `busy_timeout` a reader meeting a lock — a
+  /// WAL checkpoint, a recovery — fails at once with `SQLITE_BUSY` instead
+  /// of waiting. The writer gets the same value again in `beforeOpen`, which
+  /// is also where a database's own `busyTimeoutMs` override applies.
+  static void _configureConnection(Database database) {
+    database.execute(
+      'PRAGMA busy_timeout = ${DatabaseConstants.BUSY_TIMEOUT_MS}',
+    );
   }
 
   /// Moves an unreadable database file aside so a fresh one can be created.

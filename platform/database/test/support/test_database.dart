@@ -12,7 +12,9 @@ import 'package:drift/native.dart';
 /// running `drift_dev` over this package's `test/` directory just to produce
 /// an empty database, and the two members below are all [Migrator] needs.
 class TestDatabase extends GeneratedDatabase {
-  TestDatabase() : super(NativeDatabase.memory());
+  /// In memory unless a test passes its own [executor].
+  TestDatabase([QueryExecutor? executor])
+    : super(executor ?? NativeDatabase.memory());
 
   @override
   Iterable<TableInfo<Table, dynamic>> get allTables =>

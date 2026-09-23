@@ -23,34 +23,4 @@ class AppGradients {
       colors: colors.liquidOnboardingColors,
     );
   }
-
-  /// Flowing teal, cyan, and slate gradient for customer mode
-  static LinearGradient liquidCustomer(BuildContext context) {
-    final colors = Theme.of(context).extension<ThemeSystemExtension>()!;
-    return LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: colors.liquidCustomerColors,
-    );
-  }
-
-  /// Flowing violet, magenta, and deep midnight gradient for owner mode
-  static LinearGradient liquidOwner(BuildContext context) {
-    final colors = Theme.of(context).extension<ThemeSystemExtension>()!;
-    return LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: colors.liquidOwnerColors,
-    );
-  }
-
-  /// Flowing violet, neon blue, and deep orange for authentication
-  static LinearGradient liquidAuth(BuildContext context) {
-    final colors = Theme.of(context).extension<ThemeSystemExtension>()!;
-    return LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: colors.liquidAuthColors,
-    );
-  }
 }

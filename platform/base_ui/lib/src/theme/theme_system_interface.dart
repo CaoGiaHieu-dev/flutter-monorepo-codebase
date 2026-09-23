@@ -29,15 +29,10 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
   final Color warning;
   final Color info;
 
-  // Additional mapped variables for chat, etc.
-  final Color chatMe;
 
   // Theme Gradients
   final List<Color> primaryGradientColors;
   final List<Color> liquidOnboardingColors;
-  final List<Color> liquidCustomerColors;
-  final List<Color> liquidOwnerColors;
-  final List<Color> liquidAuthColors;
 
   ThemeSystemInterface({
     required this.primary,
@@ -57,12 +52,8 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
     required this.error,
     required this.warning,
     required this.info,
-    required this.chatMe,
     required this.primaryGradientColors,
     required this.liquidOnboardingColors,
-    required this.liquidCustomerColors,
-    required this.liquidOwnerColors,
-    required this.liquidAuthColors,
   });
 
   @override

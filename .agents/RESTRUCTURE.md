@@ -91,36 +91,45 @@ which had already leaked once, in the template's own sample code.
 
 **Gate:** `dart tools/arch_check/check.dart` exits 0 and prints R8 among its rules.
 
-### Step 2 — Shrink the samples  *(2a, 2b done; 2c pending)*
+### Step 2 — Shrink the samples ✅ done *(target revised — see below)*
 
 Sample code is documentation written in Dart. Six overlapping features is not documentation,
-it is a second product to maintain. Two reference modules demonstrate every mechanism.
+it is a second product to maintain.
 
-| Today | After | Why |
+The original target was **~2 modules, well under 1,000 LOC**, reached by folding home and
+settings into one `catalog` module and moving dashboard, splash and onboarding into the app
+shell. That target was **revised**, for one reason: step 7. A second app composing a *subset*
+of the modules is the proof that modules are removable, and it needs modules to remove. Folding
+chrome into the shell would have made dashboard, splash and onboarding part of every app, and
+`apps/admin` — which runs without all three — could not exist.
+
+| Module | Outcome | What it is kept to show |
 |:--|:--|:--|
-| ~~`feature_auth` (1,731 LOC)~~ **→ 739 LOC, 2b** | login only ✅ | Provider + stack route + agnostic stream + action handler. Register / forgot-password add no new mechanism; delete them. |
-| `feature_home` (291) | `modules/catalog` | BLoC + private Freezed events + nav destination + consuming another module's contract. |
-| `feature_settings` (195) | fold into `catalog` | Its only unique role is *consuming* an action handler; one screen can show that. |
-| `feature_dashboard` (129) | → app shell | Chrome belongs to the app, not to a removable feature. |
-| `feature_splash` (182) | → app shell | Same. |
-| `feature_onboarding` (158) | → app shell | Same; keep `IAppEntryLocation` as the contract it demonstrates. |
-| ~~`domain_language` + `data_language` (183)~~ **deleted 2a** | — | Dead by the repo's own admission: the Settings UI uses `LanguageProvider`, never `SetLanguageUseCase`. |
-| `cache_chain` inside `data_core` | move to `modules/catalog` | It is a sample; it must not sit inside a framework package. |
+| `auth` (domain + data + feature) | `feature_auth` 1,731 → 749 LOC; ~1,240 across all three layers (2b, 2d, 2g) | Provider, a Retrofit data source, a package-owned storage key, the shell contracts (`IAuthSessionState`, `IAppTreeWrapper`, …) |
+| `home` | trimmed (2c, 2g); tab route is a plain `TypedGoRoute` | BLoC with private Freezed events, a nav destination, consuming an agnostic stream |
+| `settings` | trimmed (2c, 2g) | a second tab, consuming an action handler optionally (R8) |
+| `dashboard`, `splash`, `onboarding` | **kept as modules** (not moved to the shell) | each one shell contract, and that the shell runs without it (`apps/admin`) |
+| `language` | **deleted** (2a) | — nothing: the UI never used it |
+| cache chain | **moved** out of `domain_core` / `data_core` into `modules/cache` (2h) | a package-owned Drift database; the fixture for `core_database`'s tests |
 
-Target: **~2 modules, well under 1,000 LOC of sample**, each file stating in one line which
-mechanism it exists to show.
+Result: 10 sample packages, ~2,550 LOC of hand-written Dart including comments — every file
+states which mechanism it exists to show, and no framework package contains sample code.
 
 **Gate:** `dart tools/sample_cleanup/remove_sample.dart --list` agrees with the table above,
-and removing either module leaves the app building and booting.
+and removing any bundle leaves both apps building and booting — the second half needs a
+toolchain.
 
 ### Step 3 — Empty `core_di` of product names ✅ done
 
 `core_di` becomes generic-only. Per-module contracts move to their own package.
 
-- ⏳ **Deferred to step 5.** Physically moving these contracts into
-  `modules/<module>/contracts/` is a file move; it rides the relayout rather than
-  churning every pubspec twice. `core_di` is already free of any *domain* dependency, which is
-  the part that blocked isolation.
+- ✖ **Moving the auth contracts into a contracts package under `modules/auth/` — dropped.** The shell consumes
+  them (`IAuthSessionState`, `IAuthRefreshListenable`, `IAppTreeWrapper`,
+  `IAuthSessionGateway`), and once the shell became `platform_app_shell` it may not depend on a
+  module at all (R1). A contract the shell reads has to live in `core_di`. A contract only
+  *modules* read may still go in a `<module>_contracts` package — R9 already holds such a
+  package to pure Dart — but none exists today. `core_di` is free of any *domain* dependency,
+  which is the part that blocked isolation.
 - ✅ **3a — no domain entity in a contract.** `IAuthStatusStream` / `IAuthSessionState` now
   carry `AuthPrincipal`, owned by `core_di`; `AuthStatusStreamImpl.toPrincipal` maps at the
   auth boundary. The `core_di → domain_auth` edge is gone, and with it `domain_auth` from
@@ -133,8 +142,9 @@ and removing either module leaves the app building and booting.
   `NavDestination` (label + icons), not a `BottomNavigationBarItem`. `DashboardPage` maps it to
   a bottom bar; a desktop or admin shell maps the same modules to a rail or a sidebar without
   the modules changing. `module_generator`'s template was renamed and rewritten to match.
-- Replace `AuthNavigator.toLogin(context)` with a pure-Dart `NavIntent`. Navigation contracts
-  stop needing `BuildContext`, so contracts stay pure Dart.
+- ✖ **A pure-Dart `NavIntent` instead of `toLogin(context)` — not pursued.** `core_di` is
+  Flutter-bound anyway (`NavigatorKeys` holds `GlobalKey`s), and passing the caller's
+  `BuildContext` is the documented navigation rule; the change would buy purity nothing needs.
 
 **Gate:** `core_di/pubspec.yaml` declares no `domain_*` package, and `arch_check` prints three
 approved upward edges instead of four. Contract *names* still mention auth until step 5 moves

@@ -46,8 +46,8 @@ modules/x/data/lib
 # later step creates. They are removed from this list as each step lands, which
 # is what stops the plan from quietly describing a tree nobody built —
 # `apps/mobile` came off this list the moment step 6b created it, and
-# `apps/admin` when step 7c did.
-modules/catalog
+# `apps/admin` when step 7c did. `modules/catalog` came off when step 2's
+# target was revised and no longer planned it. The section is empty now.
 
 # --- Patterns (spans containing <placeholder>, * or {a,b}) -----------------
 # Checked since placeholders stopped being skipped: at least one real path
@@ -59,8 +59,6 @@ modules/<f>/feature/lib/src/gen/language
 apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
 # (3) Tutorial: CLAUDE.md tells the reader to create their own table here.
 modules/<module>/<layer>/lib/src/database/tables
-# (3) Target layout: RESTRUCTURE.md step 3 plans per-module contracts packages.
-modules/<module>/contracts
 # History: RESTRUCTURE.md's own record of the layout the relayout replaced.
 # The plan has to be able to name what it moved away from.
 packages/core/*

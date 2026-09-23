@@ -164,7 +164,7 @@ exist) and never let an exception escape the Data layer.
 > `FirebaseAuthException` and `PlatformException` — falls through to:
 > ```dart
 > return ServerFailure(
->   message: kDebugMode ? error.toString() : 'Unknown error occurred',
+>   message: _isDebug ? error.toString() : 'Unknown error occurred',
 >   code: 9999,
 > );
 > ```

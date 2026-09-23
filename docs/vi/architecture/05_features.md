@@ -40,7 +40,7 @@ Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ
 ```
 modules/<name>/feature/
 ├── assets/
-│   └── language/            # <name>_en.arb, <name>_vi.arb
+│   └── language/            # en.arb, vi.arb
 ├── lib/
 │   ├── feature_<name>.dart  # barrel công khai
 │   ├── di/
@@ -236,7 +236,7 @@ Kiểu của nhánh BLoC được đặt tên là `BlocViewState<T>` chứ khôn
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream)
     : super(const BlocViewState.initial()) { … }
 ```

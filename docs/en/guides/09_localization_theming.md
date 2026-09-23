@@ -86,9 +86,11 @@ Each feature gets its **own** `output-class` (`FeatureHomeLocalizations`, `Featu
 ### Step 3 — generate
 
 ```bash
-dart run build_runner build -d --workspace
+cd modules/home/feature && flutter gen-l10n && cd -
 ```
 
+`build_runner` does not touch ARB files; `gen-l10n` reads the package's `l10n.yaml`.
+`dart tools/workspace_setup/configure.dart` runs it for every package that has one.
 Missing translations are reported in `untranslated-messages.txt`.
 
 ### Step 4 — register the delegate (once per feature)
@@ -317,7 +319,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 ## 13. Checklist
 
 - [ ] No hard-coded user-facing string anywhere
-- [ ] New key added to **all** `.arb` locale files, `build_runner` run
+- [ ] New key added to **all** `.arb` locale files, `flutter gen-l10n` run
 - [ ] Feature registers `IFeatureLocalization`; `root_app.dart` untouched
 - [ ] `core_ui_kit` uses `core_base_ui` strings, defines no `.arb`
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`

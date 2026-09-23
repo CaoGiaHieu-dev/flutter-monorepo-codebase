@@ -243,7 +243,7 @@ Reports packages with newer versions on pub.dev. Update `pubspec_dependencies.ya
 dart tools/workspace_setup/configure.dart
 ```
 
-Full setup for a fresh clone: activates `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`.
+Full setup for a fresh clone: activates `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, then the barrel generator for every package.
 
 > [!CAUTION]
 > There is **no** `configure.sh` and **no** `configure.bat`. Only `configure.dart` exists — invoke it with `dart`, never through a shell wrapper.

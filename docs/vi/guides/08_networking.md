@@ -93,7 +93,7 @@ Auth chạy trước để token được gắn trước mọi thứ; refresh đ
 
 ### Opt-out theo từng request
 
-Cả hai cờ nằm trong `RequestOptions.extra` và mặc định là `true`:
+Cả ba cờ nằm trong `RequestOptions.extra` và mặc định là `true`:
 
 ```dart
 // platform/network/lib/src/utils/network_constants.dart
@@ -102,6 +102,12 @@ static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
 /// Set `false` to opt a request out of [RetryInterceptor].
 static const String EXTRA_CAN_RETRY = 'canRetry';
+
+/// Set `false` on a request whose `401` must never start a token refresh —
+/// the login and refresh calls themselves. The bearer token is still
+/// attached; only the refresh reaction is skipped. Without it a `401` from
+/// the refresh call waits on the refresh that is waiting on it.
+static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
 ```
 
 ### `AuthInterceptor`
@@ -275,8 +281,9 @@ Body dạng `FormData` được dựng lại trước khi replay, vì stream c�
 // platform/network/lib/src/interceptors/refresh_token_interceptor.dart
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
-///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) are ignored, so
-///    the refresh call itself never triggers a refresh.
+///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
+///    refresh ([NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] `= false`) are
+///    ignored, so the login and refresh calls never trigger a refresh.
 /// 2. A request already replayed after a refresh is marked with
 ///    [NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] and is not refreshed a
 ///    second time.
@@ -294,7 +301,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 ```
 
 > [!NOTE]
-> Nếu endpoint refresh của bạn cũng là một HTTP call qua chính client này, hãy set `extra[EXTRA_NEED_AUTHENTICATION] = false` cho nó (lớp 1). Cài đặt hiện tại gọi thẳng Firebase nên chưa gặp tình huống này.
+> Refresh của sample **chính là** một HTTP call qua chính client này (`AuthRemoteDataSource.refreshToken`), nên nó và `login` mang `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (lớp 1). Thiếu cờ này, một `401` từ chính lời gọi refresh sẽ đi vào `RefreshTokenHandler` trong lúc lần refresh của handler vẫn đang chạy, và chờ chính nó mãi mãi. Endpoint nào của bạn mà `401` mang nghĩa khác "hết phiên" cũng cần cờ này.
 
 ---
 
@@ -449,6 +456,7 @@ Repository bóc các lớp bao này thành `Result<T>` qua `execute()` — xem [
 - [ ] Hằng số endpoint nằm trong `utils/` của package data sở hữu, không ở `core_common`
 - [ ] Đã khai Retrofit service, thêm `part`, chạy `build_runner`
 - [ ] Request không được mang token thì set `EXTRA_NEED_AUTHENTICATION = false`
+- [ ] Login, refresh, và mọi call có `401` không mang nghĩa "hết phiên" thì set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] Impl `NetworkConfig` giữ `@LazySingleton` (không bao giờ eager)
 - [ ] `sslPinningHashes` đã điền ≥2 pin trước khi phát hành
 - [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra `injection.config.dart`

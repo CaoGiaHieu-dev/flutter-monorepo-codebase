@@ -117,7 +117,7 @@ Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `core_c
 >
 > ```dart
 > return ServerFailure(
->   message: kDebugMode ? error.toString() : 'Unknown error occurred',
+>   message: _isDebug ? error.toString() : 'Unknown error occurred',
 >   code: 9999,
 > );
 > ```
@@ -339,11 +339,7 @@ abstract class RegisterModule {
 Constructing it here rather than inside the repository keeps the dependency visible to the container, which is what leaves a seam for a fake in tests.
 
 > [!NOTE]
-> **This used to call Firebase directly.**
->
-> Until recently `AuthRepositoryImpl` used `FirebaseAuth`, `GoogleSignIn` and `FacebookAuth`, and never touched `AuthRemoteDataSource` at all — the template shipped the pattern it teaches, unused, beside an implementation that ignored it. Five of its eight methods (`registerWithEmail`, `loginWithGoogle`, `loginWithFacebook`, `getCurrentUser`, `updateUserProfile`) had no caller anywhere in the workspace.
->
-> It also meant every auth error surfaced as *"Unknown error occurred"*, because `ErrorHandler` has no Firebase branch (§4). If your product authenticates through Firebase, swap the transport back — but add that branch first, and keep the shape below.
+> **Authenticating through Firebase instead?** Swap the transport inside `AuthRepositoryImpl` and keep the shape below — but add a Firebase branch to `ErrorHandler` first (§4). Without one, every Firebase error collapses to *"Unknown error occurred"* in release.
 
 ### Session persistence
 

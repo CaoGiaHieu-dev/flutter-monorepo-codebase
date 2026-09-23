@@ -134,7 +134,7 @@ dart run build_runner build -d --workspace
 dart tools/workspace_setup/configure.dart
 ```
 
-Script đa nền tảng này chạy tuần tự: kích hoạt `flutterfire_cli` → `flutter clean` → `flutter pub get` → `gen-l10n` cho mọi package có file ARB → `build_runner build -d --workspace`.
+Script đa nền tảng này chạy tuần tự: kích hoạt `flutterfire_cli` → `flutter clean` → `flutter pub get` → `gen-l10n` cho mọi package có file ARB → `build_runner build -d --workspace` → barrel generator cho từng package.
 
 > [!NOTE]
 > `configure.dart` là điểm vào duy nhất — không có bản bọc `configure.sh` hay `configure.bat`. Một script Dart chạy y hệt nhau trên mọi nền tảng, nên không cần tới shell wrapper.

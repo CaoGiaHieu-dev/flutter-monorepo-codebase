@@ -86,8 +86,11 @@ Mỗi feature có `output-class` **riêng** (`FeatureHomeLocalizations`, `Featur
 ### Bước 3 — sinh code
 
 ```bash
-dart run build_runner build -d --workspace
+cd modules/home/feature && flutter gen-l10n && cd -
 ```
+
+`build_runner` không đụng tới file ARB; `gen-l10n` đọc `l10n.yaml` của package.
+`dart tools/workspace_setup/configure.dart` chạy lệnh này cho mọi package có file đó.
 
 Chuỗi còn thiếu bản dịch sẽ được liệt kê trong `untranslated-messages.txt`.
 
@@ -318,7 +321,7 @@ Builder inline không thể tái sử dụng, không preview được, không te
 ## 13. Checklist
 
 - [ ] Không còn chuỗi hiển thị nào bị hard-code
-- [ ] Key mới đã thêm vào **tất cả** file `.arb`, đã chạy `build_runner`
+- [ ] Key mới đã thêm vào **tất cả** file `.arb`, đã chạy `flutter gen-l10n`
 - [ ] Feature đăng ký `IFeatureLocalization`; `root_app.dart` không bị đụng tới
 - [ ] `core_ui_kit` dùng chuỗi của `core_base_ui`, không định nghĩa `.arb`
 - [ ] Màu qua `context.colors.*`, typography qua `AppTextStyles.*(context)`

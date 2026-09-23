@@ -92,7 +92,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, entity/usecase cache |
+| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
 | `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
 | `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
@@ -190,7 +190,7 @@ workspace:
   - apps/admin
   - apps/mobile
   - modules/auth/data
-  # … và 23 thành viên nữa, kể cả tools
+  # … và 25 thành viên nữa, kể cả tools
   # composer:end:workspace
 ```
 

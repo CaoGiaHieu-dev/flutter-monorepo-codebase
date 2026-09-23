@@ -150,7 +150,7 @@ flutter pub get && dart analyze app
 - [ ] All sizing goes through `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; no raw doubles, no bare `16.h` form (`arch_check` R7 blocks it)
 - [ ] Design tokens called with context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, never a bare getter, never double-scaled
 - [ ] Values needed after an `await` were read from context **before** it, not across it
-- [ ] Reusable widgets in `core_ui_kit` take **unscaled** values and do not scale internally
+- [ ] Reusable widgets in `core_ui_kit` use their parameters **as received** — the caller scaled them — and scale only their own constants
 - [ ] Dialogs and bottom sheets are separate widget classes, not inline builders
 - [ ] Colors come from `context.colors.*`, typography from `AppTextStyles.*(context)`
 

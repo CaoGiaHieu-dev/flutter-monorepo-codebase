@@ -56,7 +56,9 @@ Use the `run_command` tool to run the commands above. After execution, analyze t
   `arch_check` rule R7 blocks it, so flag it as a hard error, not a nit.
 - Design tokens take context: `AppSpacing.lg(context)`, `AppRadius.md(context)`,
   `AppTextStyles.bodyMediumStyle(context)`. Never double-scale an already-scaled token.
-- Reusable widgets in `core_ui_kit` take **unscaled** values and never scale internally.
+- Reusable widgets in `core_ui_kit` use parameters **as received** — the caller scaled them — and scale
+  only their own constants. `context.w(widget.width)` is a double-scale bug; `context.h(10)` as that
+  widget's own default is correct.
 
 **Layering**
 - `core/*` must not depend on `feature_*` or `data_*`. Approved exceptions only:

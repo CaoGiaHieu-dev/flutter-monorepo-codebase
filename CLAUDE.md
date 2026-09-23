@@ -449,7 +449,7 @@ abstract class AuthModule {
   - **Why:** a number carries no context, so such an extension could only read a global, and a widget reading a global never learns the metrics changed — it computes once and never updates (silent stale value). `context.h(16)` registers a `ResponsiveScope` (InheritedWidget) dependency, so exactly the widgets that scale rebuild on rotation / split-screen / resize
 - **FORBIDDEN:** Raw doubles in layout — `SizedBox(height: 24)` → `SizedBox(height: context.h(24))`
 - **No context in an async method?** Read the value *before the first `await`*, then pass it on. See `photo_grid_item.dart` `_loadThumbnail` (`if (!mounted) return;` then `context.w(200).toInt()`)
-- **Reusable widgets** in `core_ui_kit` take **unscaled** values — caller scales before passing in
+- **Reusable widgets** in `core_ui_kit` receive **already-scaled** values and use them as-is (the caller scales); they scale only their *own* constants. `context.w(widget.width)` double-scales
 - **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
 - **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `apps/mobile/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
 - **Widget tests that scale must wrap the subject in `ResponsiveInit`** — otherwise `ResponsiveScope.of` asserts, deliberately, rather than silently falling back to unscaled values
@@ -702,7 +702,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 
 ## Frequently-Violated Rules (Full List in AGENTS.md)
 
-1. **Responsive sizing:** All UI dimensions go through `context.w/h/sp/r` from `core_responsive` — no raw doubles, and no bare `16.w` (no `num` extension exists). Reusable widgets in `core_ui_kit` take unscaled values — caller scales. Enforced by arch_check R7.
+1. **Responsive sizing:** All UI dimensions go through `context.w/h/sp/r` from `core_responsive` — no raw doubles, and no bare `16.w` (no `num` extension exists). Reusable widgets in `core_ui_kit` use parameters as received (the caller scaled them) and scale only their own constants. R7 holds the bare-extension half only.
 2. **Freezed BLoC events:** Private subclasses (`_HomeStarted`) via `part`/`part of`. `on<Event>` handlers must be async `(event, emit)` — never sync closure calling unawaited async.
 3. **Dialogs/BottomSheets:** Always separate widget classes, never inline in `showDialog`/`showModalBottomSheet` builders.
 4. **Naming:** `I` prefix reserved for interfaces. Data source dirs are `data_sources/` (not `datasources/`). Suffixes: `_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `_repository_impl`, etc.

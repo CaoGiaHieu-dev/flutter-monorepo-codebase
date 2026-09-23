@@ -150,7 +150,7 @@ flutter pub get && dart analyze app
 - [ ] Mọi kích thước đi qua `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; không double thô, không dạng bare `16.h` (`arch_check` R7 chặn)
 - [ ] Design token gọi kèm context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, không dùng getter trần, không scale hai lần
 - [ ] Giá trị cần dùng sau `await` được đọc từ context **trước** đó, không giữ context xuyên qua
-- [ ] Widget dùng lại trong `core_ui_kit` nhận giá trị **chưa scale** và không tự scale bên trong
+- [ ] Widget dùng lại trong `core_ui_kit` dùng tham số **đúng như nhận được** — bên gọi đã scale — và chỉ scale hằng số của chính nó
 - [ ] Dialog và bottom sheet là class widget riêng, không phải builder inline
 - [ ] Màu lấy từ `context.colors.*`, typography lấy từ `AppTextStyles.*(context)`
 

@@ -122,7 +122,7 @@ Nó phụ thuộc `core_common`, `core_base_ui`, `core_responsive` và `provider
 
 ### Quy tắc UI-agnostic
 
-Widget dùng lại nhận số **thô, chưa scale** và không được tự scale qua `core_responsive` bên trong. Scale là việc của bên gọi:
+Widget dùng lại dùng tham số **đúng như nhận được** và không được tự scale chúng qua `core_responsive`. Scale là việc của bên gọi, nên khi giá trị đến nơi thì nó đã ở đơn vị pixel thiết bị — để ý `context.w(120)` ở phía gọi bên dưới. Widget vẫn scale hằng số **của chính nó**, nếu không thì nó chẳng responsive gì cả:
 
 ```dart
 // bên gọi scale

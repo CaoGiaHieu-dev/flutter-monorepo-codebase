@@ -339,7 +339,7 @@ final bytes = await widget.photo.thumbnailDataWithSize(
 > [!WARNING]
 > `context.edgeInsets` scales each axis by the axis it belongs to — horizontal by `w`, vertical by `h`, and `all:` by `w`, which makes it a drop-in for `EdgeInsets.all(context.w(16))`. `borderRadius` is the exception: it uses `r`, because a radius scaled on one axis alone turns a circle into an ellipse. When in doubt, write the explicit form; it names the axis.
 
-**Reusable widgets take raw, unscaled values and must not scale internally.** Scaling is the caller's job.
+**Reusable widgets use their parameters exactly as received and must not scale them.** Scaling is the caller's job, so the value arrives already in device pixels. A widget's *own* constants it does scale — `widget.paddingBottom ?? context.h(10)` is correct on both counts.
 
 ❌ **Wrong** — an internal override silently discards the caller's value:
 ```dart

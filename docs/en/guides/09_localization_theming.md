@@ -245,10 +245,10 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 
 Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-height multiplier, `flex` is a ratio.
 
-## 10. Reusable widgets take RAW values
+## 10. A widget scales its own constants, never its parameters
 
 > [!CAUTION]
-> A reusable widget in `core_ui_kit` **must not scale its own parameters**. It accepts raw numbers; the caller scales before passing them in. Scaling inside means a caller who already scaled gets double-scaling, and a caller who passes a token cannot override it at all.
+> A reusable widget in `core_ui_kit` **must not scale the parameters it receives**. The caller scales before passing, so a value arrives already in device pixels and has to be used as-is; scaling it again double-scales, and a caller passing a token cannot override it at all. A widget's **own** constants are the opposite case: it must scale those, or it is not responsive.
 
 What the rule forbids — an `AppBar` in `core_ui_kit` that ends with:
 

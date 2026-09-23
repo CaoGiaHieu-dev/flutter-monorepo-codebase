@@ -76,6 +76,10 @@ void main() async {
     final pkgDir = pubspec.parent.path;
     final lib = Directory('$pkgDir/lib');
     if (!lib.existsSync()) continue;
+    // An app is a composition root, not a library: nothing imports it, and
+    // its `injection.dart` is composer's output — a barrel pass would add an
+    // app barrel and reformat a file `composer verify` compares byte-for-byte.
+    if (File('$pkgDir/app_manifest.yaml').existsSync()) continue;
     await _runCommand(dartCmd, [
       ...dartArgs,
       'tools/barrel_generator/generate.dart',

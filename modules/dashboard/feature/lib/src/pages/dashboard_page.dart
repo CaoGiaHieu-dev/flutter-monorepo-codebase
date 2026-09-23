@@ -45,8 +45,7 @@ class DashboardPage extends StatelessWidget {
               // widget. A desktop shell would build NavigationRailDestination
               // from the same modules, unchanged.
               items: [
-                for (final tab in tabs)
-                  _itemOf(tab.destination(context)),
+                for (final tab in tabs) _itemOf(tab.destination(context)),
               ],
             ),
     );

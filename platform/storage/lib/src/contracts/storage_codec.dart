@@ -29,8 +29,7 @@ class StorageCodec {
     String json,
     String key, {
     T Function(Object? key, Object? value)? reviver,
-  }) =>
-      revive<T>(jsonDecode(json), key, reviver: reviver);
+  }) => revive<T>(jsonDecode(json), key, reviver: reviver);
 
   /// [decode] for an already-decoded value.
   static T? revive<T>(

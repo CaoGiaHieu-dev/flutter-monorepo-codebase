@@ -34,8 +34,19 @@ class NetworkConfigImpl implements NetworkConfig {
   /// Null in a build that composes no auth module.
   IAuthSessionGateway? get _session => getItOrNull<IAuthSessionGateway>();
 
+  /// Whether an auth module is composed — *without* resolving it.
+  ///
+  /// `ApiClient` reads [onRefreshToken] while `Dio` is being constructed, and
+  /// the gateway's own dependency chain (`IAuthRepository` →
+  /// `AuthRemoteDataSource`) needs that same `Dio`. Resolving the gateway
+  /// here closed the loop: GetIt threw "Circular dependency detected" and
+  /// the app booted to an error screen. The lookup itself stays lazy, inside
+  /// the callbacks, which run long after construction.
+  bool get _hasSession => getIt.isRegistered<IAuthSessionGateway>();
+
   @override
-  String? Function() get getToken => () => _session?.readToken();
+  String? Function() get getToken =>
+      () => _session?.readToken();
 
   @override
   String? Function() get getLocale =>
@@ -47,17 +58,16 @@ class NetworkConfigImpl implements NetworkConfig {
   /// rather than pass through an interceptor that can never succeed.
   @override
   Future<String?> Function()? get onRefreshToken =>
-      _session == null ? null : _refreshSession;
+      _hasSession ? _refreshSession : null;
 
   @override
   Future<void> Function()? get onRefreshFailed =>
-      _session == null ? null : _clearSession;
+      _hasSession ? _clearSession : null;
 
   /// Renews the session and hands the transport layer the refreshed token.
   ///
   /// Persisting the new credentials is the gateway's job, not this class's.
-  Future<String?> _refreshSession() async =>
-      await _session?.refreshToken();
+  Future<String?> _refreshSession() async => await _session?.refreshToken();
 
   /// Ends the session after the server refused to renew it.
   ///

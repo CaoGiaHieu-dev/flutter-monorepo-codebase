@@ -1,4 +1,3 @@
-
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

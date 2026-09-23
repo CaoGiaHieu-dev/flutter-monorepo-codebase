@@ -39,7 +39,6 @@ class RetryHandler {
   /// A flag that indicates whether the retry dialog is being shown.
   var _isPending = false;
 
-
   /// Checks if the retry is needed based on the [DioExceptionType].
   ///
   /// Returns `true` if the error is a [DioExceptionType.receiveTimeout],
@@ -62,7 +61,9 @@ class RetryHandler {
     // One entry per caller. Matching on anything coarser (path + method)
     // silently dropped a second caller's request — `/items?page=1` and
     // `?page=2` share a path — leaving its Future pending forever.
-    _retryQueue.removeWhere((element) => identical(element.errorHandler, handler));
+    _retryQueue.removeWhere(
+      (element) => identical(element.errorHandler, handler),
+    );
     _retryQueue.add(_RetryItem(exception: err, errorHandler: handler));
 
     // If the dialog is already being shown, do nothing.

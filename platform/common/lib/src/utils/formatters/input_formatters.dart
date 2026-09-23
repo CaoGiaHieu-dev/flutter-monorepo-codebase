@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/services.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// A [TextInputFormatter] that formats numeric input with currency-style formatting.
 ///

@@ -141,7 +141,7 @@ Dashboard **không được**:
 - hardcode danh sách destination thay vì đọc DI
 - tự đăng ký `INavDestinationModule` để tạo tab "giả"
 
-Chú ý `tabs.length < 2` bỏ hẳn bar (hoặc rail) khi có ít hơn hai tab — một phần của cơ chế suy giảm mềm ở §6. `destination` của một tab là một `NavDestination` trung lập, nên cùng một đóng góp hiển thị được thành mục của bar hay của rail; vì sao chrome đổi theo lớp kích thước cửa sổ thì xem [`11_design_system.md`](11_design_system.md) §7.
+Chú ý `tabs.length < 2` bỏ hẳn bar (hoặc rail) khi có ít hơn hai tab — một phần của cơ chế suy giảm mềm ở §6. `destination` của một tab là một `NavDestination` trung lập, nên cùng một đóng góp hiển thị được thành mục của bar hay của rail; vì sao chrome đổi theo lớp kích thước cửa sổ thì xem [`11_design_system.md`](11_design_system.md#7-layout-thích-ứng-tablet-máy-gập-chia-đôi-màn-hình) §7.
 
 ---
 

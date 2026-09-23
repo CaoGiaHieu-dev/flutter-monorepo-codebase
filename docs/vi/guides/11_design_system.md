@@ -182,7 +182,7 @@ Cỡ chữ lấy từ `Typography.material2021().englishLike` — thang chữ Ma
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
-Dùng `sp`, nên chữ đi theo `textScaleBounds` của app (§6). Với mặc định `ScaleBounds.downOnly()`, chữ thu nhỏ trên cửa sổ hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế; lớp cửa sổ nào có `ResponsiveProfile` cho phép phóng to thì chữ cũng to theo. Với cấu hình của app này, chữ đúng bằng cỡ thiết kế trên mọi cửa sổ rộng từ 375 trở lên — điện thoại, tablet hay desktop.
+Dùng `sp`, nên chữ đi theo `textScaleBounds` của app ([§6](#6-chính-sách-scale-mặc-định-thu-nhỏ-phóng-to-khi-opt-in-theo-từng-lớp-cửa-sổ)). Với mặc định `ScaleBounds.downOnly()`, chữ thu nhỏ trên cửa sổ hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế; lớp cửa sổ nào có `ResponsiveProfile` cho phép phóng to thì chữ cũng to theo. Với cấu hình của app này, chữ đúng bằng cỡ thiết kế trên mọi cửa sổ rộng từ 375 trở lên — điện thoại, tablet hay desktop.
 
 Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `platform/app_shell/lib/presentation/app_material_wrapper.dart`, nơi có sẵn context.
 
@@ -486,7 +486,7 @@ return Scaffold(
 );
 ```
 
-Toàn bộ page, và những gì dashboard không được sở hữu: [`../architecture/05_features.md`](../architecture/05_features.md) §4.
+Toàn bộ page, và những gì dashboard không được sở hữu: [`../architecture/05_features.md` §4](../architecture/05_features.md#4-feature_dashboard-chỉ-là-chrome).
 
 ---
 
@@ -497,8 +497,8 @@ Giả sử bạn muốn có `AppElevation`. Hãy theo đúng khuôn mà các cla
 **Bước 1** — tạo `platform/base_ui/lib/src/styles/app_elevation.dart`:
 
 ```dart
-import 'package:flutter/widgets.dart';
 import 'package:core_responsive/core_responsive.dart';
+import 'package:flutter/widgets.dart';
 
 /// Thang elevation, quy đổi qua extension trên BuildContext.
 class AppElevation {

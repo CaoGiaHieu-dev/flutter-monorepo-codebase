@@ -254,7 +254,7 @@ class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
 }
 ```
 
-Injecting `AppDatabase` would hand this class every DAO in the app; `IDatabaseHandle.accessor(...)` hands it exactly one. See [the database guide](../guides/07_database.md).
+Injecting `CacheDatabase` itself would hand this class every DAO on that database; `IDatabaseHandle.accessor(...)` hands it exactly one. See [the database guide](../guides/07_database.md).
 
 ### Rule 3 — let exceptions bubble
 

@@ -63,4 +63,12 @@ abstract class IAuthSessionState {
   ///
   /// Broadcast. The shell renders these as toasts using global strings.
   Stream<AuthSessionFailure> get sessionFailures;
+
+  /// The transport cleared a session the server refused to renew.
+  ///
+  /// Clearing stored credentials changes nothing anyone listens to, so the
+  /// owner must drop to signed-out here — which emits on [sessionChanges] and
+  /// sends the shell to login. Without it the user stays on screen, "signed
+  /// in", while every request goes out without a token.
+  void onSessionLost();
 }

@@ -53,7 +53,7 @@ class ApiClient {
 
     if (useDefaultInterceptors) {
       final retryHandler = RetryHandler(
-        dio.options,
+        dio,
         onRetryCallback: _config.onRetryCallback,
       );
       dio.interceptors.add(

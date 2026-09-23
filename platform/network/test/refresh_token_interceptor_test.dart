@@ -143,6 +143,50 @@ void main() {
       },
     );
 
+    test(
+      'rejects but keeps the session when refresh cannot be attempted',
+      () async {
+        final interceptor = RefreshTokenInterceptor(
+          RefreshTokenHandler(
+            dio: Dio(),
+            onRefreshToken: () async {
+              refreshCalls++;
+              throw Exception('network down');
+            },
+            onRefreshFailed: () async => failureCalls++,
+          ),
+        );
+        final handler = _RecordingErrorHandler();
+
+        interceptor.onError(_unauthorized(), handler);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(refreshCalls, 1);
+        expect(
+          failureCalls,
+          0,
+          reason: 'a transient failure must not sign the user out',
+        );
+        expect(handler.rejected, isTrue);
+      },
+    );
+
+    test('still rejects when clearing the session throws', () async {
+      final interceptor = RefreshTokenInterceptor(
+        RefreshTokenHandler(
+          dio: Dio(),
+          onRefreshToken: () async => null,
+          onRefreshFailed: () async => throw StateError('storage'),
+        ),
+      );
+      final handler = _RecordingErrorHandler();
+
+      interceptor.onError(_unauthorized(), handler);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(handler.rejected, isTrue);
+    });
+
     test('a single refresh serves several concurrent 401s', () async {
       final completer = Completer<String?>();
       final interceptor = RefreshTokenInterceptor(

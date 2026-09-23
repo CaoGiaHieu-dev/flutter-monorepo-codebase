@@ -144,7 +144,7 @@ bool retryWhen(DioExceptionType type) {
 }
 ```
 
-Concurrent failures are collected into one queue and a **single** retry dialog is raised through `NetworkConfig.onRetryCallback`. If no callback is supplied, every queued request is cancelled instead of hanging.
+Concurrent failures are collected into one queue — one entry per caller — and a **single** retry dialog is raised through `NetworkConfig.onRetryCallback`. If no callback is supplied, every queued request is cancelled instead of hanging. "Retry" takes every queued request out of the queue and replays it through the same `Dio`, marked `canRetry: false`: the auth and refresh interceptors run again (fresh token, a 401 is refreshed), a timeout re-queues the caller for the next dialog, and any other failure reaches the caller as *that* error, not the original timeout.
 
 ### `LoggingInterceptor`
 
@@ -240,10 +240,29 @@ Future<String?> _refreshSession() async => await _session?.refreshToken();
 @override
 Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();
-  if (!result.isSuccess) return null;
-  return _local.getUserToken();
+  if (result.isSuccess) return _local.getUserToken();
+  final failure = result.errorOrNull;
+  final transient = failure is NetworkFailure ||
+      (failure is ServerFailure && (failure.code ?? 500) >= 500);
+  if (transient) {
+    throw StateError('Session renewal did not reach the server: '
+        '${failure?.message}');
+  }
+  return null;
 }
 ```
+
+### Rejected vs. unreachable
+
+The gateway's answer decides what happens to the session:
+
+| `refreshToken()` | Meaning | `RefreshTokenHandler` |
+| :-- | :-- | :-- |
+| a token | renewed | replays the request and every one waiting on it |
+| `null` | the server **refused** (401/403, any 4xx) | calls `onRefreshFailed` once, rejects them all |
+| throws | never got an answer (no network, 5xx, cancelled) | rejects them all, **keeps the session** |
+
+`onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `IAuthSessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
 
 ### One refresh for N concurrent 401s
 
@@ -268,8 +287,8 @@ The retry is `await`-ed deliberately:
 
 ```dart
 // `await` keeps the refresh lock (`_completer`) held until the retry
-// finishes; without it the `finally` below clears the lock early and a
-// concurrent 401 would start a second, redundant refresh.
+// finishes; releasing it earlier would let a concurrent 401 start a
+// second, redundant refresh.
 return await _retryRequest(err, handler);
 ```
 

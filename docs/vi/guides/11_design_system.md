@@ -87,8 +87,8 @@ Cả hai bảng màu là static field thuần trong [`theme/theme_system_extensi
 // platform/base_ui/lib/src/theme/theme_system_extensions.dart
 /// Light theme extension
 static ThemeSystemExtension light = ThemeSystemExtension(
-  primary: const Color(0xff0A7E8C),          // Customer teal accent
-  primaryContainer: const Color(0xff8B5CF6), // Owner violet accent
+  primary: const Color(0xff0A7E8C),
+  primaryContainer: const Color(0xff8B5CF6),
   background: const Color(0xffF8FAFC),
   surface: const Color(0xffFFFFFF),
   textPrimary: const Color(0xff0F172A),
@@ -97,7 +97,7 @@ static ThemeSystemExtension light = ThemeSystemExtension(
 
 /// Dark theme extension
 static ThemeSystemExtension dark = ThemeSystemExtension(
-  primary: const Color(0xff22D3EE),          // Customer dark cyan accent
+  primary: const Color(0xff22D3EE),
   background: const Color(0xff0B0F19),
   surface: const Color(0xff151F32),
   textPrimary: const Color(0xffF8FAFC),
@@ -107,7 +107,7 @@ static ThemeSystemExtension dark = ThemeSystemExtension(
 
 Đổi mã hex, lưu, hot-restart. **Luôn sửa cả hai** — chỉ sửa light sẽ để chế độ dark giữ nguyên bảng màu mẫu.
 
-Các tên màu đi kèm template (`chatMe`, `liquidOnboardingColors`, `liquidCustomerColors`, `liquidOwnerColors`, `liquidAuthColors`) sinh ra từ các màn hình mẫu. Nếu sản phẩm của bạn không có chat và không dùng gradient "liquid", hãy xoá hẳn các ô đó khỏi interface và cả hai bảng màu thay vì để lại màu chết.
+Chỉ có một ô màu tồn tại vì màn hình mẫu: `liquidOnboardingColors`, gradient của splash (`AppGradients.liquidOnboarding`). Khi xoá sample splash, hãy xoá luôn ô đó khỏi interface, cả hai bảng màu và `AppGradients` thay vì để lại màu chết.
 
 ### Bước 3 — đọc màu trong widget
 
@@ -345,7 +345,7 @@ static LinearGradient primaryGradient(BuildContext context) {
 }
 ```
 
-Muốn đổi gradient, hãy sửa **danh sách màu** trong bảng màu (`primaryGradientColors`, `liquidOnboardingColors`, …), không sửa widget.
+Muốn đổi gradient, hãy sửa **danh sách màu** trong bảng màu (`primaryGradientColors`, `liquidOnboardingColors`), không sửa widget.
 
 `AppShadows` là ngoại lệ — nó hardcode màu đen kèm alpha và **không** theo theme:
 

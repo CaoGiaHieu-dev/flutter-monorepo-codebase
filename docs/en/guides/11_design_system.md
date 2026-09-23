@@ -87,8 +87,8 @@ Both palettes are plain static fields in [`theme/theme_system_extensions.dart`](
 // platform/base_ui/lib/src/theme/theme_system_extensions.dart
 /// Light theme extension
 static ThemeSystemExtension light = ThemeSystemExtension(
-  primary: const Color(0xff0A7E8C),          // Customer teal accent
-  primaryContainer: const Color(0xff8B5CF6), // Owner violet accent
+  primary: const Color(0xff0A7E8C),
+  primaryContainer: const Color(0xff8B5CF6),
   background: const Color(0xffF8FAFC),
   surface: const Color(0xffFFFFFF),
   textPrimary: const Color(0xff0F172A),
@@ -97,7 +97,7 @@ static ThemeSystemExtension light = ThemeSystemExtension(
 
 /// Dark theme extension
 static ThemeSystemExtension dark = ThemeSystemExtension(
-  primary: const Color(0xff22D3EE),          // Customer dark cyan accent
+  primary: const Color(0xff22D3EE),
   background: const Color(0xff0B0F19),
   surface: const Color(0xff151F32),
   textPrimary: const Color(0xffF8FAFC),
@@ -107,7 +107,7 @@ static ThemeSystemExtension dark = ThemeSystemExtension(
 
 Change the hex values, save, hot-restart. **Always edit both** — a light-only change leaves dark mode on the sample palette.
 
-The colour names shipped with the template (`chatMe`, `liquidOnboardingColors`, `liquidCustomerColors`, `liquidOwnerColors`, `liquidAuthColors`) come from the sample screens. If your product has no chat and no "liquid" gradients, delete those slots from the interface and both palettes rather than leaving dead colours behind.
+One slot exists only for a sample screen: `liquidOnboardingColors`, the splash gradient (`AppGradients.liquidOnboarding`). Delete the splash sample and remove that slot from the interface, both palettes and `AppGradients` rather than leaving a dead colour behind.
 
 ### Step 3 — read them in a widget
 
@@ -345,7 +345,7 @@ static LinearGradient primaryGradient(BuildContext context) {
 }
 ```
 
-To change a gradient, edit the colour **list** in the palette (`primaryGradientColors`, `liquidOnboardingColors`, …), not the widget.
+To change a gradient, edit the colour **list** in the palette (`primaryGradientColors`, `liquidOnboardingColors`), not the widget.
 
 `AppShadows` is the odd one out — it hard-codes black with an alpha and is **not** theme-aware:
 

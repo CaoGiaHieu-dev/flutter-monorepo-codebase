@@ -22,12 +22,8 @@ class ThemeSystemExtension extends ThemeSystemInterface<ThemeSystemExtension> {
     required super.error,
     required super.warning,
     required super.info,
-    required super.chatMe,
     required super.primaryGradientColors,
     required super.liquidOnboardingColors,
-    required super.liquidCustomerColors,
-    required super.liquidOwnerColors,
-    required super.liquidAuthColors,
   });
 
   @override
@@ -58,7 +54,6 @@ class ThemeSystemExtension extends ThemeSystemInterface<ThemeSystemExtension> {
       error: Color.lerp(error, other.error, t)!,
       warning: Color.lerp(warning, other.warning, t)!,
       info: Color.lerp(info, other.info, t)!,
-      chatMe: Color.lerp(chatMe, other.chatMe, t)!,
       primaryGradientColors: _lerpColorList(
         primaryGradientColors,
         other.primaryGradientColors,
@@ -67,21 +62,6 @@ class ThemeSystemExtension extends ThemeSystemInterface<ThemeSystemExtension> {
       liquidOnboardingColors: _lerpColorList(
         liquidOnboardingColors,
         other.liquidOnboardingColors,
-        t,
-      ),
-      liquidCustomerColors: _lerpColorList(
-        liquidCustomerColors,
-        other.liquidCustomerColors,
-        t,
-      ),
-      liquidOwnerColors: _lerpColorList(
-        liquidOwnerColors,
-        other.liquidOwnerColors,
-        t,
-      ),
-      liquidAuthColors: _lerpColorList(
-        liquidAuthColors,
-        other.liquidAuthColors,
         t,
       ),
     );
@@ -101,8 +81,8 @@ class ThemeSystemExtension extends ThemeSystemInterface<ThemeSystemExtension> {
 
   /// Light theme extension
   static ThemeSystemExtension light = ThemeSystemExtension(
-    primary: const Color(0xff0A7E8C), // Customer teal accent
-    primaryContainer: const Color(0xff8B5CF6), // Owner violet accent
+    primary: const Color(0xff0A7E8C),
+    primaryContainer: const Color(0xff8B5CF6),
     secondary: const Color(0xff1E293B), // iOS slate secondary
     secondaryContainer: const Color(0xffF1F5F9), // iOS slate container
     background: const Color(0xffF8FAFC), // Light iOS layout background
@@ -118,37 +98,21 @@ class ThemeSystemExtension extends ThemeSystemInterface<ThemeSystemExtension> {
     error: const Color(0xffEF4444),
     warning: const Color(0xffF59E0B),
     info: const Color(0xff3B82F6),
-    chatMe: const Color(0xffE0F2FE),
     primaryGradientColors: const [
-      Color(0xff0A7E8C), // Customer teal
-      Color(0xff8B5CF6), // Owner violet
+      Color(0xff0A7E8C), // primary
+      Color(0xff8B5CF6), // primaryContainer
     ],
     liquidOnboardingColors: const [
       Color(0xff3B82F6), // blue
       Color(0xff8B5CF6), // violet/pink
       Color(0xffEF4444), // red
     ],
-    liquidCustomerColors: const [
-      Color(0xff0A7E8C), // primary/teal
-      Color(0xff3B82F6), // info/blue
-      Color(0xffF8FAFC), // background
-    ],
-    liquidOwnerColors: const [
-      Color(0xff8B5CF6), // primaryContainer/violet
-      Color(0xffEF4444), // error/red
-      Color(0xffF8FAFC), // background
-    ],
-    liquidAuthColors: const [
-      Color(0xff8B5CF6), // primaryContainer/violet
-      Color(0xff3B82F6), // info/blue
-      Color(0xffF59E0B), // warning/yellow
-    ],
   );
 
   /// Dark theme extension
   static ThemeSystemExtension dark = ThemeSystemExtension(
-    primary: const Color(0xff22D3EE), // Customer dark cyan accent
-    primaryContainer: const Color(0xffA78BFA), // Owner dark violet accent
+    primary: const Color(0xff22D3EE),
+    primaryContainer: const Color(0xffA78BFA),
     secondary: const Color(0xff94A3B8),
     secondaryContainer: const Color(0xff1E293B),
     background: const Color(0xff0B0F19), // Dark iOS midnight background
@@ -164,30 +128,14 @@ class ThemeSystemExtension extends ThemeSystemInterface<ThemeSystemExtension> {
     error: const Color(0xffF87171),
     warning: const Color(0xffFBBF24),
     info: const Color(0xff60A5FA),
-    chatMe: const Color(0xff0C4A6E),
     primaryGradientColors: const [
-      Color(0xff22D3EE), // Customer cyan
-      Color(0xffA78BFA), // Owner violet
+      Color(0xff22D3EE), // primary
+      Color(0xffA78BFA), // primaryContainer
     ],
     liquidOnboardingColors: const [
       Color(0xff60A5FA), // info/blue
       Color(0xffA78BFA), // primaryContainer/violet
       Color(0xffF87171), // error/red
-    ],
-    liquidCustomerColors: const [
-      Color(0xff22D3EE), // primary/cyan
-      Color(0xff60A5FA), // info/blue
-      Color(0xff0B0F19), // background
-    ],
-    liquidOwnerColors: const [
-      Color(0xffA78BFA), // primaryContainer/violet
-      Color(0xffF87171), // error/red
-      Color(0xff0B0F19), // background
-    ],
-    liquidAuthColors: const [
-      Color(0xffA78BFA), // primaryContainer/violet
-      Color(0xff60A5FA), // info/blue
-      Color(0xffFBBF24), // warning/yellow
     ],
   );
 

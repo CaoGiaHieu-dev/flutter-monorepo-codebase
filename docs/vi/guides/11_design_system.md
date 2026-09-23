@@ -168,8 +168,7 @@ Cỡ chữ lấy từ `Typography.material2021().englishLike` — thang chữ Ma
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-double? scaleFont(double? size) =>
-    size == null ? null : context.sp(size);
+double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
 Dùng `sp`, nên chữ đi theo `textScaleBounds` của app (§6). Với mặc định `ScaleBounds.downOnly()`, chữ thu nhỏ trên cửa sổ hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế; lớp cửa sổ nào có `ResponsiveProfile` cho phép phóng to thì chữ cũng to theo. Với cấu hình của app này, chữ đúng bằng cỡ thiết kế trên mọi cửa sổ rộng từ 375 trở lên — điện thoại, tablet hay desktop.

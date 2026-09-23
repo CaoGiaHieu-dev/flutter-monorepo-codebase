@@ -166,7 +166,7 @@ All files and class names must strictly adhere to the following naming conventio
 3. **FVM is optional — never hardcode the `fvm` prefix**:
    - The repo pins a version in `.fvmrc`, but that file does **not** guarantee `fvm` is installed on the current machine. Blindly prefixing `fvm` fails on a plain Flutter install.
    - Write commands **without** the prefix (`flutter pub get`, `dart run build_runner build -d --workspace`). Add `fvm ` yourself only if your own machine uses it.
-   - A tool that shells out to the toolchain **MUST detect FVM at runtime**, not assume it. Reference implementation — `CommonHelpers.useFvm` in `tools/module_generator/src/common_helpers.dart` requires **both** a config file (`.fvmrc` or `.fvm/fvm_config.json`) **and** a successful `fvm --version`, then routes through `runDart()` / `runFlutter()`.
+   - A tool that shells out to the toolchain **MUST detect FVM at runtime**, not assume it. Use the shared helper `tools/shared/toolchain.dart` (`useFvm`, `dartExecutable` + `dartArgs`, `flutterExecutable` + `flutterArgs`): it requires **both** a config file (`.fvmrc` or `.fvm/fvm_config.json`) **and** a successful `fvm --version`. Every tool that shells out goes through it.
 4. **No PowerShell scripts** (`.ps1`) — Windows execution policy blocks them. Prefer a cross-platform `.dart` script (as `tools/workspace_setup/configure.dart` does); use `.sh`/`.bat` pairs only when a Dart script cannot do the job.
 
 ---

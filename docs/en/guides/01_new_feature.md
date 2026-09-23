@@ -65,7 +65,7 @@ Run it with no arguments to get an interactive prompt instead.
 3. Re-run `build_runner`, then **full restart** the app — new DI registrations are not picked up by hot reload
 
 > [!NOTE]
-> FVM is auto-detected (`CommonHelpers.useFvm`): the tool prefixes its commands with `fvm ` only
+> FVM is auto-detected (`useFvm` in `tools/shared/toolchain.dart`): the tool prefixes its commands with `fvm ` only
 > when both a config file (`.fvmrc` or `.fvm/fvm_config.json`) and a working `fvm --version` are
 > present. Otherwise it calls the global `dart` / `flutter`. See
 > [`../getting-started/03_daily_workflow.md`](../getting-started/03_daily_workflow.md).

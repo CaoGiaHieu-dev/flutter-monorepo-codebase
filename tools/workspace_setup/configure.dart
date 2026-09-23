@@ -1,25 +1,16 @@
 import 'dart:io';
 
+import '../shared/toolchain.dart';
+
 void main() async {
   stdout.writeln('==========================================');
   stdout.writeln('      Project Configuration Setup');
   stdout.writeln('==========================================');
 
-  // Detect FVM: Only use it if .fvm/fvm_config.json exists
-  final hasFvmConfig = File('.fvm/fvm_config.json').existsSync();
-  final flutterCmd = hasFvmConfig ? 'fvm' : 'flutter';
-  final dartCmd = hasFvmConfig ? 'fvm' : 'dart';
-
-  final flutterArgs = hasFvmConfig ? ['flutter'] : <String>[];
-  final dartArgs = hasFvmConfig ? ['dart'] : <String>[];
-
-  if (hasFvmConfig) {
-    stdout.writeln('[INFO] Detected FVM config. Using FVM CLI.');
-  } else {
-    stdout.writeln(
-      '[INFO] FVM config not detected. Using global Flutter/Dart SDK.',
-    );
-  }
+  // The same two-signal FVM detection every tool uses.
+  reportToolchain();
+  final flutterCmd = flutterExecutable;
+  final dartCmd = dartExecutable;
 
   // 1. Activating global CLIs
   stdout.writeln('[!] Activating global CLIs...');

@@ -1,9 +1,11 @@
 import 'dart:io';
+
 import 'package:mustache_template/mustache.dart';
+
+import '../../shared/toolchain.dart' as toolchain;
 import 'module_type.dart';
 
 class CommonHelpers {
-
   static void createDir(String path) {
     Directory(path).createSync(recursive: true);
     stdout.writeln('  -> Đã tạo thư mục: $path');
@@ -13,32 +15,9 @@ class CommonHelpers {
   // Toolchain resolution (FVM vs global SDK)
   // ---------------------------------------------------------------------------
 
-  static bool? _useFvmCache;
-
-  /// Whether toolchain commands should be prefixed with `fvm`.
-  ///
-  /// Two conditions must BOTH hold, because either one alone gives a wrong
-  /// answer: a repo can pin a version in `.fvmrc` on a machine that never
-  /// installed FVM, and a machine can have FVM installed for other projects
-  /// while this repo does not pin anything.
-  ///
-  /// Checks `.fvmrc` (used by this repo) as well as the legacy
-  /// `.fvm/fvm_config.json`, then verifies the executable actually runs.
-  static bool get useFvm {
-    final cached = _useFvmCache;
-    if (cached != null) return cached;
-
-    final hasConfig =
-        File('.fvmrc').existsSync() || File('.fvm/fvm_config.json').existsSync();
-    if (!hasConfig) return _useFvmCache = false;
-
-    try {
-      final result = Process.runSync('fvm', ['--version'], runInShell: true);
-      return _useFvmCache = result.exitCode == 0;
-    } on ProcessException {
-      return _useFvmCache = false;
-    }
-  }
+  /// Whether toolchain commands should be prefixed with `fvm` — the shared
+  /// two-signal detection in `tools/shared/toolchain.dart`.
+  static bool get useFvm => toolchain.useFvm;
 
   /// Fails fast when the toolchain this run needs is not callable.
   ///

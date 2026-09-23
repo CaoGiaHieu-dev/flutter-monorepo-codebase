@@ -65,7 +65,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 3. Chạy lại `build_runner`, rồi **restart hoàn toàn** app — DI mới không được hot reload nhận
 
 > [!NOTE]
-> FVM được tự phát hiện (`CommonHelpers.useFvm`): tool chỉ thêm tiền tố `fvm ` vào lệnh khi có đủ
+> FVM được tự phát hiện (`useFvm` in `tools/shared/toolchain.dart`): tool chỉ thêm tiền tố `fvm ` vào lệnh khi có đủ
 > cả hai — một file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) và `fvm --version` chạy được.
 > Nếu không, nó gọi thẳng `dart` / `flutter` toàn cục. Xem
 > [`../getting-started/03_daily_workflow.md`](../getting-started/03_daily_workflow.md).

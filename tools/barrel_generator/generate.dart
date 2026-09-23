@@ -74,7 +74,7 @@ void main(List<String> args) {
     }
 
     stdout.writeln('\n[INFO] Đang chạy format cho "$targetDir"...');
-    final result = Process.runSync('dart', ['format', targetDir]);
+    final result = Process.runSync(Platform.resolvedExecutable, ['format', targetDir]);
     if (result.exitCode == 0) {
       stdout.write(result.stdout);
     } else {

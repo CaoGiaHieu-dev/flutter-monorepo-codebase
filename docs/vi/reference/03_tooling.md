@@ -172,7 +172,7 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 - **Kiểm tra toolchain trước tiên.** `assertToolchainAvailable()` chạy trước khi động vào bất cứ file dùng chung nào, nên thiếu SDK là fail ngay lập tức thay vì chết ở bước 8.
 - **Từ chối thư mục đã tồn tại.** Nó sẽ không âm thầm ghi đè lên package có sẵn.
 - **Rollback khi thất bại.** Các file dùng chung bị thay đổi — mọi `app_manifest.yaml`, và những gì `composer sync` ghi lại (`pubspec.yaml` gốc, `pubspec.yaml` và `lib/di/injection.dart` của từng app) — được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
-- **Tự phát hiện FVM**, yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
+- **Tự phát hiện FVM** — mọi tool có gọi lệnh ngoài đều dùng chung `tools/shared/toolchain.dart` — yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
 > [!NOTE]
 > Module domain và data chỉ được tạo thư mục và nối pubspec — entity, use case, repository phải viết tay. Xem [`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md).
@@ -233,7 +233,7 @@ dart tools/unused_checker/check_unused_packages.dart     # dependency khai mà k
 dart tools/check_outdated.dart
 ```
 
-Liệt kê package có version mới hơn trên pub.dev. Cập nhật `pubspec_dependencies.yaml` rồi chạy `dependency_sync`.
+Liệt kê package trong `pubspec_dependencies.yaml` có version mới hơn trên pub.dev. Khi chạy trong terminal, nó hiện checklist (mặc định chọn hết); gõ `a` để ghi version đã chọn vào catalog rồi chạy `dependency_sync` và `pub get`, `q` để thoát. Không có terminal (CI, pipe) thì chỉ liệt kê.
 
 ---
 
@@ -304,12 +304,6 @@ Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`
 
 > [!NOTE]
 > Workflow GitHub chạy nó ở **chế độ cảnh báo** — bước "fail on critical issues" có dòng `exit 1` bị comment lại, nên nó không bao giờ chặn PR. Xem [`../operations/01_cicd.md`](../operations/01_cicd.md).
-
----
-
-## Điểm không nhất quán đã biết
-
-`tools/workspace_setup/configure.dart` và `tools/theme_generator/theme_setting.dart` phát hiện FVM bằng cách **chỉ** kiểm tra `.fvm/fvm_config.json`. Repo này pin version trong `.fvmrc`, thứ mà hai script đó không nhìn tới, nên chúng luôn rơi về `dart` / `flutter` toàn cục. Trên máy không cài FVM thì kết quả tình cờ vẫn đúng, nhưng đây không phải cách phát hiện đáng tin như `module_generator` hiện đang làm.
 
 ---
 

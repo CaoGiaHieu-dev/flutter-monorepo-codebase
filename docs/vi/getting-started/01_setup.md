@@ -65,7 +65,7 @@ Nếu bạn thấy các file `pubspec.lock` xuất hiện trong package con, t�
 > [!CAUTION]
 > **Repo vừa clone về sẽ KHÔNG compile được.** Đây là lỗi thường gặp nhất ở lần chạy đầu tiên.
 
-File `platform/common/lib/src/firebase/firebase_module.dart` import thẳng ba file theo tên:
+File `apps/mobile/lib/firebase/firebase_module.dart` import thẳng ba file theo tên:
 
 ```dart
 import 'firebase_options_dev.dart' as dev;
@@ -73,33 +73,41 @@ import 'firebase_options_prod.dart' as prod;
 import 'firebase_options_staging.dart' as stg;
 ```
 
-Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** (`platform/common/.gitignore` có dòng `firebase_options_*.dart`), vì chúng chứa định danh Firebase project của riêng bạn. Chưa sinh thì bạn sẽ gặp:
+Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** (`apps/mobile/.gitignore` có dòng `firebase_options_*.dart`), vì chúng chứa định danh Firebase project của riêng bạn.
+
+Chúng thuộc về **app**, không thuộc `platform/`: Firebase options gắn với một bundle ID, nên mỗi app dùng Firebase sở hữu thư mục `lib/firebase/` của riêng nó. Trước đây chúng nằm trong `core_common`, khiến mọi app khác trong workspace nhận luôn options của app mobile. Chưa sinh thì bạn sẽ gặp:
 
 ```
 Target of URI doesn't exist: 'firebase_options_dev.dart'
 Undefined name 'DefaultFirebaseOptions'
 ```
 
-**Cách khắc phục — chạy FlutterFire một lần cho mỗi môi trường:**
+**Cách khắc phục — chạy script hỗ trợ từ thư mục gốc repo:**
+
+```bash
+dart tools/firebase/firebase_config.dart --app mobile
+```
+
+Script tìm app qua `app_manifest.yaml`, rồi chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode, ghi ra `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`. Có thể bỏ `--app` khi workspace chỉ có một app.
+
+Muốn làm tay thì chạy FlutterFire một lần cho mỗi môi trường, **từ `apps/mobile/`**:
 
 ```bash
 dart pub global activate flutterfire_cli
+cd apps/mobile
 
-# Lặp lại cho từng flavor, xuất vào core_common đúng tên file:
 flutterfire configure \
   --project=<firebase-project-dev-cua-ban> \
-  --out=platform/common/lib/src/firebase/firebase_options_dev.dart
+  --out=lib/firebase/firebase_options_dev.dart
 
 flutterfire configure \
   --project=<firebase-project-staging-cua-ban> \
-  --out=platform/common/lib/src/firebase/firebase_options_staging.dart
+  --out=lib/firebase/firebase_options_staging.dart
 
 flutterfire configure \
   --project=<firebase-project-prod-cua-ban> \
-  --out=platform/common/lib/src/firebase/firebase_options_prod.dart
+  --out=lib/firebase/firebase_options_prod.dart
 ```
-
-Ngoài ra còn có một script hỗ trợ: `dart tools/firebase/firebase_config.dart`.
 
 Phải có đủ **cả ba** file kể cả khi bạn chỉ định chạy `dev` — vì `firebase_module.dart` import cả ba một cách vô điều kiện, thiếu file `prod` là bản `dev` cũng gãy.
 

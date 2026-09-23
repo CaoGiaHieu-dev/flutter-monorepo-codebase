@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:yaml/yaml.dart';
 
+import '../shared/app_locator.dart';
+
 /// Removes a sample bundle — the feature package *and* everything that travels
 /// with it (domain/data pairs, workspace entries, DI registrations).
 ///
@@ -26,11 +28,17 @@ const String _manifestPath = 'tools/sample_manifest.yaml';
 /// only holds until the next `composer sync`. They stay in the list so the tree
 /// is consistent the moment this tool finishes, rather than referencing a
 /// package that no longer exists until someone runs the generator.
-const List<String> _sharedMutatedFiles = [
+///
+/// Computed from every app in the workspace rather than naming
+/// `apps/mobile/`: a sample removed from one app's manifest but left in
+/// another's is exactly the half-deleted state this tool exists to prevent.
+List<String> get _sharedMutatedFiles => [
   'pubspec.yaml',
-  'apps/mobile/app_manifest.yaml',
-  'apps/mobile/pubspec.yaml',
-  'apps/mobile/lib/di/injection.dart',
+  for (final app in discoverApps()) ...[
+    '${app.dir}/app_manifest.yaml',
+    '${app.dir}/pubspec.yaml',
+    '${app.dir}/lib/di/injection.dart',
+  ],
 ];
 
 final Map<String, String?> _snapshots = {};
@@ -341,7 +349,7 @@ List<_FileEdit> _planSharedEdits(
         // `extra_dependencies`.
         if (RegExp('^\\s+-\\s+$name\\s*\$').hasMatch(line)) drop = true;
 
-        // apps/mobile/pubspec.yaml: `  feature_auth:` followed by `    path: ...`
+        // an app's pubspec.yaml: `  feature_auth:` followed by `    path: ...`
         if (RegExp('^\\s{2}$name:\\s*\$').hasMatch(line)) {
           drop = true;
           if (i + 1 < lines.length &&

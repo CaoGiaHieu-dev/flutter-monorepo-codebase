@@ -28,7 +28,6 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transition |
 | Utils **và constants** | `src/utils/` | `ApiStatusConstants`, `EnvConstants`, `AppUtils`, `Debounce`, `MessageQueue`, `DownloadImage`, `formatters/`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`, `AppInfoHelper`), `dialog/` |
-| Firebase | `src/firebase/` | `FirebaseModule` cấp `FirebaseOptions` theo từng flavor |
 
 ### Những gì *không* thuộc về đây, và vì sao
 
@@ -44,6 +43,8 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.
+
+**Firebase options cũng không nằm ở đây.** Chúng gắn với một bundle ID, nên thuộc về một app: mỗi app dùng Firebase sở hữu `lib/firebase/firebase_module.dart` đăng ký `FirebaseOptions` theo từng flavor (của app mẫu là [`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)). Khi module đó còn nằm trong `core_common`, một app thứ hai sẽ thừa hưởng luôn định danh Firebase của app mobile.
 
 ---
 
@@ -256,6 +257,8 @@ Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout)
 
 `PushNotificationService` bọc Firebase Messaging và `flutter_local_notifications`. Channel ID và loại payload nằm ở `src/utils/notification_constants.dart`, tức ngay trong package tiêu thụ chúng — một channel ID thông báo không có lý do gì để mọi package trong app đọc được.
 
+Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự đăng ký từ `lib/firebase/firebase_module.dart` của mình. Vì thế manifest của app đặt `core_notifications` trong nhóm `notifications` với `phase: after` thay vì trong `core`: `before` chạy trước phần đăng ký của chính app. App không dùng push notification thì bỏ nhóm này đi.
+
 ---
 
 ## 9. `core_responsive` — scale theo khung thiết kế, gắn với `BuildContext`
@@ -338,15 +341,20 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 
 | Package | Phụ thuộc |
 |:--|:--|
+| `domain_core` | *(không có)* |
 | `core_database` | *(không có)* |
+| `core_di` | *(không có)* |
 | `core_responsive` | *(không có)* |
-| `core_common` | `core_responsive`, `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
-| `core_network` | `core_common` |
+| `platform_kernel` | `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
+| `core_common` | `platform_kernel`, `core_responsive` |
+| `core_network` | `platform_kernel` |
+| `core_notifications` | `platform_kernel` |
 | `core_storage` | `core_common` |
-| `core_notifications` | `core_common` |
+| `data_core` | `platform_kernel`, `core_database`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
 | `bloc_state_management` | `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `domain_core` *(ngoại lệ đã duyệt)* |
 | `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
+| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_storage`, `core_ui_kit`, `provider_state_management` |
 
 Không mũi tên nào trong bảng này trỏ tới `modules/*/feature` hay `modules/*/data` — đó là bất biến cần giữ.

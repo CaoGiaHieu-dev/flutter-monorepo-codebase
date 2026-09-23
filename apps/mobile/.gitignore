@@ -37,6 +37,9 @@ pubspec.lock
 env.prod
 
 # Firebase configuration
+# `lib/firebase/firebase_options_*.dart` are generated per project by
+# `tools/firebase/firebase_config.dart` and carry this app's identifiers.
+firebase_options_*.dart
 firebase.json
 google-services.json
 **/google-services.json

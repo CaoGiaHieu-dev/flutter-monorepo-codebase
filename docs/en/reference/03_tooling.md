@@ -253,10 +253,11 @@ Full setup for a fresh clone: activates `flutterfire_cli`, `flutter clean`, `pub
 ## `firebase`
 
 ```bash
-dart tools/firebase/firebase_config.dart
+dart tools/firebase/firebase_config.dart              # the workspace's only app
+dart tools/firebase/firebase_config.dart --app mobile # one of several
 ```
 
-Runs `flutterfire configure` for each flavour, producing the three `firebase_options_*.dart` files that `platform/common/lib/src/firebase/firebase_module.dart` imports.
+Runs `flutterfire configure` inside the chosen app for each flavour and build mode, producing the three `lib/firebase/firebase_options_*.dart` files that the app's own `lib/firebase/firebase_module.dart` imports (for the sample app, `apps/mobile/lib/firebase/firebase_module.dart`), plus the per-flavour `GoogleService-Info.plist` and `google-services.json`. With more than one app and no `--app`, it lists the apps and exits rather than configure an arbitrary one.
 
 > [!WARNING]
 > Those generated files are git-ignored, and `firebase_module.dart` imports **all three unconditionally**. A fresh clone therefore does not compile until this has been run — even for a dev-only build. See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
@@ -268,7 +269,8 @@ Must be run from the repository root; the script checks for `pubspec.yaml` and e
 ## `theme_generator`
 
 ```bash
-dart tools/theme_generator/theme_setting.dart
+dart tools/theme_generator/theme_setting.dart              # the workspace's only app
+dart tools/theme_generator/theme_setting.dart --app mobile # one of several
 ```
 
 Drives `flutter_native_splash` and `icons_launcher` from the per-flavour configs at the repo root (`flutter_native_splash-*.yaml`, `icons_launcher-*.yaml`).

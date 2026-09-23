@@ -253,10 +253,11 @@ Dựng đầy đủ cho một bản clone mới: activate `flutterfire_cli`, `fl
 ## `firebase`
 
 ```bash
-dart tools/firebase/firebase_config.dart
+dart tools/firebase/firebase_config.dart              # app duy nhất của workspace
+dart tools/firebase/firebase_config.dart --app mobile # một trong nhiều app
 ```
 
-Chạy `flutterfire configure` cho từng flavor, sinh ra ba file `firebase_options_*.dart` mà `platform/common/lib/src/firebase/firebase_module.dart` import vào.
+Chạy `flutterfire configure` bên trong app được chọn cho từng flavor và build mode, sinh ra ba file `lib/firebase/firebase_options_*.dart` mà `lib/firebase/firebase_module.dart` của chính app đó import (với app mẫu là `apps/mobile/lib/firebase/firebase_module.dart`), cùng `GoogleService-Info.plist` và `google-services.json` theo flavor. Khi có nhiều app mà không truyền `--app`, script liệt kê các app rồi thoát thay vì cấu hình bừa một app.
 
 > [!WARNING]
 > Ba file sinh ra đó bị git ignore, và `firebase_module.dart` import **cả ba một cách vô điều kiện**. Do đó một bản clone mới **không compile được** cho tới khi chạy lệnh này — kể cả khi bạn chỉ build dev. Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
@@ -268,7 +269,8 @@ Phải chạy từ thư mục gốc repo; script kiểm tra sự tồn tại c�
 ## `theme_generator`
 
 ```bash
-dart tools/theme_generator/theme_setting.dart
+dart tools/theme_generator/theme_setting.dart              # app duy nhất của workspace
+dart tools/theme_generator/theme_setting.dart --app mobile # một trong nhiều app
 ```
 
 Điều khiển `flutter_native_splash` và `icons_launcher` dựa trên các file cấu hình theo flavor ở gốc repo (`flutter_native_splash-*.yaml`, `icons_launcher-*.yaml`).

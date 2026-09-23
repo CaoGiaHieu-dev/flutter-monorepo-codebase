@@ -263,19 +263,34 @@ void initMicroPackage() {}
 ```
 
 ### Assembly at Host App (`apps/mobile/lib/di/injection.dart`):
+The lists are **generated** from `apps/mobile/app_manifest.yaml` by
+`dart tools/composer/composer.dart sync --app mobile` — edit the manifest, never this file:
+
 ```dart
+// composer:managed:modules — generated from app_manifest.yaml
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
   ExternalModule(CoreNetworkPackageModule),
-  ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
   // Registers nothing: `core_database` is mechanism only and owns no database.
   ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 
-// CoreBaseUiPackageModule depends on ILanguageStorage / IThemeStorage
-// (app-local singletons). Register it in externalPackageModulesAfter.
+// After the app's own registrations — PushNotificationService (an eager
+// singleton) injects the FirebaseOptions this app registers in
+// `lib/firebase/firebase_module.dart`.
+const _notificationsModules = [
+  ExternalModule(CoreNotificationsPackageModule),
+];
+
+// platform_app_shell: storage adapters, NetworkConfig, router, providers.
+const _shellModules = [
+  ExternalModule(PlatformAppShellPackageModule),
+];
+
+// CoreBaseUiPackageModule injects ILanguageStorage / IThemeStorage,
+// registered by the shell group above.
 const _uiModules = [
   ExternalModule(CoreBaseUiPackageModule),
 ];
@@ -283,24 +298,22 @@ const _uiModules = [
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
-  ExternalModule(DomainLanguagePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
-  ExternalModule(DataLanguagePackageModule),
 ];
 
-// The app shell's ONLY intentional hard reference to feature packages —
+// The app's ONLY intentional hard reference to feature packages —
 // as the composition root it must name what it composes.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
-  ExternalModule(FeatureDashboardPackageModule),
   ExternalModule(FeatureHomePackageModule),
-  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSettingsPackageModule),
+  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSplashPackageModule),
+  ExternalModule(FeatureDashboardPackageModule),
 ];
 
 const _otherModules = [
@@ -308,15 +321,21 @@ const _otherModules = [
   ExternalModule(BlocStateManagementPackageModule),
 ];
 
-@InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],
-  externalPackageModulesAfter: [
+const _externalModulesBefore = [..._coreModules];
+const _externalModulesAfter = [
+    ..._notificationsModules,
+    ..._shellModules,
     ..._uiModules,
     ..._domainModules,
     ..._dataModules,
     ..._featureModules,
     ..._otherModules,
-  ],
+];
+// composer:end:modules
+
+@InjectableInit(
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
 )
 Future<void> configureDependencies({String? environment}) async {
   getIt.enableRegisteringMultipleInstancesOfOneType();
@@ -405,9 +424,9 @@ flutter pub get
 *Thanks to Pub Workspaces, all dependencies of the Host App and all sub-packages are fetched concurrently and create a single `pubspec.lock`.*
 
 ### 3. Generate Firebase Options (required — the repo will not compile without it)
-`platform/common/lib/src/firebase/firebase_module.dart` imports all three
+`apps/mobile/lib/firebase/firebase_module.dart` imports all three
 `firebase_options_{dev,staging,prod}.dart` files unconditionally, and they are git-ignored. Run
-`flutterfire configure` once per flavor before the first build — see
+`dart tools/firebase/firebase_config.dart --app mobile` before the first build — see
 [`getting-started/01_setup.md`](docs/en/getting-started/01_setup.md).
 
 ### 4. Trigger Bulk Code Generation

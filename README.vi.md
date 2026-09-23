@@ -262,19 +262,34 @@ void initMicroPackage() {}
 ```
 
 ### Tổng hợp tại Host App (`apps/mobile/lib/di/injection.dart`):
+Các danh sách được **sinh tự động** từ `apps/mobile/app_manifest.yaml` bởi
+`dart tools/composer/composer.dart sync --app mobile` — sửa manifest, đừng sửa file này:
+
 ```dart
+// composer:managed:modules — generated from app_manifest.yaml
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
   ExternalModule(CoreNetworkPackageModule),
-  ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
   // Không đăng ký gì: `core_database` chỉ là cơ chế, không sở hữu database nào.
   ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
 ];
 
-// CoreBaseUiPackageModule phụ thuộc ILanguageStorage / IThemeStorage
-// (singleton đăng ký tại App Shell). Đặt trong externalPackageModulesAfter.
+// Chạy sau phần đăng ký của chính app — PushNotificationService (singleton
+// eager) inject FirebaseOptions mà app đăng ký ở
+// `lib/firebase/firebase_module.dart`.
+const _notificationsModules = [
+  ExternalModule(CoreNotificationsPackageModule),
+];
+
+// platform_app_shell: storage adapter, NetworkConfig, router, provider.
+const _shellModules = [
+  ExternalModule(PlatformAppShellPackageModule),
+];
+
+// CoreBaseUiPackageModule inject ILanguageStorage / IThemeStorage,
+// do nhóm shell phía trên đăng ký.
 const _uiModules = [
   ExternalModule(CoreBaseUiPackageModule),
 ];
@@ -282,24 +297,22 @@ const _uiModules = [
 const _domainModules = [
   ExternalModule(DomainCorePackageModule),
   ExternalModule(DomainAuthPackageModule),
-  ExternalModule(DomainLanguagePackageModule),
 ];
 
 const _dataModules = [
   ExternalModule(DataCorePackageModule),
   ExternalModule(DataAuthPackageModule),
-  ExternalModule(DataLanguagePackageModule),
 ];
 
-// Tham chiếu cứng DUY NHẤT có chủ đích của app shell tới feature package —
+// Tham chiếu cứng DUY NHẤT có chủ đích của app tới feature package —
 // là composition root, nó buộc phải gọi tên những gì nó lắp ráp.
 const _featureModules = [
   ExternalModule(FeatureAuthPackageModule),
-  ExternalModule(FeatureDashboardPackageModule),
   ExternalModule(FeatureHomePackageModule),
-  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSettingsPackageModule),
+  ExternalModule(FeatureOnboardingPackageModule),
   ExternalModule(FeatureSplashPackageModule),
+  ExternalModule(FeatureDashboardPackageModule),
 ];
 
 const _otherModules = [
@@ -307,15 +320,21 @@ const _otherModules = [
   ExternalModule(BlocStateManagementPackageModule),
 ];
 
-@InjectableInit(
-  externalPackageModulesBefore: [..._coreModules],
-  externalPackageModulesAfter: [
+const _externalModulesBefore = [..._coreModules];
+const _externalModulesAfter = [
+    ..._notificationsModules,
+    ..._shellModules,
     ..._uiModules,
     ..._domainModules,
     ..._dataModules,
     ..._featureModules,
     ..._otherModules,
-  ],
+];
+// composer:end:modules
+
+@InjectableInit(
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
 )
 Future<void> configureDependencies({String? environment}) async {
   getIt.enableRegisteringMultipleInstancesOfOneType();
@@ -404,9 +423,9 @@ flutter pub get
 *Nhờ Pub Workspaces, toàn bộ phụ thuộc của Host App và tất cả packages con được tải đồng thời và tạo duy nhất một `pubspec.lock`.*
 
 ### 3. Sinh Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
-`platform/common/lib/src/firebase/firebase_module.dart` import cả ba file
+`apps/mobile/lib/firebase/firebase_module.dart` import cả ba file
 `firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Phải
-chạy `flutterfire configure` một lần cho mỗi flavor trước lần build đầu tiên — xem
+chạy `dart tools/firebase/firebase_config.dart --app mobile` trước lần build đầu tiên — xem
 [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md).
 
 ### 4. Khởi Chạy Sinh Mã Đồng Loạt

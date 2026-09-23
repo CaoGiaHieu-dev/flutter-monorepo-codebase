@@ -1,6 +1,22 @@
 import 'dart:io';
 
-void main() async {
+import '../shared/app_locator.dart';
+
+/// Generates one app's per-flavor Firebase configuration.
+///
+/// ```bash
+/// dart tools/firebase/firebase_config.dart              # the only app
+/// dart tools/firebase/firebase_config.dart --app mobile # one of several
+/// ```
+///
+/// Everything it writes belongs to that app — Firebase options identify one
+/// bundle ID — so it all lands inside the app's directory:
+///
+/// - `lib/firebase/firebase_options_<flavor>.dart`, imported by the app's
+///   own `lib/firebase/firebase_module.dart`
+/// - `ios/flavors/<flavor>/GoogleService-Info.plist`
+/// - `android/app/src/<flavor>/google-services.json`
+void main(List<String> args) async {
   stdout.writeln('==========================================');
   stdout.writeln('    FlutterFire Config Setup Script');
   stdout.writeln('==========================================');
@@ -12,6 +28,16 @@ void main() async {
     );
     stderr.writeln('Current directory: ${Directory.current.path}');
     exit(1);
+  }
+
+  final app = selectApp(args);
+  stdout.writeln('[INFO] Configuring app "${app.id}" in ${app.dir}/');
+  if (!File('${app.dir}/lib/firebase/firebase_module.dart').existsSync()) {
+    stdout.writeln(
+      '[!] ${app.dir}/lib/firebase/firebase_module.dart does not exist, so '
+      'nothing will import the generated options. Copy the one from '
+      'apps/mobile/lib/firebase/ if this app should use Firebase.',
+    );
   }
 
   // Detect FVM: Only use it if .fvm/fvm_config.json exists
@@ -119,13 +145,13 @@ void main() async {
         'config',
         '--yes',
         '--project=$projectId',
-        '--out=../platform/common/lib/src/firebase/firebase_options_$flavor.dart',
+        '--out=lib/firebase/firebase_options_$flavor.dart',
         '--ios-bundle-id=$bundleId',
         '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
         '--ios-build-config=$buildMode-$flavor',
         '--android-package-name=$bundleId',
         '--android-out=android/app/src/$flavor/google-services.json',
-      ], workingDirectory: 'app');
+      ], workingDirectory: app.dir);
     }
   }
 

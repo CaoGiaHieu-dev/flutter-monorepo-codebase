@@ -49,10 +49,13 @@ import 'injection.config.dart';
 const _coreModules = [
   ExternalModule(CoreCommonPackageModule),
   ExternalModule(CoreNetworkPackageModule),
-  ExternalModule(CoreNotificationsPackageModule),
   ExternalModule(CoreStoragePackageModule),
   ExternalModule(CoreDatabasePackageModule),
   ExternalModule(CoreDiPackageModule),
+];
+
+const _notificationsModules = [
+  ExternalModule(CoreNotificationsPackageModule),
 ];
 
 const _shellModules = [
@@ -89,6 +92,7 @@ const _otherModules = [
 
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
+    ..._notificationsModules,
     ..._shellModules,
     ..._uiModules,
     ..._domainModules,

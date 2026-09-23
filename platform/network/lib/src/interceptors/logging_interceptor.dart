@@ -36,6 +36,41 @@ class LoggingInterceptor extends Interceptor {
     };
   }
 
+  /// Body keys whose values are credentials, compared lower-case with `_` and
+  /// `-` removed — so `password`, `access_token` and `refreshToken` all match.
+  static const _redactedBodyKeys = {
+    'password',
+    'token',
+    'accesstoken',
+    'refreshtoken',
+    'idtoken',
+    'secret',
+    'clientsecret',
+  };
+
+  /// Returns [data] with credential values masked, at any depth.
+  ///
+  /// Headers are not the only carrier: a login request sends the password in
+  /// its body and the response returns the token in its body, and both would
+  /// otherwise be printed verbatim into the same shared console.
+  Object? _redactBody(Object? data) {
+    if (data is Map) {
+      return {
+        for (final entry in data.entries)
+          entry.key: _redactedBodyKeys.contains(
+                    entry.key.toString().toLowerCase().replaceAll(
+                      RegExp('[_-]'),
+                      '',
+                    ),
+                  )
+              ? '***REDACTED***'
+              : _redactBody(entry.value),
+      };
+    }
+    if (data is List) return data.map(_redactBody).toList();
+    return data;
+  }
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     if (_loggerRequest) {
@@ -45,7 +80,7 @@ class LoggingInterceptor extends Interceptor {
         {
           'request_url': '[${options.method}] ${options.uri}',
           'request_header': _redactHeaders(options.headers),
-          'request_data': options.data,
+          'request_data': _redactBody(options.data),
         },
         tag: '$tag - REQUEST', // More descriptive tag
         level: LogLevel.INFO,
@@ -64,10 +99,10 @@ class LoggingInterceptor extends Interceptor {
           'request_url':
               '[${response.requestOptions.method}] ${response.requestOptions.uri}',
           'request_header': _redactHeaders(response.requestOptions.headers),
-          'request_data': response.requestOptions.data,
+          'request_data': _redactBody(response.requestOptions.data),
           'status_code': response.statusCode,
           'status_message': response.statusMessage,
-          'data': response.data, // Let DynamicLogger handle data formatting
+          'data': _redactBody(response.data),
         },
         tag: '$tag - RESPONSE', // More descriptive tag
         level: LogLevel.INFO,
@@ -90,13 +125,13 @@ class LoggingInterceptor extends Interceptor {
           'message': err.message,
           'error_details': err.error
               ?.toString(), // Include underlying error object info
-          'response_data': err.response?.data, // Log response data if available
+          'response_data': _redactBody(err.response?.data),
           // Log the request that caused the error — headers redacted so the
           // bearer token is never printed.
           'request_url':
               '[${err.requestOptions.method}] ${err.requestOptions.uri}',
           'request_header': _redactHeaders(err.requestOptions.headers),
-          'request_data': err.requestOptions.data,
+          'request_data': _redactBody(err.requestOptions.data),
         },
         tag:
             '$tag - ERROR [${err.requestOptions.method}] ${err.requestOptions.uri}', // More descriptive tag

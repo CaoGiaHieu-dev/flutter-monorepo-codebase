@@ -169,6 +169,8 @@ Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
 }
 ```
 
+Body cũng được che, ở mọi độ sâu: giá trị dưới `password`, `token`, `access_token` / `accessToken`, `refresh_token`, `id_token`, `secret` hoặc `client_secret` được in thành `***REDACTED***` — request login mang password trong body, còn response trả token trong body.
+
 ---
 
 ## 3. `NetworkConfig` — app shell cung cấp chi tiết

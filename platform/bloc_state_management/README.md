@@ -164,7 +164,7 @@ Nếu chỉ là liên kết Bloc-đến-Bloc cùng Feature, bạn hoàn toàn c�
 Giống như Provider, các Bloc gắn liền với màn hình phải được giải phóng bộ nhớ khi người dùng rời đi.
 
 1. **Route-level Auto Dispose**: Khai báo Bloc bằng `@injectable`, tuyệt đối không được dùng `@singleton` hoặc `@lazySingleton`.
-2. **Khởi tạo ở Router**: Bọc `BlocProvider` trong hàm `build` của lớp Route (`go_router`) ở file `route_module.dart`:
+2. **Khởi tạo ở Router**: Bọc `BlocProvider` trong hàm `build` của lớp Route (`go_router`) ở file `<feature>_route_module.dart`:
 
 ```dart
 @TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)

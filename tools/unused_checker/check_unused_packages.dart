@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
+
 import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
@@ -108,7 +110,7 @@ void main() async {
 
     stdout.writeln('\nNotes:');
     stdout.writeln(
-      '  - Dependencies are analyzed package-by-package against that package\'s own lib/, bin/ and test/.',
+      '  - Dependencies are analyzed package-by-package against that package\'s own lib/, bin/, test/ and tool/ (a package with no lib/ is read whole).',
     );
     stdout.writeln(
       '  - Common SDK and implicit packages are allowed automatically.',
@@ -119,27 +121,29 @@ void main() async {
 
 Set<String> getDartFilesForPackage(String pkgRoot, String projectRoot) {
   final files = <String>{};
-  // Check only the local package directory
-  final libDir = Directory(pkgRoot);
-  if (!libDir.existsSync()) return files;
+  final root = Directory(pkgRoot);
+  if (!root.existsSync()) return files;
 
-  final all = libDir.listSync(recursive: true, followLinks: false);
-  for (final file in all) {
-    if (file is File && file.path.endsWith('.dart')) {
-      final normalized = p.posix.normalize(file.path.replaceAll('\\', '/'));
-      if (normalized.contains('/lib/') ||
-          normalized.contains('/bin/') ||
-          normalized.contains('/test/')) {
-        // Exclude generated files locally
-        bool isExcluded = false;
-        final rel = p.posix.relative(normalized, from: pkgRoot);
-        isExcluded = _excludedSourceFilePatterns.any((pat) => pat.matches(rel));
+  // A normal package is read through lib/, bin/, test/ and tool/. A script
+  // package with no lib/ — `core_tools`, whose scripts sit directly under
+  // `tools/<tool>/` — is read whole; scanning only lib/ reported every one
+  // of its dependencies as unused.
+  const sourceRoots = {'lib', 'bin', 'test', 'tool'};
+  const neverScanned = {'.dart_tool', 'build'};
+  final scriptPackage = !Directory(p.join(pkgRoot, 'lib')).existsSync();
 
-        if (!isExcluded) {
-          files.add(normalized);
-        }
-      }
-    }
+  for (final file in root.listSync(recursive: true, followLinks: false)) {
+    if (file is! File || !file.path.endsWith('.dart')) continue;
+    final normalized = p.posix.normalize(file.path.replaceAll('\\', '/'));
+    final rel = p.posix.relative(
+      normalized,
+      from: p.posix.normalize(pkgRoot.replaceAll('\\', '/')),
+    );
+    final top = p.posix.split(rel).first;
+    if (neverScanned.contains(top)) continue;
+    if (!scriptPackage && !sourceRoots.contains(top)) continue;
+    if (_excludedSourceFilePatterns.any((pat) => pat.matches(rel))) continue;
+    files.add(normalized);
   }
   return files;
 }

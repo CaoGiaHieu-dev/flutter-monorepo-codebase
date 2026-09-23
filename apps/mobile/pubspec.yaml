@@ -58,12 +58,6 @@ dependencies:
     path: ../../platform/provider_state_management
   bloc_state_management:
     path: ../../platform/bloc_state_management
-  platform_kernel:
-    path: ../../platform/kernel
-  core_responsive:
-    path: ../../platform/responsive
-  core_ui_kit:
-    path: ../../platform/ui_kit
   # composer:end:deps
 
   # External packages this app itself uses. Everything else — the router,
@@ -74,15 +68,15 @@ dependencies:
   cupertino_icons: ^1.0.9
   firebase_core: "^4.13.0"     # lib/firebase/firebase_module.dart
   injectable: ^3.0.0           # lib/di/injection.dart
-  # Not imported: `tools/theme_generator` runs `dart run
-  # flutter_native_splash:create` in this directory, which needs it here.
-  flutter_native_splash: ^2.4.8
 
 dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: "^2.16.0"
   injectable_generator: "^3.1.3"
-  # Run from this directory by tools/theme_generator and by hand.
+  # Run from this directory by tools/theme_generator and by hand. The
+  # runtime half of the native splash (`FlutterNativeSplash.remove()`) is
+  # `platform_app_shell`'s dependency, not this app's.
+  flutter_native_splash: ^2.4.8
   icons_launcher: ^3.1.0
   package_rename: ^1.10.1
 

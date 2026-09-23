@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'adaptive/window_size_class.dart';
 import 'responsive_metrics.dart';
 import 'responsive_scope.dart';
 import 'utils/responsive_constants.dart';
@@ -33,6 +34,7 @@ class ResponsiveInit extends StatelessWidget {
     this.splitScreenMode = false,
     this.minTextAdapt = false,
     this.fontSizeResolver,
+    this.breakpoints = ResponsiveBreakpoints.material3,
     super.key,
   });
 
@@ -48,6 +50,9 @@ class ResponsiveInit extends StatelessWidget {
   /// See [ResponsiveMetrics.fontSizeResolver].
   final FontSizeResolver? fontSizeResolver;
 
+  /// See [ResponsiveMetrics.breakpoints].
+  final ResponsiveBreakpoints breakpoints;
+
   final Widget child;
 
   @override
@@ -59,6 +64,7 @@ class ResponsiveInit extends StatelessWidget {
         splitScreenMode: splitScreenMode,
         minTextAdapt: minTextAdapt,
         fontSizeResolver: fontSizeResolver,
+        breakpoints: breakpoints,
       ),
       child: child,
     );

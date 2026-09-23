@@ -108,7 +108,7 @@ class AuthStorageKeys {
 >
 > They are the public API of the design system, and `styles/` carries that meaning where `utils/` reads as "miscellaneous". Moving them would break every doc reference for no gain. **Do not "fix" this in a future audit.**
 
-The bottom of the stack keeps only genuinely global values — currently `ApiStatusConstants` (HTTP status codes) and `EnvConstants` (`String.fromEnvironment` wiring), both under `platform_kernel`'s `lib/src/utils/` and re-exported by `core_common`.
+The bottom of the stack keeps only genuinely global values — currently only `EnvConstants` (`String.fromEnvironment` wiring), under `platform_kernel`'s `lib/src/utils/` and re-exported by `core_common`.
 
 ---
 

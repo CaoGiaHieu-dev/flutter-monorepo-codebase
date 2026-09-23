@@ -72,9 +72,9 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `platform_kernel` | `platform/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), exceptions, enums, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants`, `ApiStatusConstants` |
+| `platform_kernel` | `platform/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), exceptions, enums, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
 | `platform_app_shell` | `platform/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the theme/language/boot storage adapters, `NetworkConfigImpl`. Imports no module |
-| `core_common` | `platform/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants`, `ApiStatusConstants` |
+| `core_common` | `platform/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
 | `core_di` | `platform/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `platform/base_ui` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
 | `core_ui_kit` | `platform/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |

@@ -26,22 +26,22 @@ class _BlockedTypeOperation {
 
 /// Android notification channel for app messages.
 const _initializationSettingsAndroid = AndroidInitializationSettings(
-  NotificationConstants.androidDefaultIcon,
+  NotificationConstants.ANDROID_DEFAULT_ICON,
 );
 
 /// The notification channel for app messages.
 const _channel = AndroidNotificationChannel(
-  NotificationConstants.channelId,
-  NotificationConstants.channelName,
-  description: NotificationConstants.channelDescription,
+  NotificationConstants.CHANNEL_ID,
+  NotificationConstants.CHANNEL_NAME,
+  description: NotificationConstants.CHANNEL_DESCRIPTION,
   importance: Importance.max,
 );
 
 /// The notification channel group for app messages.
 const _channelGroup = AndroidNotificationChannelGroup(
-  NotificationConstants.channelGroupId,
-  NotificationConstants.channelGroupName,
-  description: NotificationConstants.channelGroupDescription,
+  NotificationConstants.CHANNEL_GROUP_ID,
+  NotificationConstants.CHANNEL_GROUP_NAME,
+  description: NotificationConstants.CHANNEL_GROUP_DESCRIPTION,
 );
 
 /// Handles background messages received when the app is in the background.
@@ -387,7 +387,7 @@ class PushNotificationService {
           [];
       inboxStyleInformation = InboxStyleInformation(
         lines.take(min(3, lines.length)).toList(),
-        contentTitle: NotificationConstants.channelName,
+        contentTitle: NotificationConstants.CHANNEL_NAME,
         summaryText: 'You have ${activeNotifications?.length} messages',
       );
     }
@@ -403,7 +403,7 @@ class PushNotificationService {
       onlyAlertOnce: true,
       priority: Priority.high,
       importance: Importance.max,
-      icon: NotificationConstants.androidDefaultIcon,
+      icon: NotificationConstants.ANDROID_DEFAULT_ICON,
     );
 
     // Create iOS notification details.

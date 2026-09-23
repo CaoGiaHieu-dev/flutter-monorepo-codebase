@@ -72,9 +72,9 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `platform_kernel` | `platform/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants`, `ApiStatusConstants` |
+| `platform_kernel` | `platform/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
 | `platform_app_shell` | `platform/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, các storage adapter cho theme/ngôn ngữ/cờ boot, `NetworkConfigImpl`. Không import module nào |
-| `core_common` | `platform/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom` + page transition, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants`, `ApiStatusConstants` |
+| `core_common` | `platform/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom` + page transition, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
 | `core_di` | `platform/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `platform/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
 | `core_ui_kit` | `platform/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |

@@ -44,8 +44,11 @@ Environment.xcconfig
 env/
 *.env
 
-# Global Lock files
+# Lock files — except the workspace's own. A Pub workspace has exactly one
+# pubspec.lock, at the root, and for an app it belongs in git: without it
+# every clone and every CI run resolves whatever versions are newest that day.
 *.lock
+!/pubspec.lock
 .kiro
 
 # Workspace Tools & Reports

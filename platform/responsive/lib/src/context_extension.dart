@@ -18,10 +18,24 @@ extension ResponsiveContext on BuildContext {
   ResponsiveMetrics get responsive => ResponsiveScope.of(this);
 
   /// The width class of the current window.
-  WindowSizeClass get windowSizeClass => responsive.windowSizeClass;
+  ///
+  /// Unlike the scaling members, this works without a `ResponsiveInit`
+  /// above: choosing a layout is a question about the window, which every
+  /// app has. With a `ResponsiveInit` its breakpoints apply, so the whole
+  /// app agrees on where compact ends; without one the window is classified
+  /// with the Material 3 defaults — the standard answer, where a scaling
+  /// fallback would be a silently wrong number.
+  WindowSizeClass get windowSizeClass =>
+      ResponsiveScope.maybeOf(this)?.windowSizeClass ??
+      const ResponsiveBreakpoints().classify(MediaQuery.sizeOf(this).width);
 
-  /// The height class of the current window.
-  WindowHeightClass get windowHeightClass => responsive.windowHeightClass;
+  /// The height class of the current window. Falls back like
+  /// [windowSizeClass].
+  WindowHeightClass get windowHeightClass =>
+      ResponsiveScope.maybeOf(this)?.windowHeightClass ??
+      const ResponsiveBreakpoints().classifyHeight(
+        MediaQuery.sizeOf(this).height,
+      );
 
   /// Scales a width. Also correct for anything that must stay square.
   double w(num value) => responsive.width(value);

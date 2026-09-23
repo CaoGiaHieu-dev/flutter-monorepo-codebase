@@ -59,6 +59,19 @@ void main() async {
     }
   }
 
+  // 5. Code generation for the whole workspace — injectable, freezed,
+  // json_serializable, retrofit, go_router_builder, drift. No generated file
+  // is committed, so nothing past `pub get` compiles until this has run.
+  stdout.writeln('[!] Running build_runner for the workspace...');
+  await _runCommand(dartCmd, [
+    ...dartArgs,
+    'run',
+    'build_runner',
+    'build',
+    '-d',
+    '--workspace',
+  ]);
+
   // 6. Generate barrel files — one package at a time.
   //
   // This used to pass `packages` as a single argument. The generator emits a

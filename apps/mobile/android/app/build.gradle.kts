@@ -75,9 +75,10 @@ kotlin {
 
 android {
     namespace = "com.example.codebase"
-    // Pinned above Flutter 3.47's default (36): permission_handler_android 14.x
-    // is compiled against API 37, and AGP requires the app's compileSdk to be
-    // at least as high as any dependency's.
+    // Pinned above Flutter 3.47's default (36). AGP requires the app's
+    // compileSdk to be at least as high as any plugin's; this was raised for a
+    // plugin compiled against API 37. Lower it only after a clean
+    // `flutter build apk` confirms no remaining plugin needs 37.
     compileSdk = 37
     // API 37 is only published as a minor-versioned platform (android-37.0,
     // android-37.1, ...); AGP 9 needs compileSdkMinor to resolve it.
@@ -86,7 +87,7 @@ android {
 
     buildFeatures {
         // AGP 9 turns resValues off by default; defaultConfig below declares
-        // resValue entries for the Facebook/app-schema/app-name strings.
+        // resValue entries for the web-domain/app-name/app-id strings.
         resValues = true
     }
 

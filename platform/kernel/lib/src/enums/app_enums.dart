@@ -2,18 +2,6 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'app_enums.g.dart';
 
-/// Application update status for version checking
-enum UpdateStatus {
-  /// App needs to be updated
-  needsUpdate,
-
-  /// App is up to date
-  upToDate,
-
-  /// Invalid version detected
-  invalidVersion,
-}
-
 /// Application build flavors/environments
 @JsonEnum(alwaysCreate: true)
 enum Flavor {

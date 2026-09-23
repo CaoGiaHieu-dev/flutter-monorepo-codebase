@@ -70,3 +70,8 @@ packages/core/*
 packages/{domain,data,features}/<x>
 packages/**/l10n.yaml
 packages/*/*
+# History: build output RESTRUCTURE.md records untracking. Gitignored now, so
+# it exists only on a machine that has built — present locally, absent in CI.
+apps/mobile/android/app/build
+apps/mobile/ios/build
+tools/build

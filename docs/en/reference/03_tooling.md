@@ -95,14 +95,14 @@ dart tools/docs_check/check.dart            # exits 1 on any dead reference
 dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block
 ```
 
-Two kinds of reference are checked across `docs/`, `.agents/`, `README.md` and `CLAUDE.md`:
+Two kinds of reference are checked in every Markdown file in the repository — only tool state, build output and fetched native dependencies (`.dart_tool`, `build`, `Pods`, …) are skipped. It used to cover just `docs/`, `.agents/`, `README.md` and `CLAUDE.md`; widening it found 11 dead links in the `.github` guides, a package README and the fastlane README:
 
 | Kind | Example | How it is resolved |
 |---|---|---|
 | Backticked path | `` `platform/kernel/lib/platform_kernel.dart` `` | Repo-rooted, but only when the span starts with a real top-level directory |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Relative to the **file containing the link**, not the working directory |
 
-The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/mobile/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
+The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
 
 Spans containing a space, a `*`, a `{` or a `<` are skipped too: they are shell lines, globs or placeholders, and each describes a *set* rather than one file.
 

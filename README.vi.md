@@ -23,7 +23,7 @@ graph TD
     classDef data fill:#fff3e6,stroke:#f5cb99,stroke-width:2px,color:#333;
     classDef app fill:#f0f0f0,stroke:#cccccc,stroke-width:2px,color:#333;
 
-    App["🚀 Host App Shell (apps/mobile/)<br/>Lắp ráp và khởi động ứng dụng"]:::app
+    App["🚀 Các app (apps/mobile/, apps/admin/)<br/>Mỗi app ghép một tập module riêng"]:::app
 
     subgraph FeatureLayer ["🎨 Feature Presentation Layer (modules/*/feature)"]
         direction LR
@@ -100,11 +100,13 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │   └── workflows/
 │       └── fastlane.yml           # CI Github Action chạy Fastlane tự động
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
+│   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
 │   └── mobile/
 │       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
 │       ├── lib/
-│       │   ├── main.dart          # Entry point, error zone
-│       │   └── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       │   ├── main.dart          # Một dòng: runShellApp(configureDependencies: …)
+│       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
+│       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
 │       ├── android/  ios/         # Project native
 │       ├── fastlane/              # Lane phát hành
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh

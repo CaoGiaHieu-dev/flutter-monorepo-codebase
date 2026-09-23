@@ -1,0 +1,27 @@
+# Build output and tool state, at any depth.
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# Generated code
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.module.dart
+**/gen/**
+**/generated/**
+
+# Lock files — the workspace keeps one, at the root.
+pubspec.lock
+
+# Production environment values: create `env.prod` yourself, never commit it.
+env.prod
+
+# Desktop runner state `flutter create` / the IDEs leave behind.
+/macos/Flutter/ephemeral/
+/windows/flutter/ephemeral/
+/linux/flutter/ephemeral/

@@ -42,6 +42,10 @@ platform/app_shell/lib/              dùng chung cho mọi app
     └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
 ```
 
+### App thứ hai: `apps/admin`
+
+[`apps/admin`](../../../apps/admin/README.md) là cùng shell này ghép một tập con khác — `auth` và `settings`, không có dashboard, splash, onboarding, home hay Firebase. Toàn bộ `lib/` của nó là `main.dart` và `di/injection.dart` được sinh ra. Mọi lookup tuỳ chọn trong package này đều thiếu đóng góp ở đó, nên các fallback mô tả bên dưới có một bản ghép thật dựa vào chúng — khi có người chạy nó; hiện CI chưa build app này.
+
 ---
 
 ## 2. Vòng đời khởi động

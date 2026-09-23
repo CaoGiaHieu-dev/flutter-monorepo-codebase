@@ -350,10 +350,9 @@ dart code_review.dart --config
 
 ## 🔗 Related Documentation
 
-- [Code Review Tool](../../tools/code_review/TOOL_README.md)
-- [Usage Guide](../../tools/code_review/USAGE_GUIDE.md)
-- [Architecture Documentation](../../docs/01_ARCHITECTURE.md)
-- [Testing Guide](../../docs/06_TESTING.md)
+- [Code Review Tool](../../tools/code_review/README.md)
+- [Architecture overview](../../docs/en/architecture/01_overview.md)
+- [CI/CD](../../docs/en/operations/01_cicd.md)
 
 ---
 

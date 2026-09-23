@@ -1,0 +1,65 @@
+name: admin_app
+description: "Back-office app: auth + settings, composed from the shared modules"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.13.3 <4.0.0"
+  flutter: ">=3.47.4"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # composer:managed:deps — generated from app_manifest.yaml
+  core_common:
+    path: ../../platform/common
+  core_network:
+    path: ../../platform/network
+  core_storage:
+    path: ../../platform/storage
+  core_database:
+    path: ../../platform/database
+  core_di:
+    path: ../../platform/di
+  platform_app_shell:
+    path: ../../platform/app_shell
+  core_base_ui:
+    path: ../../platform/base_ui
+  domain_core:
+    path: ../../platform/domain_core
+  domain_auth:
+    path: ../../modules/auth/domain
+  data_core:
+    path: ../../platform/data_core
+  data_auth:
+    path: ../../modules/auth/data
+  feature_auth:
+    path: ../../modules/auth/feature
+  feature_settings:
+    path: ../../modules/settings/feature
+  provider_state_management:
+    path: ../../platform/provider_state_management
+  bloc_state_management:
+    path: ../../platform/bloc_state_management
+  platform_kernel:
+    path: ../../platform/kernel
+  core_responsive:
+    path: ../../platform/responsive
+  core_ui_kit:
+    path: ../../platform/ui_kit
+  # composer:end:deps
+
+  # External packages this app itself uses. Everything else belongs to
+  # `platform_app_shell` and the composed modules.
+  injectable: ^3.0.0           # lib/di/injection.dart
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  build_runner: "^2.16.0"
+  injectable_generator: "^3.1.3"
+
+flutter:
+  uses-material-design: true

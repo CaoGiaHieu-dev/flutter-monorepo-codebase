@@ -134,12 +134,17 @@ Template đang dùng Google Fonts:
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-TextTheme applyGoogleFont(TextTheme base) {
+// The M3 type scale's sizes. `ThemeData().textTheme` carries colours only.
+final geometry = Typography.material2021().englishLike;
+
+TextTheme applyGoogleFont(TextTheme colors) {
   final font = GoogleFonts.plusJakartaSans();
-  return base.apply(
-    fontFamily: font.fontFamily,
-    fontFamilyFallback: font.fontFamilyFallback,
-  );
+  return geometry
+      .merge(colors)
+      .apply(
+        fontFamily: font.fontFamily,
+        fontFamilyFallback: font.fontFamilyFallback,
+      );
 }
 
 final defaultTheme = switch (mode) {
@@ -153,16 +158,19 @@ final defaultTheme = switch (mode) {
 
 **Dùng font Google khác:** sửa đúng một dòng `GoogleFonts.plusJakartaSans()` trong `applyGoogleFont` thành `GoogleFonts.<tên>()` bất kỳ; cả ba nhánh đều đi qua nó.
 
-**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), rồi cho `applyGoogleFont` trả về `base.apply(fontFamily: 'YourFont')`. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/unused_checker/check_unused_packages.dart` sẽ báo nếu bạn khai mà không dùng.
+**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), rồi cho `applyGoogleFont` trả về `geometry.merge(colors).apply(fontFamily: 'YourFont')` — giữ nguyên `geometry.merge`, cỡ chữ lấy từ đó. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/unused_checker/check_unused_packages.dart` sẽ báo nếu bạn khai mà không dùng.
 
 ### Cơ chế scale font
 
-Mọi kích thước trong `TextTheme` đều được scale lại qua context-aware extension:
+Cỡ chữ lấy từ `Typography.material2021().englishLike` — thang chữ Material 3 — vì `ThemeData().textTheme` chỉ mang màu (Material thêm cỡ chữ về sau, khi `MaterialApp` localize theme; scale một theme chỉ có màu là không scale gì cả). Sau đó mọi cỡ chữ được scale lại qua context-aware extension, tiêu đề app bar cũng vậy (`BaseUiConstants.APP_BAR_TITLE_FONT_SIZE`):
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
-double? scaleFont(double? size) => size == null ? null : context.sp(size);
+double? scaleFont(double? size) =>
+    size == null ? null : context.spMin(size);
 ```
+
+Dùng `spMin`, không phải `sp`: chữ thu nhỏ trên màn hình hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế. `sp` scale theo chiều rộng, mà mọi app dùng chung theme này — trên cửa sổ desktop rộng 1280 nó sẽ làm mọi chữ to gấp ba. Trên điện thoại rộng từ 375 trở lên, chữ đúng bằng cỡ thiết kế.
 
 Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `platform/app_shell/lib/presentation/app_material_wrapper.dart`, nơi có sẵn context.
 

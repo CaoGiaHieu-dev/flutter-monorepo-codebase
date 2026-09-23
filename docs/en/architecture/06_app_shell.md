@@ -117,7 +117,7 @@ Both paths await `Future.wait([initService(), Future.delayed(_minimumDelay)])`, 
 
 ### `_ResponsiveWrapper`
 
-Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`, with `AppConfig.design` (375×812) and `splitScreenMode: true`. Text scales by the window's width ratio — the package default. It sits at the very root, so every widget below it can call `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
+Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`, with `AppConfig.design` (375×812) and `splitScreenMode: true`. `context.sp` scales by the window's width ratio — the package default; the theme's text styles use `spMin`, which never grows past the design size (see [`11_design_system.md`](../guides/11_design_system.md)). It sits at the very root, so every widget below it can call `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`.
 
 `ResponsiveInit` publishes the metrics through a `ResponsiveScope` `InheritedWidget`, so a widget that reads them subscribes to them — there is no rebuild flag to tune. Sizing must go through `BuildContext`: there is no `num` extension, so `16.h` does not even compile. See [rule 12](../reference/01_rules.md#12-responsive-ui) for the reasoning, and note that `arch_check` rule R7 blocks the bare form on every PR.
 

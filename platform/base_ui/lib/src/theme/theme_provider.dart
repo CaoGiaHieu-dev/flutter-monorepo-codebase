@@ -105,12 +105,21 @@ class ThemeProvider extends ChangeNotifier
       ThemeMode.system => ColorScheme.fromSwatch(),
     };
 
-    TextTheme applyGoogleFont(TextTheme base) {
+    // The type scale's sizes. A Material 3 `ThemeData().textTheme` carries
+    // colours only — its sizes are merged in later, when MaterialApp
+    // localizes the theme — so scaling it read `null` for every style and
+    // text was never scaled at all. Starting from the geometry gives
+    // [scaleFont] real numbers (the same M3 sizes MaterialApp would add).
+    final geometry = Typography.material2021().englishLike;
+
+    TextTheme applyGoogleFont(TextTheme colors) {
       final font = GoogleFonts.plusJakartaSans();
-      return base.apply(
-        fontFamily: font.fontFamily,
-        fontFamilyFallback: font.fontFamilyFallback,
-      );
+      return geometry
+          .merge(colors)
+          .apply(
+            fontFamily: font.fontFamily,
+            fontFamilyFallback: font.fontFamilyFallback,
+          );
     }
 
     final defaultTheme = switch (mode) {
@@ -123,8 +132,13 @@ class ThemeProvider extends ChangeNotifier
 
     /// Scales one font size through the context-aware extension.
     ///
-    /// Null-tolerant so the nullable `TextStyle.fontSize` chain stays readable.
-    double? scaleFont(double? size) => size == null ? null : context.sp(size);
+    /// `spMin`, not `sp`: text shrinks on a screen narrower than the design
+    /// but never grows past it. Every app shares this theme, desktop ones
+    /// included, and `sp` scales by width — a 1280-wide window would triple
+    /// every font. Null-tolerant so the `TextStyle.fontSize` chain stays
+    /// readable.
+    double? scaleFont(double? size) =>
+        size == null ? null : context.spMin(size);
 
     /// Scales the font sizes of the text theme to the device's screen size.
     final textTheme = defaultTheme
@@ -215,7 +229,7 @@ class ThemeProvider extends ChangeNotifier
 
         /// Sets the title text style of the app bar.
         titleTextStyle: textTheme.titleLarge?.copyWith(
-          fontSize: context.sp(BaseUiConstants.APP_BAR_TITLE_FONT_SIZE),
+          fontSize: scaleFont(BaseUiConstants.APP_BAR_TITLE_FONT_SIZE),
           fontWeight: FontWeight.bold,
         ),
 

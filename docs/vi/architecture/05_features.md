@@ -38,7 +38,7 @@ Pubspec đã cưỡng chế phần lớn điều này: `feature_dashboard` chỉ
 ## 2. Bố cục package
 
 ```
-modules/*/feature/<name>/
+modules/<name>/feature/
 ├── assets/
 │   └── language/            # <name>_en.arb, <name>_vi.arb
 ├── lib/

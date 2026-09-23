@@ -96,9 +96,9 @@ The private constructor is what prevents `HomePath()` from ever being instantiat
 | Layer | Prefix | Path | Example |
 |---|---|---|---|
 | Core | `core_` | `platform/<name>/` | `core_storage` |
-| Domain | `domain_` | `modules/*/domain/<name>/` | `domain_auth` |
-| Data | `data_` | `modules/*/data/<name>/` | `data_auth` |
-| Feature | `feature_` | `modules/*/feature/<name>/` | `feature_home` |
+| Domain | `domain_` | `modules/<name>/domain/` | `domain_auth` |
+| Data | `data_` | `modules/<name>/data/` | `data_auth` |
+| Feature | `feature_` | `modules/<name>/feature/` | `feature_home` |
 
 The directory is the bare name; the package name carries the prefix. `modules/home/feature/` → `name: feature_home`.
 

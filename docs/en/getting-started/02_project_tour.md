@@ -202,15 +202,15 @@ Consequences you must know:
 
 | I want to… | Package / file | Guide |
 | :--- | :--- | :--- |
-| Add a new screen + its state | `modules/*/feature/<name>/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
-| Add a business rule / use case | `modules/*/domain/<name>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
-| Add an API endpoint | `modules/*/data/<name>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
+| Add a new screen + its state | `modules/<name>/feature/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
+| Add a business rule / use case | `modules/<name>/domain/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
+| Add an API endpoint | `modules/<name>/data/lib/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Persist a key/value | The **owning** package's `utils/*_storage_keys.dart` | [../guides/06_storage.md](../guides/06_storage.md) |
 | Add a database table | The owning package's own `src/database/tables/` (reference: `platform/data_core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Change colors / spacing / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Add a translated string | `modules/*/feature/<name>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Add a translated string | `modules/<name>/feature/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Share a widget between features | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Let feature A trigger something in feature B | `core_di/src/actions/` or `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Bump a dependency version | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |

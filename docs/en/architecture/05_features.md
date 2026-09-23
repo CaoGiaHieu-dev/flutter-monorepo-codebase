@@ -38,7 +38,7 @@ The pubspec enforces most of this: `feature_dashboard` declares only `core_di` a
 ## 2. Package layout
 
 ```
-modules/*/feature/<name>/
+modules/<name>/feature/
 ├── assets/
 │   └── language/            # <name>_en.arb, <name>_vi.arb
 ├── lib/

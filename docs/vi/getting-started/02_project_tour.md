@@ -202,15 +202,15 @@ Những hệ quả bạn bắt buộc phải biết:
 
 | Tôi muốn… | Package / file | Hướng dẫn |
 | :--- | :--- | :--- |
-| Thêm màn hình mới + state của nó | `modules/*/feature/<tên>/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
-| Thêm quy tắc nghiệp vụ / use case | `modules/*/domain/<tên>/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
-| Thêm endpoint API | `modules/*/data/<tên>/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
+| Thêm màn hình mới + state của nó | `modules/<tên>/feature/` | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
+| Thêm quy tắc nghiệp vụ / use case | `modules/<tên>/domain/` | [../guides/02_new_domain_data.md](../guides/02_new_domain_data.md) |
+| Thêm endpoint API | `modules/<tên>/data/lib/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Lưu một cặp key/value | Thư mục `utils/*_storage_keys.dart` của package **sở hữu** | [../guides/06_storage.md](../guides/06_storage.md) |
 | Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `platform/data_core/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Đổi màu / khoảng cách / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Thêm chuỗi cần dịch | `modules/*/feature/<tên>/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Thêm chuỗi cần dịch | `modules/<tên>/feature/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Chia sẻ widget giữa các feature | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Cho feature A kích hoạt hành động ở feature B | `core_di/src/actions/` hoặc `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Nâng version một thư viện | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |

@@ -255,7 +255,7 @@ enum UserRole {
 ## 5. Package layout and naming
 
 ```
-modules/*/domain/<name>/
+modules/<name>/domain/
 ├── lib/
 │   ├── domain_<name>.dart          # public barrel
 │   ├── di/

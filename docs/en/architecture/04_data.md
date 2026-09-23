@@ -28,7 +28,7 @@ Data depends **inward** on Domain (to implement its interfaces) and **outward** 
 ## 2. Package layout
 
 ```
-modules/*/data/<name>/
+modules/<name>/data/
 ├── lib/
 │   ├── data_<name>.dart             # public barrel
 │   ├── di/
@@ -418,7 +418,7 @@ Checklist:
 Then:
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/*/data/<name>/lib
+dart tools/barrel_generator/generate.dart modules/<name>/data/lib
 dart run build_runner build -d --workspace
 ```
 

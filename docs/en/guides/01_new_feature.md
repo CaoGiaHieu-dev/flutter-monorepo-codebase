@@ -404,7 +404,7 @@ The app must keep running when any feature is deleted. Remove in this order:
 1. Its `ExternalModule(...)` entry **and** the matching import in `apps/mobile/lib/di/injection.dart`
 2. Its entry in `apps/mobile/pubspec.yaml`
 3. Its path in the root `pubspec.yaml` `workspace:` list
-4. The `modules/*/feature/<name>/` directory
+4. The `modules/<name>/feature/` directory
 5. `flutter pub get && dart run build_runner build -d --workspace`
 
 **Let the tool do it.** `remove_sample.dart` performs all five steps and, more importantly,

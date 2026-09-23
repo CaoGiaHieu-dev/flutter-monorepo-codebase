@@ -56,7 +56,7 @@ sequenceDiagram
 ## 📋 Detailed Steps
 
 ### Step 1: Define the API Response DTO in the `Data` Layer
-Create the DTO class to deserialize JSON from the server under `modules/*/data/<module>/lib/src/models/`:
+Create the DTO class to deserialize JSON from the server under `modules/<module>/data/lib/src/models/`:
 ```dart
 import 'package:data_core/data_core.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -90,14 +90,14 @@ abstract class ProductModel with _$ProductModel implements BaseModel<ProductEnti
 > `CacheEntryModel.fromRow(CacheEntry)` so Drift's generated class never leaves the package.
 
 ### Step 2: Configure Retrofit API Service
-Define the API endpoint inside the Remote DataSource under `modules/*/data/<module>/lib/src/data_sources/remote/`, taking the path from the package's own constants file:
+Define the API endpoint inside the Remote DataSource under `modules/<module>/data/lib/src/data_sources/remote/`, taking the path from the package's own constants file:
 ```dart
 @POST(ProductApiConstants.PRODUCTS)
 Future<BaseEntity<List<ProductModel>>> getProducts();
 ```
 
 ### Step 3: Define the Clean Entity in the `Domain` Layer
-Create the pure business object representation under `modules/*/domain/<module>/lib/src/entities/`:
+Create the pure business object representation under `modules/<module>/domain/lib/src/entities/`:
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -116,7 +116,7 @@ abstract class ProductEntity with _$ProductEntity {
 ```
 
 ### Step 4: Declare the Repository Interface in the `Domain` Layer
-Define the contract under `modules/*/domain/<module>/lib/src/repositories/i_<module>_repository.dart`:
+Define the contract under `modules/<module>/domain/lib/src/repositories/i_<module>_repository.dart`:
 ```dart
 import 'package:domain_core/domain_core.dart';
 import '../entities/product_entity.dart';
@@ -201,8 +201,8 @@ class GetProductsUseCase extends BaseUseCase<List<ProductEntity>, NoParams> {
 
 ### Step 8: Run Code Generation & Regenerate Barrel Files
 ```bash
-dart tools/barrel_generator/generate.dart modules/*/domain/<module>/lib
-dart tools/barrel_generator/generate.dart modules/*/data/<module>/lib
+dart tools/barrel_generator/generate.dart modules/<module>/domain/lib
+dart tools/barrel_generator/generate.dart modules/<module>/data/lib
 dart run build_runner build -d --workspace
 ```
 

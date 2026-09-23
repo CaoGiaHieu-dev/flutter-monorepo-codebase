@@ -14,10 +14,10 @@ Each feature owns its translations. The app shell never learns their names.
 
 | Where | What lives there |
 |---|---|
-| `modules/*/feature/<f>/assets/language/*.arb` | The feature's translation files |
-| `modules/*/feature/<f>/l10n.yaml` | Codegen config for that feature |
-| `modules/*/feature/<f>/lib/src/gen/language/` | Generated delegate + classes |
-| `modules/*/feature/<f>/lib/di/localization.dart` | `IFeatureLocalization` implementation |
+| `modules/<f>/feature/assets/language/*.arb` | The feature's translation files |
+| `modules/<f>/feature/l10n.yaml` | Codegen config for that feature |
+| `modules/<f>/feature/lib/src/gen/language/` | Generated delegate + classes |
+| `modules/<f>/feature/lib/di/localization.dart` | `IFeatureLocalization` implementation |
 | `core_base_ui` | Global / fallback strings shared by everyone |
 
 > [!CAUTION]

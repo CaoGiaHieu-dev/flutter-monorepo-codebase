@@ -96,9 +96,9 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 | Tầng | Tiền tố | Đường dẫn | Ví dụ |
 |---|---|---|---|
 | Core | `core_` | `platform/<name>/` | `core_storage` |
-| Domain | `domain_` | `modules/*/domain/<name>/` | `domain_auth` |
-| Data | `data_` | `modules/*/data/<name>/` | `data_auth` |
-| Feature | `feature_` | `modules/*/feature/<name>/` | `feature_home` |
+| Domain | `domain_` | `modules/<name>/domain/` | `domain_auth` |
+| Data | `data_` | `modules/<name>/data/` | `data_auth` |
+| Feature | `feature_` | `modules/<name>/feature/` | `feature_home` |
 
 Thư mục mang tên trần; tên package mới mang tiền tố. `modules/home/feature/` → `name: feature_home`.
 

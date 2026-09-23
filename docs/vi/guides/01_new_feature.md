@@ -402,7 +402,7 @@ App phải chạy được khi xoá bất kỳ feature nào. Gỡ theo đúng th
 1. Mục `ExternalModule(...)` **và** dòng import tương ứng trong `apps/mobile/lib/di/injection.dart`
 2. Mục khai trong `apps/mobile/pubspec.yaml`
 3. Đường dẫn trong danh sách `workspace:` ở `pubspec.yaml` gốc
-4. Thư mục `modules/*/feature/<tên>/`
+4. Thư mục `modules/<tên>/feature/`
 5. `flutter pub get && dart run build_runner build -d --workspace`
 
 **Hãy để tool làm.** `remove_sample.dart` thực hiện cả năm bước trên, và quan trọng hơn là nó

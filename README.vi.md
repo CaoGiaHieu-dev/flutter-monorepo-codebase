@@ -380,12 +380,13 @@ không giữ kiểu dữ liệu nào của feature — đó chính là điều k
 
 ### Gỡ một feature
 
-1. Xóa `ExternalModule(...)` và dòng import tương ứng trong `apps/mobile/lib/di/injection.dart`.
-2. Xóa `feature_x:` trong `apps/mobile/pubspec.yaml`.
-3. Xóa đường dẫn của nó khỏi danh sách `workspace:` trong `pubspec.yaml` gốc.
-4. `flutter pub get && dart run build_runner build -d --workspace`.
+1. Xóa dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó.
+2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app
+   và danh sách `workspace:` ở root, tất cả nằm giữa marker `composer:managed`.
+3. `flutter pub get && dart run build_runner build -d --workspace`.
 
-Không cần sửa file nào khác — mọi lookup lúc runtime đều có fallback an toàn. Xem
+Hoặc để `dart tools/sample_cleanup/remove_sample.dart <bundle>` làm, chạy dry-run trước. Không cần
+sửa file nào khác — mọi lookup lúc runtime đều có fallback an toàn. Xem
 [`guides/04_routing.md`](docs/vi/guides/04_routing.md).
 
 ---

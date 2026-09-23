@@ -326,11 +326,11 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ## Application Boot Lifecycle
 
-1. `main.dart` → `runZonedGuarded` → `WidgetsFlutterBinding.ensureInitialized()`
-2. `configureDependencies()` — initializes all DI modules (GetIt)
+1. `main.dart` → `runShellApp(configureDependencies: …)` (`platform/app_shell/lib/bootstrap.dart`) → `runZonedGuarded` → `WidgetsFlutterBinding.ensureInitialized()`
+2. `configureDependencies()` — the app's generated DI graph (GetIt)
 3. `MainScope.run()`:
    - Removes native splash (`FlutterNativeSplash.remove()`)
-   - Launches `SplashPage` via `AppMaterialWrapper(home: splashScreen)` (no router)
+   - Shows the splash from `getItOrNull<IAppSplashScreen>()` via `AppMaterialWrapper(home: splashScreen)` (no router); none registered, or iOS → native splash kept
    - Calls `AppInitializer.init()` (HttpOverrides, Logger, ScreenOrientation, SystemUIOverlay)
    - Updates widget to `RootApp` with `AppMaterialWrapper.router(...)` and GoRouter
 4. `AppMaterialWrapper` wraps tree in `MultiProvider` with global singletons, `Consumer2<ThemeProvider, LanguageProvider>` for reactive theme/locale

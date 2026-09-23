@@ -36,7 +36,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 6.  **App Initialization & main.dart Cleanup**:
     - **FORBIDDEN** to write messy service initialization code in `main.dart`.
     - All initialization logic (DI, logger, orientation, overlays, HttpOverrides) **must** be centralized in `AppInitializer.init()`.
-    - `main.dart` should only contain `runZonedGuarded` and call `AppInitializer.init` via `MainScope`.
+    - An app's `main.dart` is one call: `runShellApp(configureDependencies: configureDependencies)`. The zone, DI, splash and `AppInitializer.init` all live in `platform_app_shell`'s `bootstrap.dart`.
 7.  **SSL/TLS Certificate Pinning & HttpOverrides Security**:
     - Strictly control SSL validation based on Flavor (`AppConfig.appFlavor`):
       - Only allow `HttpOverrides.global = _MyHttpOverrides()` (bypass bad certs) in the **Development environment (`Flavor.dev`)**.

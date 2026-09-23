@@ -201,12 +201,11 @@ dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_ch
 
 Đây không phải luật về phong cách. Lookup ném lỗi vẫn **compile được**: package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature implement contract đó, nên `flutter analyze` không thấy gì sai. Nó chỉ vỡ lúc runtime, ở bản build không có feature đó, trên đúng màn hình nào gọi tới. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký nên nằm ngoài tập hợp này; feature được miễn trừ với chính contract của nó.
 
-**Gỡ một feature** — bốn bước được ghi ngay trong `apps/mobile/lib/di/injection.dart`:
+**Gỡ một feature** — manifest là file duy nhất sửa bằng tay:
 
-1. mục `ExternalModule(...)` và dòng import tương ứng trong `apps/mobile/lib/di/injection.dart`;
-2. mục `feature_x:` trong `apps/mobile/pubspec.yaml`;
-3. đường dẫn của nó trong danh sách `workspace:` ở `pubspec.yaml` gốc;
-4. `flutter pub get` + `dart run build_runner build -d --workspace`.
+1. dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó;
+2. `dart tools/composer/composer.dart sync`, lệnh này sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root;
+3. `flutter pub get` + `dart run build_runner build -d --workspace`.
 
 Các import trong `injection.dart` là **tham chiếu cứng có chủ đích duy nhất** của app shell tới feature — với vai trò composition root, nó buộc phải gọi tên những gì nó lắp ráp. Mọi consumer khác đều đi qua `core_di`.
 
@@ -214,7 +213,10 @@ Các import trong `injection.dart` là **tham chiếu cứng có chủ đích du
 
 ```bash
 # sau khi gỡ một feature
-flutter pub get && dart analyze app
+dart tools/composer/composer.dart sync
+flutter pub get && dart run build_runner build -d --workspace
+dart tools/arch_check/check.dart
+flutter analyze
 ```
 
 ---

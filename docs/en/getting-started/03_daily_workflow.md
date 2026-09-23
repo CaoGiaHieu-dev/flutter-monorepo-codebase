@@ -98,7 +98,7 @@ The tool also repairs broken local `path:` entries for workspace packages.
 
 | Tool | Command | Use it when |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [dir] [SM] [route]` | Scaffolding a new Feature / Domain / Data / Core package. It also registers the package in the root workspace, `apps/mobile/pubspec.yaml` and `apps/mobile/lib/di/injection.dart`. Run with no arguments for interactive mode. |
+| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [dir] [SM] [route]` | Scaffolding a new Feature / Domain / Data / Core package. It also registers the package in the root workspace and adds it to every `app_manifest.yaml`; run `dart tools/composer/composer.dart sync` afterwards. Run with no arguments for interactive mode. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session — lists what pub.dev has newer. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key in `tools/code_review/code_review_config.json`. Also supports `--all`, `--file <path>`, `--focus architecture,security`. |

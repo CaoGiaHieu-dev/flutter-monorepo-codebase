@@ -131,7 +131,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 Nguồn chân lý của nó là [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), phân loại mọi package thành `framework`, `sample` hay `shell`, và ghi thêm mục `embedded_samples` — code mẫu nằm *bên trong* một package framework, như chuỗi cache trong `data_core`.
 
-Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml`, `apps/mobile/pubspec.yaml` và `injection.dart`, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** — ví dụ `feature_settings` gọi `getIt<IAuthActionHandler>()` (bản ném lỗi) nên bấm logout sẽ crash, còn `HomeProfileBloc` nhận `IAuthStatusStream` qua constructor nên DI không dựng nổi.
+Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml` gốc và khỏi manifest, pubspec, `injection.dart` của mọi app, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** — `HomeProfileBloc` nhận `IAuthStatusStream` qua constructor nên DI không dựng nổi — cùng các liên kết xuống cấp an toàn, như `feature_settings` ẩn dòng logout khi `getItOrNull<IAuthActionHandler>()` trả về null.
 
 Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được.
 
@@ -171,7 +171,7 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 
 - **Kiểm tra toolchain trước tiên.** `assertToolchainAvailable()` chạy trước khi động vào bất cứ file dùng chung nào, nên thiếu SDK là fail ngay lập tức thay vì chết ở bước 8.
 - **Từ chối thư mục đã tồn tại.** Nó sẽ không âm thầm ghi đè lên package có sẵn.
-- **Rollback khi thất bại.** Ba file dùng chung (`pubspec.yaml` gốc, `apps/mobile/pubspec.yaml`, `apps/mobile/lib/di/injection.dart`) được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
+- **Rollback khi thất bại.** Các file dùng chung mà tool sửa — `pubspec.yaml` gốc và mọi `app_manifest.yaml` — được sao lưu trước mọi thao tác ghi; nếu bước sau fail thì chúng được khôi phục và thư mục module mới bị xoá.
 - **Tự phát hiện FVM**, yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
 > [!NOTE]

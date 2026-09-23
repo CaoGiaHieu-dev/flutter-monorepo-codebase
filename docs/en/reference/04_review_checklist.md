@@ -93,7 +93,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 ## 6. Dependency injection
 
 - [ ] New package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`
-- [ ] Its module is registered in the right group in `apps/mobile/lib/di/injection.dart`
+- [ ] Its module is declared in the right group in each `apps/<id>/app_manifest.yaml`, and `composer verify` is clean
 - [ ] Screen-scoped controllers are `@injectable` — **never** `@singleton` / `@lazySingleton`
 - [ ] Global controllers that are singletons are genuinely app-wide
 - [ ] No eager `@Singleton` depends on a type registered by a later module ([rule 5](01_rules.md#5-di-registration-order))
@@ -118,10 +118,13 @@ grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.confi
 - [ ] The app shell gained no new hard reference to a feature outside `injection.dart`
 - [ ] If a new `core_di` contract was added, its consumer degrades safely when nothing registers it
 
-**Verify** — for a feature that should be removable, remove it per the four steps in `injection.dart` and confirm:
+**Verify** — for a feature that should be removable, remove it from the app's manifest and confirm:
 
 ```bash
-flutter pub get && dart analyze app
+dart tools/composer/composer.dart sync
+flutter pub get && dart run build_runner build -d --workspace
+dart tools/arch_check/check.dart
+flutter analyze
 ```
 
 ---

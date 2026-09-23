@@ -54,7 +54,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 1. Tạo cây thư mục và `pubspec.yaml`
 2. Ghi `lib/di/module.dart` với `@InjectableInit.microPackage()`
 3. Đăng ký package vào danh sách `workspace:` ở `pubspec.yaml` gốc
-4. Đăng ký vào `apps/mobile/pubspec.yaml` **và** `apps/mobile/lib/di/injection.dart`
+4. Thêm vào mục `modules:` của mọi `apps/<id>/app_manifest.yaml` — sau đó chạy `dart tools/composer/composer.dart sync` để sinh lại path dependency của app và `injection.dart`
 5. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
    `build_runner build -d --workspace`, rồi `dart fix --apply`
 
@@ -399,13 +399,12 @@ Sau đó **restart hoàn toàn** app (không phải hot reload) để đồ th�
 
 App phải chạy được khi xoá bất kỳ feature nào. Gỡ theo đúng thứ tự:
 
-1. Mục `ExternalModule(...)` **và** dòng import tương ứng trong `apps/mobile/lib/di/injection.dart`
-2. Mục khai trong `apps/mobile/pubspec.yaml`
-3. Đường dẫn trong danh sách `workspace:` ở `pubspec.yaml` gốc
-4. Thư mục `modules/<tên>/feature/`
-5. `flutter pub get && dart run build_runner build -d --workspace`
+1. Dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó
+2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root
+3. Thư mục `modules/<tên>/feature/`
+4. `flutter pub get && dart run build_runner build -d --workspace`
 
-**Hãy để tool làm.** `remove_sample.dart` thực hiện cả năm bước trên, và quan trọng hơn là nó
+**Hãy để tool làm.** `remove_sample.dart` thực hiện các bước trên, và quan trọng hơn là nó
 nói cho bạn biết điều mà danh sách thủ công kia không nói:
 
 ```bash

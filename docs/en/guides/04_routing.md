@@ -319,7 +319,7 @@ builder: (context, state, navigationShell) {
         state,
         navigationShell,
       ) ??
-      const SizedBox.shrink();
+      navigationShell;
 },
 ```
 
@@ -327,7 +327,7 @@ builder: (context, state, navigationShell) {
 |---|---|
 | All `IFeatureRouteModule` | No stack routes; app still builds |
 | All `INavDestinationModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
-| `DashboardRouteModule` | Dashboard renders `SizedBox.shrink()` |
+| `DashboardRouteModule` | The destinations render without chrome — `navigationShell` shows the current branch. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
 | `IAppEntryLocation` | Boot starts on the first tab's path, then `/`. First launch no longer *stays* there: with no entry location there is no onboarding to show, so boot goes on to the login check |
 | `HomeNavigator` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
 

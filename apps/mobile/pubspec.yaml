@@ -12,9 +12,6 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  flutter_localizations:
-    sdk: flutter
-  intl: "^0.20.3"
 
   # composer:managed:deps — generated from app_manifest.yaml
   core_common:
@@ -65,35 +62,25 @@ dependencies:
     path: ../../platform/ui_kit
   # composer:end:deps
 
-  # external packages
-  material_ui: ^1.1.1
+  # External packages this app itself uses. Everything else — the router,
+  # providers, networking, logging — belongs to `platform_app_shell` and the
+  # composed modules, which declare their own. This list used to name 17
+  # packages left over from when the shell lived in this package; the app
+  # imports two of them.
   cupertino_icons: ^1.0.9
-  flutter_svg: ^2.3.0
-  provider: "^6.1.5+1"
-  go_router: "^18.0.0"
-  dio: "^5.11.0"
-  retrofit: "^4.10.0"
-  json_annotation: "^4.12.0"
-  freezed_annotation: "^3.1.0"
-  firebase_core: "^4.13.0"
-  get_it: ^9.2.1
-  injectable: ^3.0.0
+  firebase_core: "^4.13.0"     # lib/firebase/firebase_module.dart
+  injectable: ^3.0.0           # lib/di/injection.dart
+  # Not imported: `tools/theme_generator` runs `dart run
+  # flutter_native_splash:create` in this directory, which needs it here.
   flutter_native_splash: ^2.4.8
-  dynamic_logger: "^0.5.0"
-  app_links: "^7.2.1"
 
 dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: "^2.16.0"
-  json_serializable: "^6.14.1"
-  freezed: "^4.0.0-dev.3"
-  go_router_builder: "^4.4.0"
-  retrofit_generator: "^10.2.8"
-  flutter_gen_runner: "^5.15.0"
-  package_rename: ^1.10.1
-  icons_launcher: ^3.1.0
   injectable_generator: "^3.1.3"
+  # Run from this directory by tools/theme_generator and by hand.
+  icons_launcher: ^3.1.0
+  package_rename: ^1.10.1
 
 flutter:
-  generate: true
   uses-material-design: true

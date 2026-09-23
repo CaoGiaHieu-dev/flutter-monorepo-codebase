@@ -93,7 +93,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 ## 6. Dependency injection
 
 - [ ] Package mới khai `@InjectableInit.microPackage()` tại `lib/di/module.dart`
-- [ ] Module của nó được khai đúng nhóm trong `apps/mobile/app_manifest.yaml`, và `composer verify` sạch
+- [ ] Module của nó được khai đúng nhóm trong mỗi `apps/<id>/app_manifest.yaml`, và `composer verify` sạch
 - [ ] Controller gắn màn hình là `@injectable` — **không bao giờ** `@singleton` / `@lazySingleton`
 - [ ] Controller singleton phải thực sự dùng toàn app
 - [ ] Không `@Singleton` eager nào phụ thuộc type đăng ký ở module chạy sau ([luật 5](01_rules.md#5-thứ-tự-đăng-ký-di))
@@ -118,10 +118,13 @@ grep -n "PackageModule().init\|gh.singleton<" apps/mobile/lib/di/injection.confi
 - [ ] App shell không phát sinh tham chiếu cứng mới tới feature ngoài `injection.dart`
 - [ ] Nếu thêm hợp đồng `core_di` mới, phía tiêu thụ phải suy biến an toàn khi không ai đăng ký
 
-**Kiểm chứng** — với feature lẽ ra phải gỡ được, hãy gỡ theo bốn bước trong `injection.dart` rồi xác nhận:
+**Kiểm chứng** — với feature lẽ ra phải gỡ được, hãy gỡ nó khỏi manifest của app rồi xác nhận:
 
 ```bash
-flutter pub get && dart analyze app
+dart tools/composer/composer.dart sync
+flutter pub get && dart run build_runner build -d --workspace
+dart tools/arch_check/check.dart
+flutter analyze
 ```
 
 ---

@@ -16,7 +16,7 @@ import '../widgets/undefine_route_widget.dart';
 /// - [DashboardRouteModule] — dashboard chrome (optional)
 /// - [IAppEntryLocation] — cold-start path (optional)
 ///
-/// Missing modules fall back to empty routes / [SizedBox] / `/`.
+/// Missing modules fall back to empty routes / a chromeless shell / `/`.
 ///
 /// Every contribution is resolved optionally and this file imports no feature
 /// package, so removing any feature leaves routing intact — including
@@ -106,13 +106,18 @@ class AppRouter {
           StatefulShellRoute.indexedStack(
             parentNavigatorKey: NavigatorKeys.appKey,
             branches: _dashboardBranches,
+            // Without a dashboard module the destinations still render, just
+            // without chrome: `navigationShell` is itself the widget showing
+            // the current branch. This used to fall back to an empty
+            // `SizedBox`, so an app composing tabs but no dashboard — an
+            // admin app with only `settings`, say — opened on a blank screen.
             builder: (context, state, navigationShell) {
               return getItOrNull<DashboardRouteModule>()?.builder(
                     context,
                     state,
                     navigationShell,
                   ) ??
-                  const SizedBox.shrink();
+                  navigationShell;
             },
           ),
         ],

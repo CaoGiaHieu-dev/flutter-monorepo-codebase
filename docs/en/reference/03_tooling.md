@@ -131,7 +131,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 Its source of truth is [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml), which classifies every package as `framework`, `sample` or `shell`, and additionally records `embedded_samples` — sample code living *inside* a framework package, like the cache chain in `data_core`.
 
-The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from `pubspec.yaml`, `apps/mobile/pubspec.yaml` and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** — for example `feature_settings` calls `getIt<IAuthActionHandler>()` (the throwing lookup) so logout throws at runtime, while `HomeProfileBloc` takes `IAuthStatusStream` through its constructor so DI cannot build it at all.
+The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from the root `pubspec.yaml` and from every app's manifest, pubspec and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** — `HomeProfileBloc` takes `IAuthStatusStream` through its constructor, so DI cannot build it at all — as well as the couplings that degrade safely, such as `feature_settings` hiding its logout row when `getItOrNull<IAuthActionHandler>()` is null.
 
 Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back.
 
@@ -171,7 +171,7 @@ Run with fewer arguments and it prompts interactively.
 
 - **Toolchain is verified first.** `assertToolchainAvailable()` runs before anything shared is touched, so a missing SDK fails immediately instead of at step 8.
 - **Existing directories are refused.** It will not silently overwrite a package.
-- **Rollback on failure.** The three shared files (root `pubspec.yaml`, `apps/mobile/pubspec.yaml`, `apps/mobile/lib/di/injection.dart`) are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
+- **Rollback on failure.** The shared files it edits — the root `pubspec.yaml` and every `app_manifest.yaml` — are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
 - **FVM is auto-detected**, requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
 > [!NOTE]

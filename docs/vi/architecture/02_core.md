@@ -66,7 +66,7 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 
 | Nhóm hợp đồng | Đường dẫn | Mục đích |
 |:--|:--|:--|
-| Navigator | `src/navigators/` | `AuthNavigator`, `HomeNavigator`, `OnboardingNavigator`, `SettingsNavigator` — khai ở đây, hiện thực trong feature sở hữu |
+| Navigator | `src/navigators/` | `AuthNavigator`, `HomeNavigator` — khai ở đây, hiện thực trong feature sở hữu |
 | Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
 | Action handler | `src/actions/` | `IAuthActionHandler` — hành động UI xuyên feature (vd đăng xuất) |
 | Agnostic stream | `src/agnostic_streams/` | `IAuthStatusStream` — chia sẻ state giữa feature Provider và feature BLoC |

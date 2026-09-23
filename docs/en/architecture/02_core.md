@@ -68,7 +68,7 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 
 | Contract group | Path | Purpose |
 |:--|:--|:--|
-| Navigators | `src/navigators/` | `AuthNavigator`, `HomeNavigator`, `OnboardingNavigator`, `SettingsNavigator` — declared here, implemented in the owning feature |
+| Navigators | `src/navigators/` | `AuthNavigator`, `HomeNavigator` — declared here, implemented in the owning feature |
 | Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
 | Action handlers | `src/actions/` | `IAuthActionHandler` — cross-feature UI actions (e.g. logout) |
 | Agnostic streams | `src/agnostic_streams/` | `IAuthStatusStream` — state sharing between a Provider feature and a BLoC feature |

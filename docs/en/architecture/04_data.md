@@ -113,7 +113,7 @@ Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `core_c
 `platform/kernel/lib/src/error/error_handler.dart` branches on, in order: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → fallback.
 
 > [!WARNING]
-> **There is no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch.** Since `AuthRepositoryImpl` talks to the Firebase SDK directly (§6), every Firebase error — wrong password, user-not-found, network-request-failed — falls through to the generic tail:
+> **There is no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch.** The shipped `AuthRepositoryImpl` goes through Retrofit, so this does not bite the sample — but swap its transport for the Firebase SDK and every Firebase error — wrong password, user-not-found, network-request-failed — falls through to the generic tail:
 >
 > ```dart
 > return ServerFailure(
@@ -174,7 +174,7 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
 `unknownEnumValue: UserRole.unknown` means a role the backend adds later deserialises to `unknown` instead of throwing.
 
-`fromEntity` is the reverse trip, needed when writing back (`updateUserProfile`).
+`fromEntity` is the reverse trip, for writing an entity back to the API or a cache. Nothing in the sample writes back, so today only `modules/auth/data/test/user_model_test.dart` exercises it.
 
 ### A database Model
 

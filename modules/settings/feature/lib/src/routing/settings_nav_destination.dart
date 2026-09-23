@@ -18,7 +18,7 @@ class SettingsNavDestination extends INavDestinationModule {
   String get path => SettingsPath.SETTINGS;
 
   @override
-  List<RouteBase> get routes => [$settingsShellRoute];
+  List<RouteBase> get routes => [$settingsRoute];
 
   @override
   NavDestination destination(BuildContext context) => NavDestination(

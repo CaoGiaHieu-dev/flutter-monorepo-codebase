@@ -80,14 +80,14 @@ class AuthPath {
 
 | Package | Concern | State management | Registers |
 |:---|:---|:---|:---|
-| `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation`, `OnboardingNavigator` |
+| `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Login (one screen) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
 | `feature_dashboard` | Bottom-nav shell chrome | none | `DashboardRouteModule` |
 | `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
-| `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1), `SettingsNavigator` |
+| `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Splash screen | none | `IAppSplashScreen` — **not a route**; shown by `MainScope` |
 
-Every one of them also registers its `IFeatureLocalization`. `IAuthSessionGateway` is registered by `data_auth`, not by the feature.
+Every one with user-facing strings also registers its `IFeatureLocalization` — all but `feature_dashboard`, which has none. `IAuthSessionGateway` is registered by `data_auth`, not by the feature.
 
 `feature_auth` and `feature_home` are deliberately built on **different** state approaches so the template demonstrates both. See [state management](../guides/03_state_management.md) — and read the honest comparison there before choosing, because the two branches are not equally equipped.
 
@@ -113,8 +113,8 @@ Widget build(BuildContext context) {
         ? null
         : BottomNavigationBar(
             currentIndex: index.clamp(0, tabs.length - 1),
-            onTap: (tabIndex) => _onTap(context, tabIndex, tabs[tabIndex].onRestore),
-            items: [for (final tab in tabs) tab.destination(context)],
+            onTap: (tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore),
+            items: [for (final tab in tabs) _itemOf(tab.destination(context))],
           ),
   );
 }

@@ -103,15 +103,13 @@ Cũng dùng Freezed. Code thật từ
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'login_params.freezed.dart';
-part 'login_params.g.dart';
 
 @freezed
 abstract class LoginParams with _$LoginParams {
+  /// Input is validated by the login form before this is built; the params
+  /// object itself only carries it.
   const factory LoginParams({required String email, required String password}) =
       _LoginParams;
-
-  factory LoginParams.fromJson(Map<String, dynamic> json) =>
-      _$LoginParamsFromJson(json);
 }
 ```
 
@@ -151,7 +149,7 @@ import '../../entities/user/user.dart';
 import '../../params/auth_params/login_params.dart';
 import '../../repositories/i_auth_repository.dart';
 
-/// Login use case - authenticates user with credentials
+/// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
   LoginUseCase(this._authRepository);

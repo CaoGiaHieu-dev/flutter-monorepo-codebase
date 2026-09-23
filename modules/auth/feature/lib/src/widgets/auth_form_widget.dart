@@ -61,8 +61,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
     if (_formKey.currentState?.validate() ?? false) widget.onSubmit?.call();
   }
 
-  /// One decoration for both fields — the three copies this replaced drifted
-  /// apart the moment any one of them was edited.
+  /// One decoration shared by both fields.
   InputDecoration _decoration({
     required String label,
     required String hint,

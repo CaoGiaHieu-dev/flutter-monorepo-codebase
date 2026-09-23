@@ -80,14 +80,14 @@ class AuthPath {
 
 | Package | Mối quan tâm | State management | Đăng ký |
 |:---|:---|:---|:---|
-| `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation`, `OnboardingNavigator` |
+| `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Đăng nhập (một màn hình) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
 | `feature_dashboard` | Khung chrome bottom-nav | không | `DashboardRouteModule` |
 | `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
-| `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1), `SettingsNavigator` |
+| `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Màn hình splash | không | `IAppSplashScreen` — **không phải route**; do `MainScope` hiển thị |
 
-Mọi feature đều đăng ký thêm `IFeatureLocalization` của mình. `IAuthSessionGateway` do `data_auth` đăng ký, không phải feature.
+Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocalization` của mình — trừ `feature_dashboard`, vốn không có chuỗi nào. `IAuthSessionGateway` do `data_auth` đăng ký, không phải feature.
 
 `feature_auth` và `feature_home` được xây trên **hai** hướng state khác nhau một cách có chủ đích, để template minh hoạ cả hai. Xem [state management](../guides/03_state_management.md) — và hãy đọc phần so sánh trung thực ở đó trước khi chọn, vì hai nhánh **không** được trang bị ngang nhau.
 
@@ -113,8 +113,8 @@ Widget build(BuildContext context) {
         ? null
         : BottomNavigationBar(
             currentIndex: index.clamp(0, tabs.length - 1),
-            onTap: (tabIndex) => _onTap(context, tabIndex, tabs[tabIndex].onRestore),
-            items: [for (final tab in tabs) tab.destination(context)],
+            onTap: (tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore),
+            items: [for (final tab in tabs) _itemOf(tab.destination(context))],
           ),
   );
 }

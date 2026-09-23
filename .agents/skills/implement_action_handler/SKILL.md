@@ -13,7 +13,7 @@ Use this skill when requested to: "call logout from settings without importing a
 
 | Need | Prefer |
 | :--- | :--- |
-| Navigate to another feature's screen | **Navigator** (`AuthNavigator`, `HomeNavigator`, `SettingsNavigator`) |
+| Navigate to another feature's screen | **Navigator** (`AuthNavigator`, `HomeNavigator`) |
 | Shared business logic without UI | **Domain UseCase** |
 | Observe another feature's state | **Agnostic stream** (`IAuthStatusStream`, `IAuthSessionState`) |
 | Inject a widget/scope from another feature | **`IAppTreeWrapper`** or a widget-builder interface in `core_di` |

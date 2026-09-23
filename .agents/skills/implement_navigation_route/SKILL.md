@@ -23,7 +23,7 @@ abstract class ProfileNavigator {
   void toSettings(BuildContext context);
 }
 ```
-**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — use `feature_settings` + `SettingsNavigator`. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
+**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — put them in `feature_settings`, and add a `SettingsNavigator` contract to `core_di` only once another module needs to navigate there. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
 
 ### Step 2: Put the path constants in `utils/`
 

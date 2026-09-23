@@ -152,16 +152,26 @@ embedded_samples:
       - platform/data_core/lib/src/models/cache_entry_model.dart
       - platform/data_core/lib/src/data_sources/local/cache_entry_local_data_source.dart
       - platform/data_core/lib/src/repositories_impl/cache_entry_repository_impl.dart
+      - platform/data_core/lib/src/utils/data_core_constants.dart
+    also_edit:
+      # Deleting only the files above does not build: these name them too.
+      - "platform/data_core/lib/di/module.dart — the @preResolve CacheDatabase and cacheDatabaseHandle registrations"
+      - "barrels — regenerate with tools/barrel_generator for domain_core/lib and data_core/lib"
     also_remove:
       - platform/data_core/test/cache_database_test.dart
-      - platform/data_core/test/database_handle_test.dart
+    rehome_before_removing:
+      # These test framework code in core_database and only borrow the cache
+      # database as a fixture. Give them another fixture; do not delete them.
+      - "platform/data_core/test/database_handle_test.dart — the only test of DatabaseHandle"
+      - "platform/data_core/test/cache_database_test.dart, group 'on a real file' — the only test of WAL and foreign keys under driftMigrationStrategy"
 
   auth_rest_reference:
     lives_in: [data_auth]
     demonstrates: A Retrofit remote data source over the endpoints in utils/.
     warning: >-
-      Dead in the running app — AuthRepositoryImpl talks to the Firebase SDK
-      directly and never calls it. Kept as a REST reference.
+      Live, not dead: AuthRepositoryImpl calls it for login and refresh, and
+      di/register_module.dart registers it. It goes only with the whole auth
+      bundle — deleting these two files alone breaks data_auth.
     files:
       - modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
       - modules/auth/data/lib/src/utils/auth_api_constants.dart
@@ -204,21 +214,17 @@ bundles:
       - platform/di/lib/src/navigators/home_navigator.dart
     breaks: []
     safe_couplings:
-      - "feature_auth -> HomeNavigator (getItOrNull + fallback, degrades quietly)"
+      - "platform_app_shell -> HomeNavigator (getItOrNull; after sign-in the app goes to AppRouter.fallbackLocation)"
     note: >-
       Removing every INavDestinationModule leaves the dashboard with no tabs;
       AppRouter falls back to an empty branch rather than crashing.
 
   settings:
     packages: [feature_settings]
-    orphaned_contracts:
-      - platform/di/lib/src/navigators/settings_navigator.dart
     breaks: []
 
   onboarding:
     packages: [feature_onboarding]
-    orphaned_contracts:
-      - platform/di/lib/src/navigators/onboarding_navigator.dart
     breaks: []
     note: >-
       This is the only IAppEntryLocation. Without it the cold-start route falls

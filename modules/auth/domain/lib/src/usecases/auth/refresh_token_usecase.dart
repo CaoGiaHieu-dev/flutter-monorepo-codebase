@@ -12,7 +12,6 @@ class RefreshTokenUseCase extends BaseUseCase<UserEntity, NoParams> {
 
   @override
   Future<Result<UserEntity>> call(NoParams params) {
-    // Repository now returns Result<UserEntity> directly - no unwrapping needed
     return _authRepository.refreshToken();
   }
 }

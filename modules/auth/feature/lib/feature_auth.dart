@@ -2,8 +2,8 @@
 ///
 /// This package is a reference implementation shipped with the template,
 /// not product code. It demonstrates:
-/// Provider state management, a global `@lazySingleton` controller, Firebase
-/// auth through the data layer, and the cross-feature contracts
+/// Provider state management, a global `@lazySingleton` controller, auth
+/// through the domain and data layers, and the cross-feature contracts
 /// (`IAuthStatusStream`, `IAuthActionHandler`) other samples consume.
 ///
 /// To remove it and everything that travels with it:

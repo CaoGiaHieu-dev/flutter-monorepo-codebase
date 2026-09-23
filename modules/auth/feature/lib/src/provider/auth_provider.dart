@@ -75,8 +75,7 @@ class AuthProvider extends BaseProvider<UserEntity>
   ///
   /// Hooking both here — rather than inside [login] — means every error
   /// transition is published, including ones from operations that supply no
-  /// `errorStateBuilder` (e.g. [logout]). That matches what the shell's
-  /// previous listener saw when it observed the raw view state.
+  /// `errorStateBuilder` (e.g. [logout]).
   void _syncAuthStream(ViewStateModel<UserEntity> value) {
     if (value.isSuccess) {
       _authStream.updateAuthStatus(value.data);
@@ -148,15 +147,11 @@ class AuthProvider extends BaseProvider<UserEntity>
 
   /// Clears the session. Navigation is handled by the app shell, which listens
   /// to [sessionChanges] — do not navigate from here.
+  ///
+  /// Clearing local storage is synchronous and cannot meaningfully fail, so
+  /// this skips `executeOperation` — [login] is where that pattern is shown.
   Future<void> logout() async {
-    updateState(state: const ViewState.loading());
-    executeOperation(
-      OperationConfig(
-        operation: () => _logoutUseCase(const NoParams()),
-        showLoading: false,
-        onSuccess: (_) async {},
-      ),
-    );
+    _logoutUseCase(const NoParams());
     _setLoggedOut();
   }
 

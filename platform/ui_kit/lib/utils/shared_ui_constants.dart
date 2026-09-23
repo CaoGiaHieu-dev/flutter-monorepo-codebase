@@ -16,10 +16,6 @@ class SharedUiConstants {
   /// Default visible duration for a toast raised by `AppOverlay.showToast`.
   static const Duration TOAST_DURATION = Duration(seconds: 3);
 
-  /// Visible duration for the shorter error toasts raised while picking
-  /// or cropping media.
-  static const Duration MEDIA_ERROR_TOAST_DURATION = Duration(seconds: 2);
-
   /// Default scrim colour behind a dialog (50% black).
   static const Color DIALOG_BARRIER_COLOR = Color(0x80000000);
 }

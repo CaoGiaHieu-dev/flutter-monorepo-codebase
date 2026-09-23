@@ -41,7 +41,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | Extensions | `src/extensions/` | `Dio` |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
-| Utils | `src/utils/` | `AppUtils`, `Debounce`, `DownloadImage`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
+| Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
 
 ### What does *not* belong here, and why
 
@@ -169,7 +169,6 @@ class SharedUiConstants {
 
   static const Duration DIALOG_TRANSITION_DURATION = Duration(milliseconds: 200);
   static const Duration TOAST_DURATION = Duration(seconds: 3);
-  static const Duration MEDIA_ERROR_TOAST_DURATION = Duration(seconds: 2);
   static const Color DIALOG_BARRIER_COLOR = Color(0x80000000);
 }
 ```

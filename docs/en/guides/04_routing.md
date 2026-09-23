@@ -100,7 +100,7 @@ class HomeNavDestination extends INavDestinationModule {
   String get path => HomePath.HOME;
 
   @override
-  List<RouteBase> get routes => [$homeShellRoute];
+  List<RouteBase> get routes => [$homeRoute];
 
   @override
   NavDestination destination(BuildContext context) => NavDestination(
@@ -156,11 +156,7 @@ class AuthPath {
 
 ```dart
 @TypedShellRoute<AuthShellRoute>(
-  routes: [
-    TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN),
-    // Siblings go here, one `TypedGoRoute` each. They share the shell's
-    // nested Navigator, so they share one back stack.
-  ],
+  routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
 )
 class AuthShellRoute extends ShellRouteData {
   const AuthShellRoute();
@@ -178,13 +174,11 @@ class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
   static final $parentNavigatorKey = NavigatorKeys.nested('auth');
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const LoginPage();
-  }
+  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
 }
 ```
 
-The generated `$authShellRoute` is what the feature hands back from `IFeatureRouteModule.routes`.
+Add sibling routes as further `TypedGoRoute` entries in `routes:` — they share the shell's nested Navigator, so they share one back stack. The generated `$authShellRoute` is what the feature hands back from `IFeatureRouteModule.routes`.
 
 ---
 
@@ -236,9 +230,10 @@ Feature A must never import Feature B. Navigation crosses the boundary through a
 ```dart
 abstract class AuthNavigator {
   void toLogin(BuildContext context);
-  // One method per route this feature owns — and only routes it owns.
 }
 ```
+
+One method per route the feature owns — and only routes it owns.
 
 **2. Implement in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
@@ -280,7 +275,7 @@ class NavigatorKeys {
 
   static final _nested = <String, GlobalKey<NavigatorState>>{};
 
-  /// Same instance for the same id, created on first use.
+  /// The nested navigator key registered under [id], created on first use.
   static GlobalKey<NavigatorState> nested(String id) => _nested.putIfAbsent(
     id,
     () => GlobalKey<NavigatorState>(debugLabel: 'nested:$id'),

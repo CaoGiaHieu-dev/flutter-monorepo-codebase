@@ -134,20 +134,26 @@ The template uses Google Fonts:
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
+TextTheme applyGoogleFont(TextTheme base) {
+  final font = GoogleFonts.plusJakartaSans();
+  return base.apply(
+    fontFamily: font.fontFamily,
+    fontFamilyFallback: font.fontFamilyFallback,
+  );
+}
+
 final defaultTheme = switch (mode) {
-  ThemeMode.dark => GoogleFonts.plusJakartaSansTextTheme(
-    ThemeData.dark().textTheme,
+  ThemeMode.dark => applyGoogleFont(ThemeData.dark().textTheme),
+  ThemeMode.light => applyGoogleFont(ThemeData.light().textTheme),
+  ThemeMode.system => applyGoogleFont(
+    ThemeData.from(colorScheme: colorScheme).textTheme,
   ),
-  ThemeMode.light => GoogleFonts.plusJakartaSansTextTheme(
-    ThemeData.light().textTheme,
-  ),
-  // …
 };
 ```
 
-**Another Google font:** replace `plusJakartaSansTextTheme` with any `GoogleFonts.<name>TextTheme` in all branches.
+**Another Google font:** change the one line `GoogleFonts.plusJakartaSans()` inside `applyGoogleFont` to any `GoogleFonts.<name>()`; all three branches go through it.
 
-**A bundled font:** declare it under `flutter: fonts:` in [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), then swap the call for `ThemeData.light().textTheme.apply(fontFamily: 'YourFont')`. Drop the `google_fonts` dependency once nothing uses it — `dart tools/arch_check/check.dart` will flag it as declared-but-unused.
+**A bundled font:** declare it under `flutter: fonts:` in [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), then make `applyGoogleFont` return `base.apply(fontFamily: 'YourFont')`. Drop the `google_fonts` dependency once nothing uses it — `dart tools/unused_checker/check_unused_packages.dart` reports it as declared-but-unused.
 
 ### How font scaling works
 

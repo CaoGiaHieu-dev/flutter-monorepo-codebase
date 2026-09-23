@@ -411,7 +411,7 @@ const factory BaseEntity({
   @JsonKey(name: 'message') String? message,
 }) = _BaseEntity<T>;
 
-bool get isSuccess => statusCode == ApiStatusConstants.SUCCESS;
+bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
 bool get hasError => !isSuccess;
 ```
 

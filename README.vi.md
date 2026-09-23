@@ -375,7 +375,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)
-`platform/app_shell/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeShellRoute`. Nó thu thập:
+`platform/app_shell/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeRoute`. Nó thu thập:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`

@@ -134,20 +134,26 @@ Template đang dùng Google Fonts:
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
+TextTheme applyGoogleFont(TextTheme base) {
+  final font = GoogleFonts.plusJakartaSans();
+  return base.apply(
+    fontFamily: font.fontFamily,
+    fontFamilyFallback: font.fontFamilyFallback,
+  );
+}
+
 final defaultTheme = switch (mode) {
-  ThemeMode.dark => GoogleFonts.plusJakartaSansTextTheme(
-    ThemeData.dark().textTheme,
+  ThemeMode.dark => applyGoogleFont(ThemeData.dark().textTheme),
+  ThemeMode.light => applyGoogleFont(ThemeData.light().textTheme),
+  ThemeMode.system => applyGoogleFont(
+    ThemeData.from(colorScheme: colorScheme).textTheme,
   ),
-  ThemeMode.light => GoogleFonts.plusJakartaSansTextTheme(
-    ThemeData.light().textTheme,
-  ),
-  // …
 };
 ```
 
-**Dùng font Google khác:** thay `plusJakartaSansTextTheme` bằng `GoogleFonts.<tên>TextTheme` bất kỳ, ở tất cả các nhánh.
+**Dùng font Google khác:** sửa đúng một dòng `GoogleFonts.plusJakartaSans()` trong `applyGoogleFont` thành `GoogleFonts.<tên>()` bất kỳ; cả ba nhánh đều đi qua nó.
 
-**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), rồi thay lời gọi bằng `ThemeData.light().textTheme.apply(fontFamily: 'YourFont')`. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/arch_check/check.dart` sẽ báo nếu bạn khai mà không dùng.
+**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), rồi cho `applyGoogleFont` trả về `base.apply(fontFamily: 'YourFont')`. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/unused_checker/check_unused_packages.dart` sẽ báo nếu bạn khai mà không dùng.
 
 ### Cơ chế scale font
 

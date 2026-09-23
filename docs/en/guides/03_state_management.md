@@ -42,7 +42,8 @@ Both branches are registered in DI and can coexist in the same app — `feature_
 
 ```dart
 @lazySingleton
-class AuthProvider extends BaseProvider<UserEntity> {
+class AuthProvider extends BaseProvider<UserEntity>
+    implements IAuthSessionState, IAuthRefreshListenable {
   AuthProvider(
     this._loginUseCase,
     this._logoutUseCase,
@@ -221,7 +222,7 @@ Future<void> initialize() async {
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream)
       : super(const BlocViewState.initial()) {
     on<_HomeProfileStarted>(_onStarted);
@@ -232,11 +233,11 @@ class HomeProfileBloc
   }
 
   final IAuthStatusStream _authStatusStream;
-  StreamSubscription<UserEntity?>? _subscription;
+  StreamSubscription<AuthPrincipal?>? _subscription;
 
   Future<void> _onStarted(
     _HomeProfileStarted event,
-    Emitter<BlocViewState<UserEntity?>> emit,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
   ) async {
     await _subscription?.cancel();
     _subscription = _authStatusStream.authStatusStream.listen((user) {
@@ -266,7 +267,7 @@ part of 'home_profile_bloc.dart';
 abstract class HomeProfileEvent with _$HomeProfileEvent {
   const factory HomeProfileEvent.started() = _HomeProfileStarted;
   const factory HomeProfileEvent.refreshed() = _HomeProfileRefreshed;
-  const factory HomeProfileEvent.authStatusChanged(UserEntity? user) =
+  const factory HomeProfileEvent.authStatusChanged(AuthPrincipal? user) =
       _HomeProfileAuthStatusChanged;
 }
 ```
@@ -326,7 +327,7 @@ The name avoids a collision with the Provider branch's `ViewState`. Both barrels
 ### 3.4 Rendering
 
 ```dart
-BlocBuilder<HomeProfileBloc, BlocViewState<UserEntity?>>(
+BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
   builder: (context, state) => state.when(
     initial: () => const SizedBox.shrink(),
     loading: () => const Center(child: CircularProgressIndicator.adaptive()),

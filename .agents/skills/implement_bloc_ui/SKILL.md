@@ -74,7 +74,6 @@ import 'dart:async';
 
 import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_di/core_di.dart';
-import 'package:domain_auth/domain_auth.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
 
@@ -83,7 +82,7 @@ part 'home_profile_bloc.freezed.dart';
 
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream)
     : super(const BlocViewState.initial()) {
     on<_HomeProfileStarted>(_onStarted);
@@ -94,11 +93,11 @@ class HomeProfileBloc
   }
 
   final IAuthStatusStream _authStatusStream;
-  StreamSubscription<UserEntity?>? _subscription;
+  StreamSubscription<AuthPrincipal?>? _subscription;
 
   Future<void> _onStarted(
     _HomeProfileStarted event,
-    Emitter<BlocViewState<UserEntity?>> emit,
+    Emitter<BlocViewState<AuthPrincipal?>> emit,
   ) async {
     await _subscription?.cancel();
     _subscription = _authStatusStream.authStatusStream.listen((user) {
@@ -124,7 +123,7 @@ part of 'home_profile_bloc.dart';
 abstract class HomeProfileEvent with _$HomeProfileEvent {
   const factory HomeProfileEvent.started() = _HomeProfileStarted;
   const factory HomeProfileEvent.refreshed() = _HomeProfileRefreshed;
-  const factory HomeProfileEvent.authStatusChanged(UserEntity? user) =
+  const factory HomeProfileEvent.authStatusChanged(AuthPrincipal? user) =
       _HomeProfileAuthStatusChanged;
 }
 ```
@@ -156,7 +155,7 @@ Future<void> _onStarted(
 ### 4. Rendering UI: `BlocBuilder` & Pattern Matching
 
 ```dart
-BlocBuilder<HomeProfileBloc, BlocViewState<UserEntity?>>(
+BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
   builder: (context, state) {
     return state.when(
       initial: () => const SizedBox.shrink(),
@@ -171,7 +170,7 @@ BlocBuilder<HomeProfileBloc, BlocViewState<UserEntity?>>(
 ### 5. Side-effects: `BlocListener`
 
 ```dart
-BlocListener<HomeProfileBloc, BlocViewState<UserEntity?>>(
+BlocListener<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
   listener: (context, state) {
     state.maybeWhen(
       error: (failure) {

@@ -109,8 +109,7 @@ modules:
   - { id: dashboard, layers: [feature] }
   - { id: cache, layers: [domain, data] }
 
-# Packages the app depends on that contribute no DI module of their own.
-extra_dependencies:
-  - platform_kernel
-  - core_responsive
-  - core_ui_kit
+# `extra_dependencies:` (optional) — a workspace package this app's own lib/
+# imports that registers no DI module. Packages reached only through another
+# package (core_responsive, core_ui_kit, platform_kernel, ...) need no entry:
+# composer walks the pubspecs and adds them to the root `workspace:` list.

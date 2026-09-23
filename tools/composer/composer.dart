@@ -120,6 +120,41 @@ Map<String, String> _discoverPackages(String root) {
   return out;
 }
 
+/// Every workspace member [seeds] reaches through `dependencies` and
+/// `dev_dependencies`, seeds included.
+///
+/// A workspace member must be listed in the root `workspace:` list, and a
+/// feature package pulls in core packages (`core_responsive`, `core_ui_kit`,
+/// `platform_kernel`, ...) that register no DI module, so no manifest group
+/// names them. Walking the pubspecs finds them instead: a manifest names only
+/// what the app composes, and the workspace still gets everything that needs
+/// to resolve. Dev dependencies count because pub resolves them for every
+/// member too.
+Set<String> _closure(Iterable<String> seeds, Map<String, String> packages) {
+  final out = <String>{};
+  final pending = [...seeds];
+  while (pending.isNotEmpty) {
+    final pkg = pending.removeLast();
+    if (!out.add(pkg)) continue;
+    final dir = packages[pkg];
+    if (dir == null) continue;
+    final doc = loadYaml(
+      File(p.posix.join(dir, 'pubspec.yaml')).readAsStringSync(),
+    );
+    if (doc is! YamlMap) continue;
+    for (final section in const ['dependencies', 'dev_dependencies']) {
+      final deps = doc[section];
+      if (deps is! YamlMap) continue;
+      for (final name in deps.keys.cast<String>()) {
+        if (packages.containsKey(name) && !out.contains(name)) {
+          pending.add(name);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 class AppManifest {
   AppManifest(this.id, this.dir, this.doc);
 
@@ -229,8 +264,9 @@ Resolved _resolve(
     r.allPackages.addAll(all);
   }
 
-  for (final pkg in ((app.doc['extra_dependencies'] as YamlList?) ?? YamlList())
-      .cast<String>()) {
+  for (final pkg
+      in ((app.doc['extra_dependencies'] as YamlList?) ?? YamlList())
+          .cast<String>()) {
     if (packages.containsKey(pkg)) {
       r.allPackages.add(pkg);
     } else {
@@ -302,8 +338,7 @@ String? _replaceManaged(
   ].join('\n');
 }
 
-String _workspaceBody(List<String> dirs) =>
-    dirs.map((d) => '  - $d\n').join();
+String _workspaceBody(List<String> dirs) => dirs.map((d) => '  - $d\n').join();
 
 String _appDepsBody(
   List<String> pkgs,
@@ -391,8 +426,10 @@ void _list(List<AppManifest> apps, Map<String, String> packages) {
     final r = _resolve(app, packages, warnings);
     stdout.writeln('  ${app.id}  (${app.kind})  ->  ${app.dir}');
     for (final g in r.diGroups) {
-      stdout.writeln('    ${g.phase.padRight(6)} ${g.name.padRight(8)} '
-          '${g.packages.join(', ')}');
+      stdout.writeln(
+        '    ${g.phase.padRight(6)} ${g.name.padRight(8)} '
+        '${g.packages.join(', ')}',
+      );
     }
     if (r.missing.isNotEmpty) {
       OutputFormatter.printWarning('    missing: ${r.missing.join(', ')}');
@@ -440,7 +477,7 @@ void _sync(
     workspace.add(p.posix.relative(app.dir, from: root));
     final r = _resolve(app, packages, warnings);
     missing.addAll(r.missing);
-    for (final pkg in r.allPackages) {
+    for (final pkg in _closure(r.allPackages, packages)) {
       workspace.add(p.posix.relative(packages[pkg]!, from: root));
     }
   }
@@ -487,10 +524,24 @@ void _sync(
     );
     final injection = _injectionParts(r, packages);
     final injectionPath = p.posix.join(app.dir, 'lib', 'di', 'injection.dart');
-    _write(injectionPath, '//', 'imports', injection.imports, dryRun, drift,
-        root);
-    _write(injectionPath, '//', 'modules', injection.modules, dryRun, drift,
-        root);
+    _write(
+      injectionPath,
+      '//',
+      'imports',
+      injection.imports,
+      dryRun,
+      drift,
+      root,
+    );
+    _write(
+      injectionPath,
+      '//',
+      'modules',
+      injection.modules,
+      dryRun,
+      drift,
+      root,
+    );
   }
 
   // The tooling package is a workspace member but belongs to no app, so no
@@ -552,14 +603,19 @@ void _warnPartialComposition(
   List<AppManifest> selected,
   int missingCount,
 ) {
-  final touched = <String>[p.posix.relative(p.posix.join(root, 'pubspec.yaml'),
-      from: root)];
+  final touched = <String>[
+    p.posix.relative(p.posix.join(root, 'pubspec.yaml'), from: root),
+  ];
   for (final app in selected) {
-    touched.add(p.posix.relative(p.posix.join(app.dir, 'pubspec.yaml'),
-        from: root));
-    touched.add(p.posix.relative(
+    touched.add(
+      p.posix.relative(p.posix.join(app.dir, 'pubspec.yaml'), from: root),
+    );
+    touched.add(
+      p.posix.relative(
         p.posix.join(app.dir, 'lib', 'di', 'injection.dart'),
-        from: root));
+        from: root,
+      ),
+    );
   }
 
   stdout.writeln('');

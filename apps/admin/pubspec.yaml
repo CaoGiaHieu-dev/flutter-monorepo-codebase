@@ -42,12 +42,6 @@ dependencies:
     path: ../../platform/provider_state_management
   bloc_state_management:
     path: ../../platform/bloc_state_management
-  platform_kernel:
-    path: ../../platform/kernel
-  core_responsive:
-    path: ../../platform/responsive
-  core_ui_kit:
-    path: ../../platform/ui_kit
   # composer:end:deps
 
   # External packages this app itself uses. Everything else belongs to

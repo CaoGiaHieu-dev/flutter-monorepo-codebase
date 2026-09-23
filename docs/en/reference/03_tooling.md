@@ -76,6 +76,8 @@ Three things had to agree and were maintained by hand: the root `workspace:` lis
 
 `composer` generates all three from the apps' `app_manifest.yaml` files — each app's own files from its manifest, and the shared root `workspace:` list from all of them together — but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
 
+The root `workspace:` list is more than what the manifests name: composer follows each composed package's `dependencies` and `dev_dependencies` to every workspace package they reach. That is how `core_responsive`, `core_ui_kit` and `platform_kernel` — which register no DI module, so no `di_groups` entry names them — still become workspace members. A manifest's optional `extra_dependencies:` list is only for a workspace package the app's **own** `lib/` imports without composing it; neither sample app needs one.
+
 Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No directory is encoded anywhere, so moving packages needs no change to the tool or to any manifest. Module packages are matched under either naming convention — `domain_auth` and `auth_domain` both resolve.
 
 `--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find — which is what lets a developer work with only their own module checked out.
@@ -220,7 +222,7 @@ dart tools/unused_checker/check_unused_file.dart         # orphaned Dart files
 dart tools/unused_checker/check_unused_packages.dart     # declared but unused deps
 ```
 
-[Rule 2](01_rules.md#2-explicit-dependency-declaration) has two halves: `arch_check` R5 catches a package imported but not declared; `check_unused_packages.dart` catches one declared but never imported (it scans `lib/`, `bin/` and `test/`, so a dependency used only by tests counts as used). Run both before every PR.
+[Rule 2](01_rules.md#2-explicit-dependency-declaration) has two halves: `arch_check` R5 catches a package imported but not declared; `check_unused_packages.dart` catches one declared but never imported (it scans `lib/`, `bin/`, `test/` and `tool/` — a package with no `lib/`, like `core_tools`, is read whole — so a dependency used only by tests counts as used). Run both before every PR.
 
 > [!WARNING]
 > The asset / file / translation checkers work by textual reference and will report false positives for anything reached dynamically (a string-built asset path, a key looked up at runtime). Confirm before deleting.

@@ -41,24 +41,24 @@ dart tools/arch_check/check.dart --help   # mô tả đầy đủ từng luật
 
 | Luật | Kiểm tra gì |
 |---|---|
-| R1 | Hướng phụ thuộc — `core/*` không được import hay khai `feature_*` / `data_*` / `domain_*`, trừ các ngoại lệ đã duyệt |
+| R1 | Hướng phụ thuộc — không package `platform/*` nào được import hay khai `feature_*` / `data_*` / `domain_*`, trừ các ngoại lệ đã duyệt |
 | R2 | Domain thuần Dart — không import `flutter` / `dio` / `retrofit`, không khai `flutter` trong `dependencies:` |
 | R3 | Ranh giới feature — không feature nào import feature khác hay package `data_*` |
-| R4 | `static const` public phải nằm trong `utils/` của package |
+| R4 | `static const` public phải nằm trong một thư mục `utils/` (file dưới `styles/` — design token của `core_base_ui` — được miễn) |
 | R5 | Mọi `package:` import dùng trong `lib/` phải được khai trong `pubspec.yaml` của chính package đó |
 | R6 | File generated còn giữ header của generator (chỉ cảnh báo) |
-| R7 | Scale responsive phải qua `BuildContext` — cấm receiver trần `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`, trong mọi file dùng `core_responsive` |
-| R8 | Contract của `core_di` mà chỉ feature implement thì phải resolve bằng `getItOrNull` / `getAllOrEmpty`, cấm `getIt` / `getAll` (dạng ném lỗi) |
+| R7 | Scale responsive phải qua `BuildContext` — cấm receiver trần `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`, trong mọi file có nhắc tới `core_responsive` |
+| R8 | Contract của `core_di` được implement trong một package feature thì phải resolve bằng `getItOrNull` / `getAllOrEmpty`, cấm `getIt` / `getAll` (dạng ném lỗi) |
 | R9 | `platform_kernel` và mọi package `*_contracts` không import **và không khai** package kéo theo Flutter |
 | R10 | Không file nào trong một app (`apps/<id>/`) import module — chỉ `injection.dart`, điểm lắp ráp, được phép gọi tên một module. (`platform/app_shell` là core nên do R1 phủ) |
 
-Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ tư nghĩa là phải sửa cả `.agents/AGENTS.md` lẫn danh sách cho phép trong `check.dart`, nếu không build sẽ fail.
+Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ tư nghĩa là phải sửa danh sách cho phép trong `check.dart` — thiếu bước này build sẽ fail — và ghi cạnh đó vào `.agents/AGENTS.md` §2, file mà tool không đọc.
 
 R7 tồn tại vì `flutter analyze` không thấy được khác biệt này. Bản thân `core_responsive` không cung cấp extension nào trên `num`, nên `16.h` không phân giải được về nó — nhưng một extension khai ở package khác, hoặc do ai đó tự thêm cục bộ, vẫn type-check sạch trong khi đọc một biến toàn cục chẳng báo cho ai. Chỉ `context.h(16)` mới đăng ký dependency `InheritedWidget` lên `ResponsiveScope`, tức mới rebuild khi metrics đổi. Dạng trần là một lỗi giá trị cũ âm thầm, và không linter nào có luật cho nó. Check chỉ chạy trên file có tham chiếu `core_responsive`, và khớp receiver là số hoặc dấu đóng ngoặc theo sau bởi `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 
 R10 tồn tại vì tính tháo-lắp được là lời hứa template đưa ra trong bốn tài liệu mà không có gì kiểm tra. `network_config_impl.dart` import `data_auth` và `domain_auth` để đọc và làm mới token phiên, nên xoá module auth là app shell hỏng ngay ở khâu biên dịch — đúng một chỗ trong shell phá đi thứ mà mọi file còn lại cẩn thận giữ gìn. `getItOrNull` không cứu được: nó canh một *lookup*, còn lỗi ở đây là một *import*, thứ trình biên dịch giải quyết từ rất lâu trước khi có lookup nào chạy. Cách sửa là một hợp đồng (`IAuthSessionGateway` trong `core_di`, do `data_auth` hiện thực), và phép kiểm là một dòng chính sách — một app được phép import package module ở đúng một file, điểm lắp ráp, vì nhiệm vụ của file đó chính là gọi tên những gì nó lắp.
 
-R8 tồn tại vì khả năng tháo module là tính chất mà app shell dựa vào, nhưng trước đó không có gì giữ nó. Tool tự suy ra tập hợp lúc chạy: mọi type khai trong `core_di`, thu hẹp lại còn những type mà ràng buộc `implements` / `extends` / `as:` duy nhất nằm trong một package `modules/*/feature`. Một lookup ném lỗi lên các type đó vẫn compile — package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature — rồi crash lúc runtime ở bản build không có feature đó. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký, nên cố ý nằm ngoài tập hợp này. Feature sở hữu được miễn trừ với chính contract của nó: package đã có trong build thì đăng ký của nó cũng có.
+R8 tồn tại vì khả năng tháo module là tính chất mà app shell dựa vào, nhưng trước đó không có gì giữ nó. Tool tự suy ra tập hợp lúc chạy: mọi type khai trong `core_di`, thu hẹp lại còn những type có ràng buộc `implements` / `extends` / `as:` trong một package `modules/*/feature`. Một lookup ném lỗi lên các type đó vẫn compile — package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature — rồi crash lúc runtime ở bản build không có feature đó. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký, nên cố ý nằm ngoài tập hợp này. Feature sở hữu được miễn trừ với chính contract của nó: package đã có trong build thì đăng ký của nó cũng có.
 
 R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai mà không dùng*, tool này tìm dependency *đang dùng mà không khai*. Pub Workspaces che giấu hoàn toàn loại thứ hai — mọi thứ resolve được cục bộ qua `package_config.json` dùng chung, và chỉ vỡ khi tách package ra hay publish.
 
@@ -104,7 +104,7 @@ Hai loại tham chiếu được kiểm tra trong mọi file Markdown của repo
 
 Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 300 tham chiếu thật — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
 
-Chuỗi có khoảng trắng, `*`, `{` hoặc `<` cũng bị bỏ qua: đó là lệnh shell, glob hoặc placeholder, mỗi thứ mô tả một *tập hợp* chứ không phải một file.
+Chuỗi có khoảng trắng bị bỏ qua: đó là lệnh shell. Chuỗi có `*`, `{` hoặc `<` là glob hoặc placeholder, mỗi thứ mô tả một *tập hợp* chứ không phải một file — chúng được kiểm như glob (`<name>` khớp như `*`) và đạt khi có ít nhất một đường dẫn khớp. Danh sách thư mục gốc vẫn giữ `packages/` và `app/` trần, nơi không còn gì, để tài liệu còn trỏ tới đó sẽ fail thay vì bị bỏ qua.
 
 Những path vắng mặt một cách chính đáng nằm trong `tools/docs_check/allowlist.txt`, mỗi dòng một path kèm lý do. Chỉ đúng ba lý do được chấp nhận:
 
@@ -185,9 +185,9 @@ Chạy thiếu tham số thì nó sẽ hỏi tương tác.
 dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 ```
 
-Sinh lại barrel `*.dart` cho mọi thư mục dưới đường dẫn đã cho, rồi format. Chạy nó sau **bất kỳ** thao tác thêm / đổi tên / xoá file nào trong `lib/`.
+Sinh lại barrel `*.dart` cho mọi thư mục dưới đường dẫn đã cho, rồi format. Chạy nó sau **bất kỳ** thao tác thêm / đổi tên / xoá file nào trong `lib/` — và sau `build_runner` / `gen-l10n`, vì file sinh ra đang có trên đĩa cũng được export (`core_ui_kit` lấy `Assets` sinh ra của `core_base_ui` theo cách đó).
 
-Bỏ qua `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, và file khai `part of`.
+Bỏ qua `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, và file khai `part of`.
 
 > [!CAUTION]
 > Nó **xoá mọi dòng `export` viết tay** trong barrel trước khi sinh lại. Cần re-export thứ gì từ package khác thì đặt `export` vào một file nguồn bình thường rồi để barrel nhặt file đó lên.
@@ -220,7 +220,7 @@ dart tools/unused_checker/check_unused_file.dart         # file Dart mồ côi
 dart tools/unused_checker/check_unused_packages.dart     # dependency khai mà không dùng
 ```
 
-`check_unused_packages.dart` chính là cái thực thi [luật 2](01_rules.md#2-khai-báo-dependency-tường-minh) — chạy nó trước mỗi PR.
+[Luật 2](01_rules.md#2-khai-báo-dependency-tường-minh) có hai nửa: `arch_check` R5 bắt package được import mà không khai; `check_unused_packages.dart` bắt package đã khai mà không import (nó quét `lib/`, `bin/` và `test/`, nên dependency chỉ test dùng vẫn tính là đang dùng). Chạy cả hai trước mỗi PR.
 
 > [!WARNING]
 > Các checker asset / file / translation hoạt động bằng đối chiếu văn bản, nên sẽ báo nhầm với bất cứ thứ gì được với tới động (đường dẫn asset ghép từ chuỗi, key tra lúc chạy). Xác nhận kỹ trước khi xoá.

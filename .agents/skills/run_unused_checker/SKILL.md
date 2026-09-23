@@ -27,10 +27,10 @@ Use the `run_command` tool to execute the scripts. After completion, present a s
 
 ## Notes
 
-- `check_unused_packages.dart` is the one that also catches **architectural** mistakes, not
-  just bloat: it compares each package's declared dependencies against what its `lib/`
-  actually imports. Because Pub Workspaces share one `package_config.json`, an *undeclared*
-  dependency still compiles — this is how you find it. Keep it green.
+- `check_unused_packages.dart` finds dependencies a package **declares but never imports**
+  (it scans `lib/`, `bin/` and `test/`). The opposite mistake — importing a package you never
+  declared, which still compiles because Pub Workspaces share one `package_config.json` — is
+  caught by `dart tools/arch_check/check.dart` rule **R5**, not by this tool.
 - Results are **advisory**. Verify before deleting: a file can look orphaned while being
   reachable only through a barrel, a `part` directive, or `build_runner` output; an asset can
   be referenced from an `.arb` file or from native Android/iOS code.

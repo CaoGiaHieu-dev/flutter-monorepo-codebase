@@ -9,8 +9,9 @@ import '../shared/app_locator.dart';
 ///
 /// The template ships working reference features. Deleting one by hand is where
 /// people get hurt: `auth` is not just `modules/auth/feature`, it is also
-/// `domain_auth`, `data_auth`, six contracts in `core_di`, and three shared
-/// files. Miss one and the workspace stops resolving.
+/// `domain_auth`, `data_auth`, and an entry in every app manifest that composes
+/// them — plus what `composer sync` regenerates from those manifests. Miss one
+/// and the workspace stops resolving.
 ///
 /// Usage:
 ///   dart tools/sample_cleanup/remove_sample.dart --list

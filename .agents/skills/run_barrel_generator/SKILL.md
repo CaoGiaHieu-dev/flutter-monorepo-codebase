@@ -23,12 +23,16 @@ Use the `run_command` tool to execute the command and report the status.
 
 - Pass the package's **`lib` directory**, one package per run. Re-run for every package you
   touched (e.g. both `modules/x/domain/lib` and `modules/x/data/lib`).
-- The generator skips generated and non-public files: `*.g.dart`, `*.freezed.dart`,
-  `*.mocks.dart`, `*_test.dart`, and any file declaring `part of`.
+- It skips `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`, `firebase_options*`,
+  and any file declaring `part of`. Other generated files **are** exported when present:
+  `module.module.dart`, `injection.config.dart` (harmless), and the gen-l10n / flutter_gen
+  output under `lib/src/gen/` — that one is load-bearing: `core_ui_kit` reaches `Assets`
+  through `core_base_ui`'s barrel.
 - It rewrites the `export` lines of each barrel. **Hand-written `export` statements in a
   barrel will be removed.** If a file must re-export something manually, put that export in a
   normal source file instead — this is why
   `platform/kernel/lib/src/error/failures.dart` (the `AppFailure` compatibility shim)
   is a regular file, not a barrel.
 - New `utils/` folders get their own `utils.dart` barrel automatically, wired into `src.dart`.
-- Run it **before** `build_runner` when you have added files, so codegen sees the new exports.
+- Run it **after** `build_runner` and `gen-l10n`, as `tools/workspace_setup/configure.dart`
+  does. Run before them, the generated exports above are missing from the barrels.

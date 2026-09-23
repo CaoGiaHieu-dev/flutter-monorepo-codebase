@@ -108,7 +108,7 @@ void main() async {
 
     stdout.writeln('\nNotes:');
     stdout.writeln(
-      '  - Dependencies are analyzed package-by-package against the package\'s own lib/ directory.',
+      '  - Dependencies are analyzed package-by-package against that package\'s own lib/, bin/ and test/.',
     );
     stdout.writeln(
       '  - Common SDK and implicit packages are allowed automatically.',

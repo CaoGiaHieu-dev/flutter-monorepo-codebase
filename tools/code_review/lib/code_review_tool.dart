@@ -87,7 +87,9 @@ class CodeReviewTool {
     // Validate we're in a Flutter project
     if (!await FileAnalyzer.validateFlutterProject()) {
       stdout.writeln('❌ This doesn\'t appear to be a Flutter project.');
-      stdout.writeln('💡 Please run this tool from the root of your Flutter project.');
+      stdout.writeln(
+        '💡 Please run this tool from the root of your Flutter project.',
+      );
       exit(1);
     }
 
@@ -216,7 +218,9 @@ class CodeReviewTool {
   /// Print help information
   void _printHelp(ArgParser parser) {
     stdout.writeln('🤖 Code Review Tool using Gemini AI\n');
-    stdout.writeln('Usage: dart tools/code_review/code_review.dart [options]\n');
+    stdout.writeln(
+      'Usage: dart tools/code_review/code_review.dart [options]\n',
+    );
     stdout.writeln('Options:');
     stdout.writeln(parser.usage);
     stdout.writeln('\n📚 Examples:');
@@ -225,7 +229,9 @@ class CodeReviewTool {
     stdout.writeln('  # Review all Dart files');
     stdout.writeln('  dart tools/code_review/code_review.dart --all\n');
     stdout.writeln('  # Review specific file');
-    stdout.writeln('  dart tools/code_review/code_review.dart --file lib/main.dart\n');
+    stdout.writeln(
+      '  dart tools/code_review/code_review.dart --file lib/main.dart\n',
+    );
     stdout.writeln('  # Review specific folder');
     stdout.writeln(
       '  dart tools/code_review/code_review.dart --folder lib/presentation\n',
@@ -235,7 +241,9 @@ class CodeReviewTool {
     stdout.writeln('  # Review staged files');
     stdout.writeln('  dart tools/code_review/code_review.dart --staged\n');
     stdout.writeln('  # Focus on specific aspects');
-    stdout.writeln('  dart tools/code_review/code_review.dart --focus security,bugs\n');
+    stdout.writeln(
+      '  dart tools/code_review/code_review.dart --focus security,bugs\n',
+    );
     stdout.writeln('  # Exclude generated files');
     stdout.writeln(
       '  dart tools/code_review/code_review.dart --exclude "**/*.g.dart"\n',
@@ -245,11 +253,17 @@ class CodeReviewTool {
       '  dart tools/code_review/code_review.dart --api-key "your_key" --all --output-dir reports\n',
     );
     stdout.writeln('🔑 API Key Setup:');
-    stdout.writeln('  1. Environment variable: export GEMINI_API_KEY="your_key"');
+    stdout.writeln(
+      '  1. Environment variable: export GEMINI_API_KEY="your_key"',
+    );
     stdout.writeln('  2. Command line: --api-key "your_key"');
-    stdout.writeln('  3. Saved key: tools/code_review/.gemini_api_key (gitignored)');
+    stdout.writeln(
+      '  3. Saved key: tools/code_review/.gemini_api_key (gitignored)',
+    );
     stdout.writeln('  4. Interactive prompt: Tool will ask if no key is found');
-    stdout.writeln('  Get your key at: https://makersuite.google.com/app/apikey');
+    stdout.writeln(
+      '  Get your key at: https://makersuite.google.com/app/apikey',
+    );
   }
 
   /// Get list of files to review based on arguments
@@ -272,7 +286,9 @@ class CodeReviewTool {
     stdout.writeln(
       '1. 🔥 Batch Review (FAST) - Review all $fileCount files concurrently',
     );
-    stdout.writeln('2. 📄 Individual Review (DETAILED) - Review each file separately');
+    stdout.writeln(
+      '2. 📄 Individual Review (DETAILED) - Review each file separately',
+    );
     stdout.writeln('');
     stdout.writeln(
       '💡 Batch review processes files in parallel with real-time feedback.',

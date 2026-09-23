@@ -95,8 +95,7 @@ Future<int> _runCheckScript(Map<String, String> scriptInfo) async {
 void main() async {
   OutputFormatter.printHeader(
     'Flutter Project Unused Resources Checker',
-    subtitle:
-        'Comprehensive analysis of unused assets, files, packages, and translations',
+    subtitle: 'Comprehensive analysis of unused assets, files, packages, and translations',
   );
 
   final overallStopwatch = Stopwatch()..start();

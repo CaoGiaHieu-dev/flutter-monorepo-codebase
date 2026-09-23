@@ -142,7 +142,9 @@ $dependenciesContent
           } else if (!stdin.hasTerminal) {
             // No one to ask (CI, a pipe): report only. Applying on EOF would
             // bump every package — major versions included — unattended.
-            stdout.writeln('\n📦 Outdated packages (report only, no terminal):');
+            stdout.writeln(
+              '\n📦 Outdated packages (report only, no terminal):',
+            );
             for (final item in outdatedList) {
               stdout.writeln(
                 '  - ${item['name']} (${item['current']} -> ${item['latest']})',

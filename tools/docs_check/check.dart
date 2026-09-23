@@ -169,8 +169,10 @@ void main(List<String> args) {
   for (final entry in byFile.entries) {
     stdout.writeln(entry.key);
     for (final hit in entry.value) {
-      stdout.writeln('  ${hit.docFile}:${hit.line}  [${hit.kind}] '
-          '${hit.reference}');
+      stdout.writeln(
+        '  ${hit.docFile}:${hit.line}  [${hit.kind}] '
+        '${hit.reference}',
+      );
     }
     stdout.writeln('');
   }
@@ -191,7 +193,8 @@ void main(List<String> args) {
   exit(1);
 }
 
-final _usage = '''
+final _usage =
+    '''
 Verify that every path the documentation names exists in this repository.
 
   dart tools/docs_check/check.dart [--verbose]
@@ -212,7 +215,8 @@ String _findRepoRoot() {
   var dir = Directory(p.dirname(Platform.script.toFilePath())).absolute;
   while (true) {
     final isGitRoot = Directory(p.join(dir.path, '.git')).existsSync();
-    final isRepoRoot = File(p.join(dir.path, 'pubspec.yaml')).existsSync() &&
+    final isRepoRoot =
+        File(p.join(dir.path, 'pubspec.yaml')).existsSync() &&
         Directory(p.join(dir.path, 'tools')).existsSync();
     if (isGitRoot || isRepoRoot) {
       return dir.path;

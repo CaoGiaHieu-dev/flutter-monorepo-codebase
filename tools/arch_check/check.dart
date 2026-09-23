@@ -22,10 +22,10 @@ import '../unused_checker/output_formatter.dart';
 const _approvedUpwardEdges = <String, String>{
   'provider_state_management -> domain_core':
       'Needs Result<T> and PaginatedEntity<T> for executeOperation / '
-          'PaginatedViewWidget.',
+      'PaginatedViewWidget.',
   'platform_kernel -> domain_core':
       'ErrorHandler produces AppFailure, which lives in domain_core. '
-          'Core -> Domain is the correct Clean Architecture direction.',
+      'Core -> Domain is the correct Clean Architecture direction.',
   'bloc_state_management -> domain_core':
       'BlocViewState.error carries AppFailure directly.',
 };
@@ -239,7 +239,9 @@ Set<String> _typesDeclaredIn(String packageRoot) {
   final out = <String>{};
   for (final file in _dartFilesUnderLib(packageRoot)) {
     if (_isGenerated(file)) continue;
-    for (final m in _typeDeclaration.allMatches(File(file).readAsStringSync())) {
+    for (final m in _typeDeclaration.allMatches(
+      File(file).readAsStringSync(),
+    )) {
       out.add(m.group(1)!);
     }
   }
@@ -387,7 +389,13 @@ void main(List<String> args) {
         }
 
         if (layer == 'domain') {
-          const banned = {'flutter', 'dio', 'retrofit', 'material_ui', 'cupertino_ui'};
+          const banned = {
+            'flutter',
+            'dio',
+            'retrofit',
+            'material_ui',
+            'cupertino_ui',
+          };
           if (banned.contains(target)) {
             blocking.add(
               Violation(
@@ -428,7 +436,8 @@ void main(List<String> args) {
             dep.startsWith('feature_') ||
             dep.startsWith('data_') ||
             dep.startsWith('domain_');
-        if (upward && !_approvedUpwardEdges.containsKey('${pkg.name} -> $dep')) {
+        if (upward &&
+            !_approvedUpwardEdges.containsKey('${pkg.name} -> $dep')) {
           blocking.add(
             Violation(
               'R1',

@@ -56,7 +56,7 @@ Chạy không kèm tham số thì tool sẽ hỏi tương tác từng bước.
 3. Đăng ký package vào danh sách `workspace:` ở `pubspec.yaml` gốc
 4. Thêm vào mục `modules:` của mọi `apps/<id>/app_manifest.yaml` — sau đó chạy `dart tools/composer/composer.dart sync` để sinh lại path dependency của app và `injection.dart`
 5. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
-   `build_runner build -d --workspace`, rồi `dart fix --apply`
+   `build_runner build --workspace`, rồi `dart fix --apply`
 
 **Thủ công — tool in ra ở cuối:**
 
@@ -372,7 +372,7 @@ Bên gọi ở package khác dùng `getItOrNull<ProfileNavigator>()?.toProfile(c
 ## 8. Hoàn tất và kiểm chứng
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
@@ -402,7 +402,7 @@ App phải chạy được khi xoá bất kỳ feature nào. Gỡ theo đúng th
 1. Dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó
 2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root
 3. Thư mục `modules/<tên>/feature/`
-4. `flutter pub get && dart run build_runner build -d --workspace`
+4. `flutter pub get && dart run build_runner build --workspace`
 
 **Hãy để tool làm.** `remove_sample.dart` thực hiện các bước trên, và quan trọng hơn là nó
 nói cho bạn biết điều mà danh sách thủ công kia không nói:

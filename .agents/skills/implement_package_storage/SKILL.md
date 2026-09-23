@@ -111,7 +111,7 @@ Add the new value to the owner's `@PostConstruct(preResolve: true)` method so it
 ### Step 4: Run Build Runner
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
 
 If you created a new file, refresh the barrels **after** `build_runner` (they also export generated files present on disk):

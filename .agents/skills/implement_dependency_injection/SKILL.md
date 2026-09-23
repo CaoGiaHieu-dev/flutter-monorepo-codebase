@@ -204,7 +204,7 @@ registers nothing — it is mechanism only and owns no database.
 ### Step 4: Run Code Generation
 Run the following command at the root of the monorepo to regenerate the DI graph:
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
 Then **hot restart** — new DI registrations are not applied by hot reload.
 

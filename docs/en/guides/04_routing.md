@@ -147,7 +147,7 @@ Note `tabs.length < 2` drops the bar (or rail) entirely when fewer than two tabs
 
 ## 3. Type-safe routes with `go_router_builder`
 
-Routes are declared with annotations and generated into `*_route_module.g.dart`. **Run `dart run build_runner build -d --workspace` after any change.**
+Routes are declared with annotations and generated into `*_route_module.g.dart`. **Run `dart run build_runner build --workspace` after any change.**
 
 Path constants live in the feature's `src/utils/` folder, not in `routing/` — every package keeps its constants under `utils/`:
 
@@ -351,7 +351,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 2. **Route class** → `lib/src/routing/<feature>_route_module.dart` with `@TypedGoRoute` / `@TypedShellRoute`; create the controller in `build()`.
 3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
 4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`.
-5. **Generate** → `dart run build_runner build -d --workspace`.
+5. **Generate** → `dart run build_runner build --workspace`.
 6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
 ## Checklist

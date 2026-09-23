@@ -171,7 +171,7 @@ final defaultTheme = switch (mode) {
 
 **Why bundled, not `google_fonts`.** `google_fonts` registers one family *per weight*, so a style whose weight changes later — `copyWith(fontWeight: FontWeight.bold)`, which the app-bar title and the samples do — keeps the regular file and the engine fakes the bold. One family with a file per weight lets Flutter pick the real face for any `fontWeight`. It also works offline and downloads nothing at runtime. The licence travels with the files: `assets/fonts/plus_jakarta_sans/OFL.txt`, registered with `LicenseRegistry` by `registerBaseUiLicenses()` (called in `runShellApp`), so it appears on `showLicensePage`.
 
-**Another font:** put its files under `platform/base_ui/assets/fonts/<name>/` with its licence, list each weight under `flutter: fonts:` (a weight the design uses but you do not ship is synthesised from the nearest one), run `dart run build_runner build -d --workspace` so `FontFamily` gains the new constant, and point `applyFont` at it — keep the `geometry.merge`, it is where the sizes come from. Update the licence registration to the new licence file.
+**Another font:** put its files under `platform/base_ui/assets/fonts/<name>/` with its licence, list each weight under `flutter: fonts:` (a weight the design uses but you do not ship is synthesised from the nearest one), run `dart run build_runner build --workspace` so `FontFamily` gains the new constant, and point `applyFont` at it — keep the `geometry.merge`, it is where the sizes come from. Update the licence registration to the new licence file.
 
 ### How font scaling works
 

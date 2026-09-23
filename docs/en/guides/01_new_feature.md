@@ -56,7 +56,7 @@ Run it with no arguments to get an interactive prompt instead.
 3. Registers the package in the root `pubspec.yaml` `workspace:` list
 4. Adds it to `modules:` in every `apps/<id>/app_manifest.yaml` — then run `dart tools/composer/composer.dart sync`, which regenerates the app's path dependencies and `injection.dart`
 5. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
-   `build_runner build -d --workspace`, then `dart fix --apply`
+   `build_runner build --workspace`, then `dart fix --apply`
 
 **Manual — the tool prints these at the end:**
 
@@ -374,7 +374,7 @@ from `NavigatorKeys`.
 ## 8. Finish and verify
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
@@ -404,7 +404,7 @@ The app must keep running when any feature is deleted. Remove in this order:
 1. Its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it
 2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list
 3. The `modules/<name>/feature/` directory
-4. `flutter pub get && dart run build_runner build -d --workspace`
+4. `flutter pub get && dart run build_runner build --workspace`
 
 **Let the tool do it.** `remove_sample.dart` performs these steps and, more importantly,
 tells you what the manual list above cannot:

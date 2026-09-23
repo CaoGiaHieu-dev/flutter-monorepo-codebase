@@ -64,7 +64,6 @@ Practical, step-by-step, with working code. This is the "how to use" section.
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | How does a feature ship its own translations, and how do colours, fonts and dimensions stay consistent? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A needs something from feature B — how, without importing it? |
 | [`11_design_system.md`](guides/11_design_system.md) | Where is every colour, font, spacing step and radius defined — which file do I edit to rebrand the app, and how does the UI scale and adapt on tablets, foldables and split screen? |
-| Split a module into its own repository | [`guides/12_module_isolation.md`](guides/12_module_isolation.md) | [`architecture/01_overview.md`](architecture/01_overview.md) |
 | [`12_module_isolation.md`](guides/12_module_isolation.md) | How does a team check out only its own module, build the whole app from it, and never see another team's source? |
 
 ---

@@ -95,26 +95,44 @@ graph TD
 
 ## 📂 2. Cấu Trúc Chi Tiết Thư Mục (Folder Tree)
 
-Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
+Dưới đây là mọi mục cấp cao nhất được git theo dõi trong Workspace, mỗi mục một dòng (output build
+bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 
 ```text
 / (Workspace Root)
-├── .github/                       # Luồng tích hợp liên tục (CI Workflows)
+├── .agents/                       # Luật cho AI agent: AGENTS.md, skills/, RESTRUCTURE.md (kế hoạch di chuyển)
+├── .github/                       # CODEOWNERS, SETUP_GUIDE.md và các workflow CI
 │   └── workflows/
-│       └── fastlane.yml           # CI Github Action chạy Fastlane tự động
+│       ├── pr_quality_check.yml   # Cổng PR 0–5: composer, arch_check, analyze, test, catalog, docs_check
+│       ├── flutter_build.yml      # Build & phân phối thủ công bằng Flutter CLI
+│       ├── fastlane.yml           # Build & phân phối thủ công qua Fastlane
+│       ├── code_review.yml        # Review bằng Gemini AI trên pull request
+│       └── README.md              # Mỗi workflow làm gì và cần secret nào
+├── .vscode/                       # launch.json (App Dev/Staging/Prod), settings, tasks
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
 │   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
-│   └── mobile/
+│   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
 │       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
 │       ├── lib/
 │       │   ├── main.dart          # Một dòng: runShellApp(configureDependencies: …)
 │       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
 │       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
-│       ├── android/  ios/         # Project native
+│       ├── android/  ios/         # Project native — chạy và build từ apps/mobile/
+│       ├── env.dev  env.stg       # File env theo flavor (env.prod: tự tạo)
 │       ├── fastlane/              # Lane phát hành
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
+├── docs/                          # Trung tâm tài liệu — cặp en/ và vi/ (bắt đầu từ docs/vi/README.md)
+├── fastlane/                      # Fastfile/Pluginfile ở root: import apps/mobile/fastlane để chạy lane từ root
+├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
+│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng (domain, data, feature)
+│   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
+│   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
+│   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
+│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
+│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
+│   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
-│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter — dùng chung cho mọi app
+│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter
 │   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
 │   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
 │   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
@@ -129,31 +147,38 @@ Dưới đây là sơ đồ tổ chức vật lý hoàn chỉnh của Workspace:
 │   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
 │   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
 │   └── data_core/                 # IBaseRepository, BaseModel, request model
-├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
-│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
-│   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
-│   │   ├── data/                  # Model, DataSource, RepositoryImpl
-│   │   └── feature/               # UI + Provider, chỉ còn màn login
-│   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
-│   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
-│   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
-│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
-│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
-│   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
-├── tools/                         # Bộ công cụ dòng lệnh dành cho lập trình viên
-│   ├── android_compliance/        # Kiểm tra tính tương thích 16KB Page Size (Android 15+)
-│   ├── barrel_generator/          # Script tự động tạo barrel files cho packages
-│   ├── code_review/               # Công cụ review mã nguồn tự động tích hợp Gemini AI
-│   ├── firebase/                  # Cấu hình môi trường Firebase tự động
-│   ├── module_generator/          # CLI tạo Feature/Domain/Data/Core package mới
-│   ├── theme_generator/           # Tự động sinh Splash Screen & App Icons
-│   ├── unused_checker/            # Phân tích & dọn dẹp tệp, tài nguyên, bản dịch dư thừa
-│   ├── workspace_setup/           # Script thiết lập workspace (pub get, build_runner, l10n)
-│   ├── dependency_sync.dart       # Đồng bộ phiên bản thư viện từ catalog tập trung
-│   └── check_outdated.dart        # Kiểm tra phiên bản thư viện đã lỗi thời trên pub.dev
+├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.md
+│   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
+│   ├── arch_check/                # Luật phân tầng R1–R10 — Cổng PR 1
+│   ├── barrel_generator/          # Sinh lại barrel file cho lib/ của một package
+│   ├── code_review/               # Review mã nguồn bằng Gemini AI
+│   ├── composer/                  # sync/verify app theo app_manifest.yaml — Cổng PR 0
+│   ├── docs_check/                # Mọi đường dẫn repo mà docs nhắc tới đều tồn tại — Cổng PR 5
+│   ├── firebase/                  # Cấu hình Firebase theo flavor cho một app
+│   ├── module_generator/          # Sinh package Feature/Domain/Data/Core/Custom
+│   ├── sample_cleanup/            # Liệt kê và gỡ các module mẫu an toàn
+│   ├── shared/                    # Helper dùng chung giữa các tool (dò FVM, tìm app)
+│   ├── theme_generator/           # Splash screen & app icon
+│   ├── unused_checker/            # File, asset, bản dịch, package không dùng tới
+│   ├── workspace_setup/           # configure.dart — script setup cho bản clone mới
+│   ├── check_outdated.dart        # Thư viện lỗi thời trên pub.dev
+│   ├── dependency_sync.dart       # Đồng bộ version từ catalog — Cổng PR 4
+│   └── sample_manifest.yaml       # Package nào là code mẫu (sample_cleanup đọc file này)
+├── .fvmrc                         # Phiên bản Flutter được ghim (FVM là tuỳ chọn)
+├── analysis_options.yaml          # Lint cho cả workspace
+├── azure-ci-cd.yml                # Pipeline Azure DevOps
+├── build.yaml                     # Tuỳ chọn build_runner (injectable, retrofit, json_serializable…)
+├── CLAUDE.md                      # Tóm tắt luật cho Claude Code — bản đầy đủ ở .agents/AGENTS.md
+├── devtools_options.yaml          # Cấu hình Flutter DevTools
+├── flutter_native_splash-{dev,staging,prod}.yaml  # Cấu hình splash theo flavor (theme_generator)
+├── icons_launcher-{dev,staging,prod}.yaml         # Cấu hình icon app theo flavor (theme_generator)
+├── Gemfile                        # Ruby gem cho Fastlane
+├── license                        # Giấy phép
 ├── pubspec.yaml                   # File cấu hình Pub Workspace (workspace: [...])
+├── pubspec.lock                   # File lock DUY NHẤT cho cả workspace — được commit
 ├── pubspec_dependencies.yaml      # Nguồn chân lý phiên bản thư viện (Version Catalog)
-└── README.md                      # Cẩm nang kỹ thuật Master này
+├── README.md                      # Bản tiếng Anh
+└── README.vi.md                   # Cẩm nang kỹ thuật Master này
 ```
 
 > [!NOTE]
@@ -391,7 +416,7 @@ không giữ kiểu dữ liệu nào của feature — đó chính là điều k
 1. Xóa dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó.
 2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app
    và danh sách `workspace:` ở root, tất cả nằm giữa marker `composer:managed`.
-3. `flutter pub get && dart run build_runner build -d --workspace`.
+3. `flutter pub get && dart run build_runner build --workspace`.
 
 Hoặc để `dart tools/sample_cleanup/remove_sample.dart <bundle>` làm, chạy dry-run trước. Không cần
 sửa file nào khác — mọi lookup lúc runtime đều có fallback an toàn. Xem
@@ -422,35 +447,50 @@ fastlane android build flavor:dev build_type:apk distribute_store:false distribu
 ### 1. Chuẩn Bị Môi Trường
 - **Flutter**: >= 3.47.4 (Stable)
 - **Dart SDK**: >= 3.13.3
-- **JDK**: 17
+- **JDK**: 17 trở lên (17 là mức bytecode đích; build chạy được trên 21)
 - **Ruby**: >= 3.0 (cho Fastlane)
+- **Node.js + npm, tài khoản Google và một Firebase project**: chỉ cần cho cấu hình Firebase thật (bước 3)
 
-### 2. Cài Đặt Tất Cả Gói Phụ Thuộc
+### 2. Dựng Workspace — một lệnh
 ```bash
-flutter pub get
+dart tools/workspace_setup/configure.dart
 ```
-*Nhờ Pub Workspaces, toàn bộ phụ thuộc của Host App và tất cả packages con được tải đồng thời và tạo duy nhất một `pubspec.lock`.*
+Đây **chính là** bước setup. Nó chạy `flutter clean` → `flutter pub get` → `gen-l10n` trong mọi package
+có `l10n.yaml` → `dart run build_runner build --workspace` → barrel generator cho từng package, và
+activate `flutterfire_cli` trước tiên. Chỉ chạy `pub get` + `build_runner` thì **không** tương đương.
+Các barrel `lib/src/gen/gen.dart` bị gitignore chỉ có sau lượt barrel. Thiếu chúng, `flutter analyze`
+báo khoảng 17 lỗi (thiếu `gen/gen.dart`, không định nghĩa `AppLocalizations` / `Assets`). Trình tự
+làm tay đầy đủ nằm ở [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 2.
 
-### 3. Sinh Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
+*Nhờ Pub Workspaces, chỉ có một `pubspec.lock` duy nhất, nằm ở root, và nó được commit.*
+
+### 3. Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
 `apps/mobile/lib/firebase/firebase_module.dart` import cả ba file
-`firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Phải
-chạy `dart tools/firebase/firebase_config.dart --app mobile` trước lần build đầu tiên — xem
-[`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md).
+`firebase_options_{dev,staging,prod}.dart` một cách vô điều kiện, mà chúng lại bị git-ignore. Bạn có
+hai cách:
+- **Đã có Firebase project:** cài Firebase CLI (`npm install -g firebase-tools`), chạy
+  `firebase login`, rồi chạy `dart tools/firebase/firebase_config.dart --app mobile`. Script đặt mọi
+  flavor vào cùng một project ID mà bạn nhập.
+- **Chưa có:** tạo stub chỉ để biên dịch, gồm ba file Dart và một `google-services.json` cho mỗi
+  flavor. App build được, nhưng push và các tính năng Firebase khác không hoạt động.
 
-### 4. Khởi Chạy Sinh Mã Đồng Loạt
+Cả hai cách đều có trong [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 3.
+
+### 4. Chạy Ứng Dụng — từ `apps/mobile/`
 ```bash
-dart run build_runner build -d --workspace
+cd apps/mobile   # bắt buộc — thư mục gốc workspace không có project android/ hay ios/
+flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
-### 5. Chạy Ứng Dụng
-```bash
-flutter run -t apps/mobile/lib/main.dart --flavor dev --dart-define-from-file=apps/mobile/env.dev
-```
-
-### 6. Build APK
+### 5. Build APK
 ```bash
 cd apps/mobile   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
+```
+
+### 6. Sau Khi Đổi Annotation
+```bash
+dart run build_runner build --workspace   # không dùng -d: build_runner đã gỡ cờ đó và bỏ qua nó
 ```
 
 > [!WARNING]
@@ -496,6 +536,8 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 | [08. Networking](docs/vi/guides/08_networking.md) | API client, interceptor, refresh token, SSL pinning |
 | [09. Đa ngôn ngữ & Theming](docs/vi/guides/09_localization_theming.md) | Bản dịch, design token, responsive |
 | [10. Giao tiếp xuyên feature](docs/vi/guides/10_cross_feature.md) | Sáu mô hình được cho phép |
+| [11. Design System](docs/vi/guides/11_design_system.md) | Màu, font, spacing, bo góc; scale và layout thích ứng |
+| [12. Cô lập module](docs/vi/guides/12_module_isolation.md) | Tách một module ra repository riêng; checkout một phần |
 
 ### 📐 Tra Cứu — *tìm nhanh*
 | Tài liệu | Chứa |

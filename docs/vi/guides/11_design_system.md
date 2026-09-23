@@ -171,7 +171,7 @@ final defaultTheme = switch (mode) {
 
 **Vì sao đóng gói, không dùng `google_fonts`.** `google_fonts` đăng ký mỗi *độ đậm* thành một family riêng, nên một style đổi độ đậm về sau — `copyWith(fontWeight: FontWeight.bold)`, như tiêu đề app bar và các sample đang làm — vẫn giữ file nét thường và engine tự giả lập nét đậm. Một family với mỗi độ đậm một file cho phép Flutter chọn đúng mặt chữ cho bất kỳ `fontWeight` nào. Cách này cũng chạy offline và không tải gì lúc runtime. Giấy phép đi kèm file font: `assets/fonts/plus_jakarta_sans/OFL.txt`, được `registerBaseUiLicenses()` (gọi trong `runShellApp`) đăng ký với `LicenseRegistry`, nên hiện trên `showLicensePage`.
 
-**Dùng font khác:** đặt các file vào `platform/base_ui/assets/fonts/<tên>/` kèm giấy phép, khai từng độ đậm trong `flutter: fonts:` (độ đậm nào thiết kế dùng mà không có file sẽ được tổng hợp từ file gần nhất), chạy `dart run build_runner build -d --workspace` để `FontFamily` có hằng số mới, rồi trỏ `applyFont` vào nó — giữ nguyên `geometry.merge`, cỡ chữ lấy từ đó. Đổi luôn phần đăng ký giấy phép sang file giấy phép mới.
+**Dùng font khác:** đặt các file vào `platform/base_ui/assets/fonts/<tên>/` kèm giấy phép, khai từng độ đậm trong `flutter: fonts:` (độ đậm nào thiết kế dùng mà không có file sẽ được tổng hợp từ file gần nhất), chạy `dart run build_runner build --workspace` để `FontFamily` có hằng số mới, rồi trỏ `applyFont` vào nó — giữ nguyên `geometry.merge`, cỡ chữ lấy từ đó. Đổi luôn phần đăng ký giấy phép sang file giấy phép mới.
 
 ### Cơ chế scale font
 

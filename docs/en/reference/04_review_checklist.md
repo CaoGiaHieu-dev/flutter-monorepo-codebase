@@ -13,7 +13,7 @@ Skip sections the PR does not touch. Anything with a **Verify** line should be *
 The same gates `.github/workflows/pr_quality_check.yml` runs, in its order (CI first runs `dart tools/workspace_setup/configure.dart` — pub get, gen-l10n, build_runner, barrels):
 
 ```bash
-dart run build_runner build -d --workspace           # generated code up to date
+dart run build_runner build --workspace              # generated code up to date
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
 dart tools/arch_check/check.dart                     # Gate 1 — layering rules R1–R10 (R5: undeclared imports)
 flutter analyze                                      # Gate 2 — static analysis
@@ -130,7 +130,7 @@ grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib
 
 ```bash
 dart tools/composer/composer.dart sync
-flutter pub get && dart run build_runner build -d --workspace
+flutter pub get && dart run build_runner build --workspace
 dart tools/arch_check/check.dart
 flutter analyze
 ```

@@ -12,10 +12,11 @@
 | :--- | :--- | :--- |
 | Flutter SDK | **3.47.4** trở lên | `pubspec.yaml` → `environment.flutter: ">=3.47.4"` |
 | Dart SDK | **3.13.3** trở lên | `pubspec.yaml` → `environment.sdk: ">=3.13.3 <4.0.0"` |
-| JDK | **17** | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` |
+| JDK | **17 trở lên** (build được trên 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` là mức bytecode đích, không phải giới hạn trên |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
 | Ruby ≥ 3.0 | chỉ cần cho Fastlane | xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
+| Node.js + npm, một tài khoản Google, một Firebase project | chỉ cần cho cấu hình Firebase **thật** (§3) | Firebase CLI là một package npm; nếu dùng stub ở §3 thì bỏ qua cả ba |
 
 ### FVM là tuỳ chọn
 
@@ -45,18 +46,55 @@ flutter --version      # phải >= 3.47.4
 
 ---
 
-## 2. Clone và cài dependencies
+## 2. Clone và dựng workspace
 
-Đây là **Pub Workspace**. Toàn bộ 28 thành viên workspace (25 package, hai app, và `tools`) chỉ có **một** lần resolve dependency duy nhất, nên bạn chạy `pub get` **một lần, tại thư mục gốc** — tuyệt đối không chạy bên trong package con.
+Đây là **Pub Workspace**. Toàn bộ 28 thành viên workspace (25 package, hai app, và `tools`) chỉ có **một** lần resolve dependency duy nhất, và một script setup chuẩn bị cho tất cả:
 
 ```bash
 git clone <repo-url>
 cd flutter-monorepo-codebase
 
-flutter pub get        # resolve cả workspace, sinh duy nhất 1 pubspec.lock ở root
+dart tools/workspace_setup/configure.dart
 ```
 
-Nếu bạn thấy các file `pubspec.lock` xuất hiện trong package con, tức là có ai đó đã chạy `pub get` sai chỗ — xoá chúng đi, chỉ file ở root mới đúng.
+**`configure.dart` chính là bước setup**. Nó không phải lối tắt cho `pub get` + `build_runner`. Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
+
+1. `dart pub global activate flutterfire_cli`. Chỉ nhánh Firebase thật ở [§3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được) dùng tới nó.
+2. `flutter clean` tại root.
+3. `flutter pub get` tại root. Bước này resolve cả workspace theo file `pubspec.lock` duy nhất ở root.
+4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/base_ui` và các feature auth, home, onboarding, settings, splash.
+5. `dart run build_runner build --workspace`, chạy injectable, freezed, json_serializable, retrofit, go_router_builder, drift và flutter_gen.
+6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì `injection.dart` của chúng do composer sinh ra.
+
+Script tự dùng `fvm` nếu máy bạn đã cài sẵn. Không có bản bọc `configure.sh` hay `configure.bat`, vì một script Dart chạy y hệt nhau trên mọi nền tảng.
+
+> [!IMPORTANT]
+> **Chỉ `flutter pub get` + `build_runner` thì chưa thành một bản setup chạy được.** `lib/src/src.dart` của `core_base_ui` và của mọi feature có bản dịch đều export `gen/gen.dart`. Barrel đó, cùng `gen/language/language.dart`, bị gitignore và chỉ được bước 6 ghi ra. Nếu dừng sau bước 5, `flutter analyze` báo khoảng 17 lỗi dạng:
+>
+> ```
+> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/base_ui/lib/src/src.dart:3:8 • uri_does_not_exist
+> error • Undefined name 'AppLocalizations' • …
+> error • Undefined name 'Assets' • …
+> ```
+>
+> Cách sửa: chạy `dart tools/workspace_setup/configure.dart`.
+
+Nếu muốn làm tay thì phải chạy đủ các bước sau, theo đúng thứ tự (ví dụ bằng bash). Lượt barrel phải chạy **sau** gen-l10n và build_runner, vì nó export những file hai bước đó ghi ra:
+
+```bash
+flutter pub get
+# gen-l10n trong từng package có l10n.yaml
+(cd platform/base_ui && flutter gen-l10n)
+for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
+dart run build_runner build --workspace
+# barrel cho mọi package có lib/, trừ các app
+for d in platform/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
+```
+
+Những gì sẽ thấy ở một lần chạy sạch:
+
+- build_runner in ra vài cảnh báo `W injectable_config_builder … Missing dependencies`. Đó là chuyện bình thường. DI module của mỗi micro-package được sinh riêng và nhắc tới những type do package khác đăng ký. `injection.config.dart` của app mới là nơi ghép chúng lại.
+- **Chỉ một file lock, ở root, và được commit.** `pubspec.lock` được git theo dõi (`.gitignore` ở root bỏ ignore cho `/pubspec.lock`), nên mọi người resolve cùng một bộ version. Hãy commit nó khi thay đổi dependency làm nó đổi theo. Nếu thấy `pubspec.lock` xuất hiện trong package con, tức là có ai đó đã chạy `pub get` sai chỗ. Hãy xoá chúng đi, vì chỉ file ở root được dùng.
 
 ---
 
@@ -75,72 +113,128 @@ import 'firebase_options_staging.dart' as stg;
 
 Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** (`apps/mobile/.gitignore` có dòng `firebase_options_*.dart`), vì chúng chứa định danh Firebase project của riêng bạn.
 
-Chúng thuộc về **app**, không thuộc `platform/`: Firebase options gắn với một bundle ID, nên mỗi app dùng Firebase sở hữu thư mục `lib/firebase/` của riêng nó. Trước đây chúng nằm trong `core_common`, khiến mọi app khác trong workspace nhận luôn options của app mobile. Chưa sinh thì bạn sẽ gặp:
+Chúng thuộc về **app**, không thuộc `platform/`: Firebase options gắn với một bundle ID, nên mỗi app dùng Firebase sở hữu thư mục `lib/firebase/` của riêng nó. Trước đây chúng nằm trong `core_common`, khiến mọi app khác trong workspace nhận luôn options của app mobile. Khi chưa có chúng, `flutter analyze` báo:
 
 ```
-Target of URI doesn't exist: 'firebase_options_dev.dart'
-Undefined name 'DefaultFirebaseOptions'
+error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:4:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_prod.dart' • apps/mobile/lib/firebase/firebase_module.dart:5:8 • uri_does_not_exist
+error • Target of URI doesn't exist: 'firebase_options_staging.dart' • apps/mobile/lib/firebase/firebase_module.dart:6:8 • uri_does_not_exist
 ```
 
-**Cách khắc phục — chạy script hỗ trợ từ thư mục gốc repo:**
+Có hai lối ra: dùng Firebase project thật (§3.1), hoặc dùng stub chỉ để biên dịch (§3.2).
+
+### 3.1 Khi đã có Firebase project — dùng script hỗ trợ
+
+Cần chuẩn bị trước:
+
+- **Node.js + npm**, và **Firebase CLI** cài global: `npm install -g firebase-tools`.
+- Một **tài khoản Google** và một **Firebase project** bạn có quyền truy cập. Tạo project trên Firebase console.
+- Đã chạy **`firebase login`** tương tác, trong một terminal mở được trình duyệt.
+
+Sau đó chạy từ thư mục gốc repo:
 
 ```bash
 dart tools/firebase/firebase_config.dart --app mobile
 ```
 
-Script tìm app qua `app_manifest.yaml`, rồi chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode, ghi ra `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`. Có thể bỏ `--app` khi workspace chỉ có một app.
+Script yêu cầu Firebase CLI đã được cài và đã đăng nhập. Nếu thiếu, script in hướng dẫn cài đặt rồi thoát. `configure.dart` đã activate `flutterfire_cli` từ trước. Script hỏi ba thứ: **Firebase project ID**, **base bundle ID / package name** (`com.example.codebase`) và danh sách flavor (mặc định `dev staging prod`). Sau đó nó chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode. Các file được ghi ra là `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`, đều tính tương đối với `apps/mobile/`. Package Android nhận hậu tố `.dev` / `.stg` / không hậu tố. Bundle ID iOS nhận `.dev` / `.staging` / không hậu tố. Có thể bỏ `--app` khi workspace chỉ có một app.
 
-Muốn làm tay thì chạy FlutterFire một lần cho mỗi môi trường, **từ `apps/mobile/`**:
+> [!NOTE]
+> Script hỗ trợ đặt **mọi flavor vào cùng một project ID** mà bạn nhập. Muốn dev, staging và prod nằm ở các Firebase project riêng thì hãy chạy FlutterFire bằng tay, một lần cho mỗi môi trường, **từ `apps/mobile/`**:
 
 ```bash
-dart pub global activate flutterfire_cli
 cd apps/mobile
 
 flutterfire configure \
   --project=<firebase-project-dev-cua-ban> \
-  --out=lib/firebase/firebase_options_dev.dart
+  --out=lib/firebase/firebase_options_dev.dart \
+  --android-package-name=com.example.codebase.dev \
+  --android-out=android/app/src/dev/google-services.json
 
 flutterfire configure \
   --project=<firebase-project-staging-cua-ban> \
-  --out=lib/firebase/firebase_options_staging.dart
+  --out=lib/firebase/firebase_options_staging.dart \
+  --android-package-name=com.example.codebase.stg \
+  --android-out=android/app/src/staging/google-services.json
 
 flutterfire configure \
   --project=<firebase-project-prod-cua-ban> \
-  --out=lib/firebase/firebase_options_prod.dart
+  --out=lib/firebase/firebase_options_prod.dart \
+  --android-package-name=com.example.codebase \
+  --android-out=android/app/src/prod/google-services.json
 ```
 
-Phải có đủ **cả ba** file kể cả khi bạn chỉ định chạy `dev` — vì `firebase_module.dart` import cả ba một cách vô điều kiện, thiếu file `prod` là bản `dev` cũng gãy.
+Phải có đủ **cả ba** file Dart kể cả khi bạn chỉ định chạy `dev`. `firebase_module.dart` import cả ba một cách vô điều kiện, nên thiếu file `prod` là bản `dev` cũng gãy.
 
 > [!IMPORTANT]
-> Ba file Dart là đủ để **biên dịch** — analyze và test (CI tạo stub đúng cho mục đích đó). **Build app Android** còn cần `apps/mobile/android/app/src/<flavor>/google-services.json`: thiếu nó, plugin Gradle Google Services sẽ fail ở `process<Flavor>DebugGoogleServices`. Script helper tự ghi file này; các lệnh thủ công ở trên thì không, trừ khi bạn thêm `--android-package-name` (`com.example.codebase.dev`, `.stg`, prod thì không có hậu tố) và `--android-out=android/app/src/<flavor>/google-services.json`.
+> Ba file Dart là đủ để **biên dịch**: analyze và test chạy qua được, và CI tạo stub đúng cho mục đích đó. **Build app Android** còn cần `apps/mobile/android/app/src/<flavor>/google-services.json`. Thiếu nó, plugin Gradle Google Services sẽ fail ở `process<Flavor>DebugGoogleServices`. Script hỗ trợ tự ghi file này. Các lệnh thủ công ở trên ghi được nó là nhờ cờ `--android-package-name` / `--android-out`.
+
+### 3.2 Chưa có Firebase project? Dùng stub
+
+Để app biên dịch được và build ra APK mà không cần tài khoản Firebase, hãy tự tạo các file thay thế. App **build được**, nhưng mọi thứ dựa trên Firebase (push notification, FCM token) sẽ không hoạt động, và các lời gọi Firebase lúc chạy có thể ghi log lỗi. Hãy thay stub bằng cấu hình thật (§3.1) trước khi dựa vào những tính năng đó.
+
+**1. Ba file Dart.** Tạo chúng trong `apps/mobile/lib/firebase/`, đặt tên `firebase_options_dev.dart`, `firebase_options_staging.dart` và `firebase_options_prod.dart`, mỗi file có nội dung dưới đây. Đây đúng là stub mà `.github/workflows/pr_quality_check.yml` ghi ra:
+
+```dart
+// CI-only stub. Not a real Firebase configuration: analysis and unit
+// tests never initialise Firebase, they only need this to compile.
+// Generate the real file with `flutterfire configure`.
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform => const FirebaseOptions(
+    apiKey: 'ci-stub',
+    appId: 'ci-stub',
+    messagingSenderId: 'ci-stub',
+    projectId: 'ci-stub',
+  );
+}
+```
+
+**2. Mỗi flavor cần build có một `google-services.json`.** File nằm ở `apps/mobile/android/app/src/<flavor>/google-services.json`, và `package_name` phải trùng application ID của flavor đó. Với `dev` là `com.example.codebase.dev`, với `staging` là `com.example.codebase.stg`, với `prod` là `com.example.codebase` (`applicationId` + `applicationIdSuffix` trong `apps/mobile/android/app/build.gradle.kts`). File cho `dev`:
+
+```json
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "local-stub"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "android_client_info": {
+          "package_name": "com.example.codebase.dev"
+        }
+      },
+      "api_key": [
+        { "current_key": "local-stub" }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}
+```
+
+Có đủ các file đó thì `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` chạy thành công. Tất cả các file này đều bị gitignore, nên không thể lỡ tay commit.
 
 ---
 
-## 4. Chạy code generation
+## 4. Code generation sau khi setup
 
-Dự án dùng codegen rất nhiều: `freezed`, `injectable`, `json_serializable`, `retrofit`, `drift`, `go_router_builder`, `flutter_gen`.
+`configure.dart` đã chạy trọn chuỗi codegen một lần. Từ đó về sau, chỉ cần chạy lại phần mà thay đổi của bạn đụng tới:
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace   # sau khi đổi annotation
 ```
 
-- `-d` thay cho cờ `--delete-conflicting-outputs` đã lỗi thời.
 - `--workspace` chạy builder cho **mọi** package trong workspace chỉ trong một lượt. Chạy build_runner bên trong từng package riêng lẻ không được hỗ trợ ở đây.
+- **Đừng** truyền `-d` / `--delete-conflicting-outputs`. build_runner đã gỡ cờ này, giờ nó bị bỏ qua kèm cảnh báo `W These options have been removed and were ignored: --delete-conflicting-outputs`.
+- Vừa thêm, đổi tên hay xoá file trong `lib/` của một package? Hãy chạy lại barrel generator cho package đó **sau** codegen: `dart tools/barrel_generator/generate.dart <package>/lib`. Xem [03_daily_workflow.md](03_daily_workflow.md).
 
 > [!WARNING]
 > Tuyệt đối không sửa tay các file `*.g.dart`, `*.freezed.dart`, `*.module.dart` hay `injection.config.dart`.
 > Chúng bị ghi đè sau mỗi lần chạy. Muốn đổi thì sửa annotation ở file nguồn.
-
-### Hoặc gộp bước 2 + 4 làm một
-
-```bash
-dart tools/workspace_setup/configure.dart
-```
-
-Script đa nền tảng này chạy tuần tự: kích hoạt `flutterfire_cli` → `flutter clean` → `flutter pub get` → `gen-l10n` cho mọi package có file ARB → `build_runner build -d --workspace` → barrel generator cho từng package.
-
-> [!NOTE]
-> `configure.dart` là điểm vào duy nhất — không có bản bọc `configure.sh` hay `configure.bat`. Một script Dart chạy y hệt nhau trên mọi nền tảng, nên không cần tới shell wrapper.
 
 ---
 
@@ -187,13 +281,16 @@ class EnvConstants {
 
 ## 6. Chạy app
 
+Cả `flutter run` lẫn `flutter build` đều phải gọi **từ `apps/mobile/`**. Thư mục gốc workspace không có project `android/` hay `ios/`, nên chạy `-t apps/mobile/lib/main.dart` từ root không thể chạy được.
+
 ### Từ dòng lệnh
 
 ```bash
-flutter run -t apps/mobile/lib/main.dart --flavor dev --dart-define-from-file=apps/mobile/env.dev
+cd apps/mobile
+flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
-### Build APK — bắt buộc `cd apps/mobile` trước
+### Build APK
 
 ```bash
 cd apps/mobile
@@ -201,10 +298,10 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
 > [!CAUTION]
-> Chạy `flutter build apk` từ thư mục gốc sẽ báo lỗi rất khó hiểu, ví dụ
-> `Target file "lib\main.dart" not found`, hoặc
+> Chạy `flutter run` hay `flutter build apk` từ thư mục gốc sẽ báo lỗi rất khó hiểu, ví dụ
+> `Target file "lib/main.dart" not found` (`lib\main.dart` trên Windows), hoặc
 > `Flutter failed to read a file at ".../android/app/build.gradle"`.
-> Project Android nằm ở `apps/mobile/android`, nên lệnh build phải gọi từ trong `apps/mobile/`.
+> Project Android nằm ở `apps/mobile/android`, nên lệnh phải gọi từ trong `apps/mobile/`.
 > Lưu ý đường dẫn env cũng đổi theo: `env.dev` (tương đối với `apps/mobile/`), không phải `apps/mobile/env.dev`.
 
 File kết quả nằm ở `apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.apk`.
@@ -255,7 +352,13 @@ flutter analyze                     # kỳ vọng: No issues found!
 cd platform/storage && flutter test && cd ../..
 ```
 
-Nếu `flutter analyze` báo thiếu `firebase_options_*.dart`, quay lại [bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được).
+Nếu `flutter analyze` chưa sạch:
+
+| Bạn thấy | Nguyên nhân | Cách sửa |
+| :--- | :--- | :--- |
+| `Target of URI doesn't exist: 'firebase_options_dev.dart'` (và `_prod`, `_staging`) trong `firebase_module.dart` | Thiếu các file Firebase options bị gitignore | [Bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được), dùng file thật hoặc stub |
+| `Target of URI doesn't exist: 'gen/gen.dart'`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` (khoảng 17 lỗi) | Setup dừng trước lượt barrel, thường do chỉ chạy `pub get` + `build_runner` | Chạy `dart tools/workspace_setup/configure.dart` |
+| `Undefined class '_$…'`, không tìm thấy `… .g.dart` / `.freezed.dart` | Codegen chưa chạy hoặc đã cũ | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `dart run build_runner build --workspace` nếu đã setup một lần) |
 
 ---
 

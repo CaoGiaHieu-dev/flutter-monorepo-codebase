@@ -13,7 +13,7 @@ Bỏ qua phần nào PR không đụng tới. Mục nào có dòng **Kiểm ch�
 Đúng các cổng mà `.github/workflows/pr_quality_check.yml` chạy, theo đúng thứ tự (trước đó CI chạy `dart tools/workspace_setup/configure.dart` — pub get, gen-l10n, build_runner, barrel):
 
 ```bash
-dart run build_runner build -d --workspace           # code sinh đã cập nhật
+dart run build_runner build --workspace              # code sinh đã cập nhật
 dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
 dart tools/arch_check/check.dart                     # Gate 1 — luật phân tầng R1–R10 (R5: import thiếu khai)
 flutter analyze                                      # Gate 2 — phân tích tĩnh
@@ -130,7 +130,7 @@ grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib
 
 ```bash
 dart tools/composer/composer.dart sync
-flutter pub get && dart run build_runner build -d --workspace
+flutter pub get && dart run build_runner build --workspace
 dart tools/arch_check/check.dart
 flutter analyze
 ```

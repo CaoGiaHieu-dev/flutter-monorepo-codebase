@@ -400,7 +400,7 @@ dependencies:
 Then regenerate:
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 dart tools/barrel_generator/generate.dart modules/payment/data/lib
 flutter analyze

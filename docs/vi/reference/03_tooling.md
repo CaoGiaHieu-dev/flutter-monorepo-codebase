@@ -162,7 +162,7 @@ dart tools/module_generator/generate.dart 2 payment          # domain micro-pack
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
 ```
 
-Chạy thiếu tham số thì nó sẽ hỏi tương tác.
+Chạy thiếu tham số thì nó sẽ hỏi tương tác. Câu hỏi và phần lớn thông báo tiến trình, thông báo lỗi đều bằng tiếng Việt, output của `barrel_generator` và `sample_cleanup` cũng vậy.
 
 **Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template, thêm module vào mọi `app_manifest.yaml`, chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, và `dart fix --apply` trên package mới.
 
@@ -246,7 +246,7 @@ Liệt kê package trong `pubspec_dependencies.yaml` có version mới hơn trê
 dart tools/workspace_setup/configure.dart
 ```
 
-Dựng đầy đủ cho một bản clone mới: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, rồi barrel generator cho từng package.
+Dựng đầy đủ cho một bản clone mới. Script chạy theo thứ tự: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` trong mọi package có `l10n.yaml`, `build_runner build --workspace`, rồi barrel generator cho mọi package có `lib/` (bỏ qua các app). Đây **chính là** bước setup. Chỉ chạy `pub get` + `build_runner` thì các barrel `lib/src/gen/gen.dart` bị gitignore sẽ không có, và `flutter analyze` khi đó báo lỗi ở `gen/gen.dart`, `AppLocalizations` và `Assets`.
 
 > [!CAUTION]
 > **Không có** `configure.sh` và **không có** `configure.bat`. Chỉ tồn tại `configure.dart` — gọi nó bằng `dart`, đừng bao giờ qua một wrapper shell.
@@ -266,6 +266,8 @@ Chạy `flutterfire configure` bên trong app được chọn cho từng flavor 
 > Ba file sinh ra đó bị git ignore, và `firebase_module.dart` import **cả ba một cách vô điều kiện**. Do đó một bản clone mới **không compile được** cho tới khi chạy lệnh này — kể cả khi bạn chỉ build dev. Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 Phải chạy từ thư mục gốc repo; script kiểm tra sự tồn tại của `pubspec.yaml` rồi mới chạy tiếp.
+
+Script cần **Firebase CLI đã được cài và đã đăng nhập**. Cụ thể là Node.js + npm, `npm install -g firebase-tools`, và một lần `firebase login` tương tác bằng tài khoản Google có quyền vào Firebase project của bạn. Nếu thiếu CLI, script in hướng dẫn cài đặt rồi thoát. Script chỉ hỏi một project ID và dùng nó cho **mọi** flavor. Muốn mỗi flavor một project, hoặc cần stub chỉ để biên dịch khi chưa có Firebase project, xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md) § 3.
 
 ---
 

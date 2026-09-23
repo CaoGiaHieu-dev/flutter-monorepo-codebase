@@ -11,7 +11,7 @@
 ```text
    edit source
         │
-        ├─ touched an annotation?  ──► dart run build_runner build -d --workspace
+        ├─ touched an annotation?  ──► dart run build_runner build --workspace
         │
         ├─ added/renamed/deleted a file in lib/?  ──► dart tools/barrel_generator/generate.dart <pkg>/lib
         │
@@ -26,7 +26,7 @@
 ## 2. `build_runner` — after touching an annotation
 
 ```bash
-dart run build_runner build -d --workspace
+dart run build_runner build --workspace
 ```
 
 Run it whenever you add, remove, or edit any of these:
@@ -52,7 +52,7 @@ Run it whenever you add, remove, or edit any of these:
 For a tight edit loop:
 
 ```bash
-dart run build_runner watch -d --workspace
+dart run build_runner watch --workspace
 ```
 
 ---
@@ -98,11 +98,11 @@ The tool also repairs broken local `path:` entries for workspace packages.
 
 | Tool | Command | Use it when |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [dir] [SM] [route]` | Scaffolding a new Feature / Domain / Data / Core package. It adds the module to every `app_manifest.yaml` and runs `composer sync`, which registers it in the workspace and every app that composes it. Run with no arguments for interactive mode. |
+| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]` | Scaffolding a new Feature / Domain / Data / Core / Custom package. It adds the module to **every** `app_manifest.yaml`, both `apps/mobile` and `apps/admin`, and runs `composer sync`, which registers it in the workspace and in every app. `apps/admin` composes only auth + settings. If the new module does not belong there, delete its entry from `apps/admin/app_manifest.yaml` and run `dart tools/composer/composer.dart sync`. Run with no arguments for interactive mode. The prompts and progress messages are partly in Vietnamese. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. |
-| **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session — lists what pub.dev has newer. |
+| **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session. It lists what pub.dev has newer. In a terminal it then shows an interactive checklist: `a` applies the selected versions to the catalog and runs `dependency_sync` + `pub get`, and `q` quits. Without a TTY (CI, a pipe) it only reports. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key (`GEMINI_API_KEY`, `--api-key`, or saved when prompted). Also supports `--all`, `--file <path>`, `--focus architecture,security`. |
-| **Workspace setup** | `dart tools/workspace_setup/configure.dart` | After a big rebase, or when things are inexplicably broken — does clean + pub get + l10n + build_runner in one pass. |
+| **Workspace setup** | `dart tools/workspace_setup/configure.dart` | First setup of a clone, after a big rebase, or when things are inexplicably broken. It runs, in order: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `flutter gen-l10n` in every package with an `l10n.yaml` → `dart run build_runner build --workspace` → the barrel generator for every package with a `lib/` (apps skipped). Stops at the first failing step. |
 
 Module generator examples:
 
@@ -167,7 +167,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 
 | Trap | Symptom | Fix |
 | :--- | :--- | :--- |
-| Forgot `build_runner` after an annotation change | `Undefined class '_$…Impl'`, DI type not registered | `dart run build_runner build -d --workspace` |
+| Forgot `build_runner` after an annotation change | `Undefined class '_$…Impl'`, DI type not registered | `dart run build_runner build --workspace` |
 | Forgot the barrel generator after adding a file | New class invisible outside its package | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Hand-edited a generated file | Change vanishes on next codegen | Edit the annotated source |
 | Ran `pub get` inside a sub-package | Stray `pubspec.lock` files | Delete them, run `flutter pub get` at the root |

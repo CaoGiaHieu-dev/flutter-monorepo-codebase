@@ -6,6 +6,8 @@
 
 progname="${0##*/}"
 progname="${progname%.sh}"
+# How the user invoked it, for the usage examples.
+invocation="${0}"
 
 # Color codes and formatting - detect if colors are supported
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && tput colors >/dev/null 2>&1 && [[ $(tput colors) -ge 8 ]]; then
@@ -64,6 +66,37 @@ else
   ARROW=">"
 fi
 
+# Prints STRING repeated COUNT times, no newline.
+#
+# Box-drawing characters are multi-byte in UTF-8, so the old
+# `printf "%*s" N | tr ' ' '═'` garbled them on GNU tr, which maps bytes:
+# every space became the first byte of '═'.
+repeat() {
+  local string="$1"
+  local count="$2"
+  local out=""
+  local i
+  for (( i = 0; i < count; i++ )); do
+    out+="$string"
+  done
+  printf '%s' "$out"
+}
+
+# One centred line of WIDTH columns between two border characters.
+print_centered_line() {
+  local border="$1"
+  local width="$2"
+  local style="$3"
+  local text="$4"
+  local inner=$(( width - 2 ))
+  local left=$(( (inner - ${#text}) / 2 ))
+  (( left < 0 )) && left=0
+  local right=$(( inner - ${#text} - left ))
+  (( right < 0 )) && right=0
+  printf "%s${style}%*s%s%*s${ENDCOLOR}%s\n" \
+    "$border" "$left" "" "$text" "$right" "" "$border"
+}
+
 # Enhanced formatting functions
 print_banner() {
   local title="$1"
@@ -71,23 +104,12 @@ print_banner() {
   local width=88
 
   echo
-  printf "%*s\n" $width | tr ' ' '═'
-
-  # Main title
-  local title_len=${#title}
-  local title_padding=$(( (width - title_len - 4) / 2 ))
-  printf "║${BOLD}${BLUE}%*s %s %*s${ENDCOLOR}║\n" \
-    $title_padding "" "$title" $title_padding ""
-
-  # Subtitle if provided
+  printf '╔%s╗\n' "$(repeat '═' $((width - 2)))"
+  print_centered_line '║' "$width" "${BOLD}${BLUE}" "$title"
   if [[ -n "$subtitle" ]]; then
-    local subtitle_len=${#subtitle}
-    local subtitle_padding=$(( (width - subtitle_len - 4) / 2 ))
-    printf "║${DIM}%*s %s %*s${ENDCOLOR}║\n" \
-      $subtitle_padding "" "$subtitle" $subtitle_padding ""
+    print_centered_line '║' "$width" "${DIM}" "$subtitle"
   fi
-
-  printf "%*s\n" $width | tr ' ' '═'
+  printf '╚%s╝\n' "$(repeat '═' $((width - 2)))"
   echo
 }
 
@@ -101,7 +123,7 @@ print_section() {
   if [[ -n "$description" ]]; then
     echo -e "${DIM}$description${ENDCOLOR}"
   fi
-  printf "${BLUE}%*s${ENDCOLOR}\n" 80 | tr ' ' '─'
+  printf "${BLUE}%s${ENDCOLOR}\n" "$(repeat '─' 80)"
 }
 
 print_status() {
@@ -137,7 +159,7 @@ print_subsection() {
   local title="$1"
   echo
   echo -e "  ${BOLD}${PURPLE}${ARROW} $title${ENDCOLOR}"
-  printf "  ${PURPLE}%*s${ENDCOLOR}\n" 50 | tr ' ' '┈'
+  printf "  ${PURPLE}%s${ENDCOLOR}\n" "$(repeat '┈' 50)"
 }
 
 print_table_header() {
@@ -214,22 +236,19 @@ print_summary_box() {
 
   local width=78
   echo
-  printf "${box_color}┌%*s┐${ENDCOLOR}\n" $((width-2)) | tr ' ' '─'
+  printf "${box_color}┌%s┐${ENDCOLOR}\n" "$(repeat '─' $((width - 2)))"
 
   # Title
-  local title_len=${#title}
-  local title_padding=$(( (width - title_len - 4) / 2 ))
-  printf "${box_color}│${ENDCOLOR}${BOLD}${title_color}%*s %s %*s${ENDCOLOR}${box_color}│${ENDCOLOR}\n" \
-    $title_padding "" "$title" $title_padding ""
+  print_centered_line "${box_color}│${ENDCOLOR}" "$width" "${BOLD}${title_color}" "$title"
 
-  printf "${box_color}├%*s┤${ENDCOLOR}\n" $((width-2)) | tr ' ' '─'
+  printf "${box_color}├%s┤${ENDCOLOR}\n" "$(repeat '─' $((width - 2)))"
 
   # Content lines
   for line in "${lines[@]}"; do
     printf "${box_color}│${ENDCOLOR} %-*s ${box_color}│${ENDCOLOR}\n" $((width-4)) "$line"
   done
 
-  printf "${box_color}└%*s┘${ENDCOLOR}\n" $((width-2)) | tr ' ' '─'
+  printf "${box_color}└%s┘${ENDCOLOR}\n" "$(repeat '─' $((width - 2)))"
   echo
 }
 
@@ -250,15 +269,17 @@ usage() {
   echo
 
   echo -e "${BOLD}USAGE:${ENDCOLOR}"
-  echo -e "  ${GREEN}$progname${ENDCOLOR} ${CYAN}[input-path|input-APK|input-APEX]${ENDCOLOR}"
+  echo -e "  ${GREEN}$invocation${ENDCOLOR} ${CYAN}<input-path|input-APK|input-APEX>${ENDCOLOR}"
   echo
 
   echo -e "${BOLD}EXAMPLES:${ENDCOLOR}"
-  echo -e "  ${DIM}# Check an APK file${ENDCOLOR}"
-  echo -e "  $progname ${CYAN}app/build/outputs/apk/release/app-release.apk${ENDCOLOR}"
+  echo -e "  ${DIM}# Build a release APK of one flavor, then check it (run from the repo root)${ENDCOLOR}"
+  echo -e "  ${DIM}# cd apps/mobile && flutter build apk --flavor dev --release && cd -${ENDCOLOR}"
+  echo -e "  $invocation ${CYAN}apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk${ENDCOLOR}"
+  echo -e "  $invocation ${CYAN}apps/mobile/build/app/outputs/flutter-apk/app-dev-release.apk${ENDCOLOR}"
   echo
   echo -e "  ${DIM}# Check a directory of native libraries${ENDCOLOR}"
-  echo -e "  $progname ${CYAN}/path/to/native/libs/${ENDCOLOR}"
+  echo -e "  $invocation ${CYAN}/path/to/native/libs/${ENDCOLOR}"
   echo
 
   echo -e "${BOLD}WHAT THIS TOOL CHECKS:${ENDCOLOR}"
@@ -289,11 +310,12 @@ check_dependencies() {
       print_status "success" "$tool" "$(which "$tool")"
     else
       missing_tools+=("$tool")
-      print_status "error" "$tool not found"
+      print_status "error" "$tool not found" >&2
     fi
   done
 
   if [ ${#missing_tools[@]} -gt 0 ]; then
+    {
     echo
     print_subsection "Installation Instructions"
     for tool in "${missing_tools[@]}"; do
@@ -313,6 +335,7 @@ check_dependencies() {
       esac
       echo
     done
+    } >&2
     exit 1
   fi
 
@@ -321,7 +344,7 @@ check_dependencies() {
 
 # Validate input arguments
 if [ ${#} -ne 1 ]; then
-  usage
+  usage >&2
   exit 1
 fi
 
@@ -337,8 +360,9 @@ esac
 
 # Validate input file/directory
 if ! [ -f "${dir}" -o -d "${dir}" ]; then
-  print_status "error" "Invalid input: ${dir}"
-  echo "  Please provide a valid APK file, APEX file, or directory containing native libraries."
+  print_status "error" "Invalid input: ${dir}" >&2
+  echo "  Please provide a valid APK file, APEX file, or directory containing native libraries." >&2
+  echo "  A Flutter release APK is at apps/<app>/build/app/outputs/flutter-apk/app-<flavor>-release.apk" >&2
   exit 1
 fi
 
@@ -388,7 +412,7 @@ if [[ "${dir}" == *.apk ]]; then
   tmp=$(mktemp -d -t "${dir_filename%.apk}_out_XXXXX")
 
   if [ ! -d "${tmp}" ]; then
-    print_status "error" "Failed to create temporary directory"
+    print_status "error" "Failed to create temporary directory" >&2
     exit 1
   fi
 
@@ -413,8 +437,8 @@ if [[ "${dir}" == *.apex ]]; then
   print_section "$DOCUMENT" "APEX Analysis" "Processing Android Pony EXpress file"
 
   if ! command -v deapexer >/dev/null 2>&1; then
-    print_status "error" "deapexer tool not found"
-    echo "    Please ensure Android SDK tools are properly installed and in your PATH."
+    print_status "error" "deapexer tool not found" >&2
+    echo "    Please ensure Android SDK tools are properly installed and in your PATH." >&2
     exit 1
   fi
 
@@ -422,13 +446,13 @@ if [[ "${dir}" == *.apex ]]; then
   tmp=$(mktemp -d -t "${dir_filename%.apex}_out_XXXXX")
 
   if [ ! -d "${tmp}" ]; then
-    print_status "error" "Failed to create temporary directory"
+    print_status "error" "Failed to create temporary directory" >&2
     exit 1
   fi
 
   print_status "processing" "Extracting APEX contents..."
   if ! deapexer extract "${dir}" "${tmp}"; then
-    print_status "error" "Failed to extract APEX file"
+    print_status "error" "Failed to extract APEX file" >&2
     cleanup_trap 1
   fi
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/foundation.dart';
@@ -32,6 +33,7 @@ void runShellApp({
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      registerBaseUiLicenses();
       await configureDependencies();
 
       // iOS keeps its native splash for the whole boot, so no Dart splash is

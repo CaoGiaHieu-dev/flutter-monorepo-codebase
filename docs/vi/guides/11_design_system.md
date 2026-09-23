@@ -130,7 +130,24 @@ Typography được dựng một lần cho mỗi theme trong [`theme/theme_provi
 
 ### Đổi font family
 
-Template đang dùng Google Fonts:
+Font chữ — Plus Jakarta Sans — được **đóng gói sẵn** trong `core_base_ui`, mỗi độ đậm một file dưới cùng một family:
+
+```yaml
+# platform/base_ui/pubspec.yaml
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/plus_jakarta_sans/PlusJakartaSans-Bold.ttf
+          weight: 700
+```
+
+Theme áp family đó cho toàn bộ thang chữ. `FontFamily.plusJakartaSans` do `flutter_gen` sinh ra (`lib/src/gen/fonts.gen.dart`) với giá trị `packages/core_base_ui/PlusJakartaSans` — font khai báo trong một package chỉ phân giải được dưới tên đó:
 
 ```dart
 // platform/base_ui/lib/src/theme/theme_provider.dart
@@ -139,28 +156,22 @@ Template đang dùng Google Fonts:
 // …
 final geometry = Typography.material2021().englishLike;
 
-TextTheme applyGoogleFont(TextTheme colors) {
-  final font = GoogleFonts.plusJakartaSans();
-  return geometry
-      .merge(colors)
-      .apply(
-        fontFamily: font.fontFamily,
-        fontFamilyFallback: font.fontFamilyFallback,
-      );
-}
+// …
+TextTheme applyFont(TextTheme colors) =>
+    geometry.merge(colors).apply(fontFamily: FontFamily.plusJakartaSans);
 
 final defaultTheme = switch (mode) {
-  ThemeMode.dark => applyGoogleFont(ThemeData.dark().textTheme),
-  ThemeMode.light => applyGoogleFont(ThemeData.light().textTheme),
-  ThemeMode.system => applyGoogleFont(
+  ThemeMode.dark => applyFont(ThemeData.dark().textTheme),
+  ThemeMode.light => applyFont(ThemeData.light().textTheme),
+  ThemeMode.system => applyFont(
     ThemeData.from(colorScheme: colorScheme).textTheme,
   ),
 };
 ```
 
-**Dùng font Google khác:** sửa đúng một dòng `GoogleFonts.plusJakartaSans()` trong `applyGoogleFont` thành `GoogleFonts.<tên>()` bất kỳ; cả ba nhánh đều đi qua nó.
+**Vì sao đóng gói, không dùng `google_fonts`.** `google_fonts` đăng ký mỗi *độ đậm* thành một family riêng, nên một style đổi độ đậm về sau — `copyWith(fontWeight: FontWeight.bold)`, như tiêu đề app bar và các sample đang làm — vẫn giữ file nét thường và engine tự giả lập nét đậm. Một family với mỗi độ đậm một file cho phép Flutter chọn đúng mặt chữ cho bất kỳ `fontWeight` nào. Cách này cũng chạy offline và không tải gì lúc runtime. Giấy phép đi kèm file font: `assets/fonts/plus_jakarta_sans/OFL.txt`, được `registerBaseUiLicenses()` (gọi trong `runShellApp`) đăng ký với `LicenseRegistry`, nên hiện trên `showLicensePage`.
 
-**Dùng font đóng gói sẵn:** khai báo trong mục `flutter: fonts:` của [`platform/base_ui/pubspec.yaml`](../../../platform/base_ui/pubspec.yaml), rồi cho `applyGoogleFont` trả về `geometry.merge(colors).apply(fontFamily: 'YourFont')` — giữ nguyên `geometry.merge`, cỡ chữ lấy từ đó. Nhớ gỡ dependency `google_fonts` khi không còn ai dùng — `dart tools/unused_checker/check_unused_packages.dart` sẽ báo nếu bạn khai mà không dùng.
+**Dùng font khác:** đặt các file vào `platform/base_ui/assets/fonts/<tên>/` kèm giấy phép, khai từng độ đậm trong `flutter: fonts:` (độ đậm nào thiết kế dùng mà không có file sẽ được tổng hợp từ file gần nhất), chạy `dart run build_runner build -d --workspace` để `FontFamily` có hằng số mới, rồi trỏ `applyFont` vào nó — giữ nguyên `geometry.merge`, cỡ chữ lấy từ đó. Đổi luôn phần đăng ký giấy phép sang file giấy phép mới.
 
 ### Cơ chế scale font
 
@@ -581,7 +592,7 @@ Danh sách đầy đủ trong [`../reference/01_rules.md`](../reference/01_rules
 |---|---|
 | Một màu thương hiệu | `theme/theme_system_extensions.dart` → cả `light` **và** `dark` |
 | Thêm một ô màu mới | `theme/theme_system_interface.dart`, rồi cả hai bảng màu + `lerp` |
-| Font chữ | `theme/theme_provider.dart` → `GoogleFonts.*TextTheme` |
+| Font chữ | `pubspec.yaml` → `flutter: fonts:` + `theme/theme_provider.dart` → `applyFont` |
 | Một cỡ chữ trong thang | `theme/theme_provider.dart` → khối `copyWith` |
 | Một bước spacing | `styles/app_spacing.dart` → hằng số `raw*` |
 | Một mức bo góc | `styles/app_radius.dart` → hằng số `raw*` |

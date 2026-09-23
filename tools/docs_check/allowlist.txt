@@ -75,3 +75,6 @@ packages/*/*
 apps/mobile/android/app/build
 apps/mobile/ios/build
 tools/build
+# Not a path: the font family name Flutter gives a font declared by the
+# core_base_ui package (flutter_gen's FontFamily.plusJakartaSans).
+packages/core_base_ui/PlusJakartaSans

@@ -172,7 +172,7 @@ Run with fewer arguments and it prompts interactively.
 - **Toolchain is verified first.** `assertToolchainAvailable()` runs before anything shared is touched, so a missing SDK fails immediately instead of at step 8.
 - **Existing directories are refused.** It will not silently overwrite a package.
 - **Rollback on failure.** The shared files it changes — every `app_manifest.yaml`, and what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted before any write; if a later step fails they are restored and the new module directory is deleted.
-- **FVM is auto-detected**, requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
+- **FVM is auto-detected** — by every tool that shells out, through `tools/shared/toolchain.dart` — requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
 > [!NOTE]
 > Domain and data modules get directories and pubspec wiring only — entities, use cases and repositories are written by hand. See [`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md).
@@ -233,7 +233,7 @@ dart tools/unused_checker/check_unused_packages.dart     # declared but unused d
 dart tools/check_outdated.dart
 ```
 
-Reports packages with newer versions on pub.dev. Update `pubspec_dependencies.yaml`, then run `dependency_sync`.
+Reports packages in `pubspec_dependencies.yaml` with newer versions on pub.dev. In a terminal it then offers a checklist (all pre-selected); typing `a` writes the selected versions to the catalog and runs `dependency_sync` and `pub get`, `q` quits. Without a terminal (CI, a pipe) it only reports.
 
 ---
 
@@ -304,12 +304,6 @@ Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs an AP
 
 > [!NOTE]
 > The GitHub workflow runs this in **advisory mode** — its "fail on critical issues" step has `exit 1` commented out, so it never blocks a PR. See [`../operations/01_cicd.md`](../operations/01_cicd.md).
-
----
-
-## Known inconsistency
-
-`tools/workspace_setup/configure.dart` and `tools/theme_generator/theme_setting.dart` detect FVM by checking **only** `.fvm/fvm_config.json`. This repo pins its version in `.fvmrc`, which those two scripts do not look at, so they always fall through to the global `dart` / `flutter`. That happens to be correct on a machine without FVM, but it is not the robust two-signal detection `module_generator` performs.
 
 ---
 

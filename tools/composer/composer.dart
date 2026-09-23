@@ -419,7 +419,10 @@ void _sync(
   final warnings = <String>[];
   final drift = <String>[];
   final workspace = <String>{};
-  var missingCount = 0;
+  // Missing packages across *every* app: the root workspace list is written
+  // from all of them, so an app `--app` did not select can still make it
+  // partial.
+  final missing = <String>{};
 
   // The root `workspace:` list is shared by every app, so it is the union
   // over *all* of them even when `--app` narrows what else is written. It
@@ -428,14 +431,30 @@ void _sync(
   // from the workspace, and `pub get` would then fail to resolve `mobile`.
   for (final app in apps) {
     workspace.add(p.posix.relative(app.dir, from: root));
-    for (final pkg in _resolve(app, packages, <String>[]).allPackages) {
+    final r = _resolve(app, packages, warnings);
+    missing.addAll(r.missing);
+    for (final pkg in r.allPackages) {
       workspace.add(p.posix.relative(packages[pkg]!, from: root));
     }
   }
+  final missingCount = missing.length;
+
+  // Checked before anything is written: `--strict` failing *after* writing
+  // would leave the partial composition on disk it exists to refuse.
+  if (missingCount > 0 && strict) {
+    for (final w in warnings.toSet()) {
+      OutputFormatter.printWarning('  $w');
+    }
+    OutputFormatter.printError(
+      '$missingCount declared package(s) missing from disk. '
+      '`--strict` treats that as an error, so a release can never quietly '
+      'ship without one.',
+    );
+    exit(1);
+  }
 
   for (final app in selected) {
-    final r = _resolve(app, packages, warnings);
-    missingCount += r.missing.length;
+    final r = _resolve(app, packages, <String>[]);
 
     final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
     final clashes = _declaredOutsideManaged(appPubspec, r.allPackages.toSet());
@@ -486,16 +505,8 @@ void _sync(
     root,
   );
 
-  for (final w in warnings) {
+  for (final w in warnings.toSet()) {
     OutputFormatter.printWarning('  $w');
-  }
-  if (missingCount > 0 && strict) {
-    OutputFormatter.printError(
-      '$missingCount declared package(s) missing from disk. '
-      '`--strict` treats that as an error, so a release can never quietly '
-      'ship without one.',
-    );
-    exit(1);
   }
 
   if (dryRun) {

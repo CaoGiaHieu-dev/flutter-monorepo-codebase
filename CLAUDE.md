@@ -24,7 +24,7 @@ A Flutter **Pub Workspaces monorepo template** built on **Clean Architecture + S
 
 ## Commands
 
-**FVM is optional — do not hardcode an `fvm` prefix.** `.fvmrc` pins a version, but that does not mean `fvm` is installed on the current machine. Write commands bare (`flutter pub get`); add `fvm ` yourself only if your machine uses it. Tools that shell out must **detect** FVM — see `CommonHelpers.useFvm` in `tools/module_generator/src/common_helpers.dart`.
+**FVM is optional — do not hardcode an `fvm` prefix.** `.fvmrc` pins a version, but that does not mean `fvm` is installed on the current machine. Write commands bare (`flutter pub get`); add `fvm ` yourself only if your machine uses it. Tools that shell out must **detect** FVM through `tools/shared/toolchain.dart` (`useFvm`, `dartExecutable`/`dartArgs`, `flutterExecutable`/`flutterArgs`).
 
 ```bash
 # Install all workspace dependencies (single pubspec.lock at root)

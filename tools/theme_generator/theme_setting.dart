@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../shared/app_locator.dart';
+import '../shared/toolchain.dart';
 
 /// Generates the splash screen and launcher icons for one app from the
 /// `flutter_native_splash-*.yaml` / `icons_launcher-*.yaml` files at the
@@ -15,18 +16,12 @@ void main(List<String> args) async {
   stdout.writeln('       Theme and Asset Generator');
   stdout.writeln('==========================================');
 
-  // Detect FVM: Only use it if .fvm/fvm_config.json exists
-  final hasFvmConfig = File('.fvm/fvm_config.json').existsSync();
-  final dartCmd = hasFvmConfig ? 'fvm' : 'dart';
-  final dartArgs = hasFvmConfig ? ['dart'] : <String>[];
+  reportToolchain();
+  final dartCmd = dartExecutable;
 
-  if (hasFvmConfig) {
-    stdout.writeln('[INFO] Detected FVM config. Using FVM CLI.');
-  } else {
-    stdout.writeln(
-      '[INFO] FVM config not detected. Using global Flutter/Dart SDK.',
-    );
-  }
+  // Configs copied into the app for the generators, removed afterwards even
+  // when a generator fails — otherwise they are left behind in apps/<id>/.
+  final copied = <File>[];
 
   try {
     // 1. Copy config files to app directory
@@ -47,7 +42,7 @@ void main(List<String> args) async {
 
     for (final file in configFiles) {
       final fileName = file.path.split(Platform.pathSeparator).last;
-      file.copySync('$appPath/$fileName');
+      copied.add(file.copySync('$appPath/$fileName'));
     }
 
     // 2. Running Flutter Native Splash Generator
@@ -70,28 +65,17 @@ void main(List<String> args) async {
       'dev,staging,prod',
     ], workingDirectory: appPath);
 
-    // 4. Cleanup: Remove copied config files from app
-    stdout.writeln('[!] Cleaning up temporary configuration files...');
-    final appConfigs = appDir
-        .listSync()
-        .whereType<File>()
-        .where(
-          (file) =>
-              file.path.contains('flutter_native_splash-') ||
-              file.path.contains('icons_launcher-'),
-        )
-        .toList();
-
-    for (final file in appConfigs) {
-      file.deleteSync();
-    }
-
     stdout.writeln('==========================================');
     stdout.writeln('[V] Splash & Icon generation complete!');
     stdout.writeln('==========================================');
   } catch (e) {
-    stderr.writeln('[ERROR] An unexpected error occurred: $e');
-    exit(1);
+    stderr.writeln('[ERROR] $e');
+    exitCode = 1;
+  } finally {
+    stdout.writeln('[!] Cleaning up temporary configuration files...');
+    for (final file in copied) {
+      if (file.existsSync()) file.deleteSync();
+    }
   }
 }
 
@@ -108,11 +92,11 @@ Future<void> _runCommand(
     mode: ProcessStartMode.inheritStdio,
   );
 
-  final exitCode = await result.exitCode;
-  if (exitCode != 0) {
-    stderr.writeln(
-      '[ERROR] Command "$command ${args.join(' ')}" failed with exit code $exitCode',
+  final code = await result.exitCode;
+  if (code != 0) {
+    // Thrown, not `exit`: the caller's `finally` must still clean up.
+    throw Exception(
+      'Command "$command ${args.join(' ')}" failed with exit code $code',
     );
-    exit(exitCode);
   }
 }

@@ -74,7 +74,10 @@ $dependenciesContent
     if (getResult.exitCode != 0) {
       stderr.writeln('❌ Failed to resolve dependencies in sandbox!');
       stderr.writeln(getResult.stderr);
-      exit(1);
+      // Not `exit(1)`: that would skip the `finally` below that deletes the
+      // sandbox directory.
+      exitCode = 1;
+      return;
     }
 
     // 4. Chạy pub outdated (truyền thẳng stdout để giữ màu)
@@ -85,9 +88,9 @@ $dependenciesContent
       mode: ProcessStartMode.inheritStdio,
     );
 
-    final exitCode = await outdatedProcess.exitCode;
+    final outdatedExit = await outdatedProcess.exitCode;
 
-    if (exitCode == 0) {
+    if (outdatedExit == 0) {
       stdout.writeln(
         '\n✅ Outdated check completed successfully in ${stopwatch.elapsedMilliseconds}ms.',
       );
@@ -136,6 +139,15 @@ $dependenciesContent
             stdout.writeln(
               '\n✨ All packages in pubspec_dependencies.yaml are already at their latest versions!',
             );
+          } else if (!stdin.hasTerminal) {
+            // No one to ask (CI, a pipe): report only. Applying on EOF would
+            // bump every package — major versions included — unattended.
+            stdout.writeln('\n📦 Outdated packages (report only, no terminal):');
+            for (final item in outdatedList) {
+              stdout.writeln(
+                '  - ${item['name']} (${item['current']} -> ${item['latest']})',
+              );
+            }
           } else {
             // Interactive checklist loop
             bool proceed = false;
@@ -155,20 +167,23 @@ $dependenciesContent
               );
               stdout.writeln('  - Type "all" to select all');
               stdout.writeln('  - Type "none" to deselect all');
-              stdout.writeln(
-                '  - Type "a" (or press Enter) to APPLY selected updates',
-              );
+              stdout.writeln('  - Type "a" to APPLY selected updates');
               stdout.writeln('  - Type "q" to QUIT without making changes');
 
-              stdout.write(
-                '\nYour choice: (Empty to migrate all selected packages)',
-              );
-              final input = stdin.readLineSync()?.trim().toLowerCase() ?? '';
+              stdout.write('\nYour choice: ');
+              final line = stdin.readLineSync();
+              if (line == null) {
+                stdout.writeln('\nAborted (end of input).');
+                break;
+              }
+              final input = line.trim().toLowerCase();
 
-              if (input == 'q') {
+              if (input.isEmpty) {
+                continue;
+              } else if (input == 'q') {
                 stdout.writeln('\nAborted.');
                 break;
-              } else if (input == 'a' || input.isEmpty) {
+              } else if (input == 'a') {
                 proceed = true;
                 break;
               } else if (input == 'all') {
@@ -252,7 +267,7 @@ $dependenciesContent
         stderr.writeln('❌ Error running pub outdated --json.');
       }
     } else {
-      stderr.writeln('\n⚠️ Outdated check finished with code: $exitCode');
+      stderr.writeln('\n⚠️ Outdated check finished with code: $outdatedExit');
     }
   } catch (e, stackTrace) {
     stderr.writeln('❌ An unexpected error occurred:');

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../shared/app_locator.dart';
+import '../shared/toolchain.dart';
 
 /// Generates one app's per-flavor Firebase configuration.
 ///
@@ -40,18 +41,8 @@ void main(List<String> args) async {
     );
   }
 
-  // Detect FVM: Only use it if .fvm/fvm_config.json exists
-  final hasFvmConfig = File('.fvm/fvm_config.json').existsSync();
-  final dartCmd = hasFvmConfig ? 'fvm' : 'dart';
-  final dartArgs = hasFvmConfig ? ['dart'] : <String>[];
-
-  if (hasFvmConfig) {
-    stdout.writeln('[INFO] Detected FVM config. Using FVM CLI.');
-  } else {
-    stdout.writeln(
-      '[INFO] FVM config not detected. Using global Flutter/Dart SDK.',
-    );
-  }
+  reportToolchain();
+  final dartCmd = dartExecutable;
 
   // 1. Check if Firebase CLI is installed
   if (!_isCommandAvailable('firebase')) {
@@ -135,9 +126,15 @@ void main(List<String> args) async {
     stdout.writeln('Configuring $flavor environment...');
     stdout.writeln('----------------------------------------');
 
-    final bundleId = (flavor == 'prod' || flavor == 'production')
+    // The two platforms suffix staging differently: Gradle's
+    // `applicationIdSuffix` is `.stg`, the Xcode bundle id `.staging`. Each
+    // Firebase client must match the id its platform actually builds, or
+    // Gradle fails with "No matching client found".
+    final isProd = flavor == 'prod' || flavor == 'production';
+    final iosBundleId = isProd ? baseBundleId : '$baseBundleId.$flavor';
+    final androidPackage = isProd
         ? baseBundleId
-        : '$baseBundleId.$flavor';
+        : '$baseBundleId.${_androidSuffix[flavor] ?? flavor}';
 
     for (final buildMode in ['Debug', 'Profile', 'Release']) {
       stdout.writeln('=> Setting up $buildMode-$flavor');
@@ -146,10 +143,10 @@ void main(List<String> args) async {
         '--yes',
         '--project=$projectId',
         '--out=lib/firebase/firebase_options_$flavor.dart',
-        '--ios-bundle-id=$bundleId',
+        '--ios-bundle-id=$iosBundleId',
         '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
         '--ios-build-config=$buildMode-$flavor',
-        '--android-package-name=$bundleId',
+        '--android-package-name=$androidPackage',
         '--android-out=android/app/src/$flavor/google-services.json',
       ], workingDirectory: app.dir);
     }
@@ -197,3 +194,7 @@ Future<void> _runCommand(
     exit(exitCode);
   }
 }
+
+/// Android `applicationIdSuffix` per flavor where it differs from the flavor
+/// name — see `productFlavors` in `apps/<id>/android/app/build.gradle.kts`.
+const _androidSuffix = {'staging': 'stg'};

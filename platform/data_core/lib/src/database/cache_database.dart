@@ -1,15 +1,5 @@
-// SAMPLE CODE — safe to delete.
-//
-// Part of the `cache_chain` sample: one complete vertical slice (table -> DAO
-// -> data source -> repository -> entity -> use cases) kept as a copy-me
-// template for your first real table.
-//
-// Nothing in the app consumes it. `unused_checker` will not flag it because it
-// is registered in DI, and the tests use it as a fixture, so it looks alive.
-// It is not. This banner sits on the file rather than the package because the
-// package around it (`domain_core` / `data_core`) IS framework — keep that.
-//
-// Full file list: `tools/sample_manifest.yaml` -> embedded_samples.cache_chain
+// SAMPLE (cache_chain) — nothing in the app uses it: copy the shape for a real
+// table, or delete it. What to delete and edit: tools/sample_manifest.yaml.
 
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart';
@@ -44,12 +34,6 @@ part 'dao/cache_entries_dao.dart';
 /// The trade-off is that SQL cannot join across package boundaries. That is
 /// intentional: crossing a bounded context belongs at the repository layer,
 /// not inside a query.
-///
-/// > **This is sample/reference code.** The cache stack
-/// > (table → DAO → data source → repository → use cases) is wired end to end
-/// > as a working example and is exercised by tests, but no feature in this
-/// > template consumes it. Copy the shape for real tables; delete it if you
-/// > do not need a cache.
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)

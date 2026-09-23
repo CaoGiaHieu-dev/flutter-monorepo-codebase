@@ -11,14 +11,13 @@ class DashboardPage extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  void _onTap(BuildContext context, int index, VoidCallback onRestore) {
+  /// Re-tapping the current tab lets that tab reset itself; any other tap
+  /// switches branch, keeping each branch's own back stack.
+  void _onTap(int index, VoidCallback onRestore) {
     if (index == navigationShell.currentIndex) {
       onRestore();
     } else {
-      navigationShell.goBranch(
-        index,
-        initialLocation: index == navigationShell.currentIndex,
-      );
+      navigationShell.goBranch(index);
     }
   }
 
@@ -41,13 +40,7 @@ class DashboardPage extends StatelessWidget {
           ? null
           : BottomNavigationBar(
               currentIndex: index.clamp(0, tabs.length - 1),
-              onTap: (tabIndex) {
-                _onTap(
-                  context,
-                  tabIndex,
-                  tabs[tabIndex].onRestore,
-                );
-              },
+              onTap: (tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore),
               // This is where a neutral [NavDestination] becomes one app's
               // widget. A desktop shell would build NavigationRailDestination
               // from the same modules, unchanged.

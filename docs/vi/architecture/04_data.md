@@ -113,7 +113,7 @@ Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` 
 `platform/kernel/lib/src/error/error_handler.dart` phân nhánh theo thứ tự: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định.
 
 > [!WARNING]
-> **Không có nhánh nào cho `FirebaseException` / `FirebaseAuthException` / `PlatformException`.** Vì `AuthRepositoryImpl` gọi thẳng Firebase SDK (§6), mọi lỗi Firebase — sai mật khẩu, không tìm thấy user, mất mạng — đều rơi xuống nhánh mặc định:
+> **Không có nhánh nào cho `FirebaseException` / `FirebaseAuthException` / `PlatformException`.** `AuthRepositoryImpl` đi kèm template dùng Retrofit nên sample không dính lỗi này — nhưng đổi transport sang Firebase SDK thì mọi lỗi Firebase — sai mật khẩu, không tìm thấy user, mất mạng — đều rơi xuống nhánh mặc định:
 >
 > ```dart
 > return ServerFailure(
@@ -174,7 +174,7 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
 `unknownEnumValue: UserRole.unknown` nghĩa là một role backend thêm sau này sẽ deserialize thành `unknown` thay vì ném lỗi.
 
-`fromEntity` là chiều ngược lại, cần khi ghi dữ liệu lên (`updateUserProfile`).
+`fromEntity` là chiều ngược lại, dùng khi ghi một entity ngược lên API hay cache. Sample chưa có luồng ghi ngược nào, nên hiện chỉ `modules/auth/data/test/user_model_test.dart` dùng tới nó.
 
 ### Model cho database
 

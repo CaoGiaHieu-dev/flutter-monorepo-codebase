@@ -14,12 +14,9 @@ import '../models/user/user_model.dart';
 /// past this layer, and converts `UserModel` to `UserEntity` at the boundary.
 /// Nothing above this file ever sees a model.
 ///
-/// It used to call `FirebaseAuth`, `GoogleSignIn` and `FacebookAuth` directly
-/// and never touched [AuthRemoteDataSource] at all — the template shipped the
-/// pattern it teaches, unused, beside an implementation that ignored it. It
-/// also meant every auth error arrived as `ServerFailure(9999)`, because
-/// `ErrorHandler` has no Firebase branch. Swap the transport if your product
-/// uses Firebase; keep the shape.
+/// Swap the transport (Firebase, GraphQL) if your product needs to; keep the
+/// shape. If you do move to Firebase, add a branch to `ErrorHandler` first —
+/// it has none, so every Firebase error would arrive as `ServerFailure(9999)`.
 @LazySingleton(as: IAuthRepository)
 class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
   AuthRepositoryImpl(this._remote, this._local);

@@ -381,7 +381,7 @@ abstract class AuthRemoteDataSource {
 Steps: declare the abstract class → `part 'x.g.dart';` → run `dart run build_runner build -d --workspace`.
 
 > [!IMPORTANT]
-> `AuthRemoteDataSource` is a **reference sample, not the live path**. `AuthRepositoryImpl` talks to the Firebase SDK directly and never calls this class. Keep it as a template for a REST backend; do not assume auth traffic flows through it.
+> `AuthRemoteDataSource` **is** the live path: `AuthRepositoryImpl` calls it for login and token refresh, through `execute()`. Point `AuthApiConstants` at your real endpoints, or swap the transport (Firebase, GraphQL) inside the repository and keep the shape.
 
 ### Endpoints belong to the owning package
 

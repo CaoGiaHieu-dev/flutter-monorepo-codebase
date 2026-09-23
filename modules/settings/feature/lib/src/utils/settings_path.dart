@@ -1,4 +1,4 @@
 class SettingsPath {
   SettingsPath._();
-  static const String SETTING = '/setting';
+  static const String SETTINGS = '/settings';
 }

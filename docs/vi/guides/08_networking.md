@@ -381,7 +381,7 @@ abstract class AuthRemoteDataSource {
 Các bước: khai abstract class → thêm `part 'x.g.dart';` → chạy `dart run build_runner build -d --workspace`.
 
 > [!IMPORTANT]
-> `AuthRemoteDataSource` là **mẫu tham khảo, không phải đường chạy thật**. `AuthRepositoryImpl` gọi thẳng Firebase SDK và **không bao giờ** gọi class này. Hãy giữ nó làm khuôn mẫu cho backend REST; đừng tưởng traffic auth đang đi qua đây.
+> `AuthRemoteDataSource` **chính là** đường chạy thật: `AuthRepositoryImpl` gọi nó cho login và refresh token, qua `execute()`. Hãy trỏ `AuthApiConstants` vào endpoint thật của bạn, hoặc đổi transport (Firebase, GraphQL) bên trong repository và giữ nguyên hình dạng.
 
 ### Endpoint thuộc về package sở hữu
 

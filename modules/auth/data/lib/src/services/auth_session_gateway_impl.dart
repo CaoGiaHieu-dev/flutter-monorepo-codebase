@@ -7,10 +7,9 @@ import '../data_sources/local/auth_local_data_source.dart';
 /// SAMPLE — how the auth module hands the transport layer a session without
 /// the transport layer knowing this module exists.
 ///
-/// The app shell's `NetworkConfigImpl` used to import `AuthLocalDataSource`
-/// and `RefreshTokenUseCase` from here directly, which meant the shell could
-/// not compile without the auth module — the template promised removable
-/// modules and then broke that promise in its own composition root.
+/// The shell's `NetworkConfigImpl` resolves this contract with `getItOrNull`
+/// instead of importing anything from here, so it still compiles and runs in
+/// an app that composes no auth module.
 ///
 /// Registered as a singleton because [AuthLocalDataSource] is: a factory would
 /// hand each caller a gateway over a different, empty cache.

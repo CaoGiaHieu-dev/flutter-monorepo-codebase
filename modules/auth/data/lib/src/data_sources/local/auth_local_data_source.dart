@@ -32,43 +32,19 @@ class AuthLocalDataSource {
     await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
   }
 
-  /// Save user token securely
-  void saveUserToken(String? token) {
-    _token.value = token;
-  }
+  void saveUserToken(String? token) => _token.value = token;
 
-  /// Get user token
-  String? getUserToken() {
-    return _token.value;
-  }
+  String? getUserToken() => _token.value;
 
-  /// Clear user token
-  void clearUserToken() {
-    _token.value = null;
-  }
+  void saveUserData(UserModel? user) => _authUser.value = user?.toJson();
 
-  /// Save user data
-  void saveUserData(UserModel? user) {
-    _authUser.value = user?.toJson();
-  }
-
-  /// Get user data
   UserModel? getUserData() {
     final userData = _authUser.value;
-    if (userData != null) {
-      return UserModel.fromJson(userData);
-    }
-    return null;
+    return userData == null ? null : UserModel.fromJson(userData);
   }
 
-  /// Clear user data
-  void clearUserData() {
-    _authUser.value = null;
-  }
-
-  /// Clear all auth data
   void clearAllAuthData() {
-    clearUserToken();
-    clearUserData();
+    _token.value = null;
+    _authUser.value = null;
   }
 }

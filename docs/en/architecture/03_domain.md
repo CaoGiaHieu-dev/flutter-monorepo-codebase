@@ -211,8 +211,6 @@ class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
 
   @override
   Future<Result<UserEntity>> call(LoginParams params) {
-    // Params are already validated at construction - no need to validate here
-    // Repository returns Result<UserEntity> directly - no unwrapping needed
     return _authRepository.login(params);
   }
 }

@@ -214,10 +214,11 @@ Workspaces will happily compile an undeclared import. Verify with
 
 ## 📌 Reference implementation caveat
 
-`data_auth` is the shipped sample, but read it carefully before copying: `AuthRepositoryImpl`
-talks to the **Firebase SDK directly** and does *not* go through `AuthRemoteDataSource`. That
-Retrofit data source is kept as a REST reference and is not wired into the live flow. Follow
-the layering described above rather than that file's shape.
+`data_auth` is the shipped sample and follows the layering above end to end:
+`AuthRepositoryImpl` calls the Retrofit `AuthRemoteDataSource` inside `execute()`, maps the
+`UserModel` to a `UserEntity`, and persists the session through `AuthLocalDataSource`. The
+endpoints in `AuthApiConstants` are placeholders — point them at your backend, or swap the
+transport inside the repository and keep the shape.
 
 ---
 

@@ -7,7 +7,7 @@ import '../utils/settings_path.dart';
 
 part 'settings_route_module.g.dart';
 
-@TypedGoRoute<SettingsRoute>(path: SettingsPath.SETTING)
+@TypedGoRoute<SettingsRoute>(path: SettingsPath.SETTINGS)
 class SettingsRoute extends GoRouteDataCustom with $SettingsRoute {
   const SettingsRoute();
 

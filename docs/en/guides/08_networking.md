@@ -266,6 +266,8 @@ The gateway's answer decides what happens to the session:
 
 `onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `IAuthSessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
 
+A `401` that arrives *after* a refresh finished — a request sent with the old token — does not start another one: `RefreshTokenHandler` compares the request's `Authorization` header with `NetworkConfig.getToken` and, when they differ, just replays it. With rotating refresh tokens a redundant refresh could otherwise invalidate the session it just renewed.
+
 ### One refresh for N concurrent 401s
 
 `RefreshTokenHandler` serialises everything behind a `Completer`. The first 401 performs the refresh; the rest wait on the same future:

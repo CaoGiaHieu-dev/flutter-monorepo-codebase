@@ -303,10 +303,10 @@ Ask for a key **only** when a module genuinely needs its own nested navigator �
 Every lookup in `app_router.dart` tolerates a missing contribution — this is what makes a feature removable:
 
 ```dart
-String get _fallbackLocation {
+String get fallbackLocation {
   final entry = getItOrNull<IAppEntryLocation>()?.path;
   if (entry != null) return entry;
-  final tabs = _dashboardTabs;
+  final tabs = _destinations;
   if (tabs.isNotEmpty) return tabs.first.path;
   return '/';
 }
@@ -328,7 +328,10 @@ builder: (context, state, navigationShell) {
 | All `IFeatureRouteModule` | No stack routes; app still builds |
 | All `INavDestinationModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
 | `DashboardRouteModule` | Dashboard renders `SizedBox.shrink()` |
-| `IAppEntryLocation` | Falls back to the first tab's path, then `/` |
+| `IAppEntryLocation` | Boot starts on the first tab's path, then `/`. First launch no longer *stays* there: with no entry location there is no onboarding to show, so boot goes on to the login check |
+| `HomeNavigator` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
+
+`fallbackLocation` is public and defined once. `UndefineRouteWidget` used to carry its own copy of this logic, and `NavigatorWrapperWidget` did not use it at all after sign-in — which is how both bugs in the table above survived: every sample app composed onboarding and home, so nothing ever exercised the missing case.
 
 Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
 
@@ -341,7 +344,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
 4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`.
 5. **Generate** → `dart run build_runner build -d --workspace`.
-6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/*/feature/<name>/lib`.
+6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
 ## Checklist
 

@@ -71,7 +71,14 @@ class AppRouter {
     ];
   }
 
-  String get _fallbackLocation {
+  /// Where the app lands when no module claims the destination.
+  ///
+  /// The single definition. It is used as `initialLocation` at boot, by
+  /// [back] when there is nothing to pop, by `UndefineRouteWidget`, and by
+  /// `NavigatorWrapperWidget` after sign-in when no `HomeNavigator` is
+  /// registered. `UndefineRouteWidget` used to carry its own copy of this
+  /// logic, and the post-sign-in case did not exist at all.
+  String get fallbackLocation {
     final entry = getItOrNull<IAppEntryLocation>()?.path;
     if (entry != null) return entry;
     final tabs = _destinations;
@@ -87,7 +94,7 @@ class AppRouter {
     errorPageBuilder: (context, state) {
       return NoTransitionPage(child: UndefineRouteWidget(state: state));
     },
-    initialLocation: _fallbackLocation,
+    initialLocation: fallbackLocation,
     routes: [
       ShellRoute(
         navigatorKey: NavigatorKeys.appKey,
@@ -130,7 +137,7 @@ class AppRouter {
       router.pop();
       return true;
     }
-    router.go(_fallbackLocation);
+    router.go(fallbackLocation);
     return false;
   }
 }

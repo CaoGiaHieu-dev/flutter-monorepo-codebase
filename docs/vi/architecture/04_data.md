@@ -28,7 +28,7 @@ Data phụ thuộc **vào trong** là Domain (để hiện thực interface củ
 ## 2. Bố cục package
 
 ```
-modules/*/data/<name>/
+modules/<name>/data/
 ├── lib/
 │   ├── data_<name>.dart             # barrel công khai
 │   ├── di/
@@ -418,7 +418,7 @@ Checklist:
 Sau đó:
 
 ```bash
-dart tools/barrel_generator/generate.dart modules/*/data/<name>/lib
+dart tools/barrel_generator/generate.dart modules/<name>/data/lib
 dart run build_runner build -d --workspace
 ```
 

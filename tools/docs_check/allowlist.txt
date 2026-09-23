@@ -48,3 +48,22 @@ modules/x/data/lib
 # `apps/mobile` came off this list the moment step 6b created it.
 apps/admin
 modules/catalog
+
+# --- Patterns (spans containing <placeholder>, * or {a,b}) -----------------
+# Checked since placeholders stopped being skipped: at least one real path
+# must fit. These are the ones that correctly match nothing.
+
+# (1) Generated: flutter gen-l10n output, gitignored.
+modules/<f>/feature/lib/src/gen/language
+# (1) Generated: release build output, named per flavor.
+apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
+# (3) Tutorial: CLAUDE.md tells the reader to create their own table here.
+modules/<module>/<layer>/lib/src/database/tables
+# (3) Target layout: RESTRUCTURE.md step 3 plans per-module contracts packages.
+modules/<module>/contracts
+# History: RESTRUCTURE.md's own record of the layout the relayout replaced.
+# The plan has to be able to name what it moved away from.
+packages/core/*
+packages/{domain,data,features}/<x>
+packages/**/l10n.yaml
+packages/*/*

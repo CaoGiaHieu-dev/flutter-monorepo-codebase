@@ -4,9 +4,11 @@ import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/di/module.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_ui_kit/dialogs/app_overlay.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../di/app_boot_storage.dart';
+import '../navigation/app_router.dart';
 import '../providers/deeplink_provider.dart';
 
 /// App shell chrome wrapped around every routed page.
@@ -81,7 +83,16 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
     super.dispose();
   }
 
+  /// Returns `true` when first launch should stay on the entry location.
+  ///
+  /// That only makes sense when a module actually contributed one. This used
+  /// to return `true` on every first launch regardless, relying on
+  /// `initialLocation` being the onboarding screen — so in any build without
+  /// an onboarding module the router started on its fallback (the first tab),
+  /// this returned early, and the login redirect below never ran. The very
+  /// first launch of such an app opened signed-out on a protected screen.
   bool _goToOnboarding() {
+    if (getItOrNull<IAppEntryLocation>() == null) return false;
     try {
       if (_session?.signedInUser != null) {
         return false;
@@ -109,10 +120,20 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
     return true;
   }
 
-  /// No-op when `feature_home` is absent; the router's fallback location
-  /// (`AppRouter._fallbackLocation`) then decides where the app lands.
+  /// Goes to the home module when one is composed, otherwise to
+  /// [AppRouter.fallbackLocation].
+  ///
+  /// The fallback used to be implicit — "the router's initial location
+  /// decides" — which only holds at boot. After a sign-in nothing navigated
+  /// at all, so a build without `feature_home` left a signed-in user on the
+  /// login screen.
   void _goToHome() {
-    getItOrNull<HomeNavigator>()?.toHome(context);
+    final home = getItOrNull<HomeNavigator>();
+    if (home != null) {
+      home.toHome(context);
+      return;
+    }
+    context.go(getIt<AppRouter>().fallbackLocation);
   }
 
   /// Routes on settled session transitions (sign-in / sign-out).
@@ -127,7 +148,7 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
     if (user == null) {
       getItOrNull<AuthNavigator>()?.toLogin(context);
     } else {
-      getItOrNull<HomeNavigator>()?.toHome(context);
+      _goToHome();
     }
   }
 

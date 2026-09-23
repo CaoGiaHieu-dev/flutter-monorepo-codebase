@@ -14,10 +14,10 @@ Mỗi feature tự sở hữu bản dịch của mình. App shell không hề bi
 
 | Ở đâu | Chứa gì |
 |---|---|
-| `modules/*/feature/<f>/assets/language/*.arb` | File dịch của feature |
-| `modules/*/feature/<f>/l10n.yaml` | Cấu hình codegen cho feature đó |
-| `modules/*/feature/<f>/lib/src/gen/language/` | Delegate + class được sinh ra |
-| `modules/*/feature/<f>/lib/di/localization.dart` | Phần implement `IFeatureLocalization` |
+| `modules/<f>/feature/assets/language/*.arb` | File dịch của feature |
+| `modules/<f>/feature/l10n.yaml` | Cấu hình codegen cho feature đó |
+| `modules/<f>/feature/lib/src/gen/language/` | Delegate + class được sinh ra |
+| `modules/<f>/feature/lib/di/localization.dart` | Phần implement `IFeatureLocalization` |
 | `core_base_ui` | Chuỗi global / fallback dùng chung |
 
 > [!CAUTION]

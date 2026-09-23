@@ -257,7 +257,7 @@ enum UserRole {
 ## 5. Bố cục package và quy tắc đặt tên
 
 ```
-modules/*/domain/<name>/
+modules/<name>/domain/
 ├── lib/
 │   ├── domain_<name>.dart          # barrel công khai
 │   ├── di/

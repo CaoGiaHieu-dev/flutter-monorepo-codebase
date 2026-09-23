@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:glob/glob.dart';
+import 'package:glob/list_local_fs.dart';
 import 'package:path/path.dart' as p;
 
 /// Mechanical accuracy check for the Markdown documentation.
@@ -98,6 +100,15 @@ void main(List<String> args) {
 
       for (final m in _backtickSpan.allMatches(line)) {
         final raw = m.group(1)!.trim();
+        final pattern = _asPattern(raw);
+        if (pattern != null) {
+          if (!_looksLikeRepoPath(pattern)) continue;
+          checked++;
+          if (allowlist.contains(pattern)) continue;
+          if (_matchesSomething(repoRoot, pattern)) continue;
+          hits.add(_Hit(relDoc, i + 1, pattern, 'pattern'));
+          continue;
+        }
         final ref = _normalisePath(raw);
         if (ref == null) continue;
         if (!_looksLikeRepoPath(ref)) continue;
@@ -240,9 +251,50 @@ String? _normalisePath(String raw) {
   if (ref.isEmpty) return null;
   // A shell line, not a path: `dart tools/foo.dart`, `cd apps/mobile && flutter test`.
   if (ref.contains(' ')) return null;
-  // Brace expansion and globs describe a set, not one file.
+  // A set of paths is `_asPattern`'s job, checked before this is called.
   if (ref.contains('*') || ref.contains('{') || ref.contains('<')) return null;
   return ref;
+}
+
+/// A span that names a *set* of paths — `modules/<name>/feature/`,
+/// `platform/*/pubspec.yaml`, `modules/<m>/{domain,data}/lib` — returned with
+/// its trailing slash removed, or null for an ordinary path or a non-path.
+///
+/// These used to be skipped outright, on the reasoning that a placeholder
+/// names nothing in particular. It names *something*, though: at least one
+/// real path must fit it. The relayout rewrote `packages/domain/<name>/` as
+/// `modules/*/domain/<name>/` in 42 places — shapes no directory in the repo
+/// has — and all of them passed, because this check looked away from exactly
+/// the kind of reference a mechanical rewrite gets wrong.
+///
+/// The limit, stated so nobody over-trusts it: a placeholder in the **last**
+/// segment matches any child, so `modules/*/domain/<name>` still passes
+/// (`modules/auth/domain/lib` fits it). Anything with a fixed segment after
+/// the placeholder — `…/<f>/l10n.yaml`, `…/<name>/lib` — is caught.
+String? _asPattern(String raw) {
+  if (raw.contains(' ')) return null;
+  if (!raw.contains('<') && !raw.contains('*') && !raw.contains('{')) {
+    return null;
+  }
+  var ref = raw;
+  while (ref.endsWith('/')) {
+    ref = ref.substring(0, ref.length - 1);
+  }
+  return ref.isEmpty ? null : ref;
+}
+
+/// True when at least one path in the repository fits [pattern].
+///
+/// `<anything>` is a placeholder the reader fills in, so it matches like `*`.
+/// Braces and `**` are handled by `package:glob` itself.
+bool _matchesSomething(String repoRoot, String pattern) {
+  final globbable = pattern.replaceAll(RegExp(r'<[^<>]*>'), '*');
+  try {
+    return Glob(globbable).listSync(root: repoRoot).isNotEmpty;
+  } on FileSystemException {
+    // A fixed directory component that does not exist — nothing can match.
+    return false;
+  }
 }
 
 bool _looksLikeRepoPath(String ref) =>

@@ -47,8 +47,11 @@ Tất cả nằm ở `platform/di/lib/src/routing/`.
 |---|---|---|---|
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
 | `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
-| `IAppEntryLocation` | Vị trí lúc khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
+| `IAppEntryLocation` | Boot bắt đầu ở đường dẫn của tab đầu tiên, rồi tới `/`. Lần mở đầu không còn *đứng lại* ở đó nữa: không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp sang bước kiểm tra login |
+| `HomeNavigator` | Sau khi đăng nhập, app chuyển tới `fallbackLocation` thay vì kẹt lại ở màn login |
 | `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar) | n/a | **chỉ** `feature_dashboard` |
+
+`fallbackLocation` là public và chỉ được định nghĩa một lần. `UndefineRouteWidget` từng giữ một bản sao riêng của logic này, còn `NavigatorWrapperWidget` thì hoàn toàn không dùng nó sau khi đăng nhập — đó là lý do cả hai lỗi trong bảng trên sống sót được: mọi app mẫu đều ghép onboarding và home, nên chưa từng có gì chạy vào trường hợp thiếu chúng.
 
 ### 2.1 `IFeatureRouteModule`
 
@@ -303,10 +306,10 @@ Chỉ xin key **khi** một module thực sự cần navigator lồng riêng (ba
 Mọi lần tra cứu trong `app_router.dart` đều chịu được việc thiếu đóng góp — đây chính là thứ khiến feature gỡ được:
 
 ```dart
-String get _fallbackLocation {
+String get fallbackLocation {
   final entry = getItOrNull<IAppEntryLocation>()?.path;
   if (entry != null) return entry;
-  final tabs = _dashboardTabs;
+  final tabs = _destinations;
   if (tabs.isNotEmpty) return tabs.first.path;
   return '/';
 }
@@ -341,7 +344,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
 4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`.
 5. **Sinh code** → `dart run build_runner build -d --workspace`.
-6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/*/feature/<name>/lib`.
+6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
 ## Checklist
 

@@ -1,22 +1,14 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
-import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../navigation/app_router.dart';
+
 class UndefineRouteWidget extends StatelessWidget {
   const UndefineRouteWidget({super.key, required this.state});
   final GoRouterState state;
-
-  String get _fallbackLocation {
-    final entry = getItOrNull<IAppEntryLocation>()?.path;
-    if (entry != null) return entry;
-    final tabs = getAllOrEmpty<INavDestinationModule>().toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-    if (tabs.isNotEmpty) return tabs.first.path;
-    return '/';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +26,7 @@ class UndefineRouteWidget extends StatelessWidget {
                 if (canPop) {
                   context.pop();
                 } else {
-                  context.go(_fallbackLocation);
+                  context.go(getIt<AppRouter>().fallbackLocation);
                 }
               },
               child: Text(

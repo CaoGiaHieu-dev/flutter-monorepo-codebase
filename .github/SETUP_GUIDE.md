@@ -25,8 +25,12 @@ form; PR runs use Vietnamese (`--language vi` in the workflow).
 
 | Workflow | Secrets |
 |:--|:--|
-| `flutter_build.yml` | `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `FIREBASE_ANDROID_APP_ID`, `ENV` |
-| `fastlane.yml` | none — lanes read `apps/mobile/fastlane/Config.yaml` (copy `Config.example.yaml`) |
+| `flutter_build.yml` | Signing, App Distribution, and the gitignored build inputs for the flavor built (Firebase options, `google-services.json`, `ENV_PROD_B64` for prod) |
+| `fastlane.yml` | `FASTLANE_CONFIG_YAML_B64` (your `Config.yaml`), the same per-flavor build inputs, and the credential files `Config.yaml` names for the chosen distribution |
+
+The full, per-flavor list of secret names and what each decodes to is in
+[`docs/en/operations/01_cicd.md` § 7](../docs/en/operations/01_cicd.md#7-secrets). A missing
+secret is reported by name and fails the run before any build starts.
 
 Both are manual (`workflow_dispatch`) and run none of the quality gates, so dispatch them only
 from a branch that has passed `pr_quality_check.yml`.

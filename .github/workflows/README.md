@@ -22,11 +22,7 @@ what each gate protects and what is still missing, is in
 |:--|:--|
 | `GEMINI_API_KEY` | `code_review.yml` |
 | `GITHUB_TOKEN` | `code_review.yml` (provided by GitHub; posts the PR review) |
-| `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS` | `flutter_build.yml` — Android signing |
-| `FIREBASE_SERVICE_ACCOUNT_KEY`, `FIREBASE_ANDROID_APP_ID` | `flutter_build.yml` — App Distribution |
-| `ENV` | `flutter_build.yml` — base64 of a `.env` file decoded at the repo root |
-
-`fastlane.yml` reads no GitHub secrets; its lanes take their credentials from `apps/mobile/fastlane/Config.yaml`, which you create from `Config.example.yaml`.
+| Release secrets | `flutter_build.yml`, `fastlane.yml` — signing, App Distribution, the per-flavor Firebase options / `google-services.json`, `ENV_PROD_B64`, and for fastlane `FASTLANE_CONFIG_YAML_B64` plus the credential files it names. Full list: [`docs/en/operations/01_cicd.md` § 7](../../docs/en/operations/01_cicd.md#7-secrets) |
 
 `pr_quality_check.yml` needs no secrets. It stubs the git-ignored `firebase_options_*.dart` files
 for every `apps/*/lib/firebase/` so the workspace compiles.

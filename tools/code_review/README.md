@@ -22,11 +22,8 @@ Lấy Gemini API key miễn phí của bạn tại: https://makersuite.google.co
 export GEMINI_API_KEY="your_api_key_here"
 ```
 
-**Cách 2: Lưu vào file cấu hình**
-Chạy lệnh sau và làm theo hướng dẫn để lưu key cho các lần sử dụng sau:
-```bash
-dart tools/code_review/code_review.dart --config
-```
+**Cách 2: Để tool tự hỏi**
+Chạy tool khi chưa có key: nó sẽ hỏi key và đề nghị lưu vào `tools/code_review/.gemini_api_key` — file đã được gitignore, nên key không bao giờ lọt vào commit. (`--api-key "<key>"` cũng dùng được cho một lần chạy.)
 
 ### 3. Chạy Review
 **Chế độ tương tác (Dễ nhất cho người mới)**
@@ -65,7 +62,7 @@ dart tools/code_review/code_review.dart --changed
   # Kiểm tra nhiều khía cạnh
   dart tools/code_review/code_review.dart --all --focus security,performance,bugs
   ```
-  *Các `focus` hợp lệ: `architecture`, `security`, `performance`, `bugs`, `testing`, `documentation`, `naming`, `solid`.*
+  *Các `focus` hợp lệ: `architecture`, `security`, `performance`, `bugs`, `style`, `testing`. Giá trị khác bị từ chối.*
 
 - **Loại trừ file**:
   ```bash
@@ -77,10 +74,8 @@ dart tools/code_review/code_review.dart --changed
   ```bash
   # Báo cáo bằng tiếng Việt
   dart tools/code_review/code_review.dart --all --language vi
-
-  # Xuất ra định dạng HTML
-  dart tools/code_review/code_review.dart --all --format html
   ```
+  Báo cáo luôn được ghi ra Markdown (`code_review_reports/code_review_report_<ngày>_<giờ>.md`); `--format` chỉ lưu lựa chọn vào cấu hình.
 
 ### Quy trình làm việc hiệu quả
 
@@ -92,7 +87,7 @@ dart tools/code_review/code_review.dart --changed
 2.  **Review theo Tầng (hàng tuần)**:
     ```bash
     # Thứ 2: Review domain layer
-    dart tools/code_review/code_review.dart --folder modules/auth/domain --focus architecture,solid
+    dart tools/code_review/code_review.dart --folder modules/auth/domain --focus architecture
 
     # Thứ 4: Review data layer
     dart tools/code_review/code_review.dart --folder modules/auth/data
@@ -115,7 +110,7 @@ dart tools/code_review/code_review.dart --changed
   ```
 - **Các tùy chọn cấu hình**:
   - `reportLanguage`: Ngôn ngữ báo cáo (`en`, `vi`, `ja`, `ko`, `zh`, `fr`, `de`, `es`).
-  - `outputFormat`: Định dạng file báo cáo (`markdown`, `html`, `json`, `txt`).
+  - `outputFormat`: được lưu nhưng hiện chưa dùng — báo cáo luôn là Markdown.
   - `batchSize`: Số lượng file xử lý song song trong một lô (1-20).
   - `delayBetweenBatches`: Thời gian chờ (ms) giữa các lô để tránh giới hạn API.
 
@@ -126,8 +121,7 @@ Workflow thật là [`.github/workflows/code_review.yml`](../../.github/workflow
 ## 🐛 Xử Lý Sự Cố
 
 - **Lỗi "API key not found"**:
-  - Chạy `dart tools/code_review/code_review.dart --config` để lưu API key.
-  - Hoặc đặt biến môi trường `GEMINI_API_KEY`.
+  - Đặt biến môi trường `GEMINI_API_KEY`, truyền `--api-key`, hoặc chạy tool và đồng ý lưu key khi được hỏi.
 
 - **Lỗi "Rate limit exceeded"**:
   - Công cụ sẽ tự động chờ và thử lại.

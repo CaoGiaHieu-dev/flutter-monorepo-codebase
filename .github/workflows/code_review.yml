@@ -103,14 +103,19 @@ jobs:
 
           if [ "$SCOPE" = "all" ]; then
             dart tools/code_review/code_review.dart --all --language "$LANG" --format markdown
-          elif [ "$SCOPE" = "domain" ]; then
-            dart tools/code_review/code_review.dart --folder modules --language "$LANG" --format markdown
-          elif [ "$SCOPE" = "data" ]; then
-            dart tools/code_review/code_review.dart --folder modules --language "$LANG" --format markdown
+          elif [ "$SCOPE" = "domain" ] || [ "$SCOPE" = "data" ]; then
+            # One run per module layer: --folder takes a single directory.
+            for dir in modules/*/"$SCOPE"; do
+              [ -d "$dir" ] || continue
+              dart tools/code_review/code_review.dart --folder "$dir" --language "$LANG" --format markdown
+            done
           elif [ "$SCOPE" = "platform" ]; then
             dart tools/code_review/code_review.dart --folder platform --language "$LANG" --format markdown
           elif [ "$SCOPE" = "presentation" ]; then
-            dart tools/code_review/code_review.dart --folder apps --language "$LANG" --format markdown
+            for dir in modules/*/feature apps; do
+              [ -d "$dir" ] || continue
+              dart tools/code_review/code_review.dart --folder "$dir" --language "$LANG" --format markdown
+            done
           else
             dart tools/code_review/code_review.dart --changed --language "$LANG" --format markdown
           fi

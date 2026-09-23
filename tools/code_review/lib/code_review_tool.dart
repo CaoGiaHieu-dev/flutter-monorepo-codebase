@@ -30,10 +30,8 @@ class CodeReviewTool {
     try {
       _args = parser.parse(arguments);
     } catch (e) {
-      // ignore: avoid_print
-      print('Error parsing arguments: $e');
-      // ignore: avoid_print
-      print(parser.usage);
+      stdout.writeln('Error parsing arguments: $e');
+      stdout.writeln(parser.usage);
       exit(1);
     }
 
@@ -78,25 +76,18 @@ class CodeReviewTool {
     // Initialize output directory
     _outputDir = _args['output-dir'] as String;
 
-    // ignore: avoid_print
-    print('🤖 Starting code review with Gemini AI...');
-    // ignore: avoid_print
-    print('📁 Working directory: ${Directory.current.path}');
-    // ignore: avoid_print
-    print('🔑 API Key: ${_apiKey.substring(0, 8)}...');
+    stdout.writeln('🤖 Starting code review with Gemini AI...');
+    stdout.writeln('📁 Working directory: ${Directory.current.path}');
+    stdout.writeln('🔑 API Key: ${_apiKey.substring(0, 8)}...');
     if (_args['summary'] as bool) {
-      // ignore: avoid_print
-      print('📊 Summary will be saved to: $_outputDir/');
+      stdout.writeln('📊 Summary will be saved to: $_outputDir/');
     }
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     // Validate we're in a Flutter project
     if (!await FileAnalyzer.validateFlutterProject()) {
-      // ignore: avoid_print
-      print('❌ This doesn\'t appear to be a Flutter project.');
-      // ignore: avoid_print
-      print('💡 Please run this tool from the root of your Flutter project.');
+      stdout.writeln('❌ This doesn\'t appear to be a Flutter project.');
+      stdout.writeln('💡 Please run this tool from the root of your Flutter project.');
       exit(1);
     }
 
@@ -104,19 +95,15 @@ class CodeReviewTool {
     final filesToReview = await _getFilesToReview();
 
     if (filesToReview.isEmpty) {
-      // ignore: avoid_print
-      print('📝 No files found to review.');
+      stdout.writeln('📝 No files found to review.');
       return;
     }
 
-    // ignore: avoid_print
-    print('📋 Found ${filesToReview.length} file(s) to review:\n');
+    stdout.writeln('📋 Found ${filesToReview.length} file(s) to review:\n');
     for (final file in filesToReview) {
-      // ignore: avoid_print
-      print('  • $file');
+      stdout.writeln('  • $file');
     }
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     // Ask user for batch review preference
     final useBatchReview = await _promptBatchReview(filesToReview.length);
@@ -127,8 +114,7 @@ class CodeReviewTool {
       // Review each file individually
       for (final filePath in filesToReview) {
         await _reviewFile(filePath);
-        // ignore: avoid_print
-        print(''); // Add spacing between files
+        stdout.writeln(''); // Add spacing between files
       }
     }
 
@@ -140,8 +126,7 @@ class CodeReviewTool {
       );
     }
 
-    // ignore: avoid_print
-    print('✅ Code review completed!');
+    stdout.writeln('✅ Code review completed!');
   }
 
   /// Create argument parser
@@ -230,70 +215,41 @@ class CodeReviewTool {
 
   /// Print help information
   void _printHelp(ArgParser parser) {
-    // ignore: avoid_print
-    print('🤖 Code Review Tool using Gemini AI\n');
-    // ignore: avoid_print
-    print('Usage: dart tools/code_review/code_review.dart [options]\n');
-    // ignore: avoid_print
-    print('Options:');
-    // ignore: avoid_print
-    print(parser.usage);
-    // ignore: avoid_print
-    print('\n📚 Examples:');
-    // ignore: avoid_print
-    print('  # Interactive mode (default - configure all options)');
-    // ignore: avoid_print
-    print('  dart tools/code_review/code_review.dart\n');
-    // ignore: avoid_print
-    print('  # Review all Dart files');
-    // ignore: avoid_print
-    print('  dart tools/code_review/code_review.dart --all\n');
-    // ignore: avoid_print
-    print('  # Review specific file');
-    // ignore: avoid_print
-    print('  dart tools/code_review/code_review.dart --file lib/main.dart\n');
-    // ignore: avoid_print
-    print('  # Review specific folder');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('🤖 Code Review Tool using Gemini AI\n');
+    stdout.writeln('Usage: dart tools/code_review/code_review.dart [options]\n');
+    stdout.writeln('Options:');
+    stdout.writeln(parser.usage);
+    stdout.writeln('\n📚 Examples:');
+    stdout.writeln('  # Interactive mode (default - configure all options)');
+    stdout.writeln('  dart tools/code_review/code_review.dart\n');
+    stdout.writeln('  # Review all Dart files');
+    stdout.writeln('  dart tools/code_review/code_review.dart --all\n');
+    stdout.writeln('  # Review specific file');
+    stdout.writeln('  dart tools/code_review/code_review.dart --file lib/main.dart\n');
+    stdout.writeln('  # Review specific folder');
+    stdout.writeln(
       '  dart tools/code_review/code_review.dart --folder lib/presentation\n',
     );
-    // ignore: avoid_print
-    print('  # Review changed files in Git');
-    // ignore: avoid_print
-    print('  dart tools/code_review/code_review.dart --changed\n');
-    // ignore: avoid_print
-    print('  # Review staged files');
-    // ignore: avoid_print
-    print('  dart tools/code_review/code_review.dart --staged\n');
-    // ignore: avoid_print
-    print('  # Focus on specific aspects');
-    // ignore: avoid_print
-    print('  dart tools/code_review/code_review.dart --focus security,bugs\n');
-    // ignore: avoid_print
-    print('  # Exclude generated files');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('  # Review changed files in Git');
+    stdout.writeln('  dart tools/code_review/code_review.dart --changed\n');
+    stdout.writeln('  # Review staged files');
+    stdout.writeln('  dart tools/code_review/code_review.dart --staged\n');
+    stdout.writeln('  # Focus on specific aspects');
+    stdout.writeln('  dart tools/code_review/code_review.dart --focus security,bugs\n');
+    stdout.writeln('  # Exclude generated files');
+    stdout.writeln(
       '  dart tools/code_review/code_review.dart --exclude "**/*.g.dart"\n',
     );
-    // ignore: avoid_print
-    print('  # With API key and custom output');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('  # With API key and custom output');
+    stdout.writeln(
       '  dart tools/code_review/code_review.dart --api-key "your_key" --all --output-dir reports\n',
     );
-    // ignore: avoid_print
-    print('🔑 API Key Setup:');
-    // ignore: avoid_print
-    print('  1. Environment variable: export GEMINI_API_KEY="your_key"');
-    // ignore: avoid_print
-    print('  2. Command line: --api-key "your_key"');
-    // ignore: avoid_print
-    print('  3. Config file: Add "geminiApiKey" to code_review_config.json');
-    // ignore: avoid_print
-    print('  4. Interactive prompt: Tool will ask if no key is found');
-    // ignore: avoid_print
-    print('  Get your key at: https://makersuite.google.com/app/apikey');
+    stdout.writeln('🔑 API Key Setup:');
+    stdout.writeln('  1. Environment variable: export GEMINI_API_KEY="your_key"');
+    stdout.writeln('  2. Command line: --api-key "your_key"');
+    stdout.writeln('  3. Saved key: tools/code_review/.gemini_api_key (gitignored)');
+    stdout.writeln('  4. Interactive prompt: Tool will ask if no key is found');
+    stdout.writeln('  Get your key at: https://makersuite.google.com/app/apikey');
   }
 
   /// Get list of files to review based on arguments
@@ -312,26 +268,19 @@ class CodeReviewTool {
   Future<bool> _promptBatchReview(int fileCount) async {
     if (fileCount <= 1) return false;
 
-    // ignore: avoid_print
-    print('🚀 Review Mode Options:');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('🚀 Review Mode Options:');
+    stdout.writeln(
       '1. 🔥 Batch Review (FAST) - Review all $fileCount files concurrently',
     );
-    // ignore: avoid_print
-    print('2. 📄 Individual Review (DETAILED) - Review each file separately');
-    // ignore: avoid_print
-    print('');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('2. 📄 Individual Review (DETAILED) - Review each file separately');
+    stdout.writeln('');
+    stdout.writeln(
       '💡 Batch review processes files in parallel with real-time feedback.',
     );
-    // ignore: avoid_print
-    print(
+    stdout.writeln(
       '💡 Individual review is slower but provides more detailed console output.',
     );
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     stdout.write(
       'Choose review mode (1 for Batch, 2 for Individual, default: 1): ',
@@ -363,14 +312,12 @@ class CodeReviewTool {
 
   /// Review a single file
   Future<void> _reviewFile(String filePath) async {
-    // ignore: avoid_print
-    print('🔍 Reviewing: $filePath');
+    stdout.writeln('🔍 Reviewing: $filePath');
 
     try {
       final content = await FileService.readFileContent(filePath);
       if (content == null) {
-        // ignore: avoid_print
-        print('❌ File not found or could not be read: $filePath');
+        stdout.writeln('❌ File not found or could not be read: $filePath');
         _reviewResults.add(
           ReviewResult(
             filePath: filePath,
@@ -385,8 +332,7 @@ class CodeReviewTool {
       }
 
       if (content.trim().isEmpty) {
-        // ignore: avoid_print
-        print('⚠️  File is empty: $filePath');
+        stdout.writeln('⚠️  File is empty: $filePath');
         _reviewResults.add(
           ReviewResult(
             filePath: filePath,
@@ -418,8 +364,7 @@ class CodeReviewTool {
       );
       _reviewResults.add(reviewResult);
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error reviewing $filePath: $e');
+      stdout.writeln('❌ Error reviewing $filePath: $e');
       _reviewResults.add(
         ReviewResult(
           filePath: filePath,
@@ -435,14 +380,10 @@ class CodeReviewTool {
 
   /// Print review results
   void _printReview(String filePath, String review) {
-    // ignore: avoid_print
-    print('📊 Review Results for: ${path.basename(filePath)}');
-    // ignore: avoid_print
-    print('=' * 60);
-    // ignore: avoid_print
-    print(review);
-    // ignore: avoid_print
-    print('=' * 60);
+    stdout.writeln('📊 Review Results for: ${path.basename(filePath)}');
+    stdout.writeln('=' * 60);
+    stdout.writeln(review);
+    stdout.writeln('=' * 60);
   }
 
   /// Save language and format settings to config
@@ -453,8 +394,7 @@ class CodeReviewTool {
       try {
         await ConfigService.setReportLanguage(language);
       } catch (e) {
-        // ignore: avoid_print
-        print('⚠️  Warning: Could not save language setting: $e');
+        stdout.writeln('⚠️  Warning: Could not save language setting: $e');
       }
     }
 
@@ -463,26 +403,21 @@ class CodeReviewTool {
       try {
         await ConfigService.setOutputFormat(format);
       } catch (e) {
-        // ignore: avoid_print
-        print('⚠️  Warning: Could not save format setting: $e');
+        stdout.writeln('⚠️  Warning: Could not save format setting: $e');
       }
     }
   }
 
   /// Run configuration mode
   Future<void> _runConfigMode() async {
-    // ignore: avoid_print
-    print('⚙️  Code Review Tool Configuration');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('⚙️  Code Review Tool Configuration');
+    stdout.writeln('');
 
     // Show current config
     ConfigService.showConfig();
 
-    // ignore: avoid_print
-    print('🔧 Configure Settings:');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('🔧 Configure Settings:');
+    stdout.writeln('');
 
     // Configure language
     final language = await InteractiveService.promptReportLanguage();
@@ -493,8 +428,7 @@ class CodeReviewTool {
     await ConfigService.setOutputFormat(format);
 
     // Configure batch size
-    // ignore: avoid_print
-    print('\n📦 Batch Processing:');
+    stdout.writeln('\n📦 Batch Processing:');
     stdout.write(
       'Batch size (1-20, current: ${ConfigService.getBatchSize()}): ',
     );
@@ -519,8 +453,7 @@ class CodeReviewTool {
     }
 
     // Configure other options
-    // ignore: avoid_print
-    print('\n📊 Report Options:');
+    stdout.writeln('\n📊 Report Options:');
     stdout.write('Include timestamps in reports? (Y/n): ');
     final timestampInput = stdin.readLineSync()?.trim().toLowerCase() ?? 'y';
     await ConfigService.setIncludeTimestamps(
@@ -533,12 +466,9 @@ class CodeReviewTool {
       detailedInput == 'y' || detailedInput == 'yes' || detailedInput == '',
     );
 
-    // ignore: avoid_print
-    print('');
-    // ignore: avoid_print
-    print('✅ Configuration saved successfully!');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
+    stdout.writeln('✅ Configuration saved successfully!');
+    stdout.writeln('');
 
     // Show updated config
     ConfigService.showConfig();

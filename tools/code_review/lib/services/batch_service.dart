@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../models/review_result.dart';
 import 'api_service.dart';
@@ -53,10 +54,8 @@ class BatchService {
     Duration delayBetweenBatches = const Duration(seconds: 2),
     String language = 'en',
   }) async {
-    // ignore: avoid_print
-    print('🔥 Starting parallel batch review of ${filePaths.length} files...');
-    // ignore: avoid_print
-    print('📊 Processing files concurrently with rate limiting...\n');
+    stdout.writeln('🔥 Starting parallel batch review of ${filePaths.length} files...');
+    stdout.writeln('📊 Processing files concurrently with rate limiting...\n');
 
     _reviewResults.clear();
     _retryQueue.clear();
@@ -64,16 +63,14 @@ class BatchService {
     // Split files into batches
     final batches = _createBatches(filePaths, batchSize);
 
-    // ignore: avoid_print
-    print(
+    stdout.writeln(
       '📦 Processing in ${batches.length} batches of up to $batchSize files each...\n',
     );
 
     try {
       for (int batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         final batch = batches[batchIndex];
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '🚀 Starting batch ${batchIndex + 1}/${batches.length} with ${batch.length} files...',
         );
 
@@ -96,15 +93,13 @@ class BatchService {
         // final completedInBatch = batchResults.length;
         final totalProcessed = _reviewResults.length;
 
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '✅ Batch ${batchIndex + 1}/${batches.length} completed. Overall progress: $totalProcessed/${filePaths.length} files\n',
         );
 
         // Add delay between batches to respect API rate limits
         if (batchIndex < batches.length - 1) {
-          // ignore: avoid_print
-          print(
+          stdout.writeln(
             '⏳ Waiting ${delayBetweenBatches.inSeconds} seconds before next batch...\n',
           );
           await Future.delayed(delayBetweenBatches);
@@ -113,25 +108,21 @@ class BatchService {
 
       // Process retry queue if any files need retry
       if (_retryQueue.isNotEmpty) {
-        // ignore: avoid_print
-        print('\n🔄 Processing retry queue (${_retryQueue.length} files)...');
+        stdout.writeln('\n🔄 Processing retry queue (${_retryQueue.length} files)...');
         await _processRetryQueue();
       }
 
       final finalResults = _reviewResults.values.toList();
       final errorCount = finalResults.where((r) => r.hasErrors).length;
 
-      // ignore: avoid_print
-      print('🎉 Batch review completed!');
-      // ignore: avoid_print
-      print(
+      stdout.writeln('🎉 Batch review completed!');
+      stdout.writeln(
         '📊 Summary: ${finalResults.length - errorCount} successful, $errorCount issues/errors, ${finalResults.length} total',
       );
 
       return finalResults;
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ Critical error during batch review: $e');
+      stdout.writeln('❌ Critical error during batch review: $e');
       return _reviewResults.values.toList();
     }
   }
@@ -153,8 +144,7 @@ class BatchService {
         final waitDuration = nextRetry.difference(now);
 
         if (waitDuration.inSeconds > 0) {
-          // ignore: avoid_print
-          print(
+          stdout.writeln(
             '⏳ Waiting ${waitDuration.inSeconds} seconds for next retry...',
           );
           await Future.delayed(waitDuration);
@@ -162,8 +152,7 @@ class BatchService {
         continue;
       }
 
-      // ignore: avoid_print
-      print('🔄 Retrying ${readyFiles.length} files...');
+      stdout.writeln('🔄 Retrying ${readyFiles.length} files...');
 
       // Process ready files
       for (final entry in readyFiles) {
@@ -251,16 +240,14 @@ class BatchService {
     int attemptCount = 1,
   }) async {
     final retryPrefix = isRetry ? '🔄 [Retry $attemptCount] ' : '';
-    // ignore: avoid_print
-    print(
+    stdout.writeln(
       '$retryPrefix🔍 [$currentIndex/$totalFiles] Starting review: ${path.basename(filePath)}',
     );
 
     try {
       final content = await FileService.readFileContent(filePath);
       if (content == null) {
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '❌ [$currentIndex/$totalFiles] File not found: ${path.basename(filePath)}',
         );
         return ReviewResult(
@@ -274,8 +261,7 @@ class BatchService {
       }
 
       if (content.trim().isEmpty) {
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '⚠️  [$currentIndex/$totalFiles] File is empty: ${path.basename(filePath)}',
         );
         return ReviewResult(
@@ -296,8 +282,7 @@ class BatchService {
       );
 
       // Print immediate results with brief summary
-      // ignore: avoid_print
-      print(
+      stdout.writeln(
         '📊 [$currentIndex/$totalFiles] ✅ Review completed: ${path.basename(filePath)}',
       );
 
@@ -313,8 +298,7 @@ class BatchService {
           .take(3);
 
       if (summaryLines.isNotEmpty) {
-        // ignore: avoid_print
-        print('   📋 ${summaryLines.join(' | ')}');
+        stdout.writeln('   📋 ${summaryLines.join(' | ')}');
       }
 
       // Parse and return result
@@ -323,8 +307,7 @@ class BatchService {
       // Handle rate limit - add to retry queue
       if (attemptCount < _maxRetries) {
         final retryAfter = DateTime.now().add(Duration(seconds: e.retryAfter));
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '⏳ [$currentIndex/$totalFiles] Rate limited: ${path.basename(filePath)} - Retry in ${e.retryAfter}s (Attempt $attemptCount/$_maxRetries)',
         );
 
@@ -349,8 +332,7 @@ class BatchService {
         );
       } else {
         // Max retries exceeded
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '❌ [$currentIndex/$totalFiles] Max retries exceeded: ${path.basename(filePath)}',
         );
         return ReviewResult(
@@ -368,8 +350,7 @@ class BatchService {
         final retryDelay =
             30 * attemptCount; // Exponential backoff: 30s, 60s, 90s
         final retryAfter = DateTime.now().add(Duration(seconds: retryDelay));
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '⏱️  [$currentIndex/$totalFiles] Timeout: ${path.basename(filePath)} - Retry in ${retryDelay}s (Attempt $attemptCount/$_maxRetries)',
         );
 
@@ -394,8 +375,7 @@ class BatchService {
         );
       } else {
         // Max retries exceeded
-        // ignore: avoid_print
-        print(
+        stdout.writeln(
           '❌ [$currentIndex/$totalFiles] Max retries exceeded: ${path.basename(filePath)}',
         );
         return ReviewResult(
@@ -409,8 +389,7 @@ class BatchService {
       }
     } catch (e) {
       // Handle other errors - no retry
-      // ignore: avoid_print
-      print(
+      stdout.writeln(
         '❌ [\$currentIndex/$totalFiles] Error reviewing ${path.basename(filePath)}: \$e',
       );
       return ReviewResult(

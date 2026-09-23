@@ -4,10 +4,8 @@ import '../core/constants.dart';
 class InteractiveService {
   /// Run interactive mode to configure all options
   static Future<List<String>> runInteractiveMode() async {
-    // ignore: avoid_print
-    print('🤖 Welcome to Interactive Code Review Mode!');
-    // ignore: avoid_print
-    print('Let\'s configure your review settings step by step.\n');
+    stdout.writeln('🤖 Welcome to Interactive Code Review Mode!');
+    stdout.writeln('Let\'s configure your review settings step by step.\n');
 
     // Get review scope
     final scope = await promptReviewScope();
@@ -86,42 +84,31 @@ class InteractiveService {
     args.addAll(['--format', format]);
 
     // Show configuration summary
-    // ignore: avoid_print
-    print('\n📋 Configuration Summary:');
-    // ignore: avoid_print
-    print('• Scope: ${scope['description']}');
+    stdout.writeln('\n📋 Configuration Summary:');
+    stdout.writeln('• Scope: ${scope['description']}');
     if (focusAreas.isNotEmpty) {
-      // ignore: avoid_print
-      print('• Focus Areas: ${focusAreas.join(', ')}');
+      stdout.writeln('• Focus Areas: ${focusAreas.join(', ')}');
     }
     if (excludePatterns.isNotEmpty) {
-      // ignore: avoid_print
-      print('• Exclude Patterns: ${excludePatterns.join(', ')}');
+      stdout.writeln('• Exclude Patterns: ${excludePatterns.join(', ')}');
     }
-    // ignore: avoid_print
-    print('• Generate Report: ${outputOptions['summary']}');
+    stdout.writeln('• Generate Report: ${outputOptions['summary']}');
     if (outputOptions['summary'] as bool) {
-      // ignore: avoid_print
-      print('• Output Directory: ${outputOptions['outputDir']}');
+      stdout.writeln('• Output Directory: ${outputOptions['outputDir']}');
     }
-    // ignore: avoid_print
-    print(
+    stdout.writeln(
       '• Report Language: ${CodeReviewConstants.languageNames[language] ?? language}',
     );
-    // ignore: avoid_print
-    print('• Output Format: $format');
-    // ignore: avoid_print
-    print('• Verbose Mode: $verbose');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('• Output Format: $format');
+    stdout.writeln('• Verbose Mode: $verbose');
+    stdout.writeln('');
 
     // Confirm and start review
     stdout.write('🚀 Start code review with these settings? (Y/n): ');
     final confirm = stdin.readLineSync()?.trim().toLowerCase() ?? 'y';
 
     if (confirm == 'n' || confirm == 'no') {
-      // ignore: avoid_print
-      print('❌ Code review cancelled by user.');
+      stdout.writeln('❌ Code review cancelled by user.');
       exit(0);
     }
 
@@ -132,26 +119,19 @@ class InteractiveService {
   static Future<bool> promptBatchReview(int fileCount) async {
     if (fileCount <= 1) return false;
 
-    // ignore: avoid_print
-    print('🚀 Review Mode Options:');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('🚀 Review Mode Options:');
+    stdout.writeln(
       '1. 🔥 Batch Review (FAST) - Review all $fileCount files in one API call',
     );
-    // ignore: avoid_print
-    print('2. 📄 Individual Review (DETAILED) - Review each file separately');
-    // ignore: avoid_print
-    print('');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('2. 📄 Individual Review (DETAILED) - Review each file separately');
+    stdout.writeln('');
+    stdout.writeln(
       '💡 Batch review is much faster but may have less detailed analysis per file.',
     );
-    // ignore: avoid_print
-    print(
+    stdout.writeln(
       '💡 Individual review is slower but provides more detailed analysis per file.',
     );
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     stdout.write(
       'Choose review mode (1 for Batch, 2 for Individual, default: 1): ',
@@ -163,20 +143,13 @@ class InteractiveService {
 
   /// Prompt for review scope
   static Future<Map<String, dynamic>> promptReviewScope() async {
-    // ignore: avoid_print
-    print('🎯 What would you like to review?');
-    // ignore: avoid_print
-    print('1. All Dart files in the project');
-    // ignore: avoid_print
-    print('2. Specific folder');
-    // ignore: avoid_print
-    print('3. Specific file(s)');
-    // ignore: avoid_print
-    print('4. Changed files (Git)');
-    // ignore: avoid_print
-    print('5. Staged files (Git)');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('🎯 What would you like to review?');
+    stdout.writeln('1. All Dart files in the project');
+    stdout.writeln('2. Specific folder');
+    stdout.writeln('3. Specific file(s)');
+    stdout.writeln('4. Changed files (Git)');
+    stdout.writeln('5. Staged files (Git)');
+    stdout.writeln('');
 
     stdout.write('Choose option (1-5): ');
     final choice = stdin.readLineSync()?.trim() ?? '1';
@@ -189,8 +162,7 @@ class InteractiveService {
         stdout.write('📁 Enter folder path (e.g., lib/presentation): ');
         final folderPath = stdin.readLineSync()?.trim() ?? '';
         if (folderPath.isEmpty) {
-          // ignore: avoid_print
-          print('⚠️  No folder specified, using all files');
+          stdout.writeln('⚠️  No folder specified, using all files');
           return {'type': 'all', 'description': 'All Dart files'};
         }
         return {
@@ -200,8 +172,7 @@ class InteractiveService {
         };
 
       case '3':
-        // ignore: avoid_print
-        print('📄 Enter file paths (one per line, empty line to finish):');
+        stdout.writeln('📄 Enter file paths (one per line, empty line to finish):');
         final files = <String>[];
         while (true) {
           stdout.write('File path: ');
@@ -210,8 +181,7 @@ class InteractiveService {
           files.add(filePath);
         }
         if (files.isEmpty) {
-          // ignore: avoid_print
-          print('⚠️  No files specified, using all files');
+          stdout.writeln('⚠️  No files specified, using all files');
           return {'type': 'all', 'description': 'All Dart files'};
         }
         return {
@@ -227,32 +197,22 @@ class InteractiveService {
         return {'type': 'staged', 'description': 'Staged files (Git)'};
 
       default:
-        // ignore: avoid_print
-        print('⚠️  Invalid choice, using all files');
+        stdout.writeln('⚠️  Invalid choice, using all files');
         return {'type': 'all', 'description': 'All Dart files'};
     }
   }
 
   /// Prompt for focus areas
   static Future<List<String>> promptFocusAreas() async {
-    // ignore: avoid_print
-    print('\n🔍 Focus Areas (optional):');
-    // ignore: avoid_print
-    print('Available focus areas:');
-    // ignore: avoid_print
-    print('1. security - Security vulnerabilities and data protection');
-    // ignore: avoid_print
-    print('2. performance - Performance bottlenecks and optimization');
-    // ignore: avoid_print
-    print('3. bugs - Potential runtime errors and logic bugs');
-    // ignore: avoid_print
-    print('4. style - Code style and formatting conventions');
-    // ignore: avoid_print
-    print('5. architecture - Design patterns and code organization');
-    // ignore: avoid_print
-    print('6. testing - Testability and test coverage');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('\n🔍 Focus Areas (optional):');
+    stdout.writeln('Available focus areas:');
+    stdout.writeln('1. security - Security vulnerabilities and data protection');
+    stdout.writeln('2. performance - Performance bottlenecks and optimization');
+    stdout.writeln('3. bugs - Potential runtime errors and logic bugs');
+    stdout.writeln('4. style - Code style and formatting conventions');
+    stdout.writeln('5. architecture - Design patterns and code organization');
+    stdout.writeln('6. testing - Testability and test coverage');
+    stdout.writeln('');
 
     stdout.write(
       'Select focus areas (comma-separated numbers, or Enter for all): ',
@@ -286,14 +246,11 @@ class InteractiveService {
 
   /// Prompt for exclude patterns
   static Future<List<String>> promptExcludePatterns() async {
-    // ignore: avoid_print
-    print('\n🚫 Exclude Patterns (optional):');
-    // ignore: avoid_print
-    print(
+    stdout.writeln('\n🚫 Exclude Patterns (optional):');
+    stdout.writeln(
       'Default exclusions: *.g.dart, *.freezed.dart, *.mocks.dart, test/**',
     );
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     stdout.write('Add custom exclude patterns? (y/N): ');
     final addCustom = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
@@ -302,10 +259,8 @@ class InteractiveService {
       return [];
     }
 
-    // ignore: avoid_print
-    print('Enter exclude patterns (one per line, empty line to finish):');
-    // ignore: avoid_print
-    print('Examples: **/*.generated.dart, lib/legacy/**, **/old_*.dart');
+    stdout.writeln('Enter exclude patterns (one per line, empty line to finish):');
+    stdout.writeln('Examples: **/*.generated.dart, lib/legacy/**, **/old_*.dart');
 
     final patterns = <String>[];
     while (true) {
@@ -320,8 +275,7 @@ class InteractiveService {
 
   /// Prompt for output options
   static Future<Map<String, dynamic>> promptOutputOptions() async {
-    // ignore: avoid_print
-    print('\n📊 Output Options:');
+    stdout.writeln('\n📊 Output Options:');
 
     stdout.write('Generate summary report? (Y/n): ');
     final generateSummary = stdin.readLineSync()?.trim().toLowerCase() ?? 'y';
@@ -344,8 +298,7 @@ class InteractiveService {
 
   /// Prompt for verbose mode
   static Future<bool> promptVerboseMode() async {
-    // ignore: avoid_print
-    print('\n🔊 Verbose Mode:');
+    stdout.writeln('\n🔊 Verbose Mode:');
     stdout.write('Enable verbose output? (y/N): ');
     final verbose = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
     return verbose == 'y' || verbose == 'yes';
@@ -353,10 +306,8 @@ class InteractiveService {
 
   /// Prompt for report language
   static Future<String> promptReportLanguage() async {
-    // ignore: avoid_print
-    print('\n🌐 Report Language:');
-    // ignore: avoid_print
-    print('Available languages:');
+    stdout.writeln('\n🌐 Report Language:');
+    stdout.writeln('Available languages:');
 
     final languages = CodeReviewConstants.supportedLanguages;
     final languageNames = CodeReviewConstants.languageNames;
@@ -364,11 +315,9 @@ class InteractiveService {
     for (int i = 0; i < languages.length; i++) {
       final lang = languages[i];
       final name = languageNames[lang] ?? lang;
-      // ignore: avoid_print
-      print('${i + 1}. $lang - $name');
+      stdout.writeln('${i + 1}. $lang - $name');
     }
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
 
     stdout.write(
       'Select language (1-${languages.length}, default: 2 for Vietnamese): ',
@@ -385,18 +334,12 @@ class InteractiveService {
 
   /// Prompt for output format
   static Future<String> promptOutputFormat() async {
-    // ignore: avoid_print
-    print('\n📄 Output Format:');
-    // ignore: avoid_print
-    print('1. markdown - Markdown format (.md)');
-    // ignore: avoid_print
-    print('2. html - HTML format (.html)');
-    // ignore: avoid_print
-    print('3. json - JSON format (.json)');
-    // ignore: avoid_print
-    print('4. txt - Plain text (.txt)');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('\n📄 Output Format:');
+    stdout.writeln('1. markdown - Markdown format (.md)');
+    stdout.writeln('2. html - HTML format (.html)');
+    stdout.writeln('3. json - JSON format (.json)');
+    stdout.writeln('4. txt - Plain text (.txt)');
+    stdout.writeln('');
 
     stdout.write('Select format (1-4, default: 1 for Markdown): ');
     final input = stdin.readLineSync()?.trim() ?? '1';

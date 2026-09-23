@@ -300,7 +300,7 @@ dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --all --focus architecture,security
 ```
 
-Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`. Cần API key trong `tools/code_review/code_review_config.json` (file này để rỗng khi ship; đừng commit key thật).
+Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`. Cần Gemini API key: `GEMINI_API_KEY`, `--api-key`, hoặc — khi tool hỏi và bạn đồng ý lưu — file đã gitignore `tools/code_review/.gemini_api_key`. Chạy từ root repo, `--all` review mọi `lib/` dưới `apps/`, `modules/` và `platform/`. Giá trị `--focus` hợp lệ: `security`, `performance`, `bugs`, `style`, `architecture`, `testing`. Báo cáo luôn là Markdown.
 
 > [!NOTE]
 > Workflow GitHub chạy nó ở **chế độ cảnh báo** — bước "fail on critical issues" có dòng `exit 1` bị comment lại, nên nó không bao giờ chặn PR. Xem [`../operations/01_cicd.md`](../operations/01_cicd.md).

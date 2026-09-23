@@ -101,7 +101,7 @@ The tool also repairs broken local `path:` entries for workspace packages.
 | **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [dir] [SM] [route]` | Scaffolding a new Feature / Domain / Data / Core package. It adds the module to every `app_manifest.yaml` and runs `composer sync`, which registers it in the workspace and every app that composes it. Run with no arguments for interactive mode. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session — lists what pub.dev has newer. |
-| **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key in `tools/code_review/code_review_config.json`. Also supports `--all`, `--file <path>`, `--focus architecture,security`. |
+| **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key (`GEMINI_API_KEY`, `--api-key`, or saved when prompted). Also supports `--all`, `--file <path>`, `--focus architecture,security`. |
 | **Workspace setup** | `dart tools/workspace_setup/configure.dart` | After a big rebase, or when things are inexplicably broken — does clean + pub get + l10n + build_runner in one pass. |
 
 Module generator examples:

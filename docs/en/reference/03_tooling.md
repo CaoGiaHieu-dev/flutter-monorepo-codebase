@@ -300,7 +300,7 @@ dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
 dart tools/code_review/code_review.dart --all --focus architecture,security
 ```
 
-Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs an API key in `tools/code_review/code_review_config.json` (ships empty; do not commit a real key).
+Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs a Gemini API key: `GEMINI_API_KEY`, `--api-key`, or — when the tool prompts for one and you agree to save it — the gitignored `tools/code_review/.gemini_api_key`. Run from the repository root, `--all` reviews every `lib/` under `apps/`, `modules/` and `platform/`. Valid `--focus` values: `security`, `performance`, `bugs`, `style`, `architecture`, `testing`. The report is always Markdown.
 
 > [!NOTE]
 > The GitHub workflow runs this in **advisory mode** — its "fail on critical issues" step has `exit 1` commented out, so it never blocks a PR. See [`../operations/01_cicd.md`](../operations/01_cicd.md).

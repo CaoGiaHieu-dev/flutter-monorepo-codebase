@@ -27,8 +27,7 @@ class ConfigService {
 
       return defaultConfig;
     } catch (e) {
-      // ignore: avoid_print
-      print('⚠️  Error reading config: $e');
+      stdout.writeln('⚠️  Error reading config: $e');
       return _getDefaultConfig();
     }
   }
@@ -44,11 +43,9 @@ class ConfigService {
       const encoder = JsonEncoder.withIndent('    ');
       await configFile.writeAsString(encoder.convert(config));
 
-      // ignore: avoid_print
-      print('✅ Configuration saved successfully!');
+      stdout.writeln('✅ Configuration saved successfully!');
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error saving config: $e');
+      stdout.writeln('❌ Error saving config: $e');
     }
   }
 
@@ -170,32 +167,22 @@ class ConfigService {
   static void showConfig() {
     final config = getConfig();
 
-    // ignore: avoid_print
-    print('📋 Current Configuration:');
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('📋 Current Configuration:');
+    stdout.writeln('');
     final languageCode = config['reportLanguage'] as String;
     final languageName =
         CodeReviewConstants.languageNames[languageCode] ?? languageCode;
-    // ignore: avoid_print
-    print('🌐 Report Language: $languageName ($languageCode)');
-    // ignore: avoid_print
-    print('📄 Output Format: ${config['outputFormat']}');
-    // ignore: avoid_print
-    print('⏰ Include Timestamps: ${config['includeTimestamps']}');
-    // ignore: avoid_print
-    print('📊 Detailed Output: ${config['detailedOutput']}');
-    // ignore: avoid_print
-    print('📦 Batch Size: ${config['batchSize']}');
-    // ignore: avoid_print
-    print('⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms');
+    stdout.writeln('🌐 Report Language: $languageName ($languageCode)');
+    stdout.writeln('📄 Output Format: ${config['outputFormat']}');
+    stdout.writeln('⏰ Include Timestamps: ${config['includeTimestamps']}');
+    stdout.writeln('📊 Detailed Output: ${config['detailedOutput']}');
+    stdout.writeln('📦 Batch Size: ${config['batchSize']}');
+    stdout.writeln('⏳ Delay Between Batches: ${config['delayBetweenBatches']}ms');
 
     if (config.containsKey('geminiApiKey')) {
       final apiKey = config['geminiApiKey'] as String;
-      // ignore: avoid_print
-      print('🔑 API Key: ${apiKey.substring(0, 8)}...');
+      stdout.writeln('🔑 API Key: ${apiKey.substring(0, 8)}...');
     }
-    // ignore: avoid_print
-    print('');
+    stdout.writeln('');
   }
 }

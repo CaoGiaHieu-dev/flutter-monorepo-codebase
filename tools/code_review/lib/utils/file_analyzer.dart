@@ -26,16 +26,30 @@ class FileAnalyzer {
     return FileType.dartFile;
   }
 
-  /// Get architecture layer based on file path
+  /// Get architecture layer from where the file sits in the workspace:
+  /// `modules/<name>/{domain,data,feature}`, `platform/<pkg>`, `apps/<id>`.
   static ArchitectureLayer getArchitectureLayer(String filePath) {
-    if (filePath.startsWith('lib/presentation/'))
-      return ArchitectureLayer.presentation;
-    if (filePath.startsWith('lib/domain/')) return ArchitectureLayer.domain;
-    if (filePath.startsWith('lib/data/')) return ArchitectureLayer.data;
-    if (filePath.startsWith('lib/core/')) return ArchitectureLayer.core;
-    if (filePath.startsWith('lib/gen/')) return ArchitectureLayer.generated;
+    final p = filePath.replaceAll('\\', '/');
+    if (p.contains('/gen/') || p.contains('/generated/')) {
+      return ArchitectureLayer.generated;
+    }
+    final module = RegExp(r'(^|/)modules/[^/]+/(domain|data|feature)/')
+        .firstMatch(p);
+    if (module != null) {
+      return switch (module.group(2)) {
+        'domain' => ArchitectureLayer.domain,
+        'data' => ArchitectureLayer.data,
+        _ => ArchitectureLayer.presentation,
+      };
+    }
+    if (RegExp(r'(^|/)platform/').hasMatch(p)) return ArchitectureLayer.core;
+    if (RegExp(r'(^|/)apps/').hasMatch(p)) return ArchitectureLayer.presentation;
     return ArchitectureLayer.unknown;
   }
+
+  /// Source roots of the workspace, scanned when run from the repository
+  /// root (which has no `lib/` of its own).
+  static const List<String> workspaceRoots = ['apps', 'modules', 'platform'];
 
   /// Check if file matches a pattern (supports * wildcard)
   static bool matchesPattern(String text, String pattern) {
@@ -53,30 +67,36 @@ class FileAnalyzer {
       return false;
     }
 
-    final libDir = Directory('lib');
-    if (!await libDir.exists()) {
-      return false;
-    }
-
-    // Check if pubspec.yaml contains Flutter dependencies
     final pubspecContent = await pubspecFile.readAsString();
+    // The workspace root: no `lib/`, its packages live under the roots.
+    if (pubspecContent.contains('\nworkspace:')) return true;
+
+    if (!await Directory('lib').exists()) return false;
     return pubspecContent.contains('flutter:') ||
         pubspecContent.contains('flutter_');
   }
 
-  /// Get all Dart files in the project
+  /// Get all Dart files in the project: a package's `lib/`, or — from the
+  /// workspace root — every `lib/` under [workspaceRoots].
   static Future<List<String>> getAllDartFiles() async {
     final files = <String>[];
     final libDir = Directory('lib');
 
     if (await libDir.exists()) {
-      await for (final entity in libDir.list(recursive: true)) {
-        if (entity is File && entity.path.endsWith('.dart')) {
-          files.add(entity.path);
+      files.addAll(await getDartFilesInFolder('lib'));
+      return files;
+    }
+
+    for (final root in workspaceRoots) {
+      for (final file in await getDartFilesInFolder(root)) {
+        final p = file.replaceAll('\\', '/');
+        if (p.contains('/lib/') &&
+            !p.contains('/.dart_tool/') &&
+            !p.contains('/build/')) {
+          files.add(file);
         }
       }
     }
-
     return files;
   }
 
@@ -110,6 +130,8 @@ class FileAnalyzer {
             (file) =>
                 !file.contains('.g.dart') &&
                 !file.contains('.freezed.dart') &&
+                !file.contains('.module.dart') &&
+                !file.contains('.config.dart') &&
                 !file.contains('.mocks.dart') &&
                 !file.contains('test/'),
           )

@@ -125,9 +125,10 @@ Widget build(BuildContext context) {
         AppOverlay.showToast(content: message ?? 'Đã xảy ra lỗi hệ thống');
       }
     },
-    // Kích hoạt khi thành công
+    // Kích hoạt khi thành công. Không điều hướng ở đây: app shell lắng nghe
+    // phiên đăng nhập và tự chuyển route (xem LoginPage của feature_auth).
     onSuccess: (context, user) {
-      getIt<AuthNavigator>().toHome();
+      AppOverlay.showToast(content: context.l10nAuth.welcomeBack);
     },
     child: Scaffold(
       body: Consumer<AuthProvider>(
@@ -175,29 +176,31 @@ abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
 
 ## 🔗 5. Liên Kết Phụ Thuộc Giữa Các Provider (`BaseProxyWidget`)
 
-Khi `CartProvider` cần biết thông tin tài khoản đăng nhập từ `AuthProvider` để tải giỏ hàng, hãy dùng `BaseProxyWidget` (hoặc `BaseProxyWidget2`, `BaseProxyWidget3`) ở tầng Routing:
+Khi `NewsProvider` cần tải lại dữ liệu mỗi khi người dùng đổi ngôn ngữ, hãy dùng `BaseProxyWidget` (hoặc `BaseProxyWidget2`, `BaseProxyWidget3`) ở tầng Routing. `LanguageProvider` thuộc `core_base_ui` và được mount sẵn ở gốc app, nên feature nào cũng được phép đọc nó:
 
 ```dart
-@TypedGoRoute<CartRoute>(path: CartPath.CART)
-class CartRoute extends GoRouteDataCustom with $CartRoute {
-  const CartRoute();
+@TypedGoRoute<NewsRoute>(path: NewsPath.NEWS)
+class NewsRoute extends GoRouteDataCustom with $NewsRoute {
+  const NewsRoute();
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return BaseProxyWidget<AuthProvider, CartProvider>(
-      // Khởi tạo CartProvider phụ thuộc vào AuthProvider, bọc trọn CartPage ở tầng routing
-      create: (context, authProvider) => getIt<CartProvider>(
-        param1: authProvider.currentUser?.id, 
+    return BaseProxyWidget<LanguageProvider, NewsProvider>(
+      // Khởi tạo NewsProvider phụ thuộc vào LanguageProvider, bọc trọn NewsPage ở tầng routing
+      create: (context, language) => getIt<NewsProvider>(
+        param1: language.locale.languageCode,
       ),
-      // Chỉ cập nhật hoặc tái tạo CartProvider khi ID người dùng của AuthProvider thay đổi
-      updateWhen: (authPrevious, cartCurrent) {
-        return authPrevious.currentUser?.id != cartCurrent.userId;
+      // Chỉ tái tạo NewsProvider khi ngôn ngữ thực sự đổi
+      updateWhen: (language, previous) {
+        return language.locale.languageCode != previous.languageCode;
       },
-      child: const CartPage(),
+      child: const NewsPage(),
     );
   }
 }
 ```
+
+> Tầng proxy chỉ nối các provider mà feature được phép thấy: của chính nó, hoặc của `core_*`. **Không** proxy `AuthProvider` từ feature khác — import `feature_auth` phá vỡ tính tách rời của module. Trạng thái đăng nhập đi qua `IAuthStatusStream` của `core_di`.
 
 ---
 

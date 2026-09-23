@@ -155,7 +155,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | `platform_kernel` | **Depend on this, not `core_common`, unless you need something Flutter-bound.** Pure Dart, zero Flutter. `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `ApiStatusConstants`, `EnvConstants` | 7 dependencies, none Flutter-bound — enforced by arch_check **R9**. Everything else may depend on it |
 | `platform_app_shell` | The reusable app shell — `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the `ILanguageStorage`/`IThemeStorage` adapters, `AppBootStorage`, `NetworkConfigImpl` | Every app composes it instead of copying it. Its DI group runs **after `core`, before `ui`**. Imports no module — arch_check R1 holds that |
 | `core_common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, `AppUtils`, `Debounce`, formatters, dialog helpers | Re-exports `platform_kernel` wholesale, so `getItOrNull`, `ErrorHandler`, `ApiStatusConstants`, `EnvConstants` etc. still resolve through it — but they live in the kernel (`platform/kernel/lib/src/`), as does the `AppFailure` re-export shim at `src/error/failures.dart` (`AppFailure` itself lives in `domain_core`) |
-| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | May import `domain_*` for entity types |
+| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | Declares **no** `domain_*` dependency — a contract carries its own value type (`AuthPrincipal`), never a domain entity |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_app_shell` |
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
@@ -390,9 +390,10 @@ Future<void> _fetchInitialData(
 ### Agnostic Streams (Dual Registration Pattern)
 
 ```dart
-// 1. Interface in core_di:
+// 1. Interface in core_di — carries a contract-owned type, never a domain entity:
 abstract class IAuthStatusStream {
-  Stream<UserEntity?> get authStatusStream;
+  Stream<AuthPrincipal?> get authStatusStream;
+  AuthPrincipal? get currentUser; // broadcast streams do not replay
 }
 
 // 2. Concrete @singleton in owning feature:
@@ -631,7 +632,7 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 ### Data Standardization
 
 - `BaseEntity<T>`: Standard server response wrapper
-- `PaginatedEntity<T>`: Pagination (items, totalCount, currentPage, pageSize)
+- `PaginatedEntity<T>`: Pagination — items in `data` (JSON key `items`), page info in `meta: MetaPaginate` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`)
 - `BaseRequest`: Pagination params builder
 
 ---

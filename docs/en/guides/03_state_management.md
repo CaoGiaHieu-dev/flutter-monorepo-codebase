@@ -56,10 +56,6 @@ class AuthProvider extends BaseProvider<UserEntity>
   final RefreshTokenUseCase _refreshTokenUseCase;
   final AuthStatusStreamImpl _authStream;
 
-  bool get isAuthenticated => isSuccess && data != null;
-
-  UserEntity? get currentUser => isAuthenticated ? data : null;
-
   Future<void> login(String email, String password) async {
     updateState(state: const ViewState.loading());
     await executeOperation(

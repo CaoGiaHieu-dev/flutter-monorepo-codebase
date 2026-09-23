@@ -88,20 +88,26 @@ Real code from
 ```dart
 abstract class IAuthStatusStream {
   /// Emits on every authentication state change; `null` means signed out.
-  Stream<UserEntity?> get authStatusStream;
+  Stream<AuthPrincipal?> get authStatusStream;
 
-  /// The currently signed-in user, or `null` when signed out.
-  UserEntity? get currentUser;
+  /// The currently signed-in principal, or `null` when signed out.
+  ///
+  /// Read this for the state at subscription time — [authStatusStream] is a
+  /// broadcast stream and does not replay its last value to new listeners.
+  AuthPrincipal? get currentUser;
 }
 ```
 
 Two deliberate design decisions worth understanding:
 
-**Why a concrete `UserEntity` and not a generic `<T>`.** Consumers keep full type safety with no
-casting. Per `.agents/AGENTS.md` §8.4, when a neutral stream carries a domain entity the `core_di`
-interface **must** name that type explicitly rather than fall back to `<T>` — and `core_di` is
-*explicitly permitted* to depend on `domain_*` micro-packages to do so. `core_di` is the DI Hub,
-not business logic, so this does not turn it into a domain layer.
+**Why `AuthPrincipal` and not `UserEntity`.** A `core_di` contract may not name a type from a
+`domain_*` package (`.agents/AGENTS.md` §8.4): the import would make every consumer depend on
+`domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
+type,
+[`AuthPrincipal`](../../../platform/di/lib/src/agnostic_streams/auth_principal.dart), and the auth
+feature narrows its entity to it at the boundary (`toPrincipal` in step 2). The contract is
+deliberately smaller than the entity — a consumer that only asks *who is signed in* never sees the
+rest.
 
 **Why `currentUser` exists alongside the stream.** `authStatusStream` is a *broadcast* stream: it
 does not replay its last value to new listeners. A consumer subscribing after login would sit blind
@@ -116,19 +122,31 @@ Real code from
 /// Implementation of [IAuthStatusStream] provided by `feature_auth`.
 @singleton
 class AuthStatusStreamImpl implements IAuthStatusStream {
-  final _controller = StreamController<UserEntity?>.broadcast();
-  UserEntity? _currentUser;
+  final _controller = StreamController<AuthPrincipal?>.broadcast();
+  AuthPrincipal? _currentUser;
 
   @override
-  Stream<UserEntity?> get authStatusStream => _controller.stream;
+  Stream<AuthPrincipal?> get authStatusStream => _controller.stream;
 
   @override
-  UserEntity? get currentUser => _currentUser;
+  AuthPrincipal? get currentUser => _currentUser;
 
-  /// Internal method used by `feature_auth` to update the state.
+  /// Called by `feature_auth` when the session settles.
   void updateAuthStatus(UserEntity? user) {
-    _currentUser = user;
-    _controller.add(user);
+    final principal = toPrincipal(user);
+    _currentUser = principal;
+    _controller.add(principal);
+  }
+
+  /// The one place `UserEntity` is narrowed for the outside world.
+  static AuthPrincipal? toPrincipal(UserEntity? user) {
+    if (user == null) return null;
+    return AuthPrincipal(
+      id: user.id,
+      displayName: user.name,
+      email: user.email,
+      roles: {if (user.role != null) user.role!.name},
+    );
   }
 }
 ```
@@ -162,13 +180,13 @@ Real code from
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<UserEntity?>> {
+    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
   HomeProfileBloc(this._authStatusStream) : super(const BlocViewState.initial()) {
     // …
   }
 
   final IAuthStatusStream _authStatusStream;
-  StreamSubscription<UserEntity?>? _subscription;
+  StreamSubscription<AuthPrincipal?>? _subscription;
 ```
 
 `feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either: the contract carries `AuthPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
@@ -342,7 +360,7 @@ getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
 | `getIt<FeatureOwnedType>()` | Throws when that feature is gone | `getItOrNull<T>()` + fallback |
 | Action Handler for navigation | Wrong tool; loses type-safe routes | Navigator interface |
 | Put shared business logic in `core_ui_kit` | It is a UI package | A domain UseCase |
-| Generic `<T>` on a stream carrying a domain entity | Loses type safety, contradicts AGENTS.md §8.4 | Name the entity type |
+| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts AGENTS.md §8.4 | A contract-owned value type (`AuthPrincipal`) |
 
 ---
 

@@ -40,6 +40,65 @@ stages:
 
                 echo "##vso[task.setvariable variable=commitTag]$COMMAND"
 
+          # Gitignored build inputs, restored from Pipelines -> Library ->
+          # Secure files BEFORE any code generation: firebase_module.dart
+          # imports all three firebase_options_*.dart files, and the
+          # google-services Gradle plugin needs the flavor's JSON. This
+          # pipeline builds prod only, so only prod's files are real; dev and
+          # staging get a compile-only stub. DownloadSecureFile fails the run
+          # when a secure file is missing from the library.
+          # See docs/en/operations/01_cicd.md section 7.
+          - task: DownloadSecureFile@1
+            name: envProd
+            displayName: "Download env.prod"
+            inputs:
+              secureFile: "env.prod"
+              retryCount: 3
+
+          - task: DownloadSecureFile@1
+            name: firebaseOptionsProd
+            displayName: "Download firebase_options_prod.dart"
+            inputs:
+              secureFile: "firebase_options_prod.dart"
+              retryCount: 3
+
+          - task: DownloadSecureFile@1
+            name: googleServicesProd
+            displayName: "Download google-services.prod.json"
+            inputs:
+              secureFile: "google-services.prod.json"
+              retryCount: 3
+
+          - task: Bash@3
+            displayName: Restore gitignored build inputs
+            inputs:
+              targetType: inline
+              script: |
+                set -euo pipefail
+                APP="$(Build.SourcesDirectory)/apps/mobile"
+                cp "$(envProd.secureFilePath)" "$APP/env.prod"
+                cp "$(firebaseOptionsProd.secureFilePath)" "$APP/lib/firebase/firebase_options_prod.dart"
+                mkdir -p "$APP/android/app/src/prod"
+                cp "$(googleServicesProd.secureFilePath)" "$APP/android/app/src/prod/google-services.json"
+                for other in dev staging; do
+                  file="$APP/lib/firebase/firebase_options_${other}.dart"
+                  [ -f "$file" ] && continue
+                  printf '%s\n' \
+                    "// CI-only stub for a flavor this pipeline does not build. Never used at runtime:" \
+                    "// injectable registers only the prod FirebaseOptions." \
+                    "import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;" \
+                    "" \
+                    "class DefaultFirebaseOptions {" \
+                    "  static FirebaseOptions get currentPlatform => const FirebaseOptions(" \
+                    "        apiKey: 'ci-stub'," \
+                    "        appId: 'ci-stub'," \
+                    "        messagingSenderId: 'ci-stub'," \
+                    "        projectId: 'ci-stub'," \
+                    "      );" \
+                    "}" > "$file"
+                  echo "stubbed $file"
+                done
+
           - task: Hey24sheep.flutter.flutter-install.FlutterInstall@0
             displayName: Flutter Install
             inputs:
@@ -53,10 +112,12 @@ stages:
               arguments: clean
 
           - task: Hey24sheep.flutter.flutter-command.FlutterCommand@0
-            displayName: Flutter pub get
+            displayName: Flutter pub get (committed lockfile)
             inputs:
               flutterDirectory: $(flutterPath)
-              arguments: pub get
+              # The workspace pubspec.lock is committed; fail on a stale one
+              # instead of silently re-resolving it.
+              arguments: pub get --enforce-lockfile
 
           - task: Bash@3
             displayName: Flutter Config
@@ -101,7 +162,7 @@ stages:
               verboseMode: true
               buildNumber: $(numberBuild)
               buildName: $(version)
-              extraArgs: --flavor=prod --dart-define-from-file=$(Build.SourcesDirectory)/.env --obfuscate --split-debug-info=$(Build.SourcesDirectory)/obfuscate/ --no-tree-shake-icons
+              extraArgs: --flavor=prod --dart-define-from-file=$(Build.SourcesDirectory)/apps/mobile/env.prod --obfuscate --split-debug-info=$(Build.SourcesDirectory)/obfuscate/ --no-tree-shake-icons
 
           - task: PublishPipelineArtifact@1
             displayName: Publish Android
@@ -118,7 +179,7 @@ stages:
           #     buildNumber: $(numberBuild)
           #     buildName: $(version)
           #     exportOptionsPlist: $(Build.SourcesDirectory)/ExportOptions.plist
-          #     extraArgs: --flavor=prod --dart-define-from-file=.env --obfuscate --split-debug-info=./obfuscate/ --no-tree-shake-icons
+          #     extraArgs: --flavor=prod --dart-define-from-file=$(Build.SourcesDirectory)/apps/mobile/env.prod --obfuscate --split-debug-info=./obfuscate/ --no-tree-shake-icons
           # - task: PublishPipelineArtifact@1
           #   displayName: Publish Ios
           #   inputs:

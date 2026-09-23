@@ -1,4 +1,6 @@
-# Pluginfile
+# Pluginfile — the single list of fastlane plugins. Loaded by apps/mobile/Gemfile
+# and, through fastlane/Pluginfile, by the root Gemfile. Add plugins here by
+# hand; `fastlane add_plugin` would edit the Pluginfile of whichever fastlane
+# folder it runs in.
 
 gem 'fastlane-plugin-firebase_app_distribution'
-

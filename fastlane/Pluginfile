@@ -1,4 +1,5 @@
-# Root fastlane Pluginfile
-# Evaluates the real Pluginfile from the app's fastlane folder
+# Root fastlane Pluginfile — loaded by the root Gemfile.
+# The plugin list lives in one place, apps/mobile/fastlane/Pluginfile; add
+# plugins there (not here) so both entry points load the same set.
 
-eval_gemfile "../apps/mobile/fastlane/Pluginfile"
+eval_gemfile File.expand_path("../apps/mobile/fastlane/Pluginfile", __dir__)

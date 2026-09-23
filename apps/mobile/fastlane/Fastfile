@@ -1,10 +1,17 @@
 # Fastlane Main Entry Point
-# 
+#
 # This file imports modular components for better maintainability.
 # - helpers.rb: Configuration and shared helper functions.
 # - ios_lanes.rb: Lanes specific to the iOS platform.
 # - android_lanes.rb: Lanes specific to the Android platform.
 # - flutter_lanes.rb: Combined lanes that orchestrate builds for both platforms.
+#
+# The root `fastlane/Fastfile` imports the same modules, so every lane runs
+# identically from the repository root and from apps/mobile/.
+
+# fastlane regenerates README.md in this folder after every run; ours is
+# hand-written and tracked, so the generator stays off.
+ENV['FASTLANE_SKIP_DOCS'] = '1'
 
 import "modules/helpers.rb"
 import "modules/ios_lanes.rb"

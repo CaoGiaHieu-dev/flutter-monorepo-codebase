@@ -3,7 +3,7 @@
 This page answers: **what pipelines exist, what each one does, which secrets they need, and what is currently broken in them.** After reading it you can configure the repository secrets, trigger a build, and reproduce every CI step locally before you push.
 
 > [!IMPORTANT]
-> Several pipelines in this repository are **currently broken**. They are documented here as they actually are, with the fix for each. Do not assume a green checkmark exists until you have run them.
+> The release pipelines depend on **repository secrets** for every gitignored input — Firebase options, `google-services.json`, `env.prod`, the release keystore, fastlane's `Config.yaml` ([§7](#7-secrets)). Without them they stop at their first step, naming the missing secret. Do not assume a green checkmark exists until you have configured them and run the pipeline once.
 
 ---
 
@@ -42,24 +42,33 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 1. **Checkout** — `actions/checkout@v4`.
 2. **Set Up Java** — Oracle distribution, **Java 17**. Matches `sourceCompatibility`/`targetCompatibility` in `apps/mobile/android/app/build.gradle.kts`.
 3. **Set Up Flutter** — `subosito/flutter-action@v2`, pinned to **`3.47.4`**, channel `stable`, with cache enabled.
-4. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation and `build_runner` for the whole workspace.
-5. **Decode Env** — `echo -n ${{ secrets.ENV }} | base64 -d > .env` (written to the **repo root**).
-6. **Decode Keystore** — `secrets.KEYSTORE_BASE64` → `apps/mobile/android/keystore.jks`.
-7. **Create key.properties** — writes `storePassword`, `keyPassword`, `keyAlias` and a fixed `storeFile=../keystore.jks` into `apps/mobile/android/key.properties`.
-8. **Build APK** — note the `cd apps/mobile` on its own line first:
+4. **Restore gitignored build inputs from secrets** — for the chosen flavor only, each from a base64 secret ([§7](#7-secrets)):
+   - `firebase_options_<flavor>.dart` in `apps/mobile/lib/firebase/`; the two other flavors get a compile-only stub, because `firebase_module.dart` imports all three and injectable registers only the built flavor's options;
+   - `apps/mobile/android/app/src/<flavor>/google-services.json` — the `com.google.gms.google-services` Gradle plugin fails the build without it;
+   - `apps/mobile/env.prod` (prod only — `env.dev` / `env.stg` are committed);
+   - prod only: `apps/mobile/android/keystore.jks` + `key.properties` (`storeFile=../keystore.jks`). dev and staging are signed with the committed dev keystore.
+
+   A missing secret fails this step with an error naming it — before any codegen or Gradle time is spent. It runs **before** code generation because `build_runner` must be able to resolve `firebase_module.dart`'s imports.
+5. **Get dependencies from the committed lockfile** — `flutter pub get --enforce-lockfile`. The workspace `pubspec.lock` is committed; a lockfile that no longer matches the pubspecs fails here instead of being silently re-resolved.
+6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation and `build_runner` for the whole workspace.
+7. **Build APK** — note the `cd apps/mobile` on its own line first:
    ```bash
    cd apps/mobile
-   flutter build apk --flavor=$FLAVOR --build-name=$VERSION --build-number=$RUN_NUMBER \
-     --dart-define-from-file="$GITHUB_WORKSPACE/.env" \
+   flutter build apk --flavor="$FLAVOR" --build-name="$VERSION" --build-number="$GITHUB_RUN_NUMBER" \
+     --dart-define-from-file="$GITHUB_WORKSPACE/apps/mobile/$ENV_FILE" \
      --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" \
      --no-tree-shake-icons --verbose
    ```
-9. **Upload and Distribute** — `nickwph/firebase-app-distribution-action@v1`, uploading `apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk`.
+   `ENV_FILE` is `env.dev` / `env.stg` / `env.prod`, set by step 4 — the same flavor-to-file mapping Fastlane uses.
+8. **Upload and Distribute** — `nickwph/firebase-app-distribution-action@v1`, uploading `apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk`.
 
 > [!NOTE]
 > **The `cd apps/mobile` is not optional.** `flutter build apk` run from the repository root fails with a confusing `android/app/build.gradle not found`, because the Flutter project lives in `apps/mobile/`, not at the workspace root. The same applies when you build locally — see [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 The artifact name interpolates the flavor (`app-${{ inputs.flavor }}-release.apk`), so it stays correct for all three flavors. That is the right pattern; Azure does **not** do this — see [§5](#5-azure-ci-cdyml--azure-devops).
+
+> [!WARNING]
+> The Firebase App ID is **not** per flavor: every flavor uploads to `secrets.FIREBASE_ANDROID_APP_ID`. The flavors have different application IDs (`.dev`, `.stg`), so each is a different Firebase app — set the secret to the app of the flavor you dispatch, or split it per flavor.
 
 ### Cost note
 
@@ -101,14 +110,34 @@ fi
 
 ## 4. `fastlane.yml` — Fastlane build and distribute
 
-Manual dispatch that hands the whole build over to Fastlane. Sets up Java 17, Ruby 3.3 (skipped on `self-hosted`), Flutter (channel `stable`, **no pinned version**), installs Fastlane and the `firebase_app_distribution` plugin, then invokes a lane.
+Manual dispatch that hands the whole build over to Fastlane, run **from the repository root** (the root `fastlane/Fastfile` imports the lanes from `apps/mobile/fastlane/`; see [`02_fastlane_release.md` §1](02_fastlane_release.md#1-why-you-can-run-it-from-anywhere)).
 
-It invokes the cross-platform lane, `fastlane flutter` (declared in `apps/mobile/fastlane/modules/flutter_lanes.rb` as `lane :flutter do |options|`), and `flutter_version` defaults to `3.47.4`.
+### Inputs
 
-> [!WARNING]
-> The invocation passes `auto_increment:` (`fastlane.yml:99`), and **no lane reads it** — `grep -rn auto_increment apps/mobile/fastlane/` returns nothing. Auto-increment is triggered by passing `build_number:auto` instead; see [`02_fastlane_release.md`](02_fastlane_release.md). The argument is silently ignored, so a dispatch relying on it gets whatever `build_number` was passed, not an incremented one.
+| Input | Default | Notes |
+|:---|:---|:---|
+| `build-on` | `self-hosted` | `self-hosted` or `macos-latest`. Anything that builds iOS must be a Mac with signing set up |
+| `platform` | `both` | `both` → `fastlane flutter` (iOS first, then Android); `android` → `fastlane android build`; `ios` → `fastlane ios build` |
+| `flutter_version` | `3.47.4` | Installed by `subosito/flutter-action` **and** passed to the lane, which stops if the Flutter it finds differs |
+| `version` | `1.0.0` | `--build-name` |
+| `build_number` | *(empty)* | Empty means `auto`: latest on the store (`distribute_store`) or on Firebase (`distribute_firebase`) plus one; with no distribution target, the build number in `apps/mobile/pubspec.yaml`. A literal must be a positive integer |
+| `flavor` | `prod` | `dev` / `staging` / `prod` |
+| `change_log` | `Initial release` | Release notes. Always wins over anything else (no stale temp file can replace it) |
+| `build_type` | `apk` | Android only |
+| `distribute_store` | `false` | Play Store and/or TestFlight, depending on `platform` |
+| `track` | `internal` | Play track, used only with `distribute_store` |
+| `distribute_firebase` | `true` | Firebase App Distribution |
 
-Because the Flutter setup step passes only `channel: stable` without `flutter-version`, the `flutter_version` input never reaches the toolchain; it is forwarded to Fastlane, which uses it to decide whether to drive `fvm`.
+### Steps
+
+1. **Checkout**, **Java 17**.
+2. **Ruby 3.3 + `bundle install`** at the repository root (`ruby/setup-ruby` with `bundler-cache` on GitHub-hosted runners, a plain `bundle install` on `self-hosted`). The root `Gemfile` lists `fastlane` and `cocoapods` and loads the plugins from `apps/mobile/fastlane/Pluginfile` through `fastlane/Pluginfile`, so there is no `fastlane add_plugin` step — that command is interactive and fails on a runner.
+3. **Flutter** at `flutter_version`.
+4. **Restore gitignored build inputs from secrets** — `apps/mobile/fastlane/Config.yaml`, the flavor's Firebase options (other flavors stubbed), `google-services.json` (Android), `GoogleService-Info.plist` (iOS, optional), `env.prod` and the release keystore (prod), and the credential files `Config.yaml` points at — only those the chosen distribution needs. Every missing secret is reported by name, then the step fails.
+5. **Build and distribute** — `bundle exec fastlane <lane> …`. Inputs reach the script through `env:`, never interpolated into it, so a change log containing quotes or `$(…)` is passed verbatim. The lane does its own toolchain setup: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`.
+
+> [!NOTE]
+> iOS **code signing** (certificates, provisioning profiles) is not set up by any workflow. `platform: both` / `ios` needs a runner whose keychain already has them — in practice a `self-hosted` Mac.
 
 
 ---
@@ -117,20 +146,15 @@ Because the Flutter setup step passes only `channel: stable` without `flutter-ve
 
 Two stages on a self-hosted pool named `codebase`. `trigger: none`, so it only runs when started manually or by a release.
 
-**Stage `Build`**: capture the short commit SHA into `commitTag` → install Flutter at `$(flutter-version)` → `flutter clean` → `flutter pub get` → "Flutter Config" → download `key.properties` and `keystore.jks` as Azure *secure files* into `apps/mobile/android/` → build the prod APK → publish it as artifact `android`.
+**Stage `Build`**: capture the short commit SHA into `commitTag` → download `env.prod`, `firebase_options_prod.dart` and `google-services.prod.json` as Azure *secure files* and copy them into place (dev/staging Firebase options get a compile-only stub) → install Flutter at `$(flutter-version)` → `flutter clean` → `flutter pub get --enforce-lockfile` → "Flutter Config" → download `key.properties` and `keystore.jks` as secure files into `apps/mobile/android/` → build the prod APK with `--dart-define-from-file=$(Build.SourcesDirectory)/apps/mobile/env.prod` → publish it as artifact `android`.
 
 **Stage `Distribute`**: download the artifact, then `firebase appdistribution:distribute` it.
 
 Pipeline variables must be defined in the Azure Variables tab: `flutter-version`, `flutterPath`, `version`, `numberBuild`, `note`, and `FIREBASE-ANDROID-ID`.
 
-### One defect
+The artefact filename, the `configure.dart` call and the env file are consistent: the build publishes `app-prod-release.apk`, the Distribute stage downloads and uploads that same name, "Flutter Config" runs `dart tools/workspace_setup/configure.dart`, and the dart-define file is `apps/mobile/env.prod` — the same file Fastlane and `flutter_build.yml` use for prod. A secure file missing from the library fails its `DownloadSecureFile@1` task, before anything is built.
 
-The artefact filename and the `configure.dart` call are consistent: the build publishes `app-prod-release.apk`, the Distribute stage downloads and uploads that same name, and "Flutter Config" runs `dart tools/workspace_setup/configure.dart`. One thing is missing.
-
-> [!WARNING]
-> **`.env` is never created, but the build requires it.**
->
-> The build passes `--dart-define-from-file=$(Build.SourcesDirectory)/.env` (`azure-ci-cd.yml`), yet no step in the pipeline produces `.env`. The two `DownloadSecureFile@1` tasks fetch only `key.properties` and `keystore.jks`. Add a third secure file for `.env` and copy it to `$(Build.SourcesDirectory)`, mirroring what `flutter_build.yml` does with `secrets.ENV`. Without it every `String.fromEnvironment` falls back to its empty default.
+The pipeline builds **prod only** (`--flavor=prod`, `app-prod-release.apk`).
 
 The iOS build and iOS distribute tasks are present but fully commented out.
 
@@ -165,26 +189,44 @@ Gate 3 loops per package because this is a Pub Workspace: tests live in each pac
 
 ### GitHub Actions
 
-| Secret | Used by | How to produce it |
-|:---|:---|:---|
-| `ENV` | `flutter_build.yml` | Base64 of the dart-define env file: `base64 -w0 apps/mobile/env.prod` (macOS: `base64 -i apps/mobile/env.prod`) |
-| `KEYSTORE_BASE64` | `flutter_build.yml` | Base64 of your release keystore: `base64 -w0 upload-keystore.jks` |
-| `KEYSTORE_PASSWORD` | `flutter_build.yml` | Keystore password |
-| `KEY_PASSWORD` | `flutter_build.yml` | Key password |
-| `KEY_ALIAS` | `flutter_build.yml` | Key alias |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | `flutter_build.yml` | Contents of the Firebase service-account JSON |
-| `FIREBASE_ANDROID_APP_ID` | `flutter_build.yml` | Firebase App ID, e.g. `1:1234567890:android:abcdef` |
-| `GEMINI_API_KEY` | `code_review.yml` | Create at <https://aistudio.google.com/app/apikey> |
-| `GITHUB_TOKEN` | `code_review.yml` | Provided automatically by GitHub — do not create it |
+Every file below is gitignored, so a clean runner has none of them; the release workflows decode them from secrets. `<FLAVOR>` is `DEV`, `STAGING` or `PROD` — only the flavor being built is needed. Unless marked *raw*, a secret holds the **base64** of the file.
+
+| Secret | Written to | Needed by | How to produce it |
+|:---|:---|:---|:---|
+| `FIREBASE_OPTIONS_<FLAVOR>_DART_B64` | `firebase_options_<flavor>.dart` in `apps/mobile/lib/firebase/` | `flutter_build.yml`, `fastlane.yml` — every build of that flavor | `cd apps/mobile/lib/firebase && base64 -w0 firebase_options_dev.dart` (generate the file with `dart tools/firebase/firebase_config.dart --app mobile`) |
+| `GOOGLE_SERVICES_<FLAVOR>_JSON_B64` | `apps/mobile/android/app/src/<flavor>/google-services.json` | both — every Android build of that flavor | `base64 -w0 apps/mobile/android/app/src/dev/google-services.json` |
+| `GOOGLE_SERVICE_INFO_<FLAVOR>_PLIST_B64` | `ios/flavors/<flavor>/GoogleService-Info.plist` under `apps/mobile/` | `fastlane.yml`, iOS builds — optional (warning if unset) | `base64 -w0 apps/mobile/ios/flavors/dev/GoogleService-Info.plist` |
+| `ENV_PROD_B64` | `apps/mobile/env.prod` | both — **prod** builds (`env.dev` / `env.stg` are committed) | `base64 -w0 apps/mobile/env.prod`. Replaces the former `ENV` secret, which was decoded to a root `.env` for every flavor |
+| `KEYSTORE_BASE64` | `apps/mobile/android/keystore.jks` | both — **prod** Android builds | `base64 -w0 upload-keystore.jks` |
+| `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS` | `apps/mobile/android/key.properties` (*raw*) | both — **prod** Android builds | Keystore password, key password, key alias |
+| `FASTLANE_CONFIG_YAML_B64` | `apps/mobile/fastlane/Config.yaml` | `fastlane.yml` — always | `base64 -w0 apps/mobile/fastlane/Config.yaml` |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | *raw* JSON. `flutter_build.yml` passes it to the upload action; `fastlane.yml` writes it to `firebase.credentials_map.<flavor>` from `Config.yaml` | both — Firebase distribution | Contents of the Firebase service-account JSON |
+| `GOOGLE_PLAY_JSON_KEY_B64` | `paths.google_play_key_prod` from `Config.yaml` | `fastlane.yml` — `distribute_store` + Android | `base64 -w0 google-play-store.json` |
+| `APP_STORE_CONNECT_API_KEY_P8_B64` | `paths.app_store_connect_key_filepath` from `Config.yaml` | `fastlane.yml` — `distribute_store` + iOS | `base64 -w0 AuthKey_XXXX.p8` |
+| `FIREBASE_ANDROID_APP_ID` | — | `flutter_build.yml` | Firebase App ID, e.g. `1:1234567890:android:abcdef` |
+| `GEMINI_API_KEY` | — | `code_review.yml` | Create at <https://aistudio.google.com/app/apikey> |
+| `GITHUB_TOKEN` | — | `code_review.yml` | Provided automatically by GitHub — do not create it |
 
 Add them under **Settings → Secrets and variables → Actions → New repository secret**.
+
+The prod keystore secrets are **required** for prod: without `key.properties`, Gradle would silently sign prod with the committed dev keystore ([`02_fastlane_release.md` §4](02_fastlane_release.md#4-signing)), so the workflow refuses to build instead. Relative paths in `Config.yaml` are resolved against `apps/mobile/`, exactly as the lanes resolve them.
 
 > [!CAUTION]
 > `base64` without `-w0` inserts line breaks on Linux, which breaks `base64 -d` in the workflow. On macOS, plain `base64 -i <file>` produces a single line already. Always verify with `base64 -d` locally before pasting.
 
 ### Azure DevOps
 
-Azure uses the **Secure files** library rather than secrets for binaries: upload `key.properties`, `keystore.jks` and (once you add the missing step) `.env` under **Pipelines → Library → Secure files**. `FIREBASE-ANDROID-ID` is a pipeline variable.
+Azure uses the **Secure files** library rather than secrets: upload these under **Pipelines → Library → Secure files**, with exactly these names:
+
+| Secure file | Copied to |
+|:---|:---|
+| `env.prod` | `apps/mobile/env.prod` |
+| `firebase_options_prod.dart` | `firebase_options_prod.dart` in `apps/mobile/lib/firebase/` |
+| `google-services.prod.json` | `apps/mobile/android/app/src/<flavor>/google-services.json`, flavor `prod` |
+| `key.properties` | `apps/mobile/android/key.properties` — with `storeFile=../keystore.jks` |
+| `keystore.jks` | `apps/mobile/android/keystore.jks` |
+
+`FIREBASE-ANDROID-ID` is a pipeline variable.
 
 ---
 
@@ -194,6 +236,7 @@ Run these before pushing; they are the same commands the pipelines use.
 
 ```bash
 # 1. Full workspace setup — same as the CI "Install Dependencies" step
+#    (release pipelines first run `flutter pub get --enforce-lockfile`)
 dart tools/workspace_setup/configure.dart
 
 # 2. The same gates pr_quality_check.yml runs, in the same order
@@ -216,9 +259,9 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 ```
 
 > [!NOTE]
-> Locally the dart-define path is `env.dev` (relative to `apps/mobile/`), while CI writes its env file to the repo root and addresses it absolutely, through `$GITHUB_WORKSPACE` on GitHub and `$(Build.SourcesDirectory)` on Azure. Same mechanism, different location — and absolute on purpose, because counting `../` from the app broke the moment the app moved one directory deeper.
+> Locally the dart-define path is `env.dev` (relative to `apps/mobile/`). CI uses the same files — `apps/mobile/env.<dev|stg|prod>` — but addresses them absolutely, through `$GITHUB_WORKSPACE` on GitHub and `$(Build.SourcesDirectory)` on Azure, because counting `../` from the app broke the moment the app moved one directory deeper.
 
-A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files are gitignored and `apps/mobile/lib/firebase/firebase_module.dart` imports all three unconditionally. (`pr_quality_check.yml` stubs them for every app that has a `lib/firebase/firebase_module.dart`, which is enough for analysis and tests but not for a real build.) See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files and `google-services.json` are gitignored and `apps/mobile/lib/firebase/firebase_module.dart` imports all three options files unconditionally. (`pr_quality_check.yml` stubs the options for every app that has a `lib/firebase/firebase_module.dart`, which is enough for analysis and tests but not for a real build; the release pipelines restore the real ones from secrets — [§7](#7-secrets).) See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 
@@ -226,11 +269,11 @@ A first build on a clean machine also needs `flutterfire configure` to have been
 
 Open items, in rough priority order:
 
-- [ ] `azure-ci-cd.yml` — add a secure file + copy step for `.env`; the prod build currently gets no dart-defines
-- [ ] `fastlane.yml` — drop the ignored `auto_increment:` argument, or make a lane read it
 - [ ] `flutter_build.yml` — run the six `pr_quality_check.yml` gates before building, so a manual dispatch cannot ship unverified code
 - [ ] `code_review.yml` — decide whether to uncomment `exit 1` (only after you trust the reviewer's false-positive rate)
 - [ ] `flutter_build.yml` — consider `ubuntu-latest` instead of `macos-latest` for Android-only builds
+- [ ] `flutter_build.yml` — make `FIREBASE_ANDROID_APP_ID` per flavor ([§2](#2-flutter_buildyml--build-and-distribute))
+- [ ] `fastlane.yml` — set up iOS code signing (e.g. `match`) if iOS is to build on GitHub-hosted runners
 
 ---
 

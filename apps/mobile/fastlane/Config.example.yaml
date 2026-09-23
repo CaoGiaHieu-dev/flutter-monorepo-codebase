@@ -1,11 +1,21 @@
-# fastlane/Config.example.yaml
+# apps/mobile/fastlane/Config.example.yaml
 #
 # This file serves as an example configuration for your Fastlane setup.
-# Duplicate this file to `fastlane/Config.yaml` and fill in your actual project details.
+# Copy it to `apps/mobile/fastlane/Config.yaml` (next to this file — gitignored)
+# and fill in your actual project details:
+#
+#   cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
+#
+# In CI, `.github/workflows/fastlane.yml` writes it from the
+# FASTLANE_CONFIG_YAML_B64 secret instead.
 
 # Flutter configuration
+# `stable` = use whatever Flutter this machine resolves (the .fvmrc pin when
+# fvm is installed, otherwise the flutter on PATH). An exact version (e.g.
+# "3.47.4") must match that Flutter or the lane stops. Nothing is upgraded
+# unless you pass `flutter_upgrade:true`.
 flutter:
-  default_version: "stable" # e.g., "3.16.9", "stable"
+  default_version: "stable" # e.g., "3.47.4", "stable"
 
 # Default app version to use if not specified when building
 default_app_version: "1.0.0" # e.g., "1.0.0"
@@ -42,8 +52,10 @@ firebase:
       default: "YOUR_FIREBASE_APP_ID_ANDROID_DEFAULT" # Used when building without a specific flavor (i.e., 'none')
 
   # Mapping of flavors to their corresponding Firebase service account JSON files.
-  # These files should be placed in the 'fastlane/' directory (or specified with full path).
-  # Important: These files should be added to .gitignore for security!
+  # Relative paths are resolved against apps/mobile/ (so "fastlane/x.json" is
+  # apps/mobile/fastlane/x.json), whichever directory fastlane is started from;
+  # absolute paths are used as is. apps/mobile/fastlane/.gitignore already
+  # ignores *.json there.
   credentials_map:
     dev: "fastlane/firebase-auth-dev.json"
     staging: "fastlane/firebase-auth-staging.json" # Optional: If you have a separate staging credential file
@@ -52,7 +64,7 @@ firebase:
 
 # Apple App Store Connect Configuration
 # Generate an API Key in App Store Connect (Users and Access -> Keys)
-# Key file should be placed in the 'fastlane/' directory and named 'AuthKey_YOURKEYID.p8'.
+# Key file should be placed in apps/mobile/fastlane/ and named 'AuthKey_YOURKEYID.p8'.
 app_store_connect:
   api_key_id: "<YOUR_APP_STORE_CONNECT_API_KEY_ID>" # e.g., "Z2ABCD6E7F"
   issuer_id: "<YOUR_APP_STORE_CONNECT_ISSUER_ID>" # e.g., "69a6de80-d5d8-47e3-e053-5b8c7c11a4d1"
@@ -72,20 +84,22 @@ google_play:
   # The upload actions use the JSON key file for authentication.
   account_id: "<YOUR_GOOGLE_PLAY_DEVELOPER_ACCOUNT_ID>" # e.g., "1234567890123456789"
 
-# File paths used in the Fastfile
-# All paths are relative to the project root (where the 'fastlane' directory is).
-# These are internal paths for the Fastfile logic.
+# File paths used in the Fastfile.
+# Relative paths are resolved against apps/mobile/ (the app directory, the
+# parent of this file's folder) — NOT against the directory you run fastlane
+# from — so the defaults below all point into apps/mobile/fastlane/.
+# Absolute paths are used as is.
 paths:
-  firebase_testers_file: "fastlane/firebase_tester.txt" # List of tester emails for Firebase App Distribution
+  firebase_testers_file: "fastlane/firebase_tester.txt" # List of tester emails for Firebase App Distribution (gitignored)
 
   # Google Play credentials JSON files
   google_play_key_prod: "fastlane/google-play-store.json"
   google_play_key_dev: "fastlane/google-play-store-dev.json" # Optional: if you have a separate dev key
 
   # App Store Connect API Key .p8 file
-  # Rename your downloaded .p8 file to match this pattern and place it in the 'fastlane/' directory.
+  # Rename your downloaded .p8 file to match this pattern and place it in apps/mobile/fastlane/.
   app_store_connect_key_filepath: "fastlane/AuthKey_YOURKEYID.p8"
 
-  # Temporary change log files (managed by Fastlane itself)
-  change_log_android: "change_log_android.txt"
-  change_log_ios: "change_log_ios.txt"
+  # (The former `change_log_android` / `change_log_ios` keys are gone: the
+  # combined lanes now pass the change log through a temp file outside the
+  # repository. Leftover keys in an existing Config.yaml are ignored.)

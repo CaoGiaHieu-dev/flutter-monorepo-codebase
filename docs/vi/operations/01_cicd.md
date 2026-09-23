@@ -3,7 +3,7 @@
 Tài liệu này trả lời: **có những pipeline nào, mỗi cái làm gì, cần secret gì, và hiện đang hỏng chỗ nào.** Đọc xong bạn cấu hình được secret cho repo, chạy được build, và tái hiện được mọi bước CI ở máy local trước khi push.
 
 > [!IMPORTANT]
-> Một số pipeline trong repo này **đang hỏng thật sự**. Tài liệu mô tả đúng hiện trạng kèm cách sửa từng chỗ. Đừng cho rằng chúng đang chạy xanh khi bạn chưa tự chạy thử.
+> Các pipeline phát hành phụ thuộc vào **secret của repo** cho mọi đầu vào bị gitignore — Firebase options, `google-services.json`, `env.prod`, keystore release, `Config.yaml` của fastlane ([§7](#7-secrets)). Thiếu chúng thì pipeline dừng ngay ở bước đầu và nêu tên secret còn thiếu. Đừng cho rằng chúng đang chạy xanh khi bạn chưa cấu hình secret và tự chạy thử một lần.
 
 ---
 
@@ -42,24 +42,33 @@ Build number không phải tham số — nó dùng `${{ github.run_number }}`, n
 1. **Checkout** — `actions/checkout@v4`.
 2. **Set Up Java** — bản Oracle, **Java 17**. Khớp với `sourceCompatibility`/`targetCompatibility` trong `apps/mobile/android/app/build.gradle.kts`.
 3. **Set Up Flutter** — `subosito/flutter-action@v2`, ghim **`3.47.4`**, kênh `stable`, bật cache.
-4. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. Script Dart này làm trọn gói: pub get, sinh l10n, và `build_runner` cho cả workspace.
-5. **Decode Env** — `echo -n ${{ secrets.ENV }} | base64 -d > .env` (ghi ra **thư mục gốc repo**).
-6. **Decode Keystore** — `secrets.KEYSTORE_BASE64` → `apps/mobile/android/keystore.jks`.
-7. **Create key.properties** — ghi `storePassword`, `keyPassword`, `keyAlias` và `storeFile=../keystore.jks` cố định vào `apps/mobile/android/key.properties`.
-8. **Build APK** — chú ý dòng `cd apps/mobile` đứng riêng phía trước:
+4. **Restore gitignored build inputs from secrets** — chỉ cho flavor được chọn, mỗi file lấy từ một secret base64 ([§7](#7-secrets)):
+   - `firebase_options_<flavor>.dart` trong `apps/mobile/lib/firebase/`; hai flavor còn lại nhận một stub chỉ để biên dịch, vì `firebase_module.dart` import cả ba file còn injectable chỉ đăng ký options của flavor đang build;
+   - `apps/mobile/android/app/src/<flavor>/google-services.json` — thiếu nó thì plugin Gradle `com.google.gms.google-services` làm build fail;
+   - `apps/mobile/env.prod` (chỉ prod — `env.dev` / `env.stg` đã được commit);
+   - chỉ prod: `apps/mobile/android/keystore.jks` + `key.properties` (`storeFile=../keystore.jks`). dev và staging được ký bằng keystore dev đã commit.
+
+   Thiếu secret nào thì bước này fail kèm lỗi nêu đúng tên secret đó — trước khi tốn thời gian cho codegen hay Gradle. Nó chạy **trước** bước sinh code vì `build_runner` phải phân giải được các import của `firebase_module.dart`.
+5. **Get dependencies from the committed lockfile** — `flutter pub get --enforce-lockfile`. `pubspec.lock` của workspace đã được commit; lockfile nào không còn khớp các pubspec sẽ fail ngay tại đây thay vì bị resolve lại âm thầm.
+6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. Script Dart này làm trọn gói: pub get, sinh l10n, và `build_runner` cho cả workspace.
+7. **Build APK** — chú ý dòng `cd apps/mobile` đứng riêng phía trước:
    ```bash
    cd apps/mobile
-   flutter build apk --flavor=$FLAVOR --build-name=$VERSION --build-number=$RUN_NUMBER \
-     --dart-define-from-file="$GITHUB_WORKSPACE/.env" \
+   flutter build apk --flavor="$FLAVOR" --build-name="$VERSION" --build-number="$GITHUB_RUN_NUMBER" \
+     --dart-define-from-file="$GITHUB_WORKSPACE/apps/mobile/$ENV_FILE" \
      --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" \
      --no-tree-shake-icons --verbose
    ```
-9. **Upload and Distribute** — `nickwph/firebase-app-distribution-action@v1`, tải lên `apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk`.
+   `ENV_FILE` là `env.dev` / `env.stg` / `env.prod`, do bước 4 đặt — cùng cách ánh xạ flavor sang file mà Fastlane dùng.
+8. **Upload and Distribute** — `nickwph/firebase-app-distribution-action@v1`, tải lên `apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk`.
 
 > [!NOTE]
 > **`cd apps/mobile` không phải tuỳ chọn.** Chạy `flutter build apk` từ thư mục gốc sẽ lỗi khó hiểu `android/app/build.gradle not found`, vì project Flutter nằm trong `apps/mobile/` chứ không ở gốc workspace. Build ở local cũng vậy — xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 Tên artifact có nội suy flavor (`app-${{ inputs.flavor }}-release.apk`) nên đúng cho cả ba flavor. Đó là cách làm đúng; Azure **không** làm vậy — xem [§5](#5-azure-ci-cdyml--azure-devops).
+
+> [!WARNING]
+> Firebase App ID **không** tách theo flavor: flavor nào cũng upload vào `secrets.FIREBASE_ANDROID_APP_ID`. Các flavor có application ID khác nhau (`.dev`, `.stg`), nên mỗi flavor là một app Firebase riêng — hãy đặt secret này thành app của flavor bạn dispatch, hoặc tách nó ra theo flavor.
 
 ### Lưu ý chi phí
 
@@ -101,14 +110,34 @@ fi
 
 ## 4. `fastlane.yml` — Fastlane build and distribute
 
-Chạy tay, giao toàn bộ việc build cho Fastlane. Cài Java 17, Ruby 3.3 (bỏ qua nếu `self-hosted`), Flutter (kênh `stable`, **không ghim phiên bản**), cài Fastlane và plugin `firebase_app_distribution`, rồi gọi một lane.
+Chạy tay, giao toàn bộ việc build cho Fastlane, chạy **từ thư mục gốc repo** (`fastlane/Fastfile` ở gốc import các lane từ `apps/mobile/fastlane/`; xem [`02_fastlane_release.md` §1](02_fastlane_release.md#1-vì-sao-chạy-được-từ-bất-kỳ-đâu)).
 
-Nó gọi lane cross-platform `fastlane flutter` (khai trong `apps/mobile/fastlane/modules/flutter_lanes.rb` dạng `lane :flutter do |options|`), và `flutter_version` mặc định `3.47.4`.
+### Tham số đầu vào
 
-> [!WARNING]
-> Lệnh gọi vẫn truyền `auto_increment:` (`fastlane.yml:99`), và **không lane nào đọc nó** — `grep -rn auto_increment apps/mobile/fastlane/` không trả về gì. Auto-increment được kích hoạt bằng cách truyền `build_number:auto`; xem [`02_fastlane_release.md`](02_fastlane_release.md). Tham số này bị bỏ qua âm thầm, nên một lần dispatch trông cậy vào nó sẽ nhận đúng `build_number` đã truyền chứ không phải số đã tăng.
+| Tham số | Mặc định | Ghi chú |
+|:---|:---|:---|
+| `build-on` | `self-hosted` | `self-hosted` hoặc `macos-latest`. Build iOS thì bắt buộc là máy Mac đã cài sẵn chứng chỉ ký |
+| `platform` | `both` | `both` → `fastlane flutter` (iOS trước, Android sau); `android` → `fastlane android build`; `ios` → `fastlane ios build` |
+| `flutter_version` | `3.47.4` | Được `subosito/flutter-action` cài **và** truyền cho lane; lane dừng nếu Flutter tìm thấy khác phiên bản này |
+| `version` | `1.0.0` | `--build-name` |
+| `build_number` | *(rỗng)* | Rỗng nghĩa là `auto`: số mới nhất trên store (`distribute_store`) hoặc trên Firebase (`distribute_firebase`) cộng một; không có đích phân phối thì lấy build number trong `apps/mobile/pubspec.yaml`. Nếu nhập số thì phải là số nguyên dương |
+| `flavor` | `prod` | `dev` / `staging` / `prod` |
+| `change_log` | `Initial release` | Release notes. Luôn được ưu tiên hơn mọi nguồn khác (không file tạm cũ nào thay thế được nó) |
+| `build_type` | `apk` | Chỉ cho Android |
+| `distribute_store` | `false` | Play Store và/hoặc TestFlight, tuỳ `platform` |
+| `track` | `internal` | Track của Play, chỉ dùng khi có `distribute_store` |
+| `distribute_firebase` | `true` | Firebase App Distribution |
 
-Vì bước setup Flutter chỉ truyền `channel: stable` mà không truyền `flutter-version`, tham số `flutter_version` không tới được toolchain; nó được chuyển tiếp cho Fastlane để quyết định có dùng `fvm` hay không.
+### Các bước
+
+1. **Checkout**, **Java 17**.
+2. **Ruby 3.3 + `bundle install`** ở thư mục gốc repo (`ruby/setup-ruby` với `bundler-cache` trên runner GitHub-hosted, `bundle install` thường trên `self-hosted`). `Gemfile` ở gốc khai `fastlane` và `cocoapods`, rồi nạp plugin từ `apps/mobile/fastlane/Pluginfile` qua `fastlane/Pluginfile`, nên không còn bước `fastlane add_plugin` — lệnh đó cần tương tác và fail trên runner.
+3. **Flutter** đúng phiên bản `flutter_version`.
+4. **Restore gitignored build inputs from secrets** — `apps/mobile/fastlane/Config.yaml`, Firebase options của flavor (các flavor khác nhận stub), `google-services.json` (Android), `GoogleService-Info.plist` (iOS, không bắt buộc), `env.prod` và keystore release (prod), cùng các file credential mà `Config.yaml` trỏ tới — chỉ những file mà kiểu phân phối đã chọn cần đến. Mọi secret thiếu đều được báo đúng tên, rồi bước này fail.
+5. **Build and distribute** — `bundle exec fastlane <lane> …`. Tham số đi vào script qua `env:`, không bao giờ được nội suy thẳng vào script, nên một change log chứa dấu nháy hay `$(…)` vẫn được truyền nguyên văn. Lane tự lo phần thiết lập toolchain: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`.
+
+> [!NOTE]
+> **Ký mã iOS** (chứng chỉ, provisioning profile) không được workflow nào thiết lập. `platform: both` / `ios` cần một runner mà keychain đã có sẵn chúng — trên thực tế là một máy Mac `self-hosted`.
 
 ---
 
@@ -116,20 +145,15 @@ Vì bước setup Flutter chỉ truyền `channel: stable` mà không truyền `
 
 Hai stage trên pool self-hosted tên `codebase`. `trigger: none` nên chỉ chạy khi kích hoạt tay hoặc từ release.
 
-**Stage `Build`**: lấy SHA commit ngắn vào `commitTag` → cài Flutter phiên bản `$(flutter-version)` → `flutter clean` → `flutter pub get` → "Flutter Config" → tải `key.properties` và `keystore.jks` dạng *secure file* của Azure vào `apps/mobile/android/` → build APK prod → publish thành artifact `android`.
+**Stage `Build`**: lấy SHA commit ngắn vào `commitTag` → tải `env.prod`, `firebase_options_prod.dart` và `google-services.prod.json` dạng *secure file* của Azure rồi copy vào đúng chỗ (Firebase options của dev/staging nhận stub chỉ để biên dịch) → cài Flutter phiên bản `$(flutter-version)` → `flutter clean` → `flutter pub get --enforce-lockfile` → "Flutter Config" → tải `key.properties` và `keystore.jks` dạng secure file vào `apps/mobile/android/` → build APK prod với `--dart-define-from-file=$(Build.SourcesDirectory)/apps/mobile/env.prod` → publish thành artifact `android`.
 
 **Stage `Distribute`**: tải artifact về rồi `firebase appdistribution:distribute`.
 
 Các biến pipeline phải khai trong tab Variables của Azure: `flutter-version`, `flutterPath`, `version`, `numberBuild`, `note`, và `FIREBASE-ANDROID-ID`.
 
-### Một lỗi
+Tên file artefact, lệnh gọi `configure.dart` và file env đều nhất quán: build publish `app-prod-release.apk`, stage Distribute tải về và upload đúng tên đó, "Flutter Config" chạy `dart tools/workspace_setup/configure.dart`, còn file dart-define là `apps/mobile/env.prod` — đúng file mà Fastlane và `flutter_build.yml` dùng cho prod. Secure file nào vắng mặt trong thư viện thì task `DownloadSecureFile@1` tương ứng fail, trước khi có gì được build.
 
-Tên file artefact và lệnh gọi `configure.dart` thì nhất quán: build publish `app-prod-release.apk`, stage Distribute tải về và upload đúng tên đó, còn "Flutter Config" chạy `dart tools/workspace_setup/configure.dart`. Chỉ thiếu đúng một thứ.
-
-> [!WARNING]
-> **`.env` không bao giờ được tạo, nhưng build lại cần nó.**
->
-> Build truyền `--dart-define-from-file=$(Build.SourcesDirectory)/.env` (`azure-ci-cd.yml`), nhưng không bước nào trong pipeline sinh ra `.env`. Hai task `DownloadSecureFile@1` chỉ lấy `key.properties` và `keystore.jks`. Hãy thêm một secure file thứ ba cho `.env` rồi copy vào `$(Build.SourcesDirectory)`, giống cách `flutter_build.yml` làm với `secrets.ENV`. Thiếu nó thì mọi `String.fromEnvironment` rơi về giá trị rỗng mặc định.
+Pipeline này **chỉ build prod** (`--flavor=prod`, `app-prod-release.apk`).
 
 Các task build và distribute cho iOS có mặt nhưng đã bị comment toàn bộ.
 
@@ -164,26 +188,44 @@ Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm 
 
 ### GitHub Actions
 
-| Secret | Dùng bởi | Cách tạo giá trị |
-|:---|:---|:---|
-| `ENV` | `flutter_build.yml` | Base64 của file env dart-define: `base64 -w0 apps/mobile/env.prod` (macOS: `base64 -i apps/mobile/env.prod`) |
-| `KEYSTORE_BASE64` | `flutter_build.yml` | Base64 của keystore release: `base64 -w0 upload-keystore.jks` |
-| `KEYSTORE_PASSWORD` | `flutter_build.yml` | Mật khẩu keystore |
-| `KEY_PASSWORD` | `flutter_build.yml` | Mật khẩu key |
-| `KEY_ALIAS` | `flutter_build.yml` | Alias của key |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | `flutter_build.yml` | Nội dung file JSON service-account của Firebase |
-| `FIREBASE_ANDROID_APP_ID` | `flutter_build.yml` | Firebase App ID, ví dụ `1:1234567890:android:abcdef` |
-| `GEMINI_API_KEY` | `code_review.yml` | Tạo tại <https://aistudio.google.com/app/apikey> |
-| `GITHUB_TOKEN` | `code_review.yml` | GitHub tự cấp — không cần tự tạo |
+Mọi file dưới đây đều bị gitignore, nên runner sạch không có file nào; các workflow phát hành giải mã chúng từ secret. `<FLAVOR>` là `DEV`, `STAGING` hoặc `PROD` — chỉ cần secret của flavor đang build. Trừ khi ghi chú *nguyên văn*, secret chứa **base64** của file.
+
+| Secret | Ghi ra | Cần cho | Cách tạo giá trị |
+|:---|:---|:---|:---|
+| `FIREBASE_OPTIONS_<FLAVOR>_DART_B64` | `firebase_options_<flavor>.dart` trong `apps/mobile/lib/firebase/` | `flutter_build.yml`, `fastlane.yml` — mọi bản build của flavor đó | `cd apps/mobile/lib/firebase && base64 -w0 firebase_options_dev.dart` (sinh file bằng `dart tools/firebase/firebase_config.dart --app mobile`) |
+| `GOOGLE_SERVICES_<FLAVOR>_JSON_B64` | `apps/mobile/android/app/src/<flavor>/google-services.json` | cả hai — mọi bản build Android của flavor đó | `base64 -w0 apps/mobile/android/app/src/dev/google-services.json` |
+| `GOOGLE_SERVICE_INFO_<FLAVOR>_PLIST_B64` | `ios/flavors/<flavor>/GoogleService-Info.plist` bên trong `apps/mobile/` | `fastlane.yml`, bản build iOS — không bắt buộc (chỉ cảnh báo nếu thiếu) | `base64 -w0 apps/mobile/ios/flavors/dev/GoogleService-Info.plist` |
+| `ENV_PROD_B64` | `apps/mobile/env.prod` | cả hai — bản build **prod** (`env.dev` / `env.stg` đã commit) | `base64 -w0 apps/mobile/env.prod`. Thay cho secret `ENV` cũ, vốn được giải mã ra `.env` ở gốc cho mọi flavor |
+| `KEYSTORE_BASE64` | `apps/mobile/android/keystore.jks` | cả hai — bản build Android **prod** | `base64 -w0 upload-keystore.jks` |
+| `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS` | `apps/mobile/android/key.properties` (*nguyên văn*) | cả hai — bản build Android **prod** | Mật khẩu keystore, mật khẩu key, alias của key |
+| `FASTLANE_CONFIG_YAML_B64` | `apps/mobile/fastlane/Config.yaml` | `fastlane.yml` — luôn luôn | `base64 -w0 apps/mobile/fastlane/Config.yaml` |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | JSON *nguyên văn*. `flutter_build.yml` đưa nó cho action upload; `fastlane.yml` ghi nó ra `firebase.credentials_map.<flavor>` trong `Config.yaml` | cả hai — phân phối qua Firebase | Nội dung file JSON service-account của Firebase |
+| `GOOGLE_PLAY_JSON_KEY_B64` | `paths.google_play_key_prod` trong `Config.yaml` | `fastlane.yml` — `distribute_store` + Android | `base64 -w0 google-play-store.json` |
+| `APP_STORE_CONNECT_API_KEY_P8_B64` | `paths.app_store_connect_key_filepath` trong `Config.yaml` | `fastlane.yml` — `distribute_store` + iOS | `base64 -w0 AuthKey_XXXX.p8` |
+| `FIREBASE_ANDROID_APP_ID` | — | `flutter_build.yml` | Firebase App ID, ví dụ `1:1234567890:android:abcdef` |
+| `GEMINI_API_KEY` | — | `code_review.yml` | Tạo tại <https://aistudio.google.com/app/apikey> |
+| `GITHUB_TOKEN` | — | `code_review.yml` | GitHub tự cấp — không cần tự tạo |
 
 Thêm tại **Settings → Secrets and variables → Actions → New repository secret**.
+
+Các secret keystore là **bắt buộc** với prod: thiếu `key.properties`, Gradle sẽ âm thầm ký bản prod bằng keystore dev đã commit ([`02_fastlane_release.md` §4](02_fastlane_release.md#4-ký-ứng-dụng)), nên workflow từ chối build thay vì để chuyện đó xảy ra. Đường dẫn tương đối trong `Config.yaml` được giải theo `apps/mobile/`, đúng như cách các lane giải.
 
 > [!CAUTION]
 > `base64` không có `-w0` sẽ chèn xuống dòng trên Linux, làm `base64 -d` trong workflow hỏng. Trên macOS, `base64 -i <file>` vốn đã cho một dòng duy nhất. Luôn tự kiểm tra bằng `base64 -d` ở local trước khi dán vào.
 
 ### Azure DevOps
 
-Azure dùng thư viện **Secure files** thay vì secret cho file nhị phân: upload `key.properties`, `keystore.jks` và (sau khi bạn thêm bước còn thiếu) `.env` tại **Pipelines → Library → Secure files**. `FIREBASE-ANDROID-ID` là biến pipeline.
+Azure dùng thư viện **Secure files** thay vì secret: upload các file sau tại **Pipelines → Library → Secure files**, đặt đúng những tên này:
+
+| Secure file | Copy tới |
+|:---|:---|
+| `env.prod` | `apps/mobile/env.prod` |
+| `firebase_options_prod.dart` | `firebase_options_prod.dart` trong `apps/mobile/lib/firebase/` |
+| `google-services.prod.json` | `apps/mobile/android/app/src/<flavor>/google-services.json`, flavor `prod` |
+| `key.properties` | `apps/mobile/android/key.properties` — với `storeFile=../keystore.jks` |
+| `keystore.jks` | `apps/mobile/android/keystore.jks` |
+
+`FIREBASE-ANDROID-ID` là biến pipeline.
 
 ---
 
@@ -193,6 +235,7 @@ Chạy những lệnh này trước khi push; chúng đúng là những lệnh p
 
 ```bash
 # 1. Thiết lập toàn workspace — tương đương bước "Install Dependencies" của CI
+#    (các pipeline phát hành chạy `flutter pub get --enforce-lockfile` trước)
 dart tools/workspace_setup/configure.dart
 
 # 2. Đúng các gate mà pr_quality_check.yml chạy, theo đúng thứ tự
@@ -215,9 +258,9 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 ```
 
 > [!NOTE]
-> Ở local đường dẫn dart-define là `env.dev` (tương đối so với `apps/mobile/`), còn CI ghi file env ra thư mục gốc và trỏ tới nó bằng đường dẫn tuyệt đối — `$GITHUB_WORKSPACE` trên GitHub và `$(Build.SourcesDirectory)` trên Azure. Cùng cơ chế, khác vị trí — và cố ý dùng tuyệt đối, vì việc đếm `../` từ thư mục app đã hỏng ngay khi app lùi xuống sâu hơn một cấp.
+> Ở local đường dẫn dart-define là `env.dev` (tương đối so với `apps/mobile/`). CI dùng đúng các file đó — `apps/mobile/env.<dev|stg|prod>` — nhưng trỏ tới bằng đường dẫn tuyệt đối, qua `$GITHUB_WORKSPACE` trên GitHub và `$(Build.SourcesDirectory)` trên Azure, vì việc đếm `../` từ thư mục app đã hỏng ngay khi app lùi xuống sâu hơn một cấp.
 
-Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configure` — các file `firebase_options_*.dart` sinh ra bị gitignore, mà `apps/mobile/lib/firebase/firebase_module.dart` import cả ba file đó vô điều kiện. (`pr_quality_check.yml` tạo stub cho mọi app có `lib/firebase/firebase_module.dart` — đủ cho analyze và test, nhưng không đủ cho một bản build thật.) Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configure` — các file `firebase_options_*.dart` và `google-services.json` sinh ra bị gitignore, mà `apps/mobile/lib/firebase/firebase_module.dart` import cả ba file options vô điều kiện. (`pr_quality_check.yml` tạo stub options cho mọi app có `lib/firebase/firebase_module.dart` — đủ cho analyze và test, nhưng không đủ cho một bản build thật; các pipeline phát hành khôi phục file thật từ secret — [§7](#7-secrets).) Xem [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 
@@ -225,11 +268,11 @@ Build lần đầu trên máy sạch còn cần đã chạy `flutterfire configu
 
 Các mục còn mở, theo thứ tự ưu tiên tương đối:
 
-- [ ] `azure-ci-cd.yml` — thêm secure file + bước copy cho `.env`; build prod hiện không nhận được dart-define nào
-- [ ] `fastlane.yml` — bỏ tham số `auto_increment:` đang bị bỏ qua, hoặc cho một lane đọc nó
 - [ ] `flutter_build.yml` — chạy sáu gate của `pr_quality_check.yml` trước khi build, để một lần dispatch thủ công không thể ship code chưa kiểm
 - [ ] `code_review.yml` — quyết định có bỏ comment `exit 1` hay không (chỉ sau khi tin tưởng tỷ lệ báo nhầm của nó)
 - [ ] `flutter_build.yml` — cân nhắc `ubuntu-latest` thay cho `macos-latest` với build chỉ cho Android
+- [ ] `flutter_build.yml` — tách `FIREBASE_ANDROID_APP_ID` theo flavor ([§2](#2-flutter_buildyml--build-and-distribute))
+- [ ] `fastlane.yml` — thiết lập ký mã iOS (ví dụ `match`) nếu muốn build iOS trên runner GitHub-hosted
 
 ---
 

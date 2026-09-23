@@ -25,6 +25,8 @@ jobs:
   build:
     name: Build & Release
     runs-on: macos-latest
+    env:
+      FLAVOR: ${{ inputs.flavor }}
 
     steps:
       #1 Checkout Repository
@@ -46,36 +48,124 @@ jobs:
           channel: "stable"
           cache: true
 
-        #4 Install Dependencies and Generate
+        #4 Restore gitignored build inputs
+      # A clean checkout has none of these files. Each comes from a base64
+      # secret (`base64 -w0 <file>`), only for the flavor being built, and a
+      # missing secret fails here by name. This runs BEFORE code generation:
+      # apps/mobile/lib/firebase/firebase_module.dart imports all three
+      # firebase_options_*.dart files, so the other two flavors get a
+      # compile-only stub. Secrets: docs/en/operations/01_cicd.md §7.
+      - name: Restore gitignored build inputs from secrets
+        shell: bash
+        env:
+          FIREBASE_OPTIONS_DEV_DART_B64: ${{ secrets.FIREBASE_OPTIONS_DEV_DART_B64 }}
+          FIREBASE_OPTIONS_STAGING_DART_B64: ${{ secrets.FIREBASE_OPTIONS_STAGING_DART_B64 }}
+          FIREBASE_OPTIONS_PROD_DART_B64: ${{ secrets.FIREBASE_OPTIONS_PROD_DART_B64 }}
+          GOOGLE_SERVICES_DEV_JSON_B64: ${{ secrets.GOOGLE_SERVICES_DEV_JSON_B64 }}
+          GOOGLE_SERVICES_STAGING_JSON_B64: ${{ secrets.GOOGLE_SERVICES_STAGING_JSON_B64 }}
+          GOOGLE_SERVICES_PROD_JSON_B64: ${{ secrets.GOOGLE_SERVICES_PROD_JSON_B64 }}
+          ENV_PROD_B64: ${{ secrets.ENV_PROD_B64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          APP=apps/mobile
+          case "$FLAVOR" in
+            dev)     KEY=DEV;     ENV_FILE=env.dev ;;
+            staging) KEY=STAGING; ENV_FILE=env.stg ;;
+            prod)    KEY=PROD;    ENV_FILE=env.prod ;;
+            *) echo "::error::Unknown flavor '$FLAVOR'"; exit 1 ;;
+          esac
+          # The build step reads the dart-define file from here.
+          echo "ENV_FILE=$ENV_FILE" >> "$GITHUB_ENV"
+
+          missing=0
+          fail() { echo "::error title=$1::$2"; missing=1; }
+          # restore <secret> <target>: decode a base64 secret into a file.
+          restore() {
+            local name="$1" target="$2" value="${!1:-}"
+            if [ -z "$value" ]; then
+              fail "Missing secret $name" "$target is gitignored and required to build flavor $FLAVOR. Add it as the base64 secret $name - see docs/en/operations/01_cicd.md section 7."
+              return 0
+            fi
+            mkdir -p "$(dirname "$target")"
+            printf '%s' "$value" | base64 --decode > "$target"
+            echo "restored $target from $name"
+          }
+
+          # Dart-define file: env.dev / env.stg are committed, env.prod is not.
+          if [ "$FLAVOR" = prod ]; then
+            restore ENV_PROD_B64 "$APP/env.prod"
+          elif [ ! -f "$APP/$ENV_FILE" ]; then
+            fail "Missing $APP/$ENV_FILE" "It is committed to git; restore it."
+          fi
+
+          restore "FIREBASE_OPTIONS_${KEY}_DART_B64" "$APP/lib/firebase/firebase_options_${FLAVOR}.dart"
+          for other in dev staging prod; do
+            [ "$other" = "$FLAVOR" ] && continue
+            file="$APP/lib/firebase/firebase_options_${other}.dart"
+            [ -f "$file" ] && continue
+            printf '%s\n' \
+              "// CI-only stub for a flavor this job does not build. Never used at runtime:" \
+              "// injectable registers only the built flavor's FirebaseOptions." \
+              "import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;" \
+              "" \
+              "class DefaultFirebaseOptions {" \
+              "  static FirebaseOptions get currentPlatform => const FirebaseOptions(" \
+              "        apiKey: 'ci-stub'," \
+              "        appId: 'ci-stub'," \
+              "        messagingSenderId: 'ci-stub'," \
+              "        projectId: 'ci-stub'," \
+              "      );" \
+              "}" > "$file"
+            echo "stubbed $file"
+          done
+
+          # Required by the com.google.gms.google-services Gradle plugin.
+          restore "GOOGLE_SERVICES_${KEY}_JSON_B64" "$APP/android/app/src/${FLAVOR}/google-services.json"
+
+          # Prod signing. Without key.properties Gradle silently signs prod with
+          # the committed DEV keystore, so the secrets are required for prod.
+          # dev/staging are signed with the committed dev keystore.
+          if [ "$FLAVOR" = prod ]; then
+            restore KEYSTORE_BASE64 "$APP/android/keystore.jks"
+            for v in KEYSTORE_PASSWORD KEY_PASSWORD KEY_ALIAS; do
+              [ -n "${!v:-}" ] || fail "Missing secret $v" "Required to sign the prod build."
+            done
+            {
+              echo "storePassword=${KEYSTORE_PASSWORD:-}"
+              echo "keyPassword=${KEY_PASSWORD:-}"
+              echo "keyAlias=${KEY_ALIAS:-}"
+              echo "storeFile=../keystore.jks"
+            } > "$APP/android/key.properties"
+          fi
+
+          [ "$missing" -eq 0 ] || exit 1
+
+        #5 Resolve exactly the committed pubspec.lock
+      # The workspace lockfile is committed. --enforce-lockfile fails when it
+      # no longer matches the pubspecs instead of silently re-resolving, so
+      # the configure step below cannot drift away from it.
+      - name: Get dependencies from the committed lockfile
+        run: flutter pub get --enforce-lockfile
+
+        #6 Install Dependencies and Generate
       - name: Install Dependencies
         run: dart tools/workspace_setup/configure.dart
 
-        #5 Setup Env
-      - name: Decode Env
-        run: |
-          echo -n ${{ secrets.ENV }} | base64 -d > .env
-
-        #6 Setup Keystore
-      - name: Decode Keystore
-        run: |
-          echo -n ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > apps/mobile/android/keystore.jks
-
-      - name: Create key.properties
-        run: |
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > apps/mobile/android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> apps/mobile/android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> apps/mobile/android/key.properties
-          echo "storeFile=../keystore.jks" >> apps/mobile/android/key.properties
-
         #7 Building APK
-      # `.env` and the obfuscation map live at the repository root, and the
-      # build runs from the app directory — which is now two levels down, not
-      # one. `$GITHUB_WORKSPACE` says root without counting `..`, so moving
+      # The dart-define file sits in apps/mobile/ (env.dev / env.stg committed,
+      # env.prod restored above) and the obfuscation map at the repository
+      # root. `$GITHUB_WORKSPACE` says root without counting `..`, so moving
       # the app again cannot silently point these at the wrong place.
       - name: Build APK
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           cd apps/mobile
-          flutter build apk --flavor=${{ inputs.flavor }} --build-name=${{ inputs.version }} --build-number=${{ github.run_number }} --dart-define-from-file="$GITHUB_WORKSPACE/.env" --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" --no-tree-shake-icons --verbose
+          flutter build apk --flavor="$FLAVOR" --build-name="$VERSION" --build-number="$GITHUB_RUN_NUMBER" --dart-define-from-file="$GITHUB_WORKSPACE/apps/mobile/$ENV_FILE" --obfuscate --split-debug-info="$GITHUB_WORKSPACE/obfuscate/" --no-tree-shake-icons --verbose
 
       #   #7 Building App Bundle (aab)
       # - name: Build appBundle

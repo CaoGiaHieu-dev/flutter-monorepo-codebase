@@ -181,7 +181,7 @@ class EnvConstants {
 > `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
 
 > [!WARNING]
-> `apps/mobile/env.dev` and `apps/mobile/env.stg` are currently **tracked by git** — the `.gitignore` pattern `*.env` does not match a file named `env.dev`. Treat their contents as non-secret sample values, and do not put real production credentials in `apps/mobile/env.prod` until you have confirmed it is ignored.
+> `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.
 
 ---
 

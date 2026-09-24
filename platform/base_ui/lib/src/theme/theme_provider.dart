@@ -327,48 +327,49 @@ class ThemeProvider extends ChangeNotifier
     super.dispose();
   }
 
+  /// The brightness the app actually renders in: [themeMode], with
+  /// [ThemeMode.system] resolved against the platform's current brightness.
+  Brightness get effectiveBrightness => switch (themeMode) {
+    ThemeMode.light => Brightness.light,
+    ThemeMode.dark => Brightness.dark,
+    ThemeMode.system =>
+      SchedulerBinding.instance.platformDispatcher.platformBrightness,
+  };
+
   /// Sets the system UI overlay style based on the current theme mode.
   ///
-  /// This method adjusts the system UI overlay style (status bar and navigation
-  /// bar colors) based on the current theme mode.
+  /// Resolves [ThemeMode.system] to the platform brightness **first** and
+  /// derives both the bar colour and the icon brightness from that one value.
+  /// Picking the palette separately — the light one for `system`, whatever
+  /// the OS said — painted the navigation bar near-white under white icons
+  /// whenever the OS was dark. [didChangePlatformBrightness] calls this
+  /// again, so the bars follow the OS while [ThemeMode.system] is active.
   void setSystemTheme() {
-    final themeSystem = ThemeSystemExtension.withMode(
-      themeMode == ThemeMode.system ? ThemeMode.light : themeMode,
-    );
+    systemUiOverlayStyle = overlayStyleFor(effectiveBrightness);
+  }
 
-    systemUiOverlayStyle = switch (themeMode) {
-      ThemeMode.system =>
-        SchedulerBinding.instance.platformDispatcher.platformBrightness ==
-                Brightness.dark
-            ? SystemUiOverlayStyle.light.copyWith(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: Brightness.light,
-                statusBarBrightness: Brightness.dark,
-                systemNavigationBarColor: themeSystem.background,
-                systemNavigationBarIconBrightness: Brightness.light,
-              )
-            : SystemUiOverlayStyle.dark.copyWith(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: Brightness.dark,
-                statusBarBrightness: Brightness.light,
-                systemNavigationBarColor: themeSystem.background,
-                systemNavigationBarIconBrightness: Brightness.dark,
-              ),
-      ThemeMode.light => SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: themeSystem.background,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
-      ThemeMode.dark => SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: themeSystem.background,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-    };
+  /// The status/navigation bar styling for an app rendered in [brightness]:
+  /// transparent status bar, navigation bar in that palette's background,
+  /// and icons contrasting with it.
+  static SystemUiOverlayStyle overlayStyleFor(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final themeSystem = ThemeSystemExtension.withMode(
+      isDark ? ThemeMode.dark : ThemeMode.light,
+    );
+    // Icons contrast with the bars: light icons on a dark app, and vice versa.
+    final iconBrightness = isDark ? Brightness.light : Brightness.dark;
+    final base = isDark
+        ? SystemUiOverlayStyle.light
+        : SystemUiOverlayStyle.dark;
+    return base.copyWith(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: iconBrightness,
+      // iOS: the brightness of the status bar *background*, the opposite of
+      // the icons.
+      statusBarBrightness: brightness,
+      systemNavigationBarColor: themeSystem.background,
+      systemNavigationBarIconBrightness: iconBrightness,
+    );
   }
 
   void toggleTheme() {

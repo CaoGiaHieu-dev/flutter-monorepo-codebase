@@ -382,6 +382,12 @@ Future<void> run(Migrator m, int from, int to) async {
     return;
   }
 
+  // A downgrade from a schema this build has no step for is refused.
+  final newestKnown = _migrations.isEmpty ? null : _migrations.last.version;
+  if (newestKnown == null || newestKnown < from) {
+    throw UnsupportedError('Cannot downgrade the schema from version $from …');
+  }
+
   for (final migration in _migrations.reversed) {
     if (migration.version > to && migration.version <= from) {
       await migration.downgrade(m);
@@ -395,6 +401,7 @@ Three properties worth naming:
 1. **A plain `if`, not `else if`.** A device that skipped several releases replays *every* intermediate step instead of jumping straight to the newest shape.
 2. **Upgrades ascend, downgrades descend.** Order matters in both directions.
 3. **Gaps are legal.** A release may ship no schema change, leaving that version number unused.
+4. **A downgrade needs explicit steps.** Going from `from` down to `to` throws `UnsupportedError` unless a step is registered for `from` or above — the runner must know the schema it is leaving. Without that check it did nothing, and drift stamped the lower `user_version` over tables that still had the newer shape; reinstalling the newer build then replayed its upgrades against them (a duplicate column) and failed on every launch. The throw leaves the file and its version untouched, and `DriftDatabaseOpener` surfaces it as a startup error rather than quarantining the file. In practice an older build only has such steps if they shipped ahead of the change they reverse — otherwise installing an older build over a newer schema is unsupported.
 
 Validation happens once, at construction — not mid-migration. Discovering a wiring mistake halfway through would leave the schema partially migrated.
 
@@ -532,7 +539,7 @@ The existing tests are split to follow the code:
 
 | Package | File | Covers |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, empty registry |
+| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry |
 | `core_database` | `drift_database_opener_test.dart` | The corruption predicate directly — including the case where an environment marker vetoes a corruption match |
 | `data_cache` | `cache_database_test.dart` | DAO round-trips, migration wiring, and **real-file** behaviour (WAL, foreign keys, survival across close/reopen) |
 | `data_cache` | `database_handle_test.dart` | Accessor reads/writes, shared connection, transaction commit / rollback / return value |

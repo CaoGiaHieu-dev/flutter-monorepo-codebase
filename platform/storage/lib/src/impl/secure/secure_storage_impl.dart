@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +15,18 @@ import '../../contracts/storage_interface.dart';
 // ---------------------------------------------------------------------------
 const String _FIRST_TIME_OPEN_APP = 'firstTimeOpenApp';
 
+/// Reserved key of the master key (see `StorageInterface.isValidKey`).
+const String _MASTER_KEY_ID = '_internal_master_key';
+
+/// AES-256.
+const int _MASTER_KEY_BYTES = 32;
+
+/// How often a failing master-key read is attempted before init gives up.
+const int _MASTER_KEY_READ_ATTEMPTS = 3;
+
+/// Base delay between those attempts.
+const Duration _MASTER_KEY_RETRY_DELAY = Duration(milliseconds: 300);
+
 /// A class for managing secure storage.
 ///
 /// This class uses the `flutter_secure_storage` package to store data securely on the device.
@@ -22,10 +37,23 @@ const String _FIRST_TIME_OPEN_APP = 'firstTimeOpenApp';
 @Named('Secure')
 class SecureStorageImpl extends StorageInterface {
   /// Constructor – no singleton pattern, fully managed by DI.
-  SecureStorageImpl();
+  SecureStorageImpl()
+    : _storage = FlutterSecureStorage(aOptions: aOptions, iOptions: iOptions),
+      _retryDelay = _MASTER_KEY_RETRY_DELAY;
+
+  /// Over a given [storage] backend, retrying after [retryDelay] — for tests
+  /// that need a platform failure the real plugin cannot produce on demand.
+  @visibleForTesting
+  SecureStorageImpl.withStorage(
+    this._storage, [
+    this._retryDelay = Duration.zero,
+  ]);
 
   /// FlutterSecureStorage instance for storing data
-  late final FlutterSecureStorage _storage;
+  final FlutterSecureStorage _storage;
+
+  /// Base delay between master-key read attempts (grows linearly).
+  final Duration _retryDelay;
 
   /// Android options for FlutterSecureStorage
   static AndroidOptions get aOptions => const AndroidOptions(
@@ -41,12 +69,24 @@ class SecureStorageImpl extends StorageInterface {
         .first_unlock, // Data accessible when device is unlocked
   );
 
-  /// Initialize the secure storage, clearing the storage if it's the first time the app is opened.
-  /// Handles KeyStore/Keychain corruption gracefully by resetting storage if necessary.
+  /// Initializes the storage: first-launch cleanup, then the master key.
+  ///
+  /// **Never wipes the store on a platform error.** Reading the master key
+  /// can fail for reasons that pass — the Keychain before the first unlock
+  /// after a reboot (a background launch), a busy KeyStore. Treating that as
+  /// corruption and calling `deleteAll()` destroyed every secure value,
+  /// including `PrefStorageImpl`'s master key, which lives in this same
+  /// store. The read is now retried, and a failure that persists is
+  /// rethrown with nothing deleted.
+  ///
+  /// Real corruption of the plugin's own storage is handled natively: on
+  /// Android `AndroidOptions.resetOnError` (on by default) resets what it
+  /// cannot decrypt before the call returns. The one corruption this layer
+  /// can see is a master key that is present but unusable (not a 256-bit
+  /// base64 key); only that key is replaced — values sealed with it then
+  /// fail to decrypt and are dropped one by one by [read].
   @override
   Future<void> init() async {
-    _storage = FlutterSecureStorage(aOptions: aOptions, iOptions: iOptions);
-
     final preferences = await SharedPreferences.getInstance();
 
     // 1. Handle first time open cleanup
@@ -56,28 +96,23 @@ class SecureStorageImpl extends StorageInterface {
     }
 
     // 2. Initialize Master Key for software-level encryption
-    const masterKeyId = '_internal_master_key';
-    String? masterKey;
-    try {
-      masterKey = await _storage.read(key: masterKeyId);
-    } catch (e) {
-      // KeyStore corruption detected! Self-heal by clearing secure storage.
+    var masterKey = await _readMasterKey();
+
+    if (masterKey != null && !_isUsableKey(masterKey)) {
       DynamicLogger.log(
-        'KeyStore/Keychain corruption detected during init. Resetting storage. Error: ${e.runtimeType}',
+        'Stored master key is corrupt; replacing it. Values sealed with it '
+        'will be dropped as they are read.',
         tag: 'SecureStorageImpl',
         level: LogLevel.WARNING,
       );
-      try {
-        await _storage.deleteAll();
-      } catch (_) {}
       masterKey = null;
     }
 
     if (masterKey == null) {
       // Generate a new 32-byte (256-bit) random key for AES
-      final newKey = encrypter.Key.fromSecureRandom(32).base64;
+      final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
       try {
-        await _storage.write(key: masterKeyId, value: newKey);
+        await _storage.write(key: _MASTER_KEY_ID, value: newKey);
         masterKey = newKey;
       } catch (e) {
         DynamicLogger.log(
@@ -90,6 +125,39 @@ class SecureStorageImpl extends StorageInterface {
     }
 
     setMasterKey(masterKey);
+  }
+
+  /// Reads the master key, retrying a platform failure before giving up.
+  ///
+  /// Rethrows the last error once the attempts run out: generating a fresh
+  /// key here would orphan every value sealed with the one that could not be
+  /// read, and wiping would destroy them.
+  Future<String?> _readMasterKey() async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await _storage.read(key: _MASTER_KEY_ID);
+      } catch (e) {
+        final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
+        DynamicLogger.log(
+          'Reading the master key failed (attempt $attempt of '
+          '$_MASTER_KEY_READ_ATTEMPTS): ${e.runtimeType}. '
+          '${lastAttempt ? 'Giving up; secure storage is left intact.' : 'Retrying.'}',
+          tag: 'SecureStorageImpl',
+          level: lastAttempt ? LogLevel.ERROR : LogLevel.WARNING,
+        );
+        if (lastAttempt) rethrow;
+        await Future<void>.delayed(_retryDelay * attempt);
+      }
+    }
+  }
+
+  /// Whether [base64Key] decodes to a 256-bit key.
+  static bool _isUsableKey(String base64Key) {
+    try {
+      return base64.decode(base64Key).length == _MASTER_KEY_BYTES;
+    } on FormatException {
+      return false;
+    }
   }
 
   /// Delete unnecessary data from secure storage
@@ -132,21 +200,36 @@ class SecureStorageImpl extends StorageInterface {
       throw ArgumentError('Access to reserved key "$key" is forbidden.');
     }
 
+    // A platform failure says nothing about the stored bytes — the Keychain
+    // may simply be locked — so it must never delete them. The value reads
+    // as absent this time and is still there for the next read.
+    final String? encryptedData;
     try {
-      final encryptedData = await _storage.read(key: key);
-      if (encryptedData == null) return null;
+      encryptedData = await _storage.read(key: key);
+    } catch (e) {
+      DynamicLogger.log(
+        'Failed to read key: $key (platform error, value kept). '
+        'Error: ${e.runtimeType}',
+        tag: 'SecureStorageImpl',
+        level: LogLevel.ERROR,
+      );
+      return null;
+    }
+    if (encryptedData == null) return null;
 
+    try {
       // Decrypt using software layer (extracts IV from the string)
       final decryptedData = decryptData(encryptedData);
 
       return StorageCodec.decode<T>(decryptedData, key, reviver: reviver);
     } catch (e) {
       DynamicLogger.log(
-        'Failed to read or decrypt key: $key. Error: ${e.runtimeType}',
+        'Failed to decrypt or decode key: $key. Error: ${e.runtimeType}',
         tag: 'SecureStorageImpl',
         level: LogLevel.ERROR,
       );
-      // Safe self-healing: delete corrupted key so it doesn't loop failing
+      // The bytes are unreadable with this key: drop them so the read does
+      // not fail the same way forever.
       try {
         await _storage.delete(key: key);
       } catch (_) {}

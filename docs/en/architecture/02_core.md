@@ -37,7 +37,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 
 | Area | Path | Contents |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation, system UI) |
+| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation — portrait lock on phone-sized displays only, system UI) |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
 | Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
@@ -251,7 +251,7 @@ Provides the **mechanism only**. It defines no keys and no presets.
 
 Beyond encrypting data at rest (AES-256-CBC with a per-write random IV), `StorageValue` keeps its **in-memory** value XOR-masked with a random mask, and reveals it only for the moment a read needs it. The master key receives the same treatment. This raises the bar against memory-dump inspection — a layer most templates omit entirely.
 
-`SecureStorageImpl` also self-heals: if the Keychain/KeyStore entry becomes unreadable, it clears and regenerates the master key rather than leaving the app permanently unable to start.
+`SecureStorageImpl` never wipes the store on a platform error: a master-key read that fails (a locked Keychain before first unlock, a busy KeyStore) is retried and then rethrown with nothing deleted; only a master key that is present but unusable is replaced, and only an undecryptable value is dropped. See [the storage guide](../guides/06_storage.md).
 
 ### Ownership
 

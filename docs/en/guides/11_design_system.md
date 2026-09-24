@@ -276,6 +276,8 @@ It is handed to `ResponsiveInit` once, at the very root of the tree — `_Respon
 > [!CAUTION]
 > **Changing `designSize` re-scales the entire app at once.** Every `context.w/h/r/sp` call resolves against it, and a window narrower or shorter than the artboard shrinks the design by that ratio — moving from 375×812 to 390×844 shrinks everything on a 375-wide phone. Change it only when your design source of truth actually changed, then sweep the app on a small phone, a tall phone and a tablet.
 
+Both sides of `designSize` — and of every profile's `designSize` — must be positive: a zero side divides by zero. `ResponsiveInit` asserts it for every profile on build, and `ResponsiveMetrics` again when it scales. A window with no area yet (Android reports 0×0 for the first frame) is read as the artboard itself, factor 1, not as 0 — so that frame is not laid out with every value collapsed to nothing. `ScaleBounds.clamp` reads a NaN factor as 1 as well, then clamps it.
+
 ---
 
 ## 6. Scale policy: down by default, up on opt-in, per window class
@@ -307,9 +309,10 @@ return ResponsiveInit(
   // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
   // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
   profiles: const {
-    // Tablets in landscape, unfolded foldables, desktop windows — and
-    // most phones in landscape, which are 840 or wider — are laid out
-    // in real logical pixels. Without this, a laptop window
+    // Tablets in landscape, unfolded foldables and desktop windows are
+    // laid out in real logical pixels. (Phones never get here: the
+    // shell locks phone-sized displays to portrait — see
+    // `AppInitializer.preferredOrientationsFor`.) Without this, a laptop window
     // shorter than the 812-tall phone artboard would still shrink every
     // vertical gap and radius.
     WindowSizeClass.expanded: ResponsiveProfile(
@@ -379,7 +382,7 @@ Check two things when you do. A class that grows meets its neighbour in a **visi
 | `large` | 1200 – 1599 | Large tablet in landscape; a desktop window |
 | `extraLarge` | ≥ 1600 | A large desktop window |
 
-A phone in landscape is `medium` or `expanded` by width. `context.windowHeightClass` tells it apart: `WindowHeightClass.compact` below 480, `medium` 480–899, `expanded` from 900.
+A phone in landscape is `medium` or `expanded` by width — though this app never shows one: `AppInitializer` locks phone-sized displays (shortest side below 600) to portrait and leaves larger ones unlocked (`AppInitializer.preferredOrientationsFor`). If you lift that lock, `context.windowHeightClass` tells a landscape phone apart: `WindowHeightClass.compact` below 480, `medium` 480–899, `expanded` from 900.
 
 The boundaries are a `ResponsiveBreakpoints` — `const ResponsiveBreakpoints.material3()` by default, values in `ResponsiveConstants.BREAKPOINT_*`. Pass another set to `ResponsiveInit(breakpoints:)` and the scale profiles, `context.windowSizeClass` and every widget below move together. Compare classes with `isAtLeast` / `isSmallerThan`, never with raw widths.
 
@@ -424,7 +427,7 @@ It splits by the first rule that applies:
 
 1. **A vertical fold or hinge** (`FoldPosture.book`) — side by side, divided exactly at it, nothing drawn under it. Wins even below `splitAt`: a half-opened foldable has two physical halves.
 2. **A horizontal fold** (`FoldPosture.tabletop`) while `tabletopSplit` is `true` (the default) — `primary` above, `secondary` below. Turn it off for content that must not be cut in half, such as a form.
-3. **A window of `splitAt` or wider** (default `WindowSizeClass.expanded`) — side by side, `primary` taking `primaryWidth` or `primaryFraction` (0.4) of the width, with an optional `divider`.
+3. **A window of `splitAt` or wider** (default `WindowSizeClass.expanded`) — side by side, `primary` taking `primaryWidth` or `primaryFraction` (0.4) of the width, with an optional `divider` laid out `dividerExtent` wide (default 1). `primary` is capped so the divider and `secondary` still fit; a `primaryWidth` that leaves `secondary` nothing falls through to rule 4 instead of drawing a zero-width pane, so `isSplit` never reports a pane that is not there.
 4. **Otherwise** — `primary` alone. `secondary` is not built, so the app pushes the item's route instead; `AdaptiveSplitView.isSplit(context)` is how the list item knows which to do. Its `context` must be *below* the view — inside a pane, or through a `Builder`.
 
 `primary` sits at the start edge (the right, under RTL). Both panes keep their place in the tree whichever rule applies, so the list's scroll offset and any typed text survive a rotation or the device being unfolded. The view needs a bounded box — not directly inside a scroll view or an unconstrained `Row` / `Column`.
@@ -469,11 +472,15 @@ if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
 }
 
 final extended = sizeClass.isAtLeast(WindowSizeClass.large);
+// The rail sits at the start edge — the right in RTL — so only its outer
+// side pads for the insets.
+final isRtl = Directionality.of(context) == TextDirection.rtl;
 return Scaffold(
   body: Row(
     children: [
       SafeArea(
-        right: false,
+        left: !isRtl,
+        right: isRtl,
         child: NavigationRail(
           // …
           extended: extended,

@@ -115,10 +115,11 @@ Widget build(BuildContext context) {
   // the same modules feed both forms below, unchanged.
   final destinations = [for (final tab in tabs) tab.destination(context)];
 
-  // A phone in portrait keeps the bottom bar. From a medium window up — a
-  // tablet, an unfolded foldable, a desktop, and a phone in landscape —
-  // the tabs move to a side rail, which costs width the window has to
-  // spare instead of height it has not.
+  // A phone keeps the bottom bar (the shell locks phone-sized displays to
+  // portrait). From a medium window up — a tablet in either orientation,
+  // an unfolded foldable, a desktop window — the tabs move to a side
+  // rail, which costs width the window has to spare instead of height it
+  // has not.
   final sizeClass = context.windowSizeClass;
   if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
     return Scaffold(
@@ -132,11 +133,16 @@ Widget build(BuildContext context) {
   }
 
   final extended = sizeClass.isAtLeast(WindowSizeClass.large);
+  // The rail sits at the start edge: the left in LTR, the right in RTL
+  // (a `Row` follows the text direction). It pads for the insets on its
+  // outer side only; the side facing the content is the content's to pad.
+  final isRtl = Directionality.of(context) == TextDirection.rtl;
   return Scaffold(
     body: Row(
       children: [
         SafeArea(
-          right: false,
+          left: !isRtl,
+          right: isRtl,
           child: NavigationRail(
             selectedIndex: selected,
             onDestinationSelected: onSelect,
@@ -156,7 +162,7 @@ Widget build(BuildContext context) {
 
 Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab and the app still starts. With fewer than two tabs there is no bar or rail at all.
 
-The chrome is chosen by **window size class**, not by device — a phone in landscape, an iPad in Split View and a desktop window each get the chrome their window has room for. It is the template's reference for adaptive layout; the widgets and rules are in [design system §7](../guides/11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
+The chrome is chosen by **window size class**, not by device — a tablet in either orientation, an iPad in Split View and a desktop window each get the chrome their window has room for. (A phone-sized display is locked to portrait at launch by `AppInitializer`, so it always shows the bottom bar; remove that lock and a phone in landscape gets the rail by the same rule.) It is the template's reference for adaptive layout; the widgets and rules are in [design system §7](../guides/11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
 
 ### The dashboard must not
 

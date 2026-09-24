@@ -61,6 +61,22 @@ class DatabaseMigrationRunner {
   /// A gap in the registered versions is not treated as an error: a release
   /// may legitimately ship no schema change, leaving that version number
   /// unused.
+  ///
+  /// ## Downgrades need explicit steps
+  ///
+  /// A downgrade ([from] > [to]) throws [UnsupportedError] unless this
+  /// runner knows the schema it is leaving — a step registered for [from] or
+  /// above. With no such step the runner used to do nothing, and drift then
+  /// stamped the lower `user_version` over a schema that was still the newer
+  /// one: every table kept its newer shape, and reinstalling the newer build
+  /// later replayed its upgrades against tables that already had them, which
+  /// fails (a duplicate column) on every launch from then on. Failing here
+  /// leaves the file and its version untouched, and `DriftDatabaseOpener`
+  /// surfaces the error instead of quarantining the database.
+  ///
+  /// In practice an older build only has such steps when they are shipped
+  /// ahead of the change they reverse; otherwise installing an older build
+  /// over a newer schema is simply unsupported.
   Future<void> run(Migrator m, int from, int to) async {
     if (from == to) return;
 
@@ -71,6 +87,19 @@ class DatabaseMigrationRunner {
         }
       }
       return;
+    }
+
+    final newestKnown = _migrations.isEmpty ? null : _migrations.last.version;
+    if (newestKnown == null || newestKnown < from) {
+      throw UnsupportedError(
+        'Cannot downgrade the schema from version $from to $to: this build '
+        'registers no IDatabaseMigration for version $from '
+        '(${newestKnown == null ? 'it registers none' : 'its newest is version $newestKnown'}), '
+        'so it cannot reverse that schema. The database is left untouched. '
+        'Downgrades need an explicit IDatabaseMigration.downgrade step for '
+        'every version being left; otherwise reinstall a build with schema '
+        'version $from or later.',
+      );
     }
 
     for (final migration in _migrations.reversed) {

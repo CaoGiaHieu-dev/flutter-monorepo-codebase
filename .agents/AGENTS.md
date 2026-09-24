@@ -499,7 +499,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
 - **Register a migration typed to its database**: `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`. GetIt keys a registration by its exact type and the database's module collects only `IDatabaseMigration<YourDatabase>`, so an untyped `as: IDatabaseMigration` registration is never collected and the step silently never runs (`docs/en/guides/07_database.md` § 4). The contributing module must also initialise **before** the module that opens the database, which runs its migrations inside its `@preResolve` factory.
 - **Accepted trade-off**: SQL cannot join across package boundaries. That is deliberate — crossing a bounded context belongs at the repository layer, not in a query.
 - **Removability**: deleting a package deletes its database with it. A database must open normally when **no** `IDatabaseMigration` is registered.
-- Drift limits worth knowing: there is **no `onDowngrade` callback** (downgrade is routed through `onUpgrade` by comparing `from`/`to`), and **no runtime table registration** — a package cannot add a table to another package's database.
+- Drift limits worth knowing: there is **no `onDowngrade` callback** (downgrade is routed through `onUpgrade` by comparing `from`/`to`; `DatabaseMigrationRunner` throws on a downgrade unless a step is registered for the version being left — downgrades need explicit steps), and **no runtime table registration** — a package cannot add a table to another package's database.
 
 ---
 

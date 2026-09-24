@@ -24,6 +24,8 @@ dependencies:
     path: ../domain
   data_core:
     path: ../../../platform/data_core
+  platform_kernel:
+    path: ../../../platform/kernel
   get_it: ^9.2.1
   injectable: ^3.0.0
   freezed_annotation: "^3.1.0"

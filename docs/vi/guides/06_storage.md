@@ -115,29 +115,33 @@ class ObfuscatedBytes {
 
 `ObfuscatedString` (trong `storage_value.dart`) làm điều tương tự cho giá trị đã cache. Việc này nâng độ khó của tấn công memory-dump; nó **không** thay thế được hai lớp trên.
 
-### Tự phục hồi khi Keychain hỏng
+### Khi Keychain trục trặc — thử lại, không bao giờ xoá sạch
 
-KeyStore/Keychain hỏng vốn sẽ làm app chết ở mọi lần khởi động. `SecureStorageImpl` phát hiện và reset thay vì lặp vô hạn:
+Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Trước đây `SecureStorageImpl` coi *mọi* lỗi như vậy là hỏng dữ liệu và gọi `deleteAll()` — xoá sạch mọi giá trị bảo mật, kể cả master key của `PrefStorageImpl` vốn nằm trong cùng kho. Giờ thì:
 
 ```dart
 // platform/storage/lib/src/impl/secure/secure_storage_impl.dart
-try {
-  masterKey = await _storage.read(key: masterKeyId);
-} catch (e) {
-  // KeyStore corruption detected! Self-heal by clearing secure storage.
-  DynamicLogger.log(
-    'KeyStore/Keychain corruption detected during init. Resetting storage. Error: ${e.runtimeType}',
-    tag: 'SecureStorageImpl',
-    level: LogLevel.WARNING,
-  );
-  try {
-    await _storage.deleteAll();
-  } catch (_) {}
-  masterKey = null;
+Future<String?> _readMasterKey() async {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      return await _storage.read(key: _MASTER_KEY_ID);
+    } catch (e) {
+      final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
+      // … ghi log: WARNING khi thử lại, ERROR ở lần cuối …
+      if (lastAttempt) rethrow; // không xoá gì, không sinh key mới
+      await Future<void>.delayed(_retryDelay * attempt);
+    }
+  }
 }
 ```
 
-`read()` áp dụng cùng ý tưởng ở mức từng key: key nào giải mã không được thì xoá đi và trả `null`, để một dòng hỏng không làm chết mọi lần mở app.
+| Lỗi | Điều xảy ra |
+| :-- | :-- |
+| Lỗi platform khi đọc master key | thử lại (3 lần); nếu vẫn lỗi, `init` **ném lại lỗi** và kho giữ nguyên — sinh key mới sẽ bỏ rơi mọi giá trị đã mã hoá bằng key không đọc được |
+| Master key có nhưng không dùng được (không phải key base64 256-bit) | chỉ thay key đó; các giá trị mã hoá bằng nó sẽ giải mã lỗi và bị `read()` xoá từng cái một |
+| Hỏng dữ liệu trong chính storage của plugin | xử lý ở tầng native: trên Android `AndroidOptions.resetOnError` (bật mặc định) reset phần không giải mã được trước khi trả kết quả |
+| Lỗi platform trong `read(key)` | trả `null` **và giữ nguyên giá trị** — lần đọc sau vẫn còn |
+| Giá trị giải mã hoặc decode lỗi trong `read(key)` | chỉ xoá đúng key đó và trả `null`, để một dòng hỏng không làm chết mọi lần mở app |
 
 ---
 

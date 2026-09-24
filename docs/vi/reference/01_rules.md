@@ -341,6 +341,7 @@ Future<void> _loadAvatar() async {
 | `context.edgeInsets(all: x)` | `w` |
 | `context.edgeInsets(horizontal: x)` | `w` |
 | `context.edgeInsets(vertical: x)` | `h` |
+| `context.edgeInsetsDirectional(start: x)` / `(end: x)` | `w` — đảo theo chiều văn bản |
 | `context.borderRadius(all: x)` | `r` |
 | `context.verticalSpace(x)` | `h` |
 | `context.horizontalSpace(x)` | `w` |

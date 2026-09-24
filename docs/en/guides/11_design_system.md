@@ -200,6 +200,10 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 > [!CAUTION]
 > Do not add `.sp` at the call site. Text styles are **already scaled** by the time `AppTextStyles` returns them. Writing `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: context.sp(14))` scales twice.
 
+### The user's font size is a second, separate factor
+
+`context.sp` fits the design to the **window**; it never reads `MediaQuery.textScaler`. The **user's** OS font size is applied on top by `Text` itself, at layout, and the app shell passes it through up to 2x (`AppShellUiConstants.MAX_TEXT_SCALE_FACTOR`, applied by `AppMaterialWrapper` with `MediaQuery.withClampedTextScaling`). Two independent factors, each applied once — not a double scale. Do not cancel it with `MediaQuery.withNoTextScaling` or a `textScaler: TextScaler.noScaling` on a style: that fails WCAG's 200% text resize. What the text scale does *not* grow is a box sized with `context.h`/`context.w`, so give text containers padding or a `minHeight` rather than a fixed height. Details: [`06_app_shell.md`](../architecture/06_app_shell.md#the-os-font-size-is-honoured-up-to-2x).
+
 ---
 
 ## 4. Change the spacing and radius scales
@@ -249,8 +253,10 @@ Default to `w` for spacing. Reach for `h` only when the value is genuinely verti
 context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
 context.edgeInsets(horizontal: X)   // → left/right = w(X)
 context.edgeInsets(vertical: X)     // → top/bottom = h(X)
-context.edgeInsets(left: X)         // → w(X)      (same for right)
+context.edgeInsets(left: X)         // → w(X)      (same for right) — physical side
 context.edgeInsets(top: X)          // → h(X)      (same for bottom)
+context.edgeInsetsDirectional(start: X)  // → EdgeInsetsDirectional, start = w(X) (same for end)
+context.edgeInsetsDirectional(all: X / horizontal: X / vertical: X / top: X)  // same axes as edgeInsets
 context.borderRadius(all: X)        // → BorderRadius.circular(r(X))
 context.verticalSpace(X)            // → SizedBox(height: h(X))
 context.horizontalSpace(X)          // → SizedBox(width: w(X))
@@ -260,6 +266,9 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 > **`context.edgeInsets(all:)` scales with `w`**, so it is a true drop-in for `EdgeInsets.all(context.w(16))`. Each axis of `edgeInsets` is scaled by the axis it belongs to, which keeps padding proportional instead of tracking one dimension.
 >
 > `borderRadius` uses `r` — a radius scaled on one axis alone would turn a circle into an ellipse. When in doubt, write the explicit form, which states the axis out loud.
+
+> [!IMPORTANT]
+> **`left`/`right` are physical; `start`/`end` follow the text direction.** `context.edgeInsets(left: 16)` stays on the left in Arabic or Hebrew. When the side means "where the line begins" — an indent before a label, the gap after a leading icon — use `context.edgeInsetsDirectional(start: 16)`, which returns an `EdgeInsetsDirectional` resolved against the ambient `Directionality`. A side argument wins over its axis, as in `edgeInsets`: `edgeInsetsDirectional(horizontal: 16, start: 24)` is 24 at the start and 16 at the end. Keep `edgeInsets(left:)` for sides that really are physical (a shadow offset, a hinge). The same goes for alignment: prefer `AlignmentDirectional.centerStart` to `Alignment.centerLeft`.
 
 ---
 

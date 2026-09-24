@@ -299,6 +299,10 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 > `EdgeInsets.all(context.w(16))`. `horizontal:` scales with `w`, `vertical:`
 > with `h`. See [`11_design_system.md`](11_design_system.md) for the full axis
 > table.
+>
+> For a side that means start or end of the line, use
+> `context.edgeInsetsDirectional(start:, end:)` — `left:`/`right:` are
+> physical and do not flip in a right-to-left locale.
 
 Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-height multiplier, `flex` is a ratio.
 

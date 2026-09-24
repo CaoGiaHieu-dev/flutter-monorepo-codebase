@@ -98,7 +98,7 @@ class _DropDownButtonState<T> extends State<_DropDownButton<T>> {
         // Pass visual properties
         color: widget.color ?? Theme.of(context).primaryColor,
         disableColor: widget.color != null
-            ? widget.color!.withAlpha(0.5.toOpacity)
+            ? widget.color!.withValues(alpha: 0.5)
             : Theme.of(context).disabledColor,
         padding: widget.padding,
         elevation: widget.elevation,

@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:core_di/core_di.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// A custom GoRouteData implementation that adds support for route awareness,
 /// analytics screen tracking, and standard pop/transition behaviors.
@@ -54,7 +57,13 @@ abstract class GoRouteDataCustom extends GoRouteData {
   }
 }
 
-/// A widget that is aware of route changes and can log screen views.
+/// A widget that is aware of route changes and logs screen views.
+///
+/// Each time its route becomes the visible one — pushed, or uncovered by
+/// the route above it popping — it reports [name] to the optional
+/// [IAnalytics] (`getItOrNull`, so an app without analytics registers
+/// nothing and nothing is sent). It needs [observer] to hear about either:
+/// `AppInitializer.init` sets it to the shell's `AppRouter.routeObserver`.
 class RouteAwareWidget extends StatefulWidget {
   final String name;
   final Widget child;
@@ -85,12 +94,16 @@ class RouteAwareWidgetState extends State<RouteAwareWidget> with RouteAware {
   }
 
   @override
-  void didPush() {
-    // AnalyticsService.logScreenView(screenName: widget.name);
-  }
+  void didPush() => _logScreenView();
 
   @override
-  void didPopNext() {}
+  void didPopNext() => _logScreenView();
+
+  void _logScreenView() {
+    final analytics = getItOrNull<IAnalytics>();
+    if (analytics == null) return;
+    unawaited(analytics.setCurrentScreen(widget.name));
+  }
 
   @override
   Widget build(BuildContext context) => widget.child;

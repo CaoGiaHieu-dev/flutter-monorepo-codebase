@@ -27,11 +27,11 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
 | Config | `src/config/` | `SslPinningConfig` |
 | Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
-| Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`) |
-| Extension | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
+| Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`). `ErrorHandler.onUnclassifiedError` là một callback thường cho những exception nó không phân loại được — app shell trỏ nó tới `IErrorReporter` tuỳ chọn ([`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting)) |
+| Extension | `src/extensions/` | `bool`, `Enum`, `List`, `String` — không có định dạng `DateTime` hay `num`: ngày, giờ và tiền tệ phụ thuộc locale, nên hãy định dạng bằng `DateFormat` / `NumberFormat` của `intl` với locale hiện tại |
 | Utils **và constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
-**`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên, và `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`.
+**`core_common`** là nửa gắn với Flutter. Nó khai ba phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên; `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`; và `core_di`, cho `IAnalytics` tuỳ chọn mà `RouteAwareWidget` báo lượt xem màn hình tới.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
@@ -71,6 +71,7 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 | Agnostic stream | `src/agnostic_streams/` | `IAuthStatusStream` — chia sẻ state giữa feature Provider và feature BLoC |
 | Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
+| Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
 
 **`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/di/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
 
@@ -219,7 +220,8 @@ Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống:
 | `context.spMin(n)` | `sp` chặn trên bằng giá trị thiết kế — chữ co được, không phình ra; bằng `sp` dưới bound mặc định |
 | `context.dg(n)` | cả hai trục |
 | `context.dm(n)` | trục lớn hơn |
-| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` theo `w`, `vertical` theo `h`, `all` theo `w` |
+| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` theo `w`, `vertical` theo `h`, `all` theo `w` — cạnh vật lý |
+| `context.edgeInsetsDirectional({all, horizontal, vertical, start, top, end, bottom})` | cùng các trục; `start`/`end` đảo theo chiều văn bản |
 | `context.borderRadius({all, topLeft, topRight, bottomLeft, bottomRight})` | `r` |
 | `context.verticalSpace(n)` / `context.horizontalSpace(n)` | một `SizedBox`, theo `h` / `w` |
 | `context.windowSizeClass` / `context.windowHeightClass` | lớp cửa sổ — dùng được cả khi không có `ResponsiveInit` |
@@ -371,7 +373,7 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `core_di` | *(không có)* |
 | `core_responsive` | *(không có)* |
 | `platform_kernel` | `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
-| `core_common` | `platform_kernel`, `core_responsive` |
+| `core_common` | `platform_kernel`, `core_responsive`, `core_di` |
 | `core_network` | `platform_kernel` |
 | `core_notifications` | `platform_kernel` |
 | `core_storage` | `core_common` |

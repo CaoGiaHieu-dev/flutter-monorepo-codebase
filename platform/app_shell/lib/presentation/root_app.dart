@@ -62,10 +62,9 @@ class RootApp extends StatelessWidget {
               child: GestureDetector(
                 // Global tap handler to unfocus keyboard when tapping outside input fields
                 onTap: AppUtils.unfocusKeyboard,
-                child: MediaQuery.withNoTextScaling(
-                  // Disable text scaling to maintain consistent UI layout
-                  child: child!,
-                ),
+                // No text-scale override here: `AppMaterialWrapper` caps the
+                // OS font size around this whole builder, overlays included.
+                child: child,
               ),
             ),
           ),

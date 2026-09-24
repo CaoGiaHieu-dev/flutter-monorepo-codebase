@@ -5,5 +5,6 @@ export 'app/app.dart';
 export 'feature_localization.dart';
 export 'language/language.dart';
 export 'navigators/navigators.dart';
+export 'observability/observability.dart';
 export 'routing/routing.dart';
 export 'theme/theme.dart';

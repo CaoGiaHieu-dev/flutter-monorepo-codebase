@@ -26,15 +26,28 @@ import 'presentation/presentation.dart';
 /// rather than being copied into each `main.dart`, where the copies would
 /// drift.
 ///
-/// [onError] receives every error escaping the guarded zone before it is
-/// forwarded to [FlutterError.reportError]; wire a crash reporter there.
+/// ## Errors
+///
+/// Three hooks catch what nothing else did, and all three end in one place
+/// (see [installShellErrorHooks]): errors escaping the guarded zone, errors
+/// the framework catches ([FlutterError.onError] — build, layout, paint,
+/// image decoding) and errors escaping to the engine
+/// ([PlatformDispatcher.onError]). Each is still printed to the console as
+/// before, then handed to [onError] and to the registered [IErrorReporter],
+/// if any, as a fatal error.
+///
+/// To plug in Crashlytics or Sentry, register an `IErrorReporter` in the app
+/// (`getItOrNull`, so none is fine too); [onError] stays for an app that
+/// wants the raw callback. Errors thrown by `configureDependencies` itself
+/// reach [onError] only — the reporter is not registered yet.
 void runShellApp({
   required Future<void> Function() configureDependencies,
-  void Function(Object error, StackTrace stack)? onError,
+  ShellErrorCallback? onError,
 }) {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      installShellErrorHooks(onError: onError);
       registerBaseUiLicenses();
       await configureDependencies();
 
@@ -63,11 +76,104 @@ void runShellApp({
         ),
       ).run();
     },
-    (error, stack) {
-      onError?.call(error, stack);
-      FlutterError.reportError(
-        FlutterErrorDetails(exception: error, stack: stack),
-      );
-    },
+    // Through `FlutterError.reportError`, so a zone error takes the same
+    // path as every other: printed, then reported exactly once.
+    (error, stack) => FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: _library,
+        context: ErrorDescription('while running the app zone'),
+      ),
+    ),
   );
+}
+
+/// Receives every uncaught error once the shell's hooks are installed.
+typedef ShellErrorCallback = void Function(Object error, StackTrace stack);
+
+const String _library = 'platform_app_shell';
+
+/// Installs the shell's error hooks. [runShellApp] calls it first thing;
+/// exposed for tests.
+///
+/// - [FlutterError.onError] keeps whatever handler was installed before
+///   (by default [FlutterError.presentError], the console dump in debug),
+///   then reports.
+/// - [PlatformDispatcher.onError] re-raises into [FlutterError.reportError],
+///   so it is printed and reported the same way, and returns `true`: the
+///   error is handled, the engine need not log it again.
+/// - [ErrorHandler.onUnclassifiedError] forwards the handled failures
+///   `ErrorHandler` could not classify to the [IErrorReporter] as
+///   non-fatal — they usually are bugs, not network weather.
+///
+/// Reporting means: [onError], then `getItOrNull<IErrorReporter>()`,
+/// resolved at the moment of the error so a reporter registered by
+/// `configureDependencies` is picked up, and a missing one is not an error.
+/// A throwing callback or reporter is swallowed — it is never reported
+/// through itself.
+@visibleForTesting
+void installShellErrorHooks({ShellErrorCallback? onError}) {
+  final previous = FlutterError.onError;
+  FlutterError.onError = (details) {
+    (previous ?? FlutterError.presentError)(details);
+    _report(
+      details.exception,
+      details.stack ?? StackTrace.current,
+      fatal: true,
+      reason: details.context?.toDescription(),
+      onError: onError,
+    );
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: _library,
+        context: ErrorDescription('while running outside the framework'),
+      ),
+    );
+    return true;
+  };
+
+  ErrorHandler.onUnclassifiedError = (error, stack) => _report(
+    error,
+    stack,
+    fatal: false,
+    reason: 'ErrorHandler could not classify this exception',
+  );
+}
+
+/// Guards against a reporter whose own failure would be reported again.
+bool _reporting = false;
+
+void _report(
+  Object error,
+  StackTrace stack, {
+  required bool fatal,
+  String? reason,
+  ShellErrorCallback? onError,
+}) {
+  if (_reporting) return;
+  _reporting = true;
+  try {
+    try {
+      onError?.call(error, stack);
+    } catch (_) {
+      // The app's callback failed; the reporter below still gets the error.
+    }
+    final reporter = getItOrNull<IErrorReporter>();
+    if (reporter == null) return;
+    unawaited(
+      reporter
+          .recordError(error, stack, fatal: fatal, reason: reason)
+          .catchError((Object _) {}),
+    );
+  } catch (_) {
+    // `recordError` threw synchronously: nothing left to report it to.
+  } finally {
+    _reporting = false;
+  }
 }

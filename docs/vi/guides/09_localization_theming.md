@@ -301,6 +301,10 @@ padding: EdgeInsets.all(AppSpacing.lg(context))
 > được** cho `EdgeInsets.all(context.w(16))`. `horizontal:` scale bằng `w`,
 > `vertical:` bằng `h`. Xem bảng trục đầy đủ ở
 > [`11_design_system.md`](11_design_system.md).
+>
+> Với cạnh mang nghĩa đầu hoặc cuối dòng, dùng
+> `context.edgeInsetsDirectional(start:, end:)` — `left:`/`right:` là cạnh
+> vật lý và không đảo chiều ở locale viết từ phải sang trái.
 
 Những giá trị **không phải** kích thước vật lý thì được miễn: `TextStyle.height` là hệ số giãn dòng, `flex` là tỉ lệ.
 

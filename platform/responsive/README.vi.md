@@ -97,6 +97,7 @@ Container(
 | `context.dm(x)` | Trục lớn hơn |
 | `context.edgeInsets(all:)` / `(horizontal:)` | `w` |
 | `context.edgeInsets(vertical:)` | `h` |
+| `context.edgeInsetsDirectional(start:)` / `(end:)` | `w` — `EdgeInsetsDirectional`, đảo chiều khi RTL |
 | `context.borderRadius(all:)` | `r` |
 | `context.verticalSpace(x)` / `horizontalSpace(x)` | `h` / `w` |
 

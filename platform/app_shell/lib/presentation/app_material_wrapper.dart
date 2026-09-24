@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 import 'providers/providers.dart';
+import 'utils/app_shell_ui_constants.dart';
 
 /// A wrapper around [MaterialApp] and [MaterialApp.router] to avoid code duplication
 /// of common configurations like title, debugShowCheckedModeBanner, and showPerformanceOverlay.
@@ -73,7 +74,25 @@ class AppMaterialWrapper extends StatelessWidget {
   final Iterable<Locale>? supportedLocales;
 
   /// The builder function for wrapping the navigator widget.
+  ///
+  /// Whatever it returns is wrapped in the app's text-scale cap — see
+  /// [_textScaleBuilder].
   final Widget Function(BuildContext, Widget?)? builder;
+
+  /// Honours the user's OS font size up to
+  /// [AppShellUiConstants.MAX_TEXT_SCALE_FACTOR], around [builder]'s output
+  /// — so the splash, every page and every overlay the builder installs
+  /// (toasts, dialogs) share one cap.
+  ///
+  /// It does not compound with `core_responsive`: `context.sp` sizes a
+  /// `TextStyle` for the window and never reads the text scaler, which
+  /// `Text` applies on top, once, when it lays out.
+  Widget _textScaleBuilder(BuildContext context, Widget? child) {
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR,
+      child: builder?.call(context, child) ?? child ?? const SizedBox.shrink(),
+    );
+  }
 
   // Router properties
   final RouteInformationProvider? routeInformationProvider;
@@ -106,25 +125,24 @@ class AppMaterialWrapper extends StatelessWidget {
       ],
       child: Consumer2<ThemeProvider, LanguageProvider>(
         builder: (context, themeProvider, languageProvider, _) {
+          // No `TooltipVisibility(visible: false)` here: it removed every
+          // tooltip from the semantics tree too, leaving icon-only buttons
+          // unlabelled for screen readers. The theme's `tooltipTheme` stops
+          // the long-press popup instead and keeps the label.
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: themeProvider.systemUiOverlayStyle,
-            child: TooltipVisibility(
-              visible: false,
-              child: MultiProvider(
-                providers: [
-                  ChangeNotifierProvider.value(value: getIt<AppProvider>()),
-                  ChangeNotifierProvider.value(
-                    value: getIt<DeeplinkProvider>(),
-                  ),
-                ],
-                child: _wrapWithFeatureTrees(
-                  context,
-                  _buildMaterialApp(
-                    themeMode: themeProvider.themeMode,
-                    theme: themeProvider.currentTheme(context),
-                    darkTheme: themeProvider.darkTheme(context),
-                    locale: languageProvider.locale,
-                  ),
+            child: MultiProvider(
+              providers: [
+                ChangeNotifierProvider.value(value: getIt<AppProvider>()),
+                ChangeNotifierProvider.value(value: getIt<DeeplinkProvider>()),
+              ],
+              child: _wrapWithFeatureTrees(
+                context,
+                _buildMaterialApp(
+                  themeMode: themeProvider.themeMode,
+                  theme: themeProvider.currentTheme(context),
+                  darkTheme: themeProvider.darkTheme(context),
+                  locale: languageProvider.locale,
                 ),
               ),
             ),
@@ -164,7 +182,7 @@ class AppMaterialWrapper extends StatelessWidget {
         locale: locale ?? this.locale,
         localizationsDelegates: delegates,
         supportedLocales: supportedLocales ?? AppLocalizations.supportedLocales,
-        builder: builder,
+        builder: _textScaleBuilder,
         routeInformationProvider: routeInformationProvider,
         routeInformationParser: routeInformationParser,
         routerDelegate: routerDelegate,
@@ -193,7 +211,7 @@ class AppMaterialWrapper extends StatelessWidget {
       locale: locale ?? this.locale,
       localizationsDelegates: delegates,
       supportedLocales: supportedLocales ?? AppLocalizations.supportedLocales,
-      builder: builder,
+      builder: _textScaleBuilder,
       localeResolutionCallback: (deviceLocale, supportedLocales) {
         // Loop through supported locales to find a match
         for (var supportedLocale in supportedLocales) {

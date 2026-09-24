@@ -24,7 +24,7 @@ apps/mobile/                         the composition root
 └── env.dev  env.stg                 flavor values (env.prod is yours to create)
 
 platform/app_shell/lib/              shared by every app
-├── bootstrap.dart                   runShellApp — error zone, DI, splash, init
+├── bootstrap.dart                   runShellApp — error hooks, DI, splash, init
 ├── main_scope.dart                  splash → init → root transition
 ├── di/
 │   ├── module.dart                  @InjectableInit.microPackage — the `shell` DI group
@@ -39,6 +39,7 @@ platform/app_shell/lib/              shared by every app
     ├── app_material_wrapper.dart    shared MaterialApp config
     ├── navigation/app_router.dart   GoRouter assembly
     ├── providers/                   AppProvider, DeeplinkProvider
+    ├── utils/                       AppShellUiConstants (text-scale cap)
     └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
 ```
 
@@ -90,12 +91,54 @@ sequenceDiagram
 
 The sequence lives in `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`](../../../platform/app_shell/lib/bootstrap.dart)); an app's `main.dart` only calls it with its own generated `configureDependencies`.
 
-1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost. Each goes to the app's optional `onError` callback — the place to wire a crash reporter — and then to `FlutterError.reportError`.
-2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call.
+1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost.
+2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call — then **`installShellErrorHooks`**, which routes every uncaught error to one place (see [Errors and crash reporting](#errors-and-crash-reporting) below). It runs before `configureDependencies`, so a DI failure is reported too.
 3. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
 4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/app_shell/test/boot_order_test.dart` holds the order.
 5. **`MainScope`** is constructed with three things: which splash widget to show (if any), the root widget, and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, which does the rest: `OperationGlobalConfig`, GoRouter's URL reflection, `AppInfoHelper`, handing the route observer to `RouteAwareWidget`, orientation and system UI.
 6. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
+
+### Errors and crash reporting
+
+Three kinds of error escape everything else, and the shell hooks all three:
+
+| Hook | Catches |
+|:--|:--|
+| the `runZonedGuarded` handler | async errors escaping the app zone — an unawaited `Future` that throws |
+| `FlutterError.onError` | errors the framework catches: build, layout, paint, image decoding, gestures |
+| `PlatformDispatcher.instance.onError` | errors escaping to the engine — a platform-channel callback, a timer outside the zone |
+
+They all end in the same place. The zone handler and the dispatcher hook re-raise through `FlutterError.reportError`; the `FlutterError.onError` hook first calls the handler that was there before it — by default `FlutterError.presentError`, the red console dump in debug — and then reports the error **once**: to the app's optional `onError` callback, then to `getItOrNull<IErrorReporter>()` with `fatal: true`. The dispatcher hook returns `true`: the error is handled, the engine does not log it a second time.
+
+`IErrorReporter` and `IAnalytics` are optional `core_di` contracts ([`src/observability/`](../../../platform/di/lib/src/observability/)). Nothing in the template implements them, so both lookups return `null` and nothing is sent. The reporter is resolved when an error arrives, not at boot, so one registered by `configureDependencies` is picked up, and an error thrown *by* `configureDependencies` still reaches `onError`. A reporter or callback that throws is swallowed — it is never reported through itself.
+
+A third path is non-fatal. `ErrorHandler` (`platform_kernel`) maps every repository exception to an `AppFailure`; the ones it cannot classify — a `TypeError` in a `fromJson`, a plugin exception — become the generic "Unknown error occurred" and are usually bugs. The shell points `ErrorHandler.onUnclassifiedError` at the reporter with `fatal: false`, so those are recorded while the user still gets a handled failure. Classified failures (no connection, 401, timeouts) are not reported.
+
+**Plugging in Crashlytics or Sentry** is one registration in the app — its own `lib/`, next to `firebase/firebase_module.dart`, or a package the app composes. No shell code changes:
+
+```dart
+// apps/mobile/lib/observability/crashlytics_error_reporter.dart
+@LazySingleton(as: IErrorReporter)
+class CrashlyticsErrorReporter implements IErrorReporter {
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stack, {
+    bool fatal = false,
+    String? reason,
+  }) => FirebaseCrashlytics.instance.recordError(
+    error,
+    stack,
+    fatal: fatal,
+    reason: reason,
+  );
+
+  @override
+  void log(String message) => FirebaseCrashlytics.instance.log(message);
+}
+```
+
+For Sentry, `recordError` calls `Sentry.captureException(error, stackTrace: stack)` and `log` adds a breadcrumb; initialise the SDK in the app (`SentryFlutter.init` wraps `main`, before `runShellApp`). Do **not** also set `FlutterError.onError` yourself — the shell's hook already forwards it, and chains to whatever handler was installed before `runShellApp`. `IAnalytics` works the same way: register an implementation and every `GoRouteDataCustom` page reports its screen through `setCurrentScreen` (`RouteAwareWidget`, on push and when the route above it pops). `platform/app_shell/test/error_hooks_test.dart` holds the wiring.
 
 ### The two splash paths
 
@@ -310,13 +353,14 @@ Provider tree it installs:
 MultiProvider(ThemeProvider, LanguageProvider)
 └── Consumer2<ThemeProvider, LanguageProvider>
     └── AnnotatedRegion<SystemUiOverlayStyle>
-        └── TooltipVisibility(visible: false)
-            └── MultiProvider(AppProvider, DeeplinkProvider)
-                └── every IAppTreeWrapper (e.g. feature_auth's AuthProvider)
-                    └── MaterialApp[.router]
+        └── MultiProvider(AppProvider, DeeplinkProvider)
+            └── every IAppTreeWrapper (e.g. feature_auth's AuthProvider)
+                └── MaterialApp[.router]
 ```
 
 The outer `Consumer2` is what makes theme and locale changes propagate app-wide.
+
+There is no `TooltipVisibility(visible: false)` in the tree. There used to be one, to stop tooltips popping up on a long press — but it also removed every tooltip from the semantics tree, and a screen reader reads an icon-only button's `tooltip` as its label: the password field's show/hide toggle was announced as "button". The theme now does that job instead: `ThemeProvider` sets `tooltipTheme: TooltipThemeData(triggerMode: TooltipTriggerMode.manual)`, which stops the long-press/tap popup on touch screens and keeps the label (a mouse hover still shows the bubble — trigger modes do not apply to mice). Delete that line to get Material's long-press tooltip back. `platform/app_shell/test/accessibility_test.dart` checks the label is there.
 
 Localization delegates are collected from DI with `getAllOrEmpty` — an app with no feature registering one still resolves the global delegates — so features never edit this file:
 
@@ -327,7 +371,20 @@ final delegates = [
 ];
 ```
 
-`RootApp` supplies the four router objects from `getIt<AppRouter>().router` and adds the global `builder`: overlay hosts, `AppDialogController`, a `GestureDetector` that unfocuses the keyboard on outside taps, and `MediaQuery.withNoTextScaling` to keep layout stable.
+`RootApp` supplies the four router objects from `getIt<AppRouter>().router` and adds the global `builder`: overlay hosts, `AppDialogController` and a `GestureDetector` that unfocuses the keyboard on outside taps. `AppMaterialWrapper` wraps whatever a `builder` returns — for the splash and the router alike — in `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)`, so pages, toasts and dialogs share one text-scale cap.
+
+### The OS font size is honoured, up to 2x
+
+`RootApp`'s builder used to end in `MediaQuery.withNoTextScaling`, which pinned every text at 100% whatever the user had set — an accessibility failure (WCAG 2.2 SC 1.4.4 asks for text resizable to 200%), not a layout choice. It now clamps instead: the user's setting passes through unchanged up to `MAX_TEXT_SCALE_FACTOR` (2.0, in [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), non-linear scalers (Android 14+) included, and nothing clamps the lower end.
+
+This does **not** double-scale text with `core_responsive`. The two factors are independent and applied at different points:
+
+| Factor | Applied by | Answers |
+|:--|:--|:--|
+| `context.sp(x)` (the theme's type scale, `AppTextStyles`) | `core_responsive`, into `TextStyle.fontSize` | "how big is this design size in this window?" — from the window width, clamped by `textScaleBounds`. It never reads `MediaQuery.textScaler` |
+| `MediaQuery.textScaler` | Flutter's `Text` / `RichText`, at layout | "how much larger does this user want text?" |
+
+A 16-unit body style is 16 × (window factor) logical pixels, then × the user's scale when drawn — once each. What does **not** grow with the text scale is layout sized with `context.h` / `context.w`: a fixed-height box holding text can overflow at 2x. Size text containers by their content (padding, `minHeight`), not a fixed height. `modules/auth/feature/test/login_page_text_scale_test.dart` and `modules/dashboard/feature/test/dashboard_text_scale_test.dart` lay out the login screen on three phone sizes and the dashboard chrome from phone to desktop at 2x, and fail on any overflow — copy them for a new screen.
 
 ---
 

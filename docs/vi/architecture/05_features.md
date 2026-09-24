@@ -180,7 +180,7 @@ Feature đăng ký một implementation là có ngay branch và nav item:
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
-  int get order => 0;                       // phải khớp vị trí tab mong muốn
+  int get order => 0;                       // khóa sắp xếp tăng dần, duy nhất mỗi tab
 
   @override
   String get path => HomePath.HOME;

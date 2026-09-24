@@ -113,7 +113,7 @@ class AuthStorageKeys {
 >
 > Chúng là API công khai của design system, và `styles/` mang đúng ngữ nghĩa đó trong khi `utils/` đọc lên là "linh tinh". Di chuyển sẽ làm hỏng mọi tham chiếu trong docs mà chẳng được gì. **Đừng "sửa" chỗ này ở lần audit sau.**
 
-Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục — hiện chỉ có `EnvConstants` (nối `String.fromEnvironment`), nằm trong `lib/src/utils/` của `platform_kernel` và được `core_common` re-export.
+Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục — hiện có `EnvConstants` (nối `String.fromEnvironment`) và `ErrorCodes` (mã lỗi `ErrorHandler` gán khi không có HTTP status), nằm trong `lib/src/utils/` của `platform_kernel` và được `core_common` re-export.
 
 ---
 
@@ -295,7 +295,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 | Hợp đồng | Mục đích | Có thứ tự? |
 |---|---|---|
 | `IFeatureRouteModule` | route dạng stack dưới `ShellRoute` của app | không (khớp theo path) |
-| `INavDestinationModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` phải khớp index nav |
+| `INavDestinationModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` tăng dần |
 | `IAppEntryLocation` | `initialLocation` lúc cold-start | không áp dụng |
 | `DashboardRouteModule` | chỉ phần chrome của dashboard | chỉ `feature_dashboard` |
 
@@ -461,7 +461,7 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | An toàn thứ tự DI | thứ tự module trong `apps/mobile/lib/di/injection.config.dart`; đăng ký theo type trong `lib/di/module.module.dart` của từng package |
 | core ⇏ feature / data / domain của sản phẩm | `dart tools/arch_check/check.dart` (R1) |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
-| App shell không import module nào | `dart tools/arch_check/check.dart` (R10) |
+| App shell không import module nào | `dart tools/arch_check/check.dart` (R1 cho `platform_app_shell`, R10 cho `apps/*`) |
 | Domain thuần Dart | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

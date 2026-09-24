@@ -11,7 +11,7 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
 - **`apps/<id>/`**: an app — the composition root. Holds its `app_manifest.yaml`, the `injection.dart` generated from it, a one-line `main.dart` calling `runShellApp`, and what identifies the app (its `lib/firebase/`). Nothing else.
 - **`platform/app_shell/`** (`platform_app_shell`): the shell every app shares — boot (`runShellApp`, `MainScope`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), the storage adapters and `NetworkConfigImpl`. Imports no module.
 - **`platform/`**: Infrastructure and utility packages shared across the project:
-  - `platform_kernel`: **Pure Dart, no `flutter` dependency.** Service locator (`getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`), `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, and the one genuinely global constants class, `EnvConstants`. This is the one package every other package may depend on, so its dependency list is everyone's — 7 entries, none Flutter-bound. Enforced by `arch_check` rule **R9**.
+  - `platform_kernel`: **Pure Dart, no `flutter` dependency.** Service locator (`getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`), `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, and the two genuinely global constants classes, `EnvConstants` and `ErrorCodes`. This is the one package every other package may depend on, so its dependency list is everyone's — 7 entries, none Flutter-bound. Enforced by `arch_check` rule **R9**.
   - **Which of the two to depend on:** if a package uses only the service locator, `ErrorHandler`, a primitive extension or a global constant, depend on `platform_kernel` — `core_network`, `core_notifications`, `data_core` and `feature_dashboard` already do. Reach for `core_common` only when you need something Flutter-bound from it (`AppConfig`, `AppInitializer`, a mixin, `GoRouteDataCustom`, `AppUtils`, the dialog controller, a formatter).
   - `core_common`: The **Flutter side** of the old `core_common` — `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` and page transitions, `AppUtils`, the dialog controller, input formatters. Re-exports `platform_kernel` wholesale, so an existing `package:core_common/core_common.dart` import keeps resolving everything. **New code that needs only the pure-Dart foundation should import `platform_kernel` directly** rather than pulling Flutter and go_router in with it.
 
@@ -56,7 +56,7 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
    - Dependencies flow **one way**: `core_ui_kit → provider_state_management` is correct; the reverse is a genuine cycle **inside** the core ring and is forbidden. (This is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` instead of reaching into the widget library for them — that would close the loop.)
 1. **Domain Layer must be Pure Dart** — enforced by the package graph, not just by review:
    - Do not import: `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, or any UI/Network framework library.
-   - **`domain_core` has ZERO workspace dependencies** and no `flutter` entry in `dependencies`. `domain_auth` depends only on `domain_core`. Keep it that way.
+   - **`domain_core` has ZERO workspace dependencies** and no `flutter` entry in `dependencies`. `domain_auth` and `domain_cache` depend only on `domain_core`. Keep it that way.
    - **ABSOLUTELY FORBIDDEN** for a domain package to depend on `core_common` (or any `core_*` package). `core_common` imports `flutter/material.dart`, so depending on it would drag Flutter into Domain. `AppFailure` lives in `domain_core` for exactly this reason — it is part of the `Result` contract and belongs at the centre.
    - Allowed to import: `dart:*`, `domain_core` (`Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`, `get_it`.
    - Domain-owned constants live in that package's own `utils/` (§ 16) — e.g. `domain_core`'s `DomainConstants`. Never reach into `core_common` for them.
@@ -330,7 +330,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
   ```dart
   SizedBox(height: context.h(24))
   TextStyle(fontSize: context.sp(16))
-  Padding(padding: EdgeInsets.all(context.r(16)))
+  Padding(padding: EdgeInsets.all(context.w(16)))   // or context.edgeInsets(all: 16)
   ```
 - **No `BuildContext` in scope?** In an `async` method, read the value from context **before the first `await`** and pass it forward — never hold a context across an await. Read `context.w(96)` first, `await` second, and check `mounted` before touching state afterwards — see the snippet in `docs/en/reference/01_rules.md` §12.
 - **Design tokens take context too.** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter. Their `raw*` constants are the single source of the numbers; edit `raw*`, not the accessors.
@@ -370,7 +370,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
 
 - **Every package, at every layer** (core / domain / data / features / app shell), MUST keep its own public constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `platform/app_shell/lib/di/utils/`. A package with no constants needs no `utils/` folder: `arch_check` **R4** flags a public `static const` outside `utils/` (or `styles/`), and never asks for an empty folder.
 - **ABSOLUTELY FORBIDDEN** to create a shared cross-domain constants file that many packages import. A constant belongs to exactly one owner.
-- `platform_kernel`'s `lib/src/utils/` (re-exported through `core_common`) is reserved for constants that are **genuinely global** — today only `EnvConstants` (`String.fromEnvironment` values). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
+- `platform_kernel`'s `lib/src/utils/` (re-exported through `core_common`) is reserved for constants that are **genuinely global** — today `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` (the failure codes `ErrorHandler` and `IBaseRepository` assign when there is no HTTP status). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
 - **Precedent — constants that were evicted from `core_common`,** so nobody re-adds them:
   | Was | Now | Why |
   | :--- | :--- | :--- |
@@ -517,7 +517,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   **Only the manifest is edited by hand.**
 - **A type import defeats `getItOrNull`.** Guarding the *lookup* is useless if the file still imports the feature for the *type* — an unresolved import fails at compile time, before any lookup runs. When the shell needs something a module owns, declare a contract in `core_di` and have the module implement + register it:
 
-  **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R10** fails the build when any file in an app imports a `feature_*`, `data_*` or product `domain_*` package, with `injection.dart` as the single exception. It was added after `network_config_impl.dart` was found importing `data_auth` and `domain_auth` to read and refresh the session token — this section promised removability while the composition root broke it. Review had not caught it in the entire life of the file.
+  **Enforced by machine.** `dart tools/arch_check/check.dart` rule **R10** fails the build when any file in an app imports a `feature_*`, `data_*` or product `domain_*` package, with `injection.dart` as the single exception; the shared shell, `platform_app_shell`, is a `platform/*` package, so **R1** holds it to the same rule. R10 was added after `network_config_impl.dart` (then an app file, now in `platform_app_shell`) was found importing `data_auth` and `domain_auth` to read and refresh the session token — this section promised removability while the composition root broke it. Review had not caught it in the entire life of the file.
 
   | Contract (`core_di`) | Replaces the shell's direct use of |
   | :--- | :--- |
@@ -543,7 +543,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
   ```bash
   dart run build_runner build --workspace
   flutter analyze
-  cd modules/<module>/<layer> && flutter test      # per package that has a test/ directory
+  (cd modules/<module>/<layer> && flutter test)    # per package that has a test/ directory
   cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
   ```
   The build step is **not optional** — it is the only gate that sees generated code. Run `flutter test` only in a package that has a `test/` directory (CI Gate 3 does the same). The APK build needs two gitignored inputs a fresh clone lacks: the `firebase_options_<flavor>.dart` files in `apps/mobile/lib/firebase/` and `apps/mobile/android/app/src/<flavor>/google-services.json` — create them as described in `docs/en/getting-started/01_setup.md` § 3 before building.

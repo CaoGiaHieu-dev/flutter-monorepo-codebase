@@ -13,7 +13,7 @@ Use this skill when requested to: "create a new business flow/API call to displa
 
 - **Domain is the centre and depends on nothing.** `domain_core` has **zero** workspace
   dependencies and no `flutter` entry in its pubspec; `domain_auth`
-  depend only on `domain_core`. Never add `flutter`, `dio`, `retrofit`, `drift` or a `core_*`
+  and `domain_cache` depend only on `domain_core`. Never add `flutter`, `dio`, `retrofit`, `drift` or a `core_*`
   package to a domain pubspec.
 - `AppFailure` lives in **`domain_core`** (`platform/domain_core/lib/src/failures/`). It is
   part of the `Result` contract. `core_common` keeps a re-export shim so existing
@@ -180,9 +180,11 @@ exist) and never let an exception escape the Data layer.
 > `FormatException`; everything else — including `FirebaseException`,
 > `FirebaseAuthException` and `PlatformException` — falls through to:
 > ```dart
+> // Handle generic exceptions
+> // (_unknownMessage = 'Unknown error occurred'; ErrorCodes.UNKNOWN = 9999)
 > return ServerFailure(
->   message: _isDebug ? error.toString() : 'Unknown error occurred',
->   code: 9999,
+>   message: _isDebug ? error.toString() : _unknownMessage,
+>   code: ErrorCodes.UNKNOWN,
 > );
 > ```
 > So in a release build every Firebase error surfaces as *"Unknown error occurred"*, and any
@@ -246,4 +248,4 @@ transport inside the repository and keep the shape.
 
 - `docs/{en,vi}/guides/02_new_domain_data.md` — long-form walkthrough
 - `docs/{en,vi}/architecture/03_domain.md` and `04_data.md`
-- `implement_package_storage` — key-value persistence; `docs/{en,vi}/guides/07_database.md` — Drift tables
+- `implement_package_storage` — key-value persistence; `implement_package_database` — Drift tables (`docs/{en,vi}/guides/07_database.md`)

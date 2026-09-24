@@ -37,5 +37,5 @@ Run the scripts in the shell, from the repository root. After completion, presen
 - Known intentional "unused" items in the template — do **not** delete on the tool's word alone:
   - the `cache` sample module (`CacheEntriesDao` → `CacheEntryLocalDataSource` →
     `CacheEntryRepositoryImpl` → the two cache use cases) is reference/test scaffolding with
-    no production caller — remove it with `remove_sample.dart cache` if you do not want it;
+    no production caller — remove it with `dart tools/sample_cleanup/remove_sample.dart cache --apply` if you do not want it;
 - Run it before a release and after removing a feature package.

@@ -80,7 +80,7 @@ Pick **one** contribution type:
 
 | Need | Contract | Notes |
 | :--- | :--- | :--- |
-| Bottom-nav primary tab | `INavDestinationModule` | Requires `order`, `path`, `routes`, `destination`. `order` **must** stay unique and match shell branch index. |
+| Bottom-nav primary tab | `INavDestinationModule` | Requires `order`, `path`, `routes`, `destination`. `order` is an ascending sort key (not a branch index — `AppRouter` and the dashboard both sort by it); keep it unique so the order stays deterministic. |
 | Stack / shell sibling (login, onboarding, …) | `IFeatureRouteModule` | **`routes` only — no `order`** (GoRouter matches by path). |
 | Cold-start path | `IAppEntryLocation` | Optional; else the first destination's path, or the placeholder `/_empty_dashboard` when no destination is registered. |
 | Dashboard scaffold chrome | `DashboardRouteModule` | **Only** in `feature_dashboard`. |

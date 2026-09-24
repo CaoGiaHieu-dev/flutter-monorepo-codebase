@@ -73,7 +73,7 @@ dart tools/module_generator/generate.dart 5 billing acme
 
 | Behaviour | Detail |
 | :--- | :--- |
-| `lib/src/utils/` | Created for **every** module type, because a package's constants belong there (a package that ends up with none may drop the empty folder — `arch_check` R4 never asks for one). For a feature with routes, `<name>_path.dart` is written into `utils/`, not `routing/`. |
+| `lib/src/utils/` | Created for **every** module type, because a package's constants belong there (a package that ends up with none may drop the empty folder — `arch_check` R4 never asks for one). For every feature, `<name>_path.dart` is written into `utils/` (not `routing/`) together with `routing/<name>_route_module.dart` — both regardless of the route choice; delete them if the feature contributes no routes. |
 | State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, matching `feature_auth` / `feature_home`. |
 | Toolchain detection | Auto-detects FVM: uses it only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise falls back to global `dart` / `flutter`. |
 | Fail-safe | `assertToolchainAvailable()` runs **before any write**; an existing module directory aborts instead of being silently overwritten. |
@@ -125,6 +125,7 @@ unnecessary). Note the BLoC branch has no `executeOperation` — see `implement_
 ```bash
 dart tools/dependency_sync.dart
 dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/<name>/feature/lib   # after build_runner: barrels export generated files too
 ```
 Then **hot restart** the app (new DI registrations are not applied by hot reload).
 
@@ -138,8 +139,9 @@ The app must still build after any feature package is deleted. Before finishing,
   `core_di`**, resolved with `getItOrNull` / `getAllOrEmpty` and a fallback.
 - Removal procedure: drop its line from `modules:` in every `apps/<id>/app_manifest.yaml` →
   `dart tools/composer/composer.dart sync` (regenerates `injection.dart`, the app pubspecs and the
-  root `workspace:` list) → `flutter pub get` + `build_runner`. Or run
-  `dart tools/sample_cleanup/remove_sample.dart <bundle>`.
+  root `workspace:` list) → `flutter pub get` + `build_runner`. For a shipped sample only, run
+  `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` — it accepts only the bundles
+  listed in `tools/sample_manifest.yaml` (not a module you generated) and is a dry run without `--apply`.
 
 ---
 

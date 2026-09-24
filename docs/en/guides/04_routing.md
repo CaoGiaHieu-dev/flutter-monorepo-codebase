@@ -363,7 +363,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 - [ ] `app_router.dart` untouched
 - [ ] Path constants under `src/utils/`, not `routing/`
 - [ ] Controller created in the route's `build()`, page does not re-wrap
-- [ ] `INavDestinationModule.order` matches the intended tab index
+- [ ] `INavDestinationModule.order` sorts the tab into the intended position (ascending sort key, not an index) and is unique
 - [ ] Cross-feature navigation goes through a `core_di` Navigator interface
 - [ ] `BuildContext` passed from the UI, never taken from `NavigatorKeys`
 - [ ] `build_runner` re-run after touching route annotations

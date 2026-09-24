@@ -54,8 +54,9 @@ final delegates = [
 
 ### Step 1 — edit the `.arb` files
 
+In `modules/home/feature/assets/language/en.arb` — ARB is plain JSON, so a pasted `//` comment breaks `gen-l10n`:
+
 ```json
-// modules/home/feature/assets/language/en.arb
 {
   "@@locale": "en",
   "home": "Home",
@@ -120,7 +121,61 @@ extension ContextHomeExtension on BuildContext {
 Text(context.l10nHome.userLoggedIn)
 ```
 
-## 5. Rules
+## 5. Add a locale
+
+Adding a language touches `core_base_ui` **and every feature that ships strings** — not just the one you are working on. Japanese (`ja`) as the example.
+
+### Step 1 — `core_base_ui`: the ARB, and the language's name
+
+Create `ja.arb` in `platform/base_ui/assets/language/` with `"@@locale": "ja"` and every key of the template `en.arb`. Then add the language's display name to **every** `core_base_ui` ARB — `en.arb` and `vi.arb` as well as `ja.arb` — next to `languageEn` / `languageVi`:
+
+```json
+{
+  "@@locale": "en",
+  "languageEn": "English",
+  "languageVi": "Tiếng Việt",
+  "languageJa": "Japanese"
+}
+```
+
+`core_base_ui`'s `AppLocalizations.supportedLocales` is what the app offers: `MaterialApp.supportedLocales` (`platform/app_shell/lib/presentation/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`) all read it. `gen-l10n` builds it from the ARB files present, so the new file is what adds the locale.
+
+### Step 2 — name it in the picker
+
+`platform/base_ui/lib/src/extensions/locale_extension.dart` maps a language code to that name; without a case the picker shows the bare tag `ja`:
+
+```dart
+return switch (languageCode) {
+  'vi' => context.l10n.languageVi,
+  'en' => context.l10n.languageEn,
+  'ja' => context.l10n.languageJa,
+  _ => toLanguageTag(),
+};
+```
+
+### Step 3 — every feature ARB
+
+Add `assets/language/ja.arb`, every key translated, to **each** feature with an `l10n.yaml` — today `modules/{auth,home,onboarding,settings,splash}/feature`. This is not optional: each feature's extension force-unwraps its delegate —
+
+```dart
+FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
+```
+
+— and a feature with no `ja.arb` has a delegate that does not support `ja`, so `of(this)` returns `null` and the first `context.l10nHome` after the user picks Japanese throws. `find modules -name l10n.yaml` lists them. A feature scaffolded later gets only `en.arb` / `vi.arb` from `tools/module_generator/templates/feature/localization/` — add the locale there too, or to each new feature by hand.
+
+### Step 4 — `preferred-supported-locales`
+
+`platform/base_ui/l10n.yaml` and each feature's `l10n.yaml` say `preferred-supported-locales: [en, vi]`, as does the generator's `l10n.yaml.mustache`. `gen-l10n` still picks up `ja.arb` without an edit — the list only **orders** the locales, and those it omits follow alphabetically — but the first supported locale is the fallback (`localeResolutionCallback` and `LanguageProvider` both fall back to `supportedLocales.first`). Append the new locale to keep the order explicit: `[en, vi, ja]`.
+
+### Step 5 — regenerate
+
+```bash
+dart tools/workspace_setup/configure.dart   # gen-l10n in every package with an l10n.yaml, then codegen + barrels
+```
+
+Or `flutter gen-l10n` in `platform/base_ui` and in each feature. Check every package's `untranslated-messages.txt` is empty.
+
+## 6. Rules
 
 - **No hard-coded user-facing strings.** Ever. Toasts, dialogs, error messages and button labels all go through a delegate.
 - Feature-specific strings → that feature's `.arb`.
@@ -131,7 +186,7 @@ Text(context.l10nHome.userLoggedIn)
 
 # Part B — Theming
 
-## 6. Design tokens and colours
+## 7. Design tokens and colours
 
 Tokens live in `platform/base_ui/lib/src/styles/`; colours come from a
 `ThemeExtension` so they flip with light/dark automatically.
@@ -170,7 +225,7 @@ Container(
 > page: [`11_design_system.md`](11_design_system.md).** It is kept separate so
 > there is exactly one place describing how these values are defined.
 
-## 7. `ThemeMode.system` follows the OS live
+## 8. `ThemeMode.system` follows the OS live
 
 `ThemeMode.system` resolves against OS brightness, which can change while the app is running. `ThemeProvider` observes it:
 
@@ -208,7 +263,7 @@ The persisted preference is read through `IThemeStorage` — see [`06_storage.md
 
 # Part C — Responsive UI
 
-## 8. `core_responsive` is mandatory
+## 9. `core_responsive` is mandatory
 
 Every dimension is scaled, and always through a `BuildContext`:
 
@@ -249,7 +304,7 @@ Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-he
 
 By default nothing scales past the design size: a tablet or desktop window draws the design 1:1, and the room it adds is spent on layout, chosen by window size class. The scale policy and the adaptive widgets are in [`11_design_system.md`](11_design_system.md) §6–§7.
 
-## 9. A widget scales its own constants, never its parameters
+## 10. A widget scales its own constants, never its parameters
 
 > [!CAUTION]
 > A reusable widget in `core_ui_kit` **must not scale the parameters it receives**. The caller scales before passing, so a value arrives already in device pixels and has to be used as-is; scaling it again double-scales, and a caller passing a token cannot override it at all. A widget's **own** constants are the opposite case: it must scale those, or it is not responsive.
@@ -282,7 +337,7 @@ Call sites scale:
 AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 ```
 
-## 10. `core_ui_kit` constants
+## 11. `core_ui_kit` constants
 
 Non-size defaults for shared widgets live in the package's own `utils/`:
 
@@ -302,7 +357,7 @@ class SharedUiConstants {
 }
 ```
 
-## 11. Dialogs and bottom sheets are classes, not closures
+## 12. Dialogs and bottom sheets are classes, not closures
 
 > [!CAUTION]
 > Never build a dialog inline inside `showDialog()` / `showModalBottomSheet()`. Extract it into its own file and class.
@@ -318,10 +373,11 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 
 ---
 
-## 12. Checklist
+## 13. Checklist
 
 - [ ] No hard-coded user-facing string anywhere
 - [ ] New key added to **all** `.arb` locale files, `flutter gen-l10n` run
+- [ ] New locale: an ARB in `core_base_ui` **and every feature**, its name in `locale_extension.dart` (§5)
 - [ ] Feature registers `IFeatureLocalization`; `root_app.dart` untouched
 - [ ] `core_ui_kit` uses `core_base_ui` strings, defines no `.arb`
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`

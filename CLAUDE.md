@@ -127,6 +127,12 @@ dart tools/code_review/code_review.dart --all --focus architecture,security
 
 # Workspace setup (cross-platform — there is no .bat/.sh wrapper)
 dart tools/workspace_setup/configure.dart
+
+# Partial checkout (a module submodule not initialised): composer imports package:path/yaml, and pub
+# refuses a workspace listing a member with no pubspec.yaml. bootstrap uses dart:io only and prunes
+# those from the composer-managed regions; then pub get → composer sync → configure.dart.
+# Never commit what it writes. Full sequence: docs/en/guides/12_module_isolation.md § 3
+dart tools/composer/bootstrap.dart            # --dry-run to report only
 dart tools/workspace_setup/configure.dart --help   # prints the steps, runs nothing; other args exit 64
 
 # Firebase multi-environment config

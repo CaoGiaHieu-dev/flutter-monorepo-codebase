@@ -69,6 +69,30 @@ Notice every one of these is generic over `GeneratedDatabase`. `core_database` n
 
 Worked end-to-end from the real `data_cache` wiring. Substitute your package name throughout.
 
+### Step 0 — Declare the dependencies
+
+The package's `pubspec.yaml` needs what the real `modules/cache/data/pubspec.yaml` declares for its database:
+
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter              # `visibleForTesting` in the database class
+  core_database:
+    path: ../../../platform/database
+  drift: "^2.34.3"
+  get_it: ^9.2.1              # the DI module collects migrations through GetIt
+  injectable: ^3.0.0
+
+dev_dependencies:
+  build_runner: "^2.16.0"
+  drift_dev: "^2.34.5"        # generates `<name>_database.g.dart`
+  injectable_generator: "^3.1.3"
+  flutter_test:
+    sdk: flutter              # for the in-memory database tests (§ 8)
+```
+
+Add the rest of a data package as usual (`domain_core`, `data_core`, your `domain_*`, `freezed_annotation` / `freezed` for models). `sqlite3` and `path_provider` are `core_database`'s own dependencies — do not repeat them. Versions come from the catalog `pubspec_dependencies.yaml`: a dependency written with no version (`drift:`) is filled in by `dart tools/dependency_sync.dart`, and a mismatched one rewritten. Then `flutter pub get`.
+
 ### Step 1 — Define the table
 
 A `Table` subclass is standalone: it references no database, so it lives in your package.
@@ -155,6 +179,17 @@ class CacheConstants {
 
 ```dart
 // modules/cache/data/lib/src/database/cache_database.dart
+import 'package:core_database/core_database.dart';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
+import '../utils/cache_constants.dart';
+import 'tables/cache_entries_table.dart';
+
+part 'cache_database.g.dart';
+part 'dao/cache_entries_dao.dart';
+
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
@@ -196,6 +231,8 @@ class CacheDatabase extends _$CacheDatabase {
       driftMigrationStrategy(database: this, migrations: _migrations);
 }
 ```
+
+The imports matter as much as the class: the **table** is an ordinary `import` (it is standalone), while the **DAO** is a `part` — Drift requires an accessor to live in its database's library — next to `part '<name>_database.g.dart';`, which `build_runner` writes.
 
 Two things to copy exactly:
 
@@ -348,6 +385,24 @@ abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   Future<void> downgrade(Migrator m);
 }
 ```
+
+A schema change is **three edits made together** — miss one and the upgrade silently does nothing, or a fresh install and an upgraded one end up with different schemas:
+
+1. **Add the column to the table class** — Drift generates the schema from it, and `Migrator.createAll()` builds fresh installs from it. A column added to an existing table must be `nullable()` or have a `withDefault(...)`: SQLite cannot add a `NOT NULL` column without a default to rows that already exist.
+
+   ```dart
+   // tables/cache_entries_table.dart — inside `CacheEntries`
+   DateTimeColumn get expiresAt => dateTime().nullable()();
+   ```
+
+2. **Bump `schemaVersion`** in your database class (`1` → `2`). It must equal the highest `version` among your steps: Drift calls `onUpgrade` only when the stored `user_version` is below `schemaVersion`, so without the bump no step ever runs on an existing install, and its queries fail with *"no such column"*.
+
+   ```dart
+   @override
+   int get schemaVersion => 2;
+   ```
+
+3. **Register the step** — below. Then `dart run build_runner build --workspace` (the generated table class gains the column).
 
 Registered like a route module, typed to the database it belongs to — GetIt keys a registration by its exact type, so `CacheDatabase` collects only `IDatabaseMigration<CacheDatabase>` and another package's steps never reach it. Declared in the owning package, it is collected because the open carries `@Order(1)` ([Step 5](#step-5--register-it-in-your-di-module)):
 

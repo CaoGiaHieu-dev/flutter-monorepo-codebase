@@ -18,7 +18,8 @@ tools/
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
 │   └── check.dart                   # R1-R10: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
 ├── composer/                        # 🧩 Ghép app từ app_manifest.yaml (Gate 0 của CI)
-│   └── composer.dart                # sync / verify / list — sinh workspace list, dependency của app, injection.dart
+│   ├── composer.dart                # sync / verify / list — sinh workspace list, dependency của app, injection.dart
+│   └── bootstrap.dart               # Checkout từng phần: bỏ member vắng mặt để `pub get` resolve được (không import package)
 ├── docs_check/                      # 📚 Mọi đường dẫn docs nhắc tới phải tồn tại (Gate 5 của CI)
 │   ├── check.dart
 │   └── allowlist.txt                # Đường dẫn vắng mặt có chủ đích, kèm lý do
@@ -109,6 +110,21 @@ key trùng) bị từ chối với tên file và dòng lỗi thay vì crash; m�
 `apps/<id>/app_manifest.yaml: <key>: <vấn đề>`, exit 1, không ghi gì. Khi một module khai báo
 trong manifest không có trên đĩa, cảnh báo PARTIAL COMPOSITION chỉ liệt kê file thực sự bị
 ghi lại trong lần chạy đó.
+
+```bash
+# Checkout từng phần (một submodule module chưa init): composer cần workspace đã resolve, còn pub
+# từ chối workspace có member không có pubspec.yaml. Tool này không import package nên chạy trước:
+dart tools/composer/bootstrap.dart            # --dry-run để chỉ báo cáo
+flutter pub get
+dart tools/composer/composer.dart sync
+dart tools/workspace_setup/configure.dart
+```
+
+`bootstrap` chỉ xoá bớt — trong vùng `composer:managed:workspace` ở root và vùng
+`composer:managed:deps` của từng app — những mục mà thư mục không có `pubspec.yaml`, và in dòng
+`git checkout --` để hoàn tác. Checkout đầy đủ thì không có gì để bỏ (exit 0, không ghi gì). Exit 1,
+không ghi gì, khi một package đang có khai path dependency viết tay tới một package vắng mặt — hãy
+init thêm submodule đó. Xem `docs/vi/guides/12_module_isolation.md` § 3.
 
 ### 📚 Docs Check (Đường dẫn trong tài liệu)
 ```bash

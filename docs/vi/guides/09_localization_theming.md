@@ -54,8 +54,9 @@ Chính `getAllOrEmpty` là thứ khiến feature có thể gỡ bỏ được: x
 
 ### Bước 1 — sửa các file `.arb`
 
+Trong `modules/home/feature/assets/language/en.arb` — ARB là JSON thuần, nên dán kèm một comment `//` sẽ làm `gen-l10n` lỗi:
+
 ```json
-// modules/home/feature/assets/language/en.arb
 {
   "@@locale": "en",
   "home": "Home",
@@ -121,7 +122,61 @@ extension ContextHomeExtension on BuildContext {
 Text(context.l10nHome.userLoggedIn)
 ```
 
-## 5. Quy tắc
+## 5. Thêm một ngôn ngữ
+
+Thêm một ngôn ngữ đụng tới `core_base_ui` **và mọi feature có chuỗi dịch** — không chỉ feature bạn đang làm. Lấy tiếng Nhật (`ja`) làm ví dụ.
+
+### Bước 1 — `core_base_ui`: file ARB, và tên của ngôn ngữ
+
+Tạo `ja.arb` trong `platform/base_ui/assets/language/` với `"@@locale": "ja"` và mọi key của file template `en.arb`. Rồi thêm tên hiển thị của ngôn ngữ vào **mọi** ARB của `core_base_ui` — `en.arb`, `vi.arb` lẫn `ja.arb` — cạnh `languageEn` / `languageVi`:
+
+```json
+{
+  "@@locale": "en",
+  "languageEn": "English",
+  "languageVi": "Tiếng Việt",
+  "languageJa": "Japanese"
+}
+```
+
+`AppLocalizations.supportedLocales` của `core_base_ui` chính là những gì app cung cấp: `MaterialApp.supportedLocales` (`platform/app_shell/lib/presentation/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider` và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`) đều đọc nó. `gen-l10n` dựng nó từ các file ARB đang có, nên chính file mới là thứ thêm locale vào.
+
+### Bước 2 — đặt tên cho nó trong bộ chọn
+
+`platform/base_ui/lib/src/extensions/locale_extension.dart` ánh xạ mã ngôn ngữ sang tên đó; thiếu một nhánh thì bộ chọn chỉ hiện tag trần `ja`:
+
+```dart
+return switch (languageCode) {
+  'vi' => context.l10n.languageVi,
+  'en' => context.l10n.languageEn,
+  'ja' => context.l10n.languageJa,
+  _ => toLanguageTag(),
+};
+```
+
+### Bước 3 — ARB của mọi feature
+
+Thêm `assets/language/ja.arb`, dịch đủ mọi key, vào **từng** feature có `l10n.yaml` — hiện là `modules/{auth,home,onboarding,settings,splash}/feature`. Bước này không tuỳ chọn: extension của mỗi feature ép non-null delegate của nó —
+
+```dart
+FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
+```
+
+— và một feature không có `ja.arb` thì delegate không hỗ trợ `ja`, nên `of(this)` trả `null` và lần `context.l10nHome` đầu tiên sau khi người dùng chọn tiếng Nhật sẽ ném lỗi. `find modules -name l10n.yaml` liệt kê chúng. Feature được scaffold sau này chỉ nhận `en.arb` / `vi.arb` từ `tools/module_generator/templates/feature/localization/` — hãy thêm locale vào đó, hoặc thêm tay cho từng feature mới.
+
+### Bước 4 — `preferred-supported-locales`
+
+`platform/base_ui/l10n.yaml` và `l10n.yaml` của từng feature ghi `preferred-supported-locales: [en, vi]`, `l10n.yaml.mustache` của generator cũng vậy. `gen-l10n` vẫn nhận `ja.arb` mà không cần sửa — danh sách này chỉ **sắp thứ tự** các locale, locale nào không có trong đó thì xếp sau theo bảng chữ cái — nhưng locale được hỗ trợ đầu tiên là locale dự phòng (`localeResolutionCallback` và `LanguageProvider` đều lùi về `supportedLocales.first`). Hãy thêm locale mới vào cuối để thứ tự rõ ràng: `[en, vi, ja]`.
+
+### Bước 5 — sinh lại
+
+```bash
+dart tools/workspace_setup/configure.dart   # gen-l10n cho mọi package có l10n.yaml, rồi codegen + barrel
+```
+
+Hoặc `flutter gen-l10n` trong `platform/base_ui` và trong từng feature. Kiểm tra `untranslated-messages.txt` của mọi package đều trống.
+
+## 6. Quy tắc
 
 - **Không hard-code chuỗi hiển thị cho người dùng.** Không ngoại lệ. Toast, dialog, thông báo lỗi, nhãn nút — tất cả đều đi qua delegate.
 - Chuỗi riêng của feature → `.arb` của feature đó.
@@ -132,7 +187,7 @@ Text(context.l10nHome.userLoggedIn)
 
 # Phần B — Theme
 
-## 6. Design token và màu sắc
+## 7. Design token và màu sắc
 
 Token nằm trong `platform/base_ui/lib/src/styles/`; màu đến từ một
 `ThemeExtension` nên tự đổi theo light/dark.
@@ -171,7 +226,7 @@ Container(
 > [`11_design_system.md`](11_design_system.md).** Tách ra để chỉ có đúng một nơi
 > mô tả cách định nghĩa những giá trị này.
 
-## 7. `ThemeMode.system` bám theo OS ngay lúc chạy
+## 8. `ThemeMode.system` bám theo OS ngay lúc chạy
 
 `ThemeMode.system` phân giải theo độ sáng của OS, mà giá trị này có thể đổi khi app đang chạy. `ThemeProvider` lắng nghe điều đó:
 
@@ -209,7 +264,7 @@ Giá trị đã lưu được đọc qua `IThemeStorage` — xem [`06_storage.md
 
 # Phần C — Responsive UI
 
-## 8. `core_responsive` là bắt buộc
+## 9. `core_responsive` là bắt buộc
 
 Mọi kích thước đều phải scale, và **luôn qua `BuildContext`**:
 
@@ -251,7 +306,7 @@ Những giá trị **không phải** kích thước vật lý thì được mi�
 
 Mặc định không gì được scale vượt cỡ thiết kế: cửa sổ tablet hay desktop vẽ thiết kế 1:1, và chỗ dư được dùng cho layout, chọn theo lớp kích thước cửa sổ. Chính sách scale và các widget thích ứng nằm ở [`11_design_system.md`](11_design_system.md) §6–§7.
 
-## 9. Widget scale hằng số của chính nó, không scale tham số
+## 10. Widget scale hằng số của chính nó, không scale tham số
 
 > [!CAUTION]
 > Widget dùng lại trong `core_ui_kit` **không được scale tham số nó nhận vào**. Bên gọi scale trước khi truyền, nên giá trị đến nơi đã ở đơn vị pixel thiết bị và phải được dùng nguyên vẹn; scale thêm lần nữa là scale hai lần, và người truyền token thì **không thể** ghi đè được nữa. Hằng số **của chính** widget thì ngược lại: nó phải scale, nếu không widget không responsive.
@@ -284,7 +339,7 @@ Nơi gọi mới scale:
 AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 ```
 
-## 10. Hằng số của `core_ui_kit`
+## 11. Hằng số của `core_ui_kit`
 
 Các giá trị mặc định không phải kích thước nằm trong `utils/` của chính package:
 
@@ -304,7 +359,7 @@ class SharedUiConstants {
 }
 ```
 
-## 11. Dialog và bottom sheet là class, không phải closure
+## 12. Dialog và bottom sheet là class, không phải closure
 
 > [!CAUTION]
 > Không bao giờ dựng dialog inline bên trong `showDialog()` / `showModalBottomSheet()`. Phải tách ra file và class riêng.
@@ -320,10 +375,11 @@ Builder inline không thể tái sử dụng, không preview được, không te
 
 ---
 
-## 12. Checklist
+## 13. Checklist
 
 - [ ] Không còn chuỗi hiển thị nào bị hard-code
 - [ ] Key mới đã thêm vào **tất cả** file `.arb`, đã chạy `flutter gen-l10n`
+- [ ] Ngôn ngữ mới: có ARB trong `core_base_ui` **và mọi feature**, có tên trong `locale_extension.dart` (§5)
 - [ ] Feature đăng ký `IFeatureLocalization`; `root_app.dart` không bị đụng tới
 - [ ] `core_ui_kit` dùng chuỗi của `core_base_ui`, không định nghĩa `.arb`
 - [ ] Màu qua `context.colors.*`, typography qua `AppTextStyles.*(context)`

@@ -162,7 +162,24 @@ Future<String?> _readMasterKey() async {
 
 ## 4. Cách thêm một giá trị lưu trữ mới (công thức chính)
 
-Ba bước. Ví dụ minh hoạ là auth token — có thật trong repo.
+Ba bước, mở đầu bằng khai dependency và kết thúc bằng chạy codegen. Ví dụ minh hoạ là auth token — có thật trong repo.
+
+### Bước 0 — phụ thuộc vào `core_storage`
+
+Package sở hữu khai nó trong `dependencies` (trong Pub workspace, một import không khai báo vẫn compile được nhờ `package_config.json` dùng chung; `arch_check` R5 mới là thứ bắt được nó), kèm injectable cho phần đăng ký. Như trong `modules/auth/data/pubspec.yaml`:
+
+```yaml
+dependencies:
+  core_storage:
+    path: ../../../platform/storage
+  injectable: ^3.0.0
+
+dev_dependencies:
+  build_runner: "^2.16.0"
+  injectable_generator: "^3.1.3"
+```
+
+Chỉnh `path:` theo độ sâu của package bạn. Version lấy từ catalog `pubspec_dependencies.yaml` (`dart tools/dependency_sync.dart`). Sau đó `flutter pub get`.
 
 ### Bước 1 — khai key trong `utils/` của package **SỞ HỮU**
 
@@ -224,6 +241,14 @@ Các field là `private` + `late final`: bên ngoài class không chạm đượ
 
 > [!CAUTION]
 > Đăng ký owner là `@singleton` / `@lazySingleton` — **tuyệt đối không `@injectable`**. `@injectable` là factory: mỗi chỗ inject sẽ dựng một instance *mới* với cache RAM **rỗng**, nên getter đồng bộ trả `null` dù giá trị vẫn nằm trên đĩa. Đi kèm `@PostConstruct(preResolve: true)` để DI **chờ** đọc đĩa xong rồi mới trao đồ thị phụ thuộc cho app.
+
+### Bước 4 — sinh code
+
+```bash
+dart run build_runner build --workspace
+```
+
+Phần đăng ký — kể cả việc `await` `initialize()` mà `preResolve` yêu cầu — nằm trong `lib/di/module.module.dart` được sinh ra của package, và chỉ ở đó. Chưa sinh lại thì owner đơn giản là chưa được đăng ký, và lần inject đầu tiên hỏng lúc boot với *"… is not registered"* — `flutter analyze` không thấy được. File mới còn cần chạy `dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib` sau đó.
 
 ---
 

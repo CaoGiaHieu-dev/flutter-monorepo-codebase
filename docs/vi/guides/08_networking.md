@@ -38,7 +38,37 @@ Tham số của `createClient()`:
 | `useDefaultInterceptors` | `false` sẽ bỏ qua toàn bộ chuỗi mặc định — dùng cho client public/không cần auth |
 | `options` | Thay thế hoàn toàn `_defaultOptions` (được `copyWith` nên không làm hỏng state dùng chung) |
 
-Muốn có client thứ hai với luật riêng thì đăng ký qua một DI module, ví dụ client public với `useDefaultInterceptors: false`.
+`core_network` đăng ký đúng một client — `Dio` mặc định mà mọi Retrofit data source nhận được:
+
+```dart
+// platform/network/lib/di/register_module.dart
+@module
+abstract class RegisterModule {
+  @lazySingleton
+  Dio dio(ApiClient apiClient) => apiClient.createClient();
+}
+```
+
+Client thứ hai với luật riêng được đăng ký theo cùng cách, dưới một **tên**, để không thay thế client mặc định. Trong repo không có gì đăng ký nó — đây là khuôn để chép, ví dụ một API public không có header auth, không refresh, không hộp thoại retry:
+
+```dart
+// modules/<module>/data/lib/di/register_module.dart
+import 'package:core_network/core_network.dart';
+import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
+
+@module
+abstract class RegisterModule {
+  @Named('public_api')
+  @lazySingleton
+  Dio publicDio(ApiClient apiClient) => apiClient.createClient(
+    useDefaultInterceptors: false,
+    interceptors: [LoggingInterceptor(tag: 'PublicAPI')],
+  );
+}
+```
+
+`getIt<Dio>()` và mọi tham số `Dio` không đặt tên vẫn nhận client mặc định; chỉ tham số gắn `@Named('public_api')` mới nhận client này — xem [§6](#6-khai-api-service-bằng-retrofit). Mỗi tên chỉ đăng ký được **một lần** trong container: nếu package thứ hai cũng cần client đó, hãy chuyển phần đăng ký vào `platform/network/lib/di/register_module.dart` thay vì khai hai lần.
 
 ---
 
@@ -440,7 +470,57 @@ abstract class AuthRemoteDataSource {
 
 `@Extra` đặt cờ theo từng request mà interceptor đọc (`NetworkConstants` trong `core_network`): `EXTRA_CAN_REFRESH_TOKEN: false` để `401` không kích hoạt refresh token, `EXTRA_CAN_RETRY: false` để timeout không bật dialog retry. Cả hai mặc định là `true` khi không khai.
 
-Các bước: khai abstract class → thêm `part 'x.g.dart';` → chạy `dart run build_runner build --workspace`.
+### Các bước
+
+1. **Dependency** — trong `pubspec.yaml` của package data, như `modules/auth/data/pubspec.yaml` (version lấy từ catalog `pubspec_dependencies.yaml`; sửa xong chạy `dart tools/dependency_sync.dart` để đồng bộ):
+
+   ```yaml
+   dependencies:
+     core_network:
+       path: ../../../platform/network
+     dio: "^5.11.0"
+     retrofit: "^4.10.0"
+     injectable: ^3.0.0
+
+   dev_dependencies:
+     build_runner: "^2.16.0"
+     injectable_generator: "^3.1.3"
+     retrofit_generator: "^10.2.8"
+   ```
+
+   Thêm `json_annotation` / `json_serializable` (và `freezed_annotation` / `freezed`) khi model cũng được sinh code. Chạy `flutter pub get`.
+
+2. **Khai** abstract class kèm `part '<file>.g.dart';`, như trên.
+
+3. **Đăng ký** — lớp Retrofit là một factory constructor, không phải lớp `@injectable`, nên phải đi qua một `@module` trong `lib/di/register_module.dart` của package. Bản thật:
+
+   ```dart
+   // modules/auth/data/lib/di/register_module.dart
+   import 'package:dio/dio.dart';
+   import 'package:injectable/injectable.dart';
+
+   import '../src/data_sources/remote/auth_remote_data_source.dart';
+
+   @module
+   abstract class RegisterModule {
+     @lazySingleton
+     AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
+         AuthRemoteDataSource(dio);
+   }
+   ```
+
+   `Dio` nhận vào là client mặc định của `core_network`, đã mang sẵn toàn bộ chuỗi interceptor. Muốn dùng client có tên ở [§1](#1-apiclient--factory-tạo-dio) thì đặt tên cho tham số:
+
+   ```dart
+   @lazySingleton
+   CatalogRemoteDataSource catalogRemoteDataSource(
+     @Named('public_api') Dio dio,
+   ) => CatalogRemoteDataSource(dio);
+   ```
+
+   Thiếu `@lazySingleton` thì repository inject data source sẽ hỏng lúc boot với *"… is not registered"* — `flutter analyze` không thấy được lỗi này.
+
+4. **Sinh code** — `dart run build_runner build --workspace` (`.g.dart` của Retrofit và `module.module.dart` của package), rồi `dart tools/barrel_generator/generate.dart modules/<module>/data/lib` để barrel export các file mới.
 
 > [!IMPORTANT]
 > `AuthRemoteDataSource` **chính là** đường chạy thật: `AuthRepositoryImpl` gọi nó cho login và refresh token, qua `execute()`. Hãy trỏ `AuthApiConstants` vào endpoint thật của bạn, hoặc đổi transport (Firebase, GraphQL) bên trong repository và giữ nguyên hình dạng.

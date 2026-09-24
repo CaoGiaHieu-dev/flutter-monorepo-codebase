@@ -98,6 +98,40 @@ class OperationConfig<R, T> {
 
 `executeOperation` runs the whole flow: global `onStart` hook → optional loading state → `await operation()` → dispatch across the four `Result` branches → global `onFinish` hook.
 
+#### When the use case returns something else — `convert:`
+
+`executeOperation` is generic in the operation's result type `R`; the provider holds `T`. When they differ — the use case returns a `UserEntity`, the provider shows a `ProfileViewData` — pass `convert`, a named argument of `executeOperation` itself (not of `OperationConfig`):
+
+```dart
+// platform/provider_state_management/lib/src/base/base_provider.dart
+Future<void> executeOperation<R>(
+  OperationConfig<R, T> config, {
+  T? Function(R? data)? convert,
+})
+```
+
+```dart
+class ProfileProvider extends BaseProvider<ProfileViewData> {
+  Future<void> load(String id) async {
+    await executeOperation(
+      OperationConfig(operation: () => _getUserUseCase(GetUserParams(id: id))),
+      convert: (user) => user == null ? null : ProfileViewData.fromUser(user),
+    );
+  }
+}
+```
+
+How the success value becomes the provider's data (`OperationExecutor._handleSuccess`, `operation_executor.dart`):
+
+| Case | Stored as `data` |
+|:--|:--|
+| `convert` passed | `convert(data)` — always wins, even when `R` already is `T` |
+| no `convert`, result is a `T` | the result as-is |
+| no `convert`, result is `null` | `null` |
+| no `convert`, result is not a `T` | **debug:** an `assert` fails, naming both types. **release:** asserts are stripped, so the state becomes `success` with `data: null` — a screen that silently renders empty |
+
+`onSuccess` receives the **converted** value (`T?`), not the raw `R`. The test `platform/provider_state_management/test/base_provider_test.dart` (`runConvertedOperation`) covers the path.
+
 > [!CAUTION]
 > **`showLoading: true` does not always show loading.** In `OperationExecutor.execute` (`operation_executor.dart`, behind `executeOperation`) the guard is:
 >
@@ -140,7 +174,31 @@ abstract class ViewStateModel<T> with _$ViewStateModel<T> {
 
 So `provider.viewState.state` is the phase and `provider.viewState.data` is the payload. Convenience getters (`isLoading`, `isSuccess`, `isError`, `isInitial`) are exposed both on `ViewState` and, via extension, on `ViewStateModel<T>`.
 
-`ErrorState` is extensible: features declare their own Freezed union (e.g. `AuthErrorState`) and map into it through `errorStateBuilder`.
+`ErrorState` is extensible: a feature declares its own Freezed union and maps into it through `errorStateBuilder`. The union must **extend `IErrorState`** — the `ErrorState.custom()` variant, which is what makes it an `ErrorState` at all — and, because it extends a class, needs the private `const X._()` constructor. The real one:
+
+```dart
+// modules/auth/feature/lib/src/provider/auth_error_state.dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+part 'auth_error_state.freezed.dart';
+
+@freezed
+abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+  const AuthErrorState._();
+
+  const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
+
+  const factory AuthErrorState.userNotFound() = _UserNotFound;
+
+  const factory AuthErrorState.serverError({
+    required String message,
+    int? code,
+  }) = _ServerError;
+}
+```
+
+`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`: it turns an `AppFailure` into one of these, or `null` for a generic error.
 
 ### 2.4 Rendering with `BaseViewWidget`
 

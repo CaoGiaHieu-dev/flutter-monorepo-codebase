@@ -350,10 +350,21 @@ feature-owned type is a crash waiting for the day that feature is deleted.
 // Good — degrades quietly
 getItOrNull<IAuthActionHandler>()?.logout(context);
 
-// Good — renders nothing rather than crashing
-getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
-    ?? const SizedBox.shrink();
+// Good — falls back to the bare branch widget rather than crashing
+// (platform/app_shell/lib/presentation/navigation/app_router.dart)
+builder: (context, state, navigationShell) {
+  return getItOrNull<DashboardRouteModule>()?.builder(
+        context,
+        state,
+        navigationShell,
+      ) ??
+      navigationShell;
+},
 ```
+
+`navigationShell` is itself the widget showing the current branch, so an app composed without
+`feature_dashboard` still renders its destinations — just without chrome. An empty `SizedBox` here
+would open that app on a blank screen.
 
 > [!NOTE]
 > `apps/mobile/lib/di/injection.dart` naming feature packages is the composition root's one intentional

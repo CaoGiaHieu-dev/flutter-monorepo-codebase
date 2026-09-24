@@ -73,6 +73,7 @@ dart tools/composer/composer.dart list              # every app and its composit
 dart tools/composer/composer.dart list --app admin  # one app only
 dart tools/composer/composer.dart sync --app mobile # regenerate
 dart tools/composer/composer.dart verify            # CI gate 0 — fails on drift
+dart tools/composer/bootstrap.dart                  # partial checkout only — run before `flutter pub get`
 ```
 
 `--app <id>` narrows `list`, `sync` and `verify` alike; the root `workspace:` list is still computed from every app. An unknown flag, or `--app` without an id, exits `64`. A pubspec or manifest that is not valid YAML — usually a duplicate key — is refused by name, `file:line` and parser message, exit `1`, instead of crashing the tool.
@@ -94,6 +95,17 @@ Both `sync` and `verify` also **refuse**, exit `1`, when a file they generate in
 Both also **refuse** an app pubspec that declares a managed package by hand outside the markers. Pub rejects a duplicate key, so that one mistake stops the whole workspace resolving — and it is exactly the mistake composer itself once made.
 
 A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block: the committed files that run actually rewrote — only those; a file that already held this composition is not listed (the candidates are the root `pubspec.yaml`, plus the `pubspec.yaml` and `injection.dart` of each app it synced) — and the `git checkout --` line that restores them. The composition it wrote is correct locally and wrong to commit, and CI Gate 0 catches it either way, because `verify` regenerates from the manifest on a runner where every module is present. See [`12_module_isolation.md`](../guides/12_module_isolation.md).
+
+### `bootstrap` — before composer can run
+
+```bash
+dart tools/composer/bootstrap.dart            # prune, from the managed regions, every member not on disk
+dart tools/composer/bootstrap.dart --dry-run  # report only
+```
+
+`composer.dart` imports `package:path` and `package:yaml`, so it needs a resolved workspace — and a fresh **partial** checkout (a module submodule left uninitialised, i.e. an empty directory) does not resolve: the committed root `workspace:` list and each app's managed path dependencies still name it, and `flutter pub get` refuses the whole workspace. `tools/composer/bootstrap.dart` imports **no package** (only `dart:io` and the `dart:io`-only `OutputFormatter`), so it runs before pub has ever resolved. It removes, from the root `composer:managed:workspace` region and each app's `composer:managed:deps` region only, every entry whose directory has no `pubspec.yaml`, prints what it pruned and the `git checkout --` line that undoes it, and tells you to run `flutter pub get` → `composer.dart sync` → `workspace_setup/configure.dart`. `sync` then rewrites the regions from the manifests.
+
+Exit `0` when it pruned or found nothing to prune (a full checkout — it writes nothing); `1`, writing nothing, when there is no `composer:managed:workspace` region (not run from the root) or when a present package has a **hand-written** path dependency on a missing directory (`modules/auth/data` without `modules/auth/domain`) — pruning cannot fix that, so it names the line and tells you to initialise that submodule too; `64` on an unknown argument. The full sequence: [`12_module_isolation.md` § 3](../guides/12_module_isolation.md#3-working-in-a-partial-checkout).
 
 ---
 

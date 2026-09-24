@@ -54,9 +54,18 @@ thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra 
 
 1. Tạo cây thư mục và `pubspec.yaml`
 2. Ghi `lib/di/module.dart` với `@InjectableInit.microPackage()`
-3. Thêm vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — rồi tự chạy `dart tools/composer/composer.dart sync`, lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app. Bạn không phải chạy tay gì cả; nếu module không thuộc về một app nào đó, xoá dòng của nó khỏi manifest của app ấy rồi chạy lại `composer sync`
+3. Thêm vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — rồi tự chạy `dart tools/composer/composer.dart sync`, lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app. Bạn không phải chạy tay gì cả — nhưng xem ghi chú bên dưới nếu module không thuộc về mọi app
 4. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
    `build_runner build --workspace`, rồi `dart fix --apply`
+
+> [!IMPORTANT]
+> **Mọi app đều compose module mới — kể cả `apps/admin`.** Generator không biết app nào cần nó, nên thêm vào tất cả. `apps/admin` cố ý chỉ là một tập con (auth + settings); module chỉ dành cho `mobile` phải được gỡ ra khỏi nó:
+>
+> 1. Xoá dòng `- { id: <name>, layers: [...] }` của nó dưới `modules:` trong `apps/admin/app_manifest.yaml` (hoặc chỉ bỏ khỏi `layers:` những layer app đó không cần).
+> 2. `dart tools/composer/composer.dart sync` — viết lại path dependency trong `apps/admin/pubspec.yaml` và `apps/admin/lib/di/injection.dart`; danh sách `workspace:` ở root vẫn giữ package chừng nào còn app khác compose nó.
+> 3. `flutter pub get && dart run build_runner build --workspace` — sinh lại `injection.config.dart` của admin.
+>
+> Commit manifest cùng với những gì `sync` sinh lại: CI Gate 0 (`composer verify`) fail khi chúng lệch nhau.
 
 **Thủ công — tool in ra ở cuối:**
 

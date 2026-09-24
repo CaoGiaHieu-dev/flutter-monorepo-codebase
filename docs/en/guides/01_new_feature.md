@@ -54,9 +54,18 @@ missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 1. Creates the directory tree and `pubspec.yaml`
 2. Writes `lib/di/module.dart` with `@InjectableInit.microPackage()`
-3. Adds it to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`. Nothing to run by hand; if a module does not belong in an app, delete its line from that app's manifest and run `composer sync` again
+3. Adds it to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`. Nothing to run by hand — but see the note below if the module does not belong in every app
 4. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
    `build_runner build --workspace`, then `dart fix --apply`
+
+> [!IMPORTANT]
+> **Every app composes the new module — `apps/admin` included.** The generator cannot know which apps want it, so it adds the module to all of them. `apps/admin` is deliberately a subset (auth + settings); a module meant for `mobile` only has to be taken back out of it:
+>
+> 1. Delete its `- { id: <name>, layers: [...] }` line under `modules:` in `apps/admin/app_manifest.yaml` (or drop only the layers that app does not want from `layers:`).
+> 2. `dart tools/composer/composer.dart sync` — rewrites `apps/admin/pubspec.yaml`'s path dependencies and `apps/admin/lib/di/injection.dart`; the root `workspace:` list keeps the package as long as another app composes it.
+> 3. `flutter pub get && dart run build_runner build --workspace` — regenerates admin's `injection.config.dart`.
+>
+> Commit the manifest together with what `sync` regenerated: CI Gate 0 (`composer verify`) fails when they disagree.
 
 **Manual — the tool prints these at the end:**
 

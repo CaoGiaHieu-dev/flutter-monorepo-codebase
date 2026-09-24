@@ -98,6 +98,40 @@ class OperationConfig<R, T> {
 
 `executeOperation` chạy trọn luồng: hook toàn cục `onStart` → set loading (nếu đủ điều kiện) → `await operation()` → phân nhánh theo 4 nhánh của `Result` → hook toàn cục `onFinish`.
 
+#### Khi use case trả về kiểu khác — `convert:`
+
+`executeOperation` generic theo kiểu kết quả `R` của operation; provider giữ `T`. Khi hai kiểu khác nhau — use case trả `UserEntity`, provider hiển thị `ProfileViewData` — hãy truyền `convert`, một named argument của chính `executeOperation` (không phải của `OperationConfig`):
+
+```dart
+// platform/provider_state_management/lib/src/base/base_provider.dart
+Future<void> executeOperation<R>(
+  OperationConfig<R, T> config, {
+  T? Function(R? data)? convert,
+})
+```
+
+```dart
+class ProfileProvider extends BaseProvider<ProfileViewData> {
+  Future<void> load(String id) async {
+    await executeOperation(
+      OperationConfig(operation: () => _getUserUseCase(GetUserParams(id: id))),
+      convert: (user) => user == null ? null : ProfileViewData.fromUser(user),
+    );
+  }
+}
+```
+
+Giá trị thành công trở thành `data` của provider thế nào (`OperationExecutor._handleSuccess`, `operation_executor.dart`):
+
+| Trường hợp | Lưu vào `data` |
+|:--|:--|
+| Có truyền `convert` | `convert(data)` — luôn được ưu tiên, kể cả khi `R` đã là `T` |
+| Không `convert`, kết quả là `T` | giữ nguyên kết quả |
+| Không `convert`, kết quả là `null` | `null` |
+| Không `convert`, kết quả không phải `T` | **debug:** một `assert` fail, nêu tên cả hai kiểu. **release:** assert bị loại bỏ, nên state thành `success` với `data: null` — màn hình lặng lẽ render trống |
+
+`onSuccess` nhận giá trị **đã convert** (`T?`), không phải `R` gốc. Test `platform/provider_state_management/test/base_provider_test.dart` (`runConvertedOperation`) phủ nhánh này.
+
 > [!CAUTION]
 > **`showLoading: true` KHÔNG phải lúc nào cũng hiện loading.** Trong `OperationExecutor.execute` (`operation_executor.dart`, nằm sau `executeOperation`) điều kiện là:
 >
@@ -140,7 +174,31 @@ abstract class ViewStateModel<T> with _$ViewStateModel<T> {
 
 Vậy `provider.viewState.state` là pha, còn `provider.viewState.data` là dữ liệu. Các getter tiện lợi (`isLoading`, `isSuccess`, `isError`, `isInitial`) có ở cả `ViewState` lẫn `ViewStateModel<T>` (qua extension).
 
-`ErrorState` mở rộng được: feature tự khai union Freezed riêng (ví dụ `AuthErrorState`) rồi map vào qua `errorStateBuilder`.
+`ErrorState` mở rộng được: feature tự khai union Freezed riêng rồi map vào qua `errorStateBuilder`. Union đó phải **extends `IErrorState`** — chính là biến thể `ErrorState.custom()`, thứ khiến nó là một `ErrorState` — và vì kế thừa một class nên cần constructor private `const X._()`. Bản thật:
+
+```dart
+// modules/auth/feature/lib/src/provider/auth_error_state.dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+part 'auth_error_state.freezed.dart';
+
+@freezed
+abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+  const AuthErrorState._();
+
+  const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
+
+  const factory AuthErrorState.userNotFound() = _UserNotFound;
+
+  const factory AuthErrorState.serverError({
+    required String message,
+    int? code,
+  }) = _ServerError;
+}
+```
+
+`AuthProvider.mapAuthFailure` (`auth_provider.dart`) là `errorStateBuilder` tương ứng: nó đổi một `AppFailure` thành một trong các biến thể này, hoặc `null` cho lỗi chung.
 
 ### 2.4 Render bằng `BaseViewWidget`
 

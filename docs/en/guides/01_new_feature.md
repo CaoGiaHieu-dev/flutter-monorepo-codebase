@@ -30,7 +30,8 @@ Run it with no arguments on a terminal to get an interactive prompt instead; wit
 missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 > [!NOTE]
-> If `modules/profile/feature` already exists the tool **refuses** and exits 1 — it never
+> If a package named `feature_profile` already exists the tool **refuses** and exits 64 (exit 1 if
+> the directory `modules/profile/feature` exists without that package) — it never
 > overwrites or deletes an existing package. Remove or rename it yourself first.
 
 ### Choosing argument 5 — this decides your routing shape

@@ -170,7 +170,7 @@ Cả dry-run lẫn `--apply` đều đếm các **tham chiếu Markdown** tới 
 
 Các bundle: `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` (`--list` in chúng kèm bảng phân loại).
 
-Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được. Tham số được kiểm tra trước: cờ lạ (`--aply`), thiếu hoặc sai tên bundle, hoặc nhiều hơn một bundle đều thoát với mã `64` — gõ sai cờ không bao giờ lặng lẽ biến thành dry-run, cũng không bị bỏ qua khi đứng cạnh `--apply`.
+Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được. Tham số được kiểm tra trước: cờ lạ (`--aply`), có cờ mà thiếu tên bundle, sai tên bundle, hoặc nhiều hơn một bundle đều thoát với mã `64` (không có tham số nào thì in cách dùng và thoát mã `0`) — gõ sai cờ không bao giờ lặng lẽ biến thành dry-run, cũng không bị bỏ qua khi đứng cạnh `--apply`.
 
 ---
 

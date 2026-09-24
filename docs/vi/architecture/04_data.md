@@ -349,7 +349,7 @@ abstract class RegisterModule {
 Dựng ở đây thay vì bên trong repository giữ cho dependency hiển lộ với container — đó chính là khe hở để test truyền một fake vào.
 
 > [!NOTE]
-> **Muốn xác thực qua Firebase?** Đổi transport bên trong `AuthRepositoryImpl` và giữ nguyên hình dạng bên dưới — nhưng hãy thêm nhánh Firebase vào `ErrorHandler` trước (§4). Thiếu nhánh đó, mọi lỗi Firebase đều thành *"Unknown error occurred"* ở bản release.
+> **Muốn xác thực qua Firebase?** Đổi transport bên trong `AuthRepositoryImpl` và giữ nguyên hình dạng bên dưới — nhưng hãy thêm nhánh Firebase vào `ErrorHandler` trước (§3). Thiếu nhánh đó, mọi lỗi Firebase đều thành *"Unknown error occurred"* ở bản release.
 
 ### Lưu giữ phiên đăng nhập
 

@@ -48,7 +48,7 @@ flutter-monorepo-codebase/
 │   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
 │   ├── settings/feature/          # Sample: consuming another module's contract
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
-│   ├── onboarding/feature/        # Sample: IAppEntryLocation, the cold-start location
+│   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── tools/                  # Dart CLI tooling (generators, checkers, sync)
 ├── docs/                   # This documentation (en/ + vi/)

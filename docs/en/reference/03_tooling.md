@@ -170,7 +170,7 @@ Both the dry-run and `--apply` also count the **Markdown references** to the pat
 
 Bundles: `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` (`--list` prints them with the classification).
 
-Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back. Arguments are checked first: an unknown flag (`--aply`), a missing or unknown bundle name, or more than one bundle exits `64` — a misspelt flag is never silently a dry run, nor ignored next to `--apply`.
+Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back. Arguments are checked first: an unknown flag (`--aply`), flags without a bundle name, an unknown bundle name, or more than one bundle exits `64` (no arguments at all prints the usage and exits `0`) — a misspelt flag is never silently a dry run, nor ignored next to `--apply`.
 
 ---
 

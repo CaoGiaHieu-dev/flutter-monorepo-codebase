@@ -35,8 +35,8 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
     - **Cross-Feature UI Actions**: Prefer `I*ActionHandler` in `core_di` + `*ActionHandlerImpl` in the owning feature when Feature A must trigger Feature B UI logic without importing Feature B. Do not name implementations with an `I` prefix.
 6.  **App Initialization & main.dart Cleanup**:
     - **FORBIDDEN** to write messy service initialization code in `main.dart`.
-    - All initialization logic (DI, logger, orientation, overlays, HttpOverrides) **must** be centralized in `AppInitializer.init()`.
-    - An app's `main.dart` is one call: `runShellApp(configureDependencies: configureDependencies)`. The zone, DI, splash and `AppInitializer.init` all live in `platform_app_shell`'s `bootstrap.dart`.
+    - Initialization **must** stay out of `main.dart`: DI is the app's `configureDependencies()`; the logger and `HttpOverrides` go in `AppInitializer.initBeforeRunApp()` (synchronous, before any widget is built, so the first HTTP client is already pinned); orientation, overlays and the rest go in `AppInitializer.init()`.
+    - An app's `main.dart` is one call: `runShellApp(configureDependencies: configureDependencies)`. The zone, DI, `initBeforeRunApp`, splash and `AppInitializer.init` all live in `platform_app_shell`'s `bootstrap.dart`.
 7.  **SSL/TLS Certificate Pinning & HttpOverrides Security**:
     - Strictly control SSL validation through `AppConfig.bypassesCertificateValidation` — never through `AppConfig.appFlavor`, which falls back to `dev` in any debug build without a flavor:
       - Only allow `HttpOverrides.global = _MyHttpOverrides()` (bypass bad certs) in a **debug build that explicitly declared `--flavor dev`** (`AppConfig.declaredFlavor == Flavor.dev && kDebugMode`). Flag any bypass keyed on `appFlavor`, `isDevelopment`, or a flavor fallback.
@@ -68,7 +68,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 - **Scaled through context**: Never a bare receiver (`16.h`). `core_responsive` ships no `num` extension, so it should not compile, but an extension leaking in from elsewhere would type-check while reading a global that never notifies anyone.
 - **Design tokens take a context**: `AppSpacing.lg(context)`, `AppRadius.mdRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter, and never re-scaled at the call site (`context.w(AppSpacing.lg(context))` scales twice).
 - **Hard-coded design values**: colours, font sizes, spacings and radii must come from `core_base_ui` tokens, not literals in the widget.
-- **`core_ui_kit` widgets take unscaled values**: a shared widget must not scale its own constructor parameters — the caller scales before passing in.
+- **`core_ui_kit` widgets take already-scaled values**: a shared widget must not scale its own constructor parameters — the caller scales before passing in.
 
 ### 💅 Clean Code & Shared Assets
 - **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `platform/ui_kit`?

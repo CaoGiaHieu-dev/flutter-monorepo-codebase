@@ -375,7 +375,7 @@ Widget build(BuildContext context, GoRouterState state) {
 
 - Inherit `BaseProvider<T>`
 - Use `executeOperation(OperationConfig(...))` for automatic Loading/Error handling
-- `ViewStateModel<T>` wraps UI state (sealed: `initial`/`loading`/`success`/`error`)
+- `ViewStateModel<T>` holds a `ViewState` (`initial`/`loading`/`success`/`error`/`loadingMore`) plus `data` and `message`
 - `ProviderStateListener<P, T>` / `MultiProviderStateListener` for declarative side-effects
 - `BaseViewWidget<P, T>` for exhaustive state rendering
 - Custom `ErrorState` via polymorphic `ErrorStateRegistry`

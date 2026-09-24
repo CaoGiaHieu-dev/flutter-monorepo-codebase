@@ -48,7 +48,7 @@ flutter-monorepo-codebase/
 │   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
 │   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
-│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
+│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
 │   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── tools/                  # CLI viết bằng Dart (generator, checker, sync)
 ├── docs/                   # Chính bộ tài liệu này (en/ + vi/)

@@ -1,3 +1,4 @@
+<!-- translated-from: docs/en/guides/08_networking.md@e7602d5 -->
 # Hướng dẫn: Networking
 
 ## Mục tiêu

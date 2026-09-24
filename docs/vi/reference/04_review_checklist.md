@@ -1,3 +1,4 @@
+<!-- translated-from: docs/en/reference/04_review_checklist.md@526594f -->
 # Checklist review PR
 
 **File này trả lời:** phải thoả những gì thì PR này mới được merge?

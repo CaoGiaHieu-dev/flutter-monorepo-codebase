@@ -46,7 +46,7 @@ Tất cả nằm ở `platform/di/lib/src/routing/`.
 | Contract | Dùng cho | Có thứ tự? | Ai implement |
 |---|---|---|---|
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
-| `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` phải khớp index nav | home, settings, … |
+| `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` tăng dần | home, settings, … |
 | `IAppEntryLocation` | Điểm bắt đầu khi khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
 | `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
 
@@ -363,7 +363,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 - [ ] Không đụng `app_router.dart`
 - [ ] Hằng số path nằm ở `src/utils/`, không phải `routing/`
 - [ ] Controller tạo trong `build()` của route, page không bọc lại
-- [ ] `INavDestinationModule.order` khớp đúng vị trí tab mong muốn
+- [ ] `INavDestinationModule.order` xếp tab vào đúng vị trí mong muốn (khóa sắp xếp tăng dần, không phải index) và là duy nhất
 - [ ] Điều hướng xuyên feature đi qua Navigator interface ở `core_di`
 - [ ] `BuildContext` truyền từ UI, không lấy từ `NavigatorKeys`
 - [ ] Đã chạy lại `build_runner` sau khi sửa annotation route

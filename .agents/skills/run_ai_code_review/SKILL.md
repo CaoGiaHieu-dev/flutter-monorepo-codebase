@@ -71,7 +71,7 @@ Run the commands above in the shell, from the repository root. After execution, 
   widget's own default is correct.
 
 **Layering**
-- `core/*` must not depend on `feature_*` or `data_*`. Approved exceptions only:
+- `platform/*` must not depend on `feature_*`, `data_*` or product `domain_*` packages. Approved exceptions only:
   `platform_kernel → domain_core`, `provider_state_management → domain_core`,
   `bloc_state_management → domain_core`. Three, and nothing else.
 - Domain stays pure — no `flutter` / `dio` / `retrofit` / `drift` import *and* no such entry

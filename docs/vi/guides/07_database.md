@@ -570,7 +570,7 @@ Hai thói quen đáng học:
 > [!NOTE]
 > Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire trọn vẹn, nhưng **không feature nào trong template này tiêu thụ nó**. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
 >
-> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache`. Các test database đi theo nó; chúng kiểm tra `DatabaseHandle` và `driftMigrationStrategy` của `core_database` qua fixture này, nên muốn giữ phần kiểm tra đó thì hãy cho chúng một fixture khác trước khi xoá.
+> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Các test database đi theo nó; chúng kiểm tra `DatabaseHandle` và `driftMigrationStrategy` của `core_database` qua fixture này, nên muốn giữ phần kiểm tra đó thì hãy cho chúng một fixture khác trước khi xoá.
 
 ---
 

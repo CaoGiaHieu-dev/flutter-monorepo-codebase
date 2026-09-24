@@ -31,7 +31,7 @@ The owner is the package whose business logic reads/writes the value. **Never** 
 
 > [!NOTE]
 > **Key-value only.** For rows, relations, or SQL queries use a Drift database instead —
-> see `implement_domain_data_flow` and `docs/{en,vi}/guides/07_database.md`. `core_storage`
+> see `implement_package_database` and `docs/{en,vi}/guides/07_database.md`. `core_storage`
 > and `core_database` are separate mechanisms; neither owns your keys or your tables.
 
 ---

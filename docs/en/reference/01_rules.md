@@ -113,7 +113,7 @@ class AuthStorageKeys {
 >
 > They are the public API of the design system, and `styles/` carries that meaning where `utils/` reads as "miscellaneous". Moving them would break every doc reference for no gain. **Do not "fix" this in a future audit.**
 
-The bottom of the stack keeps only genuinely global values — currently only `EnvConstants` (`String.fromEnvironment` wiring), under `platform_kernel`'s `lib/src/utils/` and re-exported by `core_common`.
+The bottom of the stack keeps only genuinely global values — currently `EnvConstants` (`String.fromEnvironment` wiring) and `ErrorCodes` (the failure codes `ErrorHandler` assigns when there is no HTTP status), under `platform_kernel`'s `lib/src/utils/` and re-exported by `core_common`.
 
 ---
 
@@ -461,7 +461,7 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | DI order safety | module order in `apps/mobile/lib/di/injection.config.dart`; per-type registrations in each package's `lib/di/module.module.dart` |
 | core ⇏ feature / data / product domain | `dart tools/arch_check/check.dart` (R1) |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
-| The app shell imports no module | `dart tools/arch_check/check.dart` (R10) |
+| The app shell imports no module | `dart tools/arch_check/check.dart` (R1 for `platform_app_shell`, R10 for `apps/*`) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

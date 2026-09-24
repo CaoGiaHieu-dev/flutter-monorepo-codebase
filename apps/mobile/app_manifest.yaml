@@ -56,7 +56,8 @@ di_groups:
 
   # The shared app shell: storage adapters, NetworkConfig, router, providers.
   # These used to be app-local registrations, which injectable runs *between*
-  # the two phases — so this group goes first in `after`, the same slot.
+  # the two phases — so this group opens `after` (behind `notifications` only,
+  # which registers nothing it needs), the same slot.
   # `ui` depends on it: ThemeProvider / LanguageProvider inject the storage
   # adapters registered here.
   - name: shell

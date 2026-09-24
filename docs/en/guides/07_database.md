@@ -570,7 +570,7 @@ Two habits worth copying:
 > [!NOTE]
 > The chain — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — is the `cache` module (`modules/cache/domain` + `modules/cache/data`), wired end to end, but **no feature in this template consumes it**. It exists as a working reference for the shape above, and as the fixture the database tests run against.
 >
-> It is an ordinary removable module: `apps/mobile` composes it, `apps/admin` does not — so only mobile opens the SQLite file at boot. Copy the shape for real tables, or remove it with `dart tools/sample_cleanup/remove_sample.dart cache`. The database tests go with it; they exercise `core_database`'s `DatabaseHandle` and `driftMigrationStrategy` through this fixture, so give them another before deleting if you want to keep that coverage.
+> It is an ordinary removable module: `apps/mobile` composes it, `apps/admin` does not — so only mobile opens the SQLite file at boot. Copy the shape for real tables, or remove it with `dart tools/sample_cleanup/remove_sample.dart cache --apply` (without `--apply` it only previews). The database tests go with it; they exercise `core_database`'s `DatabaseHandle` and `driftMigrationStrategy` through this fixture, so give them another before deleting if you want to keep that coverage.
 
 ---
 

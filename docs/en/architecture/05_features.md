@@ -180,7 +180,7 @@ A feature registers one implementation and gets a branch plus a nav item:
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
-  int get order => 0;                       // must match the intended tab index
+  int get order => 0;                       // ascending sort key, unique per tab
 
   @override
   String get path => HomePath.HOME;

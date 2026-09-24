@@ -182,7 +182,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 - **FORBIDDEN imports:** `package:flutter/...`, `package:dio/...`, `package:retrofit/...`, **and any `core_*` package**
 - **Allowed imports:** `dart:*`, `domain_core` (`Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`), `freezed_annotation`, `json_annotation`, `injectable`, `get_it`
-- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth` depends only on `domain_core`. Verify: `grep -rn "package:flutter" modules/*/domain/lib` must print nothing
+- **`domain_core` has ZERO workspace dependencies** and no `flutter` in `dependencies` — purity is enforced by the package graph, not just review. `domain_auth` and `domain_cache` depend only on `domain_core`. Verify: `grep -rn "package:flutter" modules/*/domain/lib` must print nothing
 - `AppFailure` lives in `domain_core` (`lib/src/failures/`) — it is part of the `Result` contract. Moving it there is what let Domain drop `core_common`
 - Domain constants live in the domain package's own `utils/` (e.g. `DomainConstants`) — never in `core_common`
 - Components: `entities/` (Freezed immutable), `params/`, `repositories/` (interfaces), `usecases/` (`@injectable`, returns `Result<T>`), `utils/`, `services/` (optional)
@@ -277,7 +277,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 | Contract | Purpose | Has Order? | Who Implements |
 |:---------|:--------|:-----------|:---------------|
 | `IFeatureRouteModule` | Stack/shell routes under app `ShellRoute` | **No** (path match) | auth, onboarding, … |
-| `INavDestinationModule` | One primary nav destination (bottom-bar / rail item) + one `StatefulShellBranch` | **Yes** (must match nav index) | home, settings, … |
+| `INavDestinationModule` | One primary nav destination (bottom-bar / rail item) + one `StatefulShellBranch` | **Yes** (ascending sort key — keep unique) | home, settings, … |
 | `IAppEntryLocation` | Cold-start `GoRouter.initialLocation` | n/a | usually onboarding |
 | `DashboardRouteModule` | Dashboard **chrome** only (scaffold + bottom bar / rail host) | n/a | `feature_dashboard` only |
 | `IFeatureLocalization` | Feature ARB delegates | n/a | every feature with strings |
@@ -613,7 +613,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 6. Add Local DataSource → Repository → UseCase following the cache sample. **DataSource returns a Model** (`CacheEntryModel`), never the Drift row type
 
 > [!NOTE]
-> The cache chain (`CacheEntries` → DAO → DataSource → Repository → 2 UseCases) is the **`cache` sample module** (`modules/cache/{domain,data}`) with no runtime consumer — it also serves as the database tests' fixture. `apps/mobile` composes it, `apps/admin` does not. Remove it with `remove_sample.dart cache`, not on the word of `unused_checker`.
+> The cache chain (`CacheEntries` → DAO → DataSource → Repository → 2 UseCases) is the **`cache` sample module** (`modules/cache/{domain,data}`) with no runtime consumer — it also serves as the database tests' fixture. `apps/mobile` composes it, `apps/admin` does not. Remove it with `dart tools/sample_cleanup/remove_sample.dart cache --apply`, not on the word of `unused_checker`.
 
 ---
 
@@ -770,7 +770,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
 26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.
 27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
-28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10**, added after `network_config_impl.dart` was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
+28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10** in `apps/*` (only `injection.dart` may import a module) and **R1** in `platform_app_shell`. R10 was added after `network_config_impl.dart` — then an app file, now in `platform_app_shell` — was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
 
 ---
 
@@ -792,7 +792,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
 - [ ] Layout choices use the window size class (`context.adaptive` / `AdaptiveLayout`), not `Platform.is*` or a device check
 - [ ] `core_di` contracts implemented under `modules/` (any layer) resolve with `getItOrNull` / `getAllOrEmpty` outside their own module — arch_check R8 is clean
-- [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R10 is clean
+- [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R1 (`platform_app_shell`) and R10 (`apps/*`) are clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
 - [ ] No `platform/*` imports or declares `feature_*`, `data_*` or `domain_*` outside the three approved `→ domain_core` edges — `arch_check` R1 is clean

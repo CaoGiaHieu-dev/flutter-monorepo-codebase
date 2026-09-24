@@ -141,7 +141,7 @@ flutter analyze
 
 - [ ] `app_router.dart` was **not** edited to add a route
 - [ ] The feature registers `IFeatureRouteModule` and/or `INavDestinationModule` (plus optional `IAppEntryLocation`)
-- [ ] `INavDestinationModule.order` matches the intended bottom-nav index
+- [ ] `INavDestinationModule.order` sorts the tab into the intended position (ascending sort key, not an index) and is unique
 - [ ] `INavDestinationModule` is used only for real bottom-nav destinations, not push-only screens
 - [ ] `feature_dashboard` stays chrome-only — no tab pages, no hardcoded nav item list
 - [ ] Route path constants live in `lib/src/utils/<feature>_path.dart`
@@ -157,7 +157,7 @@ flutter analyze
 - [ ] Every `on<Event>` handler is `async` and takes `(event, emit)`
 - [ ] The right `ViewState` is used — `BlocViewState<T>` on the BLoC side, `ViewState` on the Provider side
 - [ ] A `core_di` contract implemented under `modules/` (any layer) is resolved with `getItOrNull` / `getAllOrEmpty` outside its own module — `arch_check` R8 is clean
-- [ ] No app-shell file outside `injection.dart` imports a module package — `arch_check` R10 is clean
+- [ ] No app-shell file outside `injection.dart` imports a module package — `arch_check` R1 (`platform_app_shell`) and R10 (`apps/*`) are clean
 - [ ] All sizing goes through `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; no raw doubles, no bare `16.h` form (`arch_check` R7 blocks it)
 - [ ] Design tokens called with context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, never a bare getter, never double-scaled
 - [ ] Values needed after an `await` were read from context **before** it, not across it

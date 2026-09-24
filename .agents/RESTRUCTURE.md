@@ -18,7 +18,7 @@ bottom after every step.
 | | |
 |:--|:--|
 | **Changing** | Top-level axis: horizontal layers → **vertical slices** (`modules/<name>/`), one per bounded context, one per team, one git submodule. |
-| **Changing** | `platform/` (today `platform/*`) must stop naming any product concept. |
+| **Changing** | `platform/` (formerly `packages/core/*`) must stop naming any product concept. |
 | **Changing** | Root `pubspec.yaml` + each app's `injection.dart`: hand-written → **generated** from an app manifest. |
 | **Changing** | Samples: 6 feature packages + 2 domain/data pairs → **2 reference modules**, deliberately small. |
 | **Not changing** | Clean Architecture, the DI model (GetIt + Injectable), Freezed/BLoC rules, the responsive mandate, the barrel/codegen workflow. |
@@ -57,9 +57,9 @@ Steps are sequenced so each one leaves the repo building. Do not batch them.
 | 3 | Empty `core_di` of product names (**done**) | 2 | yes |
 | 4 | Split `core_common` (**done**) | — | yes |
 | 5 | Manifest + `composer` (**done**) | 4 | yes |
-| 6 | Rename + relayout to `platform/` + `modules/` | 5 | no |
-| 7 | Second app (`admin`) | 6 | yes |
-| 8 | Submodules + CODEOWNERS | 7 | no |
+| 6 | Rename + relayout to `platform/` + `modules/` (**done**) | 5 | no |
+| 7 | Second app (`admin`) (7a–7c done; toolchain build open) | 6 | yes |
+| 8 | Submodules + CODEOWNERS (8a done) | 7 | no |
 
 > **Revised again after step 4.** `composer` now comes *before* the relayout. It resolves
 > packages by name from a scan, so no directory is encoded in it or in any manifest — the
@@ -161,7 +161,7 @@ One package with 20 dependencies becomes three with a defensible boundary each.
 
 | New package | Holds | Flutter? |
 |:--|:--|:--|
-| ✅ `platform_kernel` | `getIt` helpers, `ErrorHandler`, exceptions, primitive extensions, `TypeHelper`, `ValidationHelper`, enums, `EnvConstants`, `ApiStatusConstants` | no — **7 deps** |
+| ✅ `platform_kernel` | `getIt` helpers, `ErrorHandler`, exceptions, primitive extensions, `TypeHelper`, `ValidationHelper`, enums, `EnvConstants`, `ErrorCodes` | no — **7 deps** |
 | ✅ `core_common` (kept the name) | `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, page transitions, `AppUtils`, dialog controller, formatters | yes — 15 deps, was 20 |
 | ✅ *(no package)* | `FirebaseModule` and the generated options moved **into the app** (`apps/mobile/lib/firebase/`) instead: they name one bundle ID, so no platform package may own them | — |
 
@@ -285,7 +285,7 @@ Keeping the same folder layout inside the package leaves every relative import u
 
 Two things the move must get right:
 
-1. **Its own `@InjectableInit.microPackage()`.** The storage adapters are `@LazySingleton`, so
+1. **Its own `@InjectableInit.microPackage()`.** The storage adapters are `@Singleton`s (eager), so
    without a module nothing registers them.
 2. **DI group order.** `core_base_ui` depends on `ILanguageStorage` / `IThemeStorage`, so the new
    group sits between `core` and `ui` in each `app_manifest.yaml`. Get this wrong and boot throws
@@ -298,7 +298,8 @@ barrel over files that all moved, so it was deleted and `platform_app_shell.dart
 The DI order is unchanged, which was the risk. The storage adapters, `NetworkConfigImpl` and
 `AppRouter` used to be app-local registrations, which injectable runs *between* the `before` and
 `after` phases. They now register through `platform_app_shell`'s own module in a new `shell` DI
-group, placed first in `after` — the same slot. `ui` still initialises after them.
+group, placed in `after` ahead of `ui` (after `notifications` where an app composes it). `ui` still
+initialises after them.
 
 `injection.dart`, the app's path dependencies and the root workspace list were regenerated with a
 Python port of composer's generation logic, validated first by reproducing the three committed
@@ -397,8 +398,6 @@ The docs are unusually complete here, which means they go stale unusually fast. 
 
 | Where | Problem |
 |:--|:--|
-| `.agents/AGENTS.md` §4 table | Repository interface row says `_repository.dart`; the convention and every real file is `i_<name>_repository.dart`. `CLAUDE.md` has it right. |
-| `build.yaml` | `injectable_builder.generate_for: lib/core/di/injection.dart` — that path does not exist. Root package has no `lib/`, so it is a no-op; delete it. |
 | `docs/**` responsive claims | Re-check every `context.w/h/r/sp` example against `core_responsive`'s actual axis table after step 3. |
 
 ---
@@ -477,9 +476,10 @@ that does not exist.
 
 ### What was verified here, and what was not
 
-There is no Dart or Flutter toolchain in the environment these changes were made in, so every
-claim below is the result of a mechanical check over the tree, not a build. Ten checks, all
-clean at the last commit:
+When this section was written (2026-09-21, steps 1–6) there was no Dart or Flutter toolchain in
+the environment the changes were made in, so every claim below is the result of a mechanical
+check over the tree, not a build. Ten checks, all clean at the time. (Toolchain runs since then
+are logged in §6 — first on 2026-09-23, the `verify` row.)
 
 | # | Check | Catches |
 |--:|:--|:--|
@@ -487,7 +487,7 @@ clean at the last commit:
 | 2 | every relative `import` / `export` / `part` target exists | a file moved without its referrers |
 | 3 | every `package:` import is declared in that package's pubspec | the failure Pub Workspaces hide until extraction |
 | 4 | no `platform/*` declares a product module (R1) | the dependency direction inverting |
-| 5 | no domain package imports Flutter, Dio, Retrofit or a `core_*` (R2) | the pure-Dart mandate |
+| 5 | no domain package imports Flutter, Dio or Retrofit (R2), nor a `core_*` package (not covered by R2 — a separate mechanical check) | the pure-Dart mandate |
 | 6 | no feature imports another feature or a data package (R3) | module isolation |
 | 7 | no app file outside `injection.dart` imports a module (R10) | removability silently becoming false |
 | 8 | every `context.l10nX.key` exists in that package's ARB | a rename that missed a call site |
@@ -503,11 +503,11 @@ real gate** — nothing here substitutes for them.
 ```bash
 dart tools/workspace_setup/configure.dart     # pub get + codegen + l10n
 # NOTE: `data_core` declares `flutter: sdk: flutter` and imports no `package:flutter`
-# anywhere in lib/ — checked. Removing it looks right, and is deliberately NOT done
-# here: the Flutter binding arrives anyway through core_database -> sqlite3_flutter_libs,
-# so nothing is gained at runtime, and the one thing that could break it is generated
-# code emitting a Flutter import (drift and freezed both can, depending on options).
-# That needs a build to settle. If `flutter analyze` is clean after codegen, drop it.
+# anywhere in lib/, generated files included (.freezed.dart, .g.dart, module.module.dart)
+# — checked after codegen, 2026-09-24. The old reason for keeping it (Flutter arriving
+# anyway through core_database -> sqlite3_flutter_libs) is gone: since step 2h `data_core`
+# no longer depends on core_database or drift. It looks safe to drop; only its test/ uses
+# Flutter, via `flutter_test` in dev_dependencies. Drop it once analyze + tests confirm.
 dart tools/arch_check/check.dart              # R1–R10
 dart tools/composer/composer.dart verify      # Gate 0
 dart tools/docs_check/check.dart              # Gate 5

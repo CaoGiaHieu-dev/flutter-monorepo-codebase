@@ -111,7 +111,8 @@ Use `@preResolve` only where construction is genuinely async; the rest are plain
 
 ## ⚠️ Trap 3 — `getAll` throws when nothing is registered
 
-`core_common` exposes four lookups; picking the wrong one breaks feature removal:
+`platform_kernel` (`platform/kernel/lib/src/di/service_locator.dart`, re-exported by `core_common`)
+exposes four lookups; picking the wrong one breaks feature removal:
 
 | Function | Missing registration |
 | :--- | :--- |
@@ -229,3 +230,4 @@ dart tools/unused_checker/check_unused_packages.dart  # the reverse: declared bu
 - `docs/{en,vi}/guides/05_di.md` — the full DI guide
 - `docs/{en,vi}/architecture/06_app_shell.md` — boot sequence and module assembly
 - `implement_package_storage` — why storage owners must be singletons
+- `implement_package_database` — why a package's database open is `@Order(1) @preResolve`, and typed migration registrations

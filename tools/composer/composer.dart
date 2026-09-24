@@ -625,39 +625,27 @@ void _sync(
     exit(1);
   }
 
+  // Every region this run generates, collected before anything is written
+  // so a file or marker that has gone missing is refused up front instead of
+  // leaving the other regions rewritten around it.
+  final regions = <_Region>[];
   for (final app in selected) {
     final r = _resolve(app, packages, <String>[]);
 
     final appPubspec = p.posix.join(app.dir, 'pubspec.yaml');
-    _write(
-      appPubspec,
-      '#',
-      'deps',
-      _appDepsBody(r.allPackages, packages, app.dir),
-      dryRun,
-      drift,
-      root,
+    regions.add(
+      _Region(
+        appPubspec,
+        '#',
+        'deps',
+        _appDepsBody(r.allPackages, packages, app.dir),
+      ),
     );
     final injection = _injectionParts(r, packages);
     final injectionPath = p.posix.join(app.dir, 'lib', 'di', 'injection.dart');
-    _write(
-      injectionPath,
-      '//',
-      'imports',
-      injection.imports,
-      dryRun,
-      drift,
-      root,
-    );
-    _write(
-      injectionPath,
-      '//',
-      'modules',
-      injection.modules,
-      dryRun,
-      drift,
-      root,
-    );
+    regions
+      ..add(_Region(injectionPath, '//', 'imports', injection.imports))
+      ..add(_Region(injectionPath, '//', 'modules', injection.modules));
   }
 
   // The tooling package is a workspace member but belongs to no app, so no
@@ -669,15 +657,39 @@ void _sync(
     }
   }
   final ordered = workspace.toList()..sort();
-  _write(
-    p.posix.join(root, 'pubspec.yaml'),
-    '#',
-    'workspace',
-    _workspaceBody(ordered),
-    dryRun,
-    drift,
-    root,
+  regions.add(
+    _Region(
+      p.posix.join(root, 'pubspec.yaml'),
+      '#',
+      'workspace',
+      _workspaceBody(ordered),
+    ),
   );
+
+  // A missing file or marker is drift, not a skip. It used to be a warning
+  // followed by "up to date" and exit 0 — so deleting a marker (and then
+  // hand-editing what it had guarded) passed CI Gate 0, the one check that
+  // exists to stop exactly that.
+  final broken = <String>[
+    for (final region in regions) ?_regionProblem(region, root),
+  ];
+  if (broken.isNotEmpty) {
+    for (final b in broken.toSet()) {
+      OutputFormatter.printError('  $b');
+    }
+    OutputFormatter.printError(
+      '${dryRun ? 'Cannot verify' : 'Nothing was written'}: every generated '
+      'region needs its file and its '
+      '`composer:managed:<region>` / `composer:end:<region>` marker pair. '
+      'Restore them (e.g. `git checkout -- <file>`), then run '
+      '`dart tools/composer/composer.dart sync`.',
+    );
+    exit(1);
+  }
+
+  for (final region in regions) {
+    _write(region, dryRun, drift, root);
+  }
 
   for (final w in warnings.toSet()) {
     OutputFormatter.printWarning('  $w');
@@ -811,28 +823,48 @@ List<String> _declaredOutsideManaged(String pubspecPath, Set<String> managed) {
   return clashes.toList()..sort();
 }
 
-void _write(
-  String path,
-  String comment,
-  String region,
-  String body,
-  bool dryRun,
-  List<String> drift,
-  String root,
-) {
-  final file = File(path);
-  final rel = p.posix.relative(path, from: root);
+/// One generated region: the file, its comment syntax and the region name.
+class _Region {
+  const _Region(this.path, this.comment, this.region, this.body);
+
+  final String path;
+  final String comment;
+  final String region;
+  final String body;
+}
+
+/// Why [region] cannot be generated — the file or a marker is missing — or
+/// null when it can.
+String? _regionProblem(_Region region, String root) {
+  final file = File(region.path);
+  final rel = p.posix.relative(region.path, from: root);
   if (!file.existsSync()) {
-    OutputFormatter.printWarning('  $rel does not exist — skipped');
-    return;
+    return '$rel does not exist (needed for the `${region.region}` region)';
   }
+  final lines = file.readAsLinesSync();
+  final begin = '${region.comment} ${_beginMarker(region.region)}';
+  final end = '${region.comment} ${_endMarker(region.region)}';
+  final i = lines.indexWhere((l) => l.contains(begin));
+  final j = lines.indexWhere((l) => l.contains(end));
+  if (i == -1) return '$rel has no `$begin` marker';
+  if (j == -1) return '$rel has no `$end` marker';
+  if (j < i) return '$rel has `$end` before `$begin`';
+  return null;
+}
+
+void _write(_Region region, bool dryRun, List<String> drift, String root) {
+  final file = File(region.path);
+  final rel = p.posix.relative(region.path, from: root);
   final current = file.readAsStringSync();
-  final updated = _replaceManaged(current, comment, region, body);
+  final updated = _replaceManaged(
+    current,
+    region.comment,
+    region.region,
+    region.body,
+  );
+  // [_regionProblem] vetted every region before the first write.
   if (updated == null) {
-    OutputFormatter.printWarning(
-      '  $rel has no `${_beginMarker(region)}` marker — left untouched',
-    );
-    return;
+    throw StateError('$rel lost its `${region.region}` markers mid-run');
   }
   if (updated == current) return;
   drift.add(rel);
@@ -855,7 +887,11 @@ COMMANDS
                       - the root pubspec.yaml `workspace:` list
                       - each app's path dependencies
                       - each app's lib/di/injection.dart
-  verify            Same resolution, writes nothing; exits 1 on drift.
+                    Writes nothing and exits 1 if any of those files, or a
+                    region's composer:managed / composer:end marker, is
+                    missing.
+  verify            Same resolution, writes nothing; exits 1 on drift — a
+                    missing file or marker counts as drift.
                     Also implies --strict. Use in CI.
 
 OPTIONS

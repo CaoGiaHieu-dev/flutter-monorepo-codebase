@@ -64,6 +64,11 @@ class ResponsiveProfile {
   });
 
   /// The artboard this window class was designed at.
+  ///
+  /// Both sides must be positive and finite
+  /// (`ResponsiveMetrics.isValidDesignSize`). A `const` constructor cannot
+  /// check that, so `ResponsiveInit` asserts it for every profile when it
+  /// builds, and `ResponsiveMetrics` again when the profile is in force.
   final Size? designSize;
 
   /// The range layout factors may take in this class — `w`, `h`, and the

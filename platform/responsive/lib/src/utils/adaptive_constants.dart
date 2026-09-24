@@ -13,6 +13,10 @@ class AdaptiveConstants {
   /// the list beside it needs only enough room to stay scannable.
   static const double SPLIT_PRIMARY_FRACTION = 0.4;
 
+  /// Default thickness of an `AdaptiveSplitView` divider, in logical
+  /// pixels: a hairline, as Material draws between panes.
+  static const double SPLIT_DIVIDER_EXTENT = 1;
+
   /// Widest an `AdaptiveContent` lets its child grow, in logical pixels.
   ///
   /// Sized for a comfortable line length (roughly 70–80 characters of body

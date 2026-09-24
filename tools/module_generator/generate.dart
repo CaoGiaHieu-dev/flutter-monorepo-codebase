@@ -170,6 +170,7 @@ void main(List<String> args) async {
 
     // 9. Run Toolchain
     stdout.writeln('[!] Đang chạy flutter pub get...');
+    CommonHelpers.noteWorkspaceResolving();
     await CommonHelpers.runFlutter(['pub', 'get']);
 
     if (config.type == ModuleType.feature) {
@@ -192,6 +193,7 @@ void main(List<String> args) async {
     ]);
 
     stdout.writeln('[!] Đang chạy build_runner trên workspace...');
+    CommonHelpers.noteCodegenStarted();
     await CommonHelpers.runDart([
       'run',
       'build_runner',
@@ -249,7 +251,7 @@ void main(List<String> args) async {
     }
   } catch (e) {
     stderr.writeln('[ERROR] Đã xảy ra lỗi: $e');
-    CommonHelpers.rollback();
+    await CommonHelpers.rollback();
     exit(1);
   }
 }

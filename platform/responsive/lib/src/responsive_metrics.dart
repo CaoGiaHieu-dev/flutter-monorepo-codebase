@@ -68,7 +68,9 @@ class ResponsiveMetrics {
   /// The base artboard the design was drawn at, in logical pixels — the one
   /// every window class uses unless its profile names another.
   ///
-  /// Scaling reads [effectiveDesignSize], not this.
+  /// Both sides must be positive and finite — see [isValidDesignSize];
+  /// asserted when scaling reads it. Scaling reads [effectiveDesignSize],
+  /// not this.
   final Size designSize;
 
   /// Clamp the height used for vertical scaling to
@@ -136,7 +138,51 @@ class ResponsiveMetrics {
 
   /// The artboard scaling measures against: the [activeProfile]'s, else
   /// [designSize].
-  Size get effectiveDesignSize => activeProfile?.designSize ?? designSize;
+  ///
+  /// Asserts it is a usable artboard ([isValidDesignSize]). Checked here
+  /// rather than in the constructor because a `const` constructor cannot
+  /// read a [Size]'s sides.
+  Size get effectiveDesignSize {
+    final profileDesign = activeProfile?.designSize;
+    final design = profileDesign ?? designSize;
+    assert(
+      isValidDesignSize(design),
+      'The design size must be positive and finite on both sides, got '
+      '$design${profileDesign == null ? '' : ' (the $windowSizeClass profile)'}'
+      '. A zero side divides by zero: every scaled value would be NaN or '
+      'infinite.',
+    );
+    return design;
+  }
+
+  /// Whether [size] can serve as a design artboard: both sides positive and
+  /// finite. A zero side would make every ratio against it infinite or NaN.
+  static bool isValidDesignSize(Size size) =>
+      size.width > 0 && size.height > 0 && size.isFinite;
+
+  /// The ratio of a window [extent] to a design [designExtent], before any
+  /// bounds.
+  ///
+  /// [ResponsiveConstants.DESIGN_SCALE_FACTOR] — no scaling — when either
+  /// side cannot be measured against:
+  ///
+  /// * an empty window (see [_hasNoWindow]). Android reports a 0x0 window
+  ///   for the first frame; scaling by 0 would lay that frame out with
+  ///   every value collapsed to nothing, and anything that caches a size
+  ///   from it keeps the zero.
+  /// * an unusable artboard ([isValidDesignSize] — asserted in debug, so
+  ///   this is the release fallback), which would give NaN or infinity.
+  double _ratio(double extent, double designExtent) {
+    if (_hasNoWindow || !(designExtent > 0) || designExtent.isInfinite) {
+      return ResponsiveConstants.DESIGN_SCALE_FACTOR;
+    }
+    return extent / designExtent;
+  }
+
+  /// Whether the window has no area yet — the first frame on Android, a
+  /// window being created or minimised. Treated as the artboard itself on
+  /// both axes, not as zero on one of them.
+  bool get _hasNoWindow => screenSize.isEmpty;
 
   /// The layout bounds in force: the [activeProfile]'s, else [scaleBounds].
   ScaleBounds get effectiveScaleBounds =>
@@ -151,7 +197,7 @@ class ResponsiveMetrics {
   bool get effectiveMinTextAdapt => activeProfile?.minTextAdapt ?? minTextAdapt;
 
   /// The raw horizontal ratio, before any bounds.
-  double _widthRatio(Size design) => screenSize.width / design.width;
+  double _widthRatio(Size design) => _ratio(screenSize.width, design.width);
 
   /// The raw vertical ratio, before any bounds, honouring [splitScreenMode].
   double _heightRatio(Size design) {
@@ -161,7 +207,7 @@ class ResponsiveMetrics {
             ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT,
           )
         : screenSize.height;
-    return height / design.height;
+    return _ratio(height, design.height);
   }
 
   /// Horizontal factor: the window-to-artboard width ratio, clamped by

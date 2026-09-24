@@ -79,9 +79,16 @@ class CommonHelpers {
   // ---------------------------------------------------------------------------
 
   /// Files outside the new module that generation rewrites in place: every
-  /// app's `app_manifest.yaml` ([registerInAppManifests]), and what
+  /// app's `app_manifest.yaml` ([registerInAppManifests]), what
   /// `composer sync` regenerates from them — the root `pubspec.yaml`, each
-  /// app's `pubspec.yaml` and `lib/di/injection.dart`.
+  /// app's `pubspec.yaml` and `lib/di/injection.dart` — and the committed
+  /// `pubspec.lock` that `pub get` rewrites.
+  ///
+  /// Not here: what `pub get` and `build_runner` write that git does not
+  /// track — `.dart_tool/package_config.json`, each app's
+  /// `injection.config.dart`, every package's `module.module.dart`. Restoring
+  /// a snapshot of those would be wrong the moment codegen had legitimately
+  /// changed them, so [rollback] regenerates them instead.
   ///
   /// A failure partway through would leave these half-edited — a module
   /// registered in the workspace whose directory was never finished building,
@@ -89,6 +96,7 @@ class CommonHelpers {
   /// around them.
   static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
+    'pubspec.lock',
     for (final manifest in _findManifests(Directory('.'))) ...[
       manifest.path,
       '${manifest.parent.path}/pubspec.yaml',
@@ -98,6 +106,32 @@ class CommonHelpers {
 
   static final Map<String, String?> _sharedFileSnapshots = {};
   static String? _createdModulePath;
+  static bool _workspaceResolved = false;
+  static bool _codegenStarted = false;
+
+  /// Call just before `pub get`: from here on `.dart_tool/package_config.json`
+  /// may list the new module, so [rollback] must resolve the workspace again.
+  static void noteWorkspaceResolving() => _workspaceResolved = true;
+
+  /// Call just before `build_runner`: from here on the untracked generated
+  /// files (`injection.config.dart`, `module.module.dart`) may reference the
+  /// new module, so [rollback] must regenerate them.
+  static void noteCodegenStarted() => _codegenStarted = true;
+
+  /// The command, as the user would type it — `fvm dart …` under FVM.
+  static String _commandLine(bool dart, List<String> args) => [
+    if (useFvm) 'fvm',
+    if (dart) 'dart' else 'flutter',
+    ...args,
+  ].join(' ');
+
+  static const List<String> _pubGetArgs = ['pub', 'get'];
+  static const List<String> _buildRunnerArgs = [
+    'run',
+    'build_runner',
+    'build',
+    '--workspace',
+  ];
 
   /// Snapshots every shared file before the first mutation.
   ///
@@ -105,6 +139,8 @@ class CommonHelpers {
   /// resurrecting a file generation created.
   static void snapshotSharedFiles(String modulePath) {
     _createdModulePath = modulePath;
+    _workspaceResolved = false;
+    _codegenStarted = false;
     _sharedFileSnapshots.clear();
     for (final path in sharedMutatedFiles) {
       final file = File(path);
@@ -114,11 +150,20 @@ class CommonHelpers {
     }
   }
 
-  /// Restores the snapshotted files and removes the half-built module.
+  /// Restores the snapshotted files, removes the half-built module, and —
+  /// when generation got that far — resolves the workspace and reruns
+  /// `build_runner` so the untracked generated files stop referencing it.
   ///
-  /// Best-effort by design: it reports what it could not undo instead of
-  /// throwing, because it runs while another error is already propagating.
-  static void rollback() {
+  /// Restoring the tracked files alone is not enough after a late failure:
+  /// `build_runner` had already rewritten every app's `injection.config.dart`
+  /// to import the new package, and with the package deleted the app no
+  /// longer compiles — while this used to report the workspace as clean.
+  ///
+  /// Best-effort by design: it reports what it could not undo, with the
+  /// commands to finish by hand, instead of throwing, because it runs while
+  /// another error is already propagating. It claims a clean workspace only
+  /// when every step succeeded.
+  static Future<void> rollback() async {
     final failures = <String>[];
 
     _sharedFileSnapshots.forEach((path, original) {
@@ -149,6 +194,32 @@ class CommonHelpers {
       }
     }
 
+    // Regenerate what git does not track, in dependency order: build_runner
+    // needs a package_config.json that no longer lists the deleted module.
+    final pending = <String>[
+      if (_workspaceResolved || _codegenStarted)
+        _commandLine(false, _pubGetArgs),
+      if (_codegenStarted) _commandLine(true, _buildRunnerArgs),
+    ];
+    if (failures.isEmpty && pending.isNotEmpty) {
+      stderr.writeln(
+        '[ROLLBACK] Đang tạo lại các file sinh tự động (không theo dõi bởi '
+        'git) để chúng không còn tham chiếu module đã xoá...',
+      );
+      try {
+        if (_workspaceResolved || _codegenStarted) {
+          await runFlutter(_pubGetArgs);
+          pending.removeAt(0);
+        }
+        if (_codegenStarted) {
+          await runDart(_buildRunnerArgs);
+          pending.removeAt(0);
+        }
+      } catch (e) {
+        failures.add('tạo lại file sinh tự động ($e)');
+      }
+    }
+
     if (failures.isEmpty) {
       stderr.writeln(
         '[ROLLBACK] Đã hoàn tác mọi thay đổi. Workspace trở lại nguyên trạng.',
@@ -156,9 +227,22 @@ class CommonHelpers {
       return;
     }
 
-    stderr.writeln('[ROLLBACK] Không hoàn tác được các mục sau — cần dọn tay:');
+    stderr.writeln(
+      '[ROLLBACK] Workspace CHƯA sạch. Không hoàn tác được các mục sau — '
+      'cần dọn tay:',
+    );
     for (final failure in failures) {
       stderr.writeln('  - $failure');
+    }
+    if (pending.isNotEmpty) {
+      stderr.writeln(
+        '[ROLLBACK] Sau khi dọn, chạy từ thư mục gốc repo để các file sinh '
+        'tự động (injection.config.dart, module.module.dart) không còn tham '
+        'chiếu module đã xoá:',
+      );
+      for (final command in pending) {
+        stderr.writeln('    $command');
+      }
     }
   }
 

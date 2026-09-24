@@ -77,11 +77,10 @@ abstract mixin class LoadMoreControllerBinding {
   /// **Arguments:**
   /// * `scroll`: The [ScrollController] to bind to.
   void addLoadMoreBinding(ScrollController scroll) {
-    // Reset the current scroll controller
-    _scrollController = null;
-    // Assign the new scroll controller
+    // Unbind the previous controller first — dropping the reference alone
+    // left its listener behind, still firing loadMoreIfAvailable.
+    removeLoadMoreBinding();
     _scrollController = scroll;
-    // Add a listener to the scroll controller
     _scrollController?.addListener(loadMoreIfAvailable);
   }
 
@@ -108,14 +107,17 @@ abstract mixin class LoadMoreControllerBinding {
     if (_isLoadMore) return;
     _isLoadMore = true;
 
-    // Check if the user has scrolled to the end of the list
-    if (_position!.pixels >= _position!.maxScrollExtent - loadMoreThreshold) {
-      // Call the onLoadMore method
-      await onLoadMore.call();
+    try {
+      // Check if the user has scrolled to the end of the list
+      if (_position!.pixels >= _position!.maxScrollExtent - loadMoreThreshold) {
+        // Call the onLoadMore method
+        await onLoadMore.call();
+      }
+    } finally {
+      // Allow subsequent load more operations — even after onLoadMore threw,
+      // which used to leave the flag set and load more dead for good.
+      _isLoadMore = false;
     }
-
-    // Allow subsequent load more operation
-    _isLoadMore = false;
   }
 
   /// Method called when the user reaches the end of the list.

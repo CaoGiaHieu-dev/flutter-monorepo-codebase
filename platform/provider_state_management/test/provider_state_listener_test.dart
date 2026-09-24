@@ -125,6 +125,35 @@ void main() {
       expect(receivedMessage, equals('Server down'));
     });
 
+    testWidgets('should call onError again for a repeated identical failure', (
+      tester,
+    ) async {
+      var errorCount = 0;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          provider: provider,
+          child: ProviderStateListener<TestProvider, String>(
+            onError: (context, error, message) => errorCount++,
+            child: const Text('child'),
+          ),
+        ),
+      );
+
+      await provider.runSuccessOperation('data');
+      await tester.pump();
+
+      // With data loaded no loading state sits between the failures, so the
+      // second one (the user taps Retry, still offline) equals the first.
+      const failure = NetworkFailure(message: 'offline');
+      await provider.runFailureOperation(failure);
+      await tester.pump();
+      await provider.runFailureOperation(failure);
+      await tester.pump();
+
+      expect(errorCount, equals(2));
+    });
+
     testWidgets('should pass custom ErrorState to onError callback', (
       tester,
     ) async {

@@ -40,8 +40,13 @@ class StateManager<T> extends ChangeNotifier with DisposeGuard {
   ///
   /// This method updates the internal state and notifies all listeners
   /// including both ChangeNotifier listeners and stream subscribers.
-  void updateState(ViewStateModel<T> newState) {
-    if (isDisposed || _viewState == newState) return;
+  ///
+  /// An update equal to the current state is dropped, unless [force] is set:
+  /// a failed operation always forces, so a second identical failure (the
+  /// user taps Retry while still offline) still reaches its listeners.
+  void updateState(ViewStateModel<T> newState, {bool force = false}) {
+    if (isDisposed) return;
+    if (!force && _viewState == newState) return;
 
     _viewState = newState;
     notifyListeners();
@@ -58,11 +63,13 @@ class StateManager<T> extends ChangeNotifier with DisposeGuard {
   /// - [data]: New data to set
   /// - [message]: New message to set
   /// - [retainOldData]: Whether to keep existing data if no new data provided
+  /// - [force]: Notify even when the resulting state equals the current one
   void setState({
     ViewState? state,
     T? data,
     String? message,
     bool retainOldData = true,
+    bool force = false,
   }) {
     final newData = data ?? (retainOldData ? _viewState.data : null);
 
@@ -72,6 +79,7 @@ class StateManager<T> extends ChangeNotifier with DisposeGuard {
         data: newData,
         message: message,
       ),
+      force: force,
     );
   }
 

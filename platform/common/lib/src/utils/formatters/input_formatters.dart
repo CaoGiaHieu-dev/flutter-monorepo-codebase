@@ -222,7 +222,9 @@ class NumberCurrencyFormatter extends TextInputFormatter {
     int decimalLength,
   ) {
     final cleanDecimal = decimalText.replaceAll(',', '');
-    if (cleanDecimal.length >= decimalLength && oldTextGroup.length > 1) {
+    // Reject only once the limit is exceeded — `decimalLength` digits are
+    // allowed, so typing the last permitted digit must be kept.
+    if (cleanDecimal.length > decimalLength && oldTextGroup.length > 1) {
       return oldTextGroup[1];
     }
     return cleanDecimal;
@@ -334,26 +336,69 @@ class CapitalizeWordsFormatter extends TextInputFormatter {
 /// )
 /// ```
 class PhoneNumberFormatter extends TextInputFormatter {
+  static final _nonDigit = RegExp(r'\D');
+
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    final digitsOnly = newValue.text.replaceAll(_nonDigit, '');
 
-    if (digitsOnly.length <= 3) {
-      return newValue.copyWith(text: digitsOnly);
-    } else if (digitsOnly.length <= 6) {
-      return newValue.copyWith(
-        text: '${digitsOnly.substring(0, 3)}-${digitsOnly.substring(3)}',
-      );
-    } else if (digitsOnly.length <= 10) {
-      return newValue.copyWith(
-        text:
-            '${digitsOnly.substring(0, 3)}-${digitsOnly.substring(3, 6)}-${digitsOnly.substring(6)}',
-      );
-    } else {
+    if (digitsOnly.length > 10) {
       return oldValue;
     }
+
+    final formatted = _format(digitsOnly);
+    final selection = newValue.selection;
+
+    return TextEditingValue(
+      text: formatted,
+      // The edit's selection indexes the unformatted text; carried over
+      // as-is it lands on the wrong digit once dashes are inserted (and can
+      // point past the end). Map it through the digit count instead.
+      selection: selection.isValid
+          ? selection.copyWith(
+              baseOffset: _mapOffset(
+                selection.baseOffset,
+                newValue.text,
+                formatted,
+              ),
+              extentOffset: _mapOffset(
+                selection.extentOffset,
+                newValue.text,
+                formatted,
+              ),
+            )
+          : TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  /// Formats up to ten digits as `XXX`, `XXX-XXX` or `XXX-XXX-XXXX`.
+  String _format(String digits) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) {
+      return '${digits.substring(0, 3)}-${digits.substring(3)}';
+    }
+    return '${digits.substring(0, 3)}-${digits.substring(3, 6)}-'
+        '${digits.substring(6)}';
+  }
+
+  /// Returns the offset in [formatted] that sits after the same number of
+  /// digits as [offset] does in [raw].
+  int _mapOffset(int offset, String raw, String formatted) {
+    final digitsBefore = raw
+        .substring(0, offset.clamp(0, raw.length))
+        .replaceAll(_nonDigit, '')
+        .length;
+    if (digitsBefore == 0) return 0;
+
+    var seen = 0;
+    for (var i = 0; i < formatted.length; i++) {
+      if (!_nonDigit.hasMatch(formatted[i]) && ++seen == digitsBefore) {
+        return i + 1;
+      }
+    }
+    return formatted.length;
   }
 }

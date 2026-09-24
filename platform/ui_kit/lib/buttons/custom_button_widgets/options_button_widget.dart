@@ -67,7 +67,7 @@ class _OptionsButtonState<T> extends State<_OptionsButton<T>> {
             if (item is OptionsButtonType) {
               final castItem = item;
               return Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: Text(switch (castItem) {
                   OptionsButtonType.edit => context.l10n.edit,
                   OptionsButtonType.duplicate => context.l10n.duplicate,
@@ -77,7 +77,7 @@ class _OptionsButtonState<T> extends State<_OptionsButton<T>> {
             }
             // Fallback for other types, though CustomButton.options ensures OptionsButtonType
             return Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: Text(item.toString()),
             );
           },

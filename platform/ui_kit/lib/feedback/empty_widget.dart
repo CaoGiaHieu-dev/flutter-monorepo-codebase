@@ -1,5 +1,8 @@
 import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../utils/shared_ui_constants.dart';
 
 /// Widget displayed when there is no content to show
 ///
@@ -10,21 +13,27 @@ class EmptyWidget extends StatelessWidget {
   const EmptyWidget({
     super.key,
     this.controller,
-    this.width = 120,
-    this.height = 60,
+    this.width,
+    this.height,
   });
 
   /// Optional scroll controller for making the empty state scrollable
   final ScrollController? controller;
-  final double width;
-  final double height;
+
+  /// Logo width, already scaled by the caller. Defaults to
+  /// [SharedUiConstants.EMPTY_WIDGET_WIDTH], scaled with `w`.
+  final double? width;
+
+  /// Logo height, already scaled by the caller. Defaults to
+  /// [SharedUiConstants.EMPTY_WIDGET_HEIGHT], scaled with `h`.
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
     final child = Center(
       child: Assets.icons.logo.svg(
-        height: height,
-        width: width,
+        height: height ?? context.h(SharedUiConstants.EMPTY_WIDGET_HEIGHT),
+        width: width ?? context.w(SharedUiConstants.EMPTY_WIDGET_WIDTH),
         colorFilter: ColorFilter.mode(
           context.colors.surfaceVariant,
           BlendMode.srcIn,

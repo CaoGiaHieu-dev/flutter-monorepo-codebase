@@ -10,5 +10,7 @@
   "passwordTooShort": "Mật khẩu phải có ít nhất 6 ký tự",
   "enterYourEmail": "Nhập email của bạn",
   "password": "Mật khẩu",
-  "enterYourPassword": "Nhập mật khẩu"
+  "enterYourPassword": "Nhập mật khẩu",
+  "showPassword": "Hiện mật khẩu",
+  "hidePassword": "Ẩn mật khẩu"
 }

@@ -1,7 +1,10 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../utils/shared_ui_constants.dart';
 
 part 'custom_button_widgets/dropdown_button_widget.dart';
 // Part declarations for widget components
@@ -67,8 +70,8 @@ class CustomButton<T> extends StatefulWidget {
     this.color,
     this.borderSide = BorderSide.none,
     this.onPressed,
-    this.height = 48,
-    this.radius = 8,
+    this.height,
+    this.radius,
     this.minWidth = double.infinity,
     this.disable = false,
     this.disableColor,
@@ -92,9 +95,9 @@ class CustomButton<T> extends StatefulWidget {
     this.color,
     this.borderSide = const BorderSide(),
     this.onPressed,
-    this.height = 48,
-    this.radius = 30,
-    this.minWidth = 54,
+    this.height,
+    this.radius,
+    this.minWidth,
     this.disable = false,
     this.disableColor,
     this.gradientFillColors,
@@ -117,7 +120,7 @@ class CustomButton<T> extends StatefulWidget {
     this.color,
     this.borderSide = BorderSide.none,
     this.onPressed,
-    double diameter = 48, // Changed from radius to diameter for clarity
+    double? diameter,
     this.disable = false,
     this.disableColor,
     this.gradientFillColors,
@@ -146,9 +149,9 @@ class CustomButton<T> extends StatefulWidget {
     EdgeInsetsGeometry padding = EdgeInsets.zero,
     Color? color,
     double elevation = 0,
-    double height = 40,
-    double minWidth = 40,
-    double buttonRadius = 8,
+    double? height,
+    double? minWidth,
+    double? buttonRadius,
     BorderSide borderSide = BorderSide.none,
     List<Color>? gradientFillColors,
   }) {
@@ -180,20 +183,17 @@ class CustomButton<T> extends StatefulWidget {
     required String displayText,
     required List<S> items,
     ValueChanged<S?>? onSelected,
-    double maxWidth = 125,
+    double? maxWidth,
     bool disable = false,
     Widget Function(BuildContext context, S item)? dropDropBuilder,
     TextStyle? textStyle,
     bool allowEmptySelection = false,
-    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(
-      horizontal: 12,
-      vertical: 8,
-    ),
+    EdgeInsetsGeometry? padding,
     Color? color,
     double elevation = 0,
-    double height = 48,
+    double? height,
     double minWidth = 0,
-    double buttonRadius = 8,
+    double? buttonRadius,
     BorderSide borderSide = BorderSide.none,
     List<Color>? gradientFillColors,
   }) {
@@ -229,9 +229,9 @@ class CustomButton<T> extends StatefulWidget {
     this.color,
     this.borderSide = BorderSide.none,
     this.onPressed,
-    this.height = 0,
-    this.radius = 0,
-    this.minWidth = 0,
+    this.height,
+    this.radius,
+    this.minWidth,
     this.disable = false,
     this.disableColor,
     this.items,
@@ -248,23 +248,27 @@ class CustomButton<T> extends StatefulWidget {
   /// The style of the button (rectangle, circle, options, drop-down, outlined)
   final ButtonStyle style;
 
+  // Sizes left `null` fall back to this style's default from
+  // [SharedUiConstants], scaled in `build`. A size the caller passes is taken
+  // as already scaled and used as-is.
+
   /// The radius of the button's corners
-  final double radius;
+  final double? radius;
 
   /// The elevation of the button
   final double elevation;
 
   /// The height of the button
-  final double height;
+  final double? height;
 
   /// The minimum width of the button
-  final double minWidth;
+  final double? minWidth;
 
   /// The maximum width of the button
-  final double maxWidth;
+  final double? maxWidth;
 
   /// The padding inside the button
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? padding;
 
   /// The color of the button
   final Color? color;
@@ -314,19 +318,82 @@ class CustomButton<T> extends StatefulWidget {
 
 /// State class for CustomButton
 class CustomButtonState<T> extends State<CustomButton<T>> {
+  /// The corner radius, or this style's default scaled with `r`.
+  double _radius(BuildContext context) =>
+      widget.radius ??
+      switch (widget.style) {
+        ButtonStyle.circle => 0, // The CircleBorder shape draws the circle.
+        ButtonStyle.outlined => context.r(
+          SharedUiConstants.OUTLINED_BUTTON_RADIUS,
+        ),
+        _ => context.r(SharedUiConstants.BUTTON_RADIUS),
+      };
+
+  /// The height, or this style's default scaled with `h` — or with `r` for a
+  /// circle, whose height and width must stay equal.
+  double _height(BuildContext context) =>
+      widget.height ??
+      switch (widget.style) {
+        ButtonStyle.circle => context.r(
+          SharedUiConstants.CIRCLE_BUTTON_DIAMETER,
+        ),
+        ButtonStyle.options => context.h(SharedUiConstants.OPTIONS_BUTTON_SIZE),
+        _ => context.h(SharedUiConstants.BUTTON_HEIGHT),
+      };
+
+  /// The minimum width, or this style's default scaled with `w` (`r` for a
+  /// circle).
+  double _minWidth(BuildContext context) =>
+      widget.minWidth ??
+      switch (widget.style) {
+        ButtonStyle.circle => context.r(
+          SharedUiConstants.CIRCLE_BUTTON_DIAMETER,
+        ),
+        ButtonStyle.outlined => context.w(
+          SharedUiConstants.OUTLINED_BUTTON_MIN_WIDTH,
+        ),
+        ButtonStyle.options => context.w(
+          SharedUiConstants.OPTIONS_BUTTON_SIZE,
+        ),
+        _ => 0,
+      };
+
+  /// The maximum width; a drop-down defaults to a scaled design width.
+  double _maxWidth(BuildContext context) =>
+      widget.maxWidth ??
+      (widget.style == ButtonStyle.dropDown
+          ? context.w(SharedUiConstants.DROPDOWN_BUTTON_MAX_WIDTH)
+          : double.infinity);
+
+  /// The padding; a drop-down defaults to a scaled design padding.
+  EdgeInsetsGeometry _padding(BuildContext context) =>
+      widget.padding ??
+      (widget.style == ButtonStyle.dropDown
+          ? context.edgeInsets(
+              horizontal: SharedUiConstants.DROPDOWN_BUTTON_PADDING_HORIZONTAL,
+              vertical: SharedUiConstants.DROPDOWN_BUTTON_PADDING_VERTICAL,
+            )
+          : EdgeInsets.zero);
+
   @override
   Widget build(BuildContext context) {
+    final radius = _radius(context);
+    final height = _height(context);
+    final minWidth = _minWidth(context);
+    final maxWidth = _maxWidth(context);
+    final padding = _padding(context);
+
     Widget button;
     switch (widget.style) {
       case ButtonStyle.circle:
       case ButtonStyle.rectangle:
         button = _MaterialButtonWidget(
           style: widget.style,
-          radius: widget.radius,
+          radius: radius,
           elevation: widget.elevation,
-          height: widget.height,
-          minWidth: widget.minWidth,
-          padding: widget.padding,
+          height: height,
+          minWidth: minWidth,
+          padding: padding,
           color: widget.color,
           disableColor: widget.disableColor,
           borderSide: widget.borderSide,
@@ -342,12 +409,12 @@ class CustomButtonState<T> extends State<CustomButton<T>> {
           onSelected: widget.onSelected,
           disable: widget.disable,
           builder: widget.dropDropBuilder,
-          padding: widget.padding,
+          padding: padding,
           color: widget.color,
           elevation: widget.elevation,
-          height: widget.height,
-          minWidth: widget.minWidth,
-          buttonRadius: widget.radius,
+          height: height,
+          minWidth: minWidth,
+          buttonRadius: radius,
           borderSide: widget.borderSide,
           gradientFillColors: widget.gradientFillColors,
           // Pass through visual properties for the button itself
@@ -360,18 +427,18 @@ class CustomButtonState<T> extends State<CustomButton<T>> {
           displayText: widget.displayText!,
           items: widget.items!,
           onSelected: widget.onSelected,
-          maxWidth: widget.maxWidth,
-          // Use widget.maxWidth for the ConstrainedBox inside _DropDownButton
+          maxWidth: maxWidth,
+          // Use maxWidth for the ConstrainedBox inside _DropDownButton
           disable: widget.disable,
           textStyle: widget.textStyle,
           allowEmptySelection: widget.allowEmptySelection,
           // Pass through visual properties for the button itself
-          padding: widget.padding,
+          padding: padding,
           color: widget.color,
           elevation: widget.elevation,
-          height: widget.height,
-          minWidth: widget.minWidth,
-          buttonRadius: widget.radius,
+          height: height,
+          minWidth: minWidth,
+          buttonRadius: radius,
           borderSide: widget.borderSide,
           gradientFillColors: widget.gradientFillColors,
         );
@@ -381,12 +448,11 @@ class CustomButtonState<T> extends State<CustomButton<T>> {
           children: [
             _MaterialButtonWidget(
               style: widget.style,
-              radius: widget.radius,
+              radius: radius,
               elevation: widget.elevation,
-              height: widget.height,
-              minWidth:
-                  widget.minWidth, // minWidth for the material button itself
-              padding: widget.padding,
+              height: height,
+              minWidth: minWidth, // minWidth for the material button itself
+              padding: padding,
               color: widget.color,
               disableColor: widget.disableColor,
               borderSide: BorderSide.none,
@@ -415,7 +481,7 @@ class CustomButtonState<T> extends State<CustomButton<T>> {
                                 : widget.borderSide.color,
                             width: widget.borderSide.width,
                           ),
-                    borderRadius: BorderRadius.circular(widget.radius),
+                    borderRadius: BorderRadius.circular(radius),
                   ),
                 ),
               ),
@@ -427,12 +493,12 @@ class CustomButtonState<T> extends State<CustomButton<T>> {
 
     // Apply general constraints like maxWidth here, unless the specific button type handles it internally (e.g. _DropDownButton)
     if (widget.style != ButtonStyle.dropDown &&
-        (widget.maxWidth != double.infinity ||
-            (widget.style != ButtonStyle.circle && widget.minWidth > 0))) {
+        (maxWidth != double.infinity ||
+            (widget.style != ButtonStyle.circle && minWidth > 0))) {
       return ConstrainedBox(
         constraints: BoxConstraints(
-          minWidth: widget.minWidth,
-          maxWidth: widget.maxWidth,
+          minWidth: minWidth,
+          maxWidth: maxWidth,
         ),
         child: button,
       );

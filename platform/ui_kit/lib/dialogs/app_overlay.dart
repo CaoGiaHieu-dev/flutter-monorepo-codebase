@@ -111,9 +111,12 @@ class AppOverlay {
         return controller._capturedThemes.wrap(child);
       },
     );
+    // OverlayState.insert asserts that at most one of `above`/`below` is
+    // given. Stacking is loading < dialog < toast: the loading entry is
+    // always inserted below the dialog/toast, so sitting just below the toast
+    // (or on top when there is none) already keeps the dialog above it.
     controller._overlayState.insert(
       controller._overlayDialogEntry!,
-      above: controller._overlayLoadingEntry,
       below: controller._overlayToastEntry,
     );
   }
@@ -142,7 +145,7 @@ class AppOverlay {
     );
     controller._overlayState.insert(
       controller._overlayLoadingEntry!,
-      below: controller._overlayDialogEntry,
+      below: controller._overlayDialogEntry ?? controller._overlayToastEntry,
     );
   }
 

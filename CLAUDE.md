@@ -52,7 +52,7 @@ dart fix --apply
 
 ### Tests
 
-Tests live per-package in a `test/` directory — thirteen packages today: `platform/{app_shell,base_ui,common,data_core,database,network,provider_state_management,responsive,storage}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Run from the package directory:
+Tests live per-package in a `test/` directory — fifteen packages today: `platform/{app_shell,base_ui,common,data_core,database,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Run from the package directory:
 
 ```bash
 cd platform/common

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../unused_checker/monorepo_helper.dart';
 import '../unused_checker/output_formatter.dart';
+import 'dart_source.dart';
 
 /// Mechanical enforcement of the architecture rules in
 /// `.agents/AGENTS.md` / `docs/en/reference/01_rules.md`.
@@ -855,9 +856,240 @@ void main(List<String> args) {
     }
   }
 
+  // --- R12-R15: repository-wide source hygiene ----------------------------
+  // These look at files rather than at the package graph, so they run once
+  // over the working tree instead of once per package.
+  blocking.addAll(_hygieneViolations(root));
+
   stopwatch.stop();
   _report(packages.length, blocking, warnings, stopwatch.elapsed);
   exit(blocking.isEmpty ? 0 : 1);
+}
+
+/// Directories never walked by the repository-wide rules: VCS and tool
+/// state, build output, and the native dependency trees Flutter and
+/// CocoaPods fetch. None of it is authored in this repository.
+const _unwalkedDirs = <String>{
+  '.git',
+  '.dart_tool',
+  '.fvm',
+  '.idea',
+  '.symlinks',
+  '.pub-cache',
+  'build',
+  'coverage',
+  'ephemeral',
+  'node_modules',
+  'Pods',
+};
+
+/// Every file in the working tree that git does not ignore, as repo-relative
+/// POSIX paths — tracked files plus new files about to be added.
+///
+/// Walked from disk rather than read from `git ls-files`, so a module
+/// checked out as a submodule is scanned too (`ls-files` stops at the
+/// gitlink) and a fixture outside any git checkout still works. When git is
+/// available, whatever it reports as ignored (`firebase_options_*.dart`,
+/// local env files, …) is dropped afterwards.
+List<String> _workingTreeFiles(String root) {
+  final out = <String>[];
+  void walk(Directory dir) {
+    for (final e in dir.listSync(followLinks: false)) {
+      final name = p.basename(e.path);
+      if (e is Directory) {
+        if (_unwalkedDirs.contains(name)) continue;
+        walk(e);
+      } else if (e is File) {
+        out.add(
+          p.posix.relative(e.path.replaceAll(r'\', '/'), from: root),
+        );
+      }
+    }
+  }
+
+  walk(Directory(root));
+  final ignored = _gitIgnored(root);
+  if (ignored.isEmpty) return out..sort();
+  bool isIgnored(String rel) {
+    if (ignored.contains(rel)) return true;
+    // `--directory` reports a wholly ignored folder once, as `dir/`.
+    var dir = p.posix.dirname(rel);
+    while (dir != '.' && dir != '/') {
+      if (ignored.contains('$dir/')) return true;
+      dir = p.posix.dirname(dir);
+    }
+    return false;
+  }
+
+  return out.where((f) => !isIgnored(f)).toList()..sort();
+}
+
+/// Paths git ignores under [root] (folders as `dir/`), or an empty set when
+/// [root] is not the top of a git checkout or git is not installed.
+Set<String> _gitIgnored(String root) {
+  try {
+    final top = Process.runSync('git', [
+      'rev-parse',
+      '--show-toplevel',
+    ], workingDirectory: root);
+    if (top.exitCode != 0) return const {};
+    final topPath = p.posix.normalize(
+      '${top.stdout}'.trim().replaceAll(r'\', '/'),
+    );
+    // A fixture in a temp dir nested inside some other checkout must not
+    // inherit that checkout's ignore rules.
+    if (topPath != root) return const {};
+    final r = Process.runSync('git', [
+      'ls-files',
+      '-z',
+      '--others',
+      '--ignored',
+      '--exclude-standard',
+      '--directory',
+    ], workingDirectory: root);
+    if (r.exitCode != 0) return const {};
+    return '${r.stdout}'.split('\x00').where((s) => s.isNotEmpty).toSet();
+  } on ProcessException {
+    return const {};
+  }
+}
+
+/// Generated Dart, excluded from R13 and R15: nobody writes its comments or
+/// its class names, and a generator is entitled to its `ignore_for_file`.
+bool _isGeneratedForHygiene(String rel) {
+  final name = p.posix.basename(rel);
+  return name.endsWith('.g.dart') ||
+      name.endsWith('.freezed.dart') ||
+      name.endsWith('.config.dart') ||
+      name.endsWith('.module.dart') ||
+      name.endsWith('.gr.dart') ||
+      name.endsWith('.mocks.dart') ||
+      name == 'generated_plugin_registrant.dart' ||
+      name.startsWith('firebase_options_') ||
+      rel.contains('lib/src/gen/');
+}
+
+/// An analyzer suppression: `// ignore: rule` or `// ignore_for_file: rule`.
+/// Matched against the text of a real line comment only (see [DartSource]),
+/// so the same words inside a string literal or a `///` doc comment do not
+/// count — the analyzer does not honour them there either.
+final _suppression = RegExp(r'^//\s*(ignore(?:_for_file)?)\s*:');
+
+/// A class declaration whose name has the interface prefix `I[A-Z]`, with
+/// its modifiers and any same-line annotations in front of it.
+final _interfaceNamedClass = RegExp(
+  r'^[ \t]*(?:@[\w.]+(?:\([^)\n]*\))?\s+)*'
+  r'((?:(?:abstract|sealed|base|final|interface|mixin)\s+)*)'
+  r'class\s+(I[A-Z]\w*)',
+  multiLine: true,
+);
+
+/// R12-R15, over every non-ignored file in the working tree.
+List<Violation> _hygieneViolations(String root) {
+  final out = <Violation>[];
+  final files = _workingTreeFiles(root);
+
+  for (final rel in files) {
+    final segments = p.posix.split(rel);
+
+    // --- R12: no PowerShell ------------------------------------------------
+    // Windows' default execution policy refuses to run an unsigned .ps1, so
+    // a script that works for its author fails for the next contributor.
+    if (rel.toLowerCase().endsWith('.ps1')) {
+      out.add(
+        Violation(
+          'R12',
+          rel,
+          'PowerShell script. The default Windows execution policy blocks '
+              'it — write a cross-platform Dart script under tools/ instead '
+              '(.sh/.bat only when Dart cannot do the job).',
+        ),
+      );
+      continue;
+    }
+
+    if (!rel.endsWith('.dart') || _isGeneratedForHygiene(rel)) continue;
+
+    final inProductTree =
+        segments.first == 'modules' ||
+        segments.first == 'platform' ||
+        (segments.first == 'apps' &&
+            segments.length > 2 &&
+            segments[2] == 'lib');
+
+    final String source;
+    try {
+      source = File(p.join(root, rel)).readAsStringSync();
+    } on FileSystemException {
+      continue; // not UTF-8, or vanished mid-run: not ours to judge
+    }
+    final scanned = DartSource.scan(source);
+
+    // --- R13: no analyzer suppressions -----------------------------------
+    for (final comment in scanned.lineComments) {
+      final m = _suppression.firstMatch(comment.text);
+      if (m == null) continue;
+      out.add(
+        Violation(
+          'R13',
+          '$rel:${comment.line}',
+          '`// ${m.group(1)}:` suppresses the analyzer. Fix the cause — for '
+              'a deprecation, migrate to the replacement API — instead of '
+              'silencing it.',
+        ),
+      );
+    }
+
+    // --- R15: the I prefix is reserved for interfaces --------------------
+    if (inProductTree) {
+      for (final m in _interfaceNamedClass.allMatches(scanned.code)) {
+        final modifiers = m.group(1)!.split(RegExp(r'\s+'));
+        final isInterface =
+            modifiers.contains('abstract') ||
+            modifiers.contains('interface') ||
+            modifiers.contains('sealed');
+        if (isInterface) continue;
+        final name = m.group(2)!;
+        out.add(
+          Violation(
+            'R15',
+            '$rel:${scanned.lineOf(m.end - name.length)}',
+            'concrete class `$name` carries the interface prefix `I`. '
+                'Declare it `abstract` / `interface` / `sealed`, or drop the '
+                'prefix — an implementation is `${name.substring(1)}Impl`.',
+          ),
+        );
+      }
+    }
+  }
+
+  // --- R14: data_sources/, never datasources/ -----------------------------
+  // Walked as directories so an empty `datasources/` is caught as well.
+  for (final top in const ['modules', 'platform']) {
+    final dir = Directory(p.join(root, top));
+    if (!dir.existsSync()) continue;
+    void walk(Directory d) {
+      for (final e in d.listSync(followLinks: false)) {
+        if (e is! Directory) continue;
+        final name = p.basename(e.path);
+        if (_unwalkedDirs.contains(name)) continue;
+        if (name.toLowerCase() == 'datasources') {
+          out.add(
+            Violation(
+              'R14',
+              p.posix.relative(e.path.replaceAll(r'\', '/'), from: root),
+              'directory `$name/` — the convention is `data_sources/` '
+                  '(data_sources/remote, data_sources/local).',
+            ),
+          );
+        }
+        walk(e);
+      }
+    }
+
+    walk(dir);
+  }
+  return out;
 }
 
 void _report(
@@ -878,6 +1110,10 @@ void _report(
     'R9': 'The pure-Dart tier stays pure',
     'R10': 'The app shell composes modules, it does not import them',
     'R11': 'Platform group direction',
+    'R12': 'No PowerShell scripts',
+    'R13': 'No analyzer suppressions in hand-written Dart',
+    'R14': 'Data source folders are data_sources/',
+    'R15': 'The I prefix is reserved for interfaces',
   };
 
   if (warnings.isNotEmpty) {
@@ -1019,8 +1255,48 @@ RULES CHECKED
       use core_storage for fakes). A package directly under platform/, or in
       an unknown group folder, is itself a violation.
 
+  R12 No PowerShell scripts
+      No *.ps1 file anywhere in the working tree. Windows' default execution
+      policy refuses unsigned scripts, so one that runs for its author fails
+      for the next contributor. Write a cross-platform Dart script instead
+      (.sh/.bat only when Dart cannot do the job).
+
+  R13 No analyzer suppressions in hand-written Dart
+      No `// ignore: <rule>` or `// ignore_for_file: <rule>` comment in any
+      .dart file of the repository (tools/, test/ and apps/ included). Fix
+      the cause; for a deprecation, migrate to the replacement API. Only real
+      line comments count — the same text inside a string literal or a `///`
+      doc comment is not a suppression and is not reported.
+
+  R14 Data source folders are data_sources/
+      No directory named `datasources` (any letter case) under modules/ or
+      platform/. The convention is data_sources/remote and data_sources/local.
+      Checked on directories, so an empty one is reported too.
+
+  R15 The I prefix is reserved for interfaces
+      In hand-written Dart under modules/, platform/ and apps/*/lib, a class
+      whose name matches I[A-Z]... must be declared `abstract`, `interface`
+      or `sealed` (e.g. `abstract class IAuthRepository`, `abstract interface
+      class IFoo`). A concrete class — plain, `base`, `final`, or a `mixin
+      class` without `abstract` — is reported; name it `<Name>Impl`. A plain
+      `mixin IFoo` is not a class declaration and is not checked.
+      Limitations: a lexical scan, not a parser. Declarations are matched at
+      the start of a line (after any same-line annotations), with comments
+      and string literals blanked out first, so generator templates and
+      examples in docs comments do not count. A two-letter acronym at the
+      start of a concrete class (`IOClient`) is reported as well — rename it
+      or make it abstract; longer acronyms are written as words in Dart
+      (`IosConfig`), which does not match.
+
+  R12, R13 and R15 read every file in the working tree that git does not
+  ignore (tracked files and new ones about to be added; modules checked out
+  as submodules included). Outside a git checkout every file is read.
+
 EXCLUDED FROM SCANNING
   Generated output: *.g.dart, *.freezed.dart, *.config.dart, *.module.dart,
   *.mocks.dart, firebase_options_*.dart, and anything under gen/ or generated/.
+  R13 and R15 also skip *.gr.dart, generated_plugin_registrant.dart and
+  lib/src/gen/**. Never walked: .git, .dart_tool, .fvm, .idea, .symlinks,
+  .pub-cache, build, coverage, ephemeral, node_modules, Pods.
 ''');
 }

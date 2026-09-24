@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
 import 'parity.dart';
+import 'rule_ids.dart';
+import 'translations.dart';
 
 /// Mechanical accuracy check for the Markdown documentation.
 ///
@@ -52,8 +54,20 @@ import 'parity.dart';
 /// languages. Intentional differences are listed, with a reason, in
 /// `parity_allowlist.txt` next to this file.
 ///
-/// Exit code 0 = clean, 1 = at least one dead reference or unexplained parity
-/// mismatch, 64 = bad argument.
+/// A third, **RULE-ID citations** (`rule_ids.dart`): every `RULE-NN` token in
+/// any document must be a row ID of the registry table in
+/// `docs/en/reference/01_rules.md`, and the Vietnamese registry must define
+/// the same IDs. Skipped, with an INFO line, while neither registry has a row.
+///
+/// Finally, **stale translations** (`translations.dart`) — advisory only. A
+/// `docs/vi` file may carry a first-line stamp naming the English commit it
+/// was synced to; a stamp older than the English file's last commit is
+/// counted in one INFO line (`--stale-translations` lists them), and
+/// `--stamp-translations` writes the stamps.
+///
+/// Exit code 0 = clean, 1 = at least one dead reference, unexplained parity
+/// mismatch or unknown RULE-ID, 64 = bad argument. Stale translations never
+/// change the exit code.
 
 /// Directories never walked for Markdown: tool state, build output, and the
 /// native dependency trees Flutter and CocoaPods fetch.
@@ -143,16 +157,40 @@ void main(List<String> args) {
   }
   // A misspelt flag (`--verbos`) used to be ignored and the run reported as
   // if it had been asked for; anything unrecognised is a usage error.
-  const known = {'--verbose', '-v'};
-  final unknown = args.where((a) => !known.contains(a)).toList();
+  const known = {
+    '--verbose',
+    '-v',
+    '--stale-translations',
+    '--stamp-translations',
+  };
+  final stamp = args.contains('--stamp-translations');
+  final unknown = args
+      .where((a) => !known.contains(a) && (a.startsWith('-') || !stamp))
+      .toList();
   if (unknown.isNotEmpty) {
     stderr.writeln('docs_check: unknown argument(s): ${unknown.join(' ')}');
     stderr.writeln(_usage);
     exit(64);
   }
+  if (stamp && args.contains('--stale-translations')) {
+    stderr.writeln(
+      'docs_check: --stamp-translations and --stale-translations are '
+      'separate runs; pass one.',
+    );
+    exit(64);
+  }
 
   final repoRoot = _findRepoRoot();
   final verbose = args.contains('--verbose') || args.contains('-v');
+
+  if (stamp) {
+    exit(
+      _stampTranslations(
+        repoRoot,
+        args.where((a) => !a.startsWith('-')).toList(),
+      ),
+    );
+  }
 
   final allowlist = _readAllowlist(repoRoot);
   final removedBundles = _removedSampleBundles(repoRoot);
@@ -265,7 +303,18 @@ void main(List<String> args) {
     }
   }
 
+  final relDocs = [
+    for (final doc in docs)
+      p.posix.relative(_posix(doc.path), from: _posix(repoRoot)),
+  ];
   final parityFailed = _reportParity(repoRoot, docs, verbose);
+  final rulesFailed = _reportRuleIds(repoRoot, relDocs);
+  _reportStaleTranslations(
+    repoRoot,
+    relDocs,
+    detailed: args.contains('--stale-translations'),
+    verbose: verbose,
+  );
 
   if (hits.isEmpty) {
     stdout.writeln(
@@ -274,7 +323,7 @@ void main(List<String> args) {
           : '\nOK — every documented path outside the removed samples exists '
                 'on disk.',
     );
-    if (parityFailed) exit(1);
+    if (parityFailed || rulesFailed) exit(1);
     return;
   }
 
@@ -314,7 +363,8 @@ final _usage =
     '''
 Verify that every path the documentation names exists in this repository.
 
-  dart tools/docs_check/check.dart [--verbose]
+  dart tools/docs_check/check.dart [--verbose] [--stale-translations]
+  dart tools/docs_check/check.dart --stamp-translations [<docs/vi file>...]
 
 Checks every Markdown file in the repository (skipping ${_skippedDirs.join(', ')}):
   * backticked spans beginning with a real top-level directory
@@ -337,9 +387,205 @@ and table rows (table-rows). An intentional difference goes in
 tools/docs_check/parity_allowlist.txt as "<english file> <metric>" (or "*")
 with a `#` reason.
 
-Exit 1 on any unexplained dead reference or parity mismatch, 64 on an
-unknown argument.
+It also checks RULE-ID citations: every RULE-<digits> token in any Markdown
+file must be a row ID of the registry table in docs/en/reference/01_rules.md
+(rows look like "| RULE-01 | ..."), no ID may be defined twice, and
+docs/vi/reference/01_rules.md must define exactly the same IDs. While neither
+registry has a row the check is skipped with an INFO line.
+
+Stale translations (advisory — never changes the exit code). A docs/vi file
+may start with the stamp
+  <!-- translated-from: docs/en/<path>.md@<short-sha> -->
+recording the English commit it was synced to. When any stamp exists, a
+normal run prints one INFO line counting the translations whose English
+source has commits after the stamped one.
+
+  dart tools/docs_check/check.dart --stale-translations
+      Also lists every stale translation (and, with --verbose, every
+      unstamped docs/vi file).
+  dart tools/docs_check/check.dart --stamp-translations [<docs/vi file>...]
+      Writes or updates the stamp to the English file's current last commit
+      (`git log -1 --format=%h -- <en>`), then exits without checking.
+      Pass the files you just synced; with no file, every docs/vi file is
+      stamped — which marks every translation as current, so do that only
+      when adopting stamps. Commit the English change first: a stamp can
+      only name a commit that exists.
+
+Exit 1 on any unexplained dead reference, parity mismatch or RULE-ID problem,
+64 on an unknown argument.
 ''';
+
+/// `--stamp-translations`: stamps [paths] (every docs/vi file when empty).
+/// Returns the exit code.
+int _stampTranslations(String repoRoot, List<String> paths) {
+  if (!gitHistoryAvailable(repoRoot)) {
+    stderr.writeln(
+      'docs_check: --stamp-translations needs a git checkout with at least '
+      'one commit ($repoRoot).',
+    );
+    return 1;
+  }
+  final root = _posix(repoRoot);
+  final List<String> targets;
+  if (paths.isEmpty) {
+    targets = viDocs([
+      for (final doc in _collectDocs(repoRoot))
+        p.posix.relative(_posix(doc.path), from: root),
+    ]);
+  } else {
+    targets = [];
+    for (final raw in paths) {
+      // Relative to the working directory first, then to the repo root.
+      final candidates = [
+        p.posix.normalize(
+          p.posix.join(_posix(Directory.current.path), _posix(raw)),
+        ),
+        p.posix.normalize(p.posix.join(root, _posix(raw))),
+      ];
+      String? rel;
+      for (final c in candidates) {
+        final r = p.posix.relative(c, from: root);
+        if (File(c).existsSync() && !r.startsWith('..')) {
+          rel = r;
+          break;
+        }
+      }
+      if (rel == null || !rel.startsWith('docs/vi/') || !rel.endsWith('.md')) {
+        stderr.writeln('docs_check: not a docs/vi Markdown file: $raw');
+        return 64;
+      }
+      targets.add(rel);
+    }
+  }
+
+  var written = 0;
+  var unchanged = 0;
+  var skipped = 0;
+  for (final vi in targets) {
+    final (outcome, en, sha) = stampTranslation(repoRoot, vi);
+    switch (outcome) {
+      case StampOutcome.written:
+        written++;
+        stdout.writeln('  stamped   $vi  <- $en@$sha');
+      case StampOutcome.unchanged:
+        unchanged++;
+      case StampOutcome.noSource:
+        skipped++;
+        stdout.writeln('  skipped   $vi  ($en does not exist)');
+      case StampOutcome.uncommittedSource:
+        skipped++;
+        stdout.writeln(
+          '  skipped   $vi  ($en has no commit yet — commit it, then stamp)',
+        );
+    }
+  }
+  stdout.writeln(
+    'Translation stamps: $written written, $unchanged already current, '
+    '$skipped skipped.',
+  );
+  return 0;
+}
+
+/// Runs the RULE-ID citation check over [docs] and prints its section.
+/// Returns whether it failed.
+bool _reportRuleIds(String repoRoot, List<String> docs) {
+  final result = checkRuleIds(repoRoot, docs);
+  stdout.writeln('');
+  stdout.writeln('RULE-ID citations');
+  if (!result.registryFound) {
+    stdout.writeln(
+      'INFO: no "| RULE-NN |" registry row in $enRegistry or $viRegistry '
+      'yet — citation check skipped.',
+    );
+    return false;
+  }
+  stdout.writeln('  registry  : ${result.registered.length} rule(s)');
+  stdout.writeln('  citations : ${result.citations}');
+  if (result.problems.isEmpty) {
+    stdout.writeln('OK — every cited RULE-ID is defined in the registry.');
+    return false;
+  }
+  stdout.writeln('\n${result.problems.length} RULE-ID problem(s):\n');
+  for (final problem in result.problems) {
+    stdout.writeln('  $problem');
+  }
+  stdout.writeln(
+    '\nCite only IDs that have a row in the registry table of $enRegistry, '
+    'and keep\n$viRegistry defining the same IDs. A rule that is retired '
+    'keeps its row (marked\nretired) so old citations still resolve; IDs are '
+    'never reused.',
+  );
+  return true;
+}
+
+/// Prints the stale-translation summary: one INFO line when any stamp
+/// exists, or the full list when [detailed]. Never fails the run.
+void _reportStaleTranslations(
+  String repoRoot,
+  List<String> docs, {
+  required bool detailed,
+  required bool verbose,
+}) {
+  final vis = viDocs(docs);
+  final anyStamp = vis.any((vi) => readStamp(repoRoot, vi) != null);
+  if (!anyStamp && !detailed) return;
+
+  final report = staleTranslations(repoRoot, vis);
+  stdout.writeln('');
+  stdout.writeln('Stale translations (advisory)');
+  if (!report.gitAvailable) {
+    stdout.writeln(
+      'INFO: no git history here — translation stamps not compared.',
+    );
+    return;
+  }
+  final extras = [
+    if (report.missingSource.isNotEmpty)
+      '${report.missingSource.length} name an English file that no longer '
+          'exists',
+    if (report.unknownCommit.isNotEmpty)
+      '${report.unknownCommit.length} name a commit not in this checkout '
+          '(shallow clone?)',
+  ];
+  stdout.writeln(
+    'INFO: ${report.stale.length} of ${report.stamped.length} stamped '
+    'translation(s) are behind their English source'
+    '${extras.isEmpty ? '' : '; ${extras.join('; ')}'}'
+    '${report.unstamped.isEmpty ? '' : ' (${report.unstamped.length} docs/vi file(s) unstamped)'}.',
+  );
+  if (!detailed) {
+    if (report.stale.isNotEmpty || extras.isNotEmpty) {
+      stdout.writeln('      (--stale-translations lists them)');
+    }
+    return;
+  }
+  for (final s in report.stale) {
+    stdout.writeln(
+      '  ${s.stamp.viPath}  <- ${s.stamp.enPath}: ${s.commits} commit(s) '
+      'since ${s.stamp.sha} (now ${s.latest ?? '?'})',
+    );
+  }
+  for (final s in report.missingSource) {
+    stdout.writeln('  ${s.viPath}  <- ${s.enPath}: English file not found');
+  }
+  for (final s in report.unknownCommit) {
+    stdout.writeln(
+      '  ${s.viPath}  <- ${s.enPath}: commit ${s.sha} not in this checkout',
+    );
+  }
+  if (verbose) {
+    for (final vi in report.unstamped) {
+      stdout.writeln('  unstamped: $vi');
+    }
+  }
+  if (report.stale.isNotEmpty) {
+    stdout.writeln(
+      '\nRe-sync each listed translation from `git diff <sha> -- <en file>`, '
+      'then\ndart tools/docs_check/check.dart --stamp-translations '
+      '<docs/vi file>...',
+    );
+  }
+}
 
 /// Runs the en <-> vi parity check over [docs] and prints its section.
 /// Returns whether it failed.

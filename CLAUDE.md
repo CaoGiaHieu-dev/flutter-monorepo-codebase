@@ -52,12 +52,18 @@ dart fix --apply
 
 ### Tests
 
-Tests live per-package in a `test/` directory — sixteen packages today: `platform/{app_shell,base_ui,common,data_core,database,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature,onboarding/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Run from the package directory:
+Tests live per-package in a `test/` directory — nineteen packages today: `platform/{app_shell,base_ui,bloc_state_management,common,data_core,database,domain_core,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature,home/feature,onboarding/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Flutter packages use `flutter_test`; pure-Dart ones (`domain_core`, `tools`) use `package:test`, pinned in the catalog. Fakes are hand-written — the repo uses no mockito/mocktail. Run from the package directory:
 
 ```bash
 cd platform/common
 flutter test                           # all tests in the package
 flutter test test/debounce_test.dart   # a single test file
+```
+
+The CI gate tools have their own suite in `tools/test/` — each test builds a throwaway workspace in a temp dir and runs the tool (compiled to kernel) against it, asserting exit code and output: `arch_check` R1–R10, `composer verify`, `dependency_sync --check`, `docs_check`, the barrel generator, composer `bootstrap`. CI runs it right after Gate 1 (Gate 3 skips `tools/`):
+
+```bash
+cd tools && dart test                  # ~15 s; add a case here when you change a gate
 ```
 
 ### Repo Tooling (run from root)
@@ -181,7 +187,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | `platform_kernel` | **Depend on this, not `core_common`, unless you need something Flutter-bound.** Pure Dart, zero Flutter. `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` | 7 dependencies, none Flutter-bound — enforced by arch_check **R9**. Everything else may depend on it |
 | `platform_app_shell` | The reusable app shell — `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the `ILanguageStorage`/`IThemeStorage` adapters, `AppBootStorage`, `NetworkConfigImpl` | Every app composes it instead of copying it. Its DI group runs **after `core`, before `ui`**. Imports no module — arch_check R1 holds that |
 | `core_common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, `AppUtils`, `Debounce`, formatters, dialog helpers | Re-exports `platform_kernel` wholesale, so `getItOrNull`, `ErrorHandler`, `EnvConstants` etc. still resolve through it — but they live in the kernel (`platform/kernel/lib/src/`), as does the `AppFailure` re-export shim at `src/error/failures.dart` (`AppFailure` itself lives in `domain_core`) |
-| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces | Declares **no** `domain_*` dependency — a contract carries its own value type (`AuthPrincipal`), never a domain entity |
+| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces, optional observability contracts (`IErrorReporter`, `IAnalytics`) | Declares **no** `domain_*` dependency — a contract carries its own value type (`AuthPrincipal`), never a domain entity |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_app_shell` |
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
@@ -357,7 +363,8 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ## Application Boot Lifecycle
 
-1. `main.dart` → `runShellApp(configureDependencies: …)` (`platform/app_shell/lib/bootstrap.dart`) → `runZonedGuarded` → `WidgetsFlutterBinding.ensureInitialized()`
+1. `main.dart` → `runShellApp(configureDependencies: …)` (`platform/app_shell/lib/bootstrap.dart`) → `runZonedGuarded` → `WidgetsFlutterBinding.ensureInitialized()` → `installShellErrorHooks`
+   - **Error hooks:** the zone handler, `FlutterError.onError` and `PlatformDispatcher.instance.onError` all funnel into one hook that keeps the previous handler (console dump in debug), then calls the app's optional `onError` and `getItOrNull<IErrorReporter>()` (`fatal: true`); `ErrorHandler.onUnclassifiedError` sends exceptions `ErrorHandler` could not classify to the same reporter as `fatal: false`. **To plug Crashlytics/Sentry, register an `IErrorReporter` impl in the app** (`@LazySingleton(as: IErrorReporter)` in its own `lib/`) — never set `FlutterError.onError` yourself. `IAnalytics` likewise: register one and `RouteAwareWidget` (every `GoRouteDataCustom` page) reports screens via `setCurrentScreen`. Both are optional `core_di` contracts (`src/observability/`); guide: `docs/en/architecture/06_app_shell.md` § "Errors and crash reporting"
 2. `configureDependencies()` — the app's generated DI graph (GetIt)
    - then `AppInitializer.initBeforeRunApp()` — synchronous: Logger + `HttpOverrides.global` (SSL pinning / dev bypass), installed **before any widget is built**, so the first Dio client (the splash's session restore) is already pinned
 3. `MainScope.run()`:
@@ -365,7 +372,7 @@ Widget build(BuildContext context, GoRouterState state) {
    - Shows the splash from `getItOrNull<IAppSplashScreen>()` via `AppMaterialWrapper(home: splashScreen)` (no router); none registered, or iOS → native splash kept
    - Calls `AppInitializer.init()` (ScreenOrientation — portrait lock only when the display's shortest side is < 600, SystemUIOverlay; it re-runs `initBeforeRunApp()`, which is then a no-op)
    - Updates widget to `RootApp` with `AppMaterialWrapper.router(...)` and GoRouter
-4. `AppMaterialWrapper` wraps tree in `MultiProvider` with global singletons, `Consumer2<ThemeProvider, LanguageProvider>` for reactive theme/locale
+4. `AppMaterialWrapper` wraps tree in `MultiProvider` with global singletons, `Consumer2<ThemeProvider, LanguageProvider>` for reactive theme/locale, and caps the OS font size with `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)` (2.0) around every `builder` — never `withNoTextScaling`. No `TooltipVisibility(visible: false)`: it strips icon-button labels from semantics; the theme's `tooltipTheme` (`triggerMode: manual`) suppresses the long-press popup instead
 
 ---
 
@@ -488,7 +495,7 @@ abstract class AuthModule {
 - **FORBIDDEN:** Raw doubles in layout — `SizedBox(height: 24)` → `SizedBox(height: context.h(24))`
 - **No context in an async method?** Read the value *before the first `await`*, then pass it on. Then check `mounted` after the `await`, before touching state
 - **Reusable widgets** in `core_ui_kit` receive **already-scaled** values and use them as-is (the caller scales); they scale only their *own* constants. `context.w(widget.width)` double-scales
-- **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`
+- **Helper axes:** `edgeInsets(all:)` → `w` · `edgeInsets(horizontal:)` → `w` · `edgeInsets(vertical:)` → `h` · `edgeInsetsDirectional(start:/end:)` → `w` · `borderRadius(all:)` → `r` · `verticalSpace` → `h` · `horizontalSpace` → `w`. Each axis scales by the axis it belongs to, so `edgeInsets(all: 16)` is a drop-in for `EdgeInsets.all(context.w(16))`. `edgeInsets(left:/right:)` is **physical** — for a side meaning start/end of the line use `edgeInsetsDirectional(start:, end:)` (returns `EdgeInsetsDirectional`, flips in RTL)
 - **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `platform/app_shell/lib/main_scope.dart` — a `StatelessWidget` reading `MediaQuery.sizeOf(context)` (size-only dependency). Features never mount their own
 - **Widget tests that scale must wrap the subject in `ResponsiveInit`** — otherwise `ResponsiveScope.of` asserts, deliberately, rather than silently falling back to unscaled values
 - **Scale policy — down by default, up on opt-in, per window class.** Every factor is clamped by a `ScaleBounds`, layout (`scaleBounds`: `w/h/r/dg/dm`) and text (`textScaleBounds`: `sp`) separately, both `ScaleBounds.downOnly()` by default — shrink below the artboard, 1:1 above it
@@ -506,7 +513,7 @@ abstract class AuthModule {
 ## Design System (core_base_ui)
 
 - **Colors:** `context.colors.textPrimary`, `context.colors.surface`, `context.colors.primary` — auto-switch Light/Dark
-- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled (`context.sp`, following `textScaleBounds`: down-only by default, so it shrinks below the design width and never grows past it); do **not** re-apply `context.sp()` at the call site
+- **Typography:** `AppTextStyles.bodyMediumStyle(context)` — already scaled (`context.sp`, following `textScaleBounds`: down-only by default, so it shrinks below the design width and never grows past it); do **not** re-apply `context.sp()` at the call site. The user's OS font size is a separate factor `Text` applies on top (the shell passes it through up to 2x) — `context.sp` never reads `MediaQuery.textScaler`, so there is no double scale. Do not size a text container with a fixed `context.h` height: it will not grow with the text
 - **Spacing:** `AppSpacing.xs(context)`, `.sm(context)`, `.md(context)`, `.lg(context)`, `.xl(context)` (scaled with `w`); `H` variants (`lgH`) scale with `h`
 - **Radius:** `AppRadius.sm(context)`, `.md(context)`, `.circular(context)` (scaled with `r`); `AppRadius.smRadius(context)` for `BorderRadius` objects
 - **All three take `BuildContext`** — they are methods, not getters. Numbers live in their `raw*` constants: edit `raw*`, never the accessor

@@ -16,10 +16,10 @@ Five pipelines ship with the template — four on GitHub Actions, one on Azure D
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Manual (`workflow_dispatch`) | Signed release APK → Firebase App Distribution, plus its obfuscation symbols as an artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR to `main`/`develop`/`master` + manual | Markdown report artifact + PR comments |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Manual (`workflow_dispatch`) | Delegates to Fastlane lanes |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — blocks the merge; then a debug dev APK build |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — blocks the merge; then a debug dev APK build and a module-generator smoke test |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (manual only) | Prod APK + obfuscation symbols artifacts → Firebase |
 
-`pr_quality_check.yml` is the only pipeline that gates a merge. It runs six blocking gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — plus one advisory audit — and then, in a second job, builds the app (a debug `dev` APK), which no gate can prove. See [§6](#6-the-quality-gate).
+`pr_quality_check.yml` is the only pipeline that gates a merge. It runs six blocking gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — plus one advisory audit, with the gate tools' own test suite run right after Gate 1 — and then, in two more jobs, builds the app (a debug `dev` APK), which no gate can prove, and smoke-tests the module generator. See [§6](#6-the-quality-gate).
 
 ---
 
@@ -168,21 +168,24 @@ The iOS build and iOS distribute tasks are present but fully commented out.
 
 `pr_quality_check.yml` runs on every pull request to `main`, `develop` or `master`. It is the only pipeline that can block a merge.
 
-Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter pub get --enforce-lockfile`** → Gate 0 → Gate 1 → stub the Firebase options → `dart tools/workspace_setup/configure.dart` (clean, pub get, gen-l10n, `build_runner`, barrels) → Gates 2–5 → the advisory audit. The `--enforce-lockfile` step is what holds a PR to the committed `pubspec.lock`: it fails when the lockfile no longer matches the pubspecs, where the plain `flutter pub get` inside `configure.dart` would silently re-resolve it.
+Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter pub get --enforce-lockfile`** → Gate 0 → Gate 1 → the gate tools' tests (`cd tools && dart test`) → stub the Firebase options → `dart tools/workspace_setup/configure.dart` (clean, pub get, gen-l10n, `build_runner`, barrels) → Gates 2–5 → the advisory audit. The `--enforce-lockfile` step is what holds a PR to the committed `pubspec.lock`: it fails when the lockfile no longer matches the pubspecs, where the plain `flutter pub get` inside `configure.dart` would silently re-resolve it.
 
 | # | Gate | Command | Blocking |
 |:--|:---|:---|:---|
 | 0 | Composition matches every app's manifest | `dart tools/composer/composer.dart verify` | yes |
 | 1 | Architecture rules | `dart tools/arch_check/check.dart` | yes |
+| 1 | …and the gate tools' own tests | `cd tools && dart test` | yes |
 | 2 | Static analysis | `flutter analyze` | yes |
-| 3 | Tests, per package | `flutter test` in every package that has a `test/` directory | yes |
+| 3 | Tests, per package | `flutter test` in every package that has a `test/` directory, except `tools/` | yes |
 | 4 | Catalog drift | `dart tools/dependency_sync.dart --check` | yes |
 | 5 | Documentation accuracy | `dart tools/docs_check/check.dart` | yes |
 | — | Unused dependency audit | `dart tools/unused_checker/check_unused_packages.dart` | no (advisory) |
 
 Gates 0 and 1 run first on purpose: they only read manifests, imports and pubspecs and need no codegen — `pub get` is enough, since `tools/` is a workspace member — and each finishes in a second or two, so a composition or layering mistake fails right after dependency resolution instead of after the full setup, analyze and test cycle. Gate 1 is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
 
-Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — today mostly under `platform/*/test/` — and a single `flutter test` at the root does not pick them up.
+Every gate is a script under `tools/`, and a gate that has quietly stopped failing looks exactly like a clean PR. So the gates have tests of their own, in `tools/test/`, run as the second half of Gate 1: each test builds a throwaway workspace in a temp directory, runs the tool against it as a subprocess (compiled to kernel once per file, so the suite takes about 15 seconds) and asserts the exit code and output. They cover `arch_check` (a clean and a violating fixture for every rule R1–R10; R6 must warn and still exit 0), `composer verify` (a synced manifest passes; `phase: befor`, an unknown layer, a duplicate module and a module missing from disk are refused with their key path), `dependency_sync --check` (a mismatch and a malformed catalog exit 1), `docs_check` (a dead reference exits 1, a `<placeholder>` span and a removed sample bundle do not, the root comes from the script's location), the barrel generator (a trailing slash, a `web/` directory inside `lib/`) and composer `bootstrap --dry-run` (a missing member is reported and nothing written). Change a gate, add a case there. Like Gates 0 and 1 they need no codegen, which is why they run before the setup rather than in Gate 3.
+
+Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — today under `platform/*/test/` and `modules/*/*/test/`, nineteen packages — and a single `flutter test` at the root does not pick them up. It skips `tools/`, whose tests already ran.
 
 > [!IMPORTANT]
 > A clean `flutter analyze` does **not** prove the app builds. `analysis_options.yaml` excludes `**.freezed.dart`, `**.g.dart`, `**.config.dart` and `**.module.dart`, so the analyser never looks at generated code. Move a type between packages and a `.freezed.dart` file can end up referencing a symbol it cannot see: analyze stays green while the APK build fails. Only a real build catches that class of error.
@@ -193,7 +196,17 @@ That is what the second job, **`build`**, is for. It is not a numbered gate — 
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
-Debug needs no release keystore and `env.dev` is committed, so the job needs no secrets. Make **both** jobs required status checks in the branch protection rule.
+Debug needs no release keystore and `env.dev` is committed, so the job needs no secrets.
+
+The third job, **`generator-smoke`**, also `needs: quality`. Nothing else exercises the module generator's templates — they are Mustache files no analyzer reads — so a template that emits an unused dependency, a layering violation or code that no longer analyzes would otherwise reach the next developer who runs it. The job does what that developer would: pub get, the Firebase options stubs, `configure.dart`, then
+
+```bash
+dart tools/module_generator/generate.dart 1 smoke "" 2 2   # BLoC feature, bottom-nav tab
+```
+
+— the widest template: routing, localization, DI and every `app_manifest.yaml` — and holds the result to the gates: `flutter analyze`, `arch_check`, `composer verify`, and `check_unused_packages`, which fails only when the unused dependency is in `feature_smoke` (anywhere else it stays the quality job's advisory, shown as a warning). Nothing is committed; the checkout is thrown away.
+
+Make **all three** jobs required status checks in the branch protection rule.
 
 **Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 0–5 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
 
@@ -255,6 +268,7 @@ Run these before pushing; they are the same commands the pipelines use.
 flutter pub get --enforce-lockfile
 dart tools/composer/composer.dart verify
 dart tools/arch_check/check.dart
+(cd tools && dart test)                # the gate tools' own tests
 
 # 2. Full workspace setup — the CI "Install dependencies and run code
 #    generation" step — then the remaining gates, in the same order
@@ -268,11 +282,16 @@ dart tools/docs_check/check.dart
 (cd platform/database && flutter test)
 # ...repeat for any package with a test/ directory
 
-# 4. The build job of pr_quality_check.yml (needs the Firebase stubs or real
+# 4. The generator-smoke job — in a scratch clone, not your working tree:
+#    it registers `smoke` in every manifest and rewrites the lockfile
+#    dart tools/module_generator/generate.dart 1 smoke "" 2 2
+#    flutter analyze && dart tools/arch_check/check.dart && dart tools/composer/composer.dart verify
+
+# 5. The build job of pr_quality_check.yml (needs the Firebase stubs or real
 #    files — see below) — note the cd
 (cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev)
 
-# 5. The exact release build CI performs — note the cd
+# 6. The exact release build CI performs — note the cd
 cd apps/mobile
 flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
   --dart-define-from-file=env.dev --obfuscate --split-debug-info=../../obfuscate/ \

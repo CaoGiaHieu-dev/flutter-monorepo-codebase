@@ -373,6 +373,111 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 5. **Generate** → `dart run build_runner build --workspace`.
 6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
+---
+
+## 9. Deep links: platform setup
+
+Two link shapes reach the app, and both land on the same router location:
+
+| Link | Router location |
+|:---|:---|
+| `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
+| `<scheme>://settings?tab=2` (custom scheme — the first segment sits in the host position) | `/settings?tab=2` |
+
+The platform delivers the URI to `app_links`, and `DeeplinkProvider` (`platform/app_shell/lib/presentation/providers/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it — but only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it (never over onboarding or login). A path no module registered lands on `UndefineRouteWidget`, like any unknown location.
+
+### Why Flutter's own deep linking is off
+
+Since Flutter 3.27 the engine also handles deep links by default: it pushes the URI straight into `GoRouter`, skipping `DeeplinkProvider` and its session check — a signed-out user could open a signed-in screen, and each link would be routed twice. Both platforms therefore switch it off:
+
+- Android — inside `<activity>` in `apps/mobile/android/app/src/main/AndroidManifest.xml`: `<meta-data android:name="flutter_deeplinking_enabled" android:value="false" />`
+- iOS — `apps/mobile/ios/Runner/Info.plist`: `FlutterDeepLinkingEnabled` = `false`
+
+Do not remove either while `DeeplinkProvider` is the router's only way in.
+
+### Per-flavor values
+
+| Flavor | Custom scheme | Android application id | iOS bundle id |
+|:---|:---|:---|:---|
+| `dev` | `codebase-dev` | `com.example.codebase.dev` | `com.example.codebase.dev` |
+| `staging` | `codebase-stg` | `com.example.codebase.stg` | `com.example.codebase.staging` |
+| `prod` | `codebase` | `com.example.codebase` | `com.example.codebase` |
+
+One scheme per flavor, so dev, staging and prod installed side by side never compete for a link. The scheme is declared twice and the two must agree: `resValue("string", "DEEP_LINK_SCHEME", …)` in each `productFlavors` entry of `apps/mobile/android/app/build.gradle.kts`, and the `DEEP_LINK_SCHEME` build setting of each Runner configuration in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*). Rename all six together when you rename the app.
+
+`WEB_DOMAIN` comes from the flavor's env file (`apps/mobile/env.dev`, …). The committed env files leave it empty.
+
+### Android
+
+`AndroidManifest.xml` declares two `VIEW` intent-filters on `MainActivity`:
+
+```xml
+<intent-filter android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="https" />
+    <data android:host="@string/WEB_DOMAIN" />
+</intent-filter>
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="@string/DEEP_LINK_SCHEME" />
+</intent-filter>
+```
+
+`@string/WEB_DOMAIN` is a `resValue` that `build.gradle.kts` decodes from the dart-defines. When the env file leaves `WEB_DOMAIN` empty it becomes `example.invalid` — a reserved domain that never resolves — because an empty host would make the filter claim every https link.
+
+**App Links verification.** `autoVerify` makes Android fetch `https://<WEB_DOMAIN>/.well-known/assetlinks.json` at install time. Serve it over https, with no redirect, as `application/json`, listing every flavor that uses that domain:
+
+```json
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.codebase",
+      "sha256_cert_fingerprints": ["AA:BB:…"]
+    }
+  }
+]
+```
+
+The fingerprint is that of the key the **installed** APK is signed with: `keytool -list -v -keystore <release.jks> -alias <alias>` for a key you sign with yourself; for a Play build under Play App Signing, copy the *App signing key certificate* SHA-256 from Play Console → *Test and release → App integrity* — not your upload key's. Check the result on a device:
+
+```bash
+adb shell pm get-app-links com.example.codebase            # "verified" per domain
+adb shell pm verify-app-links --re-verify com.example.codebase
+adb shell am start -a android.intent.action.VIEW -d "codebase-dev://settings?tab=2"
+adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settings?tab=2"
+```
+
+### iOS
+
+**Custom scheme.** `Info.plist` registers it under `CFBundleURLTypes`, with `CFBundleURLSchemes` = `$(DEEP_LINK_SCHEME)` and `CFBundleURLName` = `$(PRODUCT_BUNDLE_IDENTIFIER)`. Nothing else is needed: `xcrun simctl openurl booted "codebase-dev://settings?tab=2"` opens the dev build.
+
+**Universal links** stay off until you own the domain, because the entitlement makes provisioning fail for an App ID without the capability. To turn them on:
+
+1. Enable **Associated Domains** on each App ID in the Apple Developer portal (or *Signing & Capabilities → + Capability* in Xcode) and regenerate the provisioning profiles.
+2. Uncomment the `com.apple.developer.associated-domains` block in `apps/mobile/ios/Runner/Runner.entitlements`. Its value, `applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)`, is expanded from `Flutter/Environment.xcconfig`, which each flavor scheme's build pre-action writes from the dart-defines — so build through a flavor scheme (`--flavor`). Leave `APP_LINK_MODE` empty in production; `?mode=developer` bypasses Apple's CDN cache on a device with *Associated Domains Development* enabled.
+3. Serve `https://<WEB_DOMAIN>/.well-known/apple-app-site-association` — no file extension, `application/json`, no redirect:
+
+```json
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["ABCDE12345.com.example.codebase"],
+        "components": [{ "/": "/*" }]
+      }
+    ]
+  }
+}
+```
+
+`ABCDE12345` is your Team ID; add one `appIDs` entry per bundle id served from that domain. Apple fetches the file through its CDN when the app is installed, so a change can take a while to reach devices — that is what `?mode=developer` is for.
+
 ## Checklist
 
 - [ ] `app_router.dart` untouched
@@ -382,6 +487,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 - [ ] Cross-feature navigation goes through a `core_di` Navigator interface
 - [ ] `BuildContext` passed from the UI, never taken from `NavigatorKeys`
 - [ ] `build_runner` re-run after touching route annotations
+- [ ] Deep links still reach the router only through `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` stay `false` (§9)
 
 ## Related
 

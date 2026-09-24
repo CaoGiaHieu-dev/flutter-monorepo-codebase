@@ -15,36 +15,37 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-//keystore dev properties
-val keystoreDevProperties = Properties()
-val keystoreDevPropertiesFile: File = rootProject.file("key-dev.properties") // Explicitly typed as File
-if (keystoreDevPropertiesFile.exists()) {
-    FileInputStream(keystoreDevPropertiesFile).use { fis -> // Use try-with-resources
-        keystoreDevProperties.load(fis)
+// Signing material, one properties file per flavor, read from android/.
+//
+// dev    -> key-dev.properties (committed, public: see keystore-dev.jks)
+// staging-> key-stg.properties (gitignored, you supply it)
+// prod   -> key.properties     (gitignored, you supply it)
+//
+// When a staging/prod file is missing, the flavor's signing config falls back
+// to the dev key so that debug/profile builds of every flavor keep working
+// from a fresh clone. A *release* build of staging/prod never does: the guard
+// at the bottom of this file fails it before anything is packaged or signed,
+// because the dev key is public and a store listing's signature can never
+// change.
+// See docs/en/operations/02_fastlane_release.md section 4.
+fun loadProperties(file: File): Properties {
+    val properties = Properties()
+    if (file.exists()) {
+        FileInputStream(file).use { fis -> properties.load(fis) }
     }
+    return properties
 }
 
-//keystore staging properties
-val keystoreStagingProperties = Properties()
-val keystoreStagingPropertiesFile: File = rootProject.file("key-stg.properties") // Explicitly typed as File
-if (keystoreStagingPropertiesFile.exists()) {
-     FileInputStream(keystoreStagingPropertiesFile).use { fis -> // Use try-with-resources
-        keystoreStagingProperties.load(fis)
-    }
-} else {
-    keystoreStagingProperties.putAll(keystoreDevProperties)
-}
+val keystoreDevPropertiesFile: File = rootProject.file("key-dev.properties")
+val keystoreDevProperties = loadProperties(keystoreDevPropertiesFile)
 
-//keystore properties
-val keystoreProperties = Properties()
-val keystorePropertiesFile: File = rootProject.file("key.properties") // Explicitly typed as File
-if (keystorePropertiesFile.exists()) {
-     FileInputStream(keystorePropertiesFile).use { fis -> // Use try-with-resources
-        keystoreProperties.load(fis)
-    }
-} else {
-    keystoreProperties.putAll(keystoreDevProperties)
-}
+val keystoreStagingPropertiesFile: File = rootProject.file("key-stg.properties")
+val keystoreStagingProperties = loadProperties(keystoreStagingPropertiesFile)
+    .takeIf { keystoreStagingPropertiesFile.exists() } ?: keystoreDevProperties
+
+val keystorePropertiesFile: File = rootProject.file("key.properties")
+val keystoreProperties = loadProperties(keystorePropertiesFile)
+    .takeIf { keystorePropertiesFile.exists() } ?: keystoreDevProperties
 
 // dart-define
 var envs: Map<String, String> = mapOf()
@@ -133,7 +134,15 @@ android {
         versionName = flutter.versionName
         multiDexEnabled = true
 
-        resValue("string", "WEB_DOMAIN", envs["WEB_DOMAIN"] ?: "")
+        // Host of the verified App Links intent-filter in AndroidManifest.xml.
+        // An empty host would turn that filter into "every https link", so an
+        // env file without WEB_DOMAIN gets a reserved, never-resolving domain
+        // (RFC 2606 `.invalid`) instead. See docs/en/guides/04_routing.md §9.
+        resValue(
+            "string",
+            "WEB_DOMAIN",
+            envs["WEB_DOMAIN"]?.takeIf { it.isNotBlank() } ?: "example.invalid",
+        )
         resValue("string", "app_name", envs["APP_NAME"] ?: "Codebase") 
         resValue("string", "APP_ID", "${applicationId}${applicationIdSuffix ?: ""}") 
     }
@@ -154,11 +163,21 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
-            isShrinkResources = false // Keep false unless you test thoroughly
-            // Release builds MUST have a signing config for distribution.
-            // This will be overridden by the flavor's signingConfig.
-            // Setting it here is redundant if flavors always define it.
-            // signingConfig = signingConfigs.getByName("prod") // Can be set as a default
+            // Drops resources nothing references. Anything looked up only by
+            // name at runtime (e.g. a notification icon passed from Dart)
+            // must be listed in src/main/res/raw/keep.xml.
+            isShrinkResources = true
+            // Every flavor's release build gets the same R8 rules — staging
+            // included, so it tests what prod ships.
+            proguardFiles(
+                // AGP 9 dropped support for "proguard-android.txt" because it
+                // carries `-dontoptimize` and blocks most R8 optimizations.
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // No signingConfig here: each flavor sets its own, and the guard
+            // at the bottom of this file refuses a staging/prod release that
+            // would be signed with the public dev key.
         }
     }
 
@@ -166,10 +185,16 @@ android {
     flavorDimensions += "environment"
 
     productFlavors {
+        // DEEP_LINK_SCHEME is the custom URL scheme of the deep-link
+        // intent-filter in AndroidManifest.xml (`<scheme>://settings?tab=2`).
+        // One per flavor, so dev/staging/prod installed side by side never
+        // compete for a link. Rename them with the app, and keep each equal
+        // to DEEP_LINK_SCHEME in the iOS build settings of the same flavor.
         create("dev") {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             signingConfig = signingConfigs.getByName("dev")
+            resValue("string", "DEEP_LINK_SCHEME", "codebase-dev")
             // Optionally set version name suffix
             // versionNameSuffix = "-dev"
         }
@@ -177,25 +202,15 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".stg"
             signingConfig = signingConfigs.getByName("staging")
+            resValue("string", "DEEP_LINK_SCHEME", "codebase-stg")
             // Optionally set version name suffix
             // versionNameSuffix = "-stg"
         }
         create("prod") {
             dimension = "environment"
             // No suffix for prod
-            // applicationIdSuffix = "" // Default is empty
             signingConfig = signingConfigs.getByName("prod")
-            proguardFiles(
-                // Includes the default ProGuard rules files that are packaged with
-                // the Android Gradle plugin. To learn more, go to the section about
-                // R8 configuration files.
-                // AGP 9 dropped support for "proguard-android.txt" because it
-                // carries `-dontoptimize` and blocks most R8 optimizations.
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-
-                // Includes a local, custom Proguard rules file
-                "proguard-rules.pro"
-            )
+            resValue("string", "DEEP_LINK_SCHEME", "codebase")
         }
     }
 }
@@ -205,21 +220,40 @@ flutter {
 }
 
 dependencies {
-    // Consider updating play-services-auth if needed, 16.0.1 is quite old.
-    // Check for the latest version compatible with your project.
-    // Example: implementation("com.google.android.gms:play-services-auth:20.7.0")
-    implementation("com.google.android.gms:play-services-auth:16.0.1")
-
-    // Check for the latest desugar_jdk_libs version
-    // Example: coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
 
-    // Check for latest window manager versions
-    // Example: implementation("androidx.window:window:1.2.0")
-    // Example: implementation("androidx.window:window-java:1.2.0")
-    implementation("androidx.window:window:1.0.0")
-    implementation("androidx.window:window-java:1.0.0")
-
-    // Add other dependencies here
-    // implementation(kotlin("stdlib-jdk8")) // Already included via kotlin-android plugin usually
+// Release-signing guard: a staging/prod *release* build must be signed with
+// its own key, never the committed (public) dev keystore. The check hangs off
+// `pre<Flavor>ReleaseBuild`, which every release entry point runs first
+// (`flutter build apk|appbundle`, `assemble*`, `bundle*`), so debug and
+// profile builds of every flavor, and IDE sync, are unaffected.
+//
+// Escape hatch for staging only, for pipelines that deliberately distribute
+// staging to testers with the dev key: pass the Gradle property
+// `allowDevKeystoreForStaging=true`, e.g.
+//   flutter build apk --flavor staging -PallowDevKeystoreForStaging=true
+//   ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true flutter build apk --flavor staging
+// There is none for prod.
+val allowDevKeystoreForStaging =
+    (findProperty("allowDevKeystoreForStaging") as String?)?.toBoolean() == true
+val releaseKeyFiles = buildMap {
+    if (!keystoreStagingPropertiesFile.exists() && !allowDevKeystoreForStaging) {
+        put("Staging", keystoreStagingPropertiesFile)
+    }
+    if (!keystorePropertiesFile.exists()) {
+        put("Prod", keystorePropertiesFile)
+    }
+}
+releaseKeyFiles.forEach { (flavor, file) ->
+    val message = """
+        |Refusing to build the ${flavor.lowercase()} release: ${file.path} is missing.
+        |Without it this build would be signed with the committed, public dev keystore
+        |(keystore-dev.jks), and a Play listing's signing key can never change afterwards.
+        |Create ${file.name} pointing at your release keystore - see
+        |docs/en/operations/02_fastlane_release.md section 4 ("Signing").
+        """.trimMargin()
+    tasks.matching { it.name == "pre${flavor}ReleaseBuild" }.configureEach {
+        doFirst { throw GradleException(message) }
+    }
 }

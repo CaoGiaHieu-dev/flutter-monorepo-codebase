@@ -8,6 +8,12 @@
 	<array>
 		<string>Default</string>
 	</array> -->
+	<!-- Universal links. Off until you own WEB_DOMAIN and serve
+	     https://<WEB_DOMAIN>/.well-known/apple-app-site-association, and the
+	     App ID has the Associated Domains capability; enabling it earlier
+	     fails provisioning. APP_LINK_MODE is empty in production, or
+	     "?mode=developer" to bypass Apple's CDN cache while testing.
+	     docs/en/guides/04_routing.md §9 -->
 	<!-- <key>com.apple.developer.associated-domains</key>
     <array>
         <string>applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)</string>

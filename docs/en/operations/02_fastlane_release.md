@@ -3,7 +3,7 @@
 This page answers: **how the Fastlane setup is wired, which lanes exist and what they take, how the app is signed, and what the full release procedure is.** After reading it you can configure `Config.yaml`, run any lane from the repository root, and ship a build to Firebase App Distribution, Google Play or TestFlight.
 
 > [!IMPORTANT]
-> Two traps in this setup are documented below — a **silent fallback to the committed dev keystore** ([§4](#4-signing)) and a **required `apps/mobile/env.prod` file** without which a prod build hard-fails ([§6](#6-flavors-and-env-files)). Read both before your first store upload.
+> Two files you must supply yourself are documented below — a **release keystore** (`key.properties`, plus `key-stg.properties` for staging), without which a staging/prod release build refuses to start ([§4](#4-signing)), and **`apps/mobile/env.prod`**, without which a prod build hard-fails ([§6](#6-flavors-and-env-files)). Read both before your first store upload.
 
 ---
 
@@ -206,31 +206,40 @@ which means whatever `--build-number` / `--build-name` the lane passes wins. `ve
 | `staging` | `key-stg.properties` | `staging` |
 | `prod` | `key.properties` | `prod` |
 
-### The fallback is silent — and dangerous
+### Release builds refuse the dev key
 
-Each block loads its file **only if it exists**, otherwise it copies the dev properties wholesale:
+A missing `key-stg.properties` / `key.properties` is handled differently per build type:
 
-```kotlin
-val keystoreProperties = Properties()
-val keystorePropertiesFile: File = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    FileInputStream(keystorePropertiesFile).use { fis -> keystoreProperties.load(fis) }
-} else {
-    keystoreProperties.putAll(keystoreDevProperties)   // ← falls back to DEV
-}
+| Build | Flavor `staging` / `prod` without its properties file |
+|:---|:---|
+| `--debug`, `--profile` | Signed with the committed dev key, so a fresh clone runs every flavor |
+| `--release` (APK or AAB) | **Fails** in `pre<Flavor>ReleaseBuild`, early in the build and before anything is packaged or signed |
+
+The failure names the missing file and points back here:
+
+```text
+Execution failed for task ':app:preProdReleaseBuild'.
+> Refusing to build the prod release: …/apps/mobile/android/key.properties is missing.
+  Without it this build would be signed with the committed, public dev keystore
+  (keystore-dev.jks), and a Play listing's signing key can never change afterwards.
 ```
 
-> [!CAUTION]
-> **If `key.properties` is absent, a prod build is signed with the committed dev keystore and the build still succeeds.** There is no warning from Gradle. (The CI workflows guard against it: a prod build there refuses to start without the keystore secrets — [`01_cicd.md` §7](01_cicd.md#7-secrets).) A release signed with the wrong key cannot be updated on the Play Store afterwards — the signature is permanent for that listing.
->
-> Before any production build, verify the file exists and points where you expect:
+The guard sits at the bottom of `apps/mobile/android/app/build.gradle.kts`. It hangs off the `pre…ReleaseBuild` task that every release entry point runs — `flutter build apk|appbundle`, the Fastlane lanes, `./gradlew assemble…|bundle…` — so none of them can produce a release signed with the public key.
+
+> [!NOTE]
+> **Staging only** has an explicit escape hatch, for a pipeline that deliberately ships staging to testers with the dev key: the Gradle property `allowDevKeystoreForStaging=true`.
 > ```bash
-> test -f apps/mobile/android/key.properties && echo OK || echo "MISSING — prod would use the dev key"
+> flutter build apk --flavor staging -PallowDevKeystoreForStaging=true --dart-define-from-file=env.stg
+> # or, for a whole CI job:
+> export ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true
 > ```
+> Prod has none. Anyone can sign an update to a dev-key-signed staging app, so prefer a real `key-stg.properties` (a separate upload key, generated the same way as below).
+
+`dev` releases keep using `key-dev.properties`: the dev flavor is never a store listing.
 
 ### The committed dev keystore
 
-`apps/mobile/android/key-dev.properties` and `apps/mobile/android/keystore-dev.jks` are **tracked in git** so a fresh clone builds and runs without any setup. That is deliberate for a template, and fine for `dev`. They are force-added past `apps/mobile/android/.gitignore`, which ignores every other `*.jks`, `*.keystore`, `key.properties` and `key-*.properties` — its comment says so.
+`apps/mobile/android/key-dev.properties` and `apps/mobile/android/keystore-dev.jks` are **tracked in git** so a fresh clone builds and runs without any setup. That is deliberate for a template, and fine for `dev`. `apps/mobile/android/.gitignore` ignores every other `*.jks`, `*.keystore`, `key.properties` and `key-*.properties` and un-ignores exactly these two; the root `.gitignore` repeats the same patterns (plus `google-services.json` / `GoogleService-Info.plist`) at any depth, with the same two exceptions.
 
 > [!CAUTION]
 > **Never ship a production release with the dev keystore.** It is public in the repository — anyone who clones it can sign an APK that the OS treats as an update to yours.
@@ -250,6 +259,8 @@ keyPassword=<your key password>
 keyAlias=upload
 storeFile=/absolute/path/to/upload-keystore.jks
 ```
+
+Staging reads `key-stg.properties`, next to it and in the same format — ideally pointing at a second key, so a leaked staging key cannot sign prod.
 
 Keep the `.jks` outside the repository, and back it up somewhere durable — losing it means you can never publish an update to that Play listing again.
 
@@ -372,7 +383,7 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
 ## 8. Release procedure
 
 1. **Pick the version.** Decide the `version` (build name). Use `build_number:auto` unless you need a specific code.
-2. **Verify signing.** `test -f apps/mobile/android/key.properties` — see the [§4](#4-signing) caution.
+2. **Verify signing.** `test -f apps/mobile/android/key.properties` — without it the release build stops in `preProdReleaseBuild` ([§4](#4-signing)).
 3. **Verify the env file exists for the flavor** — see [§6](#6-flavors-and-env-files). For prod you must create `apps/mobile/env.prod` first; the lane hard-fails without it.
 4. **Confirm `Config.yaml` is filled in**, particularly `firebase.app_ids`, `app_store_connect.apple_ids` and the credential paths.
 5. **Dry run locally**, no distribution:

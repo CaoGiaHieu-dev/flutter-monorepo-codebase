@@ -3,7 +3,7 @@
 Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế nào, có những lane nào và nhận tham số gì, app được ký ra sao, và quy trình phát hành đầy đủ gồm những bước nào.** Đọc xong bạn cấu hình được `Config.yaml`, chạy được mọi lane từ thư mục gốc, và đưa được bản build lên Firebase App Distribution, Google Play hoặc TestFlight.
 
 > [!IMPORTANT]
-> Có hai cái bẫy trong thiết lập này, được mô tả bên dưới — cơ chế **âm thầm lùi về keystore dev đã commit sẵn** ([§4](#4-ký-ứng-dụng)) và **file `apps/mobile/env.prod` bắt buộc phải có**, thiếu nó thì build prod fail cứng ([§6](#6-flavor-và-file-env)). Đọc cả hai trước lần upload store đầu tiên.
+> Có hai file bạn phải tự cung cấp, được mô tả bên dưới — **keystore release** (`key.properties`, thêm `key-stg.properties` cho staging), thiếu nó thì build release staging/prod từ chối chạy ([§4](#4-ký-ứng-dụng)), và **`apps/mobile/env.prod`**, thiếu nó thì build prod fail cứng ([§6](#6-flavor-và-file-env)). Đọc cả hai trước lần upload store đầu tiên.
 
 ---
 
@@ -206,31 +206,40 @@ nghĩa là `--build-number` / `--build-name` mà lane truyền vào sẽ quyết
 | `staging` | `key-stg.properties` | `staging` |
 | `prod` | `key.properties` | `prod` |
 
-### Cơ chế fallback im lặng — và nguy hiểm
+### Build release từ chối key dev
 
-Mỗi khối chỉ nạp file **nếu file tồn tại**, không thì copy nguyên bộ properties của dev:
+Khi thiếu `key-stg.properties` / `key.properties`, mỗi build type xử lý khác nhau:
 
-```kotlin
-val keystoreProperties = Properties()
-val keystorePropertiesFile: File = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    FileInputStream(keystorePropertiesFile).use { fis -> keystoreProperties.load(fis) }
-} else {
-    keystoreProperties.putAll(keystoreDevProperties)   // ← lùi về keystore DEV
-}
+| Build | Flavor `staging` / `prod` thiếu file properties của nó |
+|:---|:---|
+| `--debug`, `--profile` | Ký bằng key dev đã commit, để clone về là chạy được mọi flavor |
+| `--release` (APK hoặc AAB) | **Fail** ở `pre<Flavor>ReleaseBuild`, sớm trong quá trình build, trước khi đóng gói hay ký |
+
+Thông báo lỗi nêu tên file bị thiếu và trỏ về mục này:
+
+```text
+Execution failed for task ':app:preProdReleaseBuild'.
+> Refusing to build the prod release: …/apps/mobile/android/key.properties is missing.
+  Without it this build would be signed with the committed, public dev keystore
+  (keystore-dev.jks), and a Play listing's signing key can never change afterwards.
 ```
 
-> [!CAUTION]
-> **Nếu thiếu `key.properties`, bản build prod sẽ được ký bằng keystore dev đã commit sẵn, và build vẫn báo thành công.** Gradle không cảnh báo gì. (Các workflow CI chặn chuyện này: bản build prod ở đó từ chối chạy nếu thiếu các secret keystore — [`01_cicd.md` §7](01_cicd.md#7-secrets).) Một bản release ký sai khoá thì sau này **không thể cập nhật** trên Play Store — chữ ký gắn vĩnh viễn với listing đó.
->
-> Trước mọi lần build production, hãy kiểm tra file có tồn tại và trỏ đúng chỗ không:
+Phần chặn nằm ở cuối `apps/mobile/android/app/build.gradle.kts`. Nó gắn vào task `pre…ReleaseBuild` mà mọi đường build release đều chạy — `flutter build apk|appbundle`, các lane Fastlane, `./gradlew assemble…|bundle…` — nên không đường nào tạo ra được bản release ký bằng key công khai.
+
+> [!NOTE]
+> **Chỉ staging** có lối thoát tường minh, cho pipeline cố ý phát staging tới tester bằng key dev: Gradle property `allowDevKeystoreForStaging=true`.
 > ```bash
-> test -f apps/mobile/android/key.properties && echo OK || echo "THIẾU — prod sẽ dùng key dev"
+> flutter build apk --flavor staging -PallowDevKeystoreForStaging=true --dart-define-from-file=env.stg
+> # hoặc, cho cả một job CI:
+> export ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true
 > ```
+> Prod không có. Ai cũng ký được bản cập nhật cho một app staging ký bằng key dev, nên hãy ưu tiên một `key-stg.properties` thật (một upload key riêng, tạo giống như bên dưới).
+
+Bản release `dev` vẫn dùng `key-dev.properties`: flavor dev không bao giờ là một listing trên store.
 
 ### Keystore dev đang nằm trong git
 
-`apps/mobile/android/key-dev.properties` và `apps/mobile/android/keystore-dev.jks` **được track trong git** để clone về là build chạy ngay không cần cấu hình. Với một template thì đó là chủ đích, và dùng cho `dev` thì không sao. Hai file này được force-add vượt qua `apps/mobile/android/.gitignore`, vốn bỏ qua mọi `*.jks`, `*.keystore`, `key.properties` và `key-*.properties` khác — comment trong file đó ghi rõ điều này.
+`apps/mobile/android/key-dev.properties` và `apps/mobile/android/keystore-dev.jks` **được track trong git** để clone về là build chạy ngay không cần cấu hình. Với một template thì đó là chủ đích, và dùng cho `dev` thì không sao. `apps/mobile/android/.gitignore` bỏ qua mọi `*.jks`, `*.keystore`, `key.properties` và `key-*.properties` khác và chỉ un-ignore đúng hai file này; `.gitignore` ở gốc lặp lại cùng các pattern đó (thêm `google-services.json` / `GoogleService-Info.plist`) ở mọi độ sâu, với đúng hai ngoại lệ ấy.
 
 > [!CAUTION]
 > **Tuyệt đối không phát hành production bằng keystore dev.** Nó công khai trong repo — bất kỳ ai clone được cũng ký được một APK mà hệ điều hành coi là bản cập nhật của app bạn.
@@ -250,6 +259,8 @@ keyPassword=<mật khẩu key của bạn>
 keyAlias=upload
 storeFile=/duong/dan/tuyet/doi/toi/upload-keystore.jks
 ```
+
+Staging đọc `key-stg.properties`, nằm cạnh nó và cùng định dạng — tốt nhất trỏ tới một key thứ hai, để key staging có lộ cũng không ký được prod.
 
 Giữ file `.jks` **ngoài** repo, và sao lưu ở nơi bền vững — mất nó đồng nghĩa với việc không bao giờ publish được bản cập nhật cho listing Play đó nữa.
 
@@ -372,7 +383,7 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 ## 8. Quy trình phát hành
 
 1. **Chốt version.** Quyết định `version` (build name). Dùng `build_number:auto` trừ khi bạn cần một số cụ thể.
-2. **Kiểm tra ký ứng dụng.** `test -f apps/mobile/android/key.properties` — xem cảnh báo ở [§4](#4-ký-ứng-dụng).
+2. **Kiểm tra ký ứng dụng.** `test -f apps/mobile/android/key.properties` — thiếu nó thì build release dừng ở `preProdReleaseBuild` ([§4](#4-ký-ứng-dụng)).
 3. **Kiểm tra file env của flavor tương ứng có tồn tại không** — xem [§6](#6-flavor-và-file-env). Với prod bạn phải tạo `apps/mobile/env.prod` trước; thiếu nó lane fail cứng.
 4. **Xác nhận `Config.yaml` đã điền đủ**, đặc biệt `firebase.app_ids`, `app_store_connect.apple_ids` và các đường dẫn credential.
 5. **Chạy thử ở local**, không phân phối:

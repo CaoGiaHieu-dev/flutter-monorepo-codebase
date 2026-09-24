@@ -373,6 +373,111 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 5. **Sinh code** → `dart run build_runner build --workspace`.
 6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
+---
+
+## 9. Deep link: thiết lập nền tảng
+
+Có hai dạng link đi vào app, và cả hai đều về cùng một location của router:
+
+| Link | Location của router |
+|:---|:---|
+| `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
+| `<scheme>://settings?tab=2` (custom scheme — segment đầu tiên nằm ở vị trí host) | `/settings?tab=2` |
+
+Nền tảng đưa URI cho `app_links`, và `DeeplinkProvider` (`platform/app_shell/lib/presentation/providers/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng — nhưng chỉ sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó (không bao giờ đè lên onboarding hay login). Path không module nào đăng ký sẽ rơi vào `UndefineRouteWidget`, như mọi location lạ khác.
+
+### Vì sao tắt deep linking có sẵn của Flutter
+
+Từ Flutter 3.27, engine mặc định cũng tự xử lý deep link: nó đẩy thẳng URI vào `GoRouter`, bỏ qua `DeeplinkProvider` cùng bước kiểm tra phiên — người dùng chưa đăng nhập có thể mở màn hình cần đăng nhập, và mỗi link bị điều hướng hai lần. Vì vậy cả hai nền tảng đều tắt nó:
+
+- Android — trong `<activity>` ở `apps/mobile/android/app/src/main/AndroidManifest.xml`: `<meta-data android:name="flutter_deeplinking_enabled" android:value="false" />`
+- iOS — `apps/mobile/ios/Runner/Info.plist`: `FlutterDeepLinkingEnabled` = `false`
+
+Đừng xoá cái nào khi `DeeplinkProvider` vẫn là lối vào duy nhất của router.
+
+### Giá trị theo từng flavor
+
+| Flavor | Custom scheme | Application id Android | Bundle id iOS |
+|:---|:---|:---|:---|
+| `dev` | `codebase-dev` | `com.example.codebase.dev` | `com.example.codebase.dev` |
+| `staging` | `codebase-stg` | `com.example.codebase.stg` | `com.example.codebase.staging` |
+| `prod` | `codebase` | `com.example.codebase` | `com.example.codebase` |
+
+Mỗi flavor một scheme, để dev, staging và prod cài song song không tranh nhau một link. Scheme được khai hai lần và hai nơi phải khớp nhau: `resValue("string", "DEEP_LINK_SCHEME", …)` trong từng mục `productFlavors` của `apps/mobile/android/app/build.gradle.kts`, và build setting `DEEP_LINK_SCHEME` của từng configuration Runner trong `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*). Đổi tên app thì đổi cả sáu chỗ cùng lúc.
+
+`WEB_DOMAIN` lấy từ file env của flavor (`apps/mobile/env.dev`, …). Các file env đã commit để trống giá trị này.
+
+### Android
+
+`AndroidManifest.xml` khai hai intent-filter `VIEW` trên `MainActivity`:
+
+```xml
+<intent-filter android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="https" />
+    <data android:host="@string/WEB_DOMAIN" />
+</intent-filter>
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="@string/DEEP_LINK_SCHEME" />
+</intent-filter>
+```
+
+`@string/WEB_DOMAIN` là một `resValue` mà `build.gradle.kts` giải mã từ dart-define. Khi file env để trống `WEB_DOMAIN`, nó thành `example.invalid` — tên miền dành riêng, không bao giờ phân giải được — vì host rỗng sẽ khiến filter nhận mọi link https.
+
+**Xác minh App Links.** `autoVerify` khiến Android tải `https://<WEB_DOMAIN>/.well-known/assetlinks.json` lúc cài đặt. Phục vụ file qua https, không redirect, kiểu `application/json`, liệt kê mọi flavor dùng domain đó:
+
+```json
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.codebase",
+      "sha256_cert_fingerprints": ["AA:BB:…"]
+    }
+  }
+]
+```
+
+Fingerprint là của khoá dùng để ký APK **được cài**: `keytool -list -v -keystore <release.jks> -alias <alias>` với khoá bạn tự ký; với bản build qua Play dùng Play App Signing, chép SHA-256 của *App signing key certificate* trong Play Console → *Test and release → App integrity* — không phải của upload key. Kiểm tra trên thiết bị:
+
+```bash
+adb shell pm get-app-links com.example.codebase            # "verified" cho từng domain
+adb shell pm verify-app-links --re-verify com.example.codebase
+adb shell am start -a android.intent.action.VIEW -d "codebase-dev://settings?tab=2"
+adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settings?tab=2"
+```
+
+### iOS
+
+**Custom scheme.** `Info.plist` đăng ký nó dưới `CFBundleURLTypes`, với `CFBundleURLSchemes` = `$(DEEP_LINK_SCHEME)` và `CFBundleURLName` = `$(PRODUCT_BUNDLE_IDENTIFIER)`. Không cần gì thêm: `xcrun simctl openurl booted "codebase-dev://settings?tab=2"` mở bản dev.
+
+**Universal link** vẫn tắt cho tới khi bạn sở hữu domain, vì entitlement này làm provisioning fail với App ID chưa có capability. Để bật:
+
+1. Bật **Associated Domains** cho từng App ID trên Apple Developer portal (hoặc *Signing & Capabilities → + Capability* trong Xcode) rồi tạo lại provisioning profile.
+2. Bỏ comment khối `com.apple.developer.associated-domains` trong `apps/mobile/ios/Runner/Runner.entitlements`. Giá trị của nó, `applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)`, được mở rộng từ `Flutter/Environment.xcconfig`, file mà build pre-action của mỗi scheme flavor ghi ra từ dart-define — nên hãy build qua scheme flavor (`--flavor`). Để `APP_LINK_MODE` trống ở production; `?mode=developer` bỏ qua cache CDN của Apple trên thiết bị đã bật *Associated Domains Development*.
+3. Phục vụ `https://<WEB_DOMAIN>/.well-known/apple-app-site-association` — không đuôi file, `application/json`, không redirect:
+
+```json
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["ABCDE12345.com.example.codebase"],
+        "components": [{ "/": "/*" }]
+      }
+    ]
+  }
+}
+```
+
+`ABCDE12345` là Team ID của bạn; thêm một mục `appIDs` cho mỗi bundle id dùng domain đó. Apple tải file qua CDN của họ lúc app được cài, nên thay đổi có thể mất một lúc mới tới thiết bị — `?mode=developer` sinh ra để xử lý chuyện đó.
+
 ## Checklist
 
 - [ ] Không đụng `app_router.dart`
@@ -382,6 +487,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 - [ ] Điều hướng xuyên feature đi qua Navigator interface ở `core_di`
 - [ ] `BuildContext` truyền từ UI, không lấy từ `NavigatorKeys`
 - [ ] Đã chạy lại `build_runner` sau khi sửa annotation route
+- [ ] Deep link vẫn chỉ tới router qua `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` giữ nguyên `false` (§9)
 
 ## Liên quan
 

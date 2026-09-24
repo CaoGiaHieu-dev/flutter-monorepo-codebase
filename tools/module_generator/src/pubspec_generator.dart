@@ -71,8 +71,11 @@ class PubspecGenerator {
   /// The workspace packages a new module of this type starts with.
   ///
   /// Exactly what the rendered templates import, so a fresh module passes
-  /// `check_unused_packages` — add `core_responsive`, `core_ui_kit`,
-  /// `core_network`, `core_storage` and the rest when the code needs them.
+  /// `check_unused_packages` — add `core_network`, `core_storage` and the
+  /// rest when the code needs them. Every feature page lays out through
+  /// `core_responsive` (`AdaptiveContent`), so a feature declares it from the
+  /// start; a BLoC page also renders its loading state with `core_ui_kit`'s
+  /// `LoadingWidget` (Provider's `BaseViewWidget` brings its own).
   /// A pre-declared "you will probably want this" dependency is reported as
   /// unused the moment the module exists, which is how generated data
   /// packages used to fail that check out of the box.
@@ -89,13 +92,18 @@ class PubspecGenerator {
           'core_di',
           'core_common',
           'core_base_ui',
+          // Every page template wraps its body in `AdaptiveContent`.
+          'core_responsive',
           if (config.smType == StateManagementType.provider) ...[
             'provider_state_management',
             // The provider template returns a `Result` from domain_core.
             'domain_core',
           ],
-          if (config.smType == StateManagementType.bloc)
+          if (config.smType == StateManagementType.bloc) ...[
             'bloc_state_management',
+            // The BLoC page's loading state is the kit's `LoadingWidget`.
+            'core_ui_kit',
+          ],
         ];
       case ModuleType.domain:
         // The repository template returns `Result` from domain_core.

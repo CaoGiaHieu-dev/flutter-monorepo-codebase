@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 /// Mechanical accuracy check for the Markdown documentation.
 ///
@@ -25,6 +26,21 @@ import 'package:path/path.dart' as p;
 /// file, each with the reason it is not on disk. Generated output, gitignored
 /// secrets, and "Step 1 — create this file" tutorial targets are the three
 /// legitimate cases; everything else is drift.
+///
+/// Two kinds of reference are reported without failing the run:
+///
+///   * **Placeholders.** A span with a `<…>` segment (`modules/<owner>/feature/…`)
+///     is a template the reader fills in, not a reference to a file. Only its
+///     literal part — the segments before the first placeholder — must exist.
+///   * **Removed samples.** `tools/sample_cleanup/remove_sample.dart` deletes
+///     a sample bundle's packages but leaves `tools/sample_manifest.yaml`
+///     untouched, on purpose: the manifest is how this check knows a path
+///     belonged to a sample. A bundle whose packages are *all* gone from disk
+///     is "removed", and a dead reference inside it (its package paths, the
+///     emptied `modules/<id>` parent, its `orphaned_contracts`) is summarised
+///     per bundle as expected fallout rather than drift. Delete the bundle's
+///     entry from the manifest once the docs are updated — or never, if you
+///     do not mind the note.
 ///
 /// Exit code 0 = clean, 1 = at least one dead reference, 64 = bad argument.
 
@@ -79,6 +95,22 @@ class _Hit {
   final String kind;
 }
 
+/// A sample bundle from `tools/sample_manifest.yaml` whose packages are all
+/// absent from disk — what `remove_sample.dart <bundle> --apply` leaves.
+class _RemovedBundle {
+  _RemovedBundle(this.name, this.paths);
+
+  final String name;
+
+  /// Repo-relative paths that went with the bundle: its package directories,
+  /// a `modules/<id>` parent that no longer exists, and its
+  /// `orphaned_contracts`.
+  final List<String> paths;
+
+  bool covers(String ref) =>
+      paths.any((path) => ref == path || ref.startsWith('$path/'));
+}
+
 void main(List<String> args) {
   if (args.contains('--help') || args.contains('-h')) {
     stdout.writeln(_usage);
@@ -98,6 +130,7 @@ void main(List<String> args) {
   final verbose = args.contains('--verbose') || args.contains('-v');
 
   final allowlist = _readAllowlist(repoRoot);
+  final removedBundles = _removedSampleBundles(repoRoot);
   final docs = _collectDocs(repoRoot);
 
   if (docs.isEmpty) {
@@ -106,7 +139,19 @@ void main(List<String> args) {
   }
 
   final hits = <_Hit>[];
+  final sampleHits = <String, List<_Hit>>{};
   var checked = 0;
+
+  /// Files [hit] under the removed bundle [path] lies in, else as drift.
+  void report(_Hit hit, String path) {
+    for (final bundle in removedBundles) {
+      if (bundle.covers(path)) {
+        sampleHits.putIfAbsent(bundle.name, () => <_Hit>[]).add(hit);
+        return;
+      }
+    }
+    hits.add(hit);
+  }
 
   for (final doc in docs) {
     final relDoc = p.posix.relative(_posix(doc.path), from: _posix(repoRoot));
@@ -132,7 +177,10 @@ void main(List<String> args) {
           checked++;
           if (allowlist.contains(pattern)) continue;
           if (_matchesSomething(repoRoot, pattern)) continue;
-          hits.add(_Hit(relDoc, i + 1, pattern, 'pattern'));
+          report(
+            _Hit(relDoc, i + 1, pattern, 'pattern'),
+            _literalPrefix(pattern),
+          );
           continue;
         }
         final ref = _normalisePath(raw);
@@ -141,7 +189,7 @@ void main(List<String> args) {
         checked++;
         if (allowlist.contains(ref)) continue;
         if (_exists(repoRoot, ref)) continue;
-        hits.add(_Hit(relDoc, i + 1, ref, 'path'));
+        report(_Hit(relDoc, i + 1, ref, 'path'), ref);
       }
 
       for (final m in _markdownLink.allMatches(line)) {
@@ -155,7 +203,7 @@ void main(List<String> args) {
         checked++;
         if (allowlist.contains(resolved)) continue;
         if (_exists(repoRoot, resolved)) continue;
-        hits.add(_Hit(relDoc, i + 1, '$target -> $resolved', 'link'));
+        report(_Hit(relDoc, i + 1, '$target -> $resolved', 'link'), resolved);
       }
     }
   }
@@ -165,8 +213,37 @@ void main(List<String> args) {
   stdout.writeln('  references: $checked');
   stdout.writeln('  allowlist : ${allowlist.length}');
 
+  if (sampleHits.isNotEmpty) {
+    stdout.writeln('');
+    for (final entry in sampleHits.entries) {
+      final files = entry.value.map((h) => h.docFile).toSet();
+      stdout.writeln(
+        'INFO: ${entry.value.length} reference(s) in ${files.length} '
+        'document(s) point to removed sample bundle "${entry.key}" — expected '
+        'after remove_sample; update the docs at your leisure.',
+      );
+      if (verbose) {
+        for (final hit in entry.value) {
+          stdout.writeln(
+            '  ${hit.docFile}:${hit.line}  [${hit.kind}] ${hit.reference}',
+          );
+        }
+      }
+    }
+    if (!verbose) {
+      stdout.writeln(
+        '      (--verbose lists them; they do not fail this check)',
+      );
+    }
+  }
+
   if (hits.isEmpty) {
-    stdout.writeln('\nOK — every documented path exists on disk.');
+    stdout.writeln(
+      sampleHits.isEmpty
+          ? '\nOK — every documented path exists on disk.'
+          : '\nOK — every documented path outside the removed samples exists '
+                'on disk.',
+    );
     return;
   }
 
@@ -211,6 +288,11 @@ Verify that every path the documentation names exists in this repository.
 Checks every Markdown file in the repository (skipping ${_skippedDirs.join(', ')}):
   * backticked spans beginning with a real top-level directory
   * markdown links, resolved relative to the file containing them
+
+A span with a <placeholder> segment is a template: only the part before the
+first placeholder must exist. A dead reference inside a sample bundle that
+remove_sample.dart has removed (every package of the bundle absent, per
+tools/sample_manifest.yaml) is summarised as INFO and does not fail the run.
 
 Known-absent paths belong in tools/docs_check/allowlist.txt, one per line,
 with a `#` comment saying why. Exit 1 on any unexplained dead reference,
@@ -291,17 +373,20 @@ String? _normalisePath(String raw) {
 /// `platform/*/pubspec.yaml`, `modules/<m>/{domain,data}/lib` — returned with
 /// its trailing slash removed, or null for an ordinary path or a non-path.
 ///
-/// These used to be skipped outright, on the reasoning that a placeholder
-/// names nothing in particular. It names *something*, though: at least one
-/// real path must fit it. The relayout rewrote `packages/domain/<name>/` as
-/// `modules/*/domain/<name>/` in 42 places — shapes no directory in the repo
-/// has — and all of them passed, because this check looked away from exactly
-/// the kind of reference a mechanical rewrite gets wrong.
+/// These used to be skipped outright. A glob (`*`, `{a,b}`) names
+/// *something*, though: at least one real path must fit it, which is what
+/// catches a mechanical rewrite pointing at a shape no directory has.
 ///
-/// The limit, stated so nobody over-trusts it: a placeholder in the **last**
-/// segment matches any child, so `modules/*/domain/<name>` still passes
-/// (`modules/auth/domain/lib` fits it). Anything with a fixed segment after
-/// the placeholder — `…/<f>/l10n.yaml`, `…/<name>/lib` — is caught.
+/// A `<placeholder>` is different. It stands for a name the reader has not
+/// chosen yet — `modules/<owner>/feature/lib/src/handlers` describes where
+/// *your* module puts its handlers — so it is a template, not a reference.
+/// Demanding that some existing module already had that folder made the check
+/// fail whenever the only one that did was a removed sample. The pattern is
+/// therefore cut at its first `<…>` segment and only the literal part before
+/// it must match: `packages/domain/<name>` is still caught (`packages/domain`
+/// is gone), `modules/<owner>/…` passes because `modules` exists. The price,
+/// stated so nobody over-trusts it: a wrong fixed segment *after* a
+/// placeholder (`modules/<m>/featur/…`) is no longer seen.
 String? _asPattern(String raw) {
   if (raw.contains(' ')) return null;
   if (!raw.contains('<') && !raw.contains('*') && !raw.contains('{')) {
@@ -319,13 +404,84 @@ String? _asPattern(String raw) {
 /// `<anything>` is a placeholder the reader fills in, so it matches like `*`.
 /// Braces and `**` are handled by `package:glob` itself.
 bool _matchesSomething(String repoRoot, String pattern) {
-  final globbable = pattern.replaceAll(RegExp(r'<[^<>]*>'), '*');
+  final checked = _beforePlaceholder(pattern);
+  if (!checked.contains('*') && !checked.contains('{')) {
+    return _exists(repoRoot, checked);
+  }
   try {
-    return Glob(globbable).listSync(root: repoRoot).isNotEmpty;
+    return Glob(checked).listSync(root: repoRoot).isNotEmpty;
   } on FileSystemException {
     // A fixed directory component that does not exist — nothing can match.
     return false;
   }
+}
+
+/// [pattern] up to (not including) its first `<placeholder>` segment —
+/// `modules/<owner>/feature` -> `modules`; unchanged when it has none.
+String _beforePlaceholder(String pattern) {
+  final segments = pattern.split('/');
+  final cut = segments.indexWhere((s) => s.contains('<'));
+  return cut < 0 ? pattern : segments.take(cut).join('/');
+}
+
+/// [pattern] up to its first segment holding `<`, `*` or `{` — the fixed
+/// directory every path it names lies under.
+String _literalPrefix(String pattern) {
+  final segments = pattern.split('/');
+  final cut = segments.indexWhere(
+    (s) => s.contains('<') || s.contains('*') || s.contains('{'),
+  );
+  return cut < 0 ? pattern : segments.take(cut).join('/');
+}
+
+/// Every sample bundle in `tools/sample_manifest.yaml` whose packages are
+/// all absent from disk.
+///
+/// `remove_sample.dart` never edits the manifest, so after `--apply` the
+/// bundle definition is still here while its packages are not — which is the
+/// whole signal. A bundle with even one package left on disk is not removed:
+/// a half-deleted bundle is drift, and its dead references fail as usual.
+List<_RemovedBundle> _removedSampleBundles(String repoRoot) {
+  final file = File(p.join(repoRoot, 'tools', 'sample_manifest.yaml'));
+  if (!file.existsSync()) return const [];
+  final Object? doc;
+  try {
+    doc = loadYaml(file.readAsStringSync());
+  } on YamlException catch (e) {
+    stderr.writeln(
+      'docs_check: tools/sample_manifest.yaml is not valid YAML ($e) — '
+      'references to removed samples are reported as dead.',
+    );
+    return const [];
+  }
+  if (doc is! Map) return const [];
+  final packages = doc['packages'];
+  final bundles = doc['bundles'];
+  if (packages is! Map || bundles is! Map) return const [];
+
+  final out = <_RemovedBundle>[];
+  bundles.forEach((name, value) {
+    if (value is! Map || value['packages'] is! List) return;
+    final dirs = <String>[
+      for (final pkg in value['packages'] as List)
+        if (packages[pkg] case {'path': final String path}) path,
+    ];
+    if (dirs.isEmpty || dirs.any((d) => _exists(repoRoot, d))) return;
+    out.add(
+      _RemovedBundle('$name', [
+        ...dirs,
+        // `modules/auth` goes too once its last layer is removed.
+        for (final dir in dirs)
+          if (dir.startsWith('modules/') &&
+              !_exists(repoRoot, p.posix.dirname(dir)))
+            p.posix.dirname(dir),
+        if (value['orphaned_contracts'] case final List contracts)
+          for (final c in contracts)
+            if (c is String) c,
+      ]),
+    );
+  });
+  return out;
 }
 
 bool _looksLikeRepoPath(String ref) =>

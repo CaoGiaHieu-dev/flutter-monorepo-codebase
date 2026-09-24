@@ -27,9 +27,6 @@ apps/mobile/env.prod
 # Android release signing. `01_cicd.md` explains how CI materialises both.
 apps/mobile/android/keystore.jks
 apps/mobile/android/key.properties
-# Per-flavor Firebase config written by tools/firebase/firebase_config.dart;
-# gitignored because it carries the project's own Firebase identifiers.
-apps/mobile/android/app/src/<flavor>/google-services.json
 # A Gemini API key the code_review tool saves when asked to; gitignored.
 tools/code_review/.gemini_api_key
 # Fastlane credentials. The repo ships `apps/mobile/fastlane/Config.example.yaml`.
@@ -55,15 +52,12 @@ modules/x/data/lib
 # target was revised and no longer planned it. The section is empty now.
 
 # --- Patterns (spans containing <placeholder>, * or {a,b}) -----------------
-# Checked since placeholders stopped being skipped: at least one real path
-# must fit. These are the ones that correctly match nothing.
+# A glob must match at least one real path; a <placeholder> span only needs the
+# literal part before its first placeholder to exist (the rest is the reader's
+# to fill in). These are the ones that correctly match nothing.
 
-# (1) Generated: flutter gen-l10n output, gitignored.
-modules/<f>/feature/lib/src/gen/language
 # (1) Generated: release build output, named per flavor.
 apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
-# (3) Tutorial: CLAUDE.md tells the reader to create their own table here.
-modules/<module>/<layer>/lib/src/database/tables
 # History: RESTRUCTURE.md's own record of the layout the relayout replaced.
 # The plan has to be able to name what it moved away from.
 packages/core/*

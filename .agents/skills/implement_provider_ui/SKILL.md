@@ -28,8 +28,8 @@ Use this skill when requested to: "implement screen logic using Provider", "auto
 ### 2. BaseProvider (ViewModel)
 ViewModels managing UI state must inherit directly from `BaseProvider<T>` where `T` is the Domain entity type:
 ```dart
+import 'package:domain_<name>/domain_<name>.dart'; // GetProductsUseCase, ProductEntity
 import 'package:domain_core/domain_core.dart'; // NoParams, Result
-import 'package:domain_*/domain_*.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 

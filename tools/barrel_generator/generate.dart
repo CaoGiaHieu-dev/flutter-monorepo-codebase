@@ -81,8 +81,8 @@ void main(List<String> args) {
   if (flag != null || args.length > 1) {
     stderr.writeln(
       flag != null
-          ? '[ERROR] Cờ không hợp lệ: $flag'
-          : '[ERROR] Chỉ nhận một đường dẫn, nhận được: ${args.join(' ')}',
+          ? '[ERROR] Unknown flag: $flag'
+          : '[ERROR] Expected one path, got: ${args.join(' ')}',
     );
     stderr.writeln(_usage);
     exit(64);
@@ -97,13 +97,13 @@ void main(List<String> args) {
   // Ask for another path only when a person is there to answer. An agent or
   // a CI step passing a wrong path used to block forever on stdin.
   if (!dir.existsSync() && (args.isNotEmpty || !stdin.hasTerminal)) {
-    stderr.writeln('[ERROR] Thư mục "$targetDir" không tồn tại!');
-    exit(2);
+    stderr.writeln('[ERROR] Directory "$targetDir" does not exist.');
+    exit(64);
   }
   while (!dir.existsSync()) {
-    stderr.writeln('[ERROR] Thư mục "$targetDir" không tồn tại!');
+    stderr.writeln('[ERROR] Directory "$targetDir" does not exist.');
     stdout.write(
-      'Vui lòng nhập đường dẫn thư mục hợp lệ (hoặc "exit" để thoát): ',
+      'Enter a valid directory path (or "exit" to quit): ',
     );
     final input = stdin.readLineSync();
     if (input == null || input.trim().toLowerCase() == 'exit') {
@@ -114,10 +114,10 @@ void main(List<String> args) {
   }
 
   stdout.writeln(
-    '\n[INFO] Bắt đầu tạo/cập nhật barrel files cho "$targetDir"...',
+    '\n[INFO] Creating/updating barrel files for "$targetDir"...',
   );
   stdout.writeln(
-    '[INFO] Quy tắc: Tự động sắp xếp, chèn export sau import, giữ lại logic tùy chỉnh.',
+    '[INFO] Rules: exports sorted, placed after imports; hand-written code kept.',
   );
 
   try {
@@ -126,7 +126,7 @@ void main(List<String> args) {
       _createOrUpdateBarrelForDir(subDir);
     }
 
-    stdout.writeln('\n[INFO] Đang chạy format cho "$targetDir"...');
+    stdout.writeln('\n[INFO] Formatting "$targetDir"...');
     // Through the repo's toolchain (`fvm dart` when FVM is set up), not the
     // SDK that happens to run this script.
     final result = Process.runSync(dartExecutable, [
@@ -138,15 +138,15 @@ void main(List<String> args) {
     if (result.exitCode != 0) {
       stderr.write(result.stderr);
       stderr.writeln(
-        '[ERROR] dart format thất bại (exit ${result.exitCode}). Barrel đã '
-        'được ghi nhưng chưa được format.',
+        '[ERROR] dart format failed (exit ${result.exitCode}). The barrels '
+        'were written but not formatted.',
       );
       exit(1);
     }
 
-    stdout.writeln('\n[SUCCESS] Hoàn thành sinh barrel file!');
+    stdout.writeln('\n[SUCCESS] Barrel files generated.');
   } catch (e) {
-    stderr.writeln('[ERROR] Đã xảy ra lỗi: $e');
+    stderr.writeln('[ERROR] Unexpected error: $e');
     exit(1);
   }
 }
@@ -220,7 +220,7 @@ void _createOrUpdateBarrelForDir(Directory dir) {
         barrelFileName = nameMatch.group(1)!;
       } else {
         stdout.writeln(
-          '  [WARN] Không tìm thấy tên package trong pubspec.yaml',
+          '  [WARN] No package name found in pubspec.yaml',
         );
         return;
       }
@@ -254,7 +254,7 @@ void _createOrUpdateBarrelForDir(Directory dir) {
         // Check if file has "part of"
         final content = entity.readAsStringSync();
         if (content.contains(RegExp(r'^part\s+of\s+', multiLine: true))) {
-          stdout.writeln('  - Bỏ qua (part of file): $filename');
+          stdout.writeln('  - Skipped (part of file): $filename');
           continue;
         }
 
@@ -289,13 +289,13 @@ void _createOrUpdateBarrelForDir(Directory dir) {
   if (!barrelFile.existsSync()) {
     if (exports.isNotEmpty) {
       barrelFile.writeAsStringSync('${newExportLines.join('\n')}\n');
-      stdout.writeln('  -> Đã tạo file barrel mới: ${barrelFile.path}');
+      stdout.writeln('  -> Created barrel: ${barrelFile.path}');
     }
     return;
   }
 
   // Update existing barrel file
-  stdout.writeln('  - Cập nhật thông minh file: ${barrelFile.path}');
+  stdout.writeln('  - Updating barrel: ${barrelFile.path}');
   final existingLines = barrelFile.readAsLinesSync();
 
   // Remove old exports and comment
@@ -350,5 +350,5 @@ void _createOrUpdateBarrelForDir(Directory dir) {
   }
 
   barrelFile.writeAsStringSync('${finalLines.join('\n')}\n');
-  stdout.writeln('  -> Đã cập nhật thành công: ${barrelFile.path}');
+  stdout.writeln('  -> Updated: ${barrelFile.path}');
 }

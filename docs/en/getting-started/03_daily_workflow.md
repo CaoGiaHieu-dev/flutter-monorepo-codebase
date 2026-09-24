@@ -98,7 +98,7 @@ The tool also repairs broken local `path:` entries for workspace packages.
 
 | Tool | Command | Use it when |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]` | Scaffolding a new Feature / Domain / Data / Core / Custom package. It adds the module to **every** `app_manifest.yaml`, both `apps/mobile` and `apps/admin`, and runs `composer sync`, which registers it in the workspace and in every app. `apps/admin` composes only auth + settings. If the new module does not belong there, delete its entry from `apps/admin/app_manifest.yaml` and run `dart tools/composer/composer.dart sync`. Run with no arguments on a terminal for interactive mode. A feature missing `<SM>` or `<route>` prompts for it on a terminal and exits `64` without one, so always pass both; an invalid name (it must be a Dart package name) or value is rejected up front, before anything is written. `--help` prints the usage. The prompts and progress messages are partly in Vietnamese. |
+| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]` | Scaffolding a new Feature / Domain / Data / Core / Custom package. It adds the module to **every** `app_manifest.yaml`, both `apps/mobile` and `apps/admin`, and runs `composer sync`, which registers it in the workspace and in every app. `apps/admin` composes only auth + settings. If the new module does not belong there, delete its entry from `apps/admin/app_manifest.yaml` and run `dart tools/composer/composer.dart sync`. Run with no arguments on a terminal for interactive mode. A feature missing `<SM>` or `<route>` prompts for it on a terminal and exits `64` without one, so always pass both; an invalid name (it must be a Dart package name) or value is rejected up front, before anything is written. `--help` prints the usage. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session. It lists what pub.dev has newer. In a terminal it then shows an interactive checklist: `a` applies the selected versions to the catalog and runs `dependency_sync` + `pub get`, and `q` quits. Without a TTY (CI, a pipe) it only reports. Exits `1` if resolving, `pub outdated` or applying an update fails. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key (`GEMINI_API_KEY`, `--api-key`, or saved when prompted). Also supports `--all`, `--file <path>`, `--focus architecture,security`, and `--language <code>` for that run only. Generated files, tests and git-ignored files are always excluded. Without a key and without a terminal it exits `1`. |
@@ -129,22 +129,13 @@ dart tools/module_generator/generate.dart 3 payment
 # 1. Static analysis — must be clean across the whole workspace
 flutter analyze
 
-# 2. Tests — they live per package, so run them per package
-cd platform/app_shell               && flutter test && cd -
-cd platform/base_ui                 && flutter test && cd -
-cd platform/common                  && flutter test && cd -
-cd platform/data_core               && flutter test && cd -
-cd platform/database                && flutter test && cd -
-cd platform/network                 && flutter test && cd -
-cd platform/notifications           && flutter test && cd -
-cd platform/provider_state_management && flutter test && cd -
-cd platform/responsive              && flutter test && cd -
-cd platform/storage                 && flutter test && cd -
-cd platform/ui_kit                  && flutter test && cd -
-cd modules/auth/data                && flutter test && cd -
-cd modules/auth/feature             && flutter test && cd -
-cd modules/cache/data               && flutter test && cd -
-cd modules/dashboard/feature        && flutter test && cd -
+# 2. Tests — they live per package, so run every package that has a test/
+#    directory (the same discovery CI Gate 3 uses; bash — Git Bash on Windows)
+for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort); do
+  dir=$(dirname "$pubspec")
+  [ -d "$dir/test" ] || continue
+  (cd "$dir" && flutter test) || { echo "FAILED: $dir"; break; }
+done
 
 # 3. Version catalog is in sync
 dart tools/dependency_sync.dart --check
@@ -155,7 +146,7 @@ dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. Only the fifteen packages above ship tests today (CI Gate 3 finds every `test/` directory on its own); add yours next to the code you write.
+Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some — CI Gate 3 discovers them the same way. It stops at the first failing package and names it; add your tests next to the code you write. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
 
 > [!CAUTION]
 > `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, check the module order in the generated `apps/mobile/lib/di/injection.config.dart`, and your type's registration and its `gh<Dep>()` calls in the package's generated `lib/di/module.module.dart`. See [../guides/05_di.md](../guides/05_di.md).

@@ -28,9 +28,9 @@ lib/
 
 ```dart
 import 'package:core_ui_kit/buttons/custom_button.dart';
-import 'package:core_ui_kit/inputs/custom_input_field.dart';
-import 'package:core_ui_kit/feedback/loading_widget.dart';
 import 'package:core_ui_kit/dialogs/app_overlay.dart';
+import 'package:core_ui_kit/feedback/loading_widget.dart';
+import 'package:core_ui_kit/inputs/custom_input_field.dart';
 
 CustomButton.rectangle(
   onPressed: () => handleSubmit(),

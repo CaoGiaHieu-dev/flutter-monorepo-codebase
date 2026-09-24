@@ -22,7 +22,8 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 > `PaymentRepositoryImpl extends IBaseRepository` in `data/lib/src/repositories_impl/`, both with a
 > placeholder `ping()`. Generate the domain **first**: the data package then depends on
 > `domain_payment` and registers `@LazySingleton(as: IPaymentRepository)`. Replace `ping()` with
-> steps 3 and 7 below — every other class you write by hand. See
+> the real operations of §5 (repository interface) and §9 (RepositoryImpl) below — every other
+> class you write by hand. See
 > the `ModuleType.domain` / `ModuleType.data` branches in
 > [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 
@@ -382,20 +383,38 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 
 ## 10. Wire it up
 
-Declare dependencies explicitly in both `pubspec.yaml` files:
+Declare dependencies explicitly in both `pubspec.yaml` files. The generator already wrote the
+starting set — for the data package, the three workspace packages below plus `injectable`,
+`freezed_annotation` and `json_annotation`. Add the rest **as your code starts importing them**,
+not before: `check_unused_packages` fails on a dependency declared but never imported, and
+`arch_check` R5 fails on one imported but not declared.
 
 ```yaml
 # modules/payment/data/pubspec.yaml
 dependencies:
-  platform_kernel:
-    path: ../../../platform/kernel
   data_core:
     path: ../../../platform/data_core
   domain_core:
     path: ../../../platform/domain_core
   domain_payment:
     path: ../domain
+
+  # Add when you write the §8 storage owner (StorageManager, StorageValue):
+  # core_storage:
+  #   path: ../../../platform/storage
+  # Add when you write a Retrofit data source (ApiClient, Dio) — plus `dio:`
+  # and `retrofit:` with an empty value, then run dependency_sync:
+  # core_network:
+  #   path: ../../../platform/network
 ```
+
+`platform_kernel` is not on the list: `execute()` / `executeSync()` already route every error
+through `ErrorHandler`, so a repository that only uses them never imports the kernel. Declare it
+only if your own code calls `ErrorHandler`, `getIt` or another kernel symbol directly.
+
+A workspace package is a `path:` dependency and has no version. An external one (`dio`,
+`retrofit`) is written with an empty value — its version lives in `pubspec_dependencies.yaml`, and
+`dart tools/dependency_sync.dart` writes it in.
 
 > [!WARNING]
 > Pub Workspaces share one `package_config.json`, so an **undeclared** dependency still compiles.
@@ -430,9 +449,77 @@ flutter analyze
 
 ---
 
+## 11. Consume it from a feature
+
+A feature reaches this capability through the **use case**, never through `data_payment` —
+`arch_check` R3 forbids a feature importing a `data_*` package. The data package still ships:
+each `generate.dart` run added its layer to the module's entry in every `app_manifest.yaml`
+(`- { id: payment, layers: [domain, data, feature] }` once all three exist), and DI registers
+`PaymentRepositoryImpl` as `IPaymentRepository` from there.
+
+**1. Generate the feature** for the same module. [`01_new_feature.md`](01_new_feature.md) walks
+through a feature with `profile`; everything there applies with `payment` substituted:
+
+```bash
+dart tools/module_generator/generate.dart 1 payment "" 1 1   # Provider + stack route; "" 2 1 for BLoC
+```
+
+**2. Declare the domain** in the feature's `pubspec.yaml`, next to what the generator wrote (the
+Provider template already declares `domain_core`, for `Result`), then run `flutter pub get`:
+
+```yaml
+# modules/payment/feature/pubspec.yaml
+dependencies:
+  domain_payment:
+    path: ../domain
+```
+
+**3. Inject the use case** through the controller's constructor. Injectable resolves it because
+`domain_payment`'s DI module registers every `@injectable` use case — no `getIt` call in the
+controller:
+
+```dart
+// modules/payment/feature/lib/src/provider/payment_provider.dart
+import 'package:domain_payment/domain_payment.dart';
+import 'package:injectable/injectable.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+@injectable
+class PaymentProvider extends BaseProvider<PaymentEntity> {
+  PaymentProvider(this._chargeUseCase);
+
+  final ChargeUseCase _chargeUseCase;
+
+  Future<void> charge(ChargeParams params) => executeOperation(
+    OperationConfig(operation: () => _chargeUseCase(params)),
+  );
+}
+```
+
+`executeOperation` unwraps the `Result` and drives the loading / error / success states. A BLoC
+takes the use case the same way (`PaymentBloc(this._chargeUseCase) : super(...)`) but unwraps the
+`Result` by hand in each handler — see
+[`03_state_management.md`](03_state_management.md) §3.5.
+
+**4. Regenerate** — the controller's constructor changed, so its DI registration did too:
+
+```bash
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/payment/feature/lib
+flutter analyze
+dart tools/arch_check/check.dart
+dart tools/unused_checker/check_unused_packages.dart
+```
+
+The route keeps creating the controller exactly as in
+[`01_new_feature.md`](01_new_feature.md) §5 — `getIt<PaymentProvider>()` at route level, which
+now builds the whole chain: provider ← use case ← `IPaymentRepository` ← data sources.
+
+---
+
 ## Related
 
-- [`01_new_feature.md`](01_new_feature.md) — consume this use case from a feature
+- [`01_new_feature.md`](01_new_feature.md) — the feature side in full (routes, localisation, navigator)
 - [`06_storage.md`](06_storage.md) — key-value storage in depth
 - [`07_database.md`](07_database.md) — relational data with Drift
 - [`08_networking.md`](08_networking.md) — Dio, Retrofit, interceptors

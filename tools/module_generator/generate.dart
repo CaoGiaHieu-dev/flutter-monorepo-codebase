@@ -8,7 +8,7 @@ import 'src/module_type.dart';
 import 'src/pubspec_generator.dart';
 
 void main(List<String> args) async {
-  // Đảm bảo script luôn chạy từ thư mục gốc của dự án (workspace root)
+  // Always run from the workspace root, wherever the script was started.
   final scriptFile = File(Platform.script.toFilePath());
   final rootDir = scriptFile.parent.parent.parent;
   Directory.current = rootDir;
@@ -33,14 +33,14 @@ void main(List<String> args) async {
 
   if (Directory(config.modulePath).existsSync()) {
     stderr.writeln(
-      '[ERROR] Thư mục "${config.modulePath}" đã tồn tại. '
-      'Xoá nó hoặc chọn tên module khác trước khi chạy lại.',
+      '[ERROR] Directory "${config.modulePath}" already exists. '
+      'Remove it or choose another module name, then run again.',
     );
     exit(1);
   }
 
   stdout.writeln(
-    '\n[!] Đang khởi tạo module: ${config.moduleName} tại ${config.modulePath}...',
+    '\n[!] Creating module ${config.moduleName} at ${config.modulePath}...',
   );
 
   // Snapshot the shared files so any later failure can be undone.
@@ -157,7 +157,7 @@ void main(List<String> args) async {
 
     // 6. Register in every app manifest — the only hand-edited composition
     // input.
-    stdout.writeln('[!] Đang đăng ký vào app_manifest.yaml...');
+    stdout.writeln('[!] Registering in app_manifest.yaml...');
     CommonHelpers.registerInAppManifests(
       config.moduleName,
       config.type,
@@ -168,20 +168,20 @@ void main(List<String> args) async {
     // app's path dependencies and `injection.dart`, all between
     // `composer:managed` markers. Writing any of them by hand would leave an
     // entry outside the markers that composer never removes.
-    stdout.writeln('[!] Đang chạy composer sync...');
+    stdout.writeln('[!] Running composer sync...');
     await CommonHelpers.runDart(['tools/composer/composer.dart', 'sync']);
 
     // 8. Run dependency_sync.dart
-    stdout.writeln('[!] Đang đồng bộ dependencies với dependency_sync...');
+    stdout.writeln('[!] Syncing dependency versions (dependency_sync)...');
     await CommonHelpers.runDart(['tools/dependency_sync.dart']);
 
     // 9. Run Toolchain
-    stdout.writeln('[!] Đang chạy flutter pub get...');
+    stdout.writeln('[!] Running flutter pub get...');
     CommonHelpers.noteWorkspaceResolving();
     await CommonHelpers.runFlutter(['pub', 'get']);
 
     if (config.type == ModuleType.feature) {
-      stdout.writeln('[!] Đang chạy flutter gen-l10n...');
+      stdout.writeln('[!] Running flutter gen-l10n...');
       await CommonHelpers.runFlutter(
         ['gen-l10n'],
         workingDirectory: config.modulePath,
@@ -193,13 +193,13 @@ void main(List<String> args) async {
     // the package; and barrels also export generated files present on disk
     // (`module.module.dart`, `lib/src/gen/**`), so the last run must come
     // after codegen.
-    stdout.writeln('[!] Đang sinh barrel files...');
+    stdout.writeln('[!] Generating barrel files...');
     await CommonHelpers.runDart([
       'tools/barrel_generator/generate.dart',
       '${config.modulePath}/lib',
     ]);
 
-    stdout.writeln('[!] Đang chạy build_runner trên workspace...');
+    stdout.writeln('[!] Running build_runner on the workspace...');
     CommonHelpers.noteCodegenStarted();
     await CommonHelpers.runDart([
       'run',
@@ -208,56 +208,61 @@ void main(List<String> args) async {
       '--workspace',
     ]);
 
-    stdout.writeln('[!] Đang sinh lại barrel files sau codegen...');
+    stdout.writeln('[!] Regenerating barrel files after codegen...');
     await CommonHelpers.runDart([
       'tools/barrel_generator/generate.dart',
       '${config.modulePath}/lib',
     ]);
 
-    stdout.writeln('[!] Đang sửa lỗi import với dart fix...');
+    stdout.writeln('[!] Fixing imports with dart fix...');
     await CommonHelpers.runDart(
       ['fix', '--apply'],
       workingDirectory: config.modulePath,
     );
 
     stdout.writeln('\n==========================================');
-    stdout.writeln('[V] Module "${config.moduleName}" đã được tạo thành công!');
+    stdout.writeln('[V] Module "${config.moduleName}" created.');
     stdout.writeln('==========================================');
     if (config.type == ModuleType.feature) {
-      stdout.writeln('\nCác bước cuối cùng cần thực hiện thủ công:');
+      stdout.writeln('\nWhat is left for you to do by hand:');
       stdout.writeln(
-        '1. Hoàn thiện TypedGoRoute / Navigator trong "${config.modulePath}/lib/src/routing/"',
+        '1. Fill in the TypedGoRoute / navigator in "${config.modulePath}/lib/src/routing/"',
       );
       switch (config.routeContribution) {
         case FeatureRouteContribution.featureRoute:
           stdout.writeln(
-            '2. Điền routes vào *FeatureRouteModule (IFeatureRouteModule) — KHÔNG sửa list route trong app_router.dart',
+            '2. Populate routes in the *FeatureRouteModule (IFeatureRouteModule) — do NOT edit the route list in app_router.dart',
           );
           break;
         case FeatureRouteContribution.dashboardTab:
           stdout.writeln(
-            '2. Điền order/path/routes/destination vào *NavDestination (INavDestinationModule)',
+            '2. Populate order/path/routes/destination in the *NavDestination (INavDestinationModule)',
           );
           stdout.writeln(
-            '   ⚠ Chỉ dùng cho tab Bottom Nav chính. Không nhét màn push (login/detail) vào đây.',
+            '   ⚠ For a primary bottom-nav tab only. Pushed screens (login/detail) do not belong here.',
           );
           stdout.writeln(
-            '   Xem docs/{en,vi}/guides/04_routing.md mục Dashboard.',
+            '   See docs/{en,vi}/guides/04_routing.md, the Dashboard section.',
           );
           break;
         case FeatureRouteContribution.none:
           stdout.writeln(
-            '2. Nếu cần lộ diện route: đăng ký IFeatureRouteModule hoặc INavDestinationModule qua DI',
+            '2. To expose routes later: register an IFeatureRouteModule or INavDestinationModule through DI',
           );
           break;
       }
       stdout.writeln(
-        '3. Chạy lại build_runner cho package; hot restart app (DI mới cần full restart)',
+        '3. Added a navigator contract to core_di (platform/di/lib/src/navigators/)? '
+        'Run "dart tools/barrel_generator/generate.dart platform/di/lib" first',
+      );
+      stdout.writeln(
+        '4. Re-run "dart run build_runner build --workspace", then fully '
+        'restart the app — hot reload does not pick up new DI registrations',
       );
       stdout.writeln('==========================================');
     }
   } catch (e) {
-    stderr.writeln('[ERROR] Đã xảy ra lỗi: $e');
+    stderr.writeln('[ERROR] Unexpected error: $e');
     await CommonHelpers.rollback();
     exit(1);
   }

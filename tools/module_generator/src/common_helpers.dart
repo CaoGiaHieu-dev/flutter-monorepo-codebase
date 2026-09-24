@@ -9,7 +9,7 @@ import 'module_type.dart';
 class CommonHelpers {
   static void createDir(String path) {
     Directory(path).createSync(recursive: true);
-    stdout.writeln('  -> Đã tạo thư mục: $path');
+    stdout.writeln('  -> Created directory: $path');
   }
 
   // ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ class CommonHelpers {
   /// reported while the workspace is still pristine.
   static void assertToolchainAvailable() {
     if (useFvm) {
-      stdout.writeln('[INFO] Phát hiện cấu hình FVM. Dùng "fvm dart/flutter".');
+      stdout.writeln('[INFO] FVM config detected. Using "fvm dart/flutter".');
       return;
     }
 
@@ -36,16 +36,18 @@ class CommonHelpers {
           '--version',
         ], runInShell: true);
         if (result.exitCode != 0) {
-          throw Exception('"$executable --version" trả về ${result.exitCode}');
+          throw Exception(
+            '"$executable --version" exited with ${result.exitCode}',
+          );
         }
       } on ProcessException {
         throw Exception(
-          'Không tìm thấy "$executable" trong PATH và cũng không có FVM khả dụng. '
-          'Cài Flutter SDK hoặc chạy "dart pub global activate fvm" trước khi tạo module.',
+          '"$executable" is not on PATH and no usable FVM setup was found. '
+          'Install the Flutter SDK, or run "dart pub global activate fvm", before generating a module.',
         );
       }
     }
-    stdout.writeln('[INFO] Không dùng FVM. Dùng "dart/flutter" toàn cục.');
+    stdout.writeln('[INFO] No FVM. Using the global "dart/flutter".');
   }
 
   /// Runs `dart <args>`, routed through FVM when this repo uses it.
@@ -203,8 +205,8 @@ class CommonHelpers {
     ];
     if (failures.isEmpty && pending.isNotEmpty) {
       stderr.writeln(
-        '[ROLLBACK] Đang tạo lại các file sinh tự động (không theo dõi bởi '
-        'git) để chúng không còn tham chiếu module đã xoá...',
+        '[ROLLBACK] Regenerating untracked generated files so they no '
+        'longer reference the removed module...',
       );
       try {
         if (_workspaceResolved || _codegenStarted) {
@@ -216,29 +218,29 @@ class CommonHelpers {
           pending.removeAt(0);
         }
       } catch (e) {
-        failures.add('tạo lại file sinh tự động ($e)');
+        failures.add('regenerate generated files ($e)');
       }
     }
 
     if (failures.isEmpty) {
       stderr.writeln(
-        '[ROLLBACK] Đã hoàn tác mọi thay đổi. Workspace trở lại nguyên trạng.',
+        '[ROLLBACK] Every change was undone. The workspace is back to its original state.',
       );
       return;
     }
 
     stderr.writeln(
-      '[ROLLBACK] Workspace CHƯA sạch. Không hoàn tác được các mục sau — '
-      'cần dọn tay:',
+      '[ROLLBACK] The workspace is NOT clean. These could not be undone — '
+      'clean them up by hand:',
     );
     for (final failure in failures) {
       stderr.writeln('  - $failure');
     }
     if (pending.isNotEmpty) {
       stderr.writeln(
-        '[ROLLBACK] Sau khi dọn, chạy từ thư mục gốc repo để các file sinh '
-        'tự động (injection.config.dart, module.module.dart) không còn tham '
-        'chiếu module đã xoá:',
+        '[ROLLBACK] Then run these from the repo root so the generated files '
+        '(injection.config.dart, module.module.dart) stop referencing the '
+        'removed module:',
       );
       for (final command in pending) {
         stderr.writeln('    $command');
@@ -311,7 +313,7 @@ class CommonHelpers {
     final manifests = _findManifests(Directory('.'));
     if (manifests.isEmpty) {
       stdout.writeln(
-        '  !! Không tìm thấy app_manifest.yaml — bỏ qua bước ghép vào app.',
+        '  !! No app_manifest.yaml found — skipping app composition.',
       );
       return;
     }
@@ -332,7 +334,7 @@ class CommonHelpers {
     for (final manifest in manifests) {
       final original = manifest.readAsStringSync();
       if (isRegistered(original)) {
-        stdout.writeln('  -> Đã có sẵn trong ${manifest.path}');
+        stdout.writeln('  -> Already listed in ${manifest.path}');
         continue;
       }
 
@@ -347,14 +349,14 @@ class CommonHelpers {
 
       if (!isRegistered(updated)) {
         throw Exception(
-          'Không ghép được "$packageName" vào ${manifest.path}: không tìm thấy '
-          '${layer != null ? 'danh sách `modules:`' : 'nhóm DI `core` (`packages:`)'} '
-          'theo định dạng mong đợi. Thêm tay rồi chạy '
+          'Could not add "$packageName" to ${manifest.path}: no '
+          '${layer != null ? '`modules:` list' : '`core` DI group (`packages:`)'} '
+          'in the expected format. Add it by hand, then run '
           '`dart tools/composer/composer.dart sync`.',
         );
       }
       manifest.writeAsStringSync(updated);
-      stdout.writeln('  -> Đã thêm vào ${manifest.path}');
+      stdout.writeln('  -> Added to ${manifest.path}');
     }
   }
 
@@ -362,7 +364,7 @@ class CommonHelpers {
   static Map _parseManifest(String text) {
     final doc = loadYaml(text);
     if (doc is! Map) {
-      throw Exception('app_manifest.yaml không phải một YAML map.');
+      throw Exception('app_manifest.yaml is not a YAML map.');
     }
     return doc;
   }
@@ -558,7 +560,7 @@ class CommonHelpers {
     ).writeAsStringSync(extTemplate.renderString(values));
 
     stdout.writeln(
-      '  -> Đã tạo l10n.yaml, các file .arb, extension và DI cho localization',
+      '  -> Created l10n.yaml, the .arb files, the l10n extension and its DI registration',
     );
   }
 
@@ -665,7 +667,7 @@ class CommonHelpers {
     ).writeAsStringSync(routeModuleTpl.renderString(values));
 
     stdout.writeln(
-      '  -> Đã tạo template mã nguồn cho ${config.smType.name.toUpperCase()}, Route và Page',
+      '  -> Created the ${config.smType.name.toUpperCase()}, route and page templates',
     );
   }
 
@@ -707,9 +709,9 @@ class CommonHelpers {
     );
     if (!hasDomain) {
       stdout.writeln(
-        '  !! Chưa có domain_${config.nameInput}: RepositoryImpl được tạo mà '
-        'không implements interface nào — tạo domain rồi nối lại '
-        '(xem chú thích trong file).',
+        '  !! No domain_${config.nameInput} yet: the RepositoryImpl implements '
+        'no interface — generate the domain, then wire it up '
+        '(see the comment in the file).',
       );
     }
   }

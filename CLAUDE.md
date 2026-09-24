@@ -71,11 +71,16 @@ dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R10)
 # Verify every repo path the docs name actually exists — Gate 5 of
 # pr_quality_check.yml. Known-absent paths (generated / secret / "create this
 # file yourself") live in tools/docs_check/allowlist.txt with their reason.
+# A `<placeholder>` span only needs its part before the first placeholder to
+# exist. References into a sample bundle removed with remove_sample (all its
+# packages gone; bundles read from tools/sample_manifest.yaml, which
+# remove_sample never edits) print one INFO line per bundle and do not fail.
 dart tools/docs_check/check.dart
-dart tools/docs_check/check.dart --verbose   # + copy-paste allowlist block
+dart tools/docs_check/check.dart --verbose   # + copy-paste allowlist block, removed-sample refs
 
 # Which packages are sample code, and how to delete one safely.
 # Source of truth: tools/sample_manifest.yaml
+# Bundles: auth, home, settings, onboarding, dashboard, splash, cache
 dart tools/sample_cleanup/remove_sample.dart --list
 dart tools/sample_cleanup/remove_sample.dart auth           # dry-run (default)
 dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove

@@ -25,12 +25,11 @@ dependencies:
   # external packages
   injectable:
   get_it:
-{{^isDomain}}
+{{#isFeature}}
+  # gen-l10n output (lib/src/gen/language) imports both.
   flutter_localizations:
     sdk: flutter
   intl:
-{{/isDomain}}
-{{#isFeature}}
   go_router:
   material_ui:
 {{/isFeature}}

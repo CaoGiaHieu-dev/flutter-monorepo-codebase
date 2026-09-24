@@ -19,6 +19,12 @@ import '../shared/app_locator.dart';
 ///   dart tools/sample_cleanup/remove_sample.dart --list
 ///   dart tools/sample_cleanup/remove_sample.dart auth           # preview
 ///   dart tools/sample_cleanup/remove_sample.dart auth --apply   # do it
+///
+/// It never edits [_manifestPath]. After `--apply` the bundle's definition is
+/// still there while its packages are not, and that is how
+/// `tools/docs_check/check.dart` recognises a documentation reference into a
+/// removed sample: it reports those as expected fallout (INFO) instead of
+/// failing CI Gate 5.
 const String _manifestPath = 'tools/sample_manifest.yaml';
 
 /// Shared files every removal rewrites in place.
@@ -53,8 +59,8 @@ final List<String> _deletedDirs = [];
 Future<void> main(List<String> args) async {
   if (!File(_manifestPath).existsSync()) {
     stderr.writeln(
-      '[ERROR] Không tìm thấy $_manifestPath. '
-      'Hãy chạy lệnh này từ thư mục gốc của repo.',
+      '[ERROR] $_manifestPath not found. '
+      'Run this from the repository root.',
     );
     exitCode = 1;
     return;
@@ -74,7 +80,7 @@ Future<void> main(List<String> args) async {
       .where((a) => a.startsWith('-') && !knownFlags.contains(a))
       .toList();
   if (unknown.isNotEmpty) {
-    stderr.writeln('[ERROR] Cờ không hợp lệ: ${unknown.join(', ')}');
+    stderr.writeln('[ERROR] Unknown flag(s): ${unknown.join(', ')}');
     stderr.writeln('');
     _printUsage(stderr);
     exitCode = 64;
@@ -89,14 +95,14 @@ Future<void> main(List<String> args) async {
   final positional = args.where((a) => !a.startsWith('-')).toList();
   if (positional.isEmpty) {
     stderr.writeln(
-      '[ERROR] Thiếu tên bundle. Xem "--list" để biết các lựa chọn.',
+      '[ERROR] Missing bundle name. "--list" shows the choices.',
     );
     exitCode = 64;
     return;
   }
   if (positional.length > 1) {
     stderr.writeln(
-      '[ERROR] Mỗi lần chỉ gỡ một bundle — nhận được: ${positional.join(', ')}',
+      '[ERROR] One bundle per run — got: ${positional.join(', ')}',
     );
     exitCode = 64;
     return;
@@ -106,10 +112,10 @@ Future<void> main(List<String> args) async {
   final bundles = manifest['bundles'] as YamlMap;
   if (!bundles.containsKey(bundleName)) {
     stderr.writeln(
-      '[ERROR] Không có bundle "$bundleName". '
-      'Các bundle hợp lệ: ${bundles.keys.join(', ')}',
+      '[ERROR] No bundle "$bundleName". '
+      'Valid bundles: ${bundles.keys.join(', ')}',
     );
-    exitCode = 1;
+    exitCode = 64;
     return;
   }
 
@@ -128,24 +134,26 @@ Future<void> main(List<String> args) async {
 
 void _printUsage([IOSink? sink]) {
   (sink ?? stdout).writeln('''
-Gỡ một bundle code mẫu khỏi template.
+Remove one sample bundle from the template.
 
   dart tools/sample_cleanup/remove_sample.dart --list
-      In bảng phân loại sample / framework / shell.
+      Print the sample / framework / shell classification and the bundles.
 
   dart tools/sample_cleanup/remove_sample.dart <bundle>
-      Xem trước (dry-run) — KHÔNG ghi gì. Đây là mặc định.
+      Preview (dry run) — writes NOTHING. This is the default.
 
   dart tools/sample_cleanup/remove_sample.dart <bundle> --apply
-      Thực hiện gỡ thật, có rollback nếu bước nào lỗi.
+      Remove it for real, rolling the shared files back if a step fails.
 
-  --verbose: liệt kê đủ mọi tham chiếu tài liệu thay vì vài dòng đầu.
+  --verbose: list every documentation reference instead of the first few.
 
-Cả hai cách đều đếm các tham chiếu trong tài liệu (*.md) tới đường dẫn
-sắp bị xoá — `dart tools/docs_check/check.dart` (CI Gate 5) sẽ fail cho
-tới khi các tham chiếu đó được sửa.
+Both modes count the documentation (*.md) references to paths the removal
+deletes. `dart tools/docs_check/check.dart` (CI Gate 5) reports them as an
+INFO summary per removed bundle and does not fail on them — update the docs
+at your leisure. This tool never edits $_manifestPath: docs_check reads the
+bundle definitions there to recognise a removed sample.
 
-Nguồn phân loại: $_manifestPath
+Classification source: $_manifestPath
 ''');
 }
 
@@ -164,13 +172,14 @@ void _printClassification(YamlMap manifest) {
   });
 
   stdout.writeln('');
-  stdout.writeln('PHÂN LOẠI PACKAGE  (nguồn: $_manifestPath)');
+  stdout.writeln('PACKAGE CLASSIFICATION  (source: $_manifestPath)');
   stdout.writeln('=' * 78);
 
   const labels = {
-    'framework': 'FRAMEWORK — giữ lại. Xoá là vỡ template.',
-    'shell': 'SHELL — giữ lại, nhưng sửa khi thêm/bớt feature.',
-    'sample': 'SAMPLE — xoá thoải mái sau khi đã hiểu.',
+    'framework': 'FRAMEWORK — keep. Deleting it breaks the template.',
+    'shell':
+        'SHELL — keep, but edit its manifest when you add or remove a feature.',
+    'sample': 'SAMPLE — delete freely once you understand it.',
   };
 
   for (final kind in const ['framework', 'shell', 'sample']) {
@@ -186,9 +195,9 @@ void _printClassification(YamlMap manifest) {
 
   final bundles = manifest['bundles'] as YamlMap;
   stdout.writeln('');
-  stdout.writeln('BUNDLE GỠ ĐƯỢC: ${bundles.keys.join(', ')}');
+  stdout.writeln('REMOVABLE BUNDLES: ${bundles.keys.join(', ')}');
   stdout.writeln(
-    '  Xem trước: dart tools/sample_cleanup/remove_sample.dart <bundle>',
+    '  Preview: dart tools/sample_cleanup/remove_sample.dart <bundle>',
   );
   stdout.writeln('');
 }
@@ -202,36 +211,36 @@ Future<void> _removeBundle({
   final packages = manifest['packages'] as YamlMap;
   final pkgNames = (bundle['packages'] as YamlList).cast<String>();
 
-  final mode = apply ? 'ÁP DỤNG THẬT' : 'XEM TRƯỚC (dry-run — không ghi gì)';
+  final mode = apply ? 'APPLYING' : 'PREVIEW (dry run — nothing is written)';
   stdout.writeln('');
-  stdout.writeln('Gỡ bundle "$bundleName"  —  $mode');
+  stdout.writeln('Remove bundle "$bundleName"  —  $mode');
   stdout.writeln('=' * 78);
 
   // --- 1. Directories ------------------------------------------------------
   stdout.writeln('');
-  stdout.writeln('Xoá thư mục package:');
+  stdout.writeln('Package directories to delete:');
   final dirs = <String>[];
   for (final name in pkgNames) {
     final entry = packages[name] as YamlMap?;
     if (entry == null) {
-      stderr.writeln('  [WARN] "$name" không có trong manifest, bỏ qua.');
+      stderr.writeln('  [WARN] "$name" is not in the manifest — skipped.');
       continue;
     }
     final path = entry['path'] as String;
     final exists = Directory(path).existsSync();
     stdout.writeln(
       '  ${exists ? '-' : 'x'} $path'
-      '${exists ? '' : '   (không tồn tại, bỏ qua)'}',
+      '${exists ? '' : '   (absent — skipped)'}',
     );
     if (exists) dirs.add(path);
   }
 
   // --- 2. Shared file edits ------------------------------------------------
   stdout.writeln('');
-  stdout.writeln('Sửa file dùng chung:');
+  stdout.writeln('Shared files to edit:');
   final edits = _planSharedEdits(pkgNames, packages, bundleName: bundleName);
   if (edits.isEmpty) {
-    stdout.writeln('  (không có dòng nào khớp)');
+    stdout.writeln('  (no matching lines)');
   }
   for (final edit in edits) {
     stdout.writeln('  ${edit.file}');
@@ -244,12 +253,12 @@ Future<void> _removeBundle({
   final breaks = bundle['breaks'] as YamlList?;
   if (breaks != null && breaks.isNotEmpty) {
     stdout.writeln('');
-    stdout.writeln('!! SAMPLE KHÁC SẼ VỠ — phải xử lý bằng tay:');
+    stdout.writeln('!! OTHER SAMPLES WILL BREAK — fix these by hand:');
     for (final b in breaks) {
       final m = b as YamlMap;
       stdout.writeln('  * ${m['sample']}  (${m['at']})');
-      stdout.writeln('      vì  : ${m['why']}');
-      stdout.writeln('      sửa : ${m['fix']}');
+      stdout.writeln('      why : ${m['why']}');
+      stdout.writeln('      fix : ${m['fix']}');
     }
   }
 
@@ -257,7 +266,7 @@ Future<void> _removeBundle({
   if (orphans != null && orphans.isNotEmpty) {
     stdout.writeln('');
     stdout.writeln(
-      'Contract ở core_di trở thành code chết (tự quyết định xoá):',
+      'core_di contracts that become dead code (delete them if you like):',
     );
     for (final o in orphans) {
       stdout.writeln('  ? $o');
@@ -274,7 +283,9 @@ Future<void> _removeBundle({
   final safe = bundle['safe_couplings'] as YamlList?;
   if (safe != null && safe.isNotEmpty) {
     stdout.writeln('');
-    stdout.writeln('Liên kết an toàn (getItOrNull + fallback, tự suy biến):');
+    stdout.writeln(
+      'Safe couplings (getItOrNull + fallback, degrade on their own):',
+    );
     for (final s in safe) {
       stdout.writeln('  ok $s');
     }
@@ -283,7 +294,7 @@ Future<void> _removeBundle({
   final note = bundle['note'] as String?;
   if (note != null) {
     stdout.writeln('');
-    stdout.writeln('Ghi chú: $note');
+    stdout.writeln('Note: $note');
   }
 
   // --- 3b. Documentation that will point at deleted paths ------------------
@@ -294,53 +305,55 @@ Future<void> _removeBundle({
   // --- 4. Execute ----------------------------------------------------------
   if (!apply) {
     stdout.writeln('');
-    stdout.writeln('Chưa có gì bị thay đổi. Thêm --apply để thực hiện thật.');
+    stdout.writeln('Nothing was changed. Add --apply to remove it for real.');
     stdout.writeln('');
     return;
   }
 
   stdout.writeln('');
-  stdout.writeln('Đang áp dụng...');
+  stdout.writeln('Applying...');
   _snapshotSharedFiles();
   try {
     for (final edit in edits) {
       File(edit.file).writeAsStringSync(edit.newContent);
-      stdout.writeln('  đã sửa ${edit.file}');
+      stdout.writeln('  edited  ${edit.file}');
     }
     for (final dir in dirs) {
       Directory(dir).deleteSync(recursive: true);
       _deletedDirs.add(dir);
-      stdout.writeln('  đã xoá  $dir');
+      stdout.writeln('  deleted $dir');
     }
     // modules/<id>/ is left empty once its last layer is gone.
     for (final dir in dirs) {
       final parent = Directory(dir).parent;
       if (parent.existsSync() && parent.listSync().isEmpty) {
         parent.deleteSync();
-        stdout.writeln('  đã xoá  ${parent.path}');
+        stdout.writeln('  deleted ${parent.path}');
       }
     }
   } catch (e) {
-    stderr.writeln('[ERROR] Thất bại giữa chừng: $e');
-    stderr.writeln('[INFO] Đang khôi phục các file dùng chung...');
+    stderr.writeln('[ERROR] Failed partway through: $e');
+    stderr.writeln('[INFO] Restoring the shared files...');
     _rollback();
     stderr.writeln(
-      '[INFO] Đã khôi phục file dùng chung. '
-      'Thư mục đã xoá KHÔNG khôi phục được — dùng git để lấy lại.',
+      '[INFO] Shared files restored. Deleted directories CANNOT be '
+      'restored by this tool — recover them with git.',
     );
     exitCode = 1;
     return;
   }
 
   stdout.writeln('');
-  stdout.writeln('Xong. Bước tiếp theo:');
+  stdout.writeln('Done. Next steps:');
   stdout.writeln('  dart tools/composer/composer.dart sync');
   stdout.writeln('  flutter pub get');
   stdout.writeln('  dart run build_runner build --workspace');
   stdout.writeln('  flutter analyze');
+  stdout.writeln('  dart tools/arch_check/check.dart');
   if (docRefs.isNotEmpty) {
     stdout.writeln(
-      '  # sửa ${docRefs.length} tham chiếu tài liệu, rồi kiểm tra lại:',
+      '  # passes; summarises the ${docRefs.length} doc reference(s) to '
+      '"$bundleName" as INFO',
     );
   }
   stdout.writeln('  dart tools/docs_check/check.dart');
@@ -432,13 +445,19 @@ List<_DocRef> _findDocReferences(List<String> removedPaths) {
   // Whether every path fitting [pattern] is one the removal deletes — the
   // same test as docs_check's `_matchesSomething`, run against the tree as
   // it will be. Only patterns under a top-level directory a bundle lives in
-  // can be affected.
+  // can be affected. Like docs_check, a `<placeholder>` span is a template:
+  // only its part before the first placeholder segment is checked.
   final patternCache = <String, bool>{};
   bool patternDies(String pattern) => patternCache.putIfAbsent(pattern, () {
     if (!const ['modules/', 'platform/', 'apps/'].any(pattern.startsWith)) {
       return false;
     }
-    final globbable = pattern.replaceAll(RegExp(r'<[^<>]*>'), '*');
+    final segments = pattern.split('/');
+    final cut = segments.indexWhere((s) => s.contains('<'));
+    final globbable = cut < 0 ? pattern : segments.take(cut).join('/');
+    if (!globbable.contains('*') && !globbable.contains('{')) {
+      return hits(globbable);
+    }
     try {
       final matches = Glob(globbable)
           .listSync(root: '.')
@@ -523,21 +542,24 @@ void _reportDocReferences(List<_DocRef> refs, {required bool applied}) {
     if (!applied) {
       stdout.writeln('');
       stdout.writeln(
-        'Tài liệu: không có tham chiếu nào tới đường dẫn sắp xoá.',
+        'Docs: no references to the paths being removed.',
       );
     }
     return;
   }
   final files = refs.map((r) => r.file).toSet();
-  final sink = applied ? stderr : stdout;
+  // Informational, not an error: docs_check passes on these (see its
+  // removed-sample summary).
+  final sink = stdout;
   sink.writeln('');
   sink.writeln(
-    '!! TÀI LIỆU: ${refs.length} tham chiếu trong ${files.length} file .md '
-    '${applied ? 'đang' : 'sẽ'} trỏ tới đường dẫn đã xoá.',
+    'Docs: ${refs.length} reference(s) in ${files.length} .md file(s) '
+    '${applied ? 'now point' : 'will point'} to removed paths.',
   );
   sink.writeln(
-    '   `dart tools/docs_check/check.dart` (CI Gate 5) sẽ fail cho tới khi '
-    'chúng được sửa hoặc gỡ.',
+    '   Expected: `dart tools/docs_check/check.dart` (CI Gate 5) reports them '
+    'as INFO for this removed bundle and still passes. Update them at your '
+    'leisure.',
   );
   final shown = _verbose ? refs.length : 15;
   for (final ref in refs.take(shown)) {
@@ -545,8 +567,8 @@ void _reportDocReferences(List<_DocRef> refs, {required bool applied}) {
   }
   if (refs.length > shown) {
     sink.writeln(
-      '   … và ${refs.length - shown} tham chiếu nữa'
-      ' — thêm --verbose (hoặc chạy `dart tools/docs_check/check.dart` sau khi gỡ) để xem đủ.',
+      '   … and ${refs.length - shown} more'
+      ' — add --verbose (or run `dart tools/docs_check/check.dart --verbose` after removing) to see them all.',
     );
   }
 }
@@ -666,7 +688,7 @@ void _rollback() {
         file.writeAsStringSync(original);
       }
     } catch (e) {
-      stderr.writeln('  [WARN] không khôi phục được $path ($e)');
+      stderr.writeln('  [WARN] could not restore $path ($e)');
     }
   });
 }

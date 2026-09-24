@@ -62,7 +62,8 @@ thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra 
 
 1. Hoàn thiện `TypedGoRoute` / navigator trong `lib/src/routing/`
 2. Điền nội dung cho stub route module (`routes`, và với tab thì thêm `order`, `path`, `destination`)
-3. Chạy lại `build_runner`, rồi **restart hoàn toàn** app — DI mới không được hot reload nhận
+3. Nếu bạn thêm một hợp đồng navigator vào `core_di` (§7), chạy barrel generator cho `platform/di/lib` trước
+4. Chạy lại `build_runner`, rồi **restart hoàn toàn** app — DI mới không được hot reload nhận
 
 > [!NOTE]
 > FVM được tự phát hiện (`useFvm` in `tools/shared/toolchain.dart`): tool chỉ thêm tiền tố `fvm ` vào lệnh khi có đủ
@@ -74,7 +75,7 @@ thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra 
 
 ## 3. Cấu trúc thư mục
 
-Generator sinh ra cây thư mục dưới đây (cùng các file sinh tự động `gen/`, `*.g.dart` và `module.module.dart`). `widgets/` là thư mục duy nhất nó không tạo — hãy thêm khi viết widget con đầu tiên.
+Generator sinh ra cây thư mục dưới đây (cùng các file sinh tự động `gen/`, `*.g.dart` và `module.module.dart`). `widgets/` được tạo **rỗng**, mà git không theo dõi thư mục rỗng — nó biến mất khỏi commit hay bản clone mới cho tới khi widget con đầu tiên được đặt vào.
 
 ```
 modules/profile/feature/
@@ -87,7 +88,7 @@ modules/profile/feature/
 │   ├── feature_profile.dart  barrel công khai
 │   └── src/
 │       ├── pages/            widget *Page / *Screen
-│       ├── widgets/          widget con *Widget / *Card (tạo khi cần)
+│       ├── widgets/          widget con *Widget / *Card (được tạo rỗng)
 │       ├── provider/         controller (Provider) — là `bloc/` nếu bạn chọn BLoC
 │       ├── routing/          route module + navigator impl
 │       ├── extensions/       extension l10n
@@ -162,9 +163,9 @@ Rồi tới phần đóng góp qua DI — code thật từ
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
 import '../utils/home_path.dart';
@@ -359,8 +360,8 @@ Cài đặt nó ngay trong `routing/` của bạn — code thật từ
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'home_route_module.dart';
 
@@ -379,10 +380,21 @@ Bên gọi ở package khác dùng `getItOrNull<ProfileNavigator>()?.toProfile(c
 ## 8. Hoàn tất và kiểm chứng
 
 ```bash
+# 1. Export ProfileNavigator mới từ barrel của core_di (§7 đã thêm một file vào platform/di/lib)
+dart tools/barrel_generator/generate.dart platform/di/lib
+# 2. Sinh lại DI / route — injectable phải thấy ProfileNavigator qua `package:core_di/core_di.dart`
 dart run build_runner build --workspace
+# 3. Export lại các file mới của feature (và các file được sinh) từ barrel của nó
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
+
+> [!IMPORTANT]
+> Bỏ bước 1 thì `flutter analyze` báo `Undefined name 'ProfileNavigator'` ở navigator impl và ở
+> phần đăng ký được sinh của nó: barrel của `core_di` là file được sinh, nên một file thêm vào
+> `platform/di/lib/src/` sẽ vô hình với package khác cho tới khi chạy barrel generator cho
+> `platform/di/lib`. Điều này đúng với mọi package bạn thêm file vào — chạy lại barrel generator cho
+> `lib/` của nó.
 
 Sau đó **restart hoàn toàn** app (không phải hot reload) để đồ thị DI mới được dựng lại.
 

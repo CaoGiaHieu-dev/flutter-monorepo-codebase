@@ -22,9 +22,9 @@ Package này loại bỏ hoàn toàn các đoạn code lặp lại (boilerplate)
 ViewModel không được viết thủ công các câu lệnh dọn dẹp biến, đóng mở loading, hay try-catch. Thay vào đó, ViewModel ủy quyền toàn bộ tiến trình cho hàm `executeOperation` tích hợp sẵn trong `BaseProvider`:
 
 ```dart
-import 'package:provider_state_management/provider_state_management.dart';
 import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
 import 'package:injectable/injectable.dart';
+import 'package:provider_state_management/provider_state_management.dart';
 
 @injectable
 class LoginProvider extends BaseProvider<UserEntity> {
@@ -152,8 +152,8 @@ Mặc định khi gọi API thất bại, tầng Domain trả về `Failure`. Tu
 
 **Tạo file `auth_error_state.dart` bằng Freezed:**
 ```dart
-import 'package:provider_state_management/provider_state_management.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:provider_state_management/provider_state_management.dart';
 
 part 'auth_error_state.freezed.dart';
 

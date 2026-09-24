@@ -62,7 +62,8 @@ missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 1. Fill in the `TypedGoRoute` / navigator in `lib/src/routing/`
 2. Populate the route module stub (`routes`, and for a tab also `order`, `path`, `destination`)
-3. Re-run `build_runner`, then **full restart** the app — new DI registrations are not picked up by hot reload
+3. If you added a navigator contract to `core_di` (§7), run the barrel generator for `platform/di/lib` first
+4. Re-run `build_runner`, then **full restart** the app — new DI registrations are not picked up by hot reload
 
 > [!NOTE]
 > FVM is auto-detected (`useFvm` in `tools/shared/toolchain.dart`): the tool prefixes its commands with `fvm ` only
@@ -74,7 +75,7 @@ missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 ## 3. Directory layout
 
-The generator produces this tree (plus the generated `gen/`, `*.g.dart` and `module.module.dart` files). `widgets/` is the one folder it does not create — add it with your first sub-widget.
+The generator produces this tree (plus the generated `gen/`, `*.g.dart` and `module.module.dart` files). `widgets/` is created **empty**, and git does not track an empty directory — it disappears from a commit or a fresh clone until your first sub-widget lands in it.
 
 ```
 modules/profile/feature/
@@ -87,7 +88,7 @@ modules/profile/feature/
 │   ├── feature_profile.dart  public barrel
 │   └── src/
 │       ├── pages/            *Page / *Screen widgets
-│       ├── widgets/          *Widget / *Card sub-widgets (create when needed)
+│       ├── widgets/          *Widget / *Card sub-widgets (created empty)
 │       ├── provider/         controllers (Provider) — `bloc/` if you chose BLoC
 │       ├── routing/          route modules + navigator impl
 │       ├── extensions/       l10n extension
@@ -161,9 +162,9 @@ Then the DI contribution — real code from
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
 import '../utils/home_path.dart';
@@ -359,8 +360,8 @@ Implement it inside your own `routing/` — real code from
 
 ```dart
 import 'package:core_di/core_di.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:injectable/injectable.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'home_route_module.dart';
 
@@ -380,10 +381,21 @@ from `NavigatorKeys`.
 ## 8. Finish and verify
 
 ```bash
+# 1. Export the new ProfileNavigator from core_di's barrel (§7 added a file to platform/di/lib)
+dart tools/barrel_generator/generate.dart platform/di/lib
+# 2. Regenerate DI / routes — injectable must see ProfileNavigator through `package:core_di/core_di.dart`
 dart run build_runner build --workspace
+# 3. Re-export your feature's new files (and the generated ones) from its barrel
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
+
+> [!IMPORTANT]
+> Skip step 1 and `flutter analyze` reports `Undefined name 'ProfileNavigator'` in the navigator
+> impl and its generated registration: `core_di`'s barrel is generated, so a file added under
+> `platform/di/lib/src/` is invisible to other packages until the barrel generator runs for
+> `platform/di/lib`. The same holds for any package you add a file to — rerun the barrel generator
+> for its `lib/`.
 
 Then **full restart** the app (not hot reload) so the new DI graph is built.
 

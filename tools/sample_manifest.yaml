@@ -27,6 +27,7 @@ packages:
   # --- Framework: core infrastructure -------------------------------------
   platform_kernel: { kind: framework, path: platform/foundation/kernel }
   platform_app_shell: { kind: framework, path: platform/shell/app_shell }
+  platform_shell_adapters: { kind: framework, path: platform/shell/adapters }
   core_common: { kind: framework, path: platform/foundation/common }
   core_di: { kind: framework, path: platform/foundation/contracts }
   core_base_ui: { kind: framework, path: platform/ui/design_system }
@@ -159,6 +160,7 @@ bundles:
       - "NavigatorKeys.nested('auth') in platform/foundation/contracts/lib/src/routing/navigator_keys.dart"
     breaks: []
     safe_couplings:
+      - "platform_shell_adapters -> IAuthSessionGateway / IAuthSessionState (NetworkConfigImpl, getItOrNull at call time; no token is sent and no RefreshTokenInterceptor is installed)"
       - "feature_home -> IAuthStatusStream (getItOrNull at the route, passed as a factory param; Home shows the signed-out state)"
       - "feature_onboarding -> AuthNavigator (getItOrNull; the button goes to HomeNavigator instead)"
       - "feature_settings -> IAuthActionHandler (getItOrNull; the logout row is hidden)"

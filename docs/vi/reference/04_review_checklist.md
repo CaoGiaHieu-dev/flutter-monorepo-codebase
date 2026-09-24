@@ -157,7 +157,7 @@ flutter analyze
 - [ ] Mọi handler `on<Event>` đều `async` và nhận `(event, emit)`
 - [ ] Dùng đúng loại `ViewState` — `BlocViewState<T>` cho nhánh BLoC, `ViewState` cho nhánh Provider
 - [ ] Contract `core_di` được implement dưới `modules/` (ở bất kỳ tầng nào) được resolve bằng `getItOrNull` / `getAllOrEmpty` khi ở ngoài chính module đó — `arch_check` R8 sạch
-- [ ] Không file nào trong app shell ngoài `injection.dart` import package module — `arch_check` R1 (`platform_app_shell`) và R10 (`apps/*`) sạch
+- [ ] Không file nào trong app shell ngoài `injection.dart` import package module — `arch_check` R1 (`platform_app_shell`, `platform_shell_adapters`) và R10 (`apps/*`) sạch
 - [ ] Mọi kích thước đi qua `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; không double thô, không dạng bare `16.h` (`arch_check` R7 chặn)
 - [ ] Design token gọi kèm context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, không dùng getter trần, không scale hai lần
 - [ ] Giá trị cần dùng sau `await` được đọc từ context **trước** đó, không giữ context xuyên qua

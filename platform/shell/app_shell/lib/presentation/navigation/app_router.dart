@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 
-import '../../di/app_boot_storage.dart';
 import '../widgets/navigator_wrapper_widget.dart';
 import '../widgets/undefine_route_widget.dart';
 

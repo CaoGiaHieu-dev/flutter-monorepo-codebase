@@ -230,7 +230,7 @@ The two refresh getters default to `null`, so in an app with no refresh endpoint
 The implementation delegates each value to whoever actually owns it, rather than reading storage itself:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_config_impl.dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(this._languageStorage);
@@ -261,7 +261,7 @@ class NetworkConfigImpl implements NetworkConfig {
 ```
 
 > [!IMPORTANT]
-> `NetworkConfigImpl` imports no module. It reads the token through `IAuthSessionGateway`, resolved with `getItOrNull` at call time rather than injected, so it constructs whether or not an auth module is in the build and no DI ordering can break it. With no gateway registered, `onRefreshToken` returns null — and `ApiClient` installs `RefreshTokenInterceptor` **only** when that is non-null, so a build without auth gets no refresh interceptor rather than one that can never succeed. `arch_check` R1 keeps it that way: it lives in `platform_app_shell`, and a `platform/` package may not import a module. See [`05_di.md`](05_di.md).
+> `NetworkConfigImpl` imports no module. It reads the token through `IAuthSessionGateway`, resolved with `getItOrNull` at call time rather than injected, so it constructs whether or not an auth module is in the build and no DI ordering can break it. With no gateway registered, `onRefreshToken` returns null — and `ApiClient` installs `RefreshTokenInterceptor` **only** when that is non-null, so a build without auth gets no refresh interceptor rather than one that can never succeed. `arch_check` R1 keeps it that way: it lives in `platform_shell_adapters`, and a `platform/` package may not import a module. See [`05_di.md`](05_di.md).
 
 ---
 
@@ -270,7 +270,7 @@ class NetworkConfigImpl implements NetworkConfig {
 `_refreshSession` hands the work to `IAuthSessionGateway`, which `data_auth` implements: the repository refreshes and persists the credentials, and the gateway re-reads the token from its owner. The config never persists anything itself:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_config_impl.dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
 Future<String?> _refreshSession() async => await _session?.refreshToken();
 
 // modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
@@ -409,7 +409,7 @@ if (hashes != null && hashes.isNotEmpty) {
 `NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. Without a second binding, `getItOrNull<SslPinningConfig>()` returns `null` and pinning is skipped on every flavour, production included. The binding that prevents it:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_binding_module.dart
+// platform/shell/adapters/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
 /// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
@@ -594,7 +594,7 @@ Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_doma
 - [ ] Login, refresh, and any call whose `401` is not "session expired" set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] `NetworkConfig` impl stays `@LazySingleton` (never eager)
 - [ ] `sslPinningHashes` populated with ≥2 pins before shipping
-- [ ] `SslPinningConfig` bound explicitly in a `@module` — check `platform_app_shell`'s generated `lib/di/module.module.dart`
+- [ ] `SslPinningConfig` bound explicitly in a `@module` — check `platform_shell_adapters`' generated `lib/di/module.module.dart`
 - [ ] No credential ever logged verbatim
 
 ## See also

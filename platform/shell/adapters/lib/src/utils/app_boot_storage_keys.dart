@@ -1,4 +1,4 @@
-/// Physical storage key owned exclusively by the app shell's `AppBootStorage`.
+/// Physical storage key owned exclusively by `platform_shell_adapters`' `AppBootStorage`.
 class AppBootStorageKeys {
   AppBootStorageKeys._();
 

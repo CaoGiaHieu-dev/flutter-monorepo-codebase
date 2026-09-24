@@ -1,4 +1,4 @@
-/// Physical storage key owned exclusively by the app shell's `LanguageStorageImpl`.
+/// Physical storage key owned exclusively by `platform_shell_adapters`' `LanguageStorageImpl`.
 class LanguageStorageKeys {
   LanguageStorageKeys._();
 

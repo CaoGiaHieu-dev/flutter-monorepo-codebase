@@ -20,18 +20,34 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 | Nhóm | Thư mục | Package (thư mục) | Thứ thuộc về đây | Được phụ thuộc vào |
 |:--|:--|:--|:--|:--|
-| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | Nền mà mọi package khác dựng lên: service locator và xử lý lỗi, các hợp đồng DI giữa module, helper gắn với Flutter. Không I/O, không widget | không gì khác trong `platform/` |
-| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | Hợp đồng nền của tầng domain và data — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — mà `modules/*/domain` và `modules/*/data` mở rộng | foundation |
-| **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Cơ chế với ra ngoài tiến trình — HTTP, lưu trữ key–value, SQLite, push. Chỉ cơ chế: không key, bảng hay endpoint của module sản phẩm nào. Nhóm mặc định của `generate.dart 4` / `5` | foundation, layers |
-| **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scale và layout thích ứng, design token, theme và chuỗi dùng chung, thư viện widget dùng chung | foundation, layers |
-| **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | Lớp nền quản lý state; mỗi feature chọn một | foundation, layers, ui |
-| **shell** | `platform/shell/` | `platform_app_shell` (`app_shell/`) | App shell mà mọi app compose: boot, lắp ráp router, material wrapper, storage adapter | mọi nhóm khác |
+| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | Nền mà mọi package khác dựng lên: service locator và xử lý lỗi, các hợp đồng DI giữa module, helper gắn với Flutter. Không I/O, không widget, không kiểu transport | foundation, `domain_core` |
+| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | Hợp đồng nền của tầng domain và data — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — mà `modules/*/domain` và `modules/*/data` mở rộng | `domain_core`: không gì. `data_core`: foundation, `domain_core` |
+| **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Cơ chế với ra ngoài tiến trình — HTTP, lưu trữ key–value, SQLite, push. Chỉ cơ chế: không key, bảng hay endpoint của module sản phẩm nào. Nhóm mặc định của `generate.dart 4` / `5` | foundation, layers — không bao giờ một package infra khác |
+| **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scale và layout thích ứng, design token, theme và chuỗi dùng chung, thư viện widget dùng chung | foundation, ui — không bao giờ state, infra hay shell |
+| **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | Lớp nền quản lý state, và các widget gắn với nó (`LoadMoreListView`); mỗi feature chọn một | foundation, layers, ui |
+| **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | Các adapter hạ tầng mà mọi app đăng ký (`NetworkConfigImpl`, storage adapter, `AppBootStorage`); app shell mà mọi app compose: boot, lắp ráp router, material wrapper, state cấp app | mọi nhóm platform (`app_shell → adapters`, không bao giờ ngược lại) |
 
-Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← toàn bộ platform/`. Và, như cũ, không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` chưa kiểm chiều giữa các nhóm — cho tới khi kiểm, review giữ luật này. Hiện có ba cạnh đi ngược chiều, và sẽ còn đó cho tới khi luật được cưỡng chế và từng cạnh được gỡ bỏ hoặc được duyệt:
+Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← toàn bộ platform/`. `platform_kernel → domain_core` là một phần của thiết kế, không phải ngoại lệ: `ErrorHandler` sinh ra `AppFailure` (cạnh R1 đã duyệt). Và, như cũ, không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` chưa kiểm chiều giữa các nhóm — cho tới khi kiểm, review giữ luật này.
 
-- `platform_kernel` (foundation) → `domain_core` (layers) — cạnh R1 đã duyệt: `ErrorHandler` sinh ra `AppFailure`.
-- `core_common` (foundation) → `core_responsive` (ui) — các page transition trong `src/routing/page_transitions/` scale qua nó.
-- `core_ui_kit` (ui) → `provider_state_management` (state) — widget của nó vẽ `ViewState`. Cạnh ngược lại vẫn bị cấm (§ 2 của `.agents/AGENTS.md`): nó sẽ tạo vòng.
+Đồ thị package tuân theo chiều này **không có ngoại lệ nào**. Ba cạnh từng đi ngược chiều; cả ba đều được gỡ bỏ, không phải được duyệt:
+
+- `core_common` (foundation) → `core_responsive` (ui). `BottomTransitionPage`, widget duy nhất scale qua nó, đã chuyển sang `core_ui_kit` (`navigation/`); khoá dọc cho màn hình cỡ điện thoại của `AppInitializer` so với một hằng số private 600 px (breakpoint `medium` của Material 3).
+- `core_ui_kit` (ui) → `provider_state_management` (state). `LoadMoreListView` / `LoadingMoreWidget` — hai widget duy nhất của kit gắn với `LoadMoreMixin` — đã chuyển vào `provider_state_management` (`src/base_view/loading_more_widget.dart`), package được phép phụ thuộc `ui`. Kit giờ không khai package quản lý state nào.
+- `platform_kernel` → `dio`. Phần ánh xạ Dio → `AppFailure` đã chuyển sang `core_network` thành `DioFailureClassifier`, được đăng ký vào `ErrorHandler` (§ 1, § 6).
+
+Hai cạnh nhẹ hơn cũng được gỡ theo: `core_storage` giờ lấy `TypeHelper` từ `platform_kernel` thay vì cả `core_common`, và `data_auth` không còn khai `flutter` mà nó không dùng.
+
+Đồ thị ở cấp nhóm (mũi tên = "phụ thuộc vào"; mọi cạnh package đều rơi vào một trong các dòng này):
+
+```text
+layers/domain  -> (nothing)
+foundation     -> foundation, layers/domain
+layers/data    -> foundation, layers/domain
+infra          -> foundation, layers/domain            (no infra -> infra)
+ui             -> foundation, ui
+state          -> foundation, layers/domain, ui
+shell          -> foundation, infra, ui, state, shell
+```
 
 Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/generate.dart 4 <name>` đặt nó ở đó; truyền `--group <group>` cho nhóm khác.
 
@@ -41,24 +57,24 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 
 Đáy của ngăn xếp hạ tầng là hai package, tách theo đúng một câu hỏi: *có cần Flutter không?*
 
-**`platform_kernel`** là Dart thuần — không có `flutter` trong dependency, `arch_check` R9 cưỡng chế điều đó. Phụ thuộc workspace duy nhất của nó là `domain_core`, để lấy `AppFailure` mà `ErrorHandler` sinh ra. Hãy phụ thuộc thẳng vào nó, trừ khi bạn cần thứ gì gắn với Flutter.
+**`platform_kernel`** là Dart thuần — không có `flutter` trong dependency, `arch_check` R9 cưỡng chế điều đó, và cũng không transport: nó không gọi tên kiểu nào của `dio`. Phụ thuộc workspace duy nhất của nó là `domain_core`, để lấy `AppFailure` mà `ErrorHandler` sinh ra. Hãy phụ thuộc thẳng vào nó, trừ khi bạn cần thứ gì gắn với Flutter.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
 | Config | `src/config/` | `SslPinningConfig` |
 | Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
-| Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`). `ErrorHandler.onUnclassifiedError` là một callback thường cho những exception nó không phân loại được — app shell trỏ nó tới `IErrorReporter` tuỳ chọn ([`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting)) |
+| Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`). `ErrorClassifier` + `ErrorHandler.registerClassifier` cho phép package sở hữu một kiểu exception tự ánh xạ nó — `core_network` đăng ký `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` là một callback thường cho những exception nó không phân loại được — app shell trỏ nó tới `IErrorReporter` tuỳ chọn ([`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting)) |
 | Extension | `src/extensions/` | `bool`, `Enum`, `List`, `String` — không có định dạng `DateTime` hay `num`: ngày, giờ và tiền tệ phụ thuộc locale, nên hãy định dạng bằng `DateFormat` / `NumberFormat` của `intl` với locale hiện tại |
 | Utils **và constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
-**`core_common`** là nửa gắn với Flutter. Nó khai ba phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên; `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`; và `core_di`, cho `IAnalytics` tuỳ chọn mà `RouteAwareWidget` báo lượt xem màn hình tới.
+**`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên; và `core_di`, cho `IAnalytics` tuỳ chọn mà `RouteAwareWidget` báo lượt xem màn hình tới. Nó không phụ thuộc gì trong nhóm `ui`: `BottomTransitionPage` giờ nằm ở `core_ui_kit`.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Config | `src/config/` | `AppConfig` (flavor, design size, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình — chỉ khoá dọc trên màn hình cỡ điện thoại, system UI) |
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
-| Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transition |
+| Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget` |
 | Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
 
 ### Những gì *không* thuộc về đây, và vì sao
@@ -90,7 +106,7 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 | Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
 | Action handler | `src/actions/` | `IAuthActionHandler` — hành động UI xuyên feature (vd đăng xuất) |
 | Agnostic stream | `src/agnostic_streams/` | `IAuthStatusStream` — chia sẻ state giữa feature Provider và feature BLoC |
-| Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong app shell |
+| Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong package adapter của app shell (`platform_shell_adapters`) |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
 
@@ -149,10 +165,10 @@ Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là
 
 Cấu trúc phẳng (không có `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
-Nó phụ thuộc `core_common`, `core_base_ui`, `core_responsive` và `provider_state_management` — không bao giờ phụ thuộc một feature hay `data_*`.
+Nó phụ thuộc `core_common`, `core_base_ui` và `core_responsive` — không bao giờ phụ thuộc một package quản lý state, infra, một feature hay `data_*`. `navigation/` còn chứa `BottomTransitionPage`, một `Page` hiển thị route go_router dưới dạng modal bottom sheet (chuyển từ `core_common` sang đây vì bo góc của nó scale qua `core_responsive`).
 
 > [!NOTE]
-> Phụ thuộc chạy **một chiều**: `core_ui_kit -> provider_state_management`. Cạnh ngược lại sẽ khép một chu trình ngay bên trong vòng core, nên `provider_state_management` tự mang `DefaultLoadingWidget` / `DefaultEmptyWidget` của riêng nó thay vì mượn widget có thương hiệu từ đây.
+> Phụ thuộc chạy **một chiều**: `state -> ui`. `provider_state_management` được phụ thuộc nhóm ui (`LoadMoreListView` của nó scale qua `core_responsive`); `core_ui_kit` không phụ thuộc package quản lý state nào. Vì vậy widget gắn với `LoadMoreMixin` hay `ViewState` nằm ở `provider_state_management`, không ở đây — đó là nơi `LoadMoreListView` / `LoadingMoreWidget` đã chuyển tới. `provider_state_management` cũng vẫn tự mang `DefaultLoadingWidget` / `DefaultEmptyWidget` thay vì mượn widget có thương hiệu từ đây.
 
 ### Quy tắc UI-agnostic
 
@@ -270,8 +286,11 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 | Interceptor | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handler | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler` |
 | Constants | `src/utils/network_constants.dart` | Timeout, tên header, tiền tố `Bearer`, extra key, log tag |
+| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` 1003, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
 
-`NetworkConfig` được hiện thực **ở app shell**, không phải ở đây — đó chính là điều giữ cho `core_network` không dính bất kỳ phụ thuộc storage nào. Hai callback refresh mặc định `null`, nên client không có endpoint refresh sẽ đơn giản trả `401` nguyên vẹn cho nơi gọi.
+`DioFailureClassifier` là cách `ErrorHandler` của kernel biết về Dio mà không import nó: một `@singleton` eager trong DI module của package này, có `@PostConstruct` gọi `ErrorHandler.registerClassifier`. Module chạy trong nhóm DI `core`, nên classifier được đăng ký trước khi có bất kỳ Dio client nào (tất cả đều lazy) và trước khi repository nào chạy; constructor của `ApiClient` đăng ký lại lần nữa, idempotent, cho client dựng ngoài DI. Unit test nào đẩy một repository tới `DioException` mà không qua DI thì gọi `DioFailureClassifier.ensureRegistered()` trước. DI smoke test của các app khẳng định việc đăng ký này.
+
+`NetworkConfig` được hiện thực **ở package adapter của app shell** (`platform_shell_adapters`), không phải ở đây — đó chính là điều giữ cho `core_network` không dính bất kỳ phụ thuộc storage nào. Hai callback refresh mặc định `null`, nên client không có endpoint refresh sẽ đơn giản trả `401` nguyên vẹn cho nơi gọi.
 
 > [!CAUTION]
 > **SSL pinning chỉ tốt bằng danh sách hash của nó.** `sslPinningHashes` hiện trả `const []`, tức pinning đang tắt. `AppInitializer` ghi log mức `ERROR` mỗi khi danh sách rỗng hoặc config chưa đăng ký trên bất kỳ bản build nào không bỏ qua kiểm tra certificate — tức mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor (được coi như `prod` về TLS), nên lỗ hổng này hiện rõ chứ không im lặng — nhưng nó vẫn là lỗ hổng cho tới khi bạn điền hash vào. Xem [hướng dẫn networking](../guides/08_networking.md).
@@ -288,7 +307,7 @@ Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa pres
 |:--|:--|
 | `StorageInterface` | Hợp đồng cho backend |
 | `StorageManager` | `@singleton`; phân giải backend theo `StorageType`, khởi tạo backend secure trước rồi tới các backend khác qua `@PostConstruct(preResolve: true)` — secure đi trước vì lần mở đầu tiên nó xoá sạch namespace keystore, nơi cũng chứa master key của backend pref |
-| `StorageValue<T>` | Bọc phản ứng quanh một key — `ChangeNotifier` + `Stream` broadcast, cache trong RAM, tự ghi xuống đĩa khi set |
+| `StorageValue<T>` | Bọc phản ứng quanh một key — `ChangeNotifier` + `Stream` broadcast, cache trong RAM, tự ghi xuống đĩa khi set. Notify sau `dispose` là no-op (`isDisposed`). Phụ thuộc workspace duy nhất của package là `platform_kernel` (`TypeHelper`) |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (có phần cứng hỗ trợ) |
 | `ObfuscatedString` / `ObfuscatedBytes` | Che dữ liệu trong RAM |
 | `PrefStorageImpl` / `SecureStorageImpl` | Nội bộ, phân giải qua `@Named('Pref')` / `@Named('Secure')` |
@@ -306,9 +325,9 @@ Mỗi package tiêu thụ tự khai `StorageValue` của mình qua `StorageManag
 | Chủ sở hữu | Package | Key | Backend |
 |:--|:--|:--|:--|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `ThemeStorageImpl` | `platform_app_shell` | `themeMode` | pref |
-| `LanguageStorageImpl` | `platform_app_shell` | `locale` | pref |
-| `AppBootStorage` | `platform_app_shell` | `viewed_onboard` | pref |
+| `ThemeStorageImpl` | `platform_shell_adapters` | `themeMode` | pref |
+| `LanguageStorageImpl` | `platform_shell_adapters` | `locale` | pref |
+| `AppBootStorage` | `platform_shell_adapters` | `viewed_onboard` | pref |
 
 Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước cụ thể.
 
@@ -417,15 +436,16 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `core_di` | *(không có)* |
 | `core_responsive` | *(không có)* |
 | `platform_kernel` | `domain_core` *(ngoại lệ đã duyệt — `ErrorHandler` sinh ra `AppFailure`)* |
-| `core_common` | `platform_kernel`, `core_responsive`, `core_di` |
+| `core_common` | `platform_kernel`, `core_di` |
 | `core_network` | `platform_kernel` |
 | `core_notifications` | `platform_kernel` |
-| `core_storage` | `core_common` |
+| `core_storage` | `platform_kernel` |
 | `data_core` | `platform_kernel`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
-| `bloc_state_management` | `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
-| `provider_state_management` | `core_common`, `domain_core` *(ngoại lệ đã duyệt)* |
-| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
-| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_storage`, `core_ui_kit`, `provider_state_management` |
+| `bloc_state_management` | `platform_kernel`, `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
+| `provider_state_management` | `core_common`, `core_responsive`, `domain_core` *(ngoại lệ đã duyệt)* |
+| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive` |
+| `platform_shell_adapters` | `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (chỉ cho `RetryDialog`) |
+| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |
 
 Không mũi tên nào trong bảng này trỏ tới `modules/*/feature` hay `modules/*/data` — đó là bất biến cần giữ.

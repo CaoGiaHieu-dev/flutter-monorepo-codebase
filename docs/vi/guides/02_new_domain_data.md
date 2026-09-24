@@ -364,7 +364,8 @@ khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
 > [!WARNING]
 > **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc `ErrorHandler._classify` (nằm sau
 > `handleError`) trong [`error_handler.dart`](../../../platform/foundation/kernel/lib/src/error/error_handler.dart):
-> nó xử lý `AppException`, `DioException`, `SocketException`, `HttpException` và `FormatException`
+> nó xử lý `AppException`, mọi thứ mà một `ErrorClassifier` đã đăng ký nhận (`DioFailureClassifier`
+> của `core_network` ánh xạ `DioException`), `SocketException`, `HttpException` và `FormatException`
 > — nhưng **không** có `FirebaseException`, `FirebaseAuthException` hay `PlatformException`. Mọi
 > lỗi Firebase vì thế rơi vào nhánh mặc định:
 >
@@ -376,8 +377,9 @@ khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
 > ```
 >
 > Ở bản release, sai mật khẩu và mất mạng là không phân biệt được — cả hai đều hiện
-> *"Unknown error occurred"*. Nếu package của bạn dùng Firebase, hãy bổ sung nhánh xử lý trước khi
-> dựa vào mã lỗi ở UI.
+> *"Unknown error occurred"*. Nếu package của bạn dùng Firebase, hãy đăng ký một `ErrorClassifier` cho
+> exception của nó (`ErrorHandler.registerClassifier`, từ DI module của package — như cách
+> `DioFailureClassifier` làm) trước khi dựa vào mã lỗi ở UI.
 
 ---
 

@@ -34,6 +34,9 @@
 # The shared app shell. Infra maintains it, but every app boots through it, so
 # the people who own the apps review changes to it too.
 /platform/shell/app_shell/      @your-org/infra @your-org/tech-leads
+# Its infrastructure adapters (NetworkConfig, storage adapters, boot flag) —
+# every app registers them, so they are reviewed like the shell itself.
+/platform/shell/adapters/       @your-org/infra @your-org/tech-leads
 
 # ---------------------------------------------------------------------------
 # Modules — one vertical slice, one owning team.

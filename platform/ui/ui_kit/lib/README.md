@@ -14,8 +14,8 @@ Lives under `platform/` rather than `modules/*/feature/` on purpose: it is a sha
 lib/
 ├── buttons/           # CustomButton and variants
 ├── inputs/            # CustomInputField
-├── feedback/          # LoadingWidget, EmptyWidget, LoadingMoreWidget
-├── navigation/        # AppBarCustom, DotDivider
+├── feedback/          # LoadingWidget, EmptyWidget (LoadMoreListView / LoadingMoreWidget live in provider_state_management)
+├── navigation/        # AppBarCustom, DotDivider, BottomTransitionPage
 ├── media/             # Cached network image
 ├── layout/            # KeepAlive, refresh, text scale helpers
 ├── dialogs/           # AppDialog, overlays, toast, bottom sheets

@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:dio/dio.dart';
-
 import '../utils/error_codes.dart';
+import 'error_classifier.dart';
 import 'exceptions.dart';
 import 'failures.dart';
 
@@ -13,8 +12,12 @@ import 'failures.dart';
 /// It ensures consistent error handling across all layers of the application.
 ///
 /// The error handler follows these transformation rules:
-/// - Network-related exceptions → NetworkFailure
-/// - HTTP error responses → ServerFailure
+/// - [AppException]s → the matching failure
+/// - Types a registered [ErrorClassifier] recognises → its failure (the
+///   kernel names no transport type: `core_network` registers the Dio
+///   classifier — timeouts/connection → NetworkFailure, HTTP error
+///   responses → ServerFailure / AuthFailure)
+/// - Network-related `dart:io` exceptions → NetworkFailure
 /// - Authentication errors → AuthFailure
 /// - Storage errors → StorageFailure
 /// - Validation errors → ValidationFailure
@@ -73,6 +76,40 @@ class ErrorHandler {
     }
   }
 
+  /// The classifiers [handleError] asks before its own rules — see
+  /// [ErrorClassifier]. Registered by the package that owns the error type,
+  /// from its DI module (`core_network` registers `DioFailureClassifier`
+  /// while the `core` DI group initialises, before any request is made).
+  static final List<ErrorClassifier> _classifiers = [];
+
+  /// Adds [classifier] after those already registered.
+  ///
+  /// Idempotent per type: registering a second instance of the same runtime
+  /// type replaces the first in place, so a module initialised twice (a test
+  /// that runs `configureDependencies` per case) never stacks copies.
+  static void registerClassifier(ErrorClassifier classifier) {
+    final index = _classifiers.indexWhere(
+      (c) => c.runtimeType == classifier.runtimeType,
+    );
+    if (index == -1) {
+      _classifiers.add(classifier);
+    } else {
+      _classifiers[index] = classifier;
+    }
+  }
+
+  /// Removes every registered classifier of [classifier]'s runtime type.
+  /// Returns whether one was registered.
+  static bool unregisterClassifier(ErrorClassifier classifier) {
+    final before = _classifiers.length;
+    _classifiers.removeWhere((c) => c.runtimeType == classifier.runtimeType);
+    return _classifiers.length != before;
+  }
+
+  /// The registered classifiers, in the order [handleError] asks them.
+  static List<ErrorClassifier> get classifiers =>
+      List.unmodifiable(_classifiers);
+
   /// Called with every error [handleError] could not classify — the ones
   /// that become the generic "Unknown error occurred" failure.
   ///
@@ -113,9 +150,13 @@ class ErrorHandler {
       return _handleAppException(error);
     }
 
-    // Handle Dio HTTP exceptions
-    if (error is DioException) {
-      return _handleDioException(error);
+    // Types owned by other packages (Dio's `DioException`, registered by
+    // `core_network`), asked in registration order.
+    if (error is Object) {
+      for (final classifier in _classifiers) {
+        final failure = classifier.classify(error);
+        if (failure != null) return failure;
+      }
     }
 
     // Handle platform-specific exceptions
@@ -164,99 +205,6 @@ class ErrorHandler {
       service: (message, code) => ServiceFailure(message: message, code: code),
       unknown: (message, code) => ServerFailure(message: message, code: code),
     );
-  }
-
-  /// Creates appropriate failure based on HTTP status code.
-  static AppFailure<dynamic> _createFailureFromStatusCode(
-    int? statusCode,
-    String message,
-  ) {
-    if (statusCode == null) {
-      return ServerFailure(message: message, code: 500);
-    }
-
-    if (statusCode >= 400 && statusCode < 500) {
-      // Client errors (4xx)
-      if (statusCode == 401 || statusCode == 403) {
-        return AuthFailure(message: message, code: statusCode);
-      }
-      return ServerFailure(message: message, code: statusCode);
-    }
-
-    // Server errors (5xx) or unknown
-    return ServerFailure(message: message, code: statusCode);
-  }
-
-  /// Transforms Dio HTTP exceptions to failures
-  static AppFailure<dynamic> _handleDioException(DioException exception) {
-    switch (exception.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        return const NetworkFailure(message: 'Connection timeout', code: 1003);
-
-      case DioExceptionType.badResponse:
-        final response = exception.response;
-        return _createFailureFromStatusCode(
-          response?.statusCode,
-          _messageOf(response),
-        );
-
-      case DioExceptionType.cancel:
-        return const ServerFailure(
-          message: 'Request was cancelled',
-          code: ErrorCodes.REQUEST_CANCELLED,
-        );
-
-      case DioExceptionType.connectionError:
-        return const NetworkFailure(message: 'Connection error', code: 1005);
-
-      case DioExceptionType.badCertificate:
-        return const NetworkFailure(message: 'Certificate error', code: 1006);
-
-      case DioExceptionType.transformTimeout:
-        return const NetworkFailure(
-          message: 'Transform timeout error',
-          code: 1008,
-        );
-
-      case DioExceptionType.unknown:
-        return NetworkFailure(
-          message: exception.message ?? 'Unknown network error',
-          code: 1007,
-        );
-    }
-  }
-
-  /// The user-facing message of an error response.
-  ///
-  /// Backends disagree on the shape of `message`: a plain string, a list of
-  /// validation messages (NestJS's `{"message": ["email must be an
-  /// email"]}`), an object, a number. Reading it as a `String` threw a
-  /// `TypeError` for every shape but the first. Falls back to the HTTP
-  /// status message, then to a generic one, when the body carries nothing
-  /// usable — a non-map body included.
-  static String _messageOf(Response<dynamic>? response) {
-    final data = response?.data;
-    final fromBody = data is Map ? _textOf(data['message']) : null;
-    return fromBody ?? _textOf(response?.statusMessage) ?? 'Server error';
-  }
-
-  /// [value] as display text, or `null` when it holds none.
-  ///
-  /// A list is joined one entry per line, skipping entries with no text;
-  /// anything else that is not a string goes through `toString`.
-  static String? _textOf(Object? value) {
-    if (value == null) return null;
-    if (value is String) {
-      final text = value.trim();
-      return text.isEmpty ? null : text;
-    }
-    if (value is Iterable) {
-      final lines = value.map(_textOf).whereType<String>();
-      return lines.isEmpty ? null : lines.join('\n');
-    }
-    return _textOf(value.toString());
   }
 
   /// Creates a network failure for connection issues

@@ -44,7 +44,8 @@ flutter-monorepo-codebase/
 │   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
 │   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
 │   └── shell/                     # App shell mà mọi app compose
-│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapter — dùng chung cho mọi app
+│       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, storage adapter theme/ngôn ngữ, AppBootStorage
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app — dùng chung cho mọi app
 ├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
 │   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
 │   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
@@ -79,17 +80,18 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
 | `platform_kernel` | `platform/foundation/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
-| `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, các storage adapter cho theme/ngôn ngữ/cờ boot, `NetworkConfigImpl`. Không import module nào |
-| `core_common` | `platform/foundation/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom` + page transition, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
+| `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Không import module nào |
+| `platform_shell_adapters` | `platform/shell/adapters` | Các adapter hạ tầng của shell: storage adapter cho theme/ngôn ngữ/cờ boot và `NetworkConfigImpl` (+ binding `SslPinningConfig`). Không import module nào |
+| `core_common` | `platform/foundation/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom`, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
 | `core_di` | `platform/foundation/contracts` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `platform/ui/design_system` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
-| `core_ui_kit` | `platform/ui/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
-| `core_network` | `platform/infra/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
+| `core_ui_kit` | `platform/ui/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation (kể cả `BottomTransitionPage`) + `SharedUiConstants` |
+| `core_network` | `platform/infra/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning, `DioFailureClassifier` (Dio → `AppFailure`) |
 | `core_storage` | `platform/infra/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
 | `core_database` | `platform/infra/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
 | `core_responsive` | `platform/ui/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale (mặc định chỉ thu nhỏ); lớp kích thước cửa sổ và các widget layout thích ứng (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
 | `core_notifications` | `platform/infra/notifications` | Service push notification + `NotificationConstants` của riêng nó |
-| `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
+| `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin`, `LoadMoreListView` |
 | `bloc_state_management` | `platform/state/bloc` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
 ### Domain — `modules/*/domain`

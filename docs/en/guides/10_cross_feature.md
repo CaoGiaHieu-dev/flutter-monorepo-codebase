@@ -244,7 +244,7 @@ abstract class IThemeStorage {
 `package:flutter/material.dart` type. The domain layer is pure Dart and **cannot import Flutter**,
 so routing theme through it is impossible by construction — not a shortcut, a hard constraint.
 
-The implementation lives in the app shell (`platform/shell/app_shell/lib/di/theme_storage_impl.dart`) because that is
+The implementation lives in the app shell (`platform/shell/adapters/lib/src/theme_storage_impl.dart`) because that is
 where `core_base_ui`'s provider and `core_storage`'s mechanism meet without creating a cycle.
 
 

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
+import 'error/dio_failure_classifier.dart';
 import 'handlers/refresh_token_handler.dart';
 import 'handlers/retry_handler.dart';
 import 'interceptors/auth_interceptor.dart';
@@ -18,7 +19,12 @@ import 'utils/network_constants.dart';
 class ApiClient {
   final NetworkConfig _config;
 
-  ApiClient(this._config);
+  ApiClient(this._config) {
+    // Already registered by DI (the classifier is an eager singleton of this
+    // package's module); repeated here, idempotently, for a client built
+    // outside DI, whose DioExceptions must still classify.
+    DioFailureClassifier.ensureRegistered();
+  }
 
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(

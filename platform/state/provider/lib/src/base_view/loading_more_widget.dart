@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider_state_management/provider_state_management.dart';
+import 'package:provider/provider.dart';
+
+import '../mixin/load_more_mixin.dart';
 
 class LoadingMoreWidget<P extends LoadMoreMixin<Object?>>
     extends StatelessWidget {

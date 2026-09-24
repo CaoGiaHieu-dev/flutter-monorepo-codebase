@@ -153,7 +153,8 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
 │   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
 │   └── shell/                     # The app shell every app composes
-│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapters
+│       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, storage adapters, AppBootStorage
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, app providers
 ├── tools/                         # Command-line toolset (a workspace member) — see tools/README.md
 │   ├── android_compliance/        # 16KB page size compatibility check (Android 15+)
 │   ├── arch_check/                # Layering rules R1–R10 — PR Gate 1
@@ -326,8 +327,10 @@ const _notificationsModules = [
   ExternalModule(CoreNotificationsPackageModule),
 ];
 
-// platform_app_shell: storage adapters, NetworkConfig, router, providers.
+// platform_shell_adapters: storage adapters, AppBootStorage, NetworkConfig;
+// then platform_app_shell: router, providers.
 const _shellModules = [
+  ExternalModule(PlatformShellAdaptersPackageModule),
   ExternalModule(PlatformAppShellPackageModule),
 ];
 
@@ -397,7 +400,7 @@ Future<void> configureDependencies({String? environment}) async {
 >
 > **GetIt does not resolve supertypes.** Registering `Impl as InterfaceA` leaves
 > `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB` — bind the second
-> interface explicitly through an `@module` (see `platform/shell/app_shell/lib/di/network_binding_module.dart`).
+> interface explicitly through an `@module` (see `platform/shell/adapters/lib/di/network_binding_module.dart`).
 
 ---
 

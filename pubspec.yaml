@@ -27,6 +27,7 @@ workspace:
   - platform/infra/storage
   - platform/layers/data
   - platform/layers/domain
+  - platform/shell/adapters
   - platform/shell/app_shell
   - platform/state/bloc
   - platform/state/provider

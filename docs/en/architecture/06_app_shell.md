@@ -1,11 +1,11 @@
-# The App Shell (`platform/shell/app_shell/` + `apps/<id>/`)
+# The App Shell (`platform/shell/` + `apps/<id>/`)
 
 This document answers **"what happens between tapping the icon and seeing the first screen, and who wires everything together?"**. After reading it you should be able to debug a startup failure, add a shell adapter, and understand why the DI group order in `app_manifest.yaml` is not arbitrary.
 
 The shell is split in two, on purpose:
 
 - **`apps/<id>/`** is the **composition root** — the only place allowed to depend on every layer, and the only place that knows the full list of modules. It holds what genuinely differs between apps and nothing else.
-- **`platform/shell/app_shell/`** (`platform_app_shell`) is everything every app needs and would otherwise copy: the boot scope, the router assembly, the material wrapper, the storage adapters and `NetworkConfigImpl`. It imports no module — `arch_check` R1 holds that, because it is a `platform/` package.
+- **`platform/shell/app_shell/`** (`platform_app_shell`) is everything every app needs and would otherwise copy: the boot scope, the router assembly, the material wrapper and the app-level providers. Its infrastructure adapters — the storage adapters, `AppBootStorage` and `NetworkConfigImpl` — sit beside it in **`platform/shell/adapters/`** (`platform_shell_adapters`), so the shell package holds composition, UI and app state only; `platform_app_shell` depends on the adapters, never the reverse. Neither imports a module — `arch_check` R1 holds that, because both are `platform/` packages.
 
 Before the split, a second app meant copying 1,369 lines across 24 files. Now an app is a manifest, a generated `injection.dart`, a one-line `main.dart`, and whatever identifies it — in the sample, its Firebase options.
 
@@ -26,14 +26,7 @@ apps/mobile/                         the composition root
 platform/shell/app_shell/lib/              shared by every app
 ├── bootstrap.dart                   runShellApp — error hooks, DI, splash, init
 ├── main_scope.dart                  splash → init → root transition
-├── di/
-│   ├── module.dart                  @InjectableInit.microPackage — the `shell` DI group
-│   ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
-│   ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
-│   ├── app_boot_storage.dart        boot flags       → StorageValue<bool>
-│   ├── network_config_impl.dart     NetworkConfig
-│   ├── network_binding_module.dart  SslPinningConfig binding
-│   └── utils/                       storage keys owned by the shell
+├── di/module.dart                   @InjectableInit.microPackage — AppRouter, AppProvider, DeeplinkProvider
 └── presentation/
     ├── root_app.dart                the routed MaterialApp
     ├── app_material_wrapper.dart    shared MaterialApp config
@@ -41,6 +34,17 @@ platform/shell/app_shell/lib/              shared by every app
     ├── providers/                   AppProvider, DeeplinkProvider
     ├── utils/                       AppShellUiConstants (text-scale cap)
     └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
+
+platform/shell/adapters/lib/               the shell's infrastructure adapters (platform_shell_adapters)
+├── di/
+│   ├── module.dart                  @InjectableInit.microPackage — first in the `shell` DI group
+│   └── network_binding_module.dart  SslPinningConfig binding
+└── src/
+    ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
+    ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
+    ├── app_boot_storage.dart        boot flags       → StorageValue<bool>
+    ├── network_config_impl.dart     NetworkConfig
+    └── utils/                       storage keys owned by the adapters
 ```
 
 ### A second app: `apps/admin`
@@ -209,7 +213,7 @@ Resolution order in the generated `injection.config.dart`:
 | 1 | `_coreModules` | `core_common`, `core_network`, `core_storage`, `core_database`, `core_di` |
 | – | the app's own `lib/` | `FirebaseModule` — per-flavour `FirebaseOptions` ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
 | 2 | `_notificationsModules` | `core_notifications` — its eager `PushNotificationService` injects those `FirebaseOptions`, so it must come after them |
-| 3 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
+| 3 | `_shellModules` | `platform_shell_adapters` — `ILanguageStorage`, `IThemeStorage`, `AppBootStorage`, `NetworkConfig`, `SslPinningConfig`; then `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider` |
 | 4 | `_uiModules` | `core_base_ui` |
 | 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
 
@@ -219,7 +223,7 @@ The app package registers only what identifies it: its Firebase options, which n
 
 This is the single most important implicit rule in the DI setup, and the manifest says so in a comment.
 
-`core_base_ui` registers `ThemeProvider` and `LanguageProvider`, which inject `IThemeStorage` and `ILanguageStorage`. Those two interfaces are implemented in `platform_app_shell` (`theme_storage_impl.dart`, `language_storage_impl.dart`), not in any core package the providers could depend on directly. So `shell` must initialise first. Swap the two groups and startup fails with "IThemeStorage is not registered".
+`core_base_ui` registers `ThemeProvider` and `LanguageProvider`, which inject `IThemeStorage` and `ILanguageStorage`. Those two interfaces are implemented in `platform_shell_adapters` (`theme_storage_impl.dart`, `language_storage_impl.dart`), not in any core package the providers could depend on directly. So `shell` must initialise first — and inside it, `platform_shell_adapters` is listed before `platform_app_shell`, so nothing the shell registers can depend on an adapter that is not there yet. Swap the two groups and startup fails with "IThemeStorage is not registered".
 
 It is also the same slot these registrations occupied before the shell became a package. They used to be app-local, which injectable runs *between* `…Before` and `…After`; `shell` now runs early in `…After` — first in `apps/admin`, right after `notifications` in `apps/mobile`. The order the app boots in did not change — only where the code lives.
 
@@ -232,7 +236,7 @@ It is also the same slot these registrations occupied before the shell became a 
 
 Or let a test read them: each app's `test/di_smoke_test.dart` runs its generated `configureDependencies()` for every flavor, with the plugins replaced by test doubles (storage in memory, a temp directory for `path_provider`, FlutterFire's Firebase core test API and stubbed messaging / local-notification channels in `apps/mobile`), then builds every lazy singleton and resolves each `core_di` contract and `AppRouter.router`. CI's Gate 3 runs it like any package test. Swapping `shell` and `ui` makes it fail with exactly the boot error below.
 
-Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `IAuthSessionGateway` at call time instead, and has no cross-module constructor dependency.)
+Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers (through `platform_shell_adapters`). The smoke test also requires `AppBootStorage`, `NetworkConfig` and `SslPinningConfig`, and that `core_network`'s `DioFailureClassifier` registered itself with `ErrorHandler` during the `core` group. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `IAuthSessionGateway` at call time instead, and has no cross-module constructor dependency.)
 
 ### `AppRouter` is eager, but its router is not
 
@@ -248,7 +252,7 @@ The `GoRouter` — and the `getAllOrEmpty<IFeatureRouteModule>()` calls inside i
 
 ## 4. Shell adapters
 
-The shell implements the contracts that core packages declare but cannot satisfy themselves. Each owns its own `StorageValue` and keeps its keys in `platform/shell/app_shell/lib/di/utils/`.
+The shell implements the contracts that core packages declare but cannot satisfy themselves. The implementations live in their own package, `platform_shell_adapters` (`platform/shell/adapters/`), registered first in the `shell` DI group. Each owns its own `StorageValue` and keeps its keys in `platform/shell/adapters/lib/src/utils/`. `NetworkConfigImpl` shows `core_ui_kit`'s `RetryDialog` on a timeout — the one reason the package depends on the ui group.
 
 | File | Implements | Owns | Registration |
 |:--|:--|:--|:--|

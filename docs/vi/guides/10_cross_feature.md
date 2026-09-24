@@ -242,7 +242,7 @@ abstract class IThemeStorage {
 `package:flutter/material.dart`. Tầng domain là Dart thuần và **không thể import Flutter**, nên đưa
 theme đi qua nó là bất khả thi về mặt cấu trúc — đây là ràng buộc cứng, không phải đường tắt.
 
-Implementation nằm ở app shell (`platform/shell/app_shell/lib/di/theme_storage_impl.dart`) vì đó là nơi provider của
+Implementation nằm ở app shell (`platform/shell/adapters/lib/src/theme_storage_impl.dart`) vì đó là nơi provider của
 `core_base_ui` và cơ chế của `core_storage` gặp nhau mà không tạo thành vòng phụ thuộc.
 
 

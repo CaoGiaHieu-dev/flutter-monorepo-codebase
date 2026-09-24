@@ -36,7 +36,7 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 > [!IMPORTANT]
 > **Core must never depend on a feature.** `platform/*` sits underneath everything; if it reaches back up into `modules/*/feature`, the dependency graph gains a cycle and a package can no longer be extracted or tested in isolation.
 >
-> The same reasoning applies inside the core ring. A state-management base needs an empty/loading placeholder, and `core_ui_kit` already has branded ones — but `core_ui_kit` depends on `provider_state_management`, so borrowing them back would close a cycle. `provider_state_management` therefore ships its own minimal
+> The same reasoning applies inside the core ring, where dependencies run between groups in one direction only (`state → ui`, never `ui → state`). A state-management base needs an empty/loading placeholder, and `core_ui_kit` already has branded ones — but a base that borrows from the widget library drags every widget dependency along for a spinner. `provider_state_management` therefore ships its own minimal
 > [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../platform/state/provider/lib/src/base_view/default_state_widgets.dart). When core needs a widget, core defines it.
 
 ---
@@ -46,7 +46,7 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 | Layer | Path | Responsibility | May import | Must **never** import |
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Composition root: `app_manifest.yaml`, the generated `injection.dart`, a one-line `main.dart`, what identifies the app (Firebase options) | everything | — |
-| **App shell** | `platform/shell/app_shell/` | Boot sequence, router assembly, material wrapper, storage adapters — shared by every app | core packages | any module (`arch_check` R1) |
+| **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Boot sequence, router assembly, material wrapper, app state (`platform_app_shell`); `NetworkConfigImpl`, storage adapters, boot flag (`platform_shell_adapters`) — shared by every app | core packages | any module (`arch_check` R1) |
 | **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, one state-management package | `data_*`, another feature package |
 | **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
@@ -57,7 +57,7 @@ Each layer has a dedicated page:
 
 ### Inside `platform/`: six groups
 
-The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell). Only the folder changed — every package keeps its name. Dependencies point inward: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← everything in platform/`, and nothing in `platform/` depends on `modules/`. What belongs in each group, and the three edges that run against the direction today: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
+The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell and its infrastructure adapters). Only the folder changed — every package keeps its name. Dependencies point inward: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← everything in platform/`; no infra package depends on another, `ui` never on `state`, `infra` or `shell`, and nothing in `platform/` depends on `modules/`. The package graph follows it with no exception. What belongs in each group, and how the last three contrary edges were removed: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
 
 ### The Domain purity mandate
 

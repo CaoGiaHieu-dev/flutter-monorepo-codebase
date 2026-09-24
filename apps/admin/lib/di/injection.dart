@@ -13,6 +13,7 @@ import 'package:feature_auth/di/module.module.dart';
 import 'package:feature_settings/di/module.module.dart';
 import 'package:injectable/injectable.dart';
 import 'package:platform_app_shell/di/module.module.dart';
+import 'package:platform_shell_adapters/di/module.module.dart';
 import 'package:provider_state_management/di/module.module.dart';
 
 import 'injection.config.dart';
@@ -48,6 +49,7 @@ const _coreModules = [
 ];
 
 const _shellModules = [
+  ExternalModule(PlatformShellAdaptersPackageModule),
   ExternalModule(PlatformAppShellPackageModule),
 ];
 

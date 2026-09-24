@@ -44,7 +44,8 @@ flutter-monorepo-codebase/
 │   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
 │   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
 │   └── shell/                     # The app shell every app composes
-│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapters — shared by every app
+│       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, theme/language storage adapters, AppBootStorage
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, app providers — shared by every app
 ├── modules/                       # One vertical slice per bounded context, one per team
 │   ├── auth/                      # Sample: the full three-layer slice
 │   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
@@ -79,17 +80,18 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | Package | Path | Owns |
 | :--- | :--- | :--- |
 | `platform_kernel` | `platform/foundation/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), exceptions, enums, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
-| `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the theme/language/boot storage adapters, `NetworkConfigImpl`. Imports no module |
-| `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
+| `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Imports no module |
+| `platform_shell_adapters` | `platform/shell/adapters` | The shell's infrastructure adapters: the theme/language/boot storage adapters and `NetworkConfigImpl` (+ its `SslPinningConfig` binding). Imports no module |
+| `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
 | `core_di` | `platform/foundation/contracts` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
 | `core_base_ui` | `platform/ui/design_system` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
-| `core_ui_kit` | `platform/ui/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
-| `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
+| `core_ui_kit` | `platform/ui/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation (incl. `BottomTransitionPage`) + `SharedUiConstants` |
+| `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract, `DioFailureClassifier` (Dio → `AppFailure`) |
 | `core_storage` | `platform/infra/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
 | `core_database` | `platform/infra/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
 | `core_responsive` | `platform/ui/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through (down only, by default); window size classes and the adaptive layout widgets (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
 | `core_notifications` | `platform/infra/notifications` | Push notification service + its own `NotificationConstants` |
-| `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
+| `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin`, `LoadMoreListView` |
 | `bloc_state_management` | `platform/state/bloc` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
 ### Domain — `modules/*/domain`

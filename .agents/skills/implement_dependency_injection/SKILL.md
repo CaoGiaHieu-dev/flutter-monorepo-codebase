@@ -38,7 +38,7 @@ at call time and has no such dependency, but it keeps the lazy annotation — th
 one to copy whenever a constructor needs something from a later group:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_config_impl.dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)   // NOT @Singleton
 class NetworkConfigImpl implements NetworkConfig { ... }
 ```
@@ -65,7 +65,7 @@ supertype chain. Registering `@LazySingleton(as: NetworkConfig)` therefore leave
 `getItOrNull<SslPinningConfig>()` returning `null` even though `NetworkConfig implements
 SslPinningConfig` — and certificate pinning then silently no-ops.
 
-Bind the second type explicitly with a `@module` (`platform/shell/app_shell/lib/di/network_binding_module.dart`):
+Bind the second type explicitly with a `@module` (`platform/shell/adapters/lib/di/network_binding_module.dart`):
 
 ```dart
 @module
@@ -168,7 +168,7 @@ edit it. The order lives in `apps/<id>/app_manifest.yaml`:
 | `core` | `before` | Core infra that depends on nothing the app or shell registers (`core_common`, `core_network`, `core_storage`, `core_database`, `core_di`) |
 | *(the app's own `lib/`)* | between | Only what identifies the app — its per-flavour `FirebaseOptions` (`lib/firebase/firebase_module.dart`) |
 | `notifications` | after, **first** | `core_notifications` — its eager `PushNotificationService` injects the app's `FirebaseOptions` |
-| `shell` | after | `platform_app_shell` — the storage adapters, `NetworkConfig`, the router |
+| `shell` | after | `platform_shell_adapters` first — the storage adapters, `AppBootStorage`, `NetworkConfig`; then `platform_app_shell` — the router and app providers |
 | `ui` | after | **`core_base_ui` only** — injects the shell's `ILanguageStorage` / `IThemeStorage` |
 | `domain` | after | `domain_core`, then modules' `domain` layers |
 | `data` | after | `data_core`, then modules' `data` layers |
@@ -187,8 +187,8 @@ dart tools/composer/composer.dart sync --app <id>
 - Hand-editing `injection.dart`, the app's managed path dependencies, or the root `workspace:` list — `composer verify` (CI Gate 0) fails on drift.
 
 App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
-`NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_app_shell` and register through
-its own micro-package module, in the `shell` group — early in `after` (after `notifications` where an app has one), so they exist **before**
+`NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_shell_adapters` and register through
+its own micro-package module, first in the `shell` group (before `platform_app_shell`) — early in `after` (after `notifications` where an app has one), so they exist **before**
 `_uiModules` run.
 
 ### Step 3b: Ordering when a module opens a database

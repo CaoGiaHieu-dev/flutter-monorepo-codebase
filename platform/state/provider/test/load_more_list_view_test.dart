@@ -1,5 +1,4 @@
 import 'package:core_responsive/core_responsive.dart';
-import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';

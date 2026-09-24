@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:core_common/core_common.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 import 'storage_codec.dart';
 import 'storage_interface.dart';
@@ -67,7 +67,7 @@ class ObfuscatedString {
 /// print(token.value);            // reads from in-memory cache
 /// await token.readFromStorage(); // hydrates cache from disk
 /// ```
-class StorageValue<T> extends ChangeNotifier with DisposeGuard {
+class StorageValue<T> extends ChangeNotifier {
   /// Creates a storage value bound to [key] in the given [storage] backend.
   ///
   /// [reviver] is an optional function for custom JSON deserialization
@@ -177,8 +177,27 @@ class StorageValue<T> extends ChangeNotifier with DisposeGuard {
     notifyListeners();
   }
 
+  bool _isDisposed = false;
+
+  /// Whether [dispose] has run. After it, [notifyListeners] is a no-op
+  /// instead of throwing — a late `readFromStorage` or `save` completing
+  /// after its owner went away must not crash.
+  ///
+  /// The same guard as `core_common`'s `DisposeGuard` mixin, spelled out
+  /// here so `core_storage` (infra) needs only `platform_kernel` from the
+  /// foundation group, not the Flutter-bound `core_common` and everything
+  /// it pulls in (go_router, device_info_plus, http_security_pinning, …).
+  bool get isDisposed => _isDisposed;
+
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _isDisposed = true;
     if (_obfuscatedValue != null) {
       _obfuscatedValue!.dispose();
       _obfuscatedValue = null;

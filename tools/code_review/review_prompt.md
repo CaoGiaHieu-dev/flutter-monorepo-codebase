@@ -50,7 +50,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
     - **ABSOLUTELY FORBIDDEN** to hardcode new feature `$…Route` / `StatefulShellBranch` lists in `app_router.dart`. Register `IFeatureRouteModule` (no order) or `INavDestinationModule` (with order) via DI; optional `IAppEntryLocation`. `feature_dashboard` may only implement `DashboardRouteModule` (chrome) — never own tab pages. See `docs/en/guides/04_routing.md`.
 10. **Generated DI Registration (`injection.dart`)**:
     - `apps/<id>/lib/di/injection.dart` is **generated** by `dart tools/composer/composer.dart sync` from `apps/<id>/app_manifest.yaml` (between `composer:managed` markers). Flag any hand edit to it — change the manifest's `di_groups` / `modules` instead; CI Gate 0 (`composer verify`) fails on drift.
-    - Group order is load-bearing: `core` (before), then `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `CoreBaseUiPackageModule` (`ui`) must follow `shell`, because `platform_app_shell` registers the `ILanguageStorage` / `IThemeStorage` it injects.
+    - Group order is load-bearing: `core` (before), then `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `CoreBaseUiPackageModule` (`ui`) must follow `shell`, because `platform_shell_adapters` (first in `shell`) registers the `ILanguageStorage` / `IThemeStorage` it injects. `ErrorHandler` names no Dio type — `core_network`'s `DioFailureClassifier` registers itself during the `core` group.
 
 ---
 

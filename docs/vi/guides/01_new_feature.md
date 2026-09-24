@@ -1,3 +1,4 @@
+<!-- translated-from: docs/en/guides/01_new_feature.md@b65f8b3 -->
 # Hướng dẫn: Tạo một feature mới
 
 ## Mục tiêu

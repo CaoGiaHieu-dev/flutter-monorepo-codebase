@@ -1,3 +1,4 @@
+<!-- translated-from: docs/en/architecture/02_core.md@b65f8b3 -->
 # Tầng Core
 
 Tài liệu này trả lời câu hỏi **"trong `platform/*` có gì, và khi nào thì dùng package nào?"**. Đọc xong bạn sẽ chọn đúng core package cho từng việc — và nhận ra khi nào thứ bạn định thêm vào thực ra *không* thuộc về core.

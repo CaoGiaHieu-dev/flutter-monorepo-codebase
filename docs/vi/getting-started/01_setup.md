@@ -1,3 +1,4 @@
+<!-- translated-from: docs/en/getting-started/01_setup.md@b65f8b3 -->
 # 01 · Cài đặt & Chạy lần đầu
 
 **Trang này trả lời:** cần cài gì, và gõ đúng những lệnh nào để đi từ `git clone` đến lúc app chạy được?

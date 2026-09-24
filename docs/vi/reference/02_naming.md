@@ -1,3 +1,4 @@
+<!-- translated-from: docs/en/reference/02_naming.md@0dfc23b -->
 # Quy ước đặt tên
 
 **File này trả lời:** file này đặt tên gì, class này đặt tên gì, thư mục này đặt tên gì?

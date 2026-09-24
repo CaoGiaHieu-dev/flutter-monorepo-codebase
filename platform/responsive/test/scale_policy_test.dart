@@ -63,6 +63,17 @@ void main() {
       expect(const ScaleBounds.fixed().clamp(3.4), 1.0);
     });
 
+    test('clamp reads NaN as the design factor, then clamps it', () {
+      // NaN compares false with everything, so it used to come back out
+      // unchanged and turn every size built from it into NaN.
+      expect(const ScaleBounds.downOnly().clamp(double.nan), 1);
+      expect(const ScaleBounds.unbounded().clamp(double.nan), 1);
+      expect(const ScaleBounds.fixed().clamp(double.nan), 1);
+      // Still inside the bounds: a floor above 1, a cap below it.
+      expect(const ScaleBounds(min: 1.2, max: 2).clamp(double.nan), 1.2);
+      expect(const ScaleBounds(max: 0.5).clamp(double.nan), 0.5);
+    });
+
     test('rejects a negative min and a min above max', () {
       // Runtime values: a const invocation would fail at compile time instead.
       final negative = -0.5;
@@ -435,6 +446,84 @@ void main() {
 
       expect(m.effectiveMinTextAdapt, isFalse);
       expect(m.sp(10), 20);
+    });
+  });
+
+  group('degenerate sizes', () {
+    test('an empty window scales nothing, rather than everything to 0', () {
+      // Android reports 0x0 for the first frame.
+      for (final screen in const [Size.zero, Size(0, 800), Size(400, 0)]) {
+        final m = _metrics(screen);
+        expect(m.scaleWidth, 1, reason: '$screen');
+        expect(m.scaleHeight, 1, reason: '$screen');
+        expect(m.scaleText, 1, reason: '$screen');
+        expect(m.width(16), 16, reason: '$screen');
+        expect(m.height(16), 16, reason: '$screen');
+        expect(m.radius(8), 8, reason: '$screen');
+        expect(m.sp(14), 14, reason: '$screen');
+      }
+    });
+
+    test('an empty window is the artboard, so bounds still apply', () {
+      final m = _metrics(
+        Size.zero,
+        scaleBounds: const ScaleBounds(min: 1.5, max: 2),
+      );
+      expect(m.scaleWidth, 1.5);
+    });
+
+    test('an empty window under splitScreenMode scales nothing either', () {
+      const m = ResponsiveMetrics(
+        screenSize: Size.zero,
+        designSize: _design,
+        splitScreenMode: true,
+        scaleBounds: ScaleBounds.unbounded(),
+      );
+      expect(m.scaleHeight, 1);
+    });
+
+    test('isValidDesignSize wants both sides positive and finite', () {
+      expect(ResponsiveMetrics.isValidDesignSize(_design), isTrue);
+      expect(ResponsiveMetrics.isValidDesignSize(Size.zero), isFalse);
+      expect(ResponsiveMetrics.isValidDesignSize(const Size(0, 800)), isFalse);
+      expect(ResponsiveMetrics.isValidDesignSize(const Size(400, 0)), isFalse);
+      expect(
+        ResponsiveMetrics.isValidDesignSize(const Size(-400, 800)),
+        isFalse,
+      );
+      expect(
+        ResponsiveMetrics.isValidDesignSize(const Size(double.infinity, 800)),
+        isFalse,
+      );
+    });
+
+    test('a zero design size is asserted when scaling reads it', () {
+      for (final design in const [Size.zero, Size(0, 800), Size(400, 0)]) {
+        final m = _metrics(const Size(400, 800), design: design);
+        expect(() => m.scaleWidth, throwsAssertionError, reason: '$design');
+        expect(() => m.width(16), throwsAssertionError, reason: '$design');
+        expect(() => m.sp(16), throwsAssertionError, reason: '$design');
+      }
+    });
+
+    test('a zero profile design size is asserted while it is in force', () {
+      final m = _metrics(
+        const Size(1000, 800),
+        profiles: const {
+          WindowSizeClass.expanded: ResponsiveProfile(designSize: Size.zero),
+        },
+      );
+      expect(() => m.scaleWidth, throwsAssertionError);
+      // A compact window does not use that profile, so it scales fine.
+      expect(
+        _metrics(
+          const Size(200, 400),
+          profiles: const {
+            WindowSizeClass.expanded: ResponsiveProfile(designSize: Size.zero),
+          },
+        ).scaleWidth,
+        0.5,
+      );
     });
   });
 

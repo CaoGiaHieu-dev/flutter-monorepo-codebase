@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,10 +8,33 @@ import '../core/constants.dart';
 import 'prompt_service.dart';
 
 /// Service for handling Gemini API calls
+///
+/// The API key travels in the `x-goog-api-key` header, never in the URL. It
+/// used to be a `?key=` query parameter, and `http`'s `ClientException`
+/// prints the full request URI — so any network error (DNS, reset, TLS)
+/// wrote the key to the terminal and to CI logs. Every message this service
+/// raises is also passed through [redact], in case some layer below still
+/// echoes it.
 class ApiService {
   final String _apiKey;
+  final http.Client? _client;
 
-  ApiService(this._apiKey);
+  /// [client] is for tests; by default each call uses `http.post`.
+  ApiService(this._apiKey, {this._client});
+
+  /// Header Gemini reads the API key from.
+  static const String apiKeyHeader = 'x-goog-api-key';
+
+  /// [text] with the API key — and any `key=` query value — replaced by a
+  /// placeholder, so an error message can be printed safely.
+  String redact(String text) {
+    var out = text;
+    if (_apiKey.isNotEmpty) out = out.replaceAll(_apiKey, '<redacted>');
+    return out.replaceAllMapped(
+      RegExp(r'([?&]key=)[^&\s#]+'),
+      (m) => '${m[1]}<redacted>',
+    );
+  }
 
   /// Call Gemini API for single file review
   Future<String> reviewSingleFile({
@@ -62,14 +86,19 @@ class ApiService {
       },
     };
 
+    final uri = Uri.parse(CodeReviewConstants.geminiApiUrl);
+    final headers = {
+      HttpHeaders.contentTypeHeader: ContentType.json.value,
+      apiKeyHeader: _apiKey,
+    };
+    final body = jsonEncode(requestBody);
     try {
-      final response = await http
-          .post(
-            Uri.parse('${CodeReviewConstants.geminiApiUrl}?key=$_apiKey'),
-            headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
-            body: jsonEncode(requestBody),
-          )
-          .timeout(CodeReviewConstants.defaultTimeout);
+      final client = _client;
+      final response =
+          await (client == null
+                  ? http.post(uri, headers: headers, body: body)
+                  : client.post(uri, headers: headers, body: body))
+              .timeout(CodeReviewConstants.defaultTimeout);
 
       if (response.statusCode == 200) {
         try {
@@ -131,13 +160,22 @@ class ApiService {
       }
     } on ApiRateLimitException {
       rethrow;
-    } on ApiException {
+    } on ApiTimeoutException {
       rethrow;
+    } on ApiException catch (e) {
+      // A response body can echo the request; scrub it like the rest.
+      throw ApiException(
+        redact(e.message),
+        statusCode: e.statusCode,
+        responseBody: e.responseBody == null ? null : redact(e.responseBody!),
+      );
     } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw ApiTimeoutException('Request timeout: $e');
+      // `ClientException.toString()` includes the request URI.
+      final detail = redact(e.toString());
+      if (e is TimeoutException || detail.contains('TimeoutException')) {
+        throw ApiTimeoutException('Request timeout: $detail');
       }
-      throw ApiException('Failed to call Gemini API: $e');
+      throw ApiException('Failed to call Gemini API: $detail');
     }
   }
 

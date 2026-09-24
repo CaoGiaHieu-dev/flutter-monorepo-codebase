@@ -70,7 +70,17 @@ class ScaleBounds {
   final double max;
 
   /// [factor], pulled into `[min, max]`.
+  ///
+  /// A NaN [factor] is read as [ResponsiveConstants.DESIGN_SCALE_FACTOR]
+  /// and then clamped like any other. NaN means no ratio could be measured
+  /// (`0 / 0`, `∞ / ∞`), and it would otherwise pass through untouched —
+  /// every comparison with NaN is false — and poison every size built from
+  /// it. The design size is the neutral reading: it scales nothing, and
+  /// clamping it still honours a floor or [ScaleBounds.fixed]. [min] would
+  /// be the wrong one, since under [ScaleBounds.downOnly] that is 0 and
+  /// every value would vanish.
   double clamp(double factor) {
+    if (factor.isNaN) factor = ResponsiveConstants.DESIGN_SCALE_FACTOR;
     if (factor < min) return min;
     if (factor > max) return max;
     return factor;

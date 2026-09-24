@@ -61,6 +61,9 @@ class ResponsiveInit extends StatelessWidget {
 
   /// The base artboard the design was drawn at. See
   /// [ResponsiveMetrics.designSize].
+  ///
+  /// Both sides must be positive and finite, as must every profile's
+  /// [ResponsiveProfile.designSize]; asserted on build.
   final Size designSize;
 
   /// See [ResponsiveMetrics.splitScreenMode].
@@ -90,6 +93,27 @@ class ResponsiveInit extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Here rather than in the constructor: a `const` constructor cannot read
+    // a Size's sides. Every profile is checked, not just the active one, so
+    // a bad tablet artboard fails on the phone it is developed on too.
+    assert(
+      ResponsiveMetrics.isValidDesignSize(designSize),
+      'ResponsiveInit.designSize must be positive and finite on both sides, '
+      'got $designSize.',
+    );
+    assert(() {
+      for (final MapEntry(key: windowClass, value: profile)
+          in profiles.entries) {
+        final size = profile.designSize;
+        if (size != null && !ResponsiveMetrics.isValidDesignSize(size)) {
+          throw AssertionError(
+            'The ResponsiveProfile for $windowClass has designSize $size; '
+            'both sides must be positive and finite.',
+          );
+        }
+      }
+      return true;
+    }());
     return ResponsiveScope(
       metrics: ResponsiveMetrics(
         screenSize: MediaQuery.sizeOf(context),

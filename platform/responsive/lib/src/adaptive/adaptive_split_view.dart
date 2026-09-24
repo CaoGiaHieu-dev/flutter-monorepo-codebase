@@ -36,7 +36,9 @@ import 'window_size_class.dart';
 /// 2. **A horizontal fold** ([FoldPosture.tabletop]) with [tabletopSplit]:
 ///    [primary] above the fold, [secondary] below it.
 /// 3. **A window of [splitAt] or wider**: side by side, [primary] taking
-///    [primaryWidth] or [primaryFraction] of the width.
+///    [primaryWidth] or [primaryFraction] of the width — as long as that
+///    leaves [secondary] some width once the [divider] is drawn. A
+///    [primaryWidth] as wide as the view leaves none, and falls to rule 4.
 /// 4. **Otherwise**: [primary] alone. [secondary] is not built, so the app
 ///    must show the open item another way — push its route, as above. The
 ///    same applies when a window narrows while an item is open: the view
@@ -73,6 +75,7 @@ class AdaptiveSplitView extends StatelessWidget {
     this.primaryFraction = AdaptiveConstants.SPLIT_PRIMARY_FRACTION,
     this.primaryWidth,
     this.divider,
+    this.dividerExtent = AdaptiveConstants.SPLIT_DIVIDER_EXTENT,
     this.secondaryPlaceholder,
     this.tabletopSplit = true,
     super.key,
@@ -83,6 +86,10 @@ class AdaptiveSplitView extends StatelessWidget {
        assert(
          primaryWidth == null || primaryWidth > 0,
          'primaryWidth must be positive.',
+       ),
+       assert(
+         dividerExtent >= 0 && dividerExtent < double.infinity,
+         'dividerExtent must be finite and not negative.',
        );
 
   /// The pane that is always shown — typically the list.
@@ -105,19 +112,31 @@ class AdaptiveSplitView extends StatelessWidget {
   /// A fixed width for [primary], in logical pixels, used instead of
   /// [primaryFraction].
   ///
-  /// Used as given and capped at the view's width. Scaling is the caller's
+  /// Used as given, and capped so the [divider] and [secondary] still fit;
+  /// when nothing is left for [secondary] the view shows [primary] alone
+  /// (rule 4) rather than a zero-width pane. Scaling is the caller's
   /// call, as for every reusable widget: `context.w(360)` to grow it with
   /// the design, a plain `360` to keep the list the same width however wide
   /// the window gets.
   final double? primaryWidth;
 
-  /// Drawn between the panes in a split made by window class. Give it its
-  /// own width, e.g. `SizedBox(width: 1, child: ColoredBox(color: c))`; it
-  /// is stretched to the full height.
+  /// Drawn between the panes in a split made by window class, in a box
+  /// [dividerExtent] wide and stretched to the full height — e.g.
+  /// `ColoredBox(color: c)`.
   ///
   /// Not drawn at a fold or hinge: the hardware already divides the panes,
   /// and a zero-width fold has no room for one.
   final Widget? divider;
+
+  /// The [divider]'s thickness, in logical pixels. Ignored without one.
+  ///
+  /// Given here rather than read off the divider because the split is
+  /// decided before anything is laid out: the view has to know how much
+  /// room the divider takes to know whether [secondary] still fits beside
+  /// [primary] — and so what [isSplit] answers. The divider is laid out at
+  /// exactly this width, whatever width it asks for itself. Used as given,
+  /// like [primaryWidth]: scale it at the call site if it should scale.
+  final double dividerExtent;
 
   /// Shown in the secondary pane while split and [secondary] is `null` —
   /// "select an item". Without one, the pane stays empty, which keeps
@@ -177,8 +196,8 @@ class AdaptiveSplitView extends StatelessWidget {
               if (split != null) ...[
                 if (split.foldExtent case final foldExtent?)
                   _sized(axis, foldExtent)
-                else
-                  ?divider,
+                else if (divider case final divider?)
+                  _sized(axis, dividerExtent, child: divider),
                 Expanded(
                   key: _secondaryKey,
                   child:
@@ -214,12 +233,26 @@ class AdaptiveSplitView extends StatelessWidget {
         // A fold this view cannot place, or one it was told to ignore.
         _ => null,
       };
-      if (atFold != null) return atFold;
+      // A fold at the view's very edge leaves one side nothing to show.
+      if (atFold != null &&
+          atFold.primaryExtent > precisionErrorTolerance &&
+          atFold.remainingIn(size) > precisionErrorTolerance) {
+        return atFold;
+      }
     }
 
     if (context.windowSizeClass.isSmallerThan(splitAt)) return null;
-    final extent = primaryWidth ?? size.width * primaryFraction;
-    return _Split(Axis.horizontal, math.min(extent, size.width));
+    // What the panes share once the divider has its width. The primary pane
+    // is capped at it, so the row can never overflow; if that leaves the
+    // secondary pane nothing, this is one pane, not two with one invisible —
+    // `isSplit` must not tell the list that its item is shown beside it.
+    final available = size.width - (divider == null ? 0 : dividerExtent);
+    final extent = math.min(
+      primaryWidth ?? size.width * primaryFraction,
+      math.max(available, 0.0),
+    );
+    if (available - extent <= precisionErrorTolerance) return null;
+    return _Split(Axis.horizontal, extent);
   }
 
   static bool _spans(double extent, double windowExtent) =>
@@ -249,6 +282,12 @@ class _Split {
   /// Thickness of the fold or hinge kept clear between the panes — zero for
   /// a fold, the gap for a hinge — or `null` for a split by window class.
   final double? foldExtent;
+
+  /// What is left for the secondary pane in a view of [size].
+  double remainingIn(Size size) =>
+      (axis == Axis.horizontal ? size.width : size.height) -
+      primaryExtent -
+      (foldExtent ?? 0);
 }
 
 /// Publishes whether the [AdaptiveSplitView] above is split, for

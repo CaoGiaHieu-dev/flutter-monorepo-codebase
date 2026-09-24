@@ -158,4 +158,59 @@ void main() {
       ),
     );
   });
+
+  testWidgets('a zero-size window (first frame on Android) scales nothing', (
+    tester,
+  ) async {
+    late BuildContext ctx;
+    await _pumpAt(
+      tester,
+      Size.zero,
+      Builder(
+        builder: (context) {
+          ctx = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+
+    // Against the unbounded policy a 0-wide window used to scale every
+    // value to 0; it is now read as the artboard itself.
+    expect(ctx.w(10), 10);
+    expect(ctx.h(10), 10);
+    expect(ctx.r(10), 10);
+    expect(ctx.sp(10), 10);
+  });
+
+  group('ResponsiveInit asserts a usable design size', () {
+    for (final design in const [Size.zero, Size(0, 690), Size(360, 0)]) {
+      testWidgets('designSize $design', (tester) async {
+        await tester.pumpWidget(
+          ResponsiveInit(designSize: design, child: const SizedBox.shrink()),
+        );
+        expect(tester.takeException(), isAssertionError);
+      });
+    }
+
+    testWidgets('a profile designSize, even for a class not in force', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(360, 690)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        const ResponsiveInit(
+          profiles: {
+            WindowSizeClass.expanded: ResponsiveProfile(
+              designSize: Size(0, 800),
+            ),
+          },
+          child: SizedBox.shrink(),
+        ),
+      );
+      expect(tester.takeException(), isAssertionError);
+    });
+  });
 }

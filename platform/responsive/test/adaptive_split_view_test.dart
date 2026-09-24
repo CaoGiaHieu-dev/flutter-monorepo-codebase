@@ -34,6 +34,7 @@ AdaptiveSplitView _splitView({
   double primaryFraction = 0.4,
   double? primaryWidth,
   bool withDivider = false,
+  double dividerExtent = 2,
   bool withPlaceholder = false,
   bool tabletopSplit = true,
   Widget primary = const SizedBox.expand(key: _primary),
@@ -44,7 +45,8 @@ AdaptiveSplitView _splitView({
     splitAt: splitAt,
     primaryFraction: primaryFraction,
     primaryWidth: primaryWidth,
-    divider: withDivider ? const SizedBox(key: _divider, width: 2) : null,
+    divider: withDivider ? const SizedBox.expand(key: _divider) : null,
+    dividerExtent: dividerExtent,
     secondaryPlaceholder: withPlaceholder
         ? const SizedBox.expand(key: _placeholder)
         : null,
@@ -138,9 +140,72 @@ void main() {
       await _pumpAt(
         tester,
         const Size(1000, 800),
-        _splitView(primaryWidth: 5000),
+        _splitView(primaryWidth: 900, withDivider: true),
       );
-      expect(_rectOf(tester, _primary).width, 1000);
+      expect(_rectOf(tester, _primary).width, 900);
+      expect(_rectOf(tester, _divider), const Rect.fromLTRB(900, 0, 902, 800));
+      expect(
+        _rectOf(tester, _secondary),
+        const Rect.fromLTRB(902, 0, 1000, 800),
+      );
+    });
+
+    // A primaryWidth that leaves the secondary pane nothing — as wide as the
+    // view, or wide enough that the divider eats the rest — is one pane.
+    // It used to overflow the row by the divider's width while `isSplit`
+    // said true over a zero-width secondary pane.
+    for (final (label, primaryWidth, withDivider) in [
+      ('wider than the view', 5000.0, false),
+      ('as wide as the view', 1000.0, false),
+      ('wider than the view, with a divider', 5000.0, true),
+      ('as wide as the view, with a divider', 1000.0, true),
+      ('leaving only the divider room', 998.0, true),
+      ('leaving less than the divider', 999.0, true),
+    ]) {
+      testWidgets('primaryWidth $label: one pane, no overflow', (
+        tester,
+      ) async {
+        late bool answer;
+        await _pumpAt(
+          tester,
+          const Size(1000, 800),
+          _splitView(
+            primaryWidth: primaryWidth,
+            withDivider: withDivider,
+            primary: Builder(
+              builder: (context) {
+                answer = AdaptiveSplitView.isSplit(context);
+                return const SizedBox.expand(key: _primary);
+              },
+            ),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(_rectOf(tester, _primary), const Rect.fromLTWH(0, 0, 1000, 800));
+        expect(find.byKey(_secondary), findsNothing);
+        expect(find.byKey(_divider), findsNothing);
+        expect(answer, isFalse);
+      });
+    }
+
+    testWidgets('the divider is laid out at dividerExtent', (tester) async {
+      await _pumpAt(
+        tester,
+        const Size(1000, 800),
+        const AdaptiveSplitView(
+          primary: SizedBox.expand(key: _primary),
+          secondary: SizedBox.expand(key: _secondary),
+          // Asks for 40; the view gives it the default hairline.
+          divider: SizedBox(key: _divider, width: 40),
+        ),
+      );
+
+      expect(_rectOf(tester, _divider), const Rect.fromLTRB(400, 0, 401, 800));
+      expect(
+        _rectOf(tester, _secondary),
+        const Rect.fromLTRB(401, 0, 1000, 800),
+      );
     });
 
     testWidgets('the divider sits between the panes', (tester) async {
@@ -294,6 +359,24 @@ void main() {
         displayFeatures: [flatFold(500)],
       );
       expect(_rectOf(tester, _primary).width, 400);
+    });
+
+    testWidgets('a fold at the view\'s edge is ignored', (tester) async {
+      // Nothing would be left on one side of it: the window class decides.
+      await _pumpAt(
+        tester,
+        const Size(1000, 800),
+        _splitView(),
+        displayFeatures: [
+          _halfOpenedFold(const Rect.fromLTWH(1000, 0, 0, 800)),
+        ],
+      );
+
+      expect(_rectOf(tester, _primary), const Rect.fromLTWH(0, 0, 400, 800));
+      expect(
+        _rectOf(tester, _secondary),
+        const Rect.fromLTRB(400, 0, 1000, 800),
+      );
     });
 
     testWidgets('a cutout is ignored', (tester) async {

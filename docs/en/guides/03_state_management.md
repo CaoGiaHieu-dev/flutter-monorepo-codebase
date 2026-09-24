@@ -165,8 +165,11 @@ Use a listener for things that are **not** rendering — toasts, navigation, dia
 
 ```dart
 ProviderStateListener<AuthProvider, UserEntity>(
+  // Both terminal states: filtering on `isSuccess` alone would mean
+  // `onError` never fires.
   listenWhen: (previous, current) =>
-      previous.state != current.state && current.isSuccess,
+      previous.state != current.state &&
+      (current.isSuccess || current.isError),
   onError: (context, error, message) {
     if (error is AuthErrorState) {
       error.maybeWhen(
@@ -347,7 +350,11 @@ Future<void> _onStarted(
   emit(const BlocViewState.loading());
   final result = await _useCase(const NoParams());
   result.when(
-    success: (data) => emit(BlocViewState.success(data)),
+    // `Result.success` carries a nullable payload: decide what "no data"
+    // means for this screen instead of forcing it non-null.
+    success: (data) => data == null
+        ? emit(const BlocViewState.initial())
+        : emit(BlocViewState.success(data)),
     failure: (f) => emit(BlocViewState.error(f)),
     none: () => emit(const BlocViewState.initial()),
     cancel: () {},

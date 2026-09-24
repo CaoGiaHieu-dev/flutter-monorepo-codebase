@@ -92,8 +92,8 @@ A random IV per write means writing the same value twice produces different ciph
 // platform/storage/lib/src/impl/secure/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = encrypter.Key.fromSecureRandom(32).base64;
-  await _storage.write(key: masterKeyId, value: newKey);
+  final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
+  await _storage.write(key: _MASTER_KEY_ID, value: newKey); // rethrows on failure
   masterKey = newKey;
 }
 ```
@@ -142,6 +142,21 @@ Future<String?> _readMasterKey() async {
 | Corruption of the plugin's own storage | handled natively: on Android `AndroidOptions.resetOnError` (on by default) resets what it cannot decrypt before the call returns |
 | Platform error in `read(key)` | returns `null` **and keeps the value** — it is still there for the next read |
 | A value that fails to decrypt or decode in `read(key)` | that one key is deleted and `null` returned, so one bad row cannot fail every launch |
+
+### The pref backend's master key — the same rule
+
+`PrefStorageImpl` seals SharedPreferences values with a master key of its own, `_internal_pref_master_key`, kept in the same secure store. It used to fall back on *any* read error to a brand-new key in SharedPreferences — after a single transient Keychain error every stored preference (theme, locale, the onboarding flag) failed to decrypt and was deleted on its next read, and the next healthy launch orphaned whatever that session wrote. Now it never replaces a key that may still be good:
+
+| Situation | What `PrefStorageImpl.init` does |
+| :-- | :-- |
+| Platform error reading the key | retried (3 attempts) before anything else is decided |
+| Still failing, no stored preferences | a new key is kept in SharedPreferences — there is nothing it could orphan |
+| Still failing, and a key in SharedPreferences opens the stored preferences | that key is used (a device where secure storage is unavailable) |
+| Still failing, and the stored preferences depend on the unreadable key | **rethrows**, nothing written or deleted — the values open again once the platform recovers |
+| Readable again while a SharedPreferences key exists | whichever key decrypts the stored values wins; a winning SharedPreferences key is moved into secure storage and removed from SharedPreferences |
+| Key absent or unusable (not a 256-bit base64 key) | a new key is generated — in secure storage, or in SharedPreferences if secure storage refuses the write; values sealed with a lost key drop one by one in `read()` |
+
+`StorageManager.initialize` runs the secure backend first, so a persistent Keychain failure normally surfaces there before the pref backend is asked. The tests (`platform/storage/test/storage_test.dart`) drive both backends through a flaky `FlutterSecureStorage` fake.
 
 ---
 

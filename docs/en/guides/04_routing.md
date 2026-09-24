@@ -83,7 +83,11 @@ abstract class INavDestinationModule {
   int get order;                    // 0 = first tab
   String get path;                  // canonical path, used for fallbacks
   List<RouteBase> get routes;       // mounted in one StatefulShellBranch
-  void onRestore();                 // re-tap on the active tab
+  // Re-tap on the active tab. Concrete, not abstract: the default body only
+  // logs — override it for "scroll to top / pop to root".
+  void onRestore() {
+    DynamicLogger.log('onRestore $runtimeType', level: LogLevel.INFO);
+  }
   NavDestination destination(BuildContext context);
 }
 ```

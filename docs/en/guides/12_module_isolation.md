@@ -55,10 +55,12 @@ A developer on the auth team clones the monorepo without other teams' sources:
 ```bash
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # only theirs
-dart tools/composer/composer.dart sync --app mobile   # compose what is present
+dart tools/composer/composer.dart sync              # compose what is present (every app)
 dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barrels
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
+
+Run `sync` for **every app** — do not narrow it with `--app mobile`. The root `workspace:` list is always rebuilt from all apps and drops what is not on disk, but `--app mobile` leaves `apps/admin/pubspec.yaml` untouched, still declaring path dependencies on the missing modules (`settings`, say) — and `flutter pub get` then fails to resolve the workspace.
 
 The app runs. It has no home screen, no settings, no dashboard — and it boots, because every shell lookup for a module-owned contract is `getItOrNull` or `getAllOrEmpty` (`arch_check` R8), and no shell file imports a module (`arch_check` R10).
 
@@ -87,12 +89,14 @@ In a partial checkout it writes a partial composition into them. That is correct
   modules from the app for everyone.
 
   Files changed:
-    pubspec.yaml
     apps/mobile/pubspec.yaml
     apps/mobile/lib/di/injection.dart
+    apps/admin/pubspec.yaml
+    apps/admin/lib/di/injection.dart
+    pubspec.yaml
 
   Restore them before you commit:
-    git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart
+    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart pubspec.yaml
 ```
 
 And if it is committed anyway, **CI Gate 0 fails**. `composer verify` regenerates from the manifest on a runner where every submodule *is* checked out, and diffs against the committed files. A composition missing modules cannot match, so the mistake stops at the pull request rather than in a release.

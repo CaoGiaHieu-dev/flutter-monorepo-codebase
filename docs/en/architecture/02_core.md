@@ -180,36 +180,61 @@ They are defaults, not policy — a caller that needs a different value passes i
 
 The scaling mechanism every widget in the app resolves through, and the window size classes and adaptive widgets that choose a layout. It lives at `platform/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package, and no `material` import either.
 
-| Piece | What it is |
-|:--|:--|
-| `ResponsiveInit` | `StatelessWidget` mounted once above `MaterialApp`. Params: `child`, `designSize` (default 360×690), `scaleBounds` and `textScaleBounds` (both default `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (default `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
-| `ResponsiveScope` | `InheritedWidget` carrying the metrics — `maybeOf(context)` / `of(context)` |
-| `ResponsiveMetrics` | Immutable value object computing `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; exposes the resolved `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, plus `windowSizeClass`, `windowHeightClass`, `orientation` |
-| `ScaleBounds` | The range a scale factor may take: `downOnly()` (the default — shrink, never grow), `fixed()`, `unbounded()`, or `ScaleBounds(min:, max:)` |
-| `ResponsiveProfile` | Overrides `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` for one `WindowSizeClass` (`null` inherits); `resolve` picks the exact class, else the nearest smaller one |
-| `WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints` | The window's width class (`compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge`) and height class, and where they begin |
-| `ResponsiveContext` | Extension on `BuildContext` — `context.w/h/r/sp/spMin/dg/dm`, `edgeInsets`, `borderRadius`, `verticalSpace`, `horizontalSpace`, `responsive`, `windowSizeClass`, `windowHeightClass` |
-| `AdaptiveContext` | Extension on `BuildContext` — `adaptive(compact:, medium:, …)`, `isCompactWindow`, `isExpandedOrWider`, `separatingDisplayFeature`, `foldPosture` |
-| `AdaptiveBuilder` / `AdaptiveLayout` | A builder, or one builder per window class |
-| `AdaptiveSplitView` | Master–detail: two panes at a fold, hinge or from `splitAt`, one pane otherwise; `AdaptiveSplitView.isSplit(context)` |
-| `AdaptiveContent` | Caps content at a readable width (640, not scaled) |
-| `FoldPosture` | `flat` / `book` / `tabletop` |
-| `ResponsiveConstants` / `AdaptiveConstants` | `SPLIT_SCREEN_MIN_HEIGHT = 700`, `DEFAULT_DESIGN_WIDTH = 360`, `DEFAULT_DESIGN_HEIGHT = 690`, the `BREAKPOINT_*` values; `SPLIT_PRIMARY_FRACTION = 0.4`, `CONTENT_MAX_WIDTH = 640` — in `src/utils/`, like every other package's constants |
-
-`ResponsiveInit` is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. No `WidgetsBindingObserver`, no `setState`.
+| Export | Path | What it is |
+|:--|:--|:--|
+| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget` mounted **once** above `MaterialApp`. Params: `child` (required), `designSize` (default 360×690), `scaleBounds` and `textScaleBounds` (both default `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (default `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver`. Asserts that `designSize` and every profile's `designSize` are positive and finite |
+| `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` carrying `ResponsiveMetrics`; `maybeOf(context)` returns nullable, `of(context)` asserts when missing |
+| `ResponsiveMetrics` | `src/responsive_metrics.dart` | Immutable value object computing `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; exposes the resolved `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, plus `windowSizeClass`, `windowHeightClass`, `orientation`, and the static `isValidDesignSize(size)` |
+| `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` — its result is not clamped by any bounds |
+| `ScaleBounds` | `src/scaling/scale_bounds.dart` | The range a scale factor may take: `downOnly()` (the default — shrink, never grow), `fixed()`, `unbounded()`, or `ScaleBounds(min:, max:)`; `clamp` reads a NaN factor as 1 |
+| `ResponsiveProfile` | `src/scaling/responsive_profile.dart` | Overrides `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` for one `WindowSizeClass` (`null` inherits); `resolve` picks the exact class, else the nearest smaller one |
+| `WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints` | `src/adaptive/window_size_class.dart` | The window's width class (`compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge`) and height class, and where they begin |
+| `ResponsiveContext` | `src/context_extension.dart` | Extension on `BuildContext` — the **only** way to scale ([table below](#the-buildcontext-extension)); plus `responsive`, `windowSizeClass`, `windowHeightClass` |
+| `AdaptiveContext` | `src/adaptive/adaptive_context_extension.dart` | Extension on `BuildContext` — `adaptive(compact:, medium:, …)`, `isCompactWindow`, `isExpandedOrWider`, `separatingDisplayFeature`, `foldPosture` |
+| `AdaptiveBuilder` / `AdaptiveLayout` | `src/adaptive/adaptive_builder.dart` | A builder, or one builder per window class |
+| `AdaptiveSplitView` | `src/adaptive/adaptive_split_view.dart` | Master–detail: two panes at a fold, hinge or from `splitAt`, one pane otherwise; an optional `divider` laid out `dividerExtent` wide (default 1). `primary` is capped so the divider and `secondary` always fit, and a `primaryWidth` that would leave `secondary` nothing falls back to one pane. `AdaptiveSplitView.isSplit(context)` tells the list which of the two it is |
+| `AdaptiveContent` | `src/adaptive/adaptive_content.dart` | Caps content at a readable width (640, not scaled) |
+| `FoldPosture` | `src/adaptive/fold_posture.dart` | `flat` / `book` / `tabletop` |
+| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690), `DESIGN_SCALE_FACTOR` (1), the `BREAKPOINT_*` values; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `SPLIT_DIVIDER_EXTENT` (1), `CONTENT_MAX_WIDTH` (640) — in `src/utils/`, like every other package's constants |
 
 Every factor is clamped, and by default only downward: a window smaller than the artboard shrinks the design, a larger one draws it 1:1 and leaves the extra room to the layout. Growth is opt-in and capped, per window class.
 
-### There is deliberately no `num` extension
+Degenerate input never collapses a layout. An empty window — Android reports 0×0 for the first frame — scales by 1, not 0; a NaN factor clamps as 1; an unusable artboard (a zero or infinite side) asserts in debug and scales by 1 in release.
 
-`16.w` **does not compile**. A number carries no context, so such an extension could only read a global singleton — and a widget reading a global never learns the metrics changed. Requiring a `BuildContext` makes the correct thing the only writable thing; `arch_check` rule **R7** rejects the bare form in any file importing `core_responsive`.
+### Why metrics go through an `InheritedWidget`
 
-There is no global instance, no imperative `init()`, no `setWidth()` helper and no rebuild flag — rebuild targeting is Flutter's job once the metrics live in an `InheritedWidget`.
+`core_responsive` publishes its metrics through an `InheritedWidget`, so every read **registers a dependency** and rebuilding exactly the right widgets is Flutter's job. The alternative — hanging the scale values on a global singleton — produces the same numbers but registers nothing, so a widget reading them never learns the metrics changed (rotation, split screen, resize).
+
+`ResponsiveInit` is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. No `WidgetsBindingObserver`, no `setState`.
+
+`ResponsiveScope.of(context)` **asserts** — *"No ResponsiveInit found above this context."* — rather than falling back to unscaled values. Failing loudly is deliberate: a silent "no scaling" fallback would ship a layout that is wrong on every device. The layout members — `context.windowSizeClass` and everything adaptive — are the exception: choosing a layout is a question about the window, so without a `ResponsiveInit` they classify it with the Material 3 defaults.
+
+### The `BuildContext` extension
+
+| Call | Axis |
+|:--|:--|
+| `context.responsive` | returns the `ResponsiveMetrics` |
+| `context.w(n)` | width — also for anything that must stay square |
+| `context.h(n)` | height |
+| `context.r(n)` | smaller axis — radii, borders, strokes |
+| `context.sp(n)` | font size (or `fontSizeResolver`, when set) |
+| `context.spMin(n)` | `sp` capped at the design value — text may shrink, never grow; equal to `sp` under the default bounds |
+| `context.dg(n)` | both axes |
+| `context.dm(n)` | larger axis |
+| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` by `w`, `vertical` by `h`, `all` by `w` |
+| `context.borderRadius({all, topLeft, topRight, bottomLeft, bottomRight})` | `r` |
+| `context.verticalSpace(n)` / `context.horizontalSpace(n)` | a `SizedBox`, by `h` / `w` |
+| `context.windowSizeClass` / `context.windowHeightClass` | window classes — work without a `ResponsiveInit` |
+
+> [!CAUTION]
+> **There is deliberately no `num` extension.** `16.w` **does not compile**. A number carries no context, so such an extension could only read a global singleton — and a widget reading a global never learns the metrics changed. Requiring a `BuildContext` makes the correct thing the only writable thing. There is no global instance, no imperative `init()`, no `setWidth()` helper and no rebuild flag — rebuild targeting is Flutter's job once the metrics live in an `InheritedWidget`.
+
+`dart tools/arch_check/check.dart` rule **R7** rejects the bare form — the pattern `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — in any file importing `core_responsive`, and is Gate 1 of `pr_quality_check.yml`.
 
 > [!NOTE]
-> `ResponsiveScope.of(context)` **asserts** — *"No ResponsiveInit found above this context."* — rather than falling back to unscaled values. A silent fallback would ship a layout that is wrong on every device. A widget test that scales must therefore wrap its subject in `ResponsiveInit`. The layout members — `context.windowSizeClass` and everything adaptive — are the exception: choosing a layout is a question about the window, so without a `ResponsiveInit` they classify it with the Material 3 defaults.
+> A widget test that scales **must** wrap its subject in `ResponsiveInit`, or `ResponsiveScope.of` asserts. The package's own tests live in `platform/responsive/test/`.
 
-The scale policy and its parameters, and the adaptive widgets with their rules, are documented in [`../guides/11_design_system.md`](../guides/11_design_system.md) §6–§7.
+The assembly at the root of the tree (`_ResponsiveWrapper` in `platform/app_shell/lib/main_scope.dart`) is described in [the app shell](06_app_shell.md#_responsivewrapper); choosing an axis, changing the design canvas, the scale policy and the adaptive widgets are in [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 
@@ -228,7 +253,7 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 `NetworkConfig` is implemented **in the app shell**, not here — that is what keeps `core_network` free of any storage dependency. Both refresh callbacks default to `null`, so a client with no refresh endpoint simply surfaces the `401` unchanged.
 
 > [!CAUTION]
-> **SSL pinning is only as good as its hash list.** `sslPinningHashes` currently returns `const []`, which disables pinning. `AppInitializer` logs an `ERROR` on non-dev flavors when the list is empty or the config is unregistered, so the gap is visible rather than silent — but it is still a gap until you populate it. See [the networking guide](../guides/08_networking.md).
+> **SSL pinning is only as good as its hash list.** `sslPinningHashes` currently returns `const []`, which disables pinning. `AppInitializer` logs an `ERROR` whenever the list is empty or the config is unregistered on any build that does not bypass validation — that is, everything but a debug build that explicitly declared `--flavor dev`, a missing or unknown flavor included (treated as `prod` for TLS), so the gap is visible rather than silent — but it is still a gap until you populate it. See [the networking guide](../guides/08_networking.md).
 
 Full detail on the interceptor chain, the recursion guards around token refresh, and header redaction lives in [`../guides/08_networking.md`](../guides/08_networking.md).
 
@@ -251,7 +276,7 @@ Provides the **mechanism only**. It defines no keys and no presets.
 
 Beyond encrypting data at rest (AES-256-CBC with a per-write random IV), `StorageValue` keeps its **in-memory** value XOR-masked with a random mask, and reveals it only for the moment a read needs it. The master key receives the same treatment. This raises the bar against memory-dump inspection — a layer most templates omit entirely.
 
-`SecureStorageImpl` never wipes the store on a platform error: a master-key read that fails (a locked Keychain before first unlock, a busy KeyStore) is retried and then rethrown with nothing deleted; only a master key that is present but unusable is replaced, and only an undecryptable value is dropped. See [the storage guide](../guides/06_storage.md).
+`SecureStorageImpl` never wipes the store on a platform error: a master-key read that fails (a locked Keychain before first unlock, a busy KeyStore) is retried and then rethrown with nothing deleted; only a master key that is present but unusable is replaced, and only an undecryptable value is dropped. `PrefStorageImpl` applies the same rule to its own master key: it falls back to a key in SharedPreferences only when that key opens the stored preferences or there are none to lose, and otherwise rethrows with every preference intact. See [the storage guide](../guides/06_storage.md).
 
 ### Ownership
 
@@ -291,7 +316,7 @@ Drift resolves `@DriftDatabase(tables:)` at compile time and requires a DAO to b
 **`IDatabaseHandle`** — a data source asks for the accessor it needs instead of receiving a database object with every DAO on it:
 
 ```dart
-ProfileLocalDataSource(IDatabaseHandle handle)
+ProfileLocalDataSource(IDatabaseHandle<ProfileDatabase> handle)
   : _dao = handle.accessor(ProfileDao.new);
 ```
 

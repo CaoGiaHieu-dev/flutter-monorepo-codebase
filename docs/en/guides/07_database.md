@@ -208,6 +208,9 @@ Two things to copy exactly:
 // modules/cache/data/lib/di/module.dart
 @module
 abstract class DataCacheDiModule {
+  /// `@Order(1)`: injectable registers a module's entries in ascending order,
+  /// so this package's own migrations (default order 0) exist before the open.
+  @Order(1)
   @preResolve
   @lazySingleton
   Future<CacheDatabase> cacheDatabase() =>
@@ -232,7 +235,12 @@ abstract class DataCacheDiModule {
 The `isRegistered` guard matters: `getAll<T>()` **throws** when nothing is registered for `T`. Without the guard, a build with no contributed migration would crash during `configureDependencies()`.
 
 > [!WARNING]
-> **Registration order.** `@preResolve` opens the database — and therefore runs migrations — while this module initialises. An `IDatabaseMigration` registered by a module that initialises *later* is invisible at that moment. A package contributing a step for this database must sit in an **earlier DI group** than `data_cache` in the app's `app_manifest.yaml`. Nothing in the template hits this yet, but it will bite the first feature that adds a migration for someone else's database. See [`05_di.md`](05_di.md) for module ordering.
+> **Registration order.** `@preResolve` opens the database — and therefore runs migrations — at the moment injectable reaches that registration, so every step must already be registered by then. A step that is not is skipped without an error: `schemaVersion` moves and the schema does not.
+>
+> - **A step in the owning package** (here `data_cache`) is collected **as long as the open keeps `@Order(1)`**. Injectable registers a package's entries in ascending `@Order`, and a migration annotated `@LazySingleton(as: IDatabaseMigration<CacheDatabase>)` has the default order 0 — so it lands before the open. Remove `@Order(1)` and the open may be registered first; that is the bug `@Order(1)` was added to fix.
+> - **A step from another package** must sit in an **earlier DI group** than the owning package in the app's `app_manifest.yaml`. `@Order` sorts only within one package's module; it cannot move a registration across modules. Nothing in the template does this yet, but it will bite the first feature that adds a migration for someone else's database.
+>
+> **Copying this pattern for your own database? Put `@Order(1)` on your `@preResolve` open as well** — without it, a step written exactly as §4 shows is never collected. See [`05_di.md`](05_di.md) for module ordering.
 
 ### Step 6 — Consume it through `IDatabaseHandle`, not the database
 
@@ -341,7 +349,7 @@ abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
 }
 ```
 
-Registered like a route module, typed to the database it belongs to — GetIt keys a registration by its exact type, so `CacheDatabase` collects only `IDatabaseMigration<CacheDatabase>` and another package's steps never reach it:
+Registered like a route module, typed to the database it belongs to — GetIt keys a registration by its exact type, so `CacheDatabase` collects only `IDatabaseMigration<CacheDatabase>` and another package's steps never reach it. Declared in the owning package, it is collected because the open carries `@Order(1)` ([Step 5](#step-5--register-it-in-your-di-module)):
 
 ```dart
 @LazySingleton(as: IDatabaseMigration<CacheDatabase>)
@@ -351,12 +359,18 @@ class AddExpiresAtToCacheEntries
   int get version => 2;
 
   @override
-  Future<void> upgrade(Migrator m) =>
-      m.addColumn(cacheEntries, cacheEntries.expiresAt);
+  Future<void> upgrade(Migrator m) {
+    // `Migrator.database` is the database being migrated; the cast reaches
+    // its generated table getters. `expiresAt` is the column this step adds.
+    final db = m.database as CacheDatabase;
+    return m.addColumn(db.cacheEntries, db.cacheEntries.expiresAt);
+  }
 
   @override
-  Future<void> downgrade(Migrator m) =>
-      m.alterTable(TableMigration(cacheEntries));
+  Future<void> downgrade(Migrator m) {
+    final db = m.database as CacheDatabase;
+    return m.alterTable(TableMigration(db.cacheEntries));
+  }
 }
 ```
 
@@ -406,7 +420,7 @@ Three properties worth naming:
 Validation happens once, at construction — not mid-migration. Discovering a wiring mistake halfway through would leave the schema partially migrated.
 
 > [!WARNING]
-> **Drift 2.34.3 has no `onDowngrade`.** `MigrationStrategy` exposes only `onCreate`, `onUpgrade` and `beforeOpen`; Drift's own documentation notes that "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` is real and tested, but it rides on that single entry point via a `from`/`to` comparison. Implement it when the change is reversible; **throw a descriptive error when it is not**, so the failure is explicit instead of leaving a schema that no longer matches the running code.
+> **Drift 2.x has no `onDowngrade`** (the lockfile resolves 2.35.0). `MigrationStrategy` exposes only `onCreate`, `onUpgrade` and `beforeOpen`; Drift's own documentation notes that "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` is real and tested, but it rides on that single entry point via a `from`/`to` comparison. Implement it when the change is reversible; **throw a descriptive error when it is not**, so the failure is explicit instead of leaving a schema that no longer matches the running code.
 
 ---
 
@@ -507,7 +521,7 @@ static bool isCorruptionError(Object error) {
 | `malformed database schema` | `attempt to write a readonly database` |
 | | `access denied` / `permission denied` / `operation not permitted` |
 
-The predicate matches on message strings rather than a typed `SqliteException` because `sqlite3` is not a declared dependency of `core_database` — importing it would add a dependency the package does not otherwise need, and every import must be declared. Because string matching is fragile, the predicate is **biased towards not recovering**: if an environment marker appears, the database is left alone even when a corruption marker also matched.
+The predicate matches on message strings rather than a typed `SqliteException`. `sqlite3` *is* a declared dependency of `core_database` (the connection factory imports it), so the type is available — but it is not what reaches the opener. The connection runs on a background isolate (`NativeDatabase.createInBackground`), and drift hands an error raised there back as a `DriftRemoteException` whose `remoteCause` holds the original; `on SqliteException` would never match it. `DriftRemoteException.toString()` returns the cause's message, so matching the message covers an error from either side of the isolate boundary. A typed check is possible — unwrap `remoteCause` and test for `SqliteException` and its `extendedResultCode` — but it would still need the message fallback for anything else. Because string matching is fragile, the predicate is **biased towards not recovering**: if an environment marker appears, the database is left alone even when a corruption marker also matched.
 
 Losing user data is worse than surfacing a startup error.
 
@@ -567,6 +581,7 @@ Two habits worth copying:
 - [ ] `migration` delegates to `driftMigrationStrategy` (do not hand-roll `MigrationStrategy`)
 - [ ] Migrations are **passed into** the database, never looked up inside it
 - [ ] `_registeredMigrations()` guards with `isRegistered` before `getAll`
+- [ ] The `@preResolve` open carries `@Order(1)`, so the package's own migrations register before it; a step from another package sits in an earlier DI group
 - [ ] Data sources take `IDatabaseHandle<TDb>`, not the database
 - [ ] Signatures return a **Model**; no Drift row class in the public API
 - [ ] New schema step = new `IDatabaseMigration` with `version >= 2`, registered via `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` bumped to match

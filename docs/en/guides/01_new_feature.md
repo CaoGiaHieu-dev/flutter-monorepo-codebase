@@ -54,9 +54,8 @@ missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 1. Creates the directory tree and `pubspec.yaml`
 2. Writes `lib/di/module.dart` with `@InjectableInit.microPackage()`
-3. Registers the package in the root `pubspec.yaml` `workspace:` list
-4. Adds it to `modules:` in every `apps/<id>/app_manifest.yaml` — then run `dart tools/composer/composer.dart sync`, which regenerates the app's path dependencies and `injection.dart`
-5. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
+3. Adds it to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`. Nothing to run by hand; if a module does not belong in an app, delete its line from that app's manifest and run `composer sync` again
+4. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
    `build_runner build --workspace`, then `dart fix --apply`
 
 **Manual — the tool prints these at the end:**

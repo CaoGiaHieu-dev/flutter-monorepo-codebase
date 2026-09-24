@@ -257,7 +257,7 @@ Mọi điểm gom đều lùi về phương án dự phòng khi không có đón
 | `IFeatureRouteModule` | danh sách rỗng |
 | `INavDestinationModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()` |
 | `DashboardRouteModule` | chính `navigationShell` — các tab không có chrome |
-| `IAppEntryLocation` | path của tab dashboard đầu tiên, nếu không có thì `/` |
+| `IAppEntryLocation` | `AppRouter.fallbackLocation`: path của tab dashboard đầu tiên (`order` nhỏ nhất), nếu không có thì placeholder `/_empty_dashboard` (không phải `/`) |
 
 Nhờ vậy, xoá một feature package không thể làm sập shell.
 
@@ -285,7 +285,7 @@ WidgetsBinding.instance.endOfFrame.whenComplete(() async {
 
 Chờ `endOfFrame` bảo đảm khung hình đầu tiên đã lên màn hình trước mọi redirect, còn `ensureInitialized()` chờ việc khôi phục phiên hoàn tất để quyết định được đưa ra dựa trên trạng thái thật. Không ghép module auth nào thì `_session` là null và app được coi như chưa đăng nhập.
 
-**Các chuyển đổi về sau** đến qua hai stream subscription mở trong `initState` — `IAuthSessionState.sessionChanges` và `.sessionFailures` — và bị bỏ qua cho tới khi `_bootCompleted && _session.hasRestoredSession`. Điều kiện này tồn tại để chúng không tranh giành lần điều hướng đầu tiên với redirect khởi động. Bản thân `build` chỉ là `Overlay.wrap(child: widget.child)`.
+**Các chuyển đổi về sau** đến qua hai stream subscription mở trong `initState` — `IAuthSessionState.sessionChanges` và `.sessionFailures` — và được chặn theo hai cách khác nhau. `_onSessionChanged` (có điều hướng) bị bỏ qua cho tới khi `_bootCompleted && _session.hasRestoredSession`, để chính lần phát của bước khôi phục phiên không tranh giành lần điều hướng đầu tiên với redirect khởi động. `_onSessionFailure` (chỉ hiện toast) chỉ kiểm tra `_bootCompleted` — nó không điều hướng, nên không có gì để tranh giành. Bản thân `build` chỉ là `Overlay.wrap(child: widget.child)`.
 
 > [!WARNING]
 > `_goToOnboarding()` gán `viewedOnboard.value = true` trong khối `finally`, nên cờ vẫn được ghi ngay cả khi hàm trả về `false` vì người dùng đã đăng nhập sẵn. Trong trường hợp đó màn onboarding chưa từng được hiển thị. Hiện tại vô hại, nhưng cờ này không mang đúng ý nghĩa như tên gọi của nó.

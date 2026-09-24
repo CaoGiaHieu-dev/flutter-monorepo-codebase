@@ -165,8 +165,11 @@ Dùng listener cho những việc **không phải render** — toast, điều h�
 
 ```dart
 ProviderStateListener<AuthProvider, UserEntity>(
+  // Cả hai trạng thái kết thúc: chỉ lọc `isSuccess` thì
+  // `onError` sẽ không bao giờ được gọi.
   listenWhen: (previous, current) =>
-      previous.state != current.state && current.isSuccess,
+      previous.state != current.state &&
+      (current.isSuccess || current.isError),
   onError: (context, error, message) {
     if (error is AuthErrorState) {
       error.maybeWhen(
@@ -347,7 +350,11 @@ Future<void> _onStarted(
   emit(const BlocViewState.loading());
   final result = await _useCase(const NoParams());
   result.when(
-    success: (data) => emit(BlocViewState.success(data)),
+    // `Result.success` mang payload nullable: tự quyết định "không có dữ liệu"
+    // nghĩa là gì với màn hình này thay vì ép nó thành non-null.
+    success: (data) => data == null
+        ? emit(const BlocViewState.initial())
+        : emit(BlocViewState.success(data)),
     failure: (f) => emit(BlocViewState.error(f)),
     none: () => emit(const BlocViewState.initial()),
     cancel: () {},

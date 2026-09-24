@@ -96,11 +96,15 @@ abstract final class DriftDatabaseOpener {
   /// may be moved aside, so it is verified directly rather than only through
   /// a real corrupt file.
   ///
-  /// The `sqlite3` package is not a declared dependency of `core_database`,
-  /// so the typed `SqliteException` (and its `extendedResultCode`) is not
-  /// available here and the message is matched instead. The predicate is
-  /// therefore biased towards *not* recovering: an environment marker vetoes
-  /// a corruption match.
+  /// The message is matched rather than the typed `SqliteException`: the
+  /// connection runs on a background isolate, and drift returns an error
+  /// raised there as a `DriftRemoteException` (original in `remoteCause`),
+  /// which an `on SqliteException` check never sees. Its `toString()` is the
+  /// cause's message, so message matching covers both sides of the isolate
+  /// boundary. Unwrapping `remoteCause` for a typed `extendedResultCode`
+  /// check would be possible, but would still need this fallback. Because
+  /// message matching is fragile, the predicate is biased towards *not*
+  /// recovering: an environment marker vetoes a corruption match.
   @visibleForTesting
   static bool isCorruptionError(Object error) {
     final message = error.toString().toLowerCase();

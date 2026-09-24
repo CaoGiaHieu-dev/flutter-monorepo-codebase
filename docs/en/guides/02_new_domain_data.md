@@ -337,11 +337,17 @@ this boundary. Nothing above this layer ever sees a `CacheEntryModel`.
 `execute<R, T>` takes the raw operation and an optional `mapper` to convert Model → Entity:
 
 ```dart
-return execute<UserModel, UserEntity>(
-  () async => _remote.login(request),
-  mapper: (model) => model.toEntity(),
+// modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart — _authenticate
+return execute<BaseEntity<UserModel>, UserEntity>(
+  request, // Future<BaseEntity<UserModel>> Function()
+  // Without successCondition, a 200 whose body reports failure would count as success.
+  successCondition: (response) => response.isSuccess && response.data != null,
+  mapper: (response) => response.data!.toEntity(),
 );
 ```
+
+The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is the envelope and `mapper` unwraps it. `successCondition` turns a 200 with an error body (or no `data`) into a `Failure` before `mapper` runs — which is what makes the `!` safe.
+
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see

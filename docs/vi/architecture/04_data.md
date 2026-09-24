@@ -38,8 +38,13 @@ modules/<name>/data/
 │       ├── data_sources/
 │       │   ├── remote/              # Retrofit / HTTP
 │       │   └── local/               # storage / database
+│       ├── database/                # tuỳ chọn — database Drift riêng của package này
+│       │   ├── tables/              #   (data_cache: cache_database.dart, tables/, dao/)
+│       │   └── dao/
 │       ├── models/                  # DTO có .toEntity()
 │       ├── repositories_impl/
+│       ├── services/                # tuỳ chọn — hiện thực hợp đồng core_di không phải repository
+│       │                            #   (data_auth: AuthSessionGatewayImpl → IAuthSessionGateway)
 │       ├── utils/                   # key, endpoint — thuộc sở hữu package này
 │       └── src.dart
 └── pubspec.yaml

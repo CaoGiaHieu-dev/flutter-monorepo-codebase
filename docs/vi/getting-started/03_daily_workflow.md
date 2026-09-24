@@ -130,6 +130,8 @@ dart tools/module_generator/generate.dart 3 payment
 flutter analyze
 
 # 2. Test — test nằm theo từng package, nên chạy theo từng package
+cd platform/app_shell               && flutter test && cd -
+cd platform/base_ui                 && flutter test && cd -
 cd platform/common                  && flutter test && cd -
 cd platform/data_core               && flutter test && cd -
 cd platform/database                && flutter test && cd -
@@ -138,7 +140,9 @@ cd platform/provider_state_management && flutter test && cd -
 cd platform/responsive              && flutter test && cd -
 cd platform/storage                 && flutter test && cd -
 cd modules/auth/data                && flutter test && cd -
+cd modules/auth/feature             && flutter test && cd -
 cd modules/cache/data               && flutter test && cd -
+cd modules/dashboard/feature        && flutter test && cd -
 
 # 3. Catalog version đang đồng bộ
 dart tools/dependency_sync.dart --check
@@ -147,7 +151,7 @@ dart tools/dependency_sync.dart --check
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Hiện chỉ chín package trên có test (CI Gate 3 tự tìm mọi thư mục `test/`); hãy viết test của bạn ngay cạnh code bạn viết.
+Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Hiện chỉ mười ba package trên có test (CI Gate 3 tự tìm mọi thư mục `test/`); hãy viết test của bạn ngay cạnh code bạn viết.
 
 > [!CAUTION]
 > `flutter analyze` **không** bắt được lỗi thứ tự DI. Một `@Singleton` eager phụ thuộc type được đăng ký ở module chạy *sau* vẫn compile bình thường rồi ném `not registered` lúc khởi động. Sau khi đổi đăng ký DI, hãy kiểm tra thứ tự module trong file sinh ra `apps/mobile/lib/di/injection.config.dart`, cùng đăng ký của type và các lệnh `gh<Dep>()` của nó trong file sinh ra `lib/di/module.module.dart` của package. Xem [../guides/05_di.md](../guides/05_di.md).

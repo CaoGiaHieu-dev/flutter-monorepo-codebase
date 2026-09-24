@@ -130,6 +130,8 @@ dart tools/module_generator/generate.dart 3 payment
 flutter analyze
 
 # 2. Tests — they live per package, so run them per package
+cd platform/app_shell               && flutter test && cd -
+cd platform/base_ui                 && flutter test && cd -
 cd platform/common                  && flutter test && cd -
 cd platform/data_core               && flutter test && cd -
 cd platform/database                && flutter test && cd -
@@ -138,7 +140,9 @@ cd platform/provider_state_management && flutter test && cd -
 cd platform/responsive              && flutter test && cd -
 cd platform/storage                 && flutter test && cd -
 cd modules/auth/data                && flutter test && cd -
+cd modules/auth/feature             && flutter test && cd -
 cd modules/cache/data               && flutter test && cd -
+cd modules/dashboard/feature        && flutter test && cd -
 
 # 3. Version catalog is in sync
 dart tools/dependency_sync.dart --check
@@ -147,7 +151,7 @@ dart tools/dependency_sync.dart --check
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. Only the nine packages above ship tests today (CI Gate 3 finds every `test/` directory on its own); add yours next to the code you write.
+Tests live at `<package>/test/`, wherever the package lives. Only the thirteen packages above ship tests today (CI Gate 3 finds every `test/` directory on its own); add yours next to the code you write.
 
 > [!CAUTION]
 > `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, check the module order in the generated `apps/mobile/lib/di/injection.config.dart`, and your type's registration and its `gh<Dep>()` calls in the package's generated `lib/di/module.module.dart`. See [../guides/05_di.md](../guides/05_di.md).

@@ -338,11 +338,17 @@ biên này. Không tầng nào phía trên nhìn thấy `CacheEntryModel`.
 `execute<R, T>` nhận thao tác thô và một `mapper` tuỳ chọn để chuyển Model → Entity:
 
 ```dart
-return execute<UserModel, UserEntity>(
-  () async => _remote.login(request),
-  mapper: (model) => model.toEntity(),
+// modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart — _authenticate
+return execute<BaseEntity<UserModel>, UserEntity>(
+  request, // Future<BaseEntity<UserModel>> Function()
+  // Thiếu successCondition, một response 200 mà body báo lỗi vẫn bị tính là thành công.
+  successCondition: (response) => response.isSuccess && response.data != null,
+  mapper: (response) => response.data!.toEntity(),
 );
 ```
+
+Remote data source trả về envelope `BaseEntity<UserModel>`, nên `R` là envelope và `mapper` gỡ nó ra. `successCondition` biến một response 200 có body báo lỗi (hoặc không có `data`) thành `Failure` trước khi `mapper` chạy — đó là lý do dấu `!` an toàn.
+
 
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
 [`i_base_repository.dart:57-59`](../../../platform/data_core/lib/src/base/i_base_repository.dart).

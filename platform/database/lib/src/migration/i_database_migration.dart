@@ -15,14 +15,23 @@ import 'package:drift/drift.dart';
 ///   int get version => 2;
 ///
 ///   @override
-///   Future<void> upgrade(Migrator m) =>
-///       m.addColumn(cacheEntries, cacheEntries.expiresAt);
+///   Future<void> upgrade(Migrator m) {
+///     final db = m.database as CacheDatabase;
+///     return m.addColumn(db.cacheEntries, db.cacheEntries.expiresAt);
+///   }
 ///
 ///   @override
-///   Future<void> downgrade(Migrator m) =>
-///       m.alterTable(TableMigration(cacheEntries));
+///   Future<void> downgrade(Migrator m) {
+///     final db = m.database as CacheDatabase;
+///     return m.alterTable(TableMigration(db.cacheEntries));
+///   }
 /// }
 /// ```
+///
+/// The database is opened during DI (`@preResolve`), so a step must be
+/// registered before that open runs: a step in the owning package is, as long
+/// as the open carries `@Order(1)` (see `modules/cache/data/lib/di/module.dart`);
+/// a step from another package must sit in an earlier DI group.
 ///
 /// ## Contract
 ///

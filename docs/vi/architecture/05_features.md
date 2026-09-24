@@ -312,7 +312,7 @@ Mọi văn bản hiển thị cho người dùng đều phải dịch; hardcode 
 ## 8. Tạo một feature
 
 ```bash
-# type=1 (feature), tên, thư mục, SM: 1=Provider 2=BLoC 3=không, route: 1=stack 2=tab 3=không
+# type=1 (feature), tên, prefix (chỉ cho type 5 — truyền ""), SM: 1=Provider 2=BLoC 3=không, route: 1=stack 2=tab 3=không
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 

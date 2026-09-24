@@ -174,7 +174,69 @@ class SharedUiConstants {
 
 ---
 
-## 5. `core_network` — HTTP client
+## 5. `core_responsive` — scale theo khung thiết kế và layout thích ứng, gắn với `BuildContext`
+
+Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kích thước cửa sổ và widget thích ứng dùng để chọn layout. Nó nằm tại `platform/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, không package bên thứ ba nào, và cũng không import `material`.
+
+| Thành phần export | Đường dẫn | Mục đích |
+|:--|:--|:--|
+| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 360×690), `scaleBounds` và `textScaleBounds` (cùng mặc định `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (mặc định `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver`. Assert rằng `designSize` và `designSize` của mọi profile đều dương và hữu hạn |
+| `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` mang `ResponsiveMetrics`; `maybeOf(context)` trả nullable, `of(context)` assert khi thiếu |
+| `ResponsiveMetrics` | `src/responsive_metrics.dart` | Value object bất biến với các phép `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; cho thấy giá trị đã resolve `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, cùng `windowSizeClass`, `windowHeightClass`, `orientation`, và hàm static `isValidDesignSize(size)` |
+| `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` — kết quả không bị bound nào kẹp |
+| `ScaleBounds` | `src/scaling/scale_bounds.dart` | Khoảng mà một hệ số scale được phép nhận: `downOnly()` (mặc định — thu nhỏ, không bao giờ phóng to), `fixed()`, `unbounded()`, hoặc `ScaleBounds(min:, max:)`; `clamp` coi hệ số NaN là 1 |
+| `ResponsiveProfile` | `src/scaling/responsive_profile.dart` | Ghi đè `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` cho một `WindowSizeClass` (`null` là kế thừa); `resolve` chọn đúng lớp, không có thì lớp nhỏ hơn gần nhất |
+| `WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints` | `src/adaptive/window_size_class.dart` | Lớp chiều rộng của cửa sổ (`compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge`), lớp chiều cao, và nơi chúng bắt đầu |
+| `ResponsiveContext` | `src/context_extension.dart` | Extension trên `BuildContext` — **lối duy nhất** để scale ([bảng bên dưới](#extension-trên-buildcontext)); cộng `responsive`, `windowSizeClass`, `windowHeightClass` |
+| `AdaptiveContext` | `src/adaptive/adaptive_context_extension.dart` | Extension trên `BuildContext` — `adaptive(compact:, medium:, …)`, `isCompactWindow`, `isExpandedOrWider`, `separatingDisplayFeature`, `foldPosture` |
+| `AdaptiveBuilder` / `AdaptiveLayout` | `src/adaptive/adaptive_builder.dart` | Một builder, hoặc mỗi lớp cửa sổ một builder |
+| `AdaptiveSplitView` | `src/adaptive/adaptive_split_view.dart` | Master–detail: hai ô tại nếp gập, bản lề hoặc từ `splitAt`, một ô trong các trường hợp còn lại; `divider` tuỳ chọn được layout rộng đúng `dividerExtent` (mặc định 1). `primary` bị giới hạn để divider và `secondary` luôn vừa, và một `primaryWidth` không chừa gì cho `secondary` sẽ lùi về một ô. `AdaptiveSplitView.isSplit(context)` cho danh sách biết đang ở trường hợp nào |
+| `AdaptiveContent` | `src/adaptive/adaptive_content.dart` | Chặn nội dung ở chiều rộng dễ đọc (640, không scale) |
+| `FoldPosture` | `src/adaptive/fold_posture.dart` | `flat` / `book` / `tabletop` |
+| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690), `DESIGN_SCALE_FACTOR` (1), các giá trị `BREAKPOINT_*`; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `SPLIT_DIVIDER_EXTENT` (1), `CONTENT_MAX_WIDTH` (640) — nằm trong `src/utils/`, như hằng số của mọi package khác |
+
+Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống: cửa sổ nhỏ hơn khung thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ 1:1 và để chỗ dư cho layout. Phóng to là opt-in, có chặn, theo từng lớp cửa sổ.
+
+Đầu vào suy biến không bao giờ làm layout sụp. Cửa sổ rỗng — Android báo 0×0 ở frame đầu tiên — scale theo 1 chứ không phải 0; hệ số NaN được kẹp thành 1; một khung thiết kế không dùng được (một cạnh bằng 0 hoặc vô hạn) assert ở debug và scale theo 1 ở release.
+
+### Vì sao metrics đi qua `InheritedWidget`
+
+`core_responsive` phát metrics qua `InheritedWidget`, nên mỗi lần đọc đều **đăng ký dependency** và việc rebuild đúng widget do chính Flutter lo. Cách làm thay thế — treo giá trị scale trên một singleton toàn cục — vẫn cho ra đúng con số nhưng không đăng ký gì cả, nên widget đọc nó không bao giờ biết metrics đã đổi (xoay máy, chia đôi màn hình, resize).
+
+`ResponsiveInit` là `StatelessWidget` có chủ đích: nó đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — nên rebuild khi resize và bỏ qua thay đổi brightness / textScale / padding. Không cần `WidgetsBindingObserver`, không `setState`.
+
+`ResponsiveScope.of(context)` **assert** với thông điệp *"No ResponsiveInit found above this context."* thay vì lùi về giá trị không scale. Fail to tiếng là cố ý: một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị. Các thành viên về layout — `context.windowSizeClass` và mọi thứ adaptive — là ngoại lệ: chọn layout là câu hỏi về cửa sổ, nên thiếu `ResponsiveInit` chúng phân lớp cửa sổ theo mặc định Material 3.
+
+### Extension trên `BuildContext`
+
+| Lời gọi | Trục |
+|:--|:--|
+| `context.responsive` | trả về `ResponsiveMetrics` |
+| `context.w(n)` | chiều rộng — cũng dùng cho thứ phải giữ vuông |
+| `context.h(n)` | chiều cao |
+| `context.r(n)` | trục nhỏ hơn — bo góc, viền, nét |
+| `context.sp(n)` | cỡ chữ (hoặc `fontSizeResolver`, khi có) |
+| `context.spMin(n)` | `sp` chặn trên bằng giá trị thiết kế — chữ co được, không phình ra; bằng `sp` dưới bound mặc định |
+| `context.dg(n)` | cả hai trục |
+| `context.dm(n)` | trục lớn hơn |
+| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` theo `w`, `vertical` theo `h`, `all` theo `w` |
+| `context.borderRadius({all, topLeft, topRight, bottomLeft, bottomRight})` | `r` |
+| `context.verticalSpace(n)` / `context.horizontalSpace(n)` | một `SizedBox`, theo `h` / `w` |
+| `context.windowSizeClass` / `context.windowHeightClass` | lớp cửa sổ — dùng được cả khi không có `ResponsiveInit` |
+
+> [!CAUTION]
+> **Cố ý không có extension trên `num`.** `16.w` **không biên dịch được**. Một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục — và widget đọc biến toàn cục thì không bao giờ biết metrics đã đổi. Bắt buộc phải có `BuildContext` chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được. Package không có instance toàn cục, không có hàm `init()` mệnh lệnh, không có trợ giúp `setWidth()` và không có cờ điều khiển rebuild — một khi metrics đã nằm trong `InheritedWidget` thì nhắm đúng widget để rebuild là việc của Flutter.
+
+Luật **R7** của `dart tools/arch_check/check.dart` chặn dạng bare — mẫu `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — trong mọi file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
+
+> [!NOTE]
+> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/responsive/test/`.
+
+Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
+
+---
+
+## 6. `core_network` — HTTP client
 
 Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package không đụng trực tiếp tới storage hay UI.
 
@@ -189,13 +251,13 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 `NetworkConfig` được hiện thực **ở app shell**, không phải ở đây — đó chính là điều giữ cho `core_network` không dính bất kỳ phụ thuộc storage nào. Hai callback refresh mặc định `null`, nên client không có endpoint refresh sẽ đơn giản trả `401` nguyên vẹn cho nơi gọi.
 
 > [!CAUTION]
-> **SSL pinning chỉ tốt bằng danh sách hash của nó.** `sslPinningHashes` hiện trả `const []`, tức pinning đang tắt. `AppInitializer` ghi log mức `ERROR` trên các flavor khác dev khi danh sách rỗng hoặc config chưa đăng ký, nên lỗ hổng này hiện rõ chứ không im lặng — nhưng nó vẫn là lỗ hổng cho tới khi bạn điền hash vào. Xem [hướng dẫn networking](../guides/08_networking.md).
+> **SSL pinning chỉ tốt bằng danh sách hash của nó.** `sslPinningHashes` hiện trả `const []`, tức pinning đang tắt. `AppInitializer` ghi log mức `ERROR` mỗi khi danh sách rỗng hoặc config chưa đăng ký trên bất kỳ bản build nào không bỏ qua kiểm tra certificate — tức mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor (được coi như `prod` về TLS), nên lỗ hổng này hiện rõ chứ không im lặng — nhưng nó vẫn là lỗ hổng cho tới khi bạn điền hash vào. Xem [hướng dẫn networking](../guides/08_networking.md).
 
 Chi tiết đầy đủ về chuỗi interceptor, các lớp chống đệ quy khi refresh token và việc che header nằm ở [`../guides/08_networking.md`](../guides/08_networking.md).
 
 ---
 
-## 6. `core_storage` — lưu trữ key–value có mã hoá
+## 7. `core_storage` — lưu trữ key–value có mã hoá
 
 Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa preset nào.
 
@@ -212,7 +274,7 @@ Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa pres
 
 Ngoài mã hoá dữ liệu lúc nghỉ (AES-256-CBC với IV ngẫu nhiên mỗi lần ghi), `StorageValue` còn giữ giá trị **trong bộ nhớ** ở dạng XOR mask ngẫu nhiên, chỉ lộ ra đúng khoảnh khắc cần đọc. Master key cũng được xử lý y hệt. Điều này nâng rào chắn trước tấn công đọc memory dump — một lớp mà phần lớn template bỏ qua hoàn toàn.
 
-`SecureStorageImpl` không bao giờ xoá sạch kho khi gặp lỗi platform: việc đọc master key thất bại (Keychain bị khoá trước lần mở khoá đầu tiên, KeyStore đang bận) được thử lại rồi ném lại lỗi mà không xoá gì; chỉ master key có nhưng không dùng được mới bị thay, và chỉ giá trị không giải mã được mới bị xoá. Xem [hướng dẫn storage](../guides/06_storage.md).
+`SecureStorageImpl` không bao giờ xoá sạch kho khi gặp lỗi platform: việc đọc master key thất bại (Keychain bị khoá trước lần mở khoá đầu tiên, KeyStore đang bận) được thử lại rồi ném lại lỗi mà không xoá gì; chỉ master key có nhưng không dùng được mới bị thay, và chỉ giá trị không giải mã được mới bị xoá. `PrefStorageImpl` áp cùng quy tắc cho master key của riêng nó: chỉ lùi về key trong SharedPreferences khi key đó mở được các preference đã lưu hoặc chưa có preference nào để mất, còn không thì ném lại lỗi và giữ nguyên mọi preference. Xem [hướng dẫn storage](../guides/06_storage.md).
 
 ### Quyền sở hữu
 
@@ -229,7 +291,7 @@ Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước 
 
 ---
 
-## 7. `core_database` — lưu trữ quan hệ (Drift + SQLite)
+## 8. `core_database` — lưu trữ quan hệ (Drift + SQLite)
 
 Chạy trên isolate nền qua `NativeDatabase.createInBackground`. **Không phụ thuộc package nào khác** trong workspace.
 
@@ -252,7 +314,7 @@ Drift phân giải `@DriftDatabase(tables:)` lúc biên dịch và bắt buộc 
 **`IDatabaseHandle`** — data source xin đúng accessor mình cần thay vì nhận một object database kèm toàn bộ DAO trên đó:
 
 ```dart
-ProfileLocalDataSource(IDatabaseHandle handle)
+ProfileLocalDataSource(IDatabaseHandle<ProfileDatabase> handle)
   : _dao = handle.accessor(ProfileDao.new);
 ```
 
@@ -263,70 +325,11 @@ Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout)
 
 ---
 
-## 8. `core_notifications` — thông báo đẩy và cục bộ
+## 9. `core_notifications` — thông báo đẩy và cục bộ
 
 `PushNotificationService` bọc Firebase Messaging và `flutter_local_notifications`. Channel ID và loại payload nằm ở `src/utils/notification_constants.dart`, tức ngay trong package tiêu thụ chúng — một channel ID thông báo không có lý do gì để mọi package trong app đọc được.
 
 Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự đăng ký từ `lib/firebase/firebase_module.dart` của mình. Vì thế manifest của app đặt `core_notifications` trong nhóm `notifications` với `phase: after` thay vì trong `core`: `before` chạy trước phần đăng ký của chính app. App không dùng push notification thì bỏ nhóm này đi.
-
----
-
-## 9. `core_responsive` — scale theo khung thiết kế và layout thích ứng, gắn với `BuildContext`
-
-Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kích thước cửa sổ và widget thích ứng dùng để chọn layout. Nó nằm tại `platform/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, không package bên thứ ba nào, và cũng không import `material`.
-
-| Thành phần export | Đường dẫn | Mục đích |
-|:--|:--|:--|
-| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 360×690), `scaleBounds` và `textScaleBounds` (cùng mặc định `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (mặc định `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver` |
-| `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` mang `ResponsiveMetrics`; `maybeOf(context)` trả nullable, `of(context)` assert khi thiếu |
-| `ResponsiveMetrics` | `src/responsive_metrics.dart` | Value object bất biến với các phép `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; cho thấy giá trị đã resolve `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, cùng `windowSizeClass`, `windowHeightClass`, `orientation` |
-| `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` — kết quả không bị bound nào kẹp |
-| `ScaleBounds` | `src/scaling/scale_bounds.dart` | Khoảng mà một hệ số scale được phép nhận: `downOnly()` (mặc định — thu nhỏ, không bao giờ phóng to), `fixed()`, `unbounded()`, hoặc `ScaleBounds(min:, max:)` |
-| `ResponsiveProfile` | `src/scaling/responsive_profile.dart` | Ghi đè `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` cho một `WindowSizeClass` (`null` là kế thừa); `resolve` chọn đúng lớp, không có thì lớp nhỏ hơn gần nhất |
-| `WindowSizeClass` / `WindowHeightClass` / `ResponsiveBreakpoints` | `src/adaptive/window_size_class.dart` | Lớp chiều rộng của cửa sổ (`compact` < 600 ≤ `medium` < 840 ≤ `expanded` < 1200 ≤ `large` < 1600 ≤ `extraLarge`), lớp chiều cao, và nơi chúng bắt đầu |
-| `ResponsiveContext` | `src/context_extension.dart` | Extension trên `BuildContext` — **lối duy nhất** để scale; cộng `responsive`, `windowSizeClass`, `windowHeightClass` |
-| `AdaptiveContext` | `src/adaptive/adaptive_context_extension.dart` | Extension trên `BuildContext` — `adaptive(compact:, medium:, …)`, `isCompactWindow`, `isExpandedOrWider`, `separatingDisplayFeature`, `foldPosture` |
-| `AdaptiveBuilder` / `AdaptiveLayout` | `src/adaptive/adaptive_builder.dart` | Một builder, hoặc mỗi lớp cửa sổ một builder |
-| `AdaptiveSplitView` | `src/adaptive/adaptive_split_view.dart` | Master–detail: hai ô tại nếp gập, bản lề hoặc từ `splitAt`, một ô trong các trường hợp còn lại; `AdaptiveSplitView.isSplit(context)` |
-| `AdaptiveContent` | `src/adaptive/adaptive_content.dart` | Chặn nội dung ở chiều rộng dễ đọc (640, không scale) |
-| `FoldPosture` | `src/adaptive/fold_posture.dart` | `flat` / `book` / `tabletop` |
-| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690), các giá trị `BREAKPOINT_*`; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `CONTENT_MAX_WIDTH` (640) |
-
-Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống: cửa sổ nhỏ hơn khung thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ 1:1 và để chỗ dư cho layout. Phóng to là opt-in, có chặn, theo từng lớp cửa sổ.
-
-### Vì sao metrics đi qua `InheritedWidget`
-
-`core_responsive` phát metrics qua `InheritedWidget`, nên mỗi lần đọc đều **đăng ký dependency** và việc rebuild đúng widget do chính Flutter lo. Cách làm thay thế — treo giá trị scale trên một singleton toàn cục — vẫn cho ra đúng con số nhưng không đăng ký gì cả, nên widget đọc nó không bao giờ biết metrics đã đổi (xoay máy, chia đôi màn hình, resize).
-
-`ResponsiveInit` là `StatelessWidget` có chủ đích: nó đọc `MediaQuery.sizeOf(context)` — một dependency **chỉ theo size** — nên rebuild khi resize và bỏ qua thay đổi brightness / textScale / padding. Không cần `WidgetsBindingObserver`, không `setState`.
-
-`ResponsiveScope.of(context)` assert với thông điệp `"No ResponsiveInit found above this context."` khi thiếu. Fail to tiếng là cố ý: một fallback im lặng "không scale" sẽ đẩy layout sai ra mọi thiết bị. Các thành viên về layout — `context.windowSizeClass` và mọi thứ adaptive — là ngoại lệ: chọn layout là câu hỏi về cửa sổ, nên thiếu `ResponsiveInit` chúng phân lớp cửa sổ theo mặc định Material 3.
-
-### Extension trên `BuildContext`
-
-| Lời gọi | Trục |
-|:--|:--|
-| `context.responsive` | trả về `ResponsiveMetrics` |
-| `context.w(n)` | chiều rộng — cũng dùng cho thứ phải giữ vuông |
-| `context.h(n)` | chiều cao |
-| `context.r(n)` | trục nhỏ hơn — bo góc, viền, nét |
-| `context.sp(n)` | cỡ chữ |
-| `context.spMin(n)` | `sp` chặn trên bằng giá trị thiết kế (chữ co được, không phình ra) |
-| `context.dg(n)` | cả hai trục |
-| `context.dm(n)` | trục lớn hơn |
-| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` theo `w`, `vertical` theo `h`, `all` theo `w` |
-| `context.borderRadius({all, topLeft, topRight, bottomLeft, bottomRight})` | `r` |
-| `context.verticalSpace(n)` / `context.horizontalSpace(n)` | `SizedBox` |
-
-> [!CAUTION]
-> **Không có extension trên `num`.** `16.w` không biên dịch được. Một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một biến toàn cục — và widget đọc biến toàn cục thì không bao giờ biết metrics đã đổi. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được. Package không có instance toàn cục, không có hàm `init()` mệnh lệnh, không có trợ giúp `setWidth()` và không có cờ điều khiển rebuild — một khi metrics đã nằm trong `InheritedWidget` thì nhắm đúng widget để rebuild là việc của Flutter.
-
-Luật **R7** của `dart tools/arch_check/check.dart` chặn mọi dạng bare (`[\d)].(w|h|r|sp|spMin|dg|dm)`) trong file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
-
-> [!NOTE]
-> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/responsive/test/`.
-
-Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 

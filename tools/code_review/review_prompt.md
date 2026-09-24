@@ -38,9 +38,9 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
     - All initialization logic (DI, logger, orientation, overlays, HttpOverrides) **must** be centralized in `AppInitializer.init()`.
     - An app's `main.dart` is one call: `runShellApp(configureDependencies: configureDependencies)`. The zone, DI, splash and `AppInitializer.init` all live in `platform_app_shell`'s `bootstrap.dart`.
 7.  **SSL/TLS Certificate Pinning & HttpOverrides Security**:
-    - Strictly control SSL validation based on Flavor (`AppConfig.appFlavor`):
-      - Only allow `HttpOverrides.global = _MyHttpOverrides()` (bypass bad certs) in the **Development environment (`Flavor.dev`)**.
-      - In **Staging and Production environments (`Flavor.staging` / `Flavor.prod`)**, it is mandatory to strictly enforce SPKI SHA-256 hash matching (Global Pinning) by activating `HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes)`.
+    - Strictly control SSL validation through `AppConfig.bypassesCertificateValidation` — never through `AppConfig.appFlavor`, which falls back to `dev` in any debug build without a flavor:
+      - Only allow `HttpOverrides.global = _MyHttpOverrides()` (bypass bad certs) in a **debug build that explicitly declared `--flavor dev`** (`AppConfig.declaredFlavor == Flavor.dev && kDebugMode`). Flag any bypass keyed on `appFlavor`, `isDevelopment`, or a flavor fallback.
+      - Everywhere else — **staging, prod, a `dev` profile/release build, and a build whose flavor is missing or unknown (treated as prod)** — it is mandatory to strictly enforce SPKI SHA-256 hash matching (Global Pinning) by activating `HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes)`.
 8.  **Scripts & CLI Tasks**:
     - **ABSOLUTELY FORBIDDEN** to create Windows PowerShell scripts (`.ps1`).
 9.  **Localization & Decentralized Delegation**:

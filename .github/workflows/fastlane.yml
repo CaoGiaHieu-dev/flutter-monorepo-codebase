@@ -57,14 +57,18 @@ on:
         required: true
         type: boolean
         default: false
+      # The Play Console's built-in tracks: internal testing, closed testing
+      # (`alpha`), open testing (`beta`), production. A custom closed-testing
+      # track is addressed by its own name — add it to this list to offer it.
       track:
-        description: "Play Store track (used only when distributing to the store)"
+        description: "Play Store track (used only when distributing to the store): internal, alpha = closed testing, beta = open testing, production"
         required: true
         type: choice
         default: "internal"
         options:
           - internal
-          - closed
+          - alpha
+          - beta
           - production
       distribute_firebase:
         description: "Distribute to Firebase App Distribution?"
@@ -86,10 +90,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set Up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: "oracle"
           java-version: "17"
@@ -264,8 +268,16 @@ jobs:
             else restore GOOGLE_PLAY_JSON_KEY_B64 "$path"; fi
           fi
           if [ "$DISTRIBUTE_STORE" = true ] && [ "$IOS" = true ]; then
+            # `xcrun altool --apiKey <id>` takes no key path: it finds the key
+            # only by the file name AuthKey_<id>.p8 (the lane points
+            # API_PRIVATE_KEYS_DIR at this file's directory). So the key is
+            # written under exactly that name, or not at all.
             path="$(cfg paths app_store_connect_key_filepath)"
+            key_id="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).dig("app_store_connect", "api_key_id").to_s.strip' "$APP/fastlane/Config.yaml")"
             if [ -z "$path" ]; then fail "Config.yaml" "paths.app_store_connect_key_filepath is not set."
+            elif [ -z "$key_id" ]; then fail "Config.yaml" "app_store_connect.api_key_id is not set."
+            elif [ "$(basename "$path")" != "AuthKey_${key_id}.p8" ]; then
+              fail "Config.yaml" "paths.app_store_connect_key_filepath must end in AuthKey_${key_id}.p8 (the name altool looks for), not $(basename "$path")."
             else restore APP_STORE_CONNECT_API_KEY_P8_B64 "$path"; fi
           fi
 
@@ -302,3 +314,16 @@ jobs:
             "distribute_store:$DISTRIBUTE_STORE" \
             "distribute_firebase:$DISTRIBUTE_FIREBASE" \
             "track:$TRACK"
+
+      # The lane builds with --obfuscate --split-debug-info=apps/mobile/obfuscate:
+      # without these files no crash stack trace from this build can be read,
+      # and they are not inside the APK/AAB/IPA. `always()`: a build that
+      # succeeded but failed to upload still produced them.
+      - name: Upload obfuscation symbols
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-symbols-${{ inputs.platform }}-${{ inputs.flavor }}-${{ inputs.version }}+${{ github.run_number }}
+          path: apps/mobile/obfuscate/
+          if-no-files-found: warn
+          retention-days: 90

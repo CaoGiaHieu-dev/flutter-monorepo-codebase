@@ -78,15 +78,15 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `default_app_version` | Default answer to the "app version" prompt |
 | `valid_flavors` | Accepted flavor names. `none` is always accepted on top of this list |
 | `app_bundle_ids.ios` / `.android` | **Base** bundle ID, without any flavor suffix |
-| `firebase.app_ids.<platform>.<flavor>` | Firebase App ID per platform and flavor, plus a `default` key for flavor-less builds |
-| `firebase.credentials_map.<flavor>` | Path to the Firebase service-account JSON per flavor |
+| `firebase.app_ids.<platform>.<flavor>` | Firebase App ID per platform and flavor, plus a `default` key for flavor-less builds. A flavor with no entry falls back to `default` with a warning — which uploads to the default app, so give every flavor you distribute its own entry |
+| `firebase.credentials_map.<flavor>` | Path to the Firebase service-account JSON per flavor; a flavor with no entry falls back to `default` (the same fallback `fastlane.yml` uses when it writes the file) |
 | `app_store_connect.api_key_id` / `.issuer_id` | App Store Connect API key identifiers |
 | `app_store_connect.username` / `.team_id` | Apple ID and team, fallback for actions that do not take an API key |
 | `app_store_connect.apple_ids.<flavor>` | Numeric Apple ID per flavor — **required** by the TestFlight upload, which errors with *"Unknown flavor for apple-id mapping"* if the flavor is missing |
 | `google_play.account_id` | Used only to build console links |
 | `paths.firebase_testers_file` | Text file of tester emails for Firebase App Distribution |
 | `paths.google_play_key_prod` / `_dev` | Google Play service-account JSON files |
-| `paths.app_store_connect_key_filepath` | The `.p8` API key file |
+| `paths.app_store_connect_key_filepath` | The `.p8` API key file. Its name **must be `AuthKey_<app_store_connect.api_key_id>.p8`** — the name App Store Connect gives the download. The TestFlight upload runs `xcrun altool --apiKey <id>`, which takes no key path: it looks only for that file name, in `$API_PRIVATE_KEYS_DIR` (the lane sets it to this file's directory) or in `./private_keys`, `~/private_keys`, `~/.private_keys`, `~/.appstoreconnect/private_keys`. Locally, a differently named file still uploads, through a temporary renamed copy and a warning; `fastlane.yml` refuses it |
 
 The former `paths.change_log_android` / `_ios` keys are gone (see [§3](#3-lanes)); if your `Config.yaml` still has them they are ignored.
 
@@ -98,6 +98,8 @@ The one plugin, `fastlane-plugin-firebase_app_distribution`, is already listed i
 bundle install                         # from the repository root (or from apps/mobile/)
 bundle exec fastlane android build …   # same from either directory
 ```
+
+**Commit the `Gemfile.lock` files** that the first `bundle install` writes (one next to each Gemfile: the root one and the one in `apps/mobile/`) — the root `.gitignore` ignores `*.lock` but makes an exception for them, as for `pubspec.lock`. Without them every machine and every CI run resolves whatever fastlane, CocoaPods and plugin versions are newest that day. Generate them on the machine that cuts releases, and add the other platforms that run the lanes, e.g. `bundle lock --add-platform arm64-darwin x86_64-linux`, so `bundler-cache` on a GitHub runner does not reject the lockfile.
 
 Do not run `fastlane add_plugin`: the plugin is already there, the command is interactive (it fails in CI), and it edits the Pluginfile of whichever fastlane folder it runs in. Add a new plugin by hand to `apps/mobile/fastlane/Pluginfile`; both Gemfiles load it — the root one through `fastlane/Pluginfile`, which fastlane requires in order to consider plugins set up.
 
@@ -144,7 +146,7 @@ Nothing is read implicitly and nothing is written back. (The lanes used to read 
 
 Valid values enforced by `helpers.rb`:
 
-- `VALID_TRACKS` = `production`, `internal`, `closed`
+- `VALID_TRACKS` = `internal`, `alpha` (closed testing), `beta` (open testing), `production` — the Play Console's built-in tracks. `closed` is not a track name the Play API accepts. A custom closed-testing track created in the Play Console is addressed by its own name: pass `track:<name>` on the command line, which the lanes accept as is; only the interactive prompt is limited to this list
 - `VALID_BUILD_TYPES` = `apk`, `aab`
 - `VALID_FLAVORS` = whatever is in `Config.yaml`, plus `none`
 
@@ -388,6 +390,7 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
    bundle exec fastlane store version:1.2.0 build_number:auto track:internal
    ```
 7. **Promote** from `internal` to `production` in the Play Console once validated. The lane uploads with `release_status: 'draft'`, so nothing goes live without an explicit promotion.
+8. **Archive the obfuscation symbols.** Every lane builds with `--obfuscate --split-debug-info=apps/mobile/obfuscate` and prints that path after the build. The symbol files are not inside the APK/AAB/IPA, and without them `flutter symbolize` cannot read a single crash stack trace from this release — keep them with the release (`fastlane.yml` uploads them as a workflow artifact). The next build overwrites them.
 
 ### Pre-release checklist
 
@@ -408,8 +411,8 @@ The iOS lanes are real and reasonably developed, not stubs:
 
 - `run_flutter_build` deletes `Podfile.lock` and runs `pod deintegrate && pod install --repo-update` before every iOS build, forcing fresh dependency resolution.
 - It picks `ios/flavors/<flavor>/ExportOptions.plist` when a flavor is set, `ios/ExportOptions.plist` otherwise, and warns rather than failing if neither exists.
-- If `flutter build ipa` archives successfully but export fails, it retries `xcrun xcodebuild -exportArchive` up to three times.
-- `distribute_to_app_store` bypasses Fastlane's `upload_to_testflight` and calls `xcrun altool --upload-app` directly, with a comment noting Fastlane's altool wrapper has compatibility problems with Xcode 26.
+- If `flutter build ipa` archives successfully but export fails, it retries `xcrun xcodebuild -exportArchive -exportOptionsPlist <that file>` up to three times — **only when that file exists**. Without it there is nothing to retry with, so the lane stops with an error naming the missing path. Create it next to the flavor (`ios/flavors/<flavor>/ExportOptions.plist`, or `ios/ExportOptions.plist` for flavor-less builds) with at least `method` (e.g. `app-store-connect`), `teamID` and, for manual signing, `provisioningProfiles`; the `ExportOptions.plist` inside a successful Xcode *Distribute App* export is a working starting point.
+- `distribute_to_app_store` bypasses Fastlane's `upload_to_testflight` and calls `xcrun altool --upload-app` directly, with a comment noting Fastlane's altool wrapper has compatibility problems with Xcode 26. altool is spawned with `API_PRIVATE_KEYS_DIR` set to the directory of `paths.app_store_connect_key_filepath`, since it finds the key only by the name `AuthKey_<api_key_id>.p8` ([§2](#fields-to-fill-in)).
 
 What is **not** wired up:
 

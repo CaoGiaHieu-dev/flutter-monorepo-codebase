@@ -36,6 +36,10 @@ app_bundle_ids:
   android: "com.yourcompany.yourapp" # e.g., "com.example.myapp"
 
 # Firebase App IDs and Credentials Mapping
+# Both maps are looked up by flavor; a flavor with no entry of its own falls
+# back to the map's `default` entry (with a warning), as does a flavor-less
+# build. Beware: in `app_ids` that means uploading to the default app — give
+# every flavor you distribute its own entry.
 firebase:
   app_ids:
     # Get these from your Firebase project settings -> Project Overview -> Add App
@@ -63,8 +67,14 @@ firebase:
     default: "fastlane/firebase-auth.json" # Default credential file when no flavor is specified (i.e., 'none')
 
 # Apple App Store Connect Configuration
-# Generate an API Key in App Store Connect (Users and Access -> Keys)
-# Key file should be placed in apps/mobile/fastlane/ and named 'AuthKey_YOURKEYID.p8'.
+# Generate an API Key in App Store Connect (Users and Access -> Integrations ->
+# App Store Connect API). Keep the downloaded file's name: it must be exactly
+# `AuthKey_<api_key_id>.p8` (e.g. AuthKey_Z2ABCD6E7F.p8). The TestFlight upload
+# runs `xcrun altool --apiKey <api_key_id>`, which takes no key path — it looks
+# only for a file of that name, in the directory the lane passes as
+# API_PRIVATE_KEYS_DIR (the directory of paths.app_store_connect_key_filepath).
+# A differently named file still works, through a temporary renamed copy, with
+# a warning; .github/workflows/fastlane.yml refuses it outright.
 app_store_connect:
   api_key_id: "<YOUR_APP_STORE_CONNECT_API_KEY_ID>" # e.g., "Z2ABCD6E7F"
   issuer_id: "<YOUR_APP_STORE_CONNECT_ISSUER_ID>" # e.g., "69a6de80-d5d8-47e3-e053-5b8c7c11a4d1"
@@ -96,8 +106,8 @@ paths:
   google_play_key_prod: "fastlane/google-play-store.json"
   google_play_key_dev: "fastlane/google-play-store-dev.json" # Optional: if you have a separate dev key
 
-  # App Store Connect API Key .p8 file
-  # Rename your downloaded .p8 file to match this pattern and place it in apps/mobile/fastlane/.
+  # App Store Connect API Key .p8 file. The file name must be
+  # AuthKey_<app_store_connect.api_key_id>.p8 — see app_store_connect above.
   app_store_connect_key_filepath: "fastlane/AuthKey_YOURKEYID.p8"
 
   # (The former `change_log_android` / `change_log_ios` keys are gone: the

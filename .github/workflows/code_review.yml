@@ -36,9 +36,15 @@ on:
           - ko
           - zh
       flutter_version:
-        description: "Flutter version"
-        required: true
-        default: "3.47.4"
+        description: "Flutter version (empty = the version pinned in .fvmrc)"
+        required: false
+        default: ""
+
+# The job posts a PR review and PR comments, and reads nothing but the code.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   code-review:
@@ -48,24 +54,38 @@ jobs:
 
     steps:
       - name: 📥 Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # Full history for git diff
+          # Full history: the manual `changed` scope diffs against the
+          # merge-base with the default branch, and changed-files needs the
+          # PR base commit.
+          fetch-depth: 0
 
+      # The pinned version from .fvmrc unless a manual run names another one.
+      # `inputs.flutter_version` is empty on pull_request events, which used
+      # to hand the action an empty version and install the latest stable.
       - name: 🎯 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "${{ github.event.inputs.flutter_version }}" # Specify your desired Flutter version
-          channel: "stable" # Or 'beta', 'dev'
+          flutter-version: ${{ inputs.flutter_version }}
+          flutter-version-file: ${{ inputs.flutter_version == '' && '.fvmrc' || '' }}
+          channel: "stable"
           cache: true
 
       - name: 📦 Get dependencies
         run: dart tools/workspace_setup/configure.dart
 
+      # Pinned to a commit, not a tag: tags of this action were rewritten in
+      # the March 2025 supply-chain compromise (CVE-2025-30066).
+      # One file per line and no shell escaping — the list reaches the script
+      # through env, never interpolated into it.
       - name: 📜 Get changed .dart files
         id: changed_files
-        uses: tj-actions/changed-files@v46.0.1
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
+          separator: "\n"
+          safe_output: false
           files: |
             apps/*/lib/**/*.dart
             modules/**/*.dart
@@ -81,48 +101,69 @@ jobs:
         if: github.event_name == 'pull_request' && steps.changed_files.outputs.any_changed == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CHANGED_FILES: ${{ steps.changed_files.outputs.all_changed_files }}
         run: |
-          FILE_ARGS=""
-          for file in ${{ steps.changed_files.outputs.all_changed_files }}; do
-            FILE_ARGS="$FILE_ARGS --file $file"
-          done
+          set -euo pipefail
+          args=()
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then args+=(--file "$file"); fi
+          done <<< "$CHANGED_FILES"
 
           dart tools/code_review/code_review.dart \
             --format markdown \
             --language vi \
             --output-dir code_review_reports \
-            $FILE_ARGS
+            "${args[@]}"
 
+      # Inputs travel through env, never interpolated into the script.
       - name: 🔍 Run Code Review (Manual)
         if: github.event_name == 'workflow_dispatch'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SCOPE: ${{ inputs.review_scope }}
+          REPORT_LANG: ${{ inputs.language }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          SCOPE="${{ github.event.inputs.review_scope }}"
-          LANG="${{ github.event.inputs.language }}"
+          set -euo pipefail
+          review() { dart tools/code_review/code_review.dart --language "$REPORT_LANG" --format markdown "$@"; }
 
           if [ "$SCOPE" = "all" ]; then
-            dart tools/code_review/code_review.dart --all --language "$LANG" --format markdown
+            review --all
           elif [ "$SCOPE" = "domain" ] || [ "$SCOPE" = "data" ]; then
             # One run per module layer: --folder takes a single directory.
             for dir in modules/*/"$SCOPE"; do
               [ -d "$dir" ] || continue
-              dart tools/code_review/code_review.dart --folder "$dir" --language "$LANG" --format markdown
+              review --folder "$dir"
             done
           elif [ "$SCOPE" = "platform" ]; then
-            dart tools/code_review/code_review.dart --folder platform --language "$LANG" --format markdown
+            review --folder platform
           elif [ "$SCOPE" = "presentation" ]; then
             for dir in modules/*/feature apps; do
               [ -d "$dir" ] || continue
-              dart tools/code_review/code_review.dart --folder "$dir" --language "$LANG" --format markdown
+              review --folder "$dir"
             done
           else
-            dart tools/code_review/code_review.dart --changed --language "$LANG" --format markdown
+            # `changed` = what this branch changes relative to the default
+            # branch. The tool's own --changed means `git diff HEAD` — the
+            # uncommitted changes — which on a fresh checkout is nothing.
+            git fetch --no-tags origin "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+            base="$(git merge-base "origin/$DEFAULT_BRANCH" HEAD)"
+            args=()
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then args+=(--file "$file"); fi
+            done < <(git diff --name-only --diff-filter=ACMRT "$base" HEAD -- apps modules platform \
+                       | grep -E '^(apps/[^/]+/(lib|test)/|modules/|platform/).*\.dart$' \
+                       | grep -vE '\.(g|freezed|module)\.dart$' || true)
+            if [ "${#args[@]}" -eq 0 ]; then
+              echo "::notice::No Dart file changed relative to origin/$DEFAULT_BRANCH ($base); nothing to review."
+              exit 0
+            fi
+            review "${args[@]}"
           fi
 
       - name: 📊 Upload Review Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: code-review-report-${{ github.run_number }}
           path: code_review_reports/
@@ -130,7 +171,7 @@ jobs:
 
       - name: 📝 Comment PR with Inline Suggestions
         if: github.event_name == 'pull_request' && always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -141,7 +182,8 @@ jobs:
             // Helper to check if a line is in the PR's diff
             const isLineInDiff = (filePath, lineNumber, diffs) => {
               const fileDiff = diffs.find(d => d.filename === filePath);
-              if (!fileDiff) return false;
+              // `patch` is absent for binary files and very large diffs.
+              if (!fileDiff || !fileDiff.patch) return false;
 
               const hunks = fileDiff.patch.split('\n').filter(line => line.startsWith('@@'));
               for (const hunk of hunks) {
@@ -158,7 +200,11 @@ jobs:
             };
 
             // 1. Get PR diff and find the report file
-            const { data: diffs } = await github.rest.pulls.listFiles({ owner, repo, pull_number: issue_number });
+            // Paginated: listFiles returns at most 100 files per page (30 by
+            // default), and a file missing here gets no inline comments.
+            const diffs = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: issue_number, per_page: 100,
+            });
             const reportsDir = 'code_review_reports';
             if (!fs.existsSync(reportsDir)) {
               console.log('No reports directory found. Skipping comment.');
@@ -171,8 +217,10 @@ jobs:
 
             if (files.length === 0) {
               // If no report file, it might mean no issues were found. Post a success message.
-              const existingComments = await github.rest.issues.listComments({ owner, repo, issue_number });
-              const botComment = existingComments.data.find(comment => comment.user.login === 'github-actions[bot]' && comment.body.includes('AI Code Review Results'));
+              const existingComments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number, per_page: 100,
+              });
+              const botComment = existingComments.find(comment => comment.user.login === 'github-actions[bot]' && comment.body.includes('AI Code Review Results'));
               if (!botComment) {
                  await github.rest.issues.createComment({
                     owner, repo, issue_number,
@@ -257,23 +305,28 @@ jobs:
                 });
             }
 
+      # Counts files the report marks HIGH priority. Each file section of the
+      # report carries one line `**<Priority label>:** 🔴 HIGH` (written by
+      # _writeDetailSection in tools/code_review/lib/services/report_service.dart;
+      # the label is translated, the value is not). A bare `grep 🔴` also hit
+      # the report's legend row `| 🔴 **High** | …`, so it was never zero.
+      # Advisory: it annotates, it does not fail the job.
       - name: ❌ Fail on Critical Issues
-        if: github.event_name == 'pull_request'
+        if: always()
         run: |
-          # Check if report contains critical issues
-          if [ -d "code_review_reports" ]; then
-            REPORT=$(find code_review_reports -name "code_review_report_*.md" | head -1)
-            if [ -f "$REPORT" ]; then
-              # Count critical issues (🔴 markers)
-              CRITICAL_COUNT=$(grep -c "🔴" "$REPORT" || true)
-              
-              if [ "$CRITICAL_COUNT" -gt 0 ]; then
-                echo "::error::Found $CRITICAL_COUNT critical issues in code review"
-                echo "::warning::Please review the detailed report and fix critical issues"
-                # Don't fail the build, just warn
-                # exit 1
-              else
-                echo "✅ No critical issues found"
-              fi
-            fi
+          shopt -s nullglob
+          reports=(code_review_reports/code_review_report_*.md)
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "No review report was produced."
+            exit 0
+          fi
+          CRITICAL_COUNT=$({ grep -hcE '^\*\*[^*]+:\*\* 🔴 HIGH[[:space:]]*$' "${reports[@]}" || true; } \
+            | awk '{ s += $1 } END { print s + 0 }')
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::$CRITICAL_COUNT file(s) with HIGH-priority findings in the code review"
+            echo "::warning::Please review the detailed report and fix critical issues"
+            # Don't fail the build, just warn
+            # exit 1
+          else
+            echo "✅ No critical issues found"
           fi

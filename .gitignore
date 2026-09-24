@@ -49,6 +49,9 @@ env/
 # every clone and every CI run resolves whatever versions are newest that day.
 *.lock
 !/pubspec.lock
+# Bundler's lockfiles (root and apps/mobile/) pin fastlane, cocoapods and the
+# fastlane plugins the same way; commit each after the first `bundle install`.
+!Gemfile.lock
 .kiro
 
 # Workspace Tools & Reports

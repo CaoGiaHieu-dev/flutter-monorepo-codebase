@@ -354,23 +354,24 @@ Remote data source trả về envelope `BaseEntity<UserModel>`, nên `R` là env
 
 
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
-[`i_base_repository.dart:57-59`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
+khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
+[`i_base_repository.dart`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
 
 > [!CAUTION]
 > Dùng `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`. Và tuyệt
 > đối không để `throw` nào thoát khỏi tầng data — UI chỉ được nhận `Result`.
 
 > [!WARNING]
-> **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc
-> [`error_handler.dart:50-88`](../../../platform/kernel/lib/src/error/error_handler.dart):
+> **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc `ErrorHandler._classify` (nằm sau
+> `handleError`) trong [`error_handler.dart`](../../../platform/kernel/lib/src/error/error_handler.dart):
 > nó xử lý `AppException`, `DioException`, `SocketException`, `HttpException` và `FormatException`
 > — nhưng **không** có `FirebaseException`, `FirebaseAuthException` hay `PlatformException`. Mọi
 > lỗi Firebase vì thế rơi vào nhánh mặc định:
 >
 > ```dart
 > return ServerFailure(
->   message: _isDebug ? error.toString() : 'Unknown error occurred',
->   code: 9999,
+>   message: _isDebug ? error.toString() : _unknownMessage, // 'Unknown error occurred'
+>   code: ErrorCodes.UNKNOWN, // 9999
 > );
 > ```
 >

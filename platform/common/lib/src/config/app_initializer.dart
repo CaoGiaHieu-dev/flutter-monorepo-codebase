@@ -16,10 +16,26 @@ import '../../core_common.dart';
 class AppInitializer {
   AppInitializer._();
 
-  /// Performs all required startup initializations.
-  static Future<void> init({RouteObserver<ModalRoute>? routeObserver}) async {
-    // Global setup for operations (e.g., error handling, logging)
-    _setupOperationGlobalConfig();
+  static bool _ranBeforeRunApp = false;
+
+  /// The synchronous steps that must be in place before the first widget is
+  /// built: logger configuration and the certificate handling
+  /// ([HttpOverrides.global] — pinning, or, in a debug build that declared
+  /// the `dev` flavor only, a bypass for local self-signed servers).
+  ///
+  /// `runShellApp` calls this right after dependency injection and **before**
+  /// `MainScope` builds the splash. It cannot wait for [init]: the splash is
+  /// already wrapped in every feature's `IAppTreeWrapper`, so a controller
+  /// created there can open its first connection while [init] is still
+  /// pending — and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it
+  /// created first, so that connection's client (unpinned) would serve the
+  /// whole session.
+  ///
+  /// Idempotent: [init] calls it too, for a host that never called it, and a
+  /// second call installs nothing.
+  static void initBeforeRunApp() {
+    if (_ranBeforeRunApp) return;
+    _ranBeforeRunApp = true;
 
     // Configure Dynamic Logger
     _setupDynamicLogger();
@@ -27,6 +43,20 @@ class AppInitializer {
     // Certificate handling: pinning, or — debug + explicit dev flavor only —
     // a bypass for local self-signed servers.
     _setupHttpOverrides();
+  }
+
+  /// Lets a test run [initBeforeRunApp] again.
+  @visibleForTesting
+  static void debugResetBeforeRunApp() => _ranBeforeRunApp = false;
+
+  /// Performs all required startup initializations.
+  static Future<void> init({RouteObserver<ModalRoute>? routeObserver}) async {
+    // Global setup for operations (e.g., error handling, logging)
+    _setupOperationGlobalConfig();
+
+    // Logger + HttpOverrides. Normally already done by `runShellApp`, before
+    // the splash was built; a no-op then.
+    initBeforeRunApp();
 
     // Enable URL reflection for imperative APIs in GoRouter
     GoRouter.optionURLReflectsImperativeAPIs = true;

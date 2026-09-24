@@ -184,7 +184,8 @@ bundles:
     breaks: []
     note: >-
       This is the only IAppEntryLocation. Without it the cold-start route falls
-      back to the first dashboard tab, then to '/'.
+      back to the first dashboard tab, then to the '/_empty_dashboard'
+      placeholder.
 
   cache:
     packages: [domain_cache, data_cache]

@@ -370,6 +370,10 @@ if (hashes != null && hashes.isNotEmpty) {
 }
 ```
 
+### Được cài lúc nào
+
+`_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi ngay sau `configureDependencies()` và **trước** khi `MainScope` dựng splash. Thời điểm là mấu chốt: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó — auth khôi phục phiên bằng một lần refresh token — có thể gửi request đầu tiên ngay lập tức, và `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`. Override cài muộn hơn, trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
+
 ### Cái bẫy khi đăng ký DI
 
 `NetworkConfig implements SslPinningConfig`, nhưng đăng ký impl `as: NetworkConfig` **không** làm nó phân giải được dưới kiểu `SslPinningConfig` — GetIt khớp đúng kiểu đã đăng ký. Thiếu một binding thứ hai, `getItOrNull<SslPinningConfig>()` trả về `null` và pinning âm thầm vô hiệu trên mọi flavor, kể cả production. Binding ngăn điều đó:

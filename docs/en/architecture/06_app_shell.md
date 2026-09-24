@@ -55,6 +55,7 @@ sequenceDiagram
     autonumber
     participant M as runShellApp()
     participant DI as configureDependencies()
+    participant P as AppInitializer.initBeforeRunApp()
     participant S as MainScope.run()
     participant N as FlutterNativeSplash
     participant I as AppInitializer.init()
@@ -65,6 +66,8 @@ sequenceDiagram
     M->>DI: await configureDependencies()
     Note over DI: every module registered<br/>before any UI exists
     DI-->>M: container ready
+    M->>P: logger + HttpOverrides.global (pinning)
+    Note over P: synchronous, before any widget —<br/>the splash's tree wrappers may already open a connection
     M->>S: MainScope(splashScreen, root, initService).run()
 
     alt splashScreen == null (iOS)
@@ -90,8 +93,9 @@ The sequence lives in `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`]
 1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost. Each goes to the app's optional `onError` callback — the place to wire a crash reporter — and then to `FlutterError.reportError`.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call.
 3. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
-4. **`MainScope`** is constructed with three things: which splash widget to show (if any), the root widget, and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`.
-5. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
+4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/app_shell/test/boot_order_test.dart` holds the order.
+5. **`MainScope`** is constructed with three things: which splash widget to show (if any), the root widget, and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, which does the rest: `OperationGlobalConfig`, GoRouter's URL reflection, `AppInfoHelper`, handing the route observer to `RouteAwareWidget`, orientation and system UI.
+6. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
 
 ### The two splash paths
 
@@ -257,12 +261,16 @@ Every collection point degrades gracefully when nothing is registered:
 | `DashboardRouteModule` | the bare `navigationShell` — destinations without chrome |
 | `IAppEntryLocation` | `AppRouter.fallbackLocation`: the first dashboard tab's path (lowest `order`), else the `/_empty_dashboard` placeholder (not `/`) |
 
+`initialLocation` is `AppRouter.entryLocation`: the registered `IAppEntryLocation` **on the first launch only**, `fallbackLocation` on every later one. "First launch" is the shell's own `AppBootStorage.viewedOnboard`, which `NavigatorWrapperWidget` sets the first time boot runs with an entry location (§6); `AppRouter.resolveEntryLocation` is the pure decision. A returning user therefore opens on the first tab while the session restores, not on onboarding — and a signed-out one is then sent to login by the boot redirect.
+
 Deleting a feature package therefore cannot crash the shell.
 
 > [!CAUTION]
 > **Never hardcode a feature route in `app_router.dart`.** Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-evaluate redirects when auth state changes. `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
+`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `IAuthSessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
+
+`observers: [routeObserver]` attaches `AppRouter.routeObserver` to the root navigator, and go_router forwards the root observers to every `ShellRoute` and `StatefulShellBranch` navigator (`notifyRootObserver`, on by default) — so the one observer `AppInitializer.init` hands to `RouteAwareWidget` sees pushes and pops everywhere, tabs included. `platform/app_shell/test/app_router_test.dart` checks both levels.
 
 ---
 
@@ -285,8 +293,10 @@ Waiting for `endOfFrame` guarantees the first frame is on screen before any redi
 
 **Later transitions** arrive through two stream subscriptions opened in `initState` — `IAuthSessionState.sessionChanges` and `.sessionFailures` — and are gated differently. `_onSessionChanged` (which navigates) is ignored until `_bootCompleted && _session.hasRestoredSession`, so the restore's own emission does not fight the boot redirect over the very first navigation. `_onSessionFailure` (which only shows a toast) checks `_bootCompleted` alone — it never navigates, so it has nothing to fight over. `build` itself is just `Overlay.wrap(child: widget.child)`.
 
-> [!WARNING]
-> `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written even when the method returns `false` because a user is already signed in — that is, without the onboarding screen ever being shown. Harmless today, but the flag does not mean quite what its name suggests.
+**Deep links** start in `_goToHome`, so they are never routed over onboarding or login. With an auth module that covers every path — leaving onboarding leads to a sign-in, and the sign-in to `_goToHome`. Without one no sign-in ever comes, so when boot stays on the entry location the widget instead starts deep links the first time the router leaves it (`navigator_wrapper_widget_test.dart`).
+
+> [!NOTE]
+> `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written on the first boot with an entry location even when a user is already signed in and onboarding is never shown. The flag means "the first launch is over", and that is exactly what `AppRouter.entryLocation` reads it as: the next cold start begins at `fallbackLocation`.
 
 ---
 

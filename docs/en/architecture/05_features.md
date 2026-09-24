@@ -214,7 +214,7 @@ What matters on the feature side is the **caller's** obligation:
 CustomButton(width: context.w(120), height: context.h(44))
 ```
 
-`core_ui_kit` widgets never scale through `core_responsive` internally. If you pass an already-scaled value they would double-scale it, so scaling is always done here, at the call site. Note there is no `num` extension — `120.w` does not compile, only `context.w(120)` does.
+`core_ui_kit` widgets never re-scale a value passed in — they use it as received, and scale only their own default constants through `core_responsive`. Scaling a parameter again inside the widget would double-scale it, so scaling a value you pass is always done here, at the call site. Note there is no `num` extension — `120.w` does not compile, only `context.w(120)` does.
 
 ## 6. UI controller lifecycle
 

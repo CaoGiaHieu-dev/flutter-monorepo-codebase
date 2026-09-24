@@ -55,6 +55,7 @@ sequenceDiagram
     autonumber
     participant M as runShellApp()
     participant DI as configureDependencies()
+    participant P as AppInitializer.initBeforeRunApp()
     participant S as MainScope.run()
     participant N as FlutterNativeSplash
     participant I as AppInitializer.init()
@@ -65,6 +66,8 @@ sequenceDiagram
     M->>DI: await configureDependencies()
     Note over DI: mọi module đăng ký xong<br/>trước khi có bất kỳ UI nào
     DI-->>M: container sẵn sàng
+    M->>P: logger + HttpOverrides.global (pinning)
+    Note over P: đồng bộ, trước mọi widget —<br/>tree wrapper của splash có thể mở kết nối ngay
     M->>S: MainScope(splashScreen, root, initService).run()
 
     alt splashScreen == null (iOS)
@@ -90,8 +93,9 @@ Trình tự này nằm trong `runShellApp()` ([`platform/app_shell/lib/bootstrap
 1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm. Mỗi lỗi đi qua callback `onError` (tuỳ chọn) của app — chỗ để gắn crash reporter — rồi tới `FlutterError.reportError`.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin.
 3. **`await configureDependencies()`** chạy *trước* `MainScope`. Đến lúc widget đầu tiên build, cả container đã phân giải xong.
-4. **`MainScope`** được dựng với ba thứ: hiển thị splash widget nào (nếu có), widget gốc, và `initService` — ở đây là `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`.
-5. **`mainScope.run()`** rẽ nhánh tuỳ theo có truyền splash widget Dart hay không.
+4. **`AppInitializer.initBeforeRunApp()`** cấu hình logger và cài `HttpOverrides.global` — certificate pinning, hoặc bypass khi build debug + flavor `dev` — một cách đồng bộ, trước khi có bất kỳ widget nào. Không thể đợi tới `initService`: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó (`AuthProvider` của auth, khôi phục phiên bằng một lần refresh token) có thể mở kết nối đầu tiên khi `initService` còn đang chạy, và `IOHttpClientAdapter` của Dio giữ lại `HttpClient` nó tạo đầu tiên — một client không pin sẽ phục vụ cả phiên. Lời gọi này idempotent; `AppInitializer.init` gọi lại và lần thứ hai không cài gì. `platform/app_shell/test/boot_order_test.dart` giữ thứ tự này.
+5. **`MainScope`** được dựng với ba thứ: hiển thị splash widget nào (nếu có), widget gốc, và `initService` — ở đây là `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, lo phần còn lại: `OperationGlobalConfig`, URL reflection của GoRouter, `AppInfoHelper`, trao route observer cho `RouteAwareWidget`, hướng màn hình và system UI.
+6. **`mainScope.run()`** rẽ nhánh tuỳ theo có truyền splash widget Dart hay không.
 
 ### Hai đường splash
 
@@ -259,12 +263,16 @@ Mọi điểm gom đều lùi về phương án dự phòng khi không có đón
 | `DashboardRouteModule` | chính `navigationShell` — các tab không có chrome |
 | `IAppEntryLocation` | `AppRouter.fallbackLocation`: path của tab dashboard đầu tiên (`order` nhỏ nhất), nếu không có thì placeholder `/_empty_dashboard` (không phải `/`) |
 
+`initialLocation` là `AppRouter.entryLocation`: `IAppEntryLocation` đã đăng ký **chỉ ở lần chạy đầu tiên**, `fallbackLocation` ở mọi lần sau. "Lần chạy đầu tiên" là cờ riêng của shell, `AppBootStorage.viewedOnboard`, được `NavigatorWrapperWidget` gán ở lần boot đầu tiên có entry location (§6); `AppRouter.resolveEntryLocation` là phần quyết định thuần. Vì vậy người dùng quay lại mở app ở tab đầu tiên trong lúc phiên đang khôi phục, không phải ở onboarding — và nếu đã đăng xuất thì redirect khởi động đưa họ tới màn đăng nhập.
+
 Nhờ vậy, xoá một feature package không thể làm sập shell.
 
 > [!CAUTION]
 > **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Hãy đăng ký `IFeatureRouteModule` hoặc `INavDestinationModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter đánh giá lại redirect khi trạng thái đăng nhập đổi. `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
+`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter phân giải lại vị trí hiện tại — chạy mọi `redirect` gắn trên nó — khi trạng thái đăng nhập đổi. **Hiện không có redirect nào**: không có `redirect:` cấp cao nhất và không route mẫu nào khai báo, nên tự nó không tạo ra thay đổi nào thấy được. Nó được giữ làm điểm móc cho module nào thêm guard vào `GoRouteData.redirect` của riêng mình. Việc *điều hướng* khi đăng nhập / đăng xuất do `NavigatorWrapperWidget` làm, bằng cách lắng nghe `IAuthSessionState.sessionChanges` (§6). `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
+
+`observers: [routeObserver]` gắn `AppRouter.routeObserver` vào navigator gốc, và go_router chuyển tiếp các observer gốc tới mọi navigator của `ShellRoute` và `StatefulShellBranch` (`notifyRootObserver`, mặc định bật) — nên chính observer mà `AppInitializer.init` trao cho `RouteAwareWidget` thấy mọi lần push và pop, kể cả trong tab. `platform/app_shell/test/app_router_test.dart` kiểm tra cả hai cấp.
 
 ---
 
@@ -287,8 +295,10 @@ Chờ `endOfFrame` bảo đảm khung hình đầu tiên đã lên màn hình tr
 
 **Các chuyển đổi về sau** đến qua hai stream subscription mở trong `initState` — `IAuthSessionState.sessionChanges` và `.sessionFailures` — và được chặn theo hai cách khác nhau. `_onSessionChanged` (có điều hướng) bị bỏ qua cho tới khi `_bootCompleted && _session.hasRestoredSession`, để chính lần phát của bước khôi phục phiên không tranh giành lần điều hướng đầu tiên với redirect khởi động. `_onSessionFailure` (chỉ hiện toast) chỉ kiểm tra `_bootCompleted` — nó không điều hướng, nên không có gì để tranh giành. Bản thân `build` chỉ là `Overlay.wrap(child: widget.child)`.
 
-> [!WARNING]
-> `_goToOnboarding()` gán `viewedOnboard.value = true` trong khối `finally`, nên cờ vẫn được ghi ngay cả khi hàm trả về `false` vì người dùng đã đăng nhập sẵn. Trong trường hợp đó màn onboarding chưa từng được hiển thị. Hiện tại vô hại, nhưng cờ này không mang đúng ý nghĩa như tên gọi của nó.
+**Deep link** được khởi động trong `_goToHome`, nên không bao giờ được route đè lên onboarding hay màn đăng nhập. Có module auth thì mọi đường đều được phủ — rời onboarding dẫn tới đăng nhập, và đăng nhập dẫn tới `_goToHome`. Không có module auth thì không bao giờ có lần đăng nhập nào, nên khi boot dừng ở entry location, widget sẽ khởi động deep link vào lần đầu router rời khỏi đó (`navigator_wrapper_widget_test.dart`).
+
+> [!NOTE]
+> `_goToOnboarding()` gán `viewedOnboard.value = true` trong khối `finally`, nên cờ được ghi ở lần boot đầu tiên có entry location, kể cả khi người dùng đã đăng nhập sẵn và onboarding chưa từng hiện. Cờ này nghĩa là "lần chạy đầu tiên đã qua", và `AppRouter.entryLocation` đọc nó đúng theo nghĩa đó: lần khởi động nguội kế tiếp bắt đầu ở `fallbackLocation`.
 
 ---
 

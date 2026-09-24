@@ -296,7 +296,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 |---|---|---|
 | `IFeatureRouteModule` | stack routes under the app `ShellRoute` | no (path match) |
 | `INavDestinationModule` | one primary destination + one `StatefulShellBranch` | **yes** — ascending `order` |
-| `IAppEntryLocation` | cold-start `initialLocation` | n/a |
+| `IAppEntryLocation` | first-launch `initialLocation` (later cold starts use the fallback) | n/a |
 | `DashboardRouteModule` | dashboard chrome only | `feature_dashboard` only |
 
 Cross-feature navigation goes through a Navigator interface declared in `core_di` and implemented in the owning feature's `routing/`. Hardcoding a path or calling `GoRouter.of(context).go(...)` into another feature is forbidden. **`BuildContext` is passed directly from the UI caller** — do not reach for `NavigatorKeys.*.currentContext`.

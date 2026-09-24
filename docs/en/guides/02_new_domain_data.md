@@ -353,24 +353,24 @@ The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is t
 
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
-`Failure` — see
-[`i_base_repository.dart:57-59`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
+`Failure` — see the outer `catch (e)` of `execute` and of `executeSync` in
+[`i_base_repository.dart`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
 
 > [!CAUTION]
 > Use `ErrorHandler.handleError(e)`. **Never** `AppFailure.fromException()`. And never let a
 > `throw` escape the data layer — the UI must only ever receive a `Result`.
 
 > [!WARNING]
-> **`ErrorHandler` has no Firebase branch today.** Reading
-> [`error_handler.dart:50-88`](../../../platform/kernel/lib/src/error/error_handler.dart):
+> **`ErrorHandler` has no Firebase branch today.** Reading `ErrorHandler._classify` (behind
+> `handleError`) in [`error_handler.dart`](../../../platform/kernel/lib/src/error/error_handler.dart):
 > it handles `AppException`, `DioException`, `SocketException`, `HttpException` and
 > `FormatException` — but not `FirebaseException`, `FirebaseAuthException` or `PlatformException`.
 > Every Firebase error therefore lands on the fallback:
 >
 > ```dart
 > return ServerFailure(
->   message: _isDebug ? error.toString() : 'Unknown error occurred',
->   code: 9999,
+>   message: _isDebug ? error.toString() : _unknownMessage, // 'Unknown error occurred'
+>   code: ErrorCodes.UNKNOWN, // 9999
 > );
 > ```
 >

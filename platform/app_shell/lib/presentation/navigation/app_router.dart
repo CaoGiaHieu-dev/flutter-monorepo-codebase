@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../di/app_boot_storage.dart';
 import '../widgets/navigator_wrapper_widget.dart';
 import '../widgets/undefine_route_widget.dart';
 
@@ -14,7 +15,7 @@ import '../widgets/undefine_route_widget.dart';
 /// - [IFeatureRouteModule] — top-level feature routes (onboarding, auth, …)
 /// - [INavDestinationModule] — primary destinations + their shell branches
 /// - [DashboardRouteModule] — dashboard chrome (optional)
-/// - [IAppEntryLocation] — cold-start path (optional)
+/// - [IAppEntryLocation] — first-launch path (optional)
 ///
 /// Missing modules fall back to empty routes / a chromeless shell /
 /// [fallbackLocation] (the first destination, else `/_empty_dashboard`).
@@ -26,6 +27,11 @@ import '../widgets/undefine_route_widget.dart';
 /// which is correct when there are none).
 @singleton
 class AppRouter {
+  /// Observes every navigator the router builds: attached to the root
+  /// navigator through `GoRouter(observers:)`, and go_router forwards the
+  /// root observers to each `ShellRoute` and `StatefulShellBranch` navigator
+  /// (`notifyRootObserver`, on by default) — so one instance sees the whole
+  /// app. `AppInitializer.init` hands it to `RouteAwareWidget`.
   final routeObserver = RouteObserver<ModalRoute>();
 
   BuildContext get currentContext {
@@ -81,9 +87,11 @@ class AppRouter {
   ///
   /// Used by [back] when there is nothing to pop, by `UndefineRouteWidget`,
   /// and by `NavigatorWrapperWidget` after sign-in when no `HomeNavigator` is
-  /// registered. It is deliberately *not* the cold-start entry point: that is
-  /// onboarding when composed, and sending a signed-in user back to
-  /// onboarding — or a "go home" tap there — would be wrong.
+  /// registered, and as the cold-start location once the entry location has
+  /// been seen (see [entryLocation]). It is deliberately *not* the entry
+  /// location itself: that is onboarding when composed, and sending a
+  /// signed-in user back to onboarding — or a "go home" tap there — would be
+  /// wrong.
   String get fallbackLocation {
     final tabs = _destinations;
     if (tabs.isNotEmpty) return tabs.first.path;
@@ -91,14 +99,49 @@ class AppRouter {
   }
 
   /// Where a cold start lands: the registered [IAppEntryLocation]
-  /// (onboarding, when composed), else [fallbackLocation].
-  String get entryLocation =>
-      getItOrNull<IAppEntryLocation>()?.path ?? fallbackLocation;
+  /// (onboarding, when composed) on the first launch only, else
+  /// [fallbackLocation].
+  ///
+  /// "First launch" is the shell's own [AppBootStorage.viewedOnboard] flag,
+  /// which `NavigatorWrapperWidget` sets the first time it keeps the user on
+  /// the entry location. This used to return the entry location on every
+  /// cold start, so a returning user saw onboarding until the session restore
+  /// finished and the boot redirect moved them on.
+  String get entryLocation {
+    final entry = getItOrNull<IAppEntryLocation>();
+    return resolveEntryLocation(
+      entryPath: entry?.path,
+      entrySeen:
+          entry != null &&
+          (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
+      fallback: fallbackLocation,
+    );
+  }
+
+  /// The pure decision behind [entryLocation]: [entryPath] until it has been
+  /// seen, [fallback] afterwards or when there is none.
+  @visibleForTesting
+  static String resolveEntryLocation({
+    required String? entryPath,
+    required bool entrySeen,
+    required String fallback,
+  }) {
+    if (entryPath == null || entrySeen) return fallback;
+    return entryPath;
+  }
 
   /// GoRouter instance compiled modularly from individual feature routes
   late final GoRouter router = GoRouter(
     debugLogDiagnostics: kDebugMode,
     navigatorKey: NavigatorKeys.rootKey,
+    // Without this `RouteAwareWidget` subscribed to an observer no navigator
+    // reported to, and `didPush`/`didPopNext` never fired.
+    observers: [routeObserver],
+    // Re-resolves the current location — running any `redirect` on it — when
+    // the session changes. No redirect ships today (no top-level one, none on
+    // a sample route), so this is the hook for a module that adds a guard to
+    // its own `GoRouteData.redirect`. Sign-in / sign-out *navigation* is done
+    // by `NavigatorWrapperWidget`, listening to `IAuthSessionState`.
     refreshListenable: getItOrNull<IAuthRefreshListenable>(),
     errorPageBuilder: (context, state) {
       return NoTransitionPage(child: UndefineRouteWidget(state: state));

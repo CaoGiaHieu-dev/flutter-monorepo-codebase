@@ -74,7 +74,7 @@ thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra 
 
 ## 3. Cấu trúc thư mục
 
-Generator sinh ra trọn vẹn cây thư mục dưới đây.
+Generator sinh ra cây thư mục dưới đây (cùng các file sinh tự động `gen/`, `*.g.dart` và `module.module.dart`). `widgets/` là thư mục duy nhất nó không tạo — hãy thêm khi viết widget con đầu tiên.
 
 ```
 modules/profile/feature/
@@ -87,7 +87,7 @@ modules/profile/feature/
 │   ├── feature_profile.dart  barrel công khai
 │   └── src/
 │       ├── pages/            widget *Page / *Screen
-│       ├── widgets/          widget con *Widget / *Card
+│       ├── widgets/          widget con *Widget / *Card (tạo khi cần)
 │       ├── provider/         controller (Provider) — là `bloc/` nếu bạn chọn BLoC
 │       ├── routing/          route module + navigator impl
 │       ├── extensions/       extension l10n
@@ -101,10 +101,10 @@ modules/profile/feature/
 > `feature_home`). Đặt tên số nhiều `providers/` / `blocs/` là vi phạm quy ước; xem
 > [`../reference/02_naming.md`](../reference/02_naming.md).
 
-Tạo hằng số path trước — mọi thứ khác đều tham chiếu tới nó:
+Hằng số path đã có sẵn — generator ghi chúng vào `lib/src/utils/<name>_path.dart`, và mọi thứ khác đều tham chiếu tới đó. **Hãy sửa file đã được sinh** để đổi hoặc thêm path; đừng tạo file thứ hai:
 
 ```dart
-// modules/profile/feature/lib/src/utils/profile_path.dart
+// modules/profile/feature/lib/src/utils/profile_path.dart — như generator sinh ra
 class ProfilePath {
   ProfilePath._();
 
@@ -112,7 +112,7 @@ class ProfilePath {
 }
 ```
 
-Đây là bản sao nguyên mẫu của
+Cùng hình dạng với
 [`modules/home/feature/lib/src/utils/home_path.dart`](../../../modules/home/feature/lib/src/utils/home_path.dart).
 
 ---
@@ -261,7 +261,12 @@ màn hình thành singleton sẽ rò rỉ nó suốt vòng đời tiến trình.
 
 Bản dịch của feature nằm trong chính feature. Không thêm gì vào app shell.
 
-`modules/profile/feature/l10n.yaml` — sao chép hình dạng từ
+**Generator đã ghi sẵn cả bốn phần dưới đây** — `l10n.yaml`, hai file ARB, extension
+`context.l10n<Name>` và phần đăng ký `IFeatureLocalization` — và chạy `gen-l10n` một lần. Việc của bạn
+là **sửa các file đã được sinh**, chủ yếu là ARB; đừng tạo lại chúng. Chúng được trình bày ở đây để
+bạn biết mỗi file làm gì.
+
+`modules/profile/feature/l10n.yaml` — như generator sinh ra, cùng hình dạng với
 [`modules/home/feature/l10n.yaml`](../../../modules/home/feature/l10n.yaml):
 
 ```yaml
@@ -274,17 +279,19 @@ untranslated-messages-file: untranslated-messages.txt
 output-dir: lib/src/gen/language
 ```
 
-`assets/language/en.arb` (và `vi.arb` tương ứng):
+`assets/language/en.arb` (và `vi.arb` tương ứng) — được sinh với một key duy nhất, `title`, mà page
+được sinh (và, với một tab, nhãn destination được sinh) đọc qua `context.l10nProfile.title`. Thêm
+key của bạn bên cạnh, theo `lowerCamelCase`, và dịch giá trị trong `vi.arb` — generator ghi cùng một
+từ tiếng Anh vào cả hai file:
 
 ```json
 {
   "@@locale": "en",
-  "profile": "Profile",
-  "tabLabel": "Profile"
+  "title": "Profile"
 }
 ```
 
-Lộ ra ngoài qua extension — code thật từ
+Extension — bản được sinh theo đúng code thật này từ
 [`l10n_home_extension.dart`](../../../modules/home/feature/lib/src/extensions/l10n_home_extension.dart):
 
 ```dart
@@ -299,7 +306,7 @@ extension ContextHomeExtension on BuildContext {
 }
 ```
 
-Đăng ký delegate qua DI — code thật từ
+Phần đăng ký delegate qua DI — được sinh thành `lib/di/localization.dart`, giống code thật này từ
 [`modules/home/feature/lib/di/localization.dart`](../../../modules/home/feature/lib/di/localization.dart):
 
 ```dart
@@ -317,7 +324,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-Root app tự gom mọi `IFeatureLocalization` đã đăng ký, nên **không sửa `root_app.dart`**.
+[`app_material_wrapper.dart`](../../../platform/app_shell/lib/presentation/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`, nên **không sửa `root_app.dart`** (hay wrapper đó).
 
 Sinh lại sau mỗi lần đổi `.arb`:
 
@@ -425,7 +432,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > |---|---|---|
 > | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<IAuthStatusStream>()` truyền vào dưới dạng **factory param** | Home hiển thị trạng thái chưa đăng nhập |
 > | `feature_settings` (`settings_page.dart:46`) | `getItOrNull<IAuthActionHandler>()` | Dòng logout đơn giản bị ẩn đi |
-> | `feature_onboarding` (`onboarding_page.dart:31`) | `getItOrNull<AuthNavigator>()` | Nút bấm chuyển sang Home (`HomeNavigator`) |
+> | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` | Nút bấm chuyển sang Home (`HomeNavigator`); không có cả hai thì nút không làm gì |
 >
 > Dry-run in ra mọi liên kết nó biết — `breaks` và `safe_couplings` trong
 > `tools/sample_manifest.yaml` — cộng các contract trong `core_di` trở thành code chết. Hãy đọc nó

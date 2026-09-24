@@ -47,7 +47,7 @@ Tất cả nằm ở `platform/di/lib/src/routing/`.
 |---|---|---|---|
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
 | `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` tăng dần | home, settings, … |
-| `IAppEntryLocation` | Điểm bắt đầu khi khởi động nguội (`initialLocation`) | n/a | thường là onboarding |
+| `IAppEntryLocation` | Điểm bắt đầu ở lần chạy đầu tiên (`initialLocation` cho tới khi đã hiện một lần) | n/a | thường là onboarding |
 | `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
 
 ### 2.1 `IFeatureRouteModule`
@@ -320,8 +320,17 @@ String get fallbackLocation {
   return _emptyDestinationPath;
 }
 
-String get entryLocation =>
-    getItOrNull<IAppEntryLocation>()?.path ?? fallbackLocation;
+String get entryLocation {
+  final entry = getItOrNull<IAppEntryLocation>();
+  return resolveEntryLocation(
+    entryPath: entry?.path,
+    // The shell's own first-launch flag, set by NavigatorWrapperWidget.
+    entrySeen:
+        entry != null &&
+        (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
+    fallback: fallbackLocation,
+  );
+}
 ```
 
 ```dart
@@ -343,7 +352,7 @@ builder: (context, state, navigationShell) {
 | `IAppEntryLocation` | Boot bắt đầu ở `fallbackLocation` — tab đầu tiên, hoặc branch giữ chỗ. Không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
 | `HomeNavigator` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
 
-Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `HomeNavigator`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
+Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép, nhưng **chỉ ở lần chạy đầu tiên**: khi `NavigatorWrapperWidget` đã ghi nhận là đã xem (cờ `AppBootStorage.viewedOnboard` của shell), mọi lần khởi động nguội sau đó đáp xuống `fallbackLocation`, nên người dùng quay lại không phải thấy onboarding trong lúc phiên đang khôi phục. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `HomeNavigator`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
 
 Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
 

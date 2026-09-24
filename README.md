@@ -411,7 +411,7 @@ Each Feature Package owns its own routing structure and files:
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list
 - `getItOrNull<DashboardRouteModule>()` → dashboard chrome (optional)
-- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (else the first destination's path, else `/_empty_dashboard`)
+- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` on the first launch only (later launches, or none registered: the first destination's path, else `/_empty_dashboard`)
 - `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
 
 Note the last one: the router depends on a **`core_di` contract**, not on `AuthProvider`. The shell

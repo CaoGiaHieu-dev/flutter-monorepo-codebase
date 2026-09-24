@@ -47,7 +47,7 @@ All live in `platform/di/lib/src/routing/`.
 |---|---|---|---|
 | `IFeatureRouteModule` | Top-level / stack routes under the app shell | No — GoRouter matches by path | auth, onboarding, … |
 | `INavDestinationModule` | One primary destination + its `StatefulShellBranch` | **Yes** — ascending `order` | home, settings, … |
-| `IAppEntryLocation` | Cold-start location (`initialLocation`) | n/a | usually onboarding |
+| `IAppEntryLocation` | First-launch location (`initialLocation` until it has been shown once) | n/a | usually onboarding |
 | `DashboardRouteModule` | Dashboard chrome (scaffold + bottom bar / rail host) | n/a | **only** `feature_dashboard` |
 
 ### 2.1 `IFeatureRouteModule`
@@ -320,8 +320,17 @@ String get fallbackLocation {
   return _emptyDestinationPath;
 }
 
-String get entryLocation =>
-    getItOrNull<IAppEntryLocation>()?.path ?? fallbackLocation;
+String get entryLocation {
+  final entry = getItOrNull<IAppEntryLocation>();
+  return resolveEntryLocation(
+    entryPath: entry?.path,
+    // The shell's own first-launch flag, set by NavigatorWrapperWidget.
+    entrySeen:
+        entry != null &&
+        (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
+    fallback: fallbackLocation,
+  );
+}
 ```
 
 ```dart
@@ -343,7 +352,7 @@ builder: (context, state, navigationShell) {
 | `IAppEntryLocation` | Boot starts on `fallbackLocation` — the first tab, else the placeholder branch. With no entry location there is no onboarding to show, so boot goes on to the login check |
 | `HomeNavigator` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
 
-There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `HomeNavigator` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
+There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `HomeNavigator` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
 
 Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
 

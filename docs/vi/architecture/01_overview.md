@@ -47,7 +47,7 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Điểm lắp ráp: `app_manifest.yaml`, `injection.dart` được sinh, `main.dart` một dòng, thứ định danh app (Firebase options) | tất cả | — |
 | **App shell** | `platform/app_shell/` | Trình tự boot, lắp ráp router, material wrapper, storage adapter — dùng chung cho mọi app | các package core | mọi module (`arch_check` R1) |
-| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, một package state-management | `data_*`, feature package khác |
+| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, một package state-management | `data_*`, feature package khác |
 | **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
 | **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |
 | **Core** | `platform/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | `core_*` khác, cộng ba ngoại lệ bên dưới | `modules/*/feature`, `modules/*/data` |

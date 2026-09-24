@@ -52,7 +52,7 @@ dart fix --apply
 
 ### Tests
 
-Tests live per-package in a `test/` directory — fifteen packages today: `platform/{app_shell,base_ui,common,data_core,database,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Run from the package directory:
+Tests live per-package in a `test/` directory — sixteen packages today: `platform/{app_shell,base_ui,common,data_core,database,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature,onboarding/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Run from the package directory:
 
 ```bash
 cd platform/common
@@ -280,7 +280,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 |:---------|:--------|:-----------|:---------------|
 | `IFeatureRouteModule` | Stack/shell routes under app `ShellRoute` | **No** (path match) | auth, onboarding, … |
 | `INavDestinationModule` | One primary nav destination (bottom-bar / rail item) + one `StatefulShellBranch` | **Yes** (ascending sort key — keep unique) | home, settings, … |
-| `IAppEntryLocation` | Cold-start `GoRouter.initialLocation` | n/a | usually onboarding |
+| `IAppEntryLocation` | First-launch `GoRouter.initialLocation` (once `AppBootStorage.viewedOnboard` is set, cold starts use `AppRouter.fallbackLocation`) | n/a | usually onboarding |
 | `DashboardRouteModule` | Dashboard **chrome** only (scaffold + bottom bar / rail host) | n/a | `feature_dashboard` only |
 | `IFeatureLocalization` | Feature ARB delegates | n/a | every feature with strings |
 
@@ -348,10 +348,11 @@ Widget build(BuildContext context, GoRouterState state) {
 
 1. `main.dart` → `runShellApp(configureDependencies: …)` (`platform/app_shell/lib/bootstrap.dart`) → `runZonedGuarded` → `WidgetsFlutterBinding.ensureInitialized()`
 2. `configureDependencies()` — the app's generated DI graph (GetIt)
+   - then `AppInitializer.initBeforeRunApp()` — synchronous: Logger + `HttpOverrides.global` (SSL pinning / dev bypass), installed **before any widget is built**, so the first Dio client (the splash's session restore) is already pinned
 3. `MainScope.run()`:
    - Removes native splash (`FlutterNativeSplash.remove()`)
    - Shows the splash from `getItOrNull<IAppSplashScreen>()` via `AppMaterialWrapper(home: splashScreen)` (no router); none registered, or iOS → native splash kept
-   - Calls `AppInitializer.init()` (HttpOverrides, Logger, ScreenOrientation — portrait lock only when the display's shortest side is < 600, SystemUIOverlay)
+   - Calls `AppInitializer.init()` (ScreenOrientation — portrait lock only when the display's shortest side is < 600, SystemUIOverlay; it re-runs `initBeforeRunApp()`, which is then a no-op)
    - Updates widget to `RootApp` with `AppMaterialWrapper.router(...)` and GoRouter
 4. `AppMaterialWrapper` wraps tree in `MultiProvider` with global singletons, `Consumer2<ThemeProvider, LanguageProvider>` for reactive theme/locale
 

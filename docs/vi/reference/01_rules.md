@@ -296,7 +296,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 |---|---|---|
 | `IFeatureRouteModule` | route dạng stack dưới `ShellRoute` của app | không (khớp theo path) |
 | `INavDestinationModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` tăng dần |
-| `IAppEntryLocation` | `initialLocation` lúc cold-start | không áp dụng |
+| `IAppEntryLocation` | `initialLocation` ở lần chạy đầu tiên (các lần cold-start sau dùng fallback) | không áp dụng |
 | `DashboardRouteModule` | chỉ phần chrome của dashboard | chỉ `feature_dashboard` |
 
 Điều hướng xuyên feature đi qua interface Navigator khai ở `core_di`, implement trong `routing/` của feature sở hữu. Cấm hardcode path hoặc gọi `GoRouter.of(context).go(...)` sang feature khác. **`BuildContext` phải được truyền trực tiếp từ nơi gọi ở UI** — đừng với lấy `NavigatorKeys.*.currentContext`.

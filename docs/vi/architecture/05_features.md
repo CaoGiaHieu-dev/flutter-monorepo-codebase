@@ -214,7 +214,7 @@ Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui_kit` —
 CustomButton(width: context.w(120), height: context.h(44))
 ```
 
-Widget trong `core_ui_kit` không bao giờ tự scale qua `core_responsive` bên trong. Nếu bạn truyền vào giá trị đã scale thì nó sẽ bị scale hai lần, nên việc scale luôn được làm ở đây, ngay tại chỗ gọi — và luôn qua `BuildContext`, vì `core_responsive` **không có extension trên `num`**: `120.w` không biên dịch được.
+Widget trong `core_ui_kit` không bao giờ scale lại một giá trị được truyền vào — nó dùng nguyên giá trị nhận được, và chỉ scale các hằng số mặc định của chính nó qua `core_responsive`. Scale thêm một tham số bên trong widget sẽ làm nó bị scale hai lần, nên việc scale giá trị bạn truyền vào luôn được làm ở đây, ngay tại chỗ gọi — và luôn qua `BuildContext`, vì `core_responsive` **không có extension trên `num`**: `120.w` không biên dịch được.
 
 ## 6. Vòng đời UI controller
 

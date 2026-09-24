@@ -47,7 +47,7 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Composition root: `app_manifest.yaml`, the generated `injection.dart`, a one-line `main.dart`, what identifies the app (Firebase options) | everything | — |
 | **App shell** | `platform/app_shell/` | Boot sequence, router assembly, material wrapper, storage adapters — shared by every app | core packages | any module (`arch_check` R1) |
-| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, one state-management package | `data_*`, another feature package |
+| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, one state-management package | `data_*`, another feature package |
 | **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
 | **Core** | `platform/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `modules/*/feature`, `modules/*/data` |

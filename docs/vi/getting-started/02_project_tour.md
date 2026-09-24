@@ -26,7 +26,7 @@ flutter-monorepo-codebase/
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
 │   ├── foundation/                # Nền thuần mà mọi thứ dựng lên: getIt/lỗi, hợp đồng DI, helper Flutter
 │   │   ├── kernel/                # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
-│   │   ├── contracts/             # core_di: DI Hub — mọi hợp đồng liên module nằm ở đây
+│   │   ├── contracts/             # core_di: DI Hub — hợp đồng trung lập với sản phẩm (session, location, routing)
 │   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
 │   ├── layers/                    # Hợp đồng nền của tầng domain và data
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
@@ -47,12 +47,13 @@ flutter-monorepo-codebase/
 │       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, storage adapter theme/ngôn ngữ, AppBootStorage
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app — dùng chung cho mọi app
 ├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
-│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
+│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng, cộng package API của nó
+│   │   ├── api/                   # auth_api: AuthNavigator, IAuthActionHandler — cho feature khác
 │   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
 │   │   ├── data/                  # Model, DataSource, RepositoryImpl
 │   │   └── feature/               # UI + Provider, chỉ còn màn login
 │   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
-│   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
+│   ├── home/{api,feature}/        # Mẫu: BLoC, Freezed event private, một nav destination; home_api: HomeNavigator
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
 │   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
 │   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
@@ -83,7 +84,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Không import module nào |
 | `platform_shell_adapters` | `platform/shell/adapters` | Các adapter hạ tầng của shell: storage adapter cho theme/ngôn ngữ/cờ boot và `NetworkConfigImpl` (+ binding `SslPinningConfig`). Không import module nào |
 | `core_common` | `platform/foundation/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom`, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
-| `core_di` | `platform/foundation/contracts` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
+| `core_di` | `platform/foundation/contracts` | **Trạm DI**, chỉ hợp đồng trung lập với sản phẩm: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, các hợp đồng session (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. Navigator / action handler của một module nằm trong package `modules/<id>/api` của chính nó |
 | `core_base_ui` | `platform/ui/design_system` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
 | `core_ui_kit` | `platform/ui/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation (kể cả `BottomTransitionPage`) + `SharedUiConstants` |
 | `core_network` | `platform/infra/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning, `DioFailureClassifier` (Dio → `AppFailure`) |
@@ -120,7 +121,7 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `feature_auth` | `modules/auth/feature` | Một trang login duy nhất, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
+| `feature_auth` | `modules/auth/feature` | Một trang login duy nhất, `AuthProvider` (nhánh Provider), `AuthNavigatorImpl`, `AuthActionHandlerImpl` (implement `auth_api`), `AuthStatusStreamImpl`, `AuthSignInLocation` |
 | `feature_home` | `modules/home/feature` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination` |
 | `feature_settings` | `modules/settings/feature` | Tab Settings, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Luồng onboarding, hiện thực `IAppEntryLocation` |
@@ -226,12 +227,12 @@ Những hệ quả bạn bắt buộc phải biết:
 | Thêm endpoint API | `modules/<tên>/data/lib/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Lưu một cặp key/value | Thư mục `utils/*_storage_keys.dart` của package **sở hữu** | [../guides/06_storage.md](../guides/06_storage.md) |
 | Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `modules/cache/data/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
-| Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
+| Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `modules/<id>/api/lib/src/navigators/` của module đích | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Đổi màu / khoảng cách / typography | `platform/ui/design_system/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Thêm chuỗi cần dịch | `modules/<tên>/feature/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Chia sẻ widget giữa các feature | `platform/ui/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
-| Cho feature A kích hoạt hành động ở feature B | `core_di/src/actions/` hoặc `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
+| Cho feature A kích hoạt hành động ở feature B | `modules/<id>/api/lib/src/actions/` của B, hoặc `core_di/src/session/` cho session | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Nâng version một thư viện | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
 | Sửa pipeline CI | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |
 

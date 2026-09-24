@@ -11,14 +11,14 @@
 /// lookup runs.
 ///
 /// Three methods, because three are what `NetworkConfig` asks for. It is not a
-/// general-purpose auth API: a module needing to *log someone in* has its own
-/// contract for that.
+/// general-purpose auth API: a module needing to *log someone in* talks to the
+/// session owner through that module's own API package.
 ///
-/// Resolve it with `getItOrNull<IAuthSessionGateway>()`. When no module
-/// registers one, requests simply go out unauthenticated and no refresh
-/// interceptor is installed — which is the correct behaviour for a build with
-/// no auth in it.
-abstract class IAuthSessionGateway {
+/// Resolve it with `getItOrNull<ISessionGateway>()`. When no module registers
+/// one, requests simply go out unauthenticated and no refresh interceptor is
+/// installed — which is the correct behaviour for a build with no session
+/// owner in it.
+abstract class ISessionGateway {
   /// The current bearer token, or null when nobody is signed in.
   ///
   /// Synchronous: the interceptor calls it on every request, so the owner is
@@ -47,7 +47,7 @@ abstract class IAuthSessionGateway {
   ///
   /// Only the stored credentials: the signed-in *state* is the session
   /// owner's, which the transport tells separately through
-  /// [IAuthSessionState.onSessionLost]. Routing is neither's job here — it
+  /// [ISessionState.onSessionLost]. Routing is neither's job here — it
   /// would need a `BuildContext`, which the transport has no business holding.
   Future<void> clearSession();
 }

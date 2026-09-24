@@ -16,16 +16,17 @@ import '../navigation/app_router.dart';
 /// `UndefineRouteWidget`, like any unknown location, so this class names no
 /// feature route and stays removable-safe.
 ///
-/// Started by `NavigatorWrapperWidget` once the user reaches home, whichever
-/// way they got there — links are not routed over onboarding or login. In a
-/// build with no auth module, where no sign-in ever leads home, it starts
-/// instead when the user first leaves the entry location (onboarding).
+/// Started by `NavigatorWrapperWidget` once the user reaches the post-sign-in
+/// location, whichever way they got there — links are not routed over
+/// onboarding or the sign-in screen. In a build with no session owner, where
+/// no sign-in ever happens, it starts instead when the user first leaves the
+/// entry location (onboarding).
 ///
 /// The subscription outlives a sign-out, so every link is also checked
-/// against the session when it **arrives**: while an auth module reports
+/// against the session when it **arrives**: while the session owner reports
 /// nobody signed in, the link is dropped rather than opening a signed-in
-/// screen over the login page. The session is read through
-/// [IAuthSessionState] with `getItOrNull`; a build composing no auth module
+/// screen over the sign-in page. The session is read through
+/// [ISessionState] with `getItOrNull`; a build composing no session owner
 /// has no session to guard, and routes every link.
 @lazySingleton
 class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
@@ -42,7 +43,7 @@ class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
   }
 
   void _handleDeepLink(Uri uri) {
-    if (!canRoute(getItOrNull<IAuthSessionState>())) {
+    if (!canRoute(getItOrNull<ISessionState>())) {
       DynamicLogger.log(
         'Deep link ignored while signed out: $uri',
         tag: 'DeepLink',
@@ -54,9 +55,9 @@ class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
     _router.go(locationOf(uri));
   }
 
-  /// Whether a link may be routed now: always without an auth module
+  /// Whether a link may be routed now: always without a session owner
   /// ([session] null), otherwise only while someone is signed in.
-  static bool canRoute(IAuthSessionState? session) =>
+  static bool canRoute(ISessionState? session) =>
       session == null || session.signedInUser != null;
 
   /// The router location an app link points at.

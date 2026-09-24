@@ -96,10 +96,22 @@ class FakeDestination extends INavDestinationModule {
       const NavDestination(label: 'tab', icon: Icons.home);
 }
 
-/// Leaves navigation to the test instead of routing to a home module.
-class NoopHomeNavigator implements HomeNavigator {
+/// Where the shell sends a signed-out user — a session owner's contribution.
+class FakeSignInLocation implements ISignInLocation {
+  FakeSignInLocation(this.path);
+
   @override
-  void toHome(BuildContext context) {}
+  final String path;
+}
+
+/// Where the shell sends a signed-in user. A test that must stay on the
+/// location it set up registers that location here, so the boot redirect
+/// lands where the test already is.
+class FakePostSignInLocation implements IPostSignInLocation {
+  FakePostSignInLocation(this.path);
+
+  @override
+  final String path;
 }
 
 /// A page that records the [RouteAware] callbacks the shell's

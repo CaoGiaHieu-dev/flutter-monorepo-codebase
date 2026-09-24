@@ -37,10 +37,26 @@ Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật `AGEN
 > [!NOTE]
 > Ba cạnh này là những cạnh `platform → domain_core` duy nhất, và mọi cạnh platform khác đều theo chiều giữa các nhóm (`docs/vi/architecture/02_core.md` § 0): `ui` không bao giờ phụ thuộc `state`, `infra` không bao giờ phụ thuộc một package infra khác, và foundation không bao giờ phụ thuộc `ui` hay một transport. `core_ui_kit` không khai package quản lý state nào — `LoadMoreListView` nằm ở `provider_state_management` (`state → ui` là chiều được phép) — và `provider_state_management` vẫn tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`. Kernel không gọi tên kiểu Dio nào: `core_network` đóng góp `DioFailureClassifier` qua `ErrorHandler.registerClassifier`.
 
+### Chiều giữa các nhóm platform (R11)
+
+Bên trong `platform/`, luật **R11** của `arch_check` giữ DAG giữa các nhóm. Nhóm chính là thư mục — `platform/<group>/<package>` — và một package nằm ngoài thư mục nhóm hợp lệ tự nó là vi phạm. Chỉ `dependencies:` bị kiểm: dev dependency không bao giờ được ship (test của `platform_app_shell` dùng `core_storage` cho fake).
+
+| Nhóm (thư mục) | Được khai package platform thuộc |
+|---|---|
+| `layers/domain` (`domain_core`) | không gì cả — là lá |
+| `foundation` | foundation, `layers/domain` |
+| `layers/data` (`data_core`, mọi `layers/*` khác) | foundation, `layers/domain` |
+| `infra` | foundation, layers — không bao giờ một package infra khác |
+| `ui` | foundation, ui |
+| `state` | foundation, layers, ui |
+| `shell` | mọi nhóm |
+
+R11 cho phép một cạnh theo nhóm; R1 vẫn đòi danh sách đã duyệt của nó cho mọi cạnh từ package core trỏ vào `domain_core` / `data_core`.
+
 **Kiểm chứng**
 
 ```bash
-# R1 — phép kiểm chính thức; mỗi lần chạy đều in ra các cạnh đã duyệt
+# R1 + R11 — phép kiểm chính thức; mỗi lần chạy đều in ra các cạnh đã duyệt
 dart tools/arch_check/check.dart
 
 # core tuyệt đối không được nhắc tên package feature, data hay domain của sản phẩm
@@ -163,7 +179,7 @@ Hướng dẫn đầy đủ: [`../guides/06_storage.md`](../guides/06_storage.md
 
 **Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`, được sinh từ `di_groups` của manifest: `core` (before), rồi — sau phần đăng ký của chính app — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` không có nhóm `notifications`.
 
-Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_shell_adapters` đăng ký (đứng đầu nhóm `shell`) — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `IAuthSessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
+Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_shell_adapters` đăng ký (đứng đầu nhóm `shell`) — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `ISessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
 
 > [!CAUTION]
 > **`flutter analyze` KHÔNG bắt được loại lỗi này.** Nó chỉ lộ ra lúc chạy thật, trên một lần boot thật.
@@ -186,7 +202,7 @@ grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/l
 
 **Vì sao.** Một template mà không xoá được feature thì không phải template. Khả năng gỡ bỏ cũng chính là bằng chứng thực tế rằng ranh giới là có thật.
 
-**Được máy cưỡng chế.** `arch_check` **R8** chặn `getIt` / `getAll` kiểu ném lỗi trên một hợp đồng chỉ do module hiện thực, còn **R10** chặn việc *import* một module ở bất cứ đâu trong app trừ `injection.dart`. R10 tồn tại vì riêng R8 là chưa đủ: `getItOrNull` canh một lookup, còn một import không giải được thì hỏng ngay ở khâu biên dịch, trước khi có lookup nào chạy. `network_config_impl.dart` import `data_auth` và `domain_auth` đúng vì lý do đó, và khiến module auth không thể gỡ bỏ trong khi mục này nói ngược lại.
+**Được máy cưỡng chế.** `arch_check` **R3** chặn một feature import feature khác (hay bất kỳ package data nào), **R8** chặn `getIt` / `getAll` kiểu ném lỗi trên một hợp đồng chỉ do module hiện thực, còn **R10** chặn việc *import* một module — kể cả package API của nó — ở bất cứ đâu trong app trừ `injection.dart`. R10 tồn tại vì riêng R8 là chưa đủ: `getItOrNull` canh một lookup, còn một import không giải được thì hỏng ngay ở khâu biên dịch, trước khi có lookup nào chạy. `network_config_impl.dart` import `data_auth` và `domain_auth` đúng vì lý do đó, và khiến module auth không thể gỡ bỏ trong khi mục này nói ngược lại.
 
 Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng `core_di` kèm fallback:
 
@@ -199,7 +215,7 @@ Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng
 > [!WARNING]
 > `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. `getAll` ném lỗi khi type chưa đăng ký, nên một lệnh `getAll<IFeatureLocalization>()` trần sẽ làm app crash ngay lúc dựng `MaterialApp` ở bất kỳ bản build nào không có feature nào đóng góp.
 
-**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` được implement bởi một package dưới `modules/` — ở bất kỳ tầng nào: `IAuthSessionGateway` trong `data_auth` cũng tính như navigator của một feature — gắn với module implement nó, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
+**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` được implement bởi một package dưới `modules/` — ở bất kỳ tầng nào: `ISessionGateway` trong `data_auth` cũng tính như navigator của một feature — gắn với module implement nó, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
 
 ```bash
 dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_check.yml
@@ -213,7 +229,20 @@ dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_ch
 2. `dart tools/composer/composer.dart sync`, lệnh này sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root;
 3. `flutter pub get` + `dart run build_runner build --workspace`.
 
-Các import trong `injection.dart` là **tham chiếu cứng có chủ đích duy nhất** của app shell tới feature — với vai trò composition root, nó buộc phải gọi tên những gì nó lắp ráp. Mọi consumer khác đều đi qua `core_di`.
+Các import trong `injection.dart` là **tham chiếu cứng có chủ đích duy nhất** của app shell tới feature — với vai trò composition root, nó buộc phải gọi tên những gì nó lắp ráp. Mọi consumer khác đều đi qua `core_di` (hợp đồng trung lập với sản phẩm) hoặc package API của module sở hữu.
+
+### Package API của module
+
+Một hợp đồng tồn tại để một feature chạm tới **module khác** — navigator, action handler của nó — nằm trong package API của module đó, `modules/<id>/api`, tên `<id>_api` (`auth_api`, `home_api`). `core_di` chỉ giữ hợp đồng trung lập với sản phẩm, đặt tên theo thứ platform cần: phiên đăng nhập (`ISessionState`, `ISessionStatusStream`, …) và nơi shell đưa người dùng đã đăng xuất / đã đăng nhập tới (`ISignInLocation`, `IPostSignInLocation`).
+
+| Luật | Cưỡng chế bởi |
+|---|---|
+| Package API chỉ phụ thuộc `platform/foundation/*` và package Flutter/pub — không phụ thuộc domain/data/feature của chính module, module khác hay API của nó, hay nhóm platform khác | `arch_check` R3 (import và pubspec) |
+| Feature được import package API của module khác, không bao giờ import package feature hay data của nó | `arch_check` R3 |
+| Type khai trong package API và chỉ được implement dưới `modules/` phải resolve bằng `getItOrNull` / `getAllOrEmpty` bên ngoài module của nó | `arch_check` R8 |
+| Không package platform nào và không file app nào (trừ `injection.dart`) import package API | `arch_check` R1, R10 |
+
+Package API được lắp ráp như layer `api` (`- { id: auth, layers: [api, domain, data, feature] }`): một workspace member, không bao giờ là dependency của app hay một mục trong `injection.dart`. `remove_sample <id>` gỡ nó cùng module — trừ khi một package ngoài bundle vẫn import nó; khi đó nó được **giữ lại**, tên các package import nó được in ra, và manifest giữ `{ id: <id>, layers: [api] }`, nên build vẫn biên dịch và lookup của nơi dùng trả về null.
 
 **Kiểm chứng**
 
@@ -414,15 +443,15 @@ Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`.
 | 2 | Hạ tầng | core service (`core_storage`, `core_network`, …) |
 | 3 | State xuyên feature | interface `Stream` / `ValueListenable` trung lập trên `core_di`, đăng ký kép |
 | 4 | Tuỳ chọn UI thuần (theme, locale) | bỏ qua Domain → interface storage ở `core_di` → impl ở app shell |
-| 5 | Nhúng widget của feature khác | builder interface trên `core_di` |
-| 6 | Hành động UI xuyên feature | `I*ActionHandler` trong `core_di/src/actions/` |
+| 5 | Nhúng widget của feature khác | builder interface trong `<id>_api` của module sở hữu |
+| 6 | Hành động UI xuyên feature | `I*ActionHandler` trong `modules/<id>/api/lib/src/actions/` của module sở hữu |
 
 **Đăng ký kép** (mô hình 3): feature sở hữu đăng ký class cụ thể là `@singleton`, rồi bind interface qua `@module` của DI:
 
 ```dart
 @module
 abstract class AuthModule {
-  IAuthStatusStream bind(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bind(AuthStatusStreamImpl impl) => impl;
 }
 ```
 
@@ -479,6 +508,8 @@ Một file `analysis_options.yaml` duy nhất ở root áp dụng cho mọi pack
 | core ⇏ feature / data / domain của sản phẩm | `dart tools/arch_check/check.dart` (R1) |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
 | App shell không import module nào | `dart tools/arch_check/check.dart` (R1 cho `platform_app_shell` / `platform_shell_adapters`, R10 cho `apps/*`) |
+| Chiều giữa các nhóm platform | `dart tools/arch_check/check.dart` (R11) |
+| Package API của module chỉ phụ thuộc foundation; feature import API của module khác, không bao giờ import feature của nó | `dart tools/arch_check/check.dart` (R3) |
 | Domain thuần Dart | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

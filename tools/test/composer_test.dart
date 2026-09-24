@@ -114,6 +114,61 @@ void main() {
       expect(verify.output, contains('Generated artifacts are up to date.'));
     });
 
+    test(
+      'an api layer is a workspace member only — no DI, no app dependency',
+      () async {
+        final ws = workspace(
+          appManifest: manifest(
+            modules: '  - { id: foo, layers: [api, domain, feature] }\n',
+          ),
+        );
+        ws.write({'modules/foo/api/pubspec.yaml': 'name: foo_api\n'});
+
+        final sync = await run(ws, ['sync']);
+        expect(sync, exitsWith(0));
+        expect(ws.read('pubspec.yaml'), contains('  - modules/foo/api\n'));
+        expect(ws.read('apps/demo/pubspec.yaml'), isNot(contains('foo_api')));
+        expect(
+          ws.read('apps/demo/lib/di/injection.dart'),
+          isNot(contains('FooApi')),
+        );
+        expect(await run(ws, ['verify']), exitsWith(0));
+      },
+    );
+
+    test(
+      'an api package reached only through a feature joins the workspace',
+      () async {
+        // What `remove_sample` leaves behind when it keeps an API package that
+        // another module still imports: no manifest names it any more.
+        final ws = workspace();
+        ws.write({
+          'modules/bar/api/pubspec.yaml': 'name: bar_api\n',
+          'modules/foo/feature/pubspec.yaml':
+              'name: feature_foo\n'
+              'dependencies:\n'
+              '  domain_foo:\n'
+              '    path: ../domain\n'
+              '  bar_api:\n'
+              '    path: ../../bar/api\n',
+        });
+
+        expect(await run(ws, ['sync']), exitsWith(0));
+        expect(ws.read('pubspec.yaml'), contains('  - modules/bar/api\n'));
+      },
+    );
+
+    test('a missing api package fails verify (strict)', () async {
+      final ws = workspace(
+        appManifest: manifest(
+          modules: '  - { id: foo, layers: [api, domain, feature] }\n',
+        ),
+      );
+      final verify = await run(ws, ['verify']);
+      expect(verify, exitsWith(1));
+      expect(verify.output, contains('`foo/api` is declared by demo'));
+    });
+
     test('verify fails on a hand-edited managed region', () async {
       final ws = workspace();
       expect(await run(ws, ['sync']), exitsWith(0));
@@ -170,7 +225,7 @@ void main() {
         verify.output,
         contains(
           '$manifestPath: modules[0].layers[1]: expected one of '
-          'domain, data, feature, got a string (`features`)',
+          'api, domain, data, feature, got a string (`features`)',
         ),
       );
     });

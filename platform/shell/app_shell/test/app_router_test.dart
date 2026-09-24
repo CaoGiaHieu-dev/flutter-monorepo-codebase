@@ -11,12 +11,17 @@ import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 import 'support/shell_fakes.dart';
 
 /// Registers what `NavigatorWrapperWidget` resolves, plus [AppRouter].
-AppRouter _registerShell({AppBootStorage? boot}) {
+///
+/// [postSignIn] is where the boot redirect sends a user who is not on the
+/// entry location — the location the test starts on, so boot leaves it be.
+AppRouter _registerShell({AppBootStorage? boot, required String postSignIn}) {
   final router = AppRouter();
   getIt
     ..registerSingleton<AppRouter>(router)
     ..registerSingleton<DeeplinkProvider>(FakeDeeplinkProvider(router))
-    ..registerSingleton<HomeNavigator>(NoopHomeNavigator());
+    ..registerSingleton<IPostSignInLocation>(
+      FakePostSignInLocation(postSignIn),
+    );
   if (boot != null) getIt.registerSingleton<AppBootStorage>(boot);
   return router;
 }
@@ -79,7 +84,10 @@ void main() {
     );
 
     testWidgets('first launch starts on the entry location', (tester) async {
-      final router = _registerShell(boot: memoryBootStorage());
+      final router = _registerShell(
+        boot: memoryBootStorage(),
+        postSignIn: '/home',
+      );
       getIt
         ..registerSingleton<IAppEntryLocation>(FakeEntryLocation('/onboarding'))
         ..registerSingleton<IFeatureRouteModule>(
@@ -100,6 +108,7 @@ void main() {
     ) async {
       final router = _registerShell(
         boot: memoryBootStorage(viewedOnboard: true),
+        postSignIn: '/home',
       );
       getIt
         ..registerSingleton<IAppEntryLocation>(FakeEntryLocation('/onboarding'))
@@ -121,7 +130,7 @@ void main() {
       tester,
     ) async {
       final log = <String>[];
-      final router = _registerShell();
+      final router = _registerShell(postSignIn: '/a');
       getIt.registerSingleton<IFeatureRouteModule>(
         FakeFeatureRoutes([
           GoRoute(path: '/a', builder: (_, _) => RouteAwareProbe('a', log)),
@@ -147,7 +156,7 @@ void main() {
       tester,
     ) async {
       final log = <String>[];
-      final router = _registerShell();
+      final router = _registerShell(postSignIn: '/tab');
       getIt.registerSingleton<INavDestinationModule>(
         FakeDestination(
           path: '/tab',

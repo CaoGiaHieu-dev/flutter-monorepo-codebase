@@ -27,9 +27,20 @@ with the architecture rules enforced by CI instead of review alone.
 - Composer: each app is generated from `apps/<id>/app_manifest.yaml` (`composer sync`,
   `composer verify`), plus `tools/composer/bootstrap.dart` for partial checkouts.
 - Sample management: `tools/sample_manifest.yaml` and `tools/sample_cleanup/remove_sample.dart`
-  delete a sample bundle safely.
-- CI merge gate `pr_quality_check.yml`: composer verify, `arch_check` (rules R1–R10, including
-  R8 optional contract lookup and R10 app-level removability), analyze, per-package tests,
+  delete a sample bundle safely — keeping a module API package that another package still
+  imports, and saying so.
+- Module API packages, `modules/<id>/api` → `<id>_api`: a module's contracts for other features
+  (`auth_api`: `AuthNavigator`, `IAuthActionHandler`; `home_api`: `HomeNavigator`). Composed as
+  the manifest layer `api` — a workspace member with no DI group and no app dependency.
+- `core_di` location contracts `ISignInLocation` / `IPostSignInLocation`: where the app shell
+  sends a signed-out / signed-in user (contributed by `feature_auth` / `feature_home`; with none,
+  no sign-in redirect / `AppRouter.fallbackLocation`).
+- `arch_check` **R11** — platform group direction, read from `platform/<group>/<package>`,
+  `dependencies:` only; R3 extended to module API packages (foundation + Flutter only; features
+  may import another module's API, never its feature), R1/R8/R10 cover them too.
+- CI merge gate `pr_quality_check.yml`: composer verify, `arch_check` (rules R1–R11, including
+  R8 optional contract lookup, R10 app-level removability and R11 platform group direction),
+  analyze, per-package tests,
   catalog sync, `docs_check`, an unused-dependency advisory, and a debug APK build job.
 - `core_responsive`: window size classes and breakpoints, a per-window-class scale policy
   (down by default, up on opt-in), and adaptive widgets (`AdaptiveLayout`, `AdaptiveSplitView`,
@@ -52,7 +63,7 @@ with the architecture rules enforced by CI instead of review alone.
   (`app_shell`). Package names are unchanged, so imports and manifests are untouched; a fork
   updates its own relative `path:` dependencies and any hard-coded `platform/<pkg>` path.
   `module_generator` types 4/5 take `--group` (default `infra`). The allowed direction between
-  groups is documented in `docs/en/architecture/02_core.md` § 0 (not yet machine-checked).
+  groups is documented in `docs/en/architecture/02_core.md` § 0 and enforced by `arch_check` R11.
 - The platform package graph now follows that group direction with no exception (stage 2):
   `LoadMoreListView` / `LoadingMoreWidget` moved from `core_ui_kit` to
   `provider_state_management` (`core_ui_kit` no longer depends on a state package);
@@ -76,8 +87,20 @@ with the architecture rules enforced by CI instead of review alone.
 - Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere.
 - `core_database` and `core_storage` are mechanism only: each package owns its own Drift database
   and its own storage keys. The Drift cache example moved to the `cache` sample module.
-- `core_di` contracts carry their own value types (`AuthPrincipal`) instead of domain entities;
+- `core_di` contracts carry their own value types (`SessionPrincipal`) instead of domain entities;
   domain packages depend only on `domain_core`, and `AppFailure` lives there.
+- **Breaking — the shell no longer knows the auth/home flow (stage 4).** The shell-facing
+  contracts in `core_di` are product-neutral and renamed, semantics unchanged: `AuthPrincipal` →
+  `SessionPrincipal`, `IAuthStatusStream` → `ISessionStatusStream` (`authStatusStream` →
+  `sessionStatusStream`), `IAuthSessionState` → `ISessionState`, `AuthSessionFailure` →
+  `SessionFailure` (variants `Session{InvalidCredentials,UserNotFound,Server,Unknown}Failure`),
+  `IAuthRefreshListenable` → `ISessionRefreshListenable`, `IAuthSessionGateway` →
+  `ISessionGateway`; they moved from `lib/src/agnostic_streams/` to `lib/src/session/`.
+  `NavigatorWrapperWidget` routes through `ISignInLocation` / `IPostSignInLocation` instead of
+  `AuthNavigator` / `HomeNavigator`. `AuthNavigator`, `IAuthActionHandler` and `HomeNavigator`
+  left `core_di` for `auth_api` / `home_api`: a fork renames the session types, adds `<id>_api`
+  to each consumer's `dependencies:` and imports it, and adds `api` to the module's `layers:` in
+  every `app_manifest.yaml`.
 - Every module is removable: the shell reaches features only through `core_di` contracts with
   `getItOrNull` / `getAllOrEmpty` fallbacks.
 - Each app owns its Firebase configuration; tools take `--app` instead of assuming one app.

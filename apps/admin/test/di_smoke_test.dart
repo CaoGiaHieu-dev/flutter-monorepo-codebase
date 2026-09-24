@@ -72,13 +72,12 @@ void _expectShellContractsResolve() {
   getItOrNull<IAppSplashScreen>();
   getItOrNull<IAppEntryLocation>();
   getItOrNull<DashboardRouteModule>();
-  getItOrNull<IAuthRefreshListenable>();
-  getItOrNull<IAuthSessionState>();
-  getItOrNull<IAuthSessionGateway>();
-  getItOrNull<IAuthStatusStream>();
-  getItOrNull<IAuthActionHandler>();
-  getItOrNull<AuthNavigator>();
-  getItOrNull<HomeNavigator>();
+  getItOrNull<ISessionRefreshListenable>();
+  getItOrNull<ISessionState>();
+  getItOrNull<ISessionGateway>();
+  getItOrNull<ISessionStatusStream>();
+  getItOrNull<ISignInLocation>();
+  getItOrNull<IPostSignInLocation>();
   getItOrNull<IErrorReporter>();
   getItOrNull<IAnalytics>();
 

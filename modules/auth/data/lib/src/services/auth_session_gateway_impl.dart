@@ -14,8 +14,8 @@ import '../data_sources/local/auth_local_data_source.dart';
 ///
 /// Registered as a singleton because [AuthLocalDataSource] is: a factory would
 /// hand each caller a gateway over a different, empty cache.
-@LazySingleton(as: IAuthSessionGateway)
-class AuthSessionGatewayImpl implements IAuthSessionGateway {
+@LazySingleton(as: ISessionGateway)
+class AuthSessionGatewayImpl implements ISessionGateway {
   AuthSessionGatewayImpl(this._local, this._repository);
 
   final AuthLocalDataSource _local;

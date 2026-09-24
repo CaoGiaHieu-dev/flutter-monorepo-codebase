@@ -25,9 +25,11 @@ Every example below is a real path in this repository — open it to see the con
 | Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `modules/cache/data/lib/src/models/cache_entry_model.dart` |
 | Request DTO | `_request.dart` | `Request` | `platform/layers/data/lib/src/models/base_request.dart` |
 | Data source | `_data_source.dart` | `DataSource` | `modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart` |
-| Navigator interface | `<name>_navigator.dart` | `Navigator` | `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart` |
+| Navigator interface | `<name>_navigator.dart` | `Navigator` | `modules/auth/api/lib/src/navigators/auth_navigator.dart` |
 | Navigator impl | `_navigator_impl.dart` | `NavigatorImpl` | `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart` |
-| Action handler interface | `i_<name>_action_handler.dart` | prefix `I` | `platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart` |
+| Action handler interface | `i_<name>_action_handler.dart` | prefix `I` | `modules/auth/api/lib/src/actions/i_auth_action_handler.dart` |
+| Module API package | package `<id>_api` at `modules/<id>/api` | — | `modules/auth/api/pubspec.yaml` (`auth_api`) |
+| Session location contribution | `_sign_in_location.dart` / `_post_sign_in_location.dart` | `SignInLocation` / `PostSignInLocation` | `modules/auth/feature/lib/src/routing/auth_sign_in_location.dart` |
 | Action handler impl | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
@@ -48,7 +50,7 @@ Every example below is a real path in this repository — open it to see the con
 ❌ Never name an implementation `IAuthNavigator` — it is `AuthNavigatorImpl`
 
 > [!NOTE]
-> Navigator *interfaces* are the one intentional deviation: they are named `AuthNavigator`, `HomeNavigator` — no `I`. They live in `core_di/lib/src/navigators/` and their implementations carry the `Impl` suffix, which is what disambiguates them.
+> Navigator *interfaces* are the one intentional deviation: they are named `AuthNavigator`, `HomeNavigator` — no `I`. They live in the owning module's API package (`modules/<id>/api/lib/src/navigators/`) and their implementations carry the `Impl` suffix, which is what disambiguates them.
 
 ---
 

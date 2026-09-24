@@ -14,7 +14,7 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
+        child: BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
           builder: (context, state) {
             return state.when(
               initial: () => const SizedBox.shrink(),

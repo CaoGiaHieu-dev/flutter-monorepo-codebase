@@ -1,6 +1,6 @@
+import 'package:auth_api/auth_api.dart';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
-import 'package:core_di/core_di.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
@@ -36,10 +36,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // `getItOrNull`, not `getIt`: [IAuthActionHandler] is declared in `core_di`
-    // but implemented by `feature_auth`, which is removable. A throwing lookup
-    // here compiles fine — this package depends on `core_di`, not on the auth
-    // feature — and then crashes at runtime in a build without it. With no auth
+    // `getItOrNull`, not `getIt`: [IAuthActionHandler] is declared in
+    // `auth_api` but implemented by `feature_auth`, which is removable. A
+    // throwing lookup here compiles fine — this package depends on the auth
+    // module's API package, not on its feature — and then crashes at runtime
+    // in a build without it. With no auth
     // feature there is no session to end, so the row is simply not offered.
     //
     // Enforced by `dart tools/arch_check/check.dart` rule R8.

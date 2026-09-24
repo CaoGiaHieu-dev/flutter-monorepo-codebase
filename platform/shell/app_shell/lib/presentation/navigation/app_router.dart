@@ -17,14 +17,17 @@ import '../widgets/undefine_route_widget.dart';
 /// - [DashboardRouteModule] — dashboard chrome (optional)
 /// - [IAppEntryLocation] — first-launch path (optional)
 ///
+/// ([ISignInLocation] / [IPostSignInLocation] are not read here: they are
+/// where `NavigatorWrapperWidget` sends a user when the session changes.)
+///
 /// Missing modules fall back to empty routes / a chromeless shell /
 /// [fallbackLocation] (the first destination, else `/_empty_dashboard`).
 ///
 /// Every contribution is resolved optionally and this file imports no feature
 /// package, so removing any feature leaves routing intact — including
-/// [IAuthRefreshListenable], which simply resolves to `null` when no auth
-/// feature is present (the router then never refreshes on session changes,
-/// which is correct when there are none).
+/// [ISessionRefreshListenable], which simply resolves to `null` when no module
+/// owns a session (the router then never refreshes on session changes, which
+/// is correct when there are none).
 @singleton
 class AppRouter {
   /// Observes every navigator the router builds: attached to the root
@@ -86,8 +89,8 @@ class AppRouter {
   /// no module contributes one. Always a registered route.
   ///
   /// Used by [back] when there is nothing to pop, by `UndefineRouteWidget`,
-  /// and by `NavigatorWrapperWidget` after sign-in when no `HomeNavigator` is
-  /// registered, and as the cold-start location once the entry location has
+  /// and by `NavigatorWrapperWidget` after sign-in when no
+  /// `IPostSignInLocation` is registered, and as the cold-start location once the entry location has
   /// been seen (see [entryLocation]). It is deliberately *not* the entry
   /// location itself: that is onboarding when composed, and sending a
   /// signed-in user back to onboarding — or a "go home" tap there — would be
@@ -141,8 +144,8 @@ class AppRouter {
     // the session changes. No redirect ships today (no top-level one, none on
     // a sample route), so this is the hook for a module that adds a guard to
     // its own `GoRouteData.redirect`. Sign-in / sign-out *navigation* is done
-    // by `NavigatorWrapperWidget`, listening to `IAuthSessionState`.
-    refreshListenable: getItOrNull<IAuthRefreshListenable>(),
+    // by `NavigatorWrapperWidget`, listening to `ISessionState`.
+    refreshListenable: getItOrNull<ISessionRefreshListenable>(),
     errorPageBuilder: (context, state) {
       return NoTransitionPage(child: UndefineRouteWidget(state: state));
     },

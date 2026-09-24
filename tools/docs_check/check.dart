@@ -38,7 +38,8 @@ import 'parity.dart';
 ///     a sample bundle's packages but leaves `tools/sample_manifest.yaml`
 ///     untouched, on purpose: the manifest is how this check knows a path
 ///     belonged to a sample. A bundle whose packages are *all* gone from disk
-///     is "removed", and a dead reference inside it (its package paths, the
+///     (bar a `modules/<id>/api` package remove_sample kept because another
+///     package still imports it) is "removed", and a dead reference inside it (its package paths, the
 ///     emptied `modules/<id>` parent, its `orphaned_contracts`) is summarised
 ///     per bundle as expected fallout rather than drift. Delete the bundle's
 ///     entry from the manifest once the docs are updated — or never, if you
@@ -117,8 +118,22 @@ class _RemovedBundle {
   /// `orphaned_contracts`.
   final List<String> paths;
 
-  bool covers(String ref) =>
-      paths.any((path) => ref == path || ref.startsWith('$path/'));
+  /// Whether [ref] points into the removed bundle. A brace pattern
+  /// (`modules/auth/{domain,data,feature}`) is covered when every
+  /// alternative is — which matters once a kept API package keeps
+  /// `modules/<id>` itself on disk.
+  bool covers(String ref) {
+    final brace = RegExp(r'\{([^{}]*)\}').firstMatch(ref);
+    if (brace != null) {
+      return brace
+          .group(1)!
+          .split(',')
+          .every(
+            (alt) => covers(ref.replaceRange(brace.start, brace.end, alt)),
+          );
+    }
+    return paths.any((path) => ref == path || ref.startsWith('$path/'));
+  }
 }
 
 void main(List<String> args) {
@@ -153,9 +168,11 @@ void main(List<String> args) {
   var checked = 0;
 
   /// Files [hit] under the removed bundle [path] lies in, else as drift.
-  void report(_Hit hit, String path) {
+  /// A glob [pattern] also counts as inside a bundle when the bundle covers
+  /// the pattern itself (a brace list of its removed layers).
+  void report(_Hit hit, String path, {String? pattern}) {
     for (final bundle in removedBundles) {
-      if (bundle.covers(path)) {
+      if (bundle.covers(path) || (pattern != null && bundle.covers(pattern))) {
         sampleHits.putIfAbsent(bundle.name, () => <_Hit>[]).add(hit);
         return;
       }
@@ -190,6 +207,7 @@ void main(List<String> args) {
           report(
             _Hit(relDoc, i + 1, pattern, 'pattern'),
             _literalPrefix(pattern),
+            pattern: pattern,
           );
           continue;
         }
@@ -305,7 +323,9 @@ Checks every Markdown file in the repository (skipping ${_skippedDirs.join(', ')
 A span with a <placeholder> segment is a template: only the part before the
 first placeholder must exist. A dead reference inside a sample bundle that
 remove_sample.dart has removed (every package of the bundle absent, per
-tools/sample_manifest.yaml) is summarised as INFO and does not fail the run.
+tools/sample_manifest.yaml — a module API package remove_sample kept because
+something still imports it aside) is summarised as INFO and does not fail the
+run.
 
 Known-absent paths belong in tools/docs_check/allowlist.txt, one per line,
 with a `#` comment saying why.
@@ -515,12 +535,16 @@ String _literalPrefix(String pattern) {
 }
 
 /// Every sample bundle in `tools/sample_manifest.yaml` whose packages are
-/// all absent from disk.
+/// all absent from disk — a module API package (`modules/<id>/api`) aside.
 ///
 /// `remove_sample.dart` never edits the manifest, so after `--apply` the
 /// bundle definition is still here while its packages are not — which is the
-/// whole signal. A bundle with even one package left on disk is not removed:
-/// a half-deleted bundle is drift, and its dead references fail as usual.
+/// whole signal. The exception is the module's API package: `remove_sample`
+/// keeps it while another package still imports it, so a bundle whose only
+/// survivor is its `api` directory counts as removed (the API's own paths
+/// still exist and are checked as usual). Any other package left on disk
+/// means the bundle is not removed: a half-deleted bundle is drift, and its
+/// dead references fail as usual.
 List<_RemovedBundle> _removedSampleBundles(String repoRoot) {
   final file = File(p.join(repoRoot, 'tools', 'sample_manifest.yaml'));
   if (!file.existsSync()) return const [];
@@ -546,10 +570,13 @@ List<_RemovedBundle> _removedSampleBundles(String repoRoot) {
       for (final pkg in value['packages'] as List)
         if (packages[pkg] case {'path': final String path}) path,
     ];
-    if (dirs.isEmpty || dirs.any((d) => _exists(repoRoot, d))) return;
+    bool isApi(String dir) =>
+        dir.startsWith('modules/') && p.posix.basename(dir) == 'api';
+    final required = dirs.where((d) => !isApi(d)).toList();
+    if (required.isEmpty || required.any((d) => _exists(repoRoot, d))) return;
     out.add(
       _RemovedBundle('$name', [
-        ...dirs,
+        ...required,
         // `modules/auth` goes too once its last layer is removed.
         for (final dir in dirs)
           if (dir.startsWith('modules/') &&

@@ -72,24 +72,27 @@ packages:
     path: modules/auth/feature
     demonstrates: >-
       Provider state management, a global @lazySingleton controller,
-      cross-module contracts (agnostic streams, action handlers, the session
-      gateway the transport layer reads), and route-level DI. One screen only
-      (login) — register and forgot-password repeated the same mechanisms
-      with different strings.
+      implementing the platform's product-neutral session contracts
+      (ISessionState, ISessionStatusStream, ISessionRefreshListenable,
+      ISignInLocation) and its own module API (auth_api), and route-level DI.
+      One screen only (login) — register and forgot-password repeated the
+      same mechanisms with different strings.
 
   feature_home:
     kind: sample
     path: modules/home/feature
     demonstrates: >-
       BLoC with private Freezed events, a dashboard tab (INavDestinationModule),
-      and consuming another feature's state through a core_di contract.
+      reading the session through core_di's ISessionStatusStream, and
+      telling the shell where a signed-in user lands (IPostSignInLocation).
 
   feature_settings:
     kind: sample
     path: modules/settings/feature
     demonstrates: >-
       A second dashboard tab, theme/locale switching that bypasses Domain, and
-      triggering another feature's action through an action handler.
+      triggering another module's action through its API package
+      (auth_api's IAuthActionHandler).
 
   feature_onboarding:
     kind: sample
@@ -111,6 +114,23 @@ packages:
     demonstrates: >-
       Supplying the boot splash screen to the app shell through
       IAppSplashScreen.
+
+  # --- Samples: module API packages ---------------------------------------
+  # A module's public surface for *other features*: contracts only, over the
+  # foundation and Flutter (arch_check R3). remove_sample keeps one while a
+  # package outside its bundle still imports it.
+  auth_api:
+    kind: sample
+    path: modules/auth/api
+    demonstrates: >-
+      A module API package — AuthNavigator (onboarding) and
+      IAuthActionHandler (settings), implemented by feature_auth.
+  home_api:
+    kind: sample
+    path: modules/home/api
+    demonstrates: >-
+      A module API package — HomeNavigator (onboarding), implemented by
+      feature_home.
 
   # --- Samples: domain/data pairs -----------------------------------------
   domain_auth:
@@ -146,33 +166,29 @@ packages:
 
 bundles:
   auth:
-    packages: [feature_auth, domain_auth, data_auth]
-    # Contracts declared in core_di purely so this feature could publish state
-    # across the boundary. They become dead declarations once it is gone.
-    orphaned_contracts:
-      - platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart
-      - platform/foundation/contracts/lib/src/agnostic_streams/i_auth_session_state.dart
-      - platform/foundation/contracts/lib/src/agnostic_streams/i_auth_refresh_listenable.dart
-      - platform/foundation/contracts/lib/src/agnostic_streams/auth_session_failure.dart
-      - platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart
-      - platform/foundation/contracts/lib/src/navigators/auth_navigator.dart
+    # auth_api is KEPT while feature_onboarding / feature_settings import it
+    # (remove_sample says so, and the manifests keep `{ id: auth, layers:
+    # [api] }`); its two contracts then have no implementation. The session
+    # contracts auth implements live in core_di and are product-neutral —
+    # framework_contracts below, not orphans.
+    packages: [feature_auth, domain_auth, data_auth, auth_api]
     orphaned_keys:
       - "NavigatorKeys.nested('auth') in platform/foundation/contracts/lib/src/routing/navigator_keys.dart"
     breaks: []
     safe_couplings:
-      - "platform_shell_adapters -> IAuthSessionGateway / IAuthSessionState (NetworkConfigImpl, getItOrNull at call time; no token is sent and no RefreshTokenInterceptor is installed)"
-      - "feature_home -> IAuthStatusStream (getItOrNull at the route, passed as a factory param; Home shows the signed-out state)"
-      - "feature_onboarding -> AuthNavigator (getItOrNull; the button goes to HomeNavigator instead)"
-      - "feature_settings -> IAuthActionHandler (getItOrNull; the logout row is hidden)"
+      - "platform_app_shell -> ISessionState / ISignInLocation / ISessionRefreshListenable (getItOrNull; boot treats the app as signed out and never redirects to a sign-in screen)"
+      - "platform_shell_adapters -> ISessionGateway / ISessionState (NetworkConfigImpl, getItOrNull at call time; no token is sent and no RefreshTokenInterceptor is installed)"
+      - "feature_home -> ISessionStatusStream (getItOrNull at the route, passed as a factory param; Home shows the signed-out state)"
+      - "feature_onboarding -> auth_api AuthNavigator (auth_api kept; getItOrNull; the button goes to HomeNavigator instead)"
+      - "feature_settings -> auth_api IAuthActionHandler (auth_api kept; getItOrNull; the logout row is hidden)"
 
   home:
-    packages: [feature_home]
-    orphaned_contracts:
-      - platform/foundation/contracts/lib/src/navigators/home_navigator.dart
+    # home_api is KEPT while feature_onboarding imports it.
+    packages: [feature_home, home_api]
     breaks: []
     safe_couplings:
-      - "platform_app_shell -> HomeNavigator (getItOrNull; after sign-in the app goes to AppRouter.fallbackLocation)"
-      - "feature_onboarding -> HomeNavigator (getItOrNull; only used when auth is absent too, and then the button does nothing)"
+      - "platform_app_shell -> IPostSignInLocation (getItOrNull; after sign-in the app goes to AppRouter.fallbackLocation)"
+      - "feature_onboarding -> home_api HomeNavigator (home_api kept; getItOrNull; only used when auth is absent too, and then the button does nothing)"
     note: >-
       Removing every INavDestinationModule leaves the dashboard with no tabs;
       AppRouter falls back to an empty branch rather than crashing.
@@ -233,6 +249,14 @@ framework_contracts:
   - platform/foundation/contracts/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
   - platform/foundation/contracts/lib/src/routing/i_nav_destination_module.dart
   - platform/foundation/contracts/lib/src/routing/i_app_entry_location.dart
+  # Where the shell sends a signed-out / signed-in user. Product-neutral:
+  # auth and home contribute them today, any module may.
+  - platform/foundation/contracts/lib/src/routing/i_sign_in_location.dart
+  - platform/foundation/contracts/lib/src/routing/i_post_sign_in_location.dart
+  # The session seam between the shell/transport and whichever module owns
+  # sign-in (SessionPrincipal, SessionFailure, ISessionState,
+  # ISessionStatusStream, ISessionRefreshListenable, ISessionGateway).
+  - platform/foundation/contracts/lib/src/session
   - platform/foundation/contracts/lib/src/routing/navigator_keys.dart
   - platform/foundation/contracts/lib/src/feature_localization.dart
   - platform/foundation/contracts/lib/src/theme/i_theme_storage.dart

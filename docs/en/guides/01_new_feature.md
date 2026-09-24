@@ -172,9 +172,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -254,9 +254,9 @@ The controller is created in the route's `build`, never inside the page.
 // BLoC — from home_route_module.dart above
 return BlocProvider(
   // Auth is optional: an app composed without `feature_auth` registers
-  // no IAuthStatusStream, and Home then shows the signed-out state.
+  // no ISessionStatusStream, and Home then shows the signed-out state.
   create: (_) => getIt<HomeProfileBloc>(
-    param1: getItOrNull<IAuthStatusStream>(),
+    param1: getItOrNull<ISessionStatusStream>(),
   ),
   child: const HomePage(),
 );
@@ -366,10 +366,10 @@ cd modules/profile/feature && flutter gen-l10n
 
 ## 7. Navigator — let other features reach you
 
-Other features must never import `feature_profile`. Declare the contract in `core_di`:
+Other features must never import `feature_profile`. Declare the contract in your module's **API package**, `modules/<name>/api` (here `profile_api` — foundation and Flutter dependencies only, `arch_check` R3; how to create one: [`12_module_isolation.md` § 7](12_module_isolation.md)). Callers depend on `profile_api`, never on `feature_profile`; `core_di` holds no module's navigator:
 
 ```dart
-// platform/foundation/contracts/lib/src/navigators/profile_navigator.dart
+// modules/profile/api/lib/src/navigators/profile_navigator.dart
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
@@ -378,13 +378,13 @@ abstract class ProfileNavigator {
 ```
 
 That is exactly the shape of
-[`home_navigator.dart`](../../../platform/foundation/contracts/lib/src/navigators/home_navigator.dart).
+[`home_navigator.dart`](../../../modules/home/api/lib/src/navigators/home_navigator.dart) in `home_api`.
 
 Implement it inside your own `routing/` — real code from
 [`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
 
 ```dart
-import 'package:core_di/core_di.dart';
+import 'package:home_api/home_api.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -468,13 +468,13 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 >
 > | Consumer | How it couples | Result |
 > |---|---|---|
-> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<IAuthStatusStream>()` passed as a **factory param** | Home shows the signed-out state |
-> | `feature_settings` (`settings_page.dart:46`) | `getItOrNull<IAuthActionHandler>()` | The logout row is simply hidden |
-> | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` | The button goes to Home instead (`HomeNavigator`); with neither composed it does nothing |
+> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<ISessionStatusStream>()` passed as a **factory param** | Home shows the signed-out state |
+> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` (from `auth_api`, which `remove_sample` keeps while it is imported) | The logout row is simply hidden |
+> | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` (from `auth_api`, likewise kept) | The button goes to Home instead (`HomeNavigator`); with neither composed it does nothing |
 >
 > The dry-run prints every coupling it knows — `breaks` and `safe_couplings` in
-> `tools/sample_manifest.yaml` — plus the `core_di` contracts that become dead code. Read it before
-> deleting anything.
+> `tools/sample_manifest.yaml` — plus the API packages it keeps because another package still
+> imports them. Read it before deleting anything.
 
 > [!NOTE]
 > `injection.dart` naming feature packages is the composition root's **one intentional hard

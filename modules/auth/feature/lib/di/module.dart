@@ -11,7 +11,8 @@ void initMicroPackage() {}
 abstract class AuthDiModule {
   /// Neutral auth-state stream other features listen to.
   @singleton
-  IAuthStatusStream bindIAuthStatusStream(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
+      impl;
 
   /// Shell-facing session view: boot sequencing plus the failure channel.
   ///
@@ -19,11 +20,12 @@ abstract class AuthDiModule {
   /// binding eagerly would construct the provider (and its use cases) during
   /// module registration instead of on first use.
   @lazySingleton
-  IAuthSessionState bindIAuthSessionState(AuthProvider provider) => provider;
+  ISessionState bindISessionState(AuthProvider provider) => provider;
 
   /// `GoRouter.refreshListenable` source, so routing reacts to sign-in and
   /// sign-out without the shell importing this package.
   @lazySingleton
-  IAuthRefreshListenable bindIAuthRefreshListenable(AuthProvider provider) =>
-      provider;
+  ISessionRefreshListenable bindISessionRefreshListenable(
+    AuthProvider provider,
+  ) => provider;
 }

@@ -45,7 +45,7 @@ Both branches are registered in DI and can coexist in the same app — `feature_
 ```dart
 @lazySingleton
 class AuthProvider extends BaseProvider<UserEntity>
-    implements IAuthSessionState, IAuthRefreshListenable {
+    implements ISessionState, ISessionRefreshListenable {
   AuthProvider(
     this._loginUseCase,
     this._logoutUseCase,
@@ -251,7 +251,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-An illustrative listener, as a screen inside `feature_auth` would write it — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md). The app shell does the same job without this widget: [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`, so it subscribes to `IAuthSessionState.sessionChanges` / `sessionFailures` from `core_di` instead.
+An illustrative listener, as a screen inside `feature_auth` would write it — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md). The app shell does the same job without this widget: [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`, so it subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation` — it uses no module navigator. (`AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages.)
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 
@@ -282,8 +282,8 @@ Future<void> initialize() async {
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._authStatusStream)
+    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
+  HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) {
     on<_HomeProfileStarted>(_onStarted);
     on<_HomeProfileRefreshed>(_onRefreshed);
@@ -292,18 +292,18 @@ class HomeProfileBloc
     add(const HomeProfileEvent.started());
   }
 
-  final IAuthStatusStream? _authStatusStream;
-  StreamSubscription<AuthPrincipal?>? _subscription;
+  final ISessionStatusStream? _sessionStatusStream;
+  StreamSubscription<SessionPrincipal?>? _subscription;
 
   Future<void> _onStarted(
     _HomeProfileStarted event,
-    Emitter<BlocViewState<AuthPrincipal?>> emit,
+    Emitter<BlocViewState<SessionPrincipal?>> emit,
   ) async {
     await _subscription?.cancel();
-    _subscription = _authStatusStream?.authStatusStream.listen((user) {
+    _subscription = _sessionStatusStream?.sessionStatusStream.listen((user) {
       add(HomeProfileEvent.authStatusChanged(user));
     });
-    emit(BlocViewState.success(_authStatusStream?.currentUser));
+    emit(BlocViewState.success(_sessionStatusStream?.currentUser));
   }
 
   @override
@@ -327,7 +327,7 @@ part of 'home_profile_bloc.dart';
 abstract class HomeProfileEvent with _$HomeProfileEvent {
   const factory HomeProfileEvent.started() = _HomeProfileStarted;
   const factory HomeProfileEvent.refreshed() = _HomeProfileRefreshed;
-  const factory HomeProfileEvent.authStatusChanged(AuthPrincipal? user) =
+  const factory HomeProfileEvent.authStatusChanged(SessionPrincipal? user) =
       _HomeProfileAuthStatusChanged;
 }
 ```
@@ -387,7 +387,7 @@ The name avoids a collision with the Provider branch's `ViewState`. Both barrels
 ### 3.4 Rendering
 
 ```dart
-BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
+BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
   builder: (context, state) => state.when(
     initial: () => const SizedBox.shrink(),
     loading: () => const Center(child: CircularProgressIndicator.adaptive()),
@@ -483,9 +483,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );

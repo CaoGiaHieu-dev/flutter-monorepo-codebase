@@ -29,7 +29,7 @@ Three rules apply to everything on this page.
 | **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | The state-management bases, and the widgets bound to them (`LoadMoreListView`); a feature picks one | foundation, layers, ui |
 | **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | The infrastructure adapters every app registers (`NetworkConfigImpl`, the storage adapters, `AppBootStorage`); the app shell every app composes: boot, router assembly, material wrapper, app state | every platform group (`app_shell → adapters`, never the reverse) |
 
-The direction, with each arrow pointing at the side that is depended on: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`. `platform_kernel → domain_core` is part of the design, not an exception to it: `ErrorHandler` produces an `AppFailure` (the approved R1 edge). And, unchanged, nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` does not check the group direction yet — until it does, review holds it.
+The direction, with each arrow pointing at the side that is depended on: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`. `platform_kernel → domain_core` is part of the design, not an exception to it: `ErrorHandler` produces an `AppFailure` (the approved R1 edge). And, unchanged, nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` **R11** enforces the group direction: it reads a package's group from its folder (`platform/<group>/<package>`; a package outside a known group folder is itself a violation) and checks every `dependencies:` entry that is a platform package against the table above. Dev dependencies are not checked — they never ship; `platform_app_shell`'s tests use `core_storage` for fakes. An edge into `domain_core` / `data_core` also needs R1's approved list.
 
 The package graph obeys the direction **with no exception**. Three edges used to run against it; each was removed, not approved:
 
@@ -100,14 +100,12 @@ Two constants files live at the bottom of the stack, because they are genuinely 
 
 ## 2. `core_di` — the DI Hub
 
-Contracts only. No implementations, no business logic. It is the neutral ground where two packages that must not import each other can meet.
+Contracts only. No implementations, no business logic. It is the neutral ground where the platform meets the modules — and every contract in it is **product-neutral**: named for what the platform needs (a session, a location), never for the module that happens to provide it.
 
 | Contract group | Path | Purpose |
 |:--|:--|:--|
-| Navigators | `src/navigators/` | `AuthNavigator`, `HomeNavigator` — declared here, implemented in the owning feature |
-| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
-| Action handlers | `src/actions/` | `IAuthActionHandler` — cross-feature UI actions (e.g. logout) |
-| Agnostic streams | `src/agnostic_streams/` | `IAuthStatusStream` — state sharing between a Provider feature and a BLoC feature |
+| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (where the shell sends a signed-out / signed-in user), `DashboardRouteModule`, `NavigatorKeys` |
+| Session | `src/session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (shell-facing), `ISessionStatusStream` (feature-facing: state shared between a Provider and a BLoC feature), `ISessionRefreshListenable`, `ISessionGateway` (transport) — implemented by whichever module owns sign-in |
 | Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell's adapters package (`platform_shell_adapters`) |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
@@ -121,7 +119,7 @@ Keys are requested by id rather than declared: `NavigatorKeys.nested('auth')` re
 > [!NOTE]
 > `core_di` depends on `go_router`. That is not a leak: `IFeatureRouteModule` returns `List<RouteBase>` and `INavDestinationModule` returns `List<RouteBase>` too. These *are* routing contracts, so they must speak GoRouter's vocabulary — but note `INavDestinationModule` describes its destination with the Hub's own `NavDestination`, never a `BottomNavigationBarItem`, so the contract does not commit to a bottom bar. Abstracting them further would add an adapter layer with no benefit.
 
-**Not here:** anything with an implementation. If you write a `class …Impl` in `core_di`, it is in the wrong package.
+**Not here:** anything with an implementation. If you write a `class …Impl` in `core_di`, it is in the wrong package. Nor a contract that exists so one feature can reach *one other module* — `AuthNavigator`, `IAuthActionHandler`, `HomeNavigator`: those live in the owning module's API package (`modules/auth/api` → `auth_api`, `modules/home/api` → `home_api`), which may depend on the foundation and Flutter only (`arch_check` R3).
 
 ---
 

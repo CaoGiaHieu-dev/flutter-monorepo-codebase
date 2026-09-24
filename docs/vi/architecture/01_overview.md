@@ -47,7 +47,8 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Điểm lắp ráp: `app_manifest.yaml`, `injection.dart` được sinh, `main.dart` một dòng, thứ định danh app (Firebase options) | tất cả | — |
 | **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Trình tự boot, lắp ráp router, material wrapper, state cấp app (`platform_app_shell`); `NetworkConfigImpl`, storage adapter, cờ boot (`platform_shell_adapters`) — dùng chung cho mọi app | các package core | mọi module (`arch_check` R1) |
-| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, một package state-management | `data_*`, feature package khác |
+| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, một package state-management, `*_api` của module khác | `data_*`, feature package khác |
+| **Module API** | `modules/*/api` | Các hợp đồng mà feature khác dùng để chạm tới module (`auth_api`: `AuthNavigator`, `IAuthActionHandler`) — chỉ có interface, do feature của module implement | `platform/foundation/*`, Flutter | domain/data/feature của chính module, mọi module khác, mọi nhóm platform khác (`arch_check` R3) |
 | **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
 | **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |
 | **Core** | `platform/<group>/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | `core_*` khác, cộng ba ngoại lệ bên dưới | `modules/*/feature`, `modules/*/data` |
@@ -57,7 +58,7 @@ Mỗi tầng có trang riêng:
 
 ### Bên trong `platform/`: sáu nhóm
 
-Các package core nằm trong sáu thư mục nhóm theo vai trò: `foundation/` (kernel, hợp đồng DI, helper gắn với Flutter), `layers/` (`domain_core`, `data_core`), `infra/` (mạng, lưu trữ, database, notification), `ui/` (responsive, design system, thư viện widget), `state/` (lớp nền Provider và BLoC) và `shell/` (app shell và các adapter hạ tầng của nó). Chỉ thư mục thay đổi — mọi package giữ nguyên tên. Phụ thuộc trỏ vào trong: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← mọi thứ trong platform/`; không package infra nào phụ thuộc package infra khác, `ui` không bao giờ phụ thuộc `state`, `infra` hay `shell`, và không gì trong `platform/` phụ thuộc `modules/`. Đồ thị package tuân theo chiều này không có ngoại lệ. Nhóm nào chứa gì, và ba cạnh ngược chiều cuối cùng đã được gỡ ra sao: [02_core.md § 0](02_core.md#package-nằm-ở-đâu--sáu-nhóm).
+Các package core nằm trong sáu thư mục nhóm theo vai trò: `foundation/` (kernel, hợp đồng DI, helper gắn với Flutter), `layers/` (`domain_core`, `data_core`), `infra/` (mạng, lưu trữ, database, notification), `ui/` (responsive, design system, thư viện widget), `state/` (lớp nền Provider và BLoC) và `shell/` (app shell và các adapter hạ tầng của nó). Chỉ thư mục thay đổi — mọi package giữ nguyên tên. Phụ thuộc trỏ vào trong: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← mọi thứ trong platform/`; không package infra nào phụ thuộc package infra khác, `ui` không bao giờ phụ thuộc `state`, `infra` hay `shell`, và không gì trong `platform/` phụ thuộc `modules/`. Đồ thị package tuân theo chiều này không có ngoại lệ, và `arch_check` **R11** giữ nó như vậy (nhóm được đọc từ thư mục; chỉ xét `dependencies:`). Nhóm nào chứa gì, và ba cạnh ngược chiều cuối cùng đã được gỡ ra sao: [02_core.md § 0](02_core.md#package-nằm-ở-đâu--sáu-nhóm).
 
 ### Yêu cầu Dart thuần của tầng Domain
 
@@ -109,6 +110,7 @@ vậy để [`.github/CODEOWNERS`](../../../.github/CODEOWNERS) diễn đạt đ
 | `platform/` | Infra | Mọi module đều phụ thuộc, nên một thay đổi phá vỡ sẽ phá vỡ tất cả cùng lúc |
 | `platform/foundation/contracts/` | Infra + architect | Hợp đồng liên module — sửa một cái là một cuộc thương lượng, không phải chỉnh sửa đơn phương |
 | `modules/<name>/` | Team của module đó | Cả ba tầng đi cùng nhau: team sửa UI cũng chính là team sửa use case phía sau |
+| `modules/<name>/api/` | Team của module + các bên dùng nó | Bề mặt công khai của module — feature khác biên dịch dựa trên nó, nên sửa nó là một thay đổi liên module |
 | `apps/` | Tech lead | Những module nào ship cùng nhau, và khởi tạo theo thứ tự nào — đó là quyết định phát hành |
 | `apps/*/app_manifest.yaml` | Tech lead + architect | Chính là bản thân phép lắp ráp. Thêm một module ở đây là thay đổi sản phẩm *là gì* |
 

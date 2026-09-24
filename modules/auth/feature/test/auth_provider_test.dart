@@ -82,7 +82,7 @@ void main() {
   group('login', () {
     test('success stores the user and publishes the principal', () async {
       final provider = await buildProvider();
-      final published = <AuthPrincipal?>[];
+      final published = <SessionPrincipal?>[];
       final sub = provider.sessionChanges.listen(published.add);
       addTearDown(sub.cancel);
 
@@ -103,7 +103,7 @@ void main() {
         AuthFailure(message: 'Unauthorized', code: 401),
       );
       final provider = await buildProvider();
-      final failures = <AuthSessionFailure>[];
+      final failures = <SessionFailure>[];
       final sub = provider.sessionFailures.listen(failures.add);
       addTearDown(sub.cancel);
 
@@ -116,7 +116,7 @@ void main() {
         const ViewState.error(error: AuthErrorState.invalidCredentials()),
       );
       expect(provider.viewState.message, 'Unauthorized');
-      expect(failures.single, isA<AuthInvalidCredentialsFailure>());
+      expect(failures.single, isA<SessionInvalidCredentialsFailure>());
       expect(provider.signedInUser, isNull);
     });
 
@@ -125,14 +125,14 @@ void main() {
         ServerFailure(message: 'Not found', code: 404),
       );
       final provider = await buildProvider();
-      final failures = <AuthSessionFailure>[];
+      final failures = <SessionFailure>[];
       final sub = provider.sessionFailures.listen(failures.add);
       addTearDown(sub.cancel);
 
       await provider.login('nobody@example.com', 'x');
       await pumpEventQueue();
 
-      expect(failures.single, isA<AuthUserNotFoundFailure>());
+      expect(failures.single, isA<SessionUserNotFoundFailure>());
     });
 
     test('any other failure keeps the backend message', () async {
@@ -140,7 +140,7 @@ void main() {
         ServerFailure(message: 'Maintenance', code: 503),
       );
       final provider = await buildProvider();
-      final failures = <AuthSessionFailure>[];
+      final failures = <SessionFailure>[];
       final sub = provider.sessionFailures.listen(failures.add);
       addTearDown(sub.cancel);
 
@@ -148,8 +148,8 @@ void main() {
       await pumpEventQueue();
 
       final failure = failures.single;
-      expect(failure, isA<AuthServerFailure>());
-      failure as AuthServerFailure;
+      expect(failure, isA<SessionServerFailure>());
+      failure as SessionServerFailure;
       expect(failure.message, 'Maintenance');
       expect(failure.code, 503);
     });

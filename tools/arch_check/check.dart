@@ -42,13 +42,81 @@ const _compositionRoot = 'injection.dart';
 /// Derived from the name, like [_layerOf], so moving packages changes nothing
 /// here. `domain_core` and `data_core` are layer foundations that live under
 /// `platform/` and every app may depend on them directly; the check is for a
-/// *named product* module.
+/// *named product* module. A module's API package (`<module>_api`) counts:
+/// it is removed with its module unless something still imports it.
 bool _isModulePackage(String packageName) =>
-    (packageName.startsWith('domain_') ||
-        packageName.startsWith('data_') ||
-        packageName.startsWith('feature_')) &&
-    packageName != 'domain_core' &&
-    packageName != 'data_core';
+    ((packageName.startsWith('domain_') ||
+            packageName.startsWith('data_') ||
+            packageName.startsWith('feature_')) &&
+        packageName != 'domain_core' &&
+        packageName != 'data_core') ||
+    _apiPackages.contains(packageName);
+
+/// Every module API package in the workspace: named `<module>_api` **and**
+/// living under `modules/` (`modules/<module>/api`).
+///
+/// Both conditions, because the suffix alone is not a reliable signal for an
+/// import target — pub.dev is full of `*_api` packages — while a workspace
+/// package under `modules/` is one of ours. Filled in by [main] before any
+/// rule runs.
+final Set<String> _apiPackages = <String>{};
+
+/// The platform groups, by folder: `platform/<group>/<package>`.
+const _platformGroups = {
+  'foundation',
+  'layers',
+  'infra',
+  'ui',
+  'state',
+  'shell',
+};
+
+/// R11: which groups each platform group may depend on (`dependencies:`).
+///
+/// `layers` is split by folder because its two members sit at opposite ends
+/// of the DAG: `layers/domain` (`domain_core`) is the leaf everything may
+/// reach, `layers/data` (`data_core`, and any other `platform/layers/*`)
+/// builds on the foundation. `shell` composes everything, so it may reach
+/// every group; nothing else may reach `shell`.
+const _allowedGroupEdges = <String, Set<String>>{
+  'layers/domain': {},
+  'foundation': {'foundation', 'layers/domain'},
+  'layers': {'foundation', 'layers/domain'},
+  'infra': {'foundation', 'layers/domain', 'layers'},
+  'ui': {'foundation', 'ui'},
+  'state': {'foundation', 'layers/domain', 'layers', 'ui'},
+  'shell': {
+    'foundation',
+    'layers/domain',
+    'layers',
+    'infra',
+    'ui',
+    'state',
+    'shell',
+  },
+};
+
+/// The R11 group of a package under `platform/`, derived from its **path**:
+/// `platform/<group>/<package>` → `<group>`, with `platform/layers/domain`
+/// reported as `layers/domain`. Returns null outside `platform/`, and
+/// `invalid` for a package not sitting exactly one folder deep in a known
+/// group — R11 reports that as well, so a package cannot opt out of the
+/// direction check by living somewhere unexpected.
+///
+/// The one rule that reads the path rather than the name: the group is
+/// recorded *only* by the folder (package names never mention it).
+String? _platformGroupOf(MonorepoPackage pkg, String root) {
+  final rel = p.posix.relative(pkg.rootPath, from: root);
+  final segments = p.posix.split(rel);
+  if (segments.isEmpty || segments.first != 'platform') return null;
+  if (segments.length != 3 || !_platformGroups.contains(segments[1])) {
+    return 'invalid';
+  }
+  if (segments[1] == 'layers') {
+    return segments[2] == 'domain' ? 'layers/domain' : 'layers';
+  }
+  return segments[1];
+}
 
 /// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
 /// binding anywhere in their dependency closure.
@@ -182,6 +250,7 @@ String _layerOf(MonorepoPackage pkg) {
   if (name.startsWith('domain_')) return 'domain';
   if (name.startsWith('data_')) return 'data';
   if (name.startsWith('feature_')) return 'features';
+  if (_apiPackages.contains(name)) return 'api';
   if (name == 'core_tools') return 'tools';
   // platform_kernel, core_*, *_state_management: the infrastructure ring.
   return 'core';
@@ -293,6 +362,29 @@ Map<String, Set<String>> _moduleImplementers(
   return out;
 }
 
+/// Why an API package may not depend on [target], or null when it may.
+///
+/// Allowed: anything outside the workspace (Flutter, pub packages) and the
+/// `platform/foundation/` group. Refused: every other platform package and
+/// every module package — the owning module's domain/data/feature included,
+/// and any other module's API.
+String? _apiDependencyProblem(
+  String target,
+  Map<String, MonorepoPackage> packages,
+  String root,
+) {
+  final pkg = packages[target];
+  if (pkg == null) return null; // Flutter SDK / pub package
+  if (_moduleOf(pkg) != null) {
+    return _apiPackages.contains(target)
+        ? 'another module\'s API'
+        : 'a module package';
+  }
+  final group = _platformGroupOf(pkg, root);
+  if (group == 'foundation') return null;
+  return group == null ? 'a workspace package' : 'platform/$group';
+}
+
 void main(List<String> args) {
   if (args.contains('--help') || args.contains('-h')) {
     _printHelp();
@@ -322,6 +414,12 @@ void main(List<String> args) {
     exit(1);
   }
 
+  for (final pkg in packages.values) {
+    if (pkg.name.endsWith('_api') && _moduleOf(pkg) != null) {
+      _apiPackages.add(pkg.name);
+    }
+  }
+
   OutputFormatter.printInfo(
     'Approved upward exceptions out of core/* '
     '(${_approvedUpwardEdges.length}):',
@@ -347,12 +445,18 @@ void main(List<String> args) {
       break;
     }
   }
-  final removableContracts = coreDi == null
-      ? const <String, Set<String>>{}
-      : _moduleImplementers(
-          packages.values,
-          _typesDeclaredIn(coreDi.rootPath),
-        );
+  // The contracts R8 governs: every type `core_di` declares, and every type a
+  // module API package (`<module>_api`) declares — `AuthNavigator` is as
+  // removable as a `core_di` contract only `feature_auth` implements.
+  final contractTypes = <String>{
+    if (coreDi != null) ..._typesDeclaredIn(coreDi.rootPath),
+    for (final pkg in packages.values)
+      if (_apiPackages.contains(pkg.name)) ..._typesDeclaredIn(pkg.rootPath),
+  };
+  final removableContracts = _moduleImplementers(
+    packages.values,
+    contractTypes,
+  );
 
   for (final pkg in packages.values) {
     final layer = _layerOf(pkg);
@@ -375,7 +479,8 @@ void main(List<String> args) {
           final upward =
               target.startsWith('feature_') ||
               target.startsWith('data_') ||
-              target.startsWith('domain_');
+              target.startsWith('domain_') ||
+              _apiPackages.contains(target);
           if (upward && !_approvedUpwardEdges.containsKey(edge)) {
             blocking.add(
               Violation(
@@ -395,7 +500,9 @@ void main(List<String> args) {
                 'R3',
                 '$rel:${ref.line}',
                 '`${pkg.name}` imports another feature `$target`. '
-                    'Talk through a core_di contract instead.',
+                    'Depend on that module\'s API package '
+                    '(`modules/<id>/api`, `<id>_api`) or a core_di contract '
+                    'instead.',
               ),
             );
           }
@@ -406,6 +513,25 @@ void main(List<String> args) {
                 '$rel:${ref.line}',
                 '`${pkg.name}` imports data package `$target`. '
                     'Features depend on domain, never on data.',
+              ),
+            );
+          }
+        }
+
+        // An API package is the public surface of its module: contracts over
+        // the foundation and Flutter, nothing else. Importing its own
+        // module's domain would leak that module's entities to every
+        // consumer; importing any other module would chain removals.
+        if (layer == 'api' && target != pkg.name) {
+          final problem = _apiDependencyProblem(target, packages, root);
+          if (problem != null) {
+            blocking.add(
+              Violation(
+                'R3',
+                '$rel:${ref.line}',
+                'API package `${pkg.name}` imports `$target` ($problem). '
+                    'An API package may depend on the foundation '
+                    '(core_di, platform_kernel, core_common) and Flutter only.',
               ),
             );
           }
@@ -458,7 +584,8 @@ void main(List<String> args) {
         final upward =
             dep.startsWith('feature_') ||
             dep.startsWith('data_') ||
-            dep.startsWith('domain_');
+            dep.startsWith('domain_') ||
+            _apiPackages.contains(dep);
         if (upward &&
             !_approvedUpwardEdges.containsKey('${pkg.name} -> $dep')) {
           blocking.add(
@@ -470,6 +597,58 @@ void main(List<String> args) {
             ),
           );
         }
+      }
+    }
+
+    if (layer == 'api') {
+      for (final dep in declared) {
+        if (dep == pkg.name) continue;
+        final problem = _apiDependencyProblem(dep, packages, root);
+        if (problem == null) continue;
+        blocking.add(
+          Violation(
+            'R3',
+            pubspecRel,
+            'API package `${pkg.name}` declares `$dep` ($problem). An API '
+                'package may depend on the foundation and Flutter only.',
+          ),
+        );
+      }
+    }
+
+    // --- R11: platform group direction, by pubspec --------------------------
+    // `dependencies:` only. A dev dependency never ships and never reaches a
+    // consumer's graph: `platform_app_shell`'s tests use `core_storage` for
+    // their fakes, and that is not an edge of the product graph. Imports need
+    // no separate pass — R5 already holds every import to `dependencies:`.
+    final group = _platformGroupOf(pkg, root);
+    if (group == 'invalid') {
+      blocking.add(
+        Violation(
+          'R11',
+          pubspecRel,
+          '`${pkg.name}` is not in a platform group folder. Move it to '
+              'platform/<group>/<name>, <group> one of '
+              '${_platformGroups.join(', ')}.',
+        ),
+      );
+    } else if (group != null) {
+      final allowed = _allowedGroupEdges[group]!;
+      for (final dep in declared) {
+        final target = packages[dep];
+        if (target == null || dep == pkg.name) continue;
+        final targetGroup = _platformGroupOf(target, root);
+        if (targetGroup == null || targetGroup == 'invalid') continue;
+        if (allowed.contains(targetGroup)) continue;
+        blocking.add(
+          Violation(
+            'R11',
+            pubspecRel,
+            '`${pkg.name}` (platform/$group) depends on `$dep` '
+                '(platform/$targetGroup). $group may depend on '
+                '${allowed.isEmpty ? 'no other platform package' : allowed.join(', ')}.',
+          ),
+        );
       }
     }
 
@@ -637,7 +816,8 @@ void main(List<String> args) {
               'R10',
               '$rel:${ref.line}',
               'the app shell imports `${ref.package}`. Only '
-                  '`$_compositionRoot` may name a module; everywhere else '
+                  '`$_compositionRoot` may name a module (its API package '
+                  'included); everywhere else '
                   'declare a contract in `core_di` and resolve it with '
                   '`getItOrNull`. A type import cannot be guarded — it fails '
                   'the build the moment that module is removed.',
@@ -689,7 +869,7 @@ void _report(
   const ruleTitles = <String, String>{
     'R1': 'Dependency direction (core must not reach outward)',
     'R2': 'Domain is pure Dart',
-    'R3': 'Feature boundaries',
+    'R3': 'Feature and module-API boundaries',
     'R4': 'Package constants live in utils/',
     'R5': 'Every import is declared',
     'R6': 'Generated files are not hand-edited',
@@ -697,6 +877,7 @@ void _report(
     'R8': 'Removable contracts resolve optionally',
     'R9': 'The pure-Dart tier stays pure',
     'R10': 'The app shell composes modules, it does not import them',
+    'R11': 'Platform group direction',
   };
 
   if (warnings.isNotEmpty) {
@@ -758,18 +939,24 @@ so it can gate CI.
 
 RULES CHECKED
   R1  Dependency direction
-      No platform/* package may import or declare a feature_*, data_* or
-      domain_* package, except for the approved edges listed at the top of the
-      run. Checked in both lib/ imports and pubspec.yaml.
+      No platform/* package may import or declare a feature_*, data_*,
+      domain_* or module API (<id>_api) package, except for the approved edges
+      listed at the top of the run. Checked in both lib/ imports and
+      pubspec.yaml.
 
   R2  Domain is pure Dart
       No modules/*/domain/lib file may import flutter, dio or retrofit, and no
       domain pubspec may declare `flutter` under `dependencies:`
       (dev_dependencies is fine).
 
-  R3  Feature boundaries
+  R3  Feature and module-API boundaries
       A feature may not import another feature, nor any data_* package.
-      Cross-feature work goes through a contract in core_di.
+      Cross-feature work goes through the other module's API package
+      (modules/<id>/api, named <id>_api) or a product-neutral contract in
+      core_di. An API package (<id>_api under modules/) may depend on
+      platform/foundation/ packages and Flutter/pub packages only — never on
+      its own module's domain/data/feature, another module's package or API,
+      or any other platform group. Checked in lib/ imports and pubspec.yaml.
 
   R4  Package constants live in utils/
       A *public* `static const` must sit in a `utils/` directory (in practice
@@ -794,9 +981,10 @@ RULES CHECKED
       Checked in files that mention core_responsive (in practice: import it).
 
   R8  Removable contracts resolve optionally
-      A `core_di` contract implemented only under modules/ (any layer — a
-      data package's gateway as much as a feature's navigator) disappears
-      when that module is removed. `getIt<T>()` and `getAll<T>()` throw in
+      A `core_di` contract or a module API type (declared in any <id>_api
+      package) implemented only under modules/ (any layer — a data
+      package's gateway as much as a feature's navigator) disappears when
+      that module is removed. `getIt<T>()` and `getAll<T>()` throw in
       that case, so such a type must be resolved with `getItOrNull<T>()` /
       `getAllOrEmpty<T>()` and a fallback. Packages of the implementing
       module may still resolve its contracts eagerly.
@@ -811,9 +999,25 @@ RULES CHECKED
 
   R10 The app shell composes modules, it does not import them
       In an app (a package with app_manifest.yaml), only lib/di/injection.dart
-      — the composition root — may import a domain_*, data_* or feature_*
-      package. Anywhere else a module import is an unguardable compile-time
+      — the composition root — may import a domain_*, data_*, feature_* or
+      <id>_api package. Anywhere else a module import is an unguardable compile-time
       dependency: the build breaks the moment that module is removed.
+
+  R11 Platform group direction
+      Every package under platform/ sits in a group folder,
+      platform/<group>/<package>, and may declare (under `dependencies:`)
+      platform packages of these groups only:
+        layers/domain (domain_core)  nothing — the leaf
+        foundation                   foundation, layers/domain
+        layers (data_core, other)    foundation, layers/domain
+        infra                        foundation, layers — no infra -> infra
+        ui                           foundation, ui
+        state                        foundation, layers, ui
+        shell                        every group
+      The group comes from the folder, the one thing that records it.
+      dev_dependencies are not checked: they never ship (the shell's tests
+      use core_storage for fakes). A package directly under platform/, or in
+      an unknown group folder, is itself a violation.
 
 EXCLUDED FROM SCANNING
   Generated output: *.g.dart, *.freezed.dart, *.config.dart, *.module.dart,

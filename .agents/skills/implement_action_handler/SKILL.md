@@ -1,6 +1,6 @@
 ---
 name: implement_action_handler
-description: Guide for declaring cross-feature UI Action Handler interfaces in core_di and implementing them in the owning feature.
+description: Guide for declaring cross-feature UI Action Handler interfaces in the owning module's API package (<id>_api) and implementing them in the owning feature.
 ---
 
 # 🎛️ Skill: Implement Cross-Feature Action Handler
@@ -13,20 +13,20 @@ Use this skill when requested to: "call logout from settings without importing a
 
 | Need | Prefer |
 | :--- | :--- |
-| Navigate to another feature's screen | **Navigator** (`AuthNavigator`, `HomeNavigator`) |
+| Navigate to another feature's screen | **Navigator** (`AuthNavigator` in `auth_api`, `HomeNavigator` in `home_api`) |
 | Shared business logic without UI | **Domain UseCase** |
-| Observe another feature's state | **Agnostic stream** (`IAuthStatusStream`, `IAuthSessionState`) |
-| Inject a widget/scope from another feature | **`IAppTreeWrapper`** or a widget-builder interface in `core_di` |
+| Observe the session | **Agnostic stream** (`ISessionStatusStream`, `ISessionState` in `core_di`) |
+| Inject a widget/scope from another feature | **`IAppTreeWrapper`** (`core_di`) or a widget-builder interface in the owner's `<id>_api` |
 | Trigger Feature B Provider / dialog / UI method from Feature A (e.g. Settings → logout in Auth) | **Action Handler** (`I*ActionHandler`) |
 
-**Sample in this template:** `feature_settings` calls `getItOrNull<IAuthActionHandler>()?.logout(context)` — Settings and Auth remain separate packages, and with no auth feature the logout row is simply not offered.
+**Sample in this template:** `feature_settings` depends on `auth_api` and calls `getItOrNull<IAuthActionHandler>()?.logout(context)` — Settings and Auth remain separate packages, and with no auth feature the logout row is simply not offered (`remove_sample auth` keeps `auth_api` while Settings imports it).
 
 ---
 
 ## 📋 Detailed Steps
 
-### Step 1: Declare the Interface in `core_di`
-Create `platform/foundation/contracts/lib/src/actions/i_<feature>_action_handler.dart`:
+### Step 1: Declare the Interface in the owning module's API package
+Create `modules/<owner>/api/lib/src/actions/i_<feature>_action_handler.dart` (package `<owner>_api`, foundation + Flutter dependencies only — `arch_check` R3; create the package first if the module has none: `docs/en/guides/12_module_isolation.md` § 7). `core_di` is for product-neutral contracts only:
 ```dart
 import 'package:flutter/widgets.dart';
 
@@ -34,12 +34,12 @@ abstract class IAuthActionHandler {
   void logout(BuildContext context);
 }
 ```
-Do **not** hand-edit `platform/foundation/contracts/lib/src/actions/actions.dart` — it is a generated barrel, and the generator deletes hand-written `export` lines. Running the barrel generator (Step 4) adds the new file.
+Do **not** hand-edit `modules/<owner>/api/lib/src/actions/actions.dart` — it is a generated barrel, and the generator deletes hand-written `export` lines. Running the barrel generator (Step 4) adds the new file.
 
 ### Step 2: Implement in the Owning Feature
 Create `modules/<owner>/feature/lib/src/handlers/<feature>_action_handler_impl.dart`:
 ```dart
-import 'package:core_di/core_di.dart';
+import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider/provider.dart';
@@ -59,7 +59,7 @@ class AuthActionHandlerImpl implements IAuthActionHandler {
 ```dart
 getItOrNull<IAuthActionHandler>()?.logout(context);
 ```
-The consumer MUST NOT import the owning feature package.
+The consumer lists `<owner>_api` in its `dependencies:` and MUST NOT import the owning feature package.
 
 > [!CAUTION]
 > **Prefer `getItOrNull` over `getIt` for cross-feature calls.** The app must still run when
@@ -72,15 +72,14 @@ The consumer MUST NOT import the owning feature package.
 
 ### Step 4: Barrels + Code Gen
 ```bash
-dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib            # so the feature can import the new interface
+dart tools/barrel_generator/generate.dart modules/<owner>/api/lib     # so the feature can import the new interface
 dart run build_runner build --workspace
-dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib            # final pass, after codegen
 dart tools/barrel_generator/generate.dart modules/<owner>/feature/lib
 ```
 The final barrel pass must come **after** `build_runner`, because barrels also export
-generated files present on disk. The extra pass on `platform/foundation/contracts/lib` beforehand is harmless and
-lets the owning feature's `@Injectable(as: I…ActionHandler)` resolve the new interface through
-`core_di`'s barrel during codegen.
+generated files present on disk. The API package has no generated files, so its one pass
+before codegen is enough — it lets the owning feature's `@Injectable(as: I…ActionHandler)`
+resolve the new interface through the `<owner>_api` barrel.
 
 ---
 

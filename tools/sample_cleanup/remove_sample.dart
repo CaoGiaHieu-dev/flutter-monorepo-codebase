@@ -7,7 +7,18 @@ import 'package:yaml/yaml.dart';
 import '../shared/app_locator.dart';
 
 /// Removes a sample bundle — the feature package *and* everything that travels
-/// with it (domain/data pairs, workspace entries, DI registrations).
+/// with it (domain/data pairs, its API package, workspace entries, DI
+/// registrations).
+///
+/// A module's API package (`modules/<id>/api`, `<id>_api`) is the one part
+/// that may stay: other features import it for its contracts
+/// (`feature_onboarding` → `auth_api`), and deleting it would break their
+/// compile. So an API package that a package outside the bundle still
+/// depends on is **kept** — reported in the dry run and after `--apply` —
+/// and the manifests keep the module as `{ id: <id>, layers: [api] }`. Its
+/// contracts then have no implementation, which the consumers' `getItOrNull`
+/// lookups already handle. Run the removal again once nothing imports it and
+/// the API package goes too.
 ///
 /// The template ships working reference features. Deleting one by hand is where
 /// people get hurt: `auth` is not just `modules/auth/feature`, it is also
@@ -209,7 +220,12 @@ Future<void> _removeBundle({
   required bool apply,
 }) async {
   final packages = manifest['packages'] as YamlMap;
-  final pkgNames = (bundle['packages'] as YamlList).cast<String>();
+  final bundlePackages = (bundle['packages'] as YamlList).cast<String>();
+  final kept = _keptApiPackages(bundlePackages, packages);
+  final pkgNames = [
+    for (final name in bundlePackages)
+      if (!kept.containsKey(name)) name,
+  ];
 
   final mode = apply ? 'APPLYING' : 'PREVIEW (dry run — nothing is written)';
   stdout.writeln('');
@@ -220,13 +236,21 @@ Future<void> _removeBundle({
   stdout.writeln('');
   stdout.writeln('Package directories to delete:');
   final dirs = <String>[];
-  for (final name in pkgNames) {
+  for (final name in bundlePackages) {
     final entry = packages[name] as YamlMap?;
     if (entry == null) {
       stderr.writeln('  [WARN] "$name" is not in the manifest — skipped.');
       continue;
     }
     final path = entry['path'] as String;
+    final dependents = kept[name];
+    if (dependents != null) {
+      stdout.writeln(
+        '  k $path   (kept — `$name` is still a dependency of '
+        '${dependents.join(', ')})',
+      );
+      continue;
+    }
     final exists = Directory(path).existsSync();
     stdout.writeln(
       '  ${exists ? '-' : 'x'} $path'
@@ -238,7 +262,12 @@ Future<void> _removeBundle({
   // --- 2. Shared file edits ------------------------------------------------
   stdout.writeln('');
   stdout.writeln('Shared files to edit:');
-  final edits = _planSharedEdits(pkgNames, packages, bundleName: bundleName);
+  final edits = _planSharedEdits(
+    pkgNames,
+    packages,
+    bundleName: bundleName,
+    keepApiLayer: kept.isNotEmpty,
+  );
   if (edits.isEmpty) {
     stdout.writeln('  (no matching lines)');
   }
@@ -247,7 +276,11 @@ Future<void> _removeBundle({
     for (final line in edit.removedLines) {
       stdout.writeln('      - ${line.trim()}');
     }
+    for (final line in edit.addedLines) {
+      stdout.writeln('      + ${line.trim()}');
+    }
   }
+  _reportKept(kept, packages, bundleName, applied: false);
 
   // --- 3. Consequences the docs never covered ------------------------------
   final breaks = bundle['breaks'] as YamlList?;
@@ -275,6 +308,10 @@ Future<void> _removeBundle({
 
   final keys = bundle['orphaned_keys'] as YamlList?;
   if (keys != null && keys.isNotEmpty) {
+    if (orphans == null || orphans.isEmpty) {
+      stdout.writeln('');
+      stdout.writeln('Keys that become unused (delete them if you like):');
+    }
     for (final k in keys) {
       stdout.writeln('  ? $k');
     }
@@ -358,7 +395,110 @@ Future<void> _removeBundle({
   }
   stdout.writeln('  dart tools/docs_check/check.dart');
   _reportDocReferences(docRefs, applied: true);
+  _reportKept(kept, packages, bundleName, applied: true);
   stdout.writeln('');
+}
+
+/// Each API package of [bundle] that a package outside the bundle still
+/// depends on, mapped to those dependents (sorted).
+///
+/// An API package is recognised by its path, `modules/<id>/api`. The check is
+/// the pubspec — `dependencies:` and `dev_dependencies:` — of every package on
+/// disk: pub fails to resolve a path dependency whose target is gone, so any
+/// such entry, test-only or not, would break the workspace.
+Map<String, List<String>> _keptApiPackages(
+  List<String> bundle,
+  YamlMap packages,
+) {
+  final apis = <String>{
+    for (final name in bundle)
+      if (packages[name] case {'path': final String path}
+          when path.startsWith('modules/') &&
+              path.split('/').last == 'api' &&
+              Directory(path).existsSync())
+        name,
+  };
+  if (apis.isEmpty) return const {};
+
+  final out = <String, List<String>>{};
+  for (final pubspec in _workspacePubspecs()) {
+    final Object? doc;
+    try {
+      doc = loadYaml(pubspec.readAsStringSync());
+    } on YamlException {
+      continue; // composer / pub report an unparsable pubspec themselves
+    }
+    if (doc is! YamlMap) continue;
+    final name = doc['name'];
+    if (name is! String || bundle.contains(name)) continue;
+    for (final section in const ['dependencies', 'dev_dependencies']) {
+      final deps = doc[section];
+      if (deps is! YamlMap) continue;
+      for (final api in apis) {
+        if (deps.containsKey(api)) (out[api] ??= <String>[]).add(name);
+      }
+    }
+  }
+  for (final list in out.values) {
+    list.sort();
+  }
+  return out;
+}
+
+/// Every `pubspec.yaml` under the working directory, build output skipped.
+List<File> _workspacePubspecs() {
+  const skip = {
+    '.git',
+    '.dart_tool',
+    'build',
+    'ios',
+    'android',
+    'macos',
+    'windows',
+    'linux',
+    'web',
+    'node_modules',
+  };
+  final out = <File>[];
+  void walk(Directory dir) {
+    for (final entity in dir.listSync(followLinks: false)) {
+      final name = entity.path.replaceAll('\\', '/').split('/').last;
+      if (entity is Directory) {
+        if (!skip.contains(name)) walk(entity);
+      } else if (entity is File && name == 'pubspec.yaml') {
+        out.add(entity);
+      }
+    }
+  }
+
+  walk(Directory('.'));
+  return out;
+}
+
+void _reportKept(
+  Map<String, List<String>> kept,
+  YamlMap packages,
+  String bundleName, {
+  required bool applied,
+}) {
+  if (kept.isEmpty) return;
+  stdout.writeln('');
+  stdout.writeln(
+    'API package(s) ${applied ? 'kept' : 'that will be kept'} — other '
+    'packages still import them, so deleting them would break the build:',
+  );
+  kept.forEach((name, dependents) {
+    final path = (packages[name] as YamlMap)['path'];
+    stdout.writeln('  k $name  ($path)');
+    stdout.writeln('      imported by: ${dependents.join(', ')}');
+  });
+  stdout.writeln(
+    '  Their contracts now have no implementation: the consumers resolve '
+    'them with getItOrNull and take their fallback. The app manifests keep '
+    'the module as `{ id: $bundleName, layers: [api] }`. Once nothing imports '
+    'an API package, run `dart tools/sample_cleanup/remove_sample.dart '
+    '$bundleName --apply` again to delete it.',
+  );
 }
 
 /// A Markdown reference to a path the removal deletes.
@@ -574,10 +714,14 @@ void _reportDocReferences(List<_DocRef> refs, {required bool applied}) {
 }
 
 class _FileEdit {
-  _FileEdit(this.file, this.removedLines, this.newContent);
+  _FileEdit(this.file, this.removedLines, this.addedLines, this.newContent);
 
   final String file;
   final List<String> removedLines;
+
+  /// Lines written in place of a removed one — the manifest entry of a module
+  /// whose API package is kept.
+  final List<String> addedLines;
   final String newContent;
 }
 
@@ -590,6 +734,7 @@ List<_FileEdit> _planSharedEdits(
   List<String> pkgNames,
   YamlMap packages, {
   required String bundleName,
+  bool keepApiLayer = false,
 }) {
   final edits = <_FileEdit>[];
 
@@ -606,6 +751,7 @@ List<_FileEdit> _planSharedEdits(
     final lines = f.readAsLinesSync();
     final keep = <String>[];
     final removed = <String>[];
+    final added = <String>[];
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
@@ -639,8 +785,21 @@ List<_FileEdit> _planSharedEdits(
       }
 
       // app_manifest.yaml: `  - { id: auth, layers: [domain, data, feature] }`
-      if (RegExp('^\\s*-\\s*\\{\\s*id:\\s*$bundleName\\s*,').hasMatch(line)) {
-        drop = true;
+      // — or, when the bundle's API package is kept and this entry lists it,
+      // rewritten to `  - { id: auth, layers: [api] }`.
+      final entry = RegExp(
+        '^(\\s*-\\s*)\\{\\s*id:\\s*$bundleName\\s*,(.*)\$',
+      ).firstMatch(line);
+      if (entry != null) {
+        final listsApi = RegExp(r'\bapi\b').hasMatch(entry.group(2)!);
+        final rewritten = '${entry.group(1)}{ id: $bundleName, layers: [api] }';
+        if (keepApiLayer && listsApi && line != rewritten) {
+          removed.add(line);
+          added.add(rewritten);
+          keep.add(rewritten);
+          continue;
+        }
+        if (!(keepApiLayer && listsApi)) drop = true;
       }
 
       if (drop) {
@@ -651,7 +810,7 @@ List<_FileEdit> _planSharedEdits(
     }
 
     if (removed.isNotEmpty) {
-      edits.add(_FileEdit(file, removed, '${keep.join('\n')}\n'));
+      edits.add(_FileEdit(file, removed, added, '${keep.join('\n')}\n'));
     }
   }
 

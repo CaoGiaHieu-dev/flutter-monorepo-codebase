@@ -13,12 +13,19 @@ deleting either feature leaves the app running.
 
 ```
 feature_a  ──✗──>  feature_b        forbidden, always
-feature_a  ──✓──>  core_di          contract lives here
-feature_b  ──✓──>  core_di          implementation registers against it
+feature_a  ──✓──>  b_api            module B's contracts for other features live here
+feature_b  ──✓──>  b_api            B implements them and registers against them
+anyone     ──✓──>  core_di          product-neutral contracts (session, locations, routing)
 ```
 
-`core_di` is the **DI Hub**: it holds interfaces, not logic. Both sides depend on it, neither
-depends on the other. That is what makes a feature removable.
+A contract lives in one of two neutral places. **Module B's API package** (`modules/<b>/api`,
+`b_api`) holds what exists so *other features can reach B* — its navigator, its action
+handlers, a widget builder (`auth_api`, `home_api` in the samples); it depends on the
+foundation and Flutter only, and B's feature implements it. **`core_di`**, the DI Hub, holds
+only what is product-neutral — what the platform itself needs, named for that need (the
+session, the sign-in / post-sign-in locations, routing), never for the module that provides it.
+Either way both sides depend on the contract, neither on the other. That is what makes a
+feature removable; `arch_check` R3 holds the API rules.
 
 ---
 
@@ -28,11 +35,11 @@ depends on the other. That is what makes a feature removable.
 | :-- | :-- | :-- |
 | Run the same business operation as another feature | Shared **UseCase** from `domain_*` | 1 |
 | Read/write storage, call an API, log | **Core service** (`core_storage`, `core_network`…) | 2 |
-| React continuously to another feature's state (login/logout…) | **Agnostic stream** on `core_di` | 3 |
+| React continuously to another feature's state (login/logout…) | **Agnostic stream** — on `core_di` when product-neutral (the session), else the owner's `<id>_api` | 3 |
 | Persist a pure-UI preference (theme, locale) | **Bypass Domain** via a `core_di` storage interface | 4 |
-| Embed a widget that only another feature can build | **Widget builder interface** on `core_di` | 5 |
-| Trigger a one-shot UI action another feature owns (logout…) | **Action handler** on `core_di` | 6 |
-| Just navigate to another feature's screen | **Navigator interface** — see [`04_routing.md`](04_routing.md) | — |
+| Embed a widget that only another feature can build | **Widget builder interface** in the owner's `<id>_api` | 5 |
+| Trigger a one-shot UI action another feature owns (logout…) | **Action handler** in the owner's `<id>_api` | 6 |
+| Just navigate to another feature's screen | **Navigator interface** in the owner's `<id>_api` — see [`04_routing.md`](04_routing.md) | — |
 
 ---
 
@@ -83,33 +90,33 @@ state-management tool.
 ### Step 1 — neutral interface in `core_di`
 
 Real code from
-[`platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart):
+[`platform/foundation/contracts/lib/src/session/i_session_status_stream.dart`](../../../platform/foundation/contracts/lib/src/session/i_session_status_stream.dart):
 
 ```dart
-abstract class IAuthStatusStream {
-  /// Emits on every authentication state change; `null` means signed out.
-  Stream<AuthPrincipal?> get authStatusStream;
+abstract class ISessionStatusStream {
+  /// Emits on every session change; `null` means signed out.
+  Stream<SessionPrincipal?> get sessionStatusStream;
 
   /// The currently signed-in principal, or `null` when signed out.
   ///
-  /// Read this for the state at subscription time — [authStatusStream] is a
+  /// Read this for the state at subscription time — [sessionStatusStream] is a
   /// broadcast stream and does not replay its last value to new listeners.
-  AuthPrincipal? get currentUser;
+  SessionPrincipal? get currentUser;
 }
 ```
 
 Two deliberate design decisions worth understanding:
 
-**Why `AuthPrincipal` and not `UserEntity`.** A `core_di` contract may not name a type from a
+**Why `SessionPrincipal` and not `UserEntity`.** A `core_di` contract may not name a type from a
 `domain_*` package (`.agents/AGENTS.md` §8.4): the import would make every consumer depend on
 `domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
 type,
-[`AuthPrincipal`](../../../platform/foundation/contracts/lib/src/agnostic_streams/auth_principal.dart), and the auth
+[`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), and the auth
 feature narrows its entity to it at the boundary (`toPrincipal` in step 2). The contract is
 deliberately smaller than the entity — a consumer that only asks *who is signed in* never sees the
 rest.
 
-**Why `currentUser` exists alongside the stream.** `authStatusStream` is a *broadcast* stream: it
+**Why `currentUser` exists alongside the stream.** `sessionStatusStream` is a *broadcast* stream: it
 does not replay its last value to new listeners. A consumer subscribing after login would sit blind
 until the next change, so it reads `currentUser` for the state at subscription time.
 
@@ -119,17 +126,17 @@ Real code from
 [`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
 
 ```dart
-/// Implementation of [IAuthStatusStream] provided by `feature_auth`.
+/// Implementation of [ISessionStatusStream] provided by `feature_auth`.
 @singleton
-class AuthStatusStreamImpl implements IAuthStatusStream {
-  final _controller = StreamController<AuthPrincipal?>.broadcast();
-  AuthPrincipal? _currentUser;
+class AuthStatusStreamImpl implements ISessionStatusStream {
+  final _controller = StreamController<SessionPrincipal?>.broadcast();
+  SessionPrincipal? _currentUser;
 
   @override
-  Stream<AuthPrincipal?> get authStatusStream => _controller.stream;
+  Stream<SessionPrincipal?> get sessionStatusStream => _controller.stream;
 
   @override
-  AuthPrincipal? get currentUser => _currentUser;
+  SessionPrincipal? get currentUser => _currentUser;
 
   /// Called by `feature_auth` when the session settles.
   void updateAuthStatus(UserEntity? user) {
@@ -139,9 +146,9 @@ class AuthStatusStreamImpl implements IAuthStatusStream {
   }
 
   /// The one place `UserEntity` is narrowed for the outside world.
-  static AuthPrincipal? toPrincipal(UserEntity? user) {
+  static SessionPrincipal? toPrincipal(UserEntity? user) {
     if (user == null) return null;
-    return AuthPrincipal(
+    return SessionPrincipal(
       id: user.id,
       displayName: user.name,
       email: user.email,
@@ -163,7 +170,7 @@ void initMicroPackage() {}
 @module
 abstract class AuthDiModule {
   @singleton
-  IAuthStatusStream bindIAuthStatusStream(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) => impl;
 }
 ```
 
@@ -180,26 +187,26 @@ Real code from
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._authStatusStream)
+    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
+  HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) {
     // …
   }
 
-  final IAuthStatusStream? _authStatusStream;
-  StreamSubscription<AuthPrincipal?>? _subscription;
+  final ISessionStatusStream? _sessionStatusStream;
+  StreamSubscription<SessionPrincipal?>? _subscription;
 ```
 
-`feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either: the contract carries `AuthPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
+`feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either: the contract carries `SessionPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
 
-The stream is **optional** on purpose. `IAuthStatusStream` is registered by `feature_auth`, which an app may leave out, so the bloc takes it as an `@factoryParam` and the route supplies it — real code from [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
+The stream is **optional** on purpose. `ISessionStatusStream` is registered by `feature_auth`, which an app may leave out, so the bloc takes it as an `@factoryParam` and the route supplies it — real code from [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
 
 ```dart
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -255,10 +262,11 @@ where `core_base_ui`'s provider and `core_storage`'s mechanism meet without crea
 **Use when** feature A must render a widget whose content only feature B knows how to build.
 **Don't use when** the widget is generic UI — that belongs in `core_ui_kit`.
 
-Declare the builder contract in `core_di`:
+Declare the builder contract in the owning module's API package (feature A adds `profile_api` to
+its `dependencies:`):
 
 ```dart
-// platform/foundation/contracts/lib/src/builders/i_profile_card_builder.dart
+// modules/profile/api/lib/src/builders/i_profile_card_builder.dart
 import 'package:flutter/widgets.dart';
 
 abstract class IProfileCardBuilder {
@@ -282,8 +290,9 @@ return builder?.build(context, userId: id) ?? const SizedBox.shrink();
 the canonical case.
 **Don't use for** plain navigation (use a Navigator interface) or for domain logic (use a UseCase).
 
-The interface — real code from
-[`platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart`](../../../platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart):
+The interface — real code from the auth module's API package,
+[`modules/auth/api/lib/src/actions/i_auth_action_handler.dart`](../../../modules/auth/api/lib/src/actions/i_auth_action_handler.dart)
+(`feature_settings` depends on `auth_api`, never on `feature_auth`):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -297,7 +306,7 @@ The implementation — real code from
 [`modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart`](../../../modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart):
 
 ```dart
-import 'package:core_di/core_di.dart';
+import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider/provider.dart';
@@ -382,12 +391,13 @@ would open that app on a blank screen.
 
 | Don't | Why | Instead |
 | :-- | :-- | :-- |
-| `import 'package:feature_b/...'` from feature A | Hard couples two features; neither is removable | A `core_di` contract |
+| `import 'package:feature_b/...'` from feature A | Hard couples two features; neither is removable | A contract in `b_api` (or a product-neutral one in `core_di`) |
+| A module-specific contract (`AuthNavigator`) in `core_di` | The platform then names a product module, and keeps a dead contract when it is removed | The owning module's `<id>_api` |
 | Expose a `Bloc` or `ChangeNotifier` across features | Forces the other feature to adopt your state library | Model 3 — neutral stream |
 | `getIt<FeatureOwnedType>()` | Throws when that feature is gone | `getItOrNull<T>()` + fallback |
 | Action Handler for navigation | Wrong tool; loses type-safe routes | Navigator interface |
 | Put shared business logic in `core_ui_kit` | It is a UI package | A domain UseCase |
-| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts AGENTS.md §8.4 | A contract-owned value type (`AuthPrincipal`) |
+| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts AGENTS.md §8.4 | A contract-owned value type (`SessionPrincipal`) |
 
 ---
 

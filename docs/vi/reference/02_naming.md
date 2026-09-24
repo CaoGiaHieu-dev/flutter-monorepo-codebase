@@ -25,9 +25,11 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `modules/cache/data/lib/src/models/cache_entry_model.dart` |
 | Request DTO | `_request.dart` | `Request` | `platform/layers/data/lib/src/models/base_request.dart` |
 | Data source | `_data_source.dart` | `DataSource` | `modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart` |
-| Interface navigator | `<name>_navigator.dart` | `Navigator` | `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart` |
+| Interface navigator | `<name>_navigator.dart` | `Navigator` | `modules/auth/api/lib/src/navigators/auth_navigator.dart` |
 | Impl navigator | `_navigator_impl.dart` | `NavigatorImpl` | `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart` |
-| Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart` |
+| Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `modules/auth/api/lib/src/actions/i_auth_action_handler.dart` |
+| Package API của module | package `<id>_api` tại `modules/<id>/api` | — | `modules/auth/api/pubspec.yaml` (`auth_api`) |
+| Đóng góp vị trí session | `_sign_in_location.dart` / `_post_sign_in_location.dart` | `SignInLocation` / `PostSignInLocation` | `modules/auth/feature/lib/src/routing/auth_sign_in_location.dart` |
 | Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
@@ -48,7 +50,7 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 ❌ Không bao giờ đặt tên implementation là `IAuthNavigator` — nó phải là `AuthNavigatorImpl`
 
 > [!NOTE]
-> *Interface* Navigator là ngoại lệ có chủ đích duy nhất: chúng tên là `AuthNavigator`, `HomeNavigator` — không có `I`. Chúng nằm ở `core_di/lib/src/navigators/`, và chính hậu tố `Impl` của bản cài đặt là thứ phân biệt hai bên.
+> *Interface* Navigator là ngoại lệ có chủ đích duy nhất: chúng tên là `AuthNavigator`, `HomeNavigator` — không có `I`. Chúng nằm trong package API của module sở hữu (`modules/<id>/api/lib/src/navigators/`), và chính hậu tố `Impl` của bản cài đặt là thứ phân biệt hai bên.
 
 ---
 

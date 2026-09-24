@@ -124,9 +124,9 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── docs/                          # Trung tâm tài liệu — cặp en/ và vi/ (bắt đầu từ docs/vi/README.md)
 ├── fastlane/                      # Fastfile/Pluginfile ở root: import apps/mobile/fastlane để chạy lane từ root
 ├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
-│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng (domain, data, feature)
+│   ├── auth/                      # Mẫu: lát cắt đủ ba tầng (domain, data, feature) + api (auth_api)
 │   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
-│   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
+│   ├── home/{api,feature}/        # Mẫu: BLoC, Freezed event private, một nav destination; home_api
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
 │   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
 │   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
@@ -134,7 +134,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
 │   ├── foundation/                # Nền thuần mà mọi thứ dựng lên: getIt/lỗi, hợp đồng DI, helper Flutter
 │   │   ├── kernel/                # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
-│   │   ├── contracts/             # core_di: DI Hub — mọi hợp đồng liên module nằm ở đây
+│   │   ├── contracts/             # core_di: DI Hub — hợp đồng trung lập với sản phẩm (session, location, routing)
 │   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
 │   ├── layers/                    # Hợp đồng nền của tầng domain và data
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
@@ -156,7 +156,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
-│   ├── arch_check/                # Luật phân tầng R1–R10 — Cổng PR 1
+│   ├── arch_check/                # Luật phân tầng R1–R11 — Cổng PR 1
 │   ├── barrel_generator/          # Sinh lại barrel file cho lib/ của một package
 │   ├── code_review/               # Review mã nguồn bằng Gemini AI
 │   ├── composer/                  # sync/verify app theo app_manifest.yaml — Cổng PR 0
@@ -276,19 +276,19 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
 > `getAll<T>()` **ném lỗi** khi chưa có gì đăng ký — luôn ưu tiên `getAllOrEmpty<T>()`.
 
 ### Nguyên Lý Đảo Ngược Phụ Thuộc (DIP)
-Features giao tiếp chéo hoàn toàn qua giao diện trung gian trong `core_di`:
+Features giao tiếp chéo hoàn toàn qua giao diện trung gian — trong package API của module sở hữu (`modules/<id>/api`, `<id>_api`) với hợp đồng riêng của module, trong `core_di` với hợp đồng trung lập với sản phẩm (session, vị trí đăng nhập / sau đăng nhập mà app shell dùng):
 
 ```text
-[Feature Auth]
+[Feature Onboarding]
    │
    ▼ (Yêu cầu chuyển hướng đến Home)
-[Interface HomeNavigator (core_di)]  ◄── (Định nghĩa hợp đồng)
+[Interface HomeNavigator (home_api)]  ◄── (Định nghĩa hợp đồng)
    ▲
    │ (Triển khai cụ thể trong feature sở hữu route)
 [HomeNavigatorImpl (modules/home/feature/lib/src/routing/)]
 ```
 
-Hành động UI xuyên feature (ví dụ logout) dùng cùng mô hình DIP với `I*ActionHandler` trong `core_di` và `*ActionHandlerImpl` trong feature sở hữu (`feature_auth/handlers/`).
+Hành động UI xuyên feature (ví dụ logout) dùng cùng mô hình DIP với `I*ActionHandler` trong package API của module sở hữu (`auth_api`) và `*ActionHandlerImpl` trong feature sở hữu (`feature_auth/handlers/`).
 
 ---
 
@@ -420,7 +420,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
 - `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` chỉ ở lần chạy đầu tiên (các lần sau, hoặc khi không đăng ký: path của destination đầu tiên, không có nữa thì `/_empty_dashboard`)
-- `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
+- `getItOrNull<ISessionRefreshListenable>()` → `refreshListenable`
 
 Chú ý dòng cuối: router phụ thuộc vào **contract ở `core_di`**, không phải `AuthProvider`. App shell
 không giữ kiểu dữ liệu nào của feature — đó chính là điều khiến `feature_auth` gỡ được.

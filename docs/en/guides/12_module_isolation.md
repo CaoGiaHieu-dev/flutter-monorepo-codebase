@@ -41,7 +41,7 @@ git submodule add <auth-repo-url> modules/auth
 git commit -m "chore: auth becomes a submodule"
 ```
 
-Nothing else changes. `app_manifest.yaml` still says `- { id: auth, layers: [domain, data, feature] }`, because a manifest names modules, not directories.
+Nothing else changes. `app_manifest.yaml` still says `- { id: auth, layers: [api, domain, data, feature] }`, because a manifest names modules, not directories.
 
 > [!IMPORTANT]
 > Do this **after** the module is stable. Moving a file between two modules stops being a rename and becomes a delete-plus-add across two repositories, with the review split in half.
@@ -142,8 +142,35 @@ Product modules change together and ship together. Submodules keep that cheap.
 ## 6. What isolation does *not* buy you
 
 - **Not a security boundary.** Submodule access is repository permissions. Someone with a checkout has the source; this stops accidental coupling and casual reading, not a determined reader.
-- **Not freedom from contracts.** A module still talks to others only through `core_di`. What changes is that breaking a contract is now visible as a cross-repository PR rather than a silent edit.
+- **Not freedom from contracts.** A module still talks to others only through `core_di` and the other module's API package (§ 7). What changes is that breaking a contract is now visible as a cross-repository PR rather than a silent edit.
 - **Not optional discipline.** Every guardrail that made partial checkouts possible — R8's optional lookups, R10's import ban, resolution by name — stops working the moment somebody adds a direct import. Which is why each one fails the build rather than a review.
+
+---
+
+## 7. A module's API package
+
+`core_di` holds only contracts the platform itself needs, named for what it needs — a session (`ISessionState`), a location (`ISignInLocation`, `IPostSignInLocation`). A contract that exists so *one feature can reach another module* belongs to that module: its API package, `modules/<id>/api`, named `<id>_api`. The samples ship two — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) and `home_api` (`HomeNavigator`). No generator type builds one; it is three files.
+
+```bash
+# modules/payment/api/pubspec.yaml — name: payment_api, resolution: workspace,
+#   dependencies: flutter (for BuildContext) and, only if needed, core_di.
+# modules/payment/api/lib/src/navigators/payment_navigator.dart — the interface.
+# Then: list the layer, compose, and generate the barrel.
+#   apps/<id>/app_manifest.yaml:  - { id: payment, layers: [api, domain, data, feature] }
+dart tools/composer/composer.dart sync
+flutter pub get
+dart tools/barrel_generator/generate.dart modules/payment/api/lib
+```
+
+Then implement it in the owning feature (`@Singleton(as: PaymentNavigator)` in `routing/`, with `payment_api` in its `dependencies:`) and add `payment_api` to each consumer's `dependencies:`. Consumers resolve it with `getItOrNull`.
+
+What `arch_check` holds you to:
+
+- **R3** — the API package depends on `platform/foundation/*` and Flutter/pub packages only: not its own module's domain/data/feature, not another module or its API, not another platform group. A feature may import another module's API, never its feature or data package.
+- **R8** — a type declared in an API package and implemented only under `modules/` is resolved with `getItOrNull` outside its module.
+- **R1 / R10** — no platform package and no app file (bar `injection.dart`) imports it.
+
+The `api` layer needs no `di_groups` entry: `composer` makes it a workspace member, never an app dependency or an `injection.dart` line. In a partial checkout (§ 3) a module you import an API from must be checked out too — its API package lives inside it. `remove_sample <id>` keeps an API package that another package still imports, reports who, and leaves the manifest entry as `{ id: <id>, layers: [api] }`; run it again once nothing imports the package.
 
 ---
 

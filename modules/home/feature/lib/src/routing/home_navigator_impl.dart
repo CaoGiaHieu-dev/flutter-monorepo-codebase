@@ -1,4 +1,4 @@
-import 'package:core_di/core_di.dart';
+import 'package:home_api/home_api.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 

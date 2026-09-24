@@ -2,3 +2,4 @@
 export 'auth_feature_route_module.dart';
 export 'auth_navigator_impl.dart';
 export 'auth_route_module.dart';
+export 'auth_sign_in_location.dart';

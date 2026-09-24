@@ -173,9 +173,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -255,9 +255,9 @@ Controller được tạo trong `build` của route, không bao giờ tạo bên
 // BLoC — trích từ home_route_module.dart ở trên
 return BlocProvider(
   // Auth is optional: an app composed without `feature_auth` registers
-  // no IAuthStatusStream, and Home then shows the signed-out state.
+  // no ISessionStatusStream, and Home then shows the signed-out state.
   create: (_) => getIt<HomeProfileBloc>(
-    param1: getItOrNull<IAuthStatusStream>(),
+    param1: getItOrNull<ISessionStatusStream>(),
   ),
   child: const HomePage(),
 );
@@ -366,10 +366,10 @@ cd modules/profile/feature && flutter gen-l10n
 
 ## 7. Navigator — để feature khác gọi tới bạn
 
-Feature khác không được import `feature_profile`. Khai hợp đồng ở `core_di`:
+Feature khác không được import `feature_profile`. Khai hợp đồng trong **package API** của module bạn, `modules/<name>/api` (ở đây là `profile_api` — chỉ phụ thuộc foundation và Flutter, `arch_check` R3; cách tạo: [`12_module_isolation.md` § 7](12_module_isolation.md)). Bên gọi phụ thuộc `profile_api`, không bao giờ phụ thuộc `feature_profile`; `core_di` không chứa navigator của module nào:
 
 ```dart
-// platform/foundation/contracts/lib/src/navigators/profile_navigator.dart
+// modules/profile/api/lib/src/navigators/profile_navigator.dart
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
@@ -378,13 +378,13 @@ abstract class ProfileNavigator {
 ```
 
 Đúng hình dạng của
-[`home_navigator.dart`](../../../platform/foundation/contracts/lib/src/navigators/home_navigator.dart).
+[`home_navigator.dart`](../../../modules/home/api/lib/src/navigators/home_navigator.dart) trong `home_api`.
 
 Cài đặt nó ngay trong `routing/` của bạn — code thật từ
 [`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
 
 ```dart
-import 'package:core_di/core_di.dart';
+import 'package:home_api/home_api.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -467,13 +467,13 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 >
 > | Nơi tiêu thụ | Kiểu phụ thuộc | Hậu quả |
 > |---|---|---|
-> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<IAuthStatusStream>()` truyền vào dưới dạng **factory param** | Home hiển thị trạng thái chưa đăng nhập |
-> | `feature_settings` (`settings_page.dart:46`) | `getItOrNull<IAuthActionHandler>()` | Dòng logout đơn giản bị ẩn đi |
-> | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` | Nút bấm chuyển sang Home (`HomeNavigator`); không có cả hai thì nút không làm gì |
+> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<ISessionStatusStream>()` truyền vào dưới dạng **factory param** | Home hiển thị trạng thái chưa đăng nhập |
+> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` (từ `auth_api`, được `remove_sample` giữ lại khi còn bị import) | Dòng logout đơn giản bị ẩn đi |
+> | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` (từ `auth_api`, cũng được giữ lại) | Nút bấm chuyển sang Home (`HomeNavigator`); không có cả hai thì nút không làm gì |
 >
 > Dry-run in ra mọi liên kết nó biết — `breaks` và `safe_couplings` trong
-> `tools/sample_manifest.yaml` — cộng các contract trong `core_di` trở thành code chết. Hãy đọc nó
-> trước khi xoá bất cứ thứ gì.
+> `tools/sample_manifest.yaml` — cộng các package API được giữ lại vì package khác vẫn import
+> chúng. Hãy đọc nó trước khi xoá bất cứ thứ gì.
 
 > [!NOTE]
 > Việc `injection.dart` gọi tên các package feature là **tham chiếu cứng có chủ đích duy nhất** của

@@ -5,38 +5,38 @@ import 'package:core_di/core_di.dart';
 import 'package:feature_home/feature_home.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// A hand-written [IAuthStatusStream]: a broadcast controller plus the
+/// A hand-written [ISessionStatusStream]: a broadcast controller plus the
 /// current user, which is what `feature_auth`'s implementation is.
-class _FakeAuthStatusStream implements IAuthStatusStream {
+class _FakeAuthStatusStream implements ISessionStatusStream {
   _FakeAuthStatusStream({this.currentUser});
 
-  final controller = StreamController<AuthPrincipal?>.broadcast();
+  final controller = StreamController<SessionPrincipal?>.broadcast();
 
   @override
-  AuthPrincipal? currentUser;
+  SessionPrincipal? currentUser;
 
   @override
-  Stream<AuthPrincipal?> get authStatusStream => controller.stream;
+  Stream<SessionPrincipal?> get sessionStatusStream => controller.stream;
 
   /// Closes [controller]; each test registers it with `addTearDown`.
   Future<void> close() => controller.close();
 }
 
-const _ada = AuthPrincipal(id: '1', displayName: 'Ada');
-const _grace = AuthPrincipal(id: '2', displayName: 'Grace');
+const _ada = SessionPrincipal(id: '1', displayName: 'Ada');
+const _grace = SessionPrincipal(id: '2', displayName: 'Grace');
 
 void main() {
   test(
     'with no auth module registered, Home shows the signed-out state',
     () async {
-      // The route passes `getItOrNull<IAuthStatusStream>()`, which is null in
+      // The route passes `getItOrNull<ISessionStatusStream>()`, which is null in
       // an app composed without `feature_auth`.
       final bloc = HomeProfileBloc(null);
       addTearDown(bloc.close);
 
       await expectLater(
         bloc.stream,
-        emits(const BlocViewState<AuthPrincipal?>.success(null)),
+        emits(const BlocViewState<SessionPrincipal?>.success(null)),
       );
       expect(bloc.state.data, isNull);
     },
@@ -50,7 +50,7 @@ void main() {
 
     await expectLater(
       bloc.stream,
-      emits(const BlocViewState<AuthPrincipal?>.success(_ada)),
+      emits(const BlocViewState<SessionPrincipal?>.success(_ada)),
     );
   });
 
@@ -60,7 +60,7 @@ void main() {
     final bloc = HomeProfileBloc(auth);
     addTearDown(bloc.close);
 
-    final states = <BlocViewState<AuthPrincipal?>>[];
+    final states = <BlocViewState<SessionPrincipal?>>[];
     final sub = bloc.stream.listen(states.add);
     addTearDown(sub.cancel);
     await pumpEventQueue();

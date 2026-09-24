@@ -1,0 +1,23 @@
+# Dart
+.dart_tool/
+.packages
+build/
+*.dart.js
+*.js
+*.js_
+*.js.map
+*.js.deps
+*.js.tar.gz
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.module.dart
+*.config.dart
+
+# VS Code
+.vscode/
+
+# IntelliJ
+*.iml
+.idea/

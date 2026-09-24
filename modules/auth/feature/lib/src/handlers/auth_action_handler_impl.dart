@@ -1,4 +1,4 @@
-import 'package:core_di/core_di.dart';
+import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider/provider.dart';

@@ -60,7 +60,7 @@ flutter test                           # all tests in the package
 flutter test test/debounce_test.dart   # a single test file
 ```
 
-The CI gate tools have their own suite in `tools/test/` — each test builds a throwaway workspace in a temp dir and runs the tool (compiled to kernel) against it, asserting exit code and output: `arch_check` R1–R10, `composer verify`, `dependency_sync --check`, `docs_check`, the barrel generator, composer `bootstrap`. CI runs it right after Gate 1 (Gate 3 skips `tools/`):
+The CI gate tools have their own suite in `tools/test/` — each test builds a throwaway workspace in a temp dir and runs the tool (compiled to kernel) against it, asserting exit code and output: `arch_check` R1–R11, `composer verify`, `dependency_sync --check`, `docs_check`, the barrel generator, composer `bootstrap`, `remove_sample` (keeping an imported module API package). CI runs it right after Gate 1 (Gate 3 skips `tools/`):
 
 ```bash
 cd tools && dart test                  # ~15 s; add a case here when you change a gate
@@ -72,7 +72,7 @@ cd tools && dart test                  # ~15 s; add a case here when you change 
 # Enforce the layering rules — Gate 1 of pr_quality_check.yml, exits 1 on violation.
 # The only check that can see layering; analysis_options.yaml knows nothing about it.
 dart tools/arch_check/check.dart
-dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R10)
+dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R11)
 
 # Verify every repo path the docs name actually exists — Gate 5 of
 # pr_quality_check.yml. Known-absent paths (generated / secret / "create this
@@ -91,6 +91,9 @@ dart tools/docs_check/check.dart --verbose   # + copy-paste allowlist block, rem
 # Which packages are sample code, and how to delete one safely.
 # Source of truth: tools/sample_manifest.yaml
 # Bundles: auth, home, settings, onboarding, dashboard, splash, cache
+# A bundle's API package (modules/<id>/api) is KEPT while a package outside the
+# bundle still depends on it — dry run and --apply both say so, and the
+# manifests keep `{ id: <id>, layers: [api] }`. Run again once nothing imports it.
 dart tools/sample_cleanup/remove_sample.dart --list
 dart tools/sample_cleanup/remove_sample.dart auth           # dry-run (default)
 dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
@@ -198,6 +201,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | **Domain** | `modules/*/domain` | **Pure Dart** business logic — entities, use cases, repository interfaces |
 | **Data** | `modules/*/data` | Repository implementations, DTOs/models, data sources (remote + local) |
 | **Features** | `modules/*/feature` | UI + state management — one bounded UI concern per package |
+| **Module API** | `modules/*/api` | A module's public surface for *other features* (`<id>_api`): its navigator, action handlers — contracts only, over the foundation and Flutter. See [Module API Packages](#module-api-packages) |
 
 ### Platform Groups
 
@@ -213,7 +217,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | `platform/state/` | `provider_state_management` (`provider`), `bloc_state_management` (`bloc`) | State-management bases, and the widgets bound to them (`LoadMoreListView`) | foundation, layers, ui |
 | `platform/shell/` | `platform_shell_adapters` (`adapters`), `platform_app_shell` (`app_shell`) | Infrastructure adapters every app registers; the app shell every app composes | every platform group (`app_shell → adapters`, never the reverse) |
 
-Direction (arrow points at the side depended on): `domain_core ← foundation ← layers/data ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`; nothing in `platform/` depends on `modules/` (R1). **The graph obeys it with no exception** — the three edges that ran against it were removed: `core_common → core_responsive` (`BottomTransitionPage` moved to `core_ui_kit`; `AppInitializer`'s 600 px portrait threshold is a private constant), `core_ui_kit → provider_state_management` (`LoadMoreListView` / `LoadingMoreWidget` moved to `provider_state_management`), and the kernel's `dio` import (the Dio → `AppFailure` mapping is `core_network`'s `DioFailureClassifier`, registered into `ErrorHandler`). **Not machine-checked yet** — review holds it until the enforcement stage lands. Full explanation: `docs/en/architecture/02_core.md` § 0.
+Direction (arrow points at the side depended on): `domain_core ← foundation ← layers/data ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`; nothing in `platform/` depends on `modules/` (R1). **The graph obeys it with no exception** — the three edges that ran against it were removed: `core_common → core_responsive` (`BottomTransitionPage` moved to `core_ui_kit`; `AppInitializer`'s 600 px portrait threshold is a private constant), `core_ui_kit → provider_state_management` (`LoadMoreListView` / `LoadingMoreWidget` moved to `provider_state_management`), and the kernel's `dio` import (the Dio → `AppFailure` mapping is `core_network`'s `DioFailureClassifier`, registered into `ErrorHandler`). **Machine-checked by `arch_check` R11**, which reads the group from the folder (`platform/<group>/<package>`; a package outside a group folder is itself a violation) and checks `dependencies:` only — dev dependencies never ship (`platform_app_shell`'s tests use `core_storage` for fakes). An edge into `domain_core`/`data_core` additionally needs R1's approved list. Full explanation: `docs/en/architecture/02_core.md` § 0.
 
 ### Core Packages Detail
 
@@ -223,7 +227,7 @@ Direction (arrow points at the side depended on): `domain_core ← foundation �
 | `platform_app_shell` | The reusable app shell — composition, UI and app state: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `RootApp`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider` | Every app composes it instead of copying it. Its DI group (`shell`) runs **after `core`, before `ui`**, right behind `platform_shell_adapters`. Imports no module — arch_check R1 holds that |
 | `platform_shell_adapters` | The shell's infrastructure adapters — `NetworkConfigImpl` + `NetworkBindingModule` (`SslPinningConfig`), `LanguageStorageImpl`/`ThemeStorageImpl` (`ILanguageStorage`/`IThemeStorage`), `AppBootStorage`, their keys in `lib/src/utils/` | First in the `shell` DI group — the storage adapters must be registered before `ui`. Depends on `core_ui_kit` only for `NetworkConfigImpl`'s `RetryDialog`. Imports no module (R1) |
 | `core_common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, `AppUtils`, `Debounce`, formatters, dialog helpers | Re-exports `platform_kernel` wholesale, so `getItOrNull`, `ErrorHandler`, `EnvConstants` etc. still resolve through it — but they live in the kernel (`platform/foundation/kernel/lib/src/`), as does the `AppFailure` re-export shim at `src/error/failures.dart` (`AppFailure` itself lives in `domain_core`) |
-| `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces, optional observability contracts (`IErrorReporter`, `IAnalytics`) | Declares **no** `domain_*` dependency — a contract carries its own value type (`AuthPrincipal`), never a domain entity |
+| `core_di` | DI Hub — **product-neutral** contracts only: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `DashboardRouteModule`), `NavigatorKeys`, the session seam (`src/session/`: `SessionPrincipal`, `SessionFailure`, `ISessionState`, `ISessionStatusStream`, `ISessionRefreshListenable`, `ISessionGateway`), app/storage adapters, optional observability contracts (`IErrorReporter`, `IAnalytics`) | Declares **no** `domain_*` dependency — a contract carries its own value type (`SessionPrincipal`), never a domain entity. Names no product module: a module's own navigator / action handler lives in its `modules/<id>/api` package |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
 | `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning, `DioFailureClassifier` (Dio → `AppFailure`) | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_shell_adapters`. `DioFailureClassifier` is an eager `@singleton` whose `@PostConstruct` calls `ErrorHandler.registerClassifier` while the `core` group initialises — a unit test that classifies `DioException`s without DI calls `DioFailureClassifier.ensureRegistered()` |
 | `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage). Needs only `platform_kernel` from the foundation (not `core_common`) |
@@ -254,12 +258,21 @@ Direction (arrow points at the side depended on): `domain_core ← foundation �
 
 ### Feature Layer Rules
 
-- **Allowed deps:** `domain_*` and `core_*` — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` **or** `bloc_state_management`
-- **FORBIDDEN:** Direct deps on the `data` layer or on **any** other feature package — no exception. Shared widgets come from `core_ui_kit`, which is core
+- **Allowed deps:** `domain_*` and `core_*` — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` **or** `bloc_state_management` — plus **other modules' `*_api` packages** (`feature_onboarding → auth_api, home_api`)
+- **FORBIDDEN:** Direct deps on the `data` layer or on **any** other feature package — no exception (arch_check R3). Reach another module through its API package, shared widgets through `core_ui_kit`, which is core
 - **One bounded UI concern per package** — Home and Settings are separate packages; `feature_dashboard` is shell chrome only
 - Feature-specific assets go in `<feature>/assets/` (images, SVGs, language ARBs)
 - Structure: `pages/`, `widgets/`, `provider/` **or** `bloc/` (both **singular**), `routing/`, `utils/` (constants — route paths live here, not in `routing/`), `extensions/`, `handlers/` (optional), `di/module.dart`
 - **Any feature must be removable** — see [Feature Removability](#feature-removability)
+
+### Module API Packages
+
+A module's contracts *for other features* live in its own API package, `modules/<id>/api`, named `<id>_api` — `auth_api` (`AuthNavigator`, `IAuthActionHandler`), `home_api` (`HomeNavigator`). `core_di` keeps only product-neutral contracts the platform itself uses.
+
+- **May depend on** `platform/foundation/*` (`core_di`, `platform_kernel`, `core_common`) and Flutter/pub packages — nothing else: not its own module's domain/data/feature, not another module or its API, not another platform group (arch_check **R3**, imports and pubspec)
+- **Contracts only** — no DI module, no codegen. The owning feature implements them (`AuthNavigatorImpl` in `feature_auth`); consumers resolve them with `getItOrNull` (**R8** covers API types as it covers `core_di`'s)
+- **Composed** as a layer with no DI group: `- { id: auth, layers: [api, domain, data, feature] }` makes it a workspace member; the app does not depend on it and `injection.dart` never names it
+- **Removal:** `remove_sample <id>` keeps the API package while a package outside the bundle still imports it, and says so — the build keeps compiling and the lookups return null. How to add one by hand: `docs/en/guides/12_module_isolation.md` § 7
 
 ---
 
@@ -302,7 +315,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 1. **Constructor Injection only** — no `getIt<T>()` inside business logic (VMs, Repos, UseCases)
 2. **`CoreBaseUiPackageModule` must run after the `shell` group** — it injects `ILanguageStorage`/`IThemeStorage`, which `platform_shell_adapters` registers (first in the `shell` group, before `platform_app_shell`). The manifest's `di_groups` order is what enforces this
 3. Never create monolithic `DomainPackageModule`/`DataPackageModule` — register each micro-package module separately
-4. Compose a package through each `apps/<id>/app_manifest.yaml`, then run `composer sync` — the `_<group>Modules` lists in `injection.dart` are generated from it. A **module** (`domain_*`/`data_*`/`feature_*`) is listed under `modules:` as `- { id: <name>, layers: [domain, data, feature] }` and gets its group from the `from_modules:` of the `domain`/`data`/`feature` groups; only **platform** packages are named in a `di_groups` entry (`core`, `notifications`, `shell`, `ui`, `domain`, `data`, `other`)
+4. Compose a package through each `apps/<id>/app_manifest.yaml`, then run `composer sync` — the `_<group>Modules` lists in `injection.dart` are generated from it. A **module** (`domain_*`/`data_*`/`feature_*`) is listed under `modules:` as `- { id: <name>, layers: [api, domain, data, feature] }` and gets its group from the `from_modules:` of the `domain`/`data`/`feature` groups (an `api` layer needs no group: a workspace member only, never an app dependency); only **platform** packages are named in a `di_groups` entry (`core`, `notifications`, `shell`, `ui`, `domain`, `data`, `other`)
 5. `@InjectableInit.microPackage()` takes no arguments — the one exception is `core_notifications`' `ignoreUnregisteredTypesInPackages: ['firebase_core']`, because the app, not a package, registers `FirebaseOptions`
 6. **Eager `@Singleton` must not depend on a later-registered type** — GetIt throws `"<Type> is not registered"` at boot. Use `@LazySingleton`. `flutter analyze` cannot catch this — check the module **order** in generated `apps/mobile/lib/di/injection.config.dart` and the type's own registration and its `gh<Dep>()` calls in the package's generated `lib/di/module.module.dart`
 7. **`getAll<T>()` THROWS when `T` is unregistered** — use `getAllOrEmpty<T>()` for optional contributions, and `getItOrNull<T>()` + fallback for single ones
@@ -335,15 +348,18 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 | `IFeatureRouteModule` | Stack/shell routes under app `ShellRoute` | **No** (path match) | auth, onboarding, … |
 | `INavDestinationModule` | One primary nav destination (bottom-bar / rail item) + one `StatefulShellBranch` | **Yes** (ascending sort key — keep unique) | home, settings, … |
 | `IAppEntryLocation` | First-launch `GoRouter.initialLocation` (once `AppBootStorage.viewedOnboard` is set, cold starts use `AppRouter.fallbackLocation`) | n/a | usually onboarding |
+| `ISignInLocation` | Where the shell sends a signed-out user (boot with no session, sign-out, session loss); none → no redirect | n/a | the session owner (auth) |
+| `IPostSignInLocation` | Where the shell sends a signed-in user (boot with a session, every sign-in); none → `AppRouter.fallbackLocation` | n/a | the landing module (home) |
 | `DashboardRouteModule` | Dashboard **chrome** only (scaffold + bottom bar / rail host) | n/a | `feature_dashboard` only |
 | `IFeatureLocalization` | Feature ARB delegates | n/a | every feature with strings |
 
 ### Navigator Pattern
 
-1. **Declare** Navigator interface in `core_di/lib/src/navigators/` (e.g., `AuthNavigator`)
+1. **Declare** the Navigator interface in the owning module's API package, `modules/<id>/api/lib/src/navigators/` (e.g., `AuthNavigator` in `auth_api`)
 2. **Implement** in the owning feature's `routing/` directory (e.g., `AuthNavigatorImpl` in `feature_auth`)
-3. **Use** via `getItOrNull<AuthNavigator>()?.toLogin(context)` (a throwing `getIt` is allowed only inside the owning module's own packages — arch_check R8) — never hardcode paths or `GoRouter.of(context).go(...)`
+3. **Use** from another feature that depends on `<id>_api` via `getItOrNull<AuthNavigator>()?.toLogin(context)` (a throwing `getIt` is allowed only inside the owning module's own packages — arch_check R8) — never hardcode paths or `GoRouter.of(context).go(...)`
 4. **BuildContext MUST be passed directly** from UI caller — avoid using `NavigatorKeys.*.currentContext`
+5. **The app shell uses no module navigator.** It sends users to the paths of `ISignInLocation` / `IPostSignInLocation` (`core_di`), falling back to `AppRouter.fallbackLocation`
 
 ### Route-Level Instantiation (Critical)
 
@@ -364,9 +380,9 @@ Widget build(BuildContext context, GoRouterState state) {
 Widget build(BuildContext context, GoRouterState state) {
   return BlocProvider(
     // Auth is optional: an app composed without `feature_auth` registers
-    // no IAuthStatusStream, and Home then shows the signed-out state.
+    // no ISessionStatusStream, and Home then shows the signed-out state.
     create: (_) => getIt<HomeProfileBloc>(
-      param1: getItOrNull<IAuthStatusStream>(),
+      param1: getItOrNull<ISessionStatusStream>(),
     ),
     child: const HomePage(),
   );
@@ -391,8 +407,8 @@ Widget build(BuildContext context, GoRouterState state) {
 
 ### Key Router Components
 
-- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart`. `refreshListenable` resolves `IAuthRefreshListenable`, not `AuthProvider`
-- **`NavigatorWrapperWidget`**: App shell widget at `platform/shell/app_shell/lib/presentation/widgets/` — handles auth boot redirect (via `endOfFrame.whenComplete`) and global auth side-effects
+- **`AppRouter`**: `@singleton`, uses `NavigatorKeys` (`rootKey`, `appKey`, plus `nested(id)` for a module's own back stack) from `core_di/lib/src/routing/navigator_keys.dart`. `refreshListenable` resolves `ISessionRefreshListenable`, not `AuthProvider`
+- **`NavigatorWrapperWidget`**: App shell widget at `platform/shell/app_shell/lib/presentation/widgets/` — handles the session boot redirect (via `endOfFrame.whenComplete`: entry location → `ISignInLocation` → `IPostSignInLocation`) and global session side-effects (sign-in/out routing, failure toasts), knowing no product module
 - **`UndefineRouteWidget`**: GoRouter's `errorPageBuilder` child — never use inline anonymous widgets
 - **SplashPage**: Manually managed by `MainScope` (`AppMaterialWrapper`), NOT a GoRouter route
 
@@ -463,29 +479,29 @@ Future<void> _fetchInitialData(
 | 2 | Infrastructure utils | **Core Service** | Import `core_storage`, `core_network`, etc. |
 | 3 | Cross-feature state | **Agnostic Streams** | Neutral `Stream`/`ValueListenable` interface on `core_di`; dual-register owner impl |
 | 4 | Pure UI prefs (theme/locale) | **Bypass Domain** | `ThemeProvider → IThemeStorage → ThemeStorageImpl` (owns its own `StorageValue`) |
-| 5 | Embed complex widgets | **Builder/Service Interface** | Interface in `core_di`, impl in owning feature, use via GetIt |
-| 6 | Cross-feature UI actions | **Action Handler** | `I*ActionHandler` in `core_di/src/actions/`, `*ActionHandlerImpl` in owning feature's `handlers/` |
+| 5 | Embed complex widgets | **Builder/Service Interface** | Interface in the owning module's `modules/<id>/api` (in `core_di` only when product-neutral), impl in owning feature, use via `getItOrNull` |
+| 6 | Cross-feature UI actions | **Action Handler** | `I*ActionHandler` in the owning module's `modules/<id>/api/lib/src/actions/` (`auth_api`), `*ActionHandlerImpl` in owning feature's `handlers/` |
 
 ### Agnostic Streams (Dual Registration Pattern)
 
 ```dart
 // 1. Interface in core_di — carries a contract-owned type, never a domain entity:
-abstract class IAuthStatusStream {
-  Stream<AuthPrincipal?> get authStatusStream;
-  AuthPrincipal? get currentUser; // broadcast streams do not replay
+abstract class ISessionStatusStream {
+  Stream<SessionPrincipal?> get sessionStatusStream;
+  SessionPrincipal? get currentUser; // broadcast streams do not replay
 }
 
 // 2. Concrete @singleton in owning feature:
 @singleton
-class AuthStatusStreamImpl implements IAuthStatusStream { ... }
+class AuthStatusStreamImpl implements ISessionStatusStream { ... }
 
 // 3. @module binding in owning feature DI:
 @module
 abstract class AuthModule {
-  IAuthStatusStream bind(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bind(AuthStatusStreamImpl impl) => impl;
 }
 
-// 4. Consumer injects IAuthStatusStream (not AuthStatusStreamImpl)
+// 4. Consumer injects ISessionStatusStream (not AuthStatusStreamImpl)
 ```
 
 ---
@@ -508,6 +524,7 @@ abstract class AuthModule {
 | Navigator Impl | `_navigator_impl.dart` | `NavigatorImpl` | `AuthNavigatorImpl` |
 | Action Handler Interface | `i_<name>_action_handler.dart` | Prefix `I` | `IAuthActionHandler` |
 | Action Handler Impl | `_action_handler_impl.dart` | `ActionHandlerImpl` | `AuthActionHandlerImpl` |
+| Module API package | `modules/<id>/api` → package `<id>_api` | — | `auth_api`, `home_api` |
 | Dialog | `_dialog.dart` | `Dialog` | `ConfirmationDialog` |
 | Bottom Sheet | `_bottom_sheet.dart` | `BottomSheet` | `HomeSettingsBottomSheet` |
 
@@ -707,7 +724,7 @@ Dio publicDio(ApiClient apiClient) => apiClient.createClient(
 
 Registration order in `ApiClient.createClient()` (`platform/infra/network/lib/src/api_client.dart`):
 
-1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it through `IAuthSessionGateway`, resolved with `getItOrNull` — `core_network` never touches storage, and a build with no auth module simply sends no token). Also sends the locale under the non-standard header key `language`
+1. **AuthInterceptor**: injects the Bearer token via `NetworkConfig.getToken` (the config reads it through `ISessionGateway`, resolved with `getItOrNull` — `core_network` never touches storage, and a build with no auth module simply sends no token). Also sends the locale under the non-standard header key `language`
 2. **RefreshTokenInterceptor**: added **only when `NetworkConfig.onRefreshToken != null`**; catches 401 and replays. Sits **before** Retry so a 401 is never retried with a dead token. `RefreshTokenHandler` serialises concurrent 401s behind one `Completer`, and marks a replayed request so `dio.fetch` re-entering the same interceptor cannot recurse. `login` and `refreshToken` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` — a `401` from the refresh call would otherwise wait on its own refresh forever
 3. **RetryInterceptor**: retries timeout/connection errors only (not HTTP status codes); honours the per-request `canRetry` extra; groups concurrent failures into a single retry dialog
 4. **LoggingInterceptor**: JSON-formatted logs via `dynamic_logger`, `kDebugMode`-gated on **all three** hooks (including `onError`), with `Authorization`/`Cookie` headers and credential body fields (`password`, `token`, `access_token`, …) redacted
@@ -766,7 +783,7 @@ Config: copy `apps/mobile/fastlane/Config.example.yaml` → `apps/mobile/fastlan
 ### Sharing Across Features
 
 - **Pure UI widgets** (buttons, inputs) → `core_ui_kit`
-- **Widgets with Feature B logic** → Widget Builder Interface via DI (declare in `core_di`, implement in owning feature)
+- **Widgets with Feature B logic** → Widget Builder Interface via DI (declare in module B's `<id>_api` package, implement in its feature)
 - **Dialogs/BottomSheets** → Always separate widget classes (`*_dialog.dart`/`*_bottom_sheet.dart`), never inline
 
 ---
@@ -786,17 +803,21 @@ flutter pub get && dart run build_runner build --workspace
 
 `injection.dart`, `apps/mobile/pubspec.yaml`'s path deps and the root `workspace:` list are generated between `composer:managed` markers — never edit them by hand. `composer verify` is Gate 0 in CI.
 
-**A type import defeats `getItOrNull`** — guarding the lookup is useless if the file still imports the feature for the type. When the shell needs something a feature owns, declare a contract in `core_di`:
+**A type import defeats `getItOrNull`** — guarding the lookup is useless if the file still imports the feature for the type. When the shell needs something a feature owns, declare a **product-neutral** contract in `core_di` — named for what the shell needs (a session, a location), never for the module that happens to provide it:
 
 | Contract | Replaces the shell's direct use of |
 |:---------|:-----------------------------------|
 | `IAppSplashScreen` | `SplashPage` from `feature_splash` in `main.dart` |
-| `IAuthRefreshListenable` (`implements Listenable`) | `AuthProvider` as GoRouter's `refreshListenable` |
-| `IAuthSessionState` + `AuthSessionFailure` | `AuthProvider`/`AuthErrorState`/`context.l10nAuth` in `NavigatorWrapperWidget` |
+| `ISessionRefreshListenable` (`implements Listenable`) | `AuthProvider` as GoRouter's `refreshListenable` |
+| `ISessionState` + `SessionFailure` | `AuthProvider`/`AuthErrorState`/`context.l10nAuth` in `NavigatorWrapperWidget` |
 | `IAppTreeWrapper` | `ChangeNotifierProvider<AuthProvider>` in `app_material_wrapper.dart` |
-| `IAuthSessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` (`platform_shell_adapters`) |
+| `ISessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` (`platform_shell_adapters`) |
+| `ISignInLocation` | `AuthNavigator.toLogin` in `NavigatorWrapperWidget` (boot, sign-out, session loss) |
+| `IPostSignInLocation` | `HomeNavigator.toHome` in `NavigatorWrapperWidget` (boot, sign-in) |
 
-Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `AuthSessionFailure`) — `core_di` runs only injectable's codegen (its `module.module.dart`), no Freezed/`part`-file codegen, and a `part` on a contract would make every consumer wait on `build_runner`.
+Feature ↔ feature contracts are not the shell's business: they live in the owning module's API package (`auth_api`, `home_api`). Removing a module removes its API package too — unless another package still imports it, in which case `remove_sample` keeps it and says so, so removal never breaks the compile.
+
+Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `SessionFailure`) — `core_di` runs only injectable's codegen (its `module.module.dart`), no Freezed/`part`-file codegen, and a `part` on a contract would make every consumer wait on `build_runner`.
 
 > [!NOTE]
 > The shared widget library is **not** a removable feature, which is why it lives at `platform/ui/ui_kit` as `core_ui_kit` rather than under `modules/*/feature/`. Everything remaining in `modules/*/feature/` is a genuinely removable product surface.
@@ -821,7 +842,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files — and **after** `gen-l10n` / `build_runner`, because it also exports generated files present on disk (`module.module.dart`, `lib/src/gen/**`; `core_base_ui`'s `src.dart` exports `gen/gen.dart`). An extra run before codegen is harmless; the last run must come after.
 15. **Build runner flags:** plain `dart run build_runner build --workspace`. `--delete-conflicting-outputs` (short form `-d`) was removed from build_runner and is ignored with a warning — do not pass it.
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.
-17. **Core never depends on features, data or product domain packages.** No `platform/*` may import or declare `feature_*`, `data_*` or `domain_*` — except the three approved `→ domain_core` edges: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. `arch_check` R1 blocks any other edge (allow-list `_approvedUpwardEdges` in `tools/arch_check/check.dart`); a fourth needs that list and AGENTS.md updated together. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/*/pubspec.yaml` — it also prints `data_core → domain_core`, a data → domain edge from the data layer's foundation, which lives under `platform/`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
+17. **Core never depends on features, data or product domain packages.** No `platform/*` may import or declare `feature_*`, `data_*`, `domain_*` or a module API package (`<id>_api`) — except the three approved `→ domain_core` edges: `provider_state_management → domain_core`, `bloc_state_management → domain_core`, `platform_kernel → domain_core`. `arch_check` R1 blocks any other edge (allow-list `_approvedUpwardEdges` in `tools/arch_check/check.dart`); a fourth needs that list and AGENTS.md updated together. Audit with `grep -E "^  (domain_|data_|feature_)" platform/*/*/pubspec.yaml` — it also prints `data_core → domain_core`, a data → domain edge from the data layer's foundation, which lives under `platform/`. Need a fallback widget in core? Define it in core (see `DefaultLoadingWidget`/`DefaultEmptyWidget`), never borrow from `core_ui_kit`.
 18. **A package's constants live in its own `utils/` folder** — a package with no constants needs none (`arch_check` R4 flags a public `static const` outside `utils/`/`styles/`, and never asks for an empty folder). No shared cross-domain constants file. Route paths live in `lib/src/utils/*_path.dart` (not `routing/`); storage keys in `utils/*_storage_keys.dart`.
 19. **Eager `@Singleton` must not depend on a later-registered type.** Modules initialize in the order listed in `injection.dart`; an eager singleton resolving a type from a module that runs later throws "not registered" at boot. Use `@LazySingleton` instead. Two live ordering constraints in this template: `shell` before `ui` (`ThemeProvider` injects `IThemeStorage`, which the shell registers), and `notifications` after the app's own registrations (`PushNotificationService` injects the app's `FirebaseOptions`). `flutter analyze` cannot catch this; verify in the generated files — `injection.config.dart` for the module order, the package's `lib/di/module.module.dart` for the type's registration and its `gh<Dep>()` calls.
 20. **Declare every dependency explicitly.** Pub Workspaces share one `package_config.json`, so an undeclared package still compiles — until the package is extracted. Production imports belong in `dependencies`, never `dev_dependencies`. `dart tools/arch_check/check.dart` rule **R5** catches an import missing from `dependencies:` (a `dev_dependencies` entry does not count); `dart tools/unused_checker/check_unused_packages.dart` catches the reverse — declared but never imported.
@@ -832,9 +853,11 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
 26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.
 27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
-28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10** in `apps/*` (only `injection.dart` may import a module) and **R1** in `platform_app_shell` / `platform_shell_adapters`. R10 was added after `network_config_impl.dart` — then an app file, now in `platform_shell_adapters` — was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
+28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts — product-neutral ones (session, locations); a module's own contracts live in its `<id>_api` package, which platform and apps never import (R1, R10). A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10** in `apps/*` (only `injection.dart` may import a module) and **R1** in `platform_app_shell` / `platform_shell_adapters`. R10 was added after `network_config_impl.dart` — then an app file, now in `platform_shell_adapters` — was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
 
 29. **The analyzer is strict** (`analysis_options.yaml`, whose header explains every setting): `strict-casts`, `strict-inference`, `strict-raw-types`, plus `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls`, `empty_catches`. Cast `dynamic` before use (`jsonDecode(s) as Map<String, dynamic>`); give the type argument inference cannot find (`Future<void>.delayed`, `AppDialogController.show<void>`); never a raw generic — `AppFailure<dynamic>`, keeping `dynamic` because Freezed `==` compares `runtimeType`; `await` in an async body or `unawaited(...)` with a reason; cancel/close subscription and controller fields in their own class; an empty `catch` holds a comment saying why it is safe. `discarded_futures` is off on purpose (it floods synchronous `dispose()` with `cancel()`/`close()` hits). Table: `docs/en/reference/01_rules.md` § 16.
+30. **Platform group direction is machine-checked** (arch_check **R11**): `platform/<group>/<package>`, `dependencies:` only — `layers/domain` is the leaf; foundation → foundation, `domain_core`; `layers/data` → foundation, `domain_core`; infra → foundation, layers (never infra → infra); ui → foundation, ui; state → foundation, layers, ui; shell → any. A package outside a group folder fails too.
+31. **Module API packages** (`modules/<id>/api`, `<id>_api`) depend on the foundation and Flutter only; a feature may import another module's API, never its feature/data (R3). Contracts only, implemented by the owning feature, resolved with `getItOrNull` (R8).
 ---
 
 ## PR Review Checklist (full version: `docs/en/reference/04_review_checklist.md`)
@@ -855,7 +878,9 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
 - [ ] Layout choices use the window size class (`context.adaptive` / `AdaptiveLayout`), not `Platform.is*` or a device check
 - [ ] `core_di` contracts implemented under `modules/` (any layer) resolve with `getItOrNull` / `getAllOrEmpty` outside their own module — arch_check R8 is clean
-- [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R1 (`platform_app_shell`, `platform_shell_adapters`) and R10 (`apps/*`) are clean
+- [ ] No app-shell file outside `injection.dart` imports a module package (`*_api` included) — arch_check R1 (`platform_app_shell`, `platform_shell_adapters`) and R10 (`apps/*`) are clean
+- [ ] A new platform package sits in a group folder and its `dependencies:` follow the group DAG — arch_check R11 is clean
+- [ ] Cross-feature contracts live in the owning module's `<id>_api` (foundation + Flutter deps only), not in `core_di` — arch_check R3 is clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
 - [ ] No `platform/*` imports or declares `feature_*`, `data_*` or `domain_*` outside the three approved `→ domain_core` edges — `arch_check` R1 is clean

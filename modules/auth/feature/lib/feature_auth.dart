@@ -3,8 +3,10 @@
 /// This package is a reference implementation shipped with the template,
 /// not product code. It demonstrates:
 /// Provider state management, a global `@lazySingleton` controller, auth
-/// through the domain and data layers, and the cross-feature contracts
-/// (`IAuthStatusStream`, `IAuthActionHandler`) other samples consume.
+/// through the domain and data layers, the platform's session contracts
+/// (`ISessionState`, `ISessionStatusStream`, `ISignInLocation`) and the
+/// module's own public API (`auth_api`: `AuthNavigator`, `IAuthActionHandler`)
+/// other samples consume.
 ///
 /// To remove it and everything that travels with it:
 ///

@@ -236,7 +236,7 @@ It is also the same slot these registrations occupied before the shell became a 
 
 Or let a test read them: each app's `test/di_smoke_test.dart` runs its generated `configureDependencies()` for every flavor, with the plugins replaced by test doubles (storage in memory, a temp directory for `path_provider`, FlutterFire's Firebase core test API and stubbed messaging / local-notification channels in `apps/mobile`), then builds every lazy singleton and resolves each `core_di` contract and `AppRouter.router`. CI's Gate 3 runs it like any package test. Swapping `shell` and `ui` makes it fail with exactly the boot error below.
 
-Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers (through `platform_shell_adapters`). The smoke test also requires `AppBootStorage`, `NetworkConfig` and `SslPinningConfig`, and that `core_network`'s `DioFailureClassifier` registered itself with `ErrorHandler` during the `core` group. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `IAuthSessionGateway` at call time instead, and has no cross-module constructor dependency.)
+Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers (through `platform_shell_adapters`). The smoke test also requires `AppBootStorage`, `NetworkConfig` and `SslPinningConfig`, and that `core_network`'s `DioFailureClassifier` registered itself with `ErrorHandler` during the `core` group. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `ISessionGateway` at call time instead, and has no cross-module constructor dependency.)
 
 ### `AppRouter` is eager, but its router is not
 
@@ -266,7 +266,7 @@ The shell implements the contracts that core packages declare but cannot satisfy
 
 `NetworkConfig implements SslPinningConfig`, but **GetIt resolves by exact registered type and does not walk the supertype chain**. Register only `as: NetworkConfig` and `getItOrNull<SslPinningConfig>()` returns `null`, so `AppInitializer` skips pinning entirely — silently, on every flavor.
 
-The second type therefore needs its own module binding, the same dual-registration pattern `feature_auth` uses for `IAuthStatusStream`:
+The second type therefore needs its own module binding, the same dual-registration pattern `feature_auth` uses for `ISessionStatusStream`:
 
 ```dart
 @module
@@ -320,7 +320,7 @@ Deleting a feature package therefore cannot crash the shell.
 > [!CAUTION]
 > **Never hardcode a feature route in `app_router.dart`.** Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<IAuthRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `IAuthSessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
+`refreshListenable: getItOrNull<ISessionRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `ISessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
 
 `observers: [routeObserver]` attaches `AppRouter.routeObserver` to the root navigator, and go_router forwards the root observers to every `ShellRoute` and `StatefulShellBranch` navigator (`notifyRootObserver`, on by default) — so the one observer `AppInitializer.init` hands to `RouteAwareWidget` sees pushes and pops everywhere, tabs included. `platform/shell/app_shell/test/app_router_test.dart` checks both levels.
 
@@ -334,18 +334,18 @@ Sits inside the app `ShellRoute` and wraps every in-app route. It splits navigat
 
 ```dart
 WidgetsBinding.instance.endOfFrame.whenComplete(() async {
-  await _session?.ensureInitialized(); // IAuthSessionState, via getItOrNull
+  await _session?.ensureInitialized(); // ISessionState, via getItOrNull
   if (!mounted) return;
-  // onboarding? → login? → home
+  // entry location? → ISignInLocation? → IPostSignInLocation (else fallbackLocation)
   _bootCompleted = true;
 });
 ```
 
-Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state. With no auth module composed, `_session` is null and the app is treated as signed out.
+Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state. With no session owner composed, `_session` is null and the app is treated as signed out. Where each case lands comes from two more `core_di` contracts, both resolved with `getItOrNull`: `ISignInLocation` (contributed by `feature_auth`: the login path) for a signed-out user — none registered, no redirect — and `IPostSignInLocation` (contributed by `feature_home`: the home tab) for a signed-in one — none registered, `AppRouter.fallbackLocation`. The widget calls `context.go(path)` itself; it names no module and no product flow.
 
-**Later transitions** arrive through two stream subscriptions opened in `initState` — `IAuthSessionState.sessionChanges` and `.sessionFailures` — and are gated differently. `_onSessionChanged` (which navigates) is ignored until `_bootCompleted && _session.hasRestoredSession`, so the restore's own emission does not fight the boot redirect over the very first navigation. `_onSessionFailure` (which only shows a toast) checks `_bootCompleted` alone — it never navigates, so it has nothing to fight over. `build` itself is just `Overlay.wrap(child: widget.child)`.
+**Later transitions** arrive through two stream subscriptions opened in `initState` — `ISessionState.sessionChanges` and `.sessionFailures` — and are gated differently. `_onSessionChanged` (which navigates) is ignored until `_bootCompleted && _session.hasRestoredSession`, so the restore's own emission does not fight the boot redirect over the very first navigation. `_onSessionFailure` (which only shows a toast) checks `_bootCompleted` alone — it never navigates, so it has nothing to fight over. `build` itself is just `Overlay.wrap(child: widget.child)`.
 
-**Deep links** start in `_goToHome`, so they are never routed over onboarding or login. With an auth module that covers every path — leaving onboarding leads to a sign-in, and the sign-in to `_goToHome`. Without one no sign-in ever comes, so when boot stays on the entry location the widget instead starts deep links the first time the router leaves it (`navigator_wrapper_widget_test.dart`).
+**Deep links** start in `_goToPostSignIn`, so they are never routed over onboarding or the sign-in screen. With a session owner that covers every path — leaving onboarding leads to a sign-in, and the sign-in to `_goToPostSignIn`. Without one no sign-in ever comes, so when boot stays on the entry location the widget instead starts deep links the first time the router leaves it (`navigator_wrapper_widget_test.dart`).
 
 > [!NOTE]
 > `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written on the first boot with an entry location even when a user is already signed in and onboarding is never shown. The flag means "the first launch is over", and that is exactly what `AppRouter.entryLocation` reads it as: the next cold start begins at `fallbackLocation`.

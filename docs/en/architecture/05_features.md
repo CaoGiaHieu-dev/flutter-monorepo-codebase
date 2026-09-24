@@ -81,13 +81,13 @@ class AuthPath {
 | Package | Concern | State management | Registers |
 |:---|:---|:---|:---|
 | `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation` |
-| `feature_auth` | Login (one screen) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
+| `feature_auth` | Login (one screen) | **Provider** | `IFeatureRouteModule`, `ISignInLocation`, `ISessionStatusStream`, `ISessionState`, `ISessionRefreshListenable`, `IAppTreeWrapper` (`core_di`); `AuthNavigator`, `IAuthActionHandler` (its own `auth_api`) |
 | `feature_dashboard` | Navigation shell chrome (bottom bar / rail) | none | `DashboardRouteModule` |
-| `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
+| `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `IPostSignInLocation` (`core_di`); `HomeNavigator` (its own `home_api`) |
 | `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Splash screen | none | `IAppSplashScreen` — **not a route**; shown by `MainScope` |
 
-Every one with user-facing strings also registers its `IFeatureLocalization` — all but `feature_dashboard`, which has none. `IAuthSessionGateway` is registered by `data_auth`, not by the feature.
+Every one with user-facing strings also registers its `IFeatureLocalization` — all but `feature_dashboard`, which has none. `ISessionGateway` is registered by `data_auth`, not by the feature. `feature_onboarding` imports `auth_api` and `home_api`, `feature_settings` imports `auth_api` — the only cross-module edges, each to an API package, never to another feature.
 
 `feature_auth` and `feature_home` are deliberately built on **different** state approaches so the template demonstrates both. See [state management](../guides/03_state_management.md) — and read the honest comparison there before choosing, because the two branches are not equally equipped.
 
@@ -239,9 +239,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -282,8 +282,8 @@ The BLoC type is named `BlocViewState<T>` rather than `ViewState` so that a file
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._authStatusStream)
+    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
+  HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) { … }
 ```
 

@@ -115,7 +115,7 @@ Widget build(BuildContext context) {
     listener: (context, state) {
       state.maybeWhen(
         success: (user) {
-          // Navigator của feature khác: luôn `getItOrNull` (arch_check R8).
+          // Navigator của module khác (từ `home_api` của nó): luôn `getItOrNull` (arch_check R8).
           getItOrNull<HomeNavigator>()?.toHome(context);
         },
         error: (failure) {
@@ -129,7 +129,7 @@ Widget build(BuildContext context) {
 }
 ```
 
-> Đây là mẫu tổng quát. Riêng luồng đăng nhập của template thì **app shell** tự điều hướng khi phiên đăng nhập đổi (`NavigatorWrapperWidget` lắng nghe `IAuthSessionState`), nên màn login thật không tự điều hướng.
+> Đây là mẫu tổng quát. Riêng luồng đăng nhập của template thì **app shell** tự điều hướng khi phiên đăng nhập đổi (`NavigatorWrapperWidget` lắng nghe `ISessionState`), nên màn login thật không tự điều hướng.
 
 ---
 
@@ -223,9 +223,9 @@ BlocBuilder<LoginBloc, LoginState>(
 Monorepo này là một hệ thống **đa State Management**.
 Nếu Feature của bạn dùng **BLoC**, nhưng bạn cần lắng nghe sự thay đổi từ Feature khác dùng **Provider** (hoặc ngược lại).
 **TUYỆT ĐỐI KHÔNG** import trực tiếp Bloc hoặc Provider vào code của nhau.
-**HÃY SỬ DỤNG Neutral Streams**: một interface trung lập trong `core_di` (ví dụ `IAuthStatusStream`, phơi ra `Stream<AuthPrincipal?>` và `currentUser`), feature sở hữu đăng ký implementation lên GetIt, và `BaseBloc` của bạn chỉ việc lắng nghe Stream đó thay vì lắng nghe Provider.
+**HÃY SỬ DỤNG Neutral Streams**: một interface trung lập trong `core_di` (ví dụ `ISessionStatusStream`, phơi ra `Stream<SessionPrincipal?>` và `currentUser`), feature sở hữu đăng ký implementation lên GetIt, và `BaseBloc` của bạn chỉ việc lắng nghe Stream đó thay vì lắng nghe Provider.
 
-Mẫu thật: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) nhận `IAuthStatusStream?` qua `@factoryParam` — route truyền `getItOrNull<IAuthStatusStream>()`, nên Home vẫn chạy khi app không ghép `feature_auth` — rồi hủy subscription trong `close()`.
+Mẫu thật: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) nhận `ISessionStatusStream?` qua `@factoryParam` — route truyền `getItOrNull<ISessionStatusStream>()`, nên Home vẫn chạy khi app không ghép `feature_auth` — rồi hủy subscription trong `close()`.
 
 *(Xem chi tiết kiến trúc này tại [`docs/vi/guides/10_cross_feature.md`](../../../docs/vi/guides/10_cross_feature.md) — Mô hình 3: Agnostic Stream.)*
 
@@ -251,9 +251,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth là tùy chọn: app ghép không có `feature_auth` sẽ không đăng ký
-      // IAuthStatusStream, và Home hiện trạng thái chưa đăng nhập.
+      // ISessionStatusStream, và Home hiện trạng thái chưa đăng nhập.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );

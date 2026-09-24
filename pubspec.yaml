@@ -8,12 +8,14 @@ workspace:
   # composer:managed:workspace — generated from app_manifest.yaml
   - apps/admin
   - apps/mobile
+  - modules/auth/api
   - modules/auth/data
   - modules/auth/domain
   - modules/auth/feature
   - modules/cache/data
   - modules/cache/domain
   - modules/dashboard/feature
+  - modules/home/api
   - modules/home/feature
   - modules/onboarding/feature
   - modules/settings/feature

@@ -174,7 +174,7 @@ Widget build(BuildContext context) {
 }
 ```
 
-> Trong template, `AuthProvider` là singleton toàn cục và app shell (`NavigatorWrapperWidget`) **đã** hiện toast cho lỗi đăng nhập qua `IAuthSessionState`. Đoạn trên minh họa API; áp dụng nguyên văn cho `AuthProvider` sẽ hiện toast hai lần.
+> Trong template, `AuthProvider` là singleton toàn cục và app shell (`NavigatorWrapperWidget`) **đã** hiện toast cho lỗi đăng nhập qua `ISessionState`. Đoạn trên minh họa API; áp dụng nguyên văn cho `AuthProvider` sẽ hiện toast hai lần.
 
 ---
 
@@ -232,7 +232,7 @@ class NewsRoute extends GoRouteDataCustom with $NewsRoute {
 }
 ```
 
-> Tầng proxy chỉ nối các provider mà feature được phép thấy: của chính nó, hoặc của `core_*`. **Không** proxy `AuthProvider` từ feature khác — import `feature_auth` phá vỡ tính tách rời của module. Trạng thái đăng nhập đi qua `IAuthStatusStream` của `core_di`.
+> Tầng proxy chỉ nối các provider mà feature được phép thấy: của chính nó, hoặc của `core_*`. **Không** proxy `AuthProvider` từ feature khác — import `feature_auth` phá vỡ tính tách rời của module. Trạng thái đăng nhập đi qua `ISessionStatusStream` của `core_di`.
 
 ---
 

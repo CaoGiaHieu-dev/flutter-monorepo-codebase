@@ -12,7 +12,7 @@ import 'package:injectable/injectable.dart';
 /// certificate pinning is silently skipped on staging and production.
 ///
 /// Binding through a module — the same dual-registration pattern used for
-/// `IAuthStatusStream` in `feature_auth` — keeps a single instance behind both
+/// `ISessionStatusStream` in `feature_auth` — keeps a single instance behind both
 /// types. The parameter is typed as [NetworkConfig] (which `implements
 /// SslPinningConfig`), so the upcast is checked by the compiler and no `as`
 /// cast is needed.

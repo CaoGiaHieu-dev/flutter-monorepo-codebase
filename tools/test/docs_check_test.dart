@@ -112,6 +112,27 @@ void main() {
     expect(run.output, contains('outside the removed samples exists'));
   });
 
+  test('a bundle whose kept API package survives is still removed', () async {
+    final run = await check({
+      'tools/sample_manifest.yaml':
+          'packages:\n'
+          '  feature_gone: { kind: sample, path: modules/gone/feature }\n'
+          '  domain_gone: { kind: sample, path: modules/gone/domain }\n'
+          '  gone_api: { kind: sample, path: modules/gone/api }\n'
+          'bundles:\n'
+          '  gone:\n'
+          '    packages: [feature_gone, domain_gone, gone_api]\n',
+      // Kept by remove_sample: another package still imports it.
+      'modules/gone/api/pubspec.yaml': 'name: gone_api\n',
+      'README.md':
+          'Implemented in `modules/gone/feature/lib/gone.dart`, declared in '
+          '`modules/gone/api/pubspec.yaml`; the slice was '
+          '`modules/gone/{feature,domain}`.\n',
+    });
+    expect(run, exitsWith(0));
+    expect(run.output, contains('removed sample bundle "gone"'));
+  });
+
   test('a bundle still on disk is not treated as removed', () async {
     final run = await check({
       'tools/sample_manifest.yaml':

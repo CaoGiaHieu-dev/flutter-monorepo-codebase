@@ -91,6 +91,9 @@ dev_dependencies:
   # Flutter packages use the SDK's `flutter_test` instead. The exact version
   # must agree with the `test_api` that `flutter_test` pins.
   test: "^1.31.1"
+  # `setupFirebaseCoreMocks()` (its `test.dart`) for apps/mobile's DI smoke
+  # test. Bump it together with `firebase_core`, whose interface it is.
+  firebase_core_platform_interface: "^8.1.1"
 
   # Release Tooling
   icons_launcher: "^3.1.0"

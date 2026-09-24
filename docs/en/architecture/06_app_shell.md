@@ -94,7 +94,7 @@ The sequence lives in `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`]
 1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call — then **`installShellErrorHooks`**, which routes every uncaught error to one place (see [Errors and crash reporting](#errors-and-crash-reporting) below). It runs before `configureDependencies`, so a DI failure is reported too.
 3. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
-4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/app_shell/test/boot_order_test.dart` holds the order.
+4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/app_shell/test/boot_order_test.dart` holds the order. On the **web** it installs nothing and logs, at `INFO`, that the browser validates certificates — there is no `HttpClient` there to pin (see [the core layer's web status](02_core.md)).
 5. **`MainScope`** is constructed with three things: which splash widget to show (if any), the root widget, and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, which does the rest: `OperationGlobalConfig`, GoRouter's URL reflection, `AppInfoHelper`, handing the route observer to `RouteAwareWidget`, orientation and system UI.
 6. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
 
@@ -162,6 +162,9 @@ Both paths await `Future.wait([initService(), Future.delayed(_minimumDelay)])`, 
 > [!NOTE]
 > `SplashPage` is shown by `MainScope`, **not** by GoRouter. It has no route and never appears in the navigation stack.
 
+> [!WARNING]
+> **Web:** `MainScope` calls `FlutterNativeSplash.remove()` on this path too, and on the web that throws `PlatformException(… removeSplashFromWeb …)` unless `flutter_native_splash` generated web assets for the app. The app still boots — measured on `apps/admin` — but the uncaught error reaches `IErrorReporter` on every start. Neither app ships a `web/` folder today.
+
 ### `_ResponsiveWrapper`
 
 Both paths wrap the tree in **`ResponsiveInit`** from `core_responsive`. It sits at the very root, so every widget below it can call `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`. The configuration is the app's whole scale policy:
@@ -226,6 +229,8 @@ It is also the same slot these registrations occupied before the shell became a 
 > An eager `@Singleton` is constructed **at registration time**. If it depends on a type registered by a module that runs *later*, startup throws `… is not registered`.
 >
 > `flutter analyze` cannot detect this — it is a runtime ordering fault. Verify by reading the generated files: `apps/mobile/lib/di/injection.config.dart` gives the module order, and each package's `lib/di/module.module.dart` its per-type registrations — every `gh<Dep>()` an eager singleton makes must be registered *above* it, or by a module that initialises earlier.
+
+Or let a test read them: each app's `test/di_smoke_test.dart` runs its generated `configureDependencies()` for every flavor, with the plugins replaced by test doubles (storage in memory, a temp directory for `path_provider`, FlutterFire's Firebase core test API and stubbed messaging / local-notification channels in `apps/mobile`), then builds every lazy singleton and resolves each `core_di` contract and `AppRouter.router`. CI's Gate 3 runs it like any package test. Swapping `shell` and `ui` makes it fail with exactly the boot error below.
 
 Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `IAuthSessionGateway` at call time instead, and has no cross-module constructor dependency.)
 

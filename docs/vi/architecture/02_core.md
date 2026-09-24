@@ -339,18 +339,18 @@ Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự
 
 ## 10. State management — hai nhánh, **chưa ngang bằng nhau**
 
-Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: hai nhánh không được đầu tư như nhau.
+Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: giờ cả hai đều tự động hoá đường tải → chốt kết quả, nhưng nhánh Provider vẫn có nhiều thứ đi kèm hơn hẳn.
 
 | | `provider_state_management` | `bloc_state_management` |
 |:--|:--|:--|
 | Lớp nền | `BaseProvider<T>` — hiện thực đầy đủ | `BaseBloc` / `BaseCubit` — *chỉ là điểm mở rộng, không thêm gì* |
-| Trợ giúp bất đồng bộ | `executeOperation(OperationConfig(...))` tự lo loading/success/failure | **không có** |
+| Trợ giúp bất đồng bộ | `executeOperation(OperationConfig(...))` tự lo loading/success/failure | `emitResult` từ `BlocResultMixin<T>` / `CubitResultMixin<T>` — tương tự, nhưng chỉ cho state `BlocViewState<T>`; nó còn bắt cả thao tác ném exception |
 | Kiểu state | `ViewStateModel<T>` + `ViewState` (5 nhánh, có `loadingMore`, data nằm ở model) | `BlocViewState<T>` (4 nhánh, tự mang payload) |
 | Dạng lỗi | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — bắt buộc |
 | Thành phần thêm | `StateManager`, `OperationExecutor`, `OperationGlobalConfig`, `LoadMoreMixin`, `ProviderStateListener`, `BaseViewWidget` | — |
 
 > [!WARNING]
-> Ở nhánh BLoC, bạn phải tự bóc `Result<T>`, tự map `AppFailure`, và tự emit loading/kết thúc **bằng tay trong từng handler**. Nhánh Provider gói toàn bộ việc đó trong `executeOperation`. File `base_bloc.dart` ghi rõ điều này và có ví dụ mẫu cách làm thủ công.
+> `emitResult` (`platform/bloc_state_management/lib/src/result_emitter.dart`) lo cho Bloc hoặc Cubit có state là `BlocViewState<T>`: loading, bóc `Result`, `none`/`cancel` hoàn tác loading của chính nó, exception đi qua `ErrorHandler`. Bloc dùng **state Freezed riêng** vẫn tự bóc `Result<T>` và tự emit loading/kết thúc trong từng handler, và nhánh BLoC không có bản tương ứng cho `OperationGlobalConfig`, `errorStateBuilder` hay `LoadMoreMixin`. `bloc_state_management` phụ thuộc `platform_kernel` để dùng `ErrorHandler` — một cạnh platform → platform, không phải một trong các ngoại lệ `→ domain_core`.
 
 ### `BlocViewState<T>`
 
@@ -362,7 +362,30 @@ Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`
 
 ---
 
-## 11. Bản đồ phụ thuộc
+## 11. Build web — hiện trạng thật
+
+Đo bằng `flutter build web` trên `apps/admin` sau khi tạo thư mục `web/` (`flutter create --platforms=web .` — chưa app nào có sẵn `web/`), rồi mở bản release trong Chromium headless.
+
+| App | Biên dịch (dart2js; Wasm dry run cũng qua) | Khởi động |
+|:--|:--|:--|
+| `apps/admin` (auth + settings) | có | có — tới màn hình đăng nhập, `flutter_secure_storage` (kho WebCrypto) và `shared_preferences` đều chạy (trang phải là secure context: `https` hoặc `localhost`) |
+| `apps/mobile` (mọi module mẫu) | **không** — `core_database` import `package:drift/native.dart`, kéo theo `dart:ffi` của `sqlite3` | — |
+
+Điều gì giúp đường boot dùng chung an toàn trên web:
+
+- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Shell không gọi chúng ở đó: `runShellApp` kiểm tra `kIsWeb` trước `Platform.isIOS`, `GoRouteDataCustom.buildPage` trả về trước nhánh `Platform.isIOS`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
+- `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ. Trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được; cài vào thì vô hại nhưng gây hiểu lầm, và dòng `ERROR` "not pinned" từng ghi ra mô tả một cấu hình sai mà web không thể sửa.
+
+Các lỗ hổng đã biết, chưa sửa ở đây:
+
+- `apps/mobile` cần database cho web trước khi biên dịch được: `WasmDatabase` của drift (asset `sqlite3.wasm` + drift worker), mở qua conditional import trong connection factory của `core_database`.
+- `MainScope` gọi `FlutterNativeSplash.remove()` trên mọi nền tảng; trên web lệnh này ném `PlatformException(… removeSplashFromWeb …)` nếu `flutter_native_splash` chưa sinh asset web cho app. Lỗi không được bắt nhưng không làm sập app — app vẫn khởi động — và nó tới crash reporter ở mỗi lần mở trên web.
+- `AppInfoHelper.getDeviceInfo` / `getDeviceString` / `platformName` rẽ nhánh theo `Platform.isAndroid`, vốn **ném lỗi** trên web. Không gì gọi chúng lúc boot; màn hình nào gọi thì phải chặn bằng `kIsWeb` trước.
+- `core_notifications` (chỉ `apps/mobile`) khởi tạo Firebase bằng options theo flavor của app, vốn không mô tả web app nào.
+
+---
+
+## 12. Bản đồ phụ thuộc
 
 Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package từ pub.dev.
 

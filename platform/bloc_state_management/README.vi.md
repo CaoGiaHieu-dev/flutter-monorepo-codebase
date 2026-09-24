@@ -15,10 +15,11 @@ Barrel `package:bloc_state_management/bloc_state_management.dart` re-export toà
 - **`BlocViewState<T>`**: State agnostic sẵn có (`initial`, `loading`, `success(T data)`, `error(AppFailure error)`) — **khuyến nghị** cho màn hình đơn giản; **không bắt buộc**. Feature phức tạp có thể dùng Freezed state riêng với `BaseBloc<Event, CustomState>`. Có getter `data` (`T?`, chỉ khác `null` ở `success`).
 - **`BaseBloc<Event, State>`**: Base class của Bloc — **lựa chọn mặc định** cho feature dùng BLoC (event-driven).
 - **`BaseCubit<State>`**: Chỉ dùng khi luồng thực sự không cần Event (toggle/local UI đơn giản). Không mặc định Cubit cho feature mới.
+- **`BlocResultMixin<T>` / `CubitResultMixin<T>`**: `emitResult` — bản tương ứng của `executeOperation` (nhánh Provider) cho màn hình `BlocViewState<T>`: emit `loading`, chạy use case, rồi chốt `Result<T>` (hoặc lỗi bị ném) thành một state cuối.
 - **Agnostic & Decoupled**: Hoàn toàn tách biệt khỏi logic của `provider_state_management`. Tên `BlocViewState` (không phải `ViewState`) là có chủ đích: `provider_state_management` export một `ViewState` khác nghĩa, và hai barrel đều public.
 
 > [!IMPORTANT]
-> `BaseBloc` và `BaseCubit` hiện là **điểm mở rộng rỗng** — chúng không thêm gì so với `Bloc` / `Cubit`. Nhánh BLoC **không có** tương đương `executeOperation` của nhánh Provider: trong mỗi handler, bạn tự emit trạng thái loading, tự unwrap `Result<T>` (`success` / `failure` / `none` / `cancel`) và tự map `AppFailure`. Hai nhánh hiện **không** ngang nhau về mức tự động hóa.
+> `BaseBloc` và `BaseCubit` vẫn là **điểm mở rộng rỗng** — chúng không thêm gì so với `Bloc` / `Cubit`. Phần xử lý `Result` nằm ở `BlocResultMixin<T>` / `CubitResultMixin<T>` và chỉ áp dụng cho state `BlocViewState<T>`; Bloc dùng state Freezed **riêng** vẫn tự emit loading, tự unwrap `Result<T>` và tự map `AppFailure` (§3). Hai nhánh đã gần nhau hơn nhưng **chưa** ngang bằng: hook `OperationGlobalConfig`, `errorStateBuilder` và `LoadMoreMixin` của nhánh Provider không có bản tương ứng ở BLoC.
 
 ---
 
@@ -42,7 +43,8 @@ part 'login_event.dart'; // LoginEvent, với biến thể private _LoginSubmitt
 part 'login_bloc.freezed.dart';
 
 @injectable
-class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>> {
+class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>>
+    with BlocResultMixin<UserEntity> {
   LoginBloc(this._loginUseCase) : super(const BlocViewState.initial()) {
     on<_LoginSubmitted>(_onSubmitted);
   }
@@ -52,26 +54,27 @@ class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>> {
   Future<void> _onSubmitted(
     _LoginSubmitted event,
     Emitter<BlocViewState<UserEntity>> emit,
-  ) async {
-    emit(const BlocViewState.loading());
-    final result = await _loginUseCase(
+  ) => emitResult(
+    emit,
+    () => _loginUseCase(
       LoginParams(email: event.email, password: event.password),
-    );
-    result.when(
-      // `Result.success` mang payload nullable: tự quyết định "không có
-      // dữ liệu" nghĩa là gì với màn hình này thay vì ép `!`.
-      success: (user) => user == null
-          ? emit(const BlocViewState.initial())
-          : emit(BlocViewState.success(user)),
-      failure: (appFailure) => emit(BlocViewState.error(appFailure)),
-      // Đã emit loading ở trên — mọi nhánh phải kết thúc bằng một state
-      // cuối, nếu không UI kẹt ở loading.
-      none: () => emit(const BlocViewState.initial()),
-      cancel: () => emit(const BlocViewState.initial()),
-    );
-  }
+    ),
+  );
 }
 ```
+
+`emitResult` (`lib/src/result_emitter.dart`) emit:
+
+| Kết quả | Emit |
+|:--|:--|
+| Trước khi gọi | `loading` — trừ khi `showLoading: false`, hoặc đang hiển thị `success` (refresh giữ nguyên nội dung) |
+| `Result.success(data)` | `success(data)` — truyền `convert:` khi payload chưa phải `T` |
+| `Result.success(null)` | `success(null)` nếu `T` nullable, ngược lại `initial` |
+| `Result.failure(f)` | `error(f)` |
+| `Result.none` / `.cancel` | state trước lời gọi nếu đã emit `loading` (không bao giờ kẹt ở `loading`), ngược lại không emit gì |
+| Thao tác ném exception | `error(ErrorHandler.handleError(e))`, kèm `addError(e)` cho `BlocObserver.onError` |
+
+`onSuccess:` / `onFailure:` chạy sau khi state đã được emit. Khi handler đã xong (bloc đã đóng, hoặc bị transformer `restartable()` thay thế) thì không emit gì thêm. Cubit trộn `CubitResultMixin<T>` và gọi `emitResult(() => ...)`, không cần emitter.
 
 **Vẽ Giao Diện:**
 ```dart

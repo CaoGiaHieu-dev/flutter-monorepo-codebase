@@ -15,10 +15,11 @@ The barrel `package:bloc_state_management/bloc_state_management.dart` re-exports
 - **`BlocViewState<T>`**: A ready-made agnostic state (`initial`, `loading`, `success(T data)`, `error(AppFailure error)`) — **recommended** for simple screens; **not mandatory**. A complex feature may use its own Freezed state with `BaseBloc<Event, CustomState>`. Has a `data` getter (`T?`, non-null only in `success`).
 - **`BaseBloc<Event, State>`**: The Bloc base class — **the default choice** for a BLoC (event-driven) feature.
 - **`BaseCubit<State>`**: Only when the flow genuinely needs no events (a toggle, simple local UI). Do not default to Cubit for a new feature.
+- **`BlocResultMixin<T>` / `CubitResultMixin<T>`**: `emitResult` — the BLoC counterpart of the Provider branch's `executeOperation` for a `BlocViewState<T>` screen: emits `loading`, runs the use case, and settles its `Result<T>` (or a thrown error) into a terminal state.
 - **Agnostic & decoupled**: Fully independent of `provider_state_management`'s logic. The name `BlocViewState` (not `ViewState`) is deliberate: `provider_state_management` exports a `ViewState` that means something different, and both barrels are public.
 
 > [!IMPORTANT]
-> `BaseBloc` and `BaseCubit` are currently **empty extension points** — they add nothing on top of `Bloc` / `Cubit`. The BLoC branch has **no** equivalent of the Provider branch's `executeOperation`: in each handler you emit the loading state yourself, unwrap `Result<T>` (`success` / `failure` / `none` / `cancel`) yourself and map `AppFailure` yourself. The two branches are **not** at parity in how much they automate.
+> `BaseBloc` and `BaseCubit` are still **empty extension points** — they add nothing on top of `Bloc` / `Cubit`. The `Result` handling lives in `BlocResultMixin<T>` / `CubitResultMixin<T>` and covers a `BlocViewState<T>` state only; a Bloc with its **own** Freezed state still emits loading, unwraps `Result<T>` and maps `AppFailure` by hand (§3). The branches are closer than they were, **not** at parity: the Provider branch's `OperationGlobalConfig` hooks, `errorStateBuilder` and `LoadMoreMixin` have no BLoC counterpart.
 
 ---
 
@@ -42,7 +43,8 @@ part 'login_event.dart'; // LoginEvent, with a private _LoginSubmitted(email, pa
 part 'login_bloc.freezed.dart';
 
 @injectable
-class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>> {
+class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>>
+    with BlocResultMixin<UserEntity> {
   LoginBloc(this._loginUseCase) : super(const BlocViewState.initial()) {
     on<_LoginSubmitted>(_onSubmitted);
   }
@@ -52,26 +54,27 @@ class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>> {
   Future<void> _onSubmitted(
     _LoginSubmitted event,
     Emitter<BlocViewState<UserEntity>> emit,
-  ) async {
-    emit(const BlocViewState.loading());
-    final result = await _loginUseCase(
+  ) => emitResult(
+    emit,
+    () => _loginUseCase(
       LoginParams(email: event.email, password: event.password),
-    );
-    result.when(
-      // `Result.success` carries a nullable payload: decide what "no data"
-      // means for this screen instead of forcing it with `!`.
-      success: (user) => user == null
-          ? emit(const BlocViewState.initial())
-          : emit(BlocViewState.success(user)),
-      failure: (appFailure) => emit(BlocViewState.error(appFailure)),
-      // Loading was emitted above — every branch must end in a terminal
-      // state, or the UI stays stuck on loading.
-      none: () => emit(const BlocViewState.initial()),
-      cancel: () => emit(const BlocViewState.initial()),
-    );
-  }
+    ),
+  );
 }
 ```
+
+`emitResult` (`lib/src/result_emitter.dart`) emits:
+
+| Outcome | Emitted |
+|:--|:--|
+| Before the call | `loading` — unless `showLoading: false`, or a `success` is already on screen (a refresh keeps the content) |
+| `Result.success(data)` | `success(data)` — pass `convert:` when the payload is not already a `T` |
+| `Result.success(null)` | `success(null)` for a nullable `T`, otherwise `initial` |
+| `Result.failure(f)` | `error(f)` |
+| `Result.none` / `.cancel` | the state before the call when `loading` was emitted (never stuck on `loading`), otherwise nothing |
+| The operation throws | `error(ErrorHandler.handleError(e))`, plus `addError(e)` for `BlocObserver.onError` |
+
+`onSuccess:` / `onFailure:` run after the state is emitted. Nothing is emitted once the handler is done (bloc closed, or replaced by a `restartable()` transformer). A Cubit mixes in `CubitResultMixin<T>` and calls `emitResult(() => ...)` without an emitter.
 
 **Rendering the UI:**
 ```dart

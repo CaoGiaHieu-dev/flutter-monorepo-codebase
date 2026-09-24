@@ -24,6 +24,7 @@ void main() {
   tearDown(() async {
     await getIt.reset();
     AppInitializer.debugResetBeforeRunApp();
+    AppInitializer.debugIsWebOverride = null;
   });
 
   test('installs the pinning HttpOverrides synchronously', () {
@@ -48,6 +49,17 @@ void main() {
   });
 
   test('leaves HttpOverrides alone without pins (logs instead)', () {
+    final sentinel = _Sentinel();
+    HttpOverrides.global = sentinel;
+
+    AppInitializer.initBeforeRunApp();
+
+    expect(HttpOverrides.current, same(sentinel));
+  });
+
+  test('installs nothing on the web, even with pins configured', () {
+    getIt.registerSingleton<SslPinningConfig>(_Pins());
+    AppInitializer.debugIsWebOverride = true;
     final sentinel = _Sentinel();
     HttpOverrides.global = sentinel;
 

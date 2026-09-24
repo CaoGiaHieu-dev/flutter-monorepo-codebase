@@ -253,8 +253,9 @@ void main(List<String> args) async {
           break;
       }
       stdout.writeln(
-        '3. Added a navigator contract to core_di (platform/foundation/contracts/lib/src/navigators/)? '
-        'Run "dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib" first',
+        '3. Other modules navigate here through a Navigator in this module\'s API package '
+        '(modules/<id>/api — see guides/12_module_isolation § 4); after adding one run '
+        '"dart tools/barrel_generator/generate.dart modules/<id>/api/lib" first',
       );
       stdout.writeln(
         '4. Re-run "dart run build_runner build --workspace", then fully '

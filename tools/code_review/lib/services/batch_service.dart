@@ -396,15 +396,15 @@ class BatchService {
     } catch (e) {
       // Handle other errors - no retry
       stdout.writeln(
-        '❌ [\$currentIndex/$totalFiles] Error reviewing ${path.basename(filePath)}: \$e',
+        '❌ [$currentIndex/$totalFiles] Error reviewing ${path.basename(filePath)}: $e',
       );
       return ReviewResult(
         filePath: filePath,
         fileName: path.basename(filePath),
-        review: 'Error: \$e',
+        review: 'Error: $e',
         timestamp: DateTime.now(),
         hasErrors: true,
-        issues: ['Review error: \$e'],
+        issues: ['Review error: $e'],
       );
     }
   }

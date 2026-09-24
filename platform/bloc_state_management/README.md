@@ -1,37 +1,44 @@
+🌍 *Choose Language:* [English](README.md) | [Tiếng Việt](README.vi.md)
+
 # Bloc State Management
 
-Micro-core package cung cấp bộ khung quản lý trạng thái UI dựa trên thư viện `flutter_bloc` dành cho các nhóm phát triển yêu thích kiến trúc hướng sự kiện (Event-Driven) và MVI.
+A micro-core package providing a UI state-management skeleton built on `flutter_bloc`, for teams that prefer an event-driven (MVI-style) architecture.
 
-Package này tuân thủ nguyên tắc **Idiomatic BLoC** (tối giản, không ép buộc cấu trúc xử lý rườm rà), nhưng cung cấp sẵn một mô hình **UI State Đồng Nhất (Agnostic View State)** để dễ dàng tích hợp và chung sống hòa bình với các mô-đun dùng Provider trong cùng một hệ sinh thái Monorepo.
+The package follows **idiomatic BLoC** (minimal, no forced ceremony), but ships a ready-made **agnostic view state** so BLoC modules integrate with — and coexist peacefully alongside — Provider modules in the same monorepo.
 
----
-
-## 🌟 Tính Năng Cốt Lõi
-
-- **`BlocViewState<T>`**: State agnostic sẵn có (`initial`, `loading`, `success`, `error`) — **khuyến nghị** cho màn hình đơn giản; **không bắt buộc**. Feature phức tạp có thể dùng Freezed state riêng với `BaseBloc<Event, CustomState>`.
-- **`BaseBloc<Event, State>`**: Base class của Bloc — **lựa chọn mặc định** cho feature dùng BLoC (event-driven).
-- **`BaseCubit<State>`**: Chỉ dùng khi luồng thực sự không cần Event (toggle/local UI đơn giản). Không mặc định Cubit cho feature mới.
-- **Agnostic & Decoupled**: Hoàn toàn tách biệt khỏi logic của `provider_state_management`.
+The barrel `package:bloc_state_management/bloc_state_management.dart` re-exports all of `flutter_bloc` (`Bloc`, `Emitter`, `BlocProvider`, `BlocBuilder`, `BlocListener`, …), so a feature does not import `flutter_bloc` separately.
 
 ---
 
-## 🚀 1. Quản lý Trạng thái UI qua `BlocViewState` (khuyến nghị) hoặc State riêng
+## 🌟 Core Features
 
-**`BlocViewState<T>` không bắt buộc** với BLoC. Đây là state agnostic sẵn có (giống Provider) cho màn hình CRUD / load-success-error đơn giản.
+- **`BlocViewState<T>`**: A ready-made agnostic state (`initial`, `loading`, `success(T data)`, `error(AppFailure error)`) — **recommended** for simple screens; **not mandatory**. A complex feature may use its own Freezed state with `BaseBloc<Event, CustomState>`. Has a `data` getter (`T?`, non-null only in `success`).
+- **`BaseBloc<Event, State>`**: The Bloc base class — **the default choice** for a BLoC (event-driven) feature.
+- **`BaseCubit<State>`**: Only when the flow genuinely needs no events (a toggle, simple local UI). Do not default to Cubit for a new feature.
+- **Agnostic & decoupled**: Fully independent of `provider_state_management`'s logic. The name `BlocViewState` (not `ViewState`) is deliberate: `provider_state_management` exports a `ViewState` that means something different, and both barrels are public.
 
-- **Nên dùng `BlocViewState<T>`** khi UI chỉ cần `initial` / `loading` / `success` / `error` quanh một payload `T`.
-- **Được phép (và khuyến khích) tự tạo Freezed state riêng** khi feature cần state phức tạp hơn (nhiều field, wizard, form dirty, pagination + filter kết hợp, v.v.). Khi đó `BaseBloc<Event, YourCustomState>` là hợp lệ — chỉ cần giữ Event Freezed private theo AGENTS §13.
+> [!IMPORTANT]
+> `BaseBloc` and `BaseCubit` are currently **empty extension points** — they add nothing on top of `Bloc` / `Cubit`. The BLoC branch has **no** equivalent of the Provider branch's `executeOperation`: in each handler you emit the loading state yourself, unwrap `Result<T>` (`success` / `failure` / `none` / `cancel`) yourself and map `AppFailure` yourself. The two branches are **not** at parity in how much they automate.
 
-Kết hợp Pattern Matching (`when` / `maybeWhen`) trên Freezed state để UI type-safe.
+---
 
-**Khai báo Bloc với `BlocViewState` (mẫu đơn giản):**
+## 🚀 1. Managing UI State with `BlocViewState` (recommended) or a Custom State
+
+**`BlocViewState<T>` is not mandatory** for BLoC. It is a ready-made agnostic state (like Provider's) for simple CRUD / load-success-error screens.
+
+- **Use `BlocViewState<T>`** when the UI only needs `initial` / `loading` / `success` / `error` around a payload `T`.
+- **You may (and are encouraged to) define your own Freezed state** when the feature needs richer state (many fields, a wizard, a dirty form, pagination combined with filters, etc.). `BaseBloc<Event, YourCustomState>` is then perfectly valid — just keep the Freezed events private per AGENTS §13.
+
+Combine it with pattern matching (`when` / `maybeWhen`) on the Freezed state for a type-safe UI. `BlocViewState`'s variants are private, so use `when` / `maybeWhen` / `whenOrNull` on it rather than a `switch`.
+
+**Declaring a Bloc with `BlocViewState` (simple example):**
 ```dart
 import 'package:bloc_state_management/bloc_state_management.dart';
-import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, UserEntity
+import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
 
-part 'login_event.dart';
+part 'login_event.dart'; // LoginEvent, with a private _LoginSubmitted(email, password) variant
 part 'login_bloc.freezed.dart';
 
 @injectable
@@ -51,27 +58,37 @@ class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>> {
       LoginParams(email: event.email, password: event.password),
     );
     result.when(
-      success: (user) => emit(BlocViewState.success(user!)),
+      // `Result.success` carries a nullable payload: decide what "no data"
+      // means for this screen instead of forcing it with `!`.
+      success: (user) => user == null
+          ? emit(const BlocViewState.initial())
+          : emit(BlocViewState.success(user)),
       failure: (appFailure) => emit(BlocViewState.error(appFailure)),
-      none: () {},
-      cancel: () {},
+      // Loading was emitted above — every branch must end in a terminal
+      // state, or the UI stays stuck on loading.
+      none: () => emit(const BlocViewState.initial()),
+      cancel: () => emit(const BlocViewState.initial()),
     );
   }
 }
 ```
 
-**Vẽ Giao Diện:**
+**Rendering the UI:**
 ```dart
 class LoginPage extends StatelessWidget {
+  const LoginPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<LoginBloc, BlocViewState<UserEntity>>(
       builder: (context, state) {
         return state.when(
-          initial: () => MyLoginForm(),
+          initial: () => const MyLoginForm(),
           loading: () => const CircularProgressIndicator(),
-          success: (user) => Text('Xin chào ${user.name}'),
-          error: (failure) => Text('Đăng nhập lỗi: $failure'),
+          success: (user) => WelcomeWidget(user: user),
+          // Map the AppFailure to a translated string inside the widget —
+          // never hardcode UI strings.
+          error: (failure) => LoginFailureWidget(failure: failure),
         );
       },
     );
@@ -79,15 +96,15 @@ class LoginPage extends StatelessWidget {
 }
 ```
 
-*(Ghi chú: Khác với `Provider` tự động bọc thẻ `loading` ở BaseViewWidget, đối với `BLoC` chúng ta sử dụng triết lý "Trực quan 100%" - dev sẽ tự return `CircularProgressIndicator` ở node `loading` của hàm `when`).*
+*(Note: unlike Provider, whose `BaseViewWidget` shows a loading widget for you, BLoC follows a "100% explicit" philosophy — you return the loading widget yourself in the `loading` branch of `when`.)*
 
-**State riêng (được phép):** Khi màn hình cần nhiều hơn 4 trạng thái chuẩn, định nghĩa Freezed state trong feature (`part '_state.dart'`) và dùng `BaseBloc<Event, CheckoutState>` — không bắt buộc bọc lại bằng `BlocViewState`.
+**Custom state (allowed):** When a screen needs more than the 4 standard states, define a Freezed state in the feature (`part '<name>_state.dart'`) and use `BaseBloc<Event, CheckoutState>` — there is no need to wrap it in `BlocViewState`.
 
 ---
 
-## 🎧 2. Lắng Nghe Side-effects & Hiển Thị Thông Báo (`BlocListener`)
+## 🎧 2. Listening for Side-effects & Showing Notifications (`BlocListener`)
 
-Để bật Dialog, hiện Toast lỗi hoặc chuyển màn hình một lần duy nhất, hãy bọc giao diện của bạn bằng `BlocListener` (thay vì viết stream tay):
+To open a dialog, show an error toast or navigate exactly once, wrap your UI in a `BlocListener` (instead of hand-writing a stream subscription):
 
 ```dart
 @override
@@ -96,7 +113,7 @@ Widget build(BuildContext context) {
     listener: (context, state) {
       state.maybeWhen(
         success: (user) {
-          // Navigator của feature khác: luôn `getItOrNull` (arch_check R8).
+          // Another feature's navigator: always `getItOrNull` (arch_check R8).
           getItOrNull<HomeNavigator>()?.toHome(context);
         },
         error: (failure) {
@@ -105,24 +122,24 @@ Widget build(BuildContext context) {
         orElse: () {},
       );
     },
-    child: BlocBuilder<LoginBloc, BlocViewState<UserEntity>>(
-      // UI building...
-    ),
+    child: const LoginView(), // the UI, built with a BlocBuilder as above
   );
 }
 ```
 
+> This is the general pattern. For this template's own sign-in flow the **app shell** navigates when the session changes (`NavigatorWrapperWidget` listens to `IAuthSessionState`), so the real login screen does not navigate itself.
+
 ---
 
-## 🔒 3. Quản Lý Lỗi Nghiệp Vụ Chuyên Biệt (Custom Error State)
+## 🔒 3. Feature-Specific Business Errors (Custom Error State)
 
-Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. `AppFailure` là một `sealed class` (Freezed) trong `domain_core` (`platform/domain_core/lib/src/failures/failures.dart`), nên feature **không thể** `extends` / `implements` nó để thêm lỗi riêng — một `AuthErrorState extends AppFailure` sẽ không compile. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa **Freezed state riêng** cho feature, mang một giá trị lỗi của chính feature, dùng `BaseBloc<Event, CustomState>`, rồi map các biến thể của `AppFailure` sang giá trị đó trong handler:
+By default, `error` in `BlocViewState.error(error)` is an `AppFailure`. `AppFailure` is a Freezed `sealed class` in `domain_core` (`platform/domain_core/lib/src/failures/failures.dart`), so a feature **cannot** `extends` / `implements` it to add its own errors — an `AuthErrorState extends AppFailure` does not compile. To refine errors, define the feature's **own Freezed state** carrying a feature-owned error value, use `BaseBloc<Event, CustomState>`, and map the `AppFailure` variants to that value in the handler:
 
 ```dart
 // login_state.dart
 part of 'login_bloc.dart';
 
-/// Lỗi nghiệp vụ của màn login — giá trị của feature, không phải một AppFailure.
+/// The login screen's business errors — a feature value, not an AppFailure.
 enum LoginError { invalidCredentials, network, unknown }
 
 @freezed
@@ -134,11 +151,11 @@ sealed class LoginState with _$LoginState {
 }
 ```
 
-Sau đó trong Bloc:
+Then in the Bloc:
 ```dart
 import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
-import 'package:domain_core/domain_core.dart'; // Result, AppFailure và các biến thể
+import 'package:domain_core/domain_core.dart'; // Result, AppFailure and its variants
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
 
@@ -163,14 +180,19 @@ class LoginBloc extends BaseBloc<LoginEvent, LoginState> {
       LoginParams(email: event.email, password: event.password),
     );
     result.when(
-      success: (user) => emit(LoginState.success(user!)),
+      success: (user) => user == null
+          ? emit(const LoginState.error(LoginError.unknown))
+          : emit(LoginState.success(user)),
       failure: (failure) => emit(LoginState.error(_toLoginError(failure))),
-      none: () {},
-      cancel: () {},
+      none: () => emit(const LoginState.initial()),
+      cancel: () => emit(const LoginState.initial()),
     );
   }
 
-  /// Map từ biến thể của Domain Failure sang lỗi của feature.
+  /// Maps a Domain failure variant to the feature's error.
+  ///
+  /// `ErrorHandler` turns HTTP 401/403 into an `AuthFailure` and a
+  /// connection error / timeout into a `NetworkFailure`.
   static LoginError _toLoginError(AppFailure failure) => switch (failure) {
     AuthFailure() || ValidationFailure() => LoginError.invalidCredentials,
     NetworkFailure() => LoginError.network,
@@ -179,14 +201,14 @@ class LoginBloc extends BaseBloc<LoginEvent, LoginState> {
 }
 ```
 
-Vẽ giao diện — `LoginState` là `sealed`, nên `switch` được kiểm tra đủ trường hợp lúc compile:
+Rendering — `LoginState` is `sealed`, so the `switch` is checked for exhaustiveness at compile time:
 ```dart
 BlocBuilder<LoginBloc, LoginState>(
   builder: (context, state) => switch (state) {
     LoginInitial() => const MyLoginForm(),
     LoginLoading() => const CircularProgressIndicator(),
     LoginSuccess(:final user) => WelcomeWidget(user: user),
-    // LoginErrorWidget map mỗi LoginError sang chuỗi đã dịch của feature.
+    // LoginErrorWidget maps each LoginError to the feature's translated string.
     LoginErrorState(:final error) => LoginErrorWidget(error: error),
   },
 )
@@ -194,38 +216,46 @@ BlocBuilder<LoginBloc, LoginState>(
 
 ---
 
-## 🔗 4. Liên Kết Phụ Thuộc Giữa Các Bloc (Giao Tiếp Chéo Hệ Lạ)
+## 🔗 4. Dependencies Between Blocs (Cross-Paradigm Communication)
 
-Monorepo này là một hệ thống **đa State Management**. 
-Nếu Feature của bạn dùng **BLoC**, nhưng bạn cần lắng nghe sự thay đổi từ Feature khác dùng **Provider** (hoặc ngược lại).
-**TUYỆT ĐỐI KHÔNG** import trực tiếp Bloc hoặc Provider vào code của nhau.
-**HÃY SỬ DỤNG Neutral Streams**: Đăng ký một Dart `Stream` thuần túy lên GetIt (DI Hub), sau đó `BaseBloc` của bạn chỉ việc lắng nghe Stream đó thay vì lắng nghe Provider.
+This monorepo runs **more than one state-management library**.
+Say your feature uses **BLoC**, but needs to react to changes in another feature that uses **Provider** (or the other way round).
+**NEVER** import one's Bloc or Provider directly into the other's code.
+**USE neutral streams**: a neutral interface in `core_di` (for example `IAuthStatusStream`, exposing a `Stream<AuthPrincipal?>` and `currentUser`), whose implementation the owning feature registers in GetIt; your `BaseBloc` listens to that stream instead of to a Provider.
 
-*(Xem chi tiết kiến trúc này tại [`docs/vi/guides/10_cross_feature.md`](../../docs/vi/guides/10_cross_feature.md) — Mô hình 3: Agnostic Stream.)*
+The real example: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) takes an `IAuthStatusStream?` through `@factoryParam` — the route passes `getItOrNull<IAuthStatusStream>()`, so Home still works in an app composed without `feature_auth` — and cancels its subscription in `close()`.
 
-Nếu chỉ là liên kết Bloc-đến-Bloc cùng Feature, bạn hoàn toàn có thể truyền instance thông qua constructor và dùng `StreamSubscription` lắng nghe bên trong thân Bloc.
+*(See the full architecture in [`docs/en/guides/10_cross_feature.md`](../../docs/en/guides/10_cross_feature.md) — Model 3: Agnostic Stream.)*
+
+For Bloc-to-Bloc links inside the same feature, you can simply pass the instance through the constructor and listen with a `StreamSubscription` inside the Bloc (cancel it in `close()`).
 
 ---
 
-## ⚠️ 5. Lưu ý Cực Kỳ Quan Trọng về Vòng Đời (Route-Level Auto Dispose)
+## ⚠️ 5. Critical Lifecycle Note (Route-Level Auto Dispose)
 
-Giống như Provider, các Bloc gắn liền với màn hình phải được giải phóng bộ nhớ khi người dùng rời đi.
+As with Provider, a Bloc tied to a screen must be released when the user leaves it.
 
-1. **Route-level Auto Dispose**: Khai báo Bloc bằng `@injectable`, tuyệt đối không được dùng `@singleton` hoặc `@lazySingleton`.
-2. **Khởi tạo ở Router**: Bọc `BlocProvider` trong hàm `build` của lớp Route (`go_router`) ở file `<feature>_route_module.dart`:
+1. **Route-level auto dispose**: Register the Bloc with `@injectable` — never `@singleton` or `@lazySingleton`.
+2. **Create it in the router**: Wrap `BlocProvider` in the `build` method of the route class (`go_router`) in `<feature>_route_module.dart`. The page must **not** wrap itself in a second `BlocProvider`.
+
+The real example, `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
-@TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
-class LoginRoute extends GoRouteDataCustom with $LoginRoute {
-  const LoginRoute();
+@TypedGoRoute<HomeRoute>(path: HomePath.HOME)
+class HomeRoute extends GoRouteDataCustom with $HomeRoute {
+  const HomeRoute();
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
-      create: (context) => getIt<LoginBloc>(), // Injectable sẽ tạo instance mới
-      child: const LoginPage(),
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no IAuthStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<IAuthStatusStream>(),
+      ),
+      child: const HomePage(),
     );
   }
 }
 ```
-Khi người dùng chuyển sang màn hình khác, `BlocProvider` sẽ tự động gọi hàm `close()` của `LoginBloc` để xóa sổ nó khỏi RAM.
+`BlocProvider` calls the Bloc's `close()` when it leaves the widget tree itself — the route is popped, or replaced by a `go` to another location. Pushing another screen **on top** does not close it, and a `StatefulShellRoute` tab (like Home) stays alive while the user switches tabs.

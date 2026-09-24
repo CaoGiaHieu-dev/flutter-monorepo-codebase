@@ -273,7 +273,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 | Chứa data | không (data nằm ở `ViewStateModel<T>`) | có |
 
 > [!WARNING]
-> `BaseBloc` / `BaseCubit` hiện chỉ là **điểm mở rộng rỗng**. Không có thứ gì tương đương `executeOperation` ở nhánh BLoC — bạn phải tự unwrap `Result`, tự map `AppFailure`, tự set loading trong **từng** handler. Hai nhánh chưa ngang bằng nhau.
+> `BaseBloc` / `BaseCubit` là **điểm mở rộng rỗng**. Bản tương đương `executeOperation` ở nhánh BLoC là tuỳ chọn: mix in `BlocResultMixin<T>` / `CubitResultMixin<T>` (`bloc_state_management`) rồi gọi `emitResult` — loading, success, failure, none/cancel và exception được xử lý sẵn. Handler nào không dùng nó thì tự unwrap `Result`.
 
 ---
 

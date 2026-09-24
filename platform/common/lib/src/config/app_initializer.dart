@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:core_responsive/core_responsive.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +50,13 @@ class AppInitializer {
   @visibleForTesting
   static void debugResetBeforeRunApp() => _ranBeforeRunApp = false;
 
+  /// Stands in for [kIsWeb] in a test, which always runs on the VM. `null`
+  /// (the default) reads the real constant.
+  @visibleForTesting
+  static bool? debugIsWebOverride;
+
+  static bool get _isWeb => debugIsWebOverride ?? kIsWeb;
+
   /// Performs all required startup initializations.
   static Future<void> init({RouteObserver<ModalRoute>? routeObserver}) async {
     // Global setup for operations (e.g., error handling, logging)
@@ -90,6 +98,23 @@ class AppInitializer {
   }
 
   static void _setupHttpOverrides() {
+    // On the web the browser owns TLS: `dart:io`'s `HttpOverrides` compiles
+    // there but nothing reads it — Dio uses the browser adapter, never an
+    // `HttpClient` — so neither pinning nor the dev bypass can apply. Say so
+    // once instead of installing an override that would suggest otherwise
+    // (and instead of the "NOT pinned" ERROR below, which is about a
+    // misconfiguration the web cannot fix).
+    if (_isWeb) {
+      DynamicLogger.log(
+        'Web build: the browser validates TLS certificates. SSL pinning and '
+        'the dev-flavor certificate bypass do not apply and are not '
+        'installed.',
+        tag: 'Security',
+        level: LogLevel.INFO,
+      );
+      return;
+    }
+
     // Fail closed. Validation is switched off only for a debug build that
     // explicitly declared the `dev` flavor; a missing or unknown flavor is
     // treated as `prod` here. `appFlavor` used to fall back to `dev`, so a

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:core_common/core_common.dart';
 import 'package:core_responsive/core_responsive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -48,7 +49,7 @@ class MainScope {
       await Future.wait([initService.call(), Future.delayed(_minimumDelay)]);
 
       // Remove the splash screen after initialization.
-      FlutterNativeSplash.remove();
+      _removeNativeSplash();
 
       // Run the app with the root widget wrapped in a responsive wrapper.
       runApp(_ResponsiveWrapper(child: root));
@@ -56,7 +57,7 @@ class MainScope {
     }
 
     // Remove the splash screen after initialization.
-    FlutterNativeSplash.remove();
+    _removeNativeSplash();
 
     // Create an AppMaterialWrapper with the splash screen.
     final splash = AppMaterialWrapper(home: splashScreen);
@@ -131,4 +132,14 @@ class _ResponsiveWrapper extends StatelessWidget {
       child: child,
     );
   }
+}
+
+/// Removes the native splash kept by `FlutterNativeSplash.preserve`.
+///
+/// Skipped on the web: no app here generates a web splash, so the plugin has
+/// no web side and `remove()` throws `PlatformException(removeSplashFromWeb)`,
+/// which would reach the crash reporter on every start.
+void _removeNativeSplash() {
+  if (kIsWeb) return;
+  FlutterNativeSplash.remove();
 }

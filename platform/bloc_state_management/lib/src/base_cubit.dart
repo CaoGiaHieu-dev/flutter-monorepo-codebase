@@ -2,11 +2,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Base class for all Cubits in the application.
 ///
-/// > **Read this before choosing the BLoC branch.**
-/// > Like [BaseBloc], this is an *extension point only* — it adds nothing on
-/// > top of [Cubit]. There is **no equivalent of the Provider branch's
-/// > `executeOperation`**: every method must unwrap `Result<T>`, map
-/// > `AppFailure`, and emit its own loading/terminal states by hand.
+/// Like [BaseBloc], an *extension point* that adds nothing on top of
+/// [Cubit]. A Cubit whose state is `BlocViewState<T>` mixes in
+/// `CubitResultMixin<T>` for `emitResult` — the same rules as the Bloc
+/// helper, emitting through the Cubit's own `emit`.
 ///
 /// Per `.agents/AGENTS.md`, prefer [BaseBloc] with Freezed events. Reach for
 /// [BaseCubit] only when the screen genuinely has no events worth modelling.

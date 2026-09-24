@@ -3,42 +3,33 @@ export 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Base class for all Blocs in the application.
 ///
-/// > **Read this before choosing the BLoC branch.**
-/// > This class is currently an *extension point only* — it adds nothing on
-/// > top of [Bloc]. It exists so shared behaviour (logging, analytics,
-/// > default error mapping) can be introduced later in one place without
-/// > touching every feature.
+/// An *extension point*: it adds nothing on top of [Bloc], so shared
+/// behaviour (logging, analytics) can later be introduced in one place
+/// without touching every feature.
 ///
-/// Concretely, the BLoC branch has **no equivalent of the Provider branch's
-/// `executeOperation`**. In each event handler you are responsible for:
-///
-/// - unwrapping `Result<T>` yourself (`success` / `failure` / `none` / `cancel`)
-/// - mapping `AppFailure` to whatever your UI state expects
-/// - emitting the loading state before the async work and a terminal state after
+/// For a screen whose state is `BlocViewState<T>`, mix in
+/// `BlocResultMixin<T>` — the BLoC counterpart of the Provider branch's
+/// `executeOperation`. Its `emitResult` emits `loading`, runs the use case,
+/// and settles the `Result<T>` (`success` / `failure` / `none` / `cancel`, or
+/// a thrown error) into a terminal state:
 ///
 /// ```dart
-/// Future<void> _onStarted(
-///   _Started event,
-///   Emitter<BlocViewState<Foo>> emit,
-/// ) async {
-///   emit(const BlocViewState.loading());
-///   final result = await _useCase(const NoParams());
-///   result.when(
-///     // `Result.success` carries a nullable payload: decide what "no data"
-///     // means for this screen instead of forcing it non-null.
-///     success: (data) => data == null
-///         ? emit(const BlocViewState.initial())
-///         : emit(BlocViewState.success(data)),
-///     failure: (f) => emit(BlocViewState.error(f)),
-///     none: () => emit(const BlocViewState.initial()),
-///     cancel: () {},
-///   );
+/// class FooBloc extends BaseBloc<FooEvent, BlocViewState<Foo>>
+///     with BlocResultMixin<Foo> {
+///   FooBloc(this._useCase) : super(const BlocViewState.initial()) {
+///     on<_Started>(_onStarted);
+///   }
+///
+///   final GetFooUseCase _useCase;
+///
+///   Future<void> _onStarted(_Started event, Emitter<BlocViewState<Foo>> emit) =>
+///       emitResult(emit, () => _useCase(const NoParams()));
 /// }
 /// ```
 ///
-/// The Provider branch (`provider_state_management`) wraps all of the above in
-/// `executeOperation`. If that automation matters more to you than BLoC's
-/// event modelling, prefer that branch — the two are not at parity today.
+/// A Bloc with its own Freezed state (`BaseBloc<Event, CustomState>`) does
+/// not get that helper: it unwraps `Result<T>`, maps `AppFailure` and emits
+/// its loading/terminal states by hand.
 abstract class BaseBloc<Event, State> extends Bloc<Event, State> {
   BaseBloc(super.initialState);
 }

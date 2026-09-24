@@ -8,27 +8,29 @@
 
 ## 1. The honest comparison
 
-This template ships **two** state-management branches. They are **not at parity**, and picking one without knowing that is the most common source of frustration.
+This template ships **two** state-management branches. They now share the core of the job — run a use case, show loading, settle its `Result` — but they are **still not at parity**, and picking one without knowing where they differ is the most common source of frustration.
 
 | | `provider_state_management` | `bloc_state_management` |
 |---|---|---|
 | Base class | `BaseProvider<T>` | `BaseBloc<Event, State>` / `BaseCubit<State>` |
-| Lines of shared machinery | Full: `StateManager`, `OperationExecutor`, `LoadMoreMixin`, `ensureInitialized` | **None** — the base classes add nothing over `Bloc` / `Cubit` |
-| `Result<T>` unwrapping | Automatic via `executeOperation` | **You write it, in every handler** |
-| `AppFailure` → UI error mapping | `errorStateBuilder` hook | **You write it, in every handler** |
-| Loading state | Set automatically | **You emit it, in every handler** |
+| Lines of shared machinery | Full: `StateManager`, `OperationExecutor`, `LoadMoreMixin`, `ensureInitialized` | `BlocResultMixin` / `CubitResultMixin` (`emitResult`) — nothing else; the base classes add nothing over `Bloc` / `Cubit` |
+| `Result<T>` unwrapping | Automatic via `executeOperation` | Automatic via `emitResult` **for a `BlocViewState<T>` screen**; by hand for a custom state |
+| `AppFailure` → UI error mapping | `errorStateBuilder` hook | None — `error(AppFailure)` carries it as-is; map it in the view, or by hand into a custom state |
+| Loading state | Set automatically (skipped once data is loaded) | `emitResult` emits it (skipped while a `success` is on screen) |
+| An operation that **throws** | Propagates — the repository's `execute()` is what turns exceptions into `Result.failure` | `emitResult` catches it: `ErrorHandler.handleError` → `error(...)`, and the raw error goes to `addError` (`BlocObserver.onError`) |
 | Global hooks | `OperationGlobalConfig` (`onStart`/`onSuccess`/`onFailure`/`onFinish`) | None |
+| Pagination | `LoadMoreMixin` | None |
 | State type | `ViewStateModel<T>` wrapping `ViewState` | `BlocViewState<T>` (optional) or your own Freezed state |
 | Declarative side effects | `ProviderStateListener` / `MultiProviderStateListener` | `BlocListener` (from `flutter_bloc`) |
 
 > [!WARNING]
-> `BaseBloc` and `BaseCubit` are **extension points only**. Read their own doc comments — they say so explicitly. They exist so shared behaviour (logging, analytics, default error mapping) can be added later in one place, but **today they add nothing**. Choosing BLoC means writing the `Result` unwrap / failure-map / loading-emit trio by hand in **each** event handler.
+> `BaseBloc` and `BaseCubit` are still **extension points only** — they add nothing over `Bloc` / `Cubit`. The `Result` unwrap / loading emit lives in a separate mixin, `BlocResultMixin<T>` (or `CubitResultMixin<T>`), and only for a screen whose state is `BlocViewState<T>` (§3.5). A Bloc with its own Freezed state writes that trio by hand in each handler, and neither branch-B mixin offers global hooks, an `errorStateBuilder` or pagination.
 
 ### Choosing
 
 - **Pick Provider** when you want the automation: CRUD screens, forms, list + detail, anything where `executeOperation` removes real boilerplate.
 - **Pick BLoC** when event modelling itself is the value: complex flows with many discrete triggers, replayable/traceable event streams, or when the team already standardises on BLoC.
-- **Do not** pick BLoC expecting `executeOperation`-equivalent ergonomics. It is not there yet.
+- **Do not** pick BLoC expecting all of Provider's machinery. `emitResult` covers the load → settle path of a `BlocViewState<T>` screen; global hooks, `errorStateBuilder`, `LoadMoreMixin` and `ensureInitialized` have no BLoC counterpart.
 
 Both branches are registered in DI and can coexist in the same app — `feature_auth` uses Provider, `feature_home` uses BLoC.
 
@@ -397,26 +399,64 @@ BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
 
 Dispatch events with `context.read<HomeProfileBloc>().add(const HomeProfileEvent.refreshed())`.
 
-### 3.5 Unwrapping `Result` by hand
+### 3.5 Unwrapping `Result` — `emitResult`
 
-Since there is no `executeOperation`, every handler that calls a use case looks like this — the pattern is spelled out in `BaseBloc`'s own doc comment:
+`platform/bloc_state_management/lib/src/result_emitter.dart` is the BLoC branch's `executeOperation`. Mix `BlocResultMixin<T>` into a Bloc whose state is `BlocViewState<T>` and hand each handler's `emit` to `emitResult`:
 
 ```dart
-Future<void> _onStarted(
-  _Started event,
-  Emitter<BlocViewState<Foo>> emit,
+@injectable
+class OrdersBloc extends BaseBloc<OrdersEvent, BlocViewState<List<OrderEntity>>>
+    with BlocResultMixin<List<OrderEntity>> {
+  OrdersBloc(this._getOrders) : super(const BlocViewState.initial()) {
+    on<_OrdersRequested>(_onRequested);
+  }
+
+  final GetOrdersUseCase _getOrders;
+
+  Future<void> _onRequested(
+    _OrdersRequested event,
+    Emitter<BlocViewState<List<OrderEntity>>> emit,
+  ) => emitResult(emit, () => _getOrders(const NoParams()));
+}
+```
+
+A Cubit mixes in `CubitResultMixin<T>` instead and calls `emitResult(() => ...)` — no emitter, it emits through its own `emit`.
+
+What `emitResult` emits, row by row:
+
+| Outcome | Emitted |
+|:--|:--|
+| Before the call | `loading` — unless `showLoading: false`, or a `success` is already on screen (a refresh keeps the content) |
+| `Result.success(data)` | `success(data)`; pass `convert:` when the payload is not already a `T` (without it a mismatched payload is a `StateError`) |
+| `Result.success(null)` | `success(null)` when `T` is nullable, otherwise `initial` |
+| `Result.failure(f)` | `error(f)` |
+| `Result.none` / `Result.cancel` | the state from before the call, if `loading` was emitted — never left stuck on `loading`; otherwise nothing |
+| The operation throws | `error(ErrorHandler.handleError(e))`, and `addError(e)` so `BlocObserver.onError` sees the bug |
+
+`onSuccess:` / `onFailure:` run after that state was emitted — for follow-up work (another event, analytics), not for state. Once the handler is done — the bloc closed, or a `restartable()` transformer replaced it while the call was pending — nothing more is emitted and the callbacks are skipped.
+
+> [!NOTE]
+> `emitResult` never emits a `const` state: inside a generic helper `const BlocViewState.loading()` is a `BlocViewState<Never>`, which `==` treats as different from the `BlocViewState<T>.loading()` a view or a test expects.
+
+**A custom Freezed state** (`BaseBloc<Event, CheckoutState>`) gets no helper — unwrap by hand, and make every branch end in a terminal state:
+
+```dart
+Future<void> _onSubmitted(
+  _Submitted event,
+  Emitter<CheckoutState> emit,
 ) async {
-  emit(const BlocViewState.loading());
-  final result = await _useCase(const NoParams());
+  final before = state;
+  emit(const CheckoutState.submitting());
+  final result = await _placeOrder(event.params);
   result.when(
     // `Result.success` carries a nullable payload: decide what "no data"
-    // means for this screen instead of forcing it non-null.
-    success: (data) => data == null
-        ? emit(const BlocViewState.initial())
-        : emit(BlocViewState.success(data)),
-    failure: (f) => emit(BlocViewState.error(f)),
-    none: () => emit(const BlocViewState.initial()),
-    cancel: () {},
+    // means for this screen instead of forcing it with `!`.
+    success: (order) =>
+        emit(order == null ? before : CheckoutState.placed(order)),
+    failure: (f) => emit(CheckoutState.failed(f)),
+    // Nothing to show: undo the loading state rather than leave the spinner.
+    none: () => emit(before),
+    cancel: () => emit(before),
   );
 }
 ```
@@ -462,7 +502,8 @@ Global controllers such as `AuthProvider` are the exception: routes do **not** w
 
 ## 5. Checklist
 
-- [ ] Branch chosen deliberately, knowing BLoC has no `executeOperation`
+- [ ] Branch chosen deliberately, knowing what BLoC lacks (global hooks, `errorStateBuilder`, pagination)
+- [ ] A `BlocViewState<T>` Bloc settles use cases through `emitResult`, not a hand-written `result.when`
 - [ ] Screen controller is `@injectable`, not a singleton
 - [ ] Controller created in the **route's** `build()`, page does not re-wrap
 - [ ] BLoC events are private Freezed subclasses under `part` / `part of`

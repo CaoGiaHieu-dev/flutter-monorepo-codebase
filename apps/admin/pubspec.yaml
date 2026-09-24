@@ -49,6 +49,12 @@ dependencies:
   injectable: ^3.0.0           # lib/di/injection.dart
 
 dev_dependencies:
+  # test/di_smoke_test.dart: boots the generated DI graph with the storage
+  # plugins' in-memory doubles.
+  flutter_test:
+    sdk: flutter
+  flutter_secure_storage: "10.3.1"
+  shared_preferences: "^2.5.5"
   flutter_lints: ^6.0.0
   build_runner: "^2.16.0"
   injectable_generator: "^3.1.3"

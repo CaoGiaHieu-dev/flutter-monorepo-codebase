@@ -341,18 +341,18 @@ The service is an eager `@singleton` that injects `FirebaseOptions`, which each 
 
 ## 10. State management — two branches, **not at parity**
 
-The template supports Provider and BLoC. Be aware before choosing: the two are not equally developed.
+The template supports Provider and BLoC. Be aware before choosing: both automate the core load → settle path now, but the Provider branch still ships far more around it.
 
 | | `provider_state_management` | `bloc_state_management` |
 |:--|:--|:--|
 | Base class | `BaseProvider<T>` — full implementation | `BaseBloc` / `BaseCubit` — *extension point only, adds nothing* |
-| Async helper | `executeOperation(OperationConfig(...))` handles loading/success/failure automatically | **none** |
+| Async helper | `executeOperation(OperationConfig(...))` handles loading/success/failure automatically | `emitResult` from `BlocResultMixin<T>` / `CubitResultMixin<T>` — the same, for a `BlocViewState<T>` state only; it also catches an operation that throws |
 | State type | `ViewStateModel<T>` + `ViewState` (5 variants incl. `loadingMore`, data held on the model) | `BlocViewState<T>` (4 variants, carries its own payload) |
 | Error shape | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — required |
 | Extras | `StateManager`, `OperationExecutor`, `OperationGlobalConfig`, `LoadMoreMixin`, `ProviderStateListener`, `BaseViewWidget` | — |
 
 > [!WARNING]
-> On the BLoC branch you must unwrap `Result<T>`, map `AppFailure`, and emit loading/terminal states **by hand in every handler**. The Provider branch wraps all of that in `executeOperation`. `base_bloc.dart` documents this honestly and shows the manual pattern.
+> `emitResult` (`platform/bloc_state_management/lib/src/result_emitter.dart`) covers a Bloc or Cubit whose state is `BlocViewState<T>`: loading, `Result` unwrap, `none`/`cancel` undoing its own loading, exceptions through `ErrorHandler`. A Bloc with its **own Freezed state** still unwraps `Result<T>` and emits loading/terminal states by hand in every handler, and the BLoC branch has no counterpart for `OperationGlobalConfig`, `errorStateBuilder` or `LoadMoreMixin`. `bloc_state_management` depends on `platform_kernel` for `ErrorHandler` — a platform → platform edge, not one of the `→ domain_core` exceptions.
 
 ### `BlocViewState<T>`
 
@@ -364,7 +364,30 @@ Practical usage for both branches: [`../guides/03_state_management.md`](../guide
 
 ---
 
-## 11. Dependency map
+## 11. Web builds — honest status
+
+Measured with `flutter build web` on `apps/admin` after scaffolding `web/` (`flutter create --platforms=web .` — neither app ships a `web/` folder), then loading the release build in headless Chromium.
+
+| App | Compiles (dart2js; the Wasm dry run passes too) | Boots |
+|:--|:--|:--|
+| `apps/admin` (auth + settings) | yes | yes — to the sign-in screen, with `flutter_secure_storage`'s WebCrypto store and `shared_preferences` working (the page must be a secure context: `https` or `localhost`) |
+| `apps/mobile` (every sample module) | **no** — `core_database` imports `package:drift/native.dart`, which pulls `sqlite3`'s `dart:ffi` | — |
+
+What makes the shared boot path web-safe:
+
+- `dart:io` **compiles** on the web; only *calling* most of it fails. The shell never calls it there: `runShellApp` checks `kIsWeb` before `Platform.isIOS`, `GoRouteDataCustom.buildPage` returns before its `Platform.isIOS` branch, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
+- `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates. The browser owns TLS, so neither pinning nor the dev-flavor bypass can apply; installing one anyway was harmless but suggested otherwise, and the "not pinned" `ERROR` it logged described a misconfiguration the web cannot fix.
+
+Known gaps, none fixed here:
+
+- `apps/mobile` needs a web database before it can even compile: drift's `WasmDatabase` (the `sqlite3.wasm` + drift worker assets), opened through a conditional import in `core_database`'s connection factory.
+- `MainScope` calls `FlutterNativeSplash.remove()` on every platform; on the web it throws `PlatformException(… removeSplashFromWeb …)` unless `flutter_native_splash` generated web assets for that app. The error is uncaught but not fatal — the app still boots — and it reaches the crash reporter on every web start.
+- `AppInfoHelper.getDeviceInfo` / `getDeviceString` / `platformName` branch on `Platform.isAndroid`, which **throws** on the web. Nothing calls them during boot; a screen that does needs a `kIsWeb` guard first.
+- `core_notifications` (`apps/mobile` only) initialises Firebase with the app's per-flavor options, which describe no web app.
+
+---
+
+## 12. Dependency map
 
 Local (workspace) dependencies only — pub.dev packages omitted.
 

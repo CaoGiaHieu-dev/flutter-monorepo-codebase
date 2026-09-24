@@ -17,6 +17,8 @@ dependencies:
   injectable: ^3.0.0
   domain_core:
     path: ../domain_core
+  platform_kernel:
+    path: ../kernel
 
 dev_dependencies:
   flutter_test:

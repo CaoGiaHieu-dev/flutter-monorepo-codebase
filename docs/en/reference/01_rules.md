@@ -273,7 +273,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 | Holds data | no (data lives in `ViewStateModel<T>`) | yes |
 
 > [!WARNING]
-> `BaseBloc` / `BaseCubit` are currently **empty extension points**. There is no BLoC equivalent of `executeOperation` — on the BLoC branch you unwrap `Result`, map `AppFailure`, and set loading yourself in every handler. The two branches are not at parity.
+> `BaseBloc` / `BaseCubit` are **empty extension points**. The BLoC counterpart of `executeOperation` is opt-in: mix in `BlocResultMixin<T>` / `CubitResultMixin<T>` (`bloc_state_management`) and call `emitResult` — loading, success, failure, none/cancel and thrown exceptions are then handled for you. A handler that does not use it unwraps `Result` by hand.
 
 ---
 

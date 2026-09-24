@@ -15,17 +15,18 @@ Use this skill when requested to: "implement UI logic using BLoC", "create a blo
 Reference sample in the template: `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`.
 
 > [!WARNING]
-> **The BLoC branch is not at parity with the Provider branch.**
-> `BaseBloc` and `BaseCubit` are *extension points only* — they add nothing on top of
-> `Bloc` / `Cubit`. There is **no equivalent of `executeOperation`**. In every handler you
-> must yourself:
+>  **`BaseBloc` and `BaseCubit` are *extension points only*** — they add nothing on top of
+> `Bloc` / `Cubit`. The counterpart of Provider's `executeOperation` is **opt-in**: mix in
+> `BlocResultMixin<T>` (or `CubitResultMixin<T>`) when the state is `BlocViewState<T>` and call
+> `emitResult(emit, () => useCase(params))` — it emits loading (skipped once a success is on
+> screen), success (via `convert` when the payload type differs), `error(AppFailure)`, restores
+> the previous state on none/cancel, and turns a thrown exception into
+> `error(ErrorHandler.handleError(e))`. With a custom Freezed state you still:
 > - unwrap `Result<T>` (`success` / `failure` / `none` / `cancel`)
 > - map `AppFailure` into your UI state
 > - emit the loading state before the async work and a terminal state after
 >
-> If that automation matters more than BLoC's event modelling, use
-> `implement_provider_ui` instead. Read the doc comments on
-> `platform/bloc_state_management/lib/src/base_bloc.dart` before choosing.
+> Read `platform/bloc_state_management/lib/src/result_emitter.dart` before choosing.
 
 ---
 

@@ -8,27 +8,29 @@
 
 ## 1. So sánh trung thực
 
-Template này có **hai** nhánh state management. Chúng **không ngang bằng nhau**, và chọn mà không biết điều đó là nguyên nhân bực bội phổ biến nhất.
+Template này có **hai** nhánh state management. Giờ đây chúng dùng chung phần cốt lõi — chạy use case, hiện loading, chốt `Result` — nhưng **vẫn chưa ngang bằng nhau**, và chọn mà không biết chúng khác nhau ở đâu là nguyên nhân bực bội phổ biến nhất.
 
 | | `provider_state_management` | `bloc_state_management` |
 |---|---|---|
 | Lớp cơ sở | `BaseProvider<T>` | `BaseBloc<Event, State>` / `BaseCubit<State>` |
-| Máy móc dùng chung | Đầy đủ: `StateManager`, `OperationExecutor`, `LoadMoreMixin`, `ensureInitialized` | **Không có gì** — lớp cơ sở không thêm gì so với `Bloc` / `Cubit` |
-| Bóc tách `Result<T>` | Tự động qua `executeOperation` | **Bạn tự viết, trong TỪNG handler** |
-| Map `AppFailure` → lỗi UI | Hook `errorStateBuilder` | **Bạn tự viết, trong TỪNG handler** |
-| Trạng thái loading | Tự động set | **Bạn tự emit, trong TỪNG handler** |
+| Máy móc dùng chung | Đầy đủ: `StateManager`, `OperationExecutor`, `LoadMoreMixin`, `ensureInitialized` | `BlocResultMixin` / `CubitResultMixin` (`emitResult`) — ngoài ra không có gì; lớp cơ sở không thêm gì so với `Bloc` / `Cubit` |
+| Bóc tách `Result<T>` | Tự động qua `executeOperation` | Tự động qua `emitResult` **với màn hình dùng `BlocViewState<T>`**; tự viết với state tuỳ biến |
+| Map `AppFailure` → lỗi UI | Hook `errorStateBuilder` | Không có — `error(AppFailure)` giữ nguyên failure; map trong view, hoặc tự map vào state tuỳ biến |
+| Trạng thái loading | Tự động set (bỏ qua khi đã có dữ liệu) | `emitResult` tự emit (bỏ qua khi đang hiển thị `success`) |
+| Thao tác **ném exception** | Lan ra ngoài — chính `execute()` của repository mới đổi exception thành `Result.failure` | `emitResult` bắt lại: `ErrorHandler.handleError` → `error(...)`, lỗi gốc đi vào `addError` (`BlocObserver.onError`) |
 | Hook toàn cục | `OperationGlobalConfig` (`onStart`/`onSuccess`/`onFailure`/`onFinish`) | Không có |
+| Phân trang | `LoadMoreMixin` | Không có |
 | Kiểu state | `ViewStateModel<T>` bọc `ViewState` | `BlocViewState<T>` (tuỳ chọn) hoặc state Freezed tự định nghĩa |
 | Side effect khai báo | `ProviderStateListener` / `MultiProviderStateListener` | `BlocListener` (của `flutter_bloc`) |
 
 > [!WARNING]
-> `BaseBloc` và `BaseCubit` **chỉ là điểm mở rộng (extension point)**. Hãy đọc chính doc comment của chúng — chúng nói thẳng điều đó. Chúng tồn tại để sau này thêm hành vi dùng chung (logging, analytics, map lỗi mặc định) ở một nơi duy nhất, nhưng **hiện tại không thêm gì cả**. Chọn BLoC nghĩa là bạn tự viết bộ ba bóc-`Result` / map-lỗi / emit-loading trong **mỗi** event handler.
+> `BaseBloc` và `BaseCubit` vẫn **chỉ là điểm mở rộng (extension point)** — không thêm gì so với `Bloc` / `Cubit`. Phần bóc `Result` / emit loading nằm trong một mixin riêng, `BlocResultMixin<T>` (hoặc `CubitResultMixin<T>`), và chỉ dành cho màn hình có state là `BlocViewState<T>` (§3.5). Bloc dùng state Freezed riêng vẫn tự viết bộ ba đó trong từng handler, và nhánh BLoC không có hook toàn cục, `errorStateBuilder` hay phân trang.
 
 ### Chọn thế nào
 
 - **Chọn Provider** khi bạn muốn sự tự động hoá: màn hình CRUD, form, list + detail — bất cứ nơi nào `executeOperation` cắt được boilerplate thật.
 - **Chọn BLoC** khi bản thân việc mô hình hoá event mới là giá trị: luồng phức tạp nhiều trigger rời rạc, cần replay/truy vết luồng event, hoặc team đã chuẩn hoá theo BLoC.
-- **Đừng** chọn BLoC rồi kỳ vọng có trải nghiệm tương đương `executeOperation`. Chưa có.
+- **Đừng** chọn BLoC rồi kỳ vọng có đủ bộ máy của Provider. `emitResult` lo đường tải → chốt kết quả của màn hình `BlocViewState<T>`; hook toàn cục, `errorStateBuilder`, `LoadMoreMixin` và `ensureInitialized` không có bản tương ứng ở BLoC.
 
 Hai nhánh cùng đăng ký trong DI và sống chung được: `feature_auth` dùng Provider, `feature_home` dùng BLoC.
 
@@ -397,26 +399,64 @@ BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
 
 Bắn event bằng `context.read<HomeProfileBloc>().add(const HomeProfileEvent.refreshed())`.
 
-### 3.5 Tự bóc `Result`
+### 3.5 Bóc `Result` — `emitResult`
 
-Vì không có `executeOperation`, mọi handler gọi use case đều có hình dạng như sau — chính doc comment của `BaseBloc` viết sẵn mẫu này:
+`platform/bloc_state_management/lib/src/result_emitter.dart` là `executeOperation` của nhánh BLoC. Trộn `BlocResultMixin<T>` vào Bloc có state là `BlocViewState<T>` rồi đưa `emit` của từng handler cho `emitResult`:
 
 ```dart
-Future<void> _onStarted(
-  _Started event,
-  Emitter<BlocViewState<Foo>> emit,
+@injectable
+class OrdersBloc extends BaseBloc<OrdersEvent, BlocViewState<List<OrderEntity>>>
+    with BlocResultMixin<List<OrderEntity>> {
+  OrdersBloc(this._getOrders) : super(const BlocViewState.initial()) {
+    on<_OrdersRequested>(_onRequested);
+  }
+
+  final GetOrdersUseCase _getOrders;
+
+  Future<void> _onRequested(
+    _OrdersRequested event,
+    Emitter<BlocViewState<List<OrderEntity>>> emit,
+  ) => emitResult(emit, () => _getOrders(const NoParams()));
+}
+```
+
+Cubit thì trộn `CubitResultMixin<T>` và gọi `emitResult(() => ...)` — không cần emitter, nó emit qua chính `emit` của Cubit.
+
+`emitResult` emit gì, từng trường hợp:
+
+| Kết quả | Emit |
+|:--|:--|
+| Trước khi gọi | `loading` — trừ khi `showLoading: false`, hoặc đang hiển thị `success` (refresh giữ nguyên nội dung) |
+| `Result.success(data)` | `success(data)`; truyền `convert:` khi payload chưa phải `T` (không có `convert` thì payload sai kiểu là `StateError`) |
+| `Result.success(null)` | `success(null)` nếu `T` nullable, ngược lại `initial` |
+| `Result.failure(f)` | `error(f)` |
+| `Result.none` / `Result.cancel` | state trước lời gọi, nếu đã emit `loading` — không bao giờ kẹt ở `loading`; ngược lại không emit gì |
+| Thao tác ném exception | `error(ErrorHandler.handleError(e))`, kèm `addError(e)` để `BlocObserver.onError` thấy lỗi |
+
+`onSuccess:` / `onFailure:` chạy sau khi state đã được emit — dành cho việc tiếp theo (bắn event khác, analytics), không dùng để đổi state. Khi handler đã xong — bloc đã đóng, hoặc transformer `restartable()` đã thay handler này trong lúc lời gọi còn chờ — sẽ không emit gì thêm và các callback bị bỏ qua.
+
+> [!NOTE]
+> `emitResult` không bao giờ emit state `const`: trong một helper generic, `const BlocViewState.loading()` là `BlocViewState<Never>`, mà `==` coi là khác với `BlocViewState<T>.loading()` view hay test mong đợi.
+
+**State Freezed tuỳ biến** (`BaseBloc<Event, CheckoutState>`) không có helper — tự bóc, và mọi nhánh phải kết thúc ở một state cuối:
+
+```dart
+Future<void> _onSubmitted(
+  _Submitted event,
+  Emitter<CheckoutState> emit,
 ) async {
-  emit(const BlocViewState.loading());
-  final result = await _useCase(const NoParams());
+  final before = state;
+  emit(const CheckoutState.submitting());
+  final result = await _placeOrder(event.params);
   result.when(
     // `Result.success` mang payload nullable: tự quyết định "không có dữ liệu"
-    // nghĩa là gì với màn hình này thay vì ép nó thành non-null.
-    success: (data) => data == null
-        ? emit(const BlocViewState.initial())
-        : emit(BlocViewState.success(data)),
-    failure: (f) => emit(BlocViewState.error(f)),
-    none: () => emit(const BlocViewState.initial()),
-    cancel: () {},
+    // nghĩa là gì với màn hình này thay vì ép bằng `!`.
+    success: (order) =>
+        emit(order == null ? before : CheckoutState.placed(order)),
+    failure: (f) => emit(CheckoutState.failed(f)),
+    // Không có gì để hiển thị: hoàn tác loading thay vì để spinner quay mãi.
+    none: () => emit(before),
+    cancel: () => emit(before),
   );
 }
 ```
@@ -462,7 +502,8 @@ Controller toàn cục như `AuthProvider` là ngoại lệ: route **không** b�
 
 ## 5. Checklist
 
-- [ ] Đã chọn nhánh có chủ đích, biết rõ BLoC không có `executeOperation`
+- [ ] Đã chọn nhánh có chủ đích, biết rõ BLoC thiếu gì (hook toàn cục, `errorStateBuilder`, phân trang)
+- [ ] Bloc dùng `BlocViewState<T>` chốt use case qua `emitResult`, không tự viết `result.when`
 - [ ] Controller màn hình là `@injectable`, không phải singleton
 - [ ] Controller tạo trong `build()` của **route**, page không bọc lại
 - [ ] Event BLoC là subclass Freezed private, theo `part` / `part of`

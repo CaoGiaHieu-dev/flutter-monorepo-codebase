@@ -82,10 +82,12 @@ Notes that apply to this app specifically:
   environment, and `prod` in a profile or release build. TLS is stricter still: certificate
   validation is bypassed only in a debug build that *declared* `--flavor dev`, so a build with no
   flavor keeps validation on (and logs an ERROR) even when its DI environment is `dev`.
-- **Branding.** `tools/theme_generator/theme_setting.dart` takes `--app admin`, but runs
-  `flutter_native_splash` and `icons_launcher` from this directory, so both must first be added
-  to this app's `dev_dependencies` — and the shared configs at the repository root only target
-  mobile platforms today. This app does not use Firebase.
+- **Branding.** `tools/theme_generator/theme_setting.dart --app admin` is refused. The tool checks
+  every precondition before writing anything, and requires the app to have both `android/` and
+  `ios/` — the shared `flutter_native_splash` / `icons_launcher` configs at the repository root
+  enable both — as well as both packages in its `dev_dependencies`. This app has neither platform
+  directory, so adding the `dev_dependencies` alone does not unblock it; it stays refused until
+  the app gains `android/` and `ios/`. This app does not use Firebase.
 
 ## What checks it today
 

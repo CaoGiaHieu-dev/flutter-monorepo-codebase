@@ -255,14 +255,14 @@ Keep the `.jks` outside the repository, and back it up somewhere durable — los
 
 ## 5. Bundle IDs
 
-`helpers.rb` derives the bundle ID by appending a flavor suffix, and the suffixes match Gradle exactly:
+`helpers.rb` derives the bundle ID by appending a flavor suffix. The staging suffix differs per platform — Gradle uses `.stg`, the Xcode project `.staging` — so the helper takes the platform and matches each native project exactly:
 
 ```ruby
-def get_bundle_id_with_suffix(base_bundle_id, flavor)
+def get_bundle_id_with_suffix(base_bundle_id, flavor, platform)
   return base_bundle_id if flavor.nil? || flavor.empty?
   case flavor
   when 'dev' then "#{base_bundle_id}.dev"
-  when 'staging' then "#{base_bundle_id}.stg"
+  when 'staging' then platform == :ios ? "#{base_bundle_id}.staging" : "#{base_bundle_id}.stg"
   else base_bundle_id
   end
 end
@@ -276,14 +276,16 @@ create("staging") {
 }
 ```
 
-| Flavor | Gradle `applicationIdSuffix` | Fastlane bundle ID | Agree |
-|:---|:---|:---|:---|
-| `dev` | `.dev` | `<base>.dev` | ✅ |
-| `staging` | `.stg` | `<base>.stg` | ✅ |
-| `prod` | *(none)* | `<base>` | ✅ |
+| Flavor | Android: Gradle `applicationIdSuffix` | Android: Fastlane bundle ID | iOS: Xcode `PRODUCT_BUNDLE_IDENTIFIER` | iOS: Fastlane bundle ID | Agree |
+|:---|:---|:---|:---|:---|:---|
+| `dev` | `.dev` | `<base>.dev` | `com.example.codebase.dev` | `<base>.dev` | ✅ |
+| `staging` | `.stg` | `<base>.stg` | `com.example.codebase.staging` | `<base>.staging` | ✅ |
+| `prod` | *(none)* | `<base>` | `com.example.codebase` | `<base>` | ✅ |
+
+`<base>` is `app_bundle_ids.android` / `app_bundle_ids.ios` from `Config.yaml`. The Xcode identifiers are set per build configuration (`Debug-<flavor>`, `Release-<flavor>`, `Profile-<flavor>`) in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj`, and `tools/firebase/firebase_config.dart` registers the same `.staging` iOS ID.
 
 > [!NOTE]
-> These two lists are maintained independently and nothing checks that they agree. If Fastlane computed `.staging` while Gradle produced `.stg`, a staging upload would look up a Play listing that does not match the artifact. If you add a flavor, change **both** sides in the same commit.
+> These lists are maintained independently and nothing checks that they agree. If Fastlane computed `.staging` while Gradle produced `.stg` — or `.stg` while Xcode produced `.staging`, as it did before the helper took the platform — a staging upload would look up a store listing that does not match the artifact. If you add a flavor or rename a suffix, change the helper, Gradle **and** Xcode in the same commit.
 
 ---
 
@@ -352,9 +354,13 @@ sh "#{flutter_cmd} clean"
 sh "#{flutter_cmd} pub get --enforce-lockfile"
 # ...then flutter gen-l10n for every l10n.yaml in the tree
 sh "#{dart_cmd} run build_runner build --workspace"
+# ...then, per package with a lib/ (apps skipped), from the workspace root:
+sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
 ```
 
 `--enforce-lockfile` builds from exactly the committed workspace `pubspec.lock`, and fails when it no longer matches the pubspecs instead of re-resolving.
+
+The barrel pass comes last because a barrel also exports generated files, and the `lib/src/gen/gen.dart` barrels are gitignored — it mirrors step 6 of `tools/workspace_setup/configure.dart`.
 
 
 Because this runs `flutter clean` and a full workspace `build_runner`, it is slow. Use `skip_setup:true` for iterative local builds.

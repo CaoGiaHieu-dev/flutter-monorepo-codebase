@@ -147,7 +147,9 @@ cd modules/dashboard/feature        && flutter test && cd -
 # 3. Catalog version đang đồng bộ
 dart tools/dependency_sync.dart --check
 
-# 4. Không có dependency thiếu khai / thừa
+# 4. Không có dependency thiếu khai (arch_check R5: import mà không có trong
+#    `dependencies:`) và không có dependency thừa (khai mà không import)
+dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
@@ -177,7 +179,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Chạy `pub get` bên trong package con | Xuất hiện `pubspec.lock` lạc chỗ | Xoá chúng đi, chạy `flutter pub get` tại root |
 | Chạy `flutter build apk` từ gốc repo | `Target file "lib\main.dart" not found` | `cd apps/mobile` trước |
 | Hardcode version trong pubspec của package | `dependency_sync --check` báo lỗi | Đưa version về `pubspec_dependencies.yaml`, sync lại |
-| Import package mà không khai báo | Compile được cục bộ (workspace dùng chung `package_config.json`), gãy khi tách package | Khai vào `pubspec.yaml` của package đó; kiểm tra bằng unused checker |
+| Import package mà không khai báo | Compile được cục bộ (workspace dùng chung `package_config.json`), gãy khi tách package | Khai vào `pubspec.yaml` của package đó (`dependencies:`, không phải `dev_dependencies:`); kiểm tra bằng `dart tools/arch_check/check.dart` (R5). Unused checker lo chiều ngược lại — khai mà không import |
 | Đăng ký controller màn hình là singleton | State rò rỉ giữa các lần mở màn hình | Controller của feature phải là `@injectable` (factory) — xem [../guides/05_di.md](../guides/05_di.md) |
 
 ---

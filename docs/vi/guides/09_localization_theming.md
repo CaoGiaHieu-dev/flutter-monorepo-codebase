@@ -171,7 +171,7 @@ Container(
 > [`11_design_system.md`](11_design_system.md).** Tách ra để chỉ có đúng một nơi
 > mô tả cách định nghĩa những giá trị này.
 
-## 8. `ThemeMode.system` bám theo OS ngay lúc chạy
+## 7. `ThemeMode.system` bám theo OS ngay lúc chạy
 
 `ThemeMode.system` phân giải theo độ sáng của OS, mà giá trị này có thể đổi khi app đang chạy. `ThemeProvider` lắng nghe điều đó:
 
@@ -209,7 +209,7 @@ Giá trị đã lưu được đọc qua `IThemeStorage` — xem [`06_storage.md
 
 # Phần C — Responsive UI
 
-## 9. `core_responsive` là bắt buộc
+## 8. `core_responsive` là bắt buộc
 
 Mọi kích thước đều phải scale, và **luôn qua `BuildContext`**:
 
@@ -233,7 +233,7 @@ fontSize: 16
 
 // ✅ Đúng — extension trên BuildContext
 SizedBox(height: context.h(24))
-padding: EdgeInsets.all(context.r(16))
+padding: EdgeInsets.all(context.w(16))
 fontSize: context.sp(16)
 
 // ✅ Tốt hơn — dùng token
@@ -251,7 +251,7 @@ Những giá trị **không phải** kích thước vật lý thì được mi�
 
 Mặc định không gì được scale vượt cỡ thiết kế: cửa sổ tablet hay desktop vẽ thiết kế 1:1, và chỗ dư được dùng cho layout, chọn theo lớp kích thước cửa sổ. Chính sách scale và các widget thích ứng nằm ở [`11_design_system.md`](11_design_system.md) §6–§7.
 
-## 10. Widget scale hằng số của chính nó, không scale tham số
+## 9. Widget scale hằng số của chính nó, không scale tham số
 
 > [!CAUTION]
 > Widget dùng lại trong `core_ui_kit` **không được scale tham số nó nhận vào**. Bên gọi scale trước khi truyền, nên giá trị đến nơi đã ở đơn vị pixel thiết bị và phải được dùng nguyên vẹn; scale thêm lần nữa là scale hai lần, và người truyền token thì **không thể** ghi đè được nữa. Hằng số **của chính** widget thì ngược lại: nó phải scale, nếu không widget không responsive.
@@ -284,7 +284,7 @@ Nơi gọi mới scale:
 AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 ```
 
-## 11. Hằng số của `core_ui_kit`
+## 10. Hằng số của `core_ui_kit`
 
 Các giá trị mặc định không phải kích thước nằm trong `utils/` của chính package:
 
@@ -304,7 +304,7 @@ class SharedUiConstants {
 }
 ```
 
-## 12. Dialog và bottom sheet là class, không phải closure
+## 11. Dialog và bottom sheet là class, không phải closure
 
 > [!CAUTION]
 > Không bao giờ dựng dialog inline bên trong `showDialog()` / `showModalBottomSheet()`. Phải tách ra file và class riêng.
@@ -320,7 +320,7 @@ Builder inline không thể tái sử dụng, không preview được, không te
 
 ---
 
-## 13. Checklist
+## 12. Checklist
 
 - [ ] Không còn chuỗi hiển thị nào bị hard-code
 - [ ] Key mới đã thêm vào **tất cả** file `.arb`, đã chạy `flutter gen-l10n`
@@ -329,7 +329,7 @@ Builder inline không thể tái sử dụng, không preview được, không te
 - [ ] Màu qua `context.colors.*`, typography qua `AppTextStyles.*(context)`
 - [ ] Mọi kích thước đều scale qua context (`context.w/h/sp/r`) hoặc lấy từ token
 - [ ] Token không bị scale hai lần (`AppSpacing.lg(context)`, không phải `context.w(AppSpacing.lg(context))`)
-- [ ] Widget dùng lại nhận giá trị thô, không scale gì bên trong
+- [ ] Widget dùng lại dùng tham số đúng như nhận được (bên gọi đã scale); chỉ scale hằng số của chính nó
 - [ ] Dialog/bottom sheet đã tách ra file riêng đúng hậu tố
 
 ## Xem thêm

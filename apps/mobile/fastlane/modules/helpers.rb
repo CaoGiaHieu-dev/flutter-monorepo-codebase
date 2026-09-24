@@ -138,12 +138,15 @@ end
 
 # --- Helper Functions ---
 
-# Get bundle ID with suffix based on flavor
-def get_bundle_id_with_suffix(base_bundle_id, flavor)
+# Get bundle ID with suffix based on flavor and platform. The suffixes differ
+# per platform and must match the native projects: Android's
+# `applicationIdSuffix` (android/app/build.gradle.kts: `.dev`, `.stg`) and iOS's
+# `PRODUCT_BUNDLE_IDENTIFIER` (ios/Runner.xcodeproj: `.dev`, `.staging`).
+def get_bundle_id_with_suffix(base_bundle_id, flavor, platform)
   return base_bundle_id if flavor.nil? || flavor.empty?
   case flavor
   when 'dev' then "#{base_bundle_id}.dev"
-  when 'staging' then "#{base_bundle_id}.stg"
+  when 'staging' then platform == :ios ? "#{base_bundle_id}.staging" : "#{base_bundle_id}.stg"
   else base_bundle_id
   end
 end
@@ -274,6 +277,29 @@ def install_dependencies
   UI.message("Running build_runner for workspace...")
   Dir.chdir(WORKSPACE_ROOT) do
     sh "#{dart_cmd} run build_runner build --workspace"
+  end
+
+  # Generate barrel files — one package at a time, after gen-l10n and
+  # build_runner, because a barrel also exports the generated files on disk.
+  # The `lib/src/gen/gen.dart` barrels are gitignored, so on a clean runner
+  # nothing compiles until this has run. Mirrors step 6 of
+  # tools/workspace_setup/configure.dart: same skipped directories, and an app
+  # (a dir with `app_manifest.yaml`) is skipped — it is a composition root, and
+  # its `injection.dart` is composer's output, compared byte-for-byte.
+  UI.message("Generating barrel files per package...")
+  skipped_dirs = %w[build .dart_tool ios android macos windows linux web node_modules]
+  Dir.chdir(WORKSPACE_ROOT) do
+    # Relative paths, as configure.dart passes them.
+    pubspecs = Dir.glob(File.join("**", "pubspec.yaml"))
+                  .reject { |f| f.split("/").any? { |s| skipped_dirs.include?(s) } }
+                  .sort
+    pubspecs.each do |pubspec|
+      pkg_dir = File.dirname(pubspec)
+      lib_dir = File.join(pkg_dir, "lib")
+      next unless Dir.exist?(lib_dir)
+      next if File.exist?(File.join(pkg_dir, "app_manifest.yaml"))
+      sh "#{dart_cmd} tools/barrel_generator/generate.dart #{lib_dir.shellescape}"
+    end
   end
 end
 
@@ -744,7 +770,7 @@ def run_build(platform:, options:)
   # --- 3. Determine Bundle ID ---
   base_bundle_id = CONFIG.dig('app_bundle_ids', platform.to_s)
   UI.user_error!("'app_bundle_ids' for platform '#{platform}' not set in #{CONFIG_FILE}.") unless base_bundle_id
-  bundle_id = get_bundle_id_with_suffix(base_bundle_id, flavor)
+  bundle_id = get_bundle_id_with_suffix(base_bundle_id, flavor, platform)
 
   # --- 4. Determine Build Number ---
   build_number = determine_build_number(

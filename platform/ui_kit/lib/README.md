@@ -19,6 +19,7 @@ lib/
 ├── media/             # Cached network image
 ├── layout/            # KeepAlive, refresh, text scale helpers
 ├── dialogs/           # AppDialog, overlays, toast, bottom sheets
+├── utils/             # SharedUiConstants — the kit's own constants
 ├── di/                # Micro-package DI module
 └── core_ui_kit.dart
 ```
@@ -48,5 +49,5 @@ AppOverlay.showToast(content: 'Saved');
 
 - Callers apply `core_responsive` (`context.w` / `context.h` / `context.sp` / `context.r`) **before** passing sizes into shared widgets.
 - Shared atomic widgets must stay UI-agnostic — do not scale constructor params internally.
-- Prefer `context.colorScheme` / `AppTextStyles` from `core_base_ui` for theming.
+- Take brand colours from `context.colors.*` (the `ThemeSystemExtension` palette) and text styles from `AppTextStyles`, both from `core_base_ui`. Avoid `context.colorScheme`: `ThemeProvider` wires only `primary` and `surface` of Material's `ColorScheme` to the palette — see `docs/en/guides/11_design_system.md` §2.
 - Feature-specific copy must use the owning feature's l10n; shared widgets that need strings should take them as parameters or use `core_base_ui` global l10n.

@@ -47,7 +47,7 @@ flutter-monorepo-codebase/
 │   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
 │   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
-│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
+│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
 │   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
 │   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── tools/                  # CLI viết bằng Dart (generator, checker, sync)
@@ -116,7 +116,7 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 | `feature_home` | `modules/home/feature` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination` |
 | `feature_settings` | `modules/settings/feature` | Tab Settings, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Luồng onboarding, hiện thực `IAppEntryLocation` |
-| `feature_dashboard` | `modules/dashboard/feature` | **Chỉ là khung vỏ** — `Scaffold` + bottom navigation bar. Dựng tab từ `getAllOrEmpty<INavDestinationModule>()`; không sở hữu trang tab nào. |
+| `feature_dashboard` | `modules/dashboard/feature` | **Chỉ là khung vỏ** — `Scaffold` + điều hướng chính: bottom bar khi cửa sổ `compact`, `NavigationRail` từ `medium` trở lên (dạng mở rộng từ `large`). Dựng các destination từ `getAllOrEmpty<INavDestinationModule>()`; không sở hữu trang tab nào. |
 | `feature_splash` | `modules/splash/feature` | Trang splash do `MainScope` hiển thị trước khi router tồn tại |
 
 > [!NOTE]
@@ -175,7 +175,7 @@ Kiểm tra bất cứ lúc nào:
 
 ```bash
 grep -rl "package:feature_" platform/*/lib    # phải không in ra gì
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/arch_check/check.dart              # R1: không có cạnh platform/* → feature_/data_/domain_ nào ngoài ba cạnh trên
 ```
 
 ---

@@ -255,14 +255,14 @@ Giữ file `.jks` **ngoài** repo, và sao lưu ở nơi bền vững — mất 
 
 ## 5. Bundle ID
 
-`helpers.rb` sinh bundle ID bằng cách thêm hậu tố theo flavor, và các hậu tố khớp Gradle chính xác:
+`helpers.rb` sinh bundle ID bằng cách thêm hậu tố theo flavor. Hậu tố staging khác nhau theo nền tảng — Gradle dùng `.stg`, project Xcode dùng `.staging` — nên helper nhận thêm platform và khớp chính xác với từng project native:
 
 ```ruby
-def get_bundle_id_with_suffix(base_bundle_id, flavor)
+def get_bundle_id_with_suffix(base_bundle_id, flavor, platform)
   return base_bundle_id if flavor.nil? || flavor.empty?
   case flavor
   when 'dev' then "#{base_bundle_id}.dev"
-  when 'staging' then "#{base_bundle_id}.stg"
+  when 'staging' then platform == :ios ? "#{base_bundle_id}.staging" : "#{base_bundle_id}.stg"
   else base_bundle_id
   end
 end
@@ -276,14 +276,16 @@ create("staging") {
 }
 ```
 
-| Flavor | `applicationIdSuffix` của Gradle | Bundle ID Fastlane tính | Khớp |
-|:---|:---|:---|:---|
-| `dev` | `.dev` | `<base>.dev` | ✅ |
-| `staging` | `.stg` | `<base>.stg` | ✅ |
-| `prod` | *(không có)* | `<base>` | ✅ |
+| Flavor | Android: `applicationIdSuffix` của Gradle | Android: Bundle ID Fastlane tính | iOS: `PRODUCT_BUNDLE_IDENTIFIER` của Xcode | iOS: Bundle ID Fastlane tính | Khớp |
+|:---|:---|:---|:---|:---|:---|
+| `dev` | `.dev` | `<base>.dev` | `com.example.codebase.dev` | `<base>.dev` | ✅ |
+| `staging` | `.stg` | `<base>.stg` | `com.example.codebase.staging` | `<base>.staging` | ✅ |
+| `prod` | *(không có)* | `<base>` | `com.example.codebase` | `<base>` | ✅ |
+
+`<base>` là `app_bundle_ids.android` / `app_bundle_ids.ios` trong `Config.yaml`. Các identifier của Xcode được đặt theo từng build configuration (`Debug-<flavor>`, `Release-<flavor>`, `Profile-<flavor>`) trong `apps/mobile/ios/Runner.xcodeproj/project.pbxproj`, và `tools/firebase/firebase_config.dart` cũng đăng ký đúng ID iOS `.staging` đó.
 
 > [!NOTE]
-> Hai danh sách này được duy trì độc lập và không có gì kiểm tra xem chúng có khớp nhau hay không. Nếu Fastlane tính ra `.staging` trong khi Gradle sinh `.stg`, một lần upload staging sẽ tra tới một Play listing không khớp artifact. Nếu thêm flavor mới, hãy sửa **cả hai** phía trong cùng một commit.
+> Các danh sách này được duy trì độc lập và không có gì kiểm tra xem chúng có khớp nhau hay không. Nếu Fastlane tính ra `.staging` trong khi Gradle sinh `.stg` — hoặc `.stg` trong khi Xcode sinh `.staging`, như trước khi helper nhận thêm platform — một lần upload staging sẽ tra tới một store listing không khớp artifact. Nếu thêm flavor hay đổi hậu tố, hãy sửa helper, Gradle **và** Xcode trong cùng một commit.
 
 ---
 
@@ -352,9 +354,13 @@ sh "#{flutter_cmd} clean"
 sh "#{flutter_cmd} pub get --enforce-lockfile"
 # ...rồi flutter gen-l10n cho mọi l10n.yaml trong cây thư mục
 sh "#{dart_cmd} run build_runner build --workspace"
+# ...rồi, với mỗi package có lib/ (bỏ qua app), chạy từ gốc workspace:
+sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
 ```
 
 `--enforce-lockfile` build đúng theo `pubspec.lock` của workspace đã commit, và fail khi lockfile không còn khớp các pubspec thay vì resolve lại.
+
+Lượt sinh barrel chạy cuối cùng vì barrel còn export cả các file được sinh ra, và các barrel `lib/src/gen/gen.dart` nằm trong gitignore — nó làm y như bước 6 của `tools/workspace_setup/configure.dart`.
 
 
 Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace nên rất chậm. Dùng `skip_setup:true` khi build đi build lại ở local.

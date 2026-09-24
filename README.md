@@ -129,7 +129,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │   ├── cache/                     # Sample: a package-owned Drift database (domain + data, no UI)
 │   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
 │   ├── settings/feature/          # Sample: consuming another module's contract
-│   ├── dashboard/feature/         # Sample: shell chrome only (bottom-bar host)
+│   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the cold-start location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── platform/                      # Infra team's ground — every module may depend on it
@@ -183,8 +183,8 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ```
 
 > [!NOTE]
-> **Every package owns a `utils/` folder** holding *its own* constants — storage keys, route
-> paths, timeouts. Nothing domain-specific belongs in `core_common`. The single approved
+> **A package's constants live in its own `utils/` folder** — storage keys, route paths,
+> timeouts; a package with no constants needs no `utils/`. Nothing domain-specific belongs in `core_common`. The single approved
 > exception is the design-token set under `core_base_ui/src/styles/`, which stays put because it
 > is the public surface of the design system.
 
@@ -411,7 +411,7 @@ Each Feature Package owns its own routing structure and files:
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list
 - `getItOrNull<DashboardRouteModule>()` → dashboard chrome (optional)
-- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (else first tab / `/`)
+- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (else the first destination's path, else `/_empty_dashboard`)
 - `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
 
 Note the last one: the router depends on a **`core_di` contract**, not on `AuthProvider`. The shell

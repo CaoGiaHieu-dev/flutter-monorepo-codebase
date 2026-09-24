@@ -170,7 +170,7 @@ Container(
 > page: [`11_design_system.md`](11_design_system.md).** It is kept separate so
 > there is exactly one place describing how these values are defined.
 
-## 8. `ThemeMode.system` follows the OS live
+## 7. `ThemeMode.system` follows the OS live
 
 `ThemeMode.system` resolves against OS brightness, which can change while the app is running. `ThemeProvider` observes it:
 
@@ -208,7 +208,7 @@ The persisted preference is read through `IThemeStorage` — see [`06_storage.md
 
 # Part C — Responsive UI
 
-## 9. `core_responsive` is mandatory
+## 8. `core_responsive` is mandatory
 
 Every dimension is scaled, and always through a `BuildContext`:
 
@@ -231,7 +231,7 @@ fontSize: 16
 
 // ✅ Right — context-aware extensions
 SizedBox(height: context.h(24))
-padding: EdgeInsets.all(context.r(16))
+padding: EdgeInsets.all(context.w(16))
 fontSize: context.sp(16)
 
 // ✅ Better — use a token
@@ -249,7 +249,7 @@ Values that are *not* physical sizes are exempt: `TextStyle.height` is a line-he
 
 By default nothing scales past the design size: a tablet or desktop window draws the design 1:1, and the room it adds is spent on layout, chosen by window size class. The scale policy and the adaptive widgets are in [`11_design_system.md`](11_design_system.md) §6–§7.
 
-## 10. A widget scales its own constants, never its parameters
+## 9. A widget scales its own constants, never its parameters
 
 > [!CAUTION]
 > A reusable widget in `core_ui_kit` **must not scale the parameters it receives**. The caller scales before passing, so a value arrives already in device pixels and has to be used as-is; scaling it again double-scales, and a caller passing a token cannot override it at all. A widget's **own** constants are the opposite case: it must scale those, or it is not responsive.
@@ -282,7 +282,7 @@ Call sites scale:
 AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 ```
 
-## 11. `core_ui_kit` constants
+## 10. `core_ui_kit` constants
 
 Non-size defaults for shared widgets live in the package's own `utils/`:
 
@@ -302,7 +302,7 @@ class SharedUiConstants {
 }
 ```
 
-## 12. Dialogs and bottom sheets are classes, not closures
+## 11. Dialogs and bottom sheets are classes, not closures
 
 > [!CAUTION]
 > Never build a dialog inline inside `showDialog()` / `showModalBottomSheet()`. Extract it into its own file and class.
@@ -318,7 +318,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 
 ---
 
-## 13. Checklist
+## 12. Checklist
 
 - [ ] No hard-coded user-facing string anywhere
 - [ ] New key added to **all** `.arb` locale files, `flutter gen-l10n` run
@@ -327,7 +327,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`
 - [ ] Every dimension scaled through context (`context.w`/`context.h`/`context.sp`/`context.r`) or taken from a token
 - [ ] Tokens not double-scaled (`AppSpacing.lg(context)`, not `context.w(AppSpacing.lg(context))`)
-- [ ] Reusable widgets accept raw values and scale nothing internally
+- [ ] Reusable widgets use parameters as received (the caller scaled them); they scale only their own constants
 - [ ] Dialogs/bottom sheets extracted into their own suffixed files
 
 ## See also

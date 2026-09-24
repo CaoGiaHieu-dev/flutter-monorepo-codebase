@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:yaml/yaml.dart';
+
 import 'shared/toolchain.dart';
 
 Future<void> main(List<String> arguments) async {
@@ -39,36 +41,15 @@ USAGE
     exit(1);
   }
 
-  // 1. Parse Dependency Catalog
-  final Map<String, String> catalog = {};
-  String currentSection = '';
-
-  for (final line in catalogFile.readAsLinesSync()) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-
-    if (trimmed == 'dependencies:') {
-      currentSection = 'dependencies';
-      continue;
-    } else if (trimmed == 'dev_dependencies:') {
-      currentSection = 'dev_dependencies';
-      continue;
-    }
-
-    if (trimmed.contains(':') && currentSection.isNotEmpty) {
-      final parts = trimmed.split(':');
-      final name = parts[0].trim();
-      var version = parts.sublist(1).join(':').trim();
-      // A trailing `# note` documents the entry; it is not part of the
-      // version. Kept in, it made every package using the dependency report
-      // drift, and a sync would have written the comment into their pubspecs.
-      version = version.replaceFirst(RegExp(r'\s+#.*$'), '');
-      if ((version.startsWith('"') && version.endsWith('"')) ||
-          (version.startsWith("'") && version.endsWith("'"))) {
-        version = version.substring(1, version.length - 1);
-      }
-      catalog[name] = version;
-    }
+  // 1. Parse Dependency Catalog — with a YAML parser, and refused outright
+  // when it is not the shape this tool pins from. It used to be read line by
+  // line: `dependencies: # note` did not match the header, so every runtime
+  // pin was dropped and `--check` (CI Gate 4) passed on a catalog it had not
+  // read; a `git:` block was written into pubspecs as `dio: ""`.
+  final problems = <String>[];
+  final catalog = _loadCatalog(catalogFile, problems);
+  if (problems.isNotEmpty) {
+    _refuse(problems, 'pubspec_dependencies.yaml');
   }
 
   stdout.writeln(
@@ -82,38 +63,42 @@ USAGE
     exit(1);
   }
 
+  final rootDoc = _loadYaml(rootPubspec, 'pubspec.yaml', problems);
   final List<String> packagePaths = [];
-  bool inWorkspaceSection = false;
-
-  for (final line in rootPubspec.readAsLinesSync()) {
-    final trimmed = line.trim();
-    if (trimmed == 'workspace:') {
-      inWorkspaceSection = true;
-      continue;
-    }
-    if (inWorkspaceSection) {
-      if (trimmed.startsWith('-')) {
-        final path = trimmed.substring(1).trim();
-        packagePaths.add(path);
-      } else if (trimmed.isNotEmpty &&
-          !trimmed.startsWith('#') &&
-          !line.startsWith(' ')) {
-        inWorkspaceSection = false;
-      }
+  final workspace = rootDoc is YamlMap ? rootDoc['workspace'] : null;
+  if (workspace is YamlList) {
+    for (final entry in workspace) {
+      if (entry is String) packagePaths.add(entry.trim());
     }
   }
-
   packagePaths.add('.');
 
-  final Map<String, String> workspacePackageDirs = {};
+  // Every pubspec is parsed before anything is compared or written: one that
+  // does not parse is refused by name, and a sync never leaves half the
+  // workspace rewritten around it.
+  final pubspecs = <_Pubspec>[];
   for (final pkgPath in packagePaths) {
     final pubspecFile = File('${rootDir.path}/$pkgPath/pubspec.yaml');
     if (!pubspecFile.existsSync()) continue;
-
-    final packageName = _readPackageName(pubspecFile);
-    if (packageName != null) {
-      workspacePackageDirs[packageName] = pkgPath;
+    final relativePath = pkgPath == '.'
+        ? 'pubspec.yaml'
+        : '$pkgPath/pubspec.yaml';
+    final doc = pkgPath == '.'
+        ? rootDoc
+        : _loadYaml(pubspecFile, relativePath, problems);
+    if (doc == null) continue; // reported
+    if (doc is! YamlMap) {
+      problems.add('$relativePath: expected a map, got ${_describe(doc)}');
+      continue;
     }
+    pubspecs.add(_Pubspec(pkgPath, pubspecFile, relativePath, doc));
+  }
+  if (problems.isNotEmpty) _refuse(problems, 'a workspace pubspec');
+
+  final Map<String, String> workspacePackageDirs = {};
+  for (final pubspec in pubspecs) {
+    final name = pubspec.doc['name'];
+    if (name is String) workspacePackageDirs[name] = pubspec.pkgPath;
   }
 
   stdout.writeln(
@@ -127,168 +112,98 @@ USAGE
   int totalMismatches = 0;
   int totalRepairedPaths = 0;
 
-  for (final pkgPath in packagePaths) {
-    final pubspecFile = File('${rootDir.path}/$pkgPath/pubspec.yaml');
-    if (!pubspecFile.existsSync()) continue;
-
-    final String relativePath = pkgPath == '.'
+  for (final pubspec in pubspecs) {
+    final relativePath = pubspec.pkgPath == '.'
         ? 'Root (pubspec.yaml)'
-        : '$pkgPath/pubspec.yaml';
-    final lines = pubspecFile.readAsLinesSync();
-    final List<String> newLines = [];
-    bool fileModified = false;
-    String activeSection = '';
-    String? pendingBlockDepName;
-    const int dependencyIndent = 2;
+        : pubspec.relativePath;
+    final source = pubspec.file.readAsStringSync();
+    final edits = <_Edit>[];
 
-    for (final line in lines) {
-      final trimmed = line.trim();
-      final indent = line.length - line.trimLeft().length;
+    // The YAML tree says *what* to change; the edit itself replaces only the
+    // characters of that one value, so comments, quoting elsewhere, key
+    // order and line endings stay exactly as they were.
+    for (final section in const ['dependencies', 'dev_dependencies']) {
+      final deps = pubspec.doc.nodes[section];
+      if (deps is! YamlMap) continue;
 
-      if (trimmed == 'dependencies:') {
-        activeSection = 'dependencies';
-        pendingBlockDepName = null;
-        newLines.add(line);
-        continue;
-      } else if (trimmed == 'dev_dependencies:') {
-        activeSection = 'dev_dependencies';
-        pendingBlockDepName = null;
-        newLines.add(line);
-        continue;
-      } else if (trimmed.isNotEmpty &&
-          indent == 0 &&
-          !trimmed.startsWith('#')) {
-        activeSection = '';
-        pendingBlockDepName = null;
-      }
+      for (final entry in deps.nodes.entries) {
+        final key = entry.key as YamlNode;
+        final depName = key is YamlScalar ? key.value : null;
+        if (depName is! String) continue;
+        final value = entry.value;
+        // An alias (`*anchor`) points at a node written elsewhere; editing
+        // it would edit the anchor. Nothing in the workspace uses one.
+        if (value.span.start.offset < key.span.end.offset) continue;
 
-      if (activeSection.isNotEmpty && trimmed.contains(':') && indent > 0) {
-        final parts = trimmed.split(':');
-        final depName = parts[0].trim();
-        final rawValue = parts.sublist(1).join(':');
-        // A trailing `# comment` is not part of the version: comparing it
-        // would report drift on every commented line, and a rewrite would
-        // drop the comment.
-        final comment = RegExp(r'\s+#.*$').firstMatch(rawValue);
-        final trailingComment = comment == null ? '' : comment.group(0)!;
-        final currentVersion =
-            (comment == null ? rawValue : rawValue.substring(0, comment.start))
-                .trim();
-
-        // Block-style dependency parent (e.g. `core_common:` + nested `path:`)
-        // Empty version on a workspace package — wait for nested `path:`.
-        if (indent == dependencyIndent && currentVersion.isEmpty) {
-          if (workspacePackageDirs.containsKey(depName)) {
-            pendingBlockDepName = depName;
-            newLines.add(line);
-            continue;
-          }
-
-          // Empty catalog dep (e.g. `dynamic_logger:`) — fill from pubspec_dependencies.yaml.
-          if (catalog.containsKey(depName)) {
-            final targetVersion = catalog[depName]!;
+        // Workspace package: only its local `path:` is ours to repair.
+        if (workspacePackageDirs.containsKey(depName)) {
+          final pathNode = value is YamlMap ? value.nodes['path'] : null;
+          if (pathNode is! YamlScalar) continue;
+          final expectedPath = _relativePathBetween(
+            pubspec.pkgPath,
+            workspacePackageDirs[depName]!,
+          );
+          final cleanedPath = '${pathNode.value}';
+          if (cleanedPath == expectedPath) continue;
+          if (isCheckMode) {
             totalMismatches++;
-            if (isCheckMode) {
-              stderr.writeln(
-                '⚠️  Missing version: [$relativePath] $depName (expected "$targetVersion")',
-              );
-              newLines.add(line);
-            } else {
-              stdout.writeln(
-                '⚡ Syncing missing: [$relativePath] -> $depName: "$targetVersion"',
-              );
-              final leadingIndent = ' ' * indent;
-              newLines.add(
-                '$leadingIndent$depName: "$targetVersion"$trailingComment',
-              );
-              fileModified = true;
-            }
-            continue;
+            stderr.writeln(
+              '⚠️  Broken local path: [$relativePath] $depName -> path: "$cleanedPath" (expected "$expectedPath")',
+            );
+          } else {
+            stdout.writeln(
+              '🔧 Repairing local path: [$relativePath] $depName -> path: "$expectedPath"',
+            );
+            edits.add(_Edit.replace(pathNode, expectedPath));
+            totalRepairedPaths++;
           }
-
-          pendingBlockDepName = depName;
-          newLines.add(line);
           continue;
         }
 
-        // Nested dependency source keys (e.g. `path: ../common` under `core_common:`)
-        if (indent > dependencyIndent) {
-          if (depName == 'path' &&
-              pendingBlockDepName != null &&
-              workspacePackageDirs.containsKey(pendingBlockDepName)) {
-            final targetDir = workspacePackageDirs[pendingBlockDepName]!;
-            final expectedPath = _relativePathBetween(pkgPath, targetDir);
-            final cleanedPath = _stripQuotes(currentVersion);
+        final targetVersion = catalog[depName];
+        // A map value is a `path:` / `git:` / `sdk:` / `hosted:` source —
+        // not a version, and not the catalog's to overwrite.
+        if (targetVersion == null || value is! YamlScalar) continue;
 
-            if (_looksLikePubVersion(cleanedPath) ||
-                cleanedPath != expectedPath) {
-              if (isCheckMode) {
-                totalMismatches++;
-                stderr.writeln(
-                  '⚠️  Broken local path: [$relativePath] $pendingBlockDepName -> path: "$cleanedPath" (expected "$expectedPath")',
-                );
-                newLines.add(line);
-              } else {
-                stdout.writeln(
-                  '🔧 Repairing local path: [$relativePath] $pendingBlockDepName -> path: "$expectedPath"',
-                );
-                final leadingIndent = ' ' * indent;
-                newLines.add(
-                  '$leadingIndent$depName: $expectedPath$trailingComment',
-                );
-                fileModified = true;
-                totalRepairedPaths++;
-              }
-              continue;
-            }
+        if (value.value == null) {
+          // Empty catalog dep (e.g. `dynamic_logger:`) — fill it in.
+          totalMismatches++;
+          if (isCheckMode) {
+            stderr.writeln(
+              '⚠️  Missing version: [$relativePath] $depName (expected "$targetVersion")',
+            );
+          } else {
+            stdout.writeln(
+              '⚡ Syncing missing: [$relativePath] -> $depName: "$targetVersion"',
+            );
+            edits.add(_Edit.fillEmpty(source, key, targetVersion));
           }
-
-          newLines.add(line);
           continue;
         }
 
-        if (indent == dependencyIndent) {
-          pendingBlockDepName = null;
+        final currentVersion = '${value.value}';
+        if (currentVersion == targetVersion) continue;
+        totalMismatches++;
+        if (isCheckMode) {
+          stderr.writeln(
+            '⚠️  Mismatch: [$relativePath] uses $depName: "$currentVersion" instead of "$targetVersion"',
+          );
+        } else {
+          stdout.writeln(
+            '⚡ Syncing: [$relativePath] -> $depName from "$currentVersion" to "$targetVersion"',
+          );
+          edits.add(_Edit.replace(value, '"$targetVersion"'));
         }
-
-        // Inline dependency version sync from catalog
-        if (indent == dependencyIndent &&
-            catalog.containsKey(depName) &&
-            !currentVersion.contains('path:') &&
-            !currentVersion.contains('sdk:') &&
-            !workspacePackageDirs.containsKey(depName)) {
-          final targetVersion = catalog[depName]!;
-          final cleanedCurrentVersion = _stripQuotes(currentVersion);
-
-          if (cleanedCurrentVersion != targetVersion) {
-            totalMismatches++;
-            if (isCheckMode) {
-              stderr.writeln(
-                '⚠️  Mismatch: [$relativePath] uses $depName: "$cleanedCurrentVersion" instead of "$targetVersion"',
-              );
-              newLines.add(line);
-            } else {
-              stdout.writeln(
-                '⚡ Syncing: [$relativePath] -> $depName from "$cleanedCurrentVersion" to "$targetVersion"',
-              );
-              final leadingIndent = ' ' * indent;
-              newLines.add(
-                '$leadingIndent$depName: "$targetVersion"$trailingComment',
-              );
-              fileModified = true;
-            }
-            continue;
-          }
-        }
-      } else if (indent <= dependencyIndent) {
-        pendingBlockDepName = null;
       }
-
-      newLines.add(line);
     }
 
-    if (fileModified && !isCheckMode) {
-      pubspecFile.writeAsStringSync('${newLines.join('\n')}\n');
+    if (edits.isNotEmpty && !isCheckMode) {
+      edits.sort((a, b) => b.start.compareTo(a.start));
+      var updated = source;
+      for (final edit in edits) {
+        updated = updated.replaceRange(edit.start, edit.end, edit.text);
+      }
+      pubspec.file.writeAsStringSync(updated);
       totalSynced++;
     }
   }
@@ -351,31 +266,149 @@ USAGE
   );
 }
 
-String? _readPackageName(File pubspecFile) {
-  for (final line in pubspecFile.readAsLinesSync()) {
-    final trimmed = line.trim();
-    if (trimmed.startsWith('name:')) {
-      return trimmed.substring('name:'.length).trim();
-    }
-    if (trimmed.isNotEmpty &&
-        !trimmed.startsWith('#') &&
-        !line.startsWith(' ')) {
-      break;
+/// Top-level sections the catalog may hold. Anything else is refused: a
+/// typo such as `dev_dependancies:` would otherwise drop every pin under it.
+const _catalogSections = ['dependencies', 'dev_dependencies'];
+
+final _packageName = RegExp(r'^[a-z_][a-z0-9_]*$');
+
+/// The catalog as package -> version constraint, both sections merged.
+///
+/// Adds one `pubspec_dependencies.yaml: <key>: <problem>` line to [problems]
+/// per defect, and returns what it could read (the caller refuses on any).
+Map<String, String> _loadCatalog(File file, List<String> problems) {
+  const name = 'pubspec_dependencies.yaml';
+  final catalog = <String, String>{};
+  final owner = <String, String>{};
+  final doc = _loadYaml(file, name, problems);
+  if (problems.isNotEmpty) return catalog;
+  if (doc is! YamlMap) {
+    problems.add(
+      '$name: (root): expected a map with `dependencies:` and '
+      '`dev_dependencies:`, got '
+      '${doc == null ? 'an empty file' : _describe(doc)}',
+    );
+    return catalog;
+  }
+
+  for (final key in doc.keys) {
+    if (!_catalogSections.contains(key)) {
+      problems.add(
+        '$name: $key: unknown section — expected '
+        '${_catalogSections.join(' or ')}',
+      );
     }
   }
-  return null;
-}
 
-String _stripQuotes(String value) {
-  if ((value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))) {
-    return value.substring(1, value.length - 1);
+  for (final section in _catalogSections) {
+    final deps = doc[section];
+    if (deps == null) continue; // absent, or a header with nothing under it
+    if (deps is! YamlMap) {
+      problems.add(
+        '$name: $section: expected a map of package: "version", got '
+        '${_describe(deps)}',
+      );
+      continue;
+    }
+    for (final entry in deps.entries) {
+      final pkg = entry.key;
+      final version = entry.value;
+      final where = '$name: $section.$pkg';
+      if (pkg is! String || !_packageName.hasMatch(pkg)) {
+        problems.add('$where: not a package name');
+        continue;
+      }
+      if (version is! String || version.trim().isEmpty) {
+        problems.add(
+          '$where: expected a version constraint string (e.g. "^1.2.3"), got '
+          '${_describe(version)}${switch (version) {
+            num() => ' — quote it',
+            YamlMap() => ' — the catalog pins versions only; a git/path/hosted source belongs in the package\'s own pubspec',
+            _ => '',
+          }}',
+        );
+        continue;
+      }
+      final previous = owner[pkg];
+      if (previous != null) {
+        problems.add('$where: already pinned under `$previous`');
+        continue;
+      }
+      owner[pkg] = section;
+      catalog[pkg] = version.trim();
+    }
   }
-  return value;
+  return catalog;
 }
 
-bool _looksLikePubVersion(String value) {
-  return RegExp(r'^[\^~<>=]*\d').hasMatch(value);
+/// Parses [file]; on invalid YAML adds `<name>:<line>: not valid YAML — …`
+/// to [problems] and returns null.
+Object? _loadYaml(File file, String name, List<String> problems) {
+  try {
+    return loadYaml(file.readAsStringSync(), sourceUrl: file.uri);
+  } on YamlException catch (e) {
+    final line = e.span == null ? '' : ':${e.span!.start.line + 1}';
+    problems.add(
+      '$name$line: not valid YAML — '
+      '${e.message.replaceFirst(RegExp(r'\.+$'), '')}',
+    );
+    return null;
+  }
+}
+
+/// Prints [problems] and exits 1, before anything has been written.
+Never _refuse(List<String> problems, String what) {
+  for (final problem in problems) {
+    stderr.writeln('❌ $problem');
+  }
+  stderr.writeln(
+    '❌ Refusing to sync: fix $what first. Nothing was checked or written.',
+  );
+  exit(1);
+}
+
+/// `a string (`x`)`, `a map`, `nothing` — for "expected X, got Y".
+String _describe(Object? value) => switch (value) {
+  null => 'nothing',
+  String() => 'a string (`$value`)',
+  bool() => 'a boolean (`$value`)',
+  num() => 'a number (`$value`)',
+  List() => 'a list',
+  Map() => 'a map',
+  _ => 'a ${value.runtimeType}',
+};
+
+/// A workspace pubspec, parsed.
+class _Pubspec {
+  _Pubspec(this.pkgPath, this.file, this.relativePath, this.doc);
+
+  final String pkgPath;
+  final File file;
+  final String relativePath;
+  final YamlMap doc;
+}
+
+/// A replacement of `source[start, end)` with [text].
+class _Edit {
+  _Edit(this.start, this.end, this.text);
+
+  /// Replaces exactly the characters of one scalar (quotes included).
+  _Edit.replace(YamlNode node, String text)
+    : this(node.span.start.offset, node.span.end.offset, text);
+
+  /// Gives `name:` (no value) a version: the `:` and the blanks after it
+  /// become `: "<version>"`, and a trailing `# comment` stays.
+  factory _Edit.fillEmpty(String source, YamlNode key, String version) {
+    final start = key.span.end.offset;
+    final colon = RegExp(r'[ \t]*:[ \t]*').matchAsPrefix(source, start);
+    final end = colon?.end ?? start;
+    final commentFollows = end < source.length && source[end] == '#';
+    return _Edit(start, end, ': "$version"${commentFollows ? ' ' : ''}');
+  }
+
+  final int start;
+  final int end;
+  final String text;
 }
 
 String _relativePathBetween(String fromDir, String toDir) {

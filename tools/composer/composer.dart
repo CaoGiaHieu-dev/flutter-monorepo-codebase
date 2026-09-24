@@ -80,15 +80,18 @@ void main(List<String> args) {
     _run(command, root, appFilter, strict);
   } on YamlException catch (e) {
     // A pubspec or manifest that is not valid YAML — a duplicate key is the
-    // usual one. Pub rejects it too, so nothing resolves until it is fixed.
-    final where = e.span == null
-        ? ''
-        : '${_relativeSource(e.span!.sourceUrl, root)}:'
-              '${e.span!.start.line + 1}: ';
+    // usual one. A pubspec, pub rejects too, so nothing resolves until it is
+    // fixed; a manifest only composer reads, so that claim is left off.
+    final source = e.span == null
+        ? null
+        : _relativeSource(e.span!.sourceUrl, root);
+    final where = source == null ? '' : '$source:${e.span!.start.line + 1}: ';
+    final isPubspec =
+        source == null || p.posix.basename(source) == 'pubspec.yaml';
     OutputFormatter.printError(
-      'Refusing to compose: ${where}not valid YAML — ${_trimDot(e.message)}. Pub '
-      'rejects this file as well, so nothing in the workspace resolves until '
-      'it is fixed.',
+      'Refusing to compose: ${where}not valid YAML — ${_trimDot(e.message)}.'
+      '${isPubspec ? ' Pub rejects this file as well, so nothing in the '
+                'workspace resolves until it is fixed.' : ' Nothing was written.'}',
     );
     exit(1);
   }
@@ -243,18 +246,63 @@ Set<String> _closure(Iterable<String> seeds, Map<String, String> packages) {
   return out;
 }
 
-class AppManifest {
-  AppManifest(this.id, this.dir, this.doc);
+/// One `di_groups` entry of a manifest, validated.
+class DiGroup {
+  const DiGroup(this.name, this.phase, this.packages, this.fromModules);
 
-  final String id;
-  final String dir;
-  final YamlMap doc;
+  final String name;
 
-  String get kind => (doc['app'] as YamlMap)['kind'] as String? ?? 'flutter';
+  /// `before` or `after` — nothing else ([_parseManifest] refuses it).
+  final String phase;
+  final List<String> packages;
+
+  /// The module layer this group collects, if any.
+  final String? fromModules;
 }
 
+/// One `modules` entry of a manifest, validated.
+class ModuleRef {
+  const ModuleRef(this.id, this.layers);
+
+  final String id;
+  final List<String> layers;
+}
+
+/// An `app_manifest.yaml`, read into typed fields by [_parseManifest].
+///
+/// Nothing downstream reads the raw YAML: every shape the generators rely on
+/// is checked once, up front, so a malformed manifest is a named refusal
+/// rather than a cast error — or, worse, a clean exit with modules dropped.
+class AppManifest {
+  AppManifest({
+    required this.id,
+    required this.kind,
+    required this.dir,
+    required this.groups,
+    required this.modules,
+    required this.extraDependencies,
+  });
+
+  final String id;
+  final String kind;
+  final String dir;
+  final List<DiGroup> groups;
+  final List<ModuleRef> modules;
+  final List<String> extraDependencies;
+}
+
+/// Every `app_manifest.yaml` under [root], validated, sorted by id.
+///
+/// Refuses — exit 1, every problem named as `<file>: <key>: <problem>` — when
+/// any manifest is malformed or two share an app id. Runs before any command,
+/// so nothing is listed or written from a manifest that does not say what it
+/// was meant to.
 List<AppManifest> _discoverApps(String root) {
   final out = <AppManifest>[];
+  final problems = <String>[];
+  final idOwner = <String, String>{};
+  final paths = <String>[];
+
   void walk(Directory dir) {
     for (final e in dir.listSync(followLinks: false)) {
       final name = p.posix.basename(e.path.replaceAll(r'\', '/'));
@@ -263,22 +311,371 @@ List<AppManifest> _discoverApps(String root) {
         if (skip.contains(name)) continue;
         walk(e);
       } else if (e is File && name == 'app_manifest.yaml') {
-        final doc = _loadYamlFile(e.path) as YamlMap;
-        final id = (doc['app'] as YamlMap)['id'] as String;
-        out.add(
-          AppManifest(
-            id,
-            p.posix.dirname(p.posix.normalize(e.path.replaceAll(r'\', '/'))),
-            doc,
-          ),
-        );
+        paths.add(p.posix.normalize(e.path.replaceAll(r'\', '/')));
       }
     }
   }
 
   walk(Directory(root));
+  // Directory listing order is filesystem-dependent; sorting the paths makes
+  // "which manifest is the duplicate" the same answer on every machine.
+  paths.sort();
+  for (final path in paths) {
+    final rel = p.posix.relative(path, from: root);
+    final app = _parseManifest(
+      _loadYamlFile(path),
+      rel,
+      p.posix.dirname(path),
+      problems,
+    );
+    if (app == null) continue;
+    final other = idOwner[app.id];
+    if (other != null) {
+      problems.add(
+        '$rel: app.id: `${app.id}` is already the id of $other — `--app` '
+        'and every generated file are keyed by it, so each app needs its own',
+      );
+      continue;
+    }
+    idOwner[app.id] = rel;
+    out.add(app);
+  }
+
+  if (problems.isNotEmpty) {
+    for (final problem in problems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to compose: ${problems.length} problem(s) in '
+      'app_manifest.yaml. Nothing was written.',
+    );
+    exit(1);
+  }
+
   out.sort((a, b) => a.id.compareTo(b.id));
   return out;
+}
+
+const _topLevelKeys = {'app', 'di_groups', 'modules', 'extra_dependencies'};
+const _appKeys = {'id', 'kind', 'entrypoint'};
+const _groupKeys = {'name', 'phase', 'packages', 'from_modules'};
+const _moduleKeys = {'id', 'layers'};
+const _phases = ['before', 'after'];
+const _layers = ['domain', 'data', 'feature'];
+
+/// A Dart package name — what a module id and a package entry must be.
+final _packageName = RegExp(r'^[a-z_][a-z0-9_]*$');
+
+/// A group name becomes `_<name>Modules` in `injection.dart`.
+final _identifier = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
+/// `a string (`x`)`, `a list`, `nothing` — for "expected X, got Y".
+String _describe(Object? value) => switch (value) {
+  null => 'nothing',
+  String() => 'a string (`$value`)',
+  bool() => 'a boolean (`$value`)',
+  num() => 'a number (`$value`)',
+  YamlList() || List() => 'a list',
+  YamlMap() || Map() => 'a map',
+  _ => 'a ${value.runtimeType}',
+};
+
+/// Reads [doc] (manifest [rel], in [dir]) into an [AppManifest], adding one
+/// `<rel>: <key>: <problem>` line to [problems] per defect. Returns null when
+/// the manifest has any.
+///
+/// Each check here closes a way a manifest used to be accepted and then
+/// mis-generated: a `phase: befor` dropped every core module from
+/// `injection.dart`, `layers: [features]` dropped the module, a duplicate id
+/// composed a package twice (a duplicate pubspec key, which pub rejects), and
+/// the shapes below crashed the tool with a stack trace.
+AppManifest? _parseManifest(
+  Object? doc,
+  String rel,
+  String dir,
+  List<String> problems,
+) {
+  final before = problems.length;
+  void bad(String key, String problem) => problems.add('$rel: $key: $problem');
+
+  if (doc is! YamlMap) {
+    bad(
+      '(root)',
+      'expected a map with `app`, `di_groups` and `modules`, got '
+          '${doc == null ? 'an empty file' : _describe(doc)}',
+    );
+    return null;
+  }
+
+  // An unknown key is refused, not ignored: `module:` for `modules:` would
+  // otherwise compose an app with no modules and exit 0.
+  for (final key in doc.keys) {
+    if (!_topLevelKeys.contains(key)) {
+      bad('$key', 'unknown key — expected one of ${_topLevelKeys.join(', ')}');
+    }
+  }
+
+  /// A required, non-empty string at [map]`[key]`, reported as [path].
+  String? requiredString(YamlMap map, String key, String path) {
+    final value = map[key];
+    if (value is String && value.trim().isNotEmpty) return value;
+    bad(path, 'expected a non-empty string, got ${_describe(value)}');
+    return null;
+  }
+
+  /// An optional list of package names; null (absent or `key:` with nothing
+  /// under it) reads as empty.
+  List<String> packageList(Object? value, String path) {
+    if (value == null) return const [];
+    if (value is! YamlList) {
+      bad(path, 'expected a list of package names, got ${_describe(value)}');
+      return const [];
+    }
+    final out = <String>[];
+    for (var i = 0; i < value.length; i++) {
+      final pkg = value[i];
+      if (pkg is String && _packageName.hasMatch(pkg)) {
+        out.add(pkg);
+      } else {
+        bad('$path[$i]', 'expected a package name, got ${_describe(pkg)}');
+      }
+    }
+    return out;
+  }
+
+  // -- app ------------------------------------------------------------------
+  String? id;
+  var kind = 'flutter';
+  final app = doc['app'];
+  if (app is! YamlMap) {
+    bad('app', 'expected a map with `id`, got ${_describe(app)}');
+  } else {
+    for (final key in app.keys) {
+      if (!_appKeys.contains(key)) {
+        bad('app.$key', 'unknown key — expected one of ${_appKeys.join(', ')}');
+      }
+    }
+    id = requiredString(app, 'id', 'app.id');
+    if (app['kind'] != null) {
+      kind = requiredString(app, 'kind', 'app.kind') ?? kind;
+    }
+    if (app['entrypoint'] != null) {
+      requiredString(app, 'entrypoint', 'app.entrypoint');
+    }
+  }
+
+  // Which group already holds each package: a package composed twice is a
+  // duplicate key in the app's generated `dependencies:`.
+  final packageOwner = <String, String>{};
+  void claim(String pkg, String owner, String path) {
+    final other = packageOwner[pkg];
+    if (other == null) {
+      packageOwner[pkg] = owner;
+    } else {
+      bad(path, '`$pkg` is already composed by $other');
+    }
+  }
+
+  // -- di_groups -------------------------------------------------------------
+  final groups = <DiGroup>[];
+  final collected = <String, String>{}; // layer -> group that collects it
+  final rawGroups = doc['di_groups'];
+  final problemsBeforeGroups = problems.length;
+  if (rawGroups is! YamlList || rawGroups.isEmpty) {
+    bad(
+      'di_groups',
+      'expected a non-empty list of groups (`- name: <n>`, `phase: before|'
+          'after`), got ${rawGroups is YamlList ? 'an empty list' : _describe(rawGroups)}',
+    );
+  } else {
+    final names = <String>{};
+    var sawAfter = false;
+    for (var i = 0; i < rawGroups.length; i++) {
+      final path = 'di_groups[$i]';
+      final g = rawGroups[i];
+      if (g is! YamlMap) {
+        bad(
+          path,
+          'expected a map with `name` and `phase`, got ${_describe(g)}',
+        );
+        continue;
+      }
+      for (final key in g.keys) {
+        if (!_groupKeys.contains(key)) {
+          bad(
+            '$path.$key',
+            'unknown key — expected one of ${_groupKeys.join(', ')}',
+          );
+        }
+      }
+
+      final name = requiredString(g, 'name', '$path.name');
+      if (name != null) {
+        if (!_identifier.hasMatch(name)) {
+          bad(
+            '$path.name',
+            '`$name` is not a Dart identifier — it becomes `_${name}Modules` '
+                'in injection.dart',
+          );
+        } else if (!names.add(name)) {
+          bad('$path.name', '`$name` names another group already');
+        }
+      }
+
+      // Validated because the generator filters on it: any other value put
+      // the group in neither `externalPackageModulesBefore` nor `...After`.
+      final phase = g['phase'];
+      if (phase is! String || !_phases.contains(phase)) {
+        bad(
+          '$path.phase',
+          'expected `before` or `after`, got ${_describe(phase)}',
+        );
+      } else if (phase == 'after') {
+        sawAfter = true;
+      } else if (sawAfter) {
+        bad(
+          '$path.phase',
+          '`before` group listed after an `after` group — injectable runs '
+              'every `before` group first, so this order is not the boot order',
+        );
+      }
+
+      final label = '`${name ?? path}`';
+      final pkgs = packageList(g['packages'], '$path.packages');
+      for (var j = 0; j < pkgs.length; j++) {
+        claim(pkgs[j], 'group $label', '$path.packages[$j]');
+      }
+
+      String? from;
+      final rawFrom = g['from_modules'];
+      if (rawFrom != null) {
+        if (rawFrom is! String || !_layers.contains(rawFrom)) {
+          bad(
+            '$path.from_modules',
+            'expected one of ${_layers.join(', ')}, got ${_describe(rawFrom)}',
+          );
+        } else if (collected.containsKey(rawFrom)) {
+          bad(
+            '$path.from_modules',
+            '`$rawFrom` is already collected by group ${collected[rawFrom]}',
+          );
+        } else {
+          from = rawFrom;
+          collected[rawFrom] = label;
+        }
+      }
+
+      final rawPkgs = g['packages'];
+      if (rawFrom == null &&
+          (rawPkgs == null || (rawPkgs is YamlList && rawPkgs.isEmpty))) {
+        bad(
+          path,
+          'names no `packages` and no `from_modules`, so it composes nothing',
+        );
+      }
+
+      if (name != null && phase is String) {
+        groups.add(DiGroup(name, phase, pkgs, from));
+      }
+    }
+  }
+
+  // A layer no group collects is checked only when `di_groups` read cleanly;
+  // otherwise every module would repeat the group's own problem.
+  final groupsOk = problems.length == problemsBeforeGroups;
+
+  // -- modules ---------------------------------------------------------------
+  final modules = <ModuleRef>[];
+  final rawModules = doc['modules'];
+  if (rawModules != null && rawModules is! YamlList) {
+    bad(
+      'modules',
+      'expected a list of `{ id: <name>, layers: [...] }`, got '
+          '${_describe(rawModules)}',
+    );
+  } else if (rawModules is YamlList) {
+    final ids = <String>{};
+    for (var i = 0; i < rawModules.length; i++) {
+      final path = 'modules[$i]';
+      final m = rawModules[i];
+      if (m is! YamlMap) {
+        bad(
+          path,
+          'expected `{ id: <name>, layers: [${_layers.join(', ')}] }`, got '
+          '${_describe(m)}',
+        );
+        continue;
+      }
+      for (final key in m.keys) {
+        if (!_moduleKeys.contains(key)) {
+          bad(
+            '$path.$key',
+            'unknown key — expected one of ${_moduleKeys.join(', ')}',
+          );
+        }
+      }
+
+      final moduleId = requiredString(m, 'id', '$path.id');
+      if (moduleId != null) {
+        if (!_packageName.hasMatch(moduleId)) {
+          bad(
+            '$path.id',
+            '`$moduleId` is not a valid package-name segment (lowercase '
+                'letters, digits, `_`)',
+          );
+        } else if (!ids.add(moduleId)) {
+          bad('$path.id', 'module `$moduleId` is listed more than once');
+        }
+      }
+
+      final rawLayers = m['layers'];
+      final layers = <String>[];
+      if (rawLayers is! YamlList || rawLayers.isEmpty) {
+        bad(
+          '$path.layers',
+          'expected a non-empty list drawn from ${_layers.join(', ')}, got '
+              '${rawLayers is YamlList ? 'an empty list' : _describe(rawLayers)}',
+        );
+      } else {
+        for (var j = 0; j < rawLayers.length; j++) {
+          final layer = rawLayers[j];
+          if (layer is! String || !_layers.contains(layer)) {
+            bad(
+              '$path.layers[$j]',
+              'expected one of ${_layers.join(', ')}, got ${_describe(layer)}',
+            );
+          } else if (layers.contains(layer)) {
+            bad('$path.layers[$j]', '`$layer` is listed more than once');
+          } else if (groupsOk && !collected.containsKey(layer)) {
+            bad(
+              '$path.layers[$j]',
+              '`$layer` is not collected by any di_groups entry — add '
+                  '`from_modules: $layer` to one, or the layer is dropped',
+            );
+          } else {
+            layers.add(layer);
+          }
+        }
+      }
+      if (moduleId != null) modules.add(ModuleRef(moduleId, layers));
+    }
+  }
+
+  // -- extra_dependencies ------------------------------------------------------
+  final extras = packageList(doc['extra_dependencies'], 'extra_dependencies');
+  for (var i = 0; i < extras.length; i++) {
+    claim(extras[i], '`extra_dependencies`', 'extra_dependencies[$i]');
+  }
+
+  if (problems.length != before || id == null) return null;
+  return AppManifest(
+    id: id,
+    kind: kind,
+    dir: dir,
+    groups: groups,
+    modules: modules,
+    extraDependencies: extras,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -314,17 +711,14 @@ Resolved _resolve(
   List<String> warnings,
 ) {
   final r = Resolved();
-  final modules = (app.doc['modules'] as YamlList?) ?? YamlList();
 
   List<String> fromModules(String layer) {
     final out = <String>[];
-    for (final m in modules) {
-      final id = m['id'] as String;
-      final layers = (m['layers'] as YamlList).cast<String>();
-      if (!layers.contains(layer)) continue;
-      final pkg = _modulePackage(packages, id, layer);
+    for (final m in app.modules) {
+      if (!m.layers.contains(layer)) continue;
+      final pkg = _modulePackage(packages, m.id, layer);
       if (pkg == null) {
-        r.missing.add('$id/$layer');
+        r.missing.add('${m.id}/$layer');
         continue;
       }
       out.add(pkg);
@@ -332,29 +726,22 @@ Resolved _resolve(
     return out;
   }
 
-  for (final g in (app.doc['di_groups'] as YamlList)) {
-    final name = g['name'] as String;
-    final phase = g['phase'] as String;
-    final explicit = ((g['packages'] as YamlList?) ?? YamlList())
-        .cast<String>()
-        .where((pkg) {
-          if (packages.containsKey(pkg)) return true;
-          r.missing.add(pkg);
-          return false;
-        })
-        .toList();
-    final derived = g['from_modules'] == null
+  for (final g in app.groups) {
+    final explicit = g.packages.where((pkg) {
+      if (packages.containsKey(pkg)) return true;
+      r.missing.add(pkg);
+      return false;
+    }).toList();
+    final derived = g.fromModules == null
         ? const <String>[]
-        : fromModules(g['from_modules'] as String);
+        : fromModules(g.fromModules!);
     final all = [...explicit, ...derived];
     if (all.isEmpty) continue;
-    r.diGroups.add((name: name, phase: phase, packages: all));
+    r.diGroups.add((name: g.name, phase: g.phase, packages: all));
     r.allPackages.addAll(all);
   }
 
-  for (final pkg
-      in ((app.doc['extra_dependencies'] as YamlList?) ?? YamlList())
-          .cast<String>()) {
+  for (final pkg in app.extraDependencies) {
     if (packages.containsKey(pkg)) {
       r.allPackages.add(pkg);
     } else {
@@ -687,8 +1074,14 @@ void _sync(
     exit(1);
   }
 
+  // Grouped by file: `injection.dart` holds two regions, and writing them one
+  // at a time reported the file — "wrote" or "out of date" — once for each.
+  final byFile = <String, List<_Region>>{};
   for (final region in regions) {
-    _write(region, dryRun, drift, root);
+    (byFile[region.path] ??= []).add(region);
+  }
+  for (final entry in byFile.entries) {
+    _write(entry.key, entry.value, dryRun, drift, root);
   }
 
   for (final w in warnings.toSet()) {
@@ -852,19 +1245,31 @@ String? _regionProblem(_Region region, String root) {
   return null;
 }
 
-void _write(_Region region, bool dryRun, List<String> drift, String root) {
-  final file = File(region.path);
-  final rel = p.posix.relative(region.path, from: root);
+/// Applies every region of the file at [path] in one pass, and writes and
+/// reports the file at most once.
+void _write(
+  String path,
+  List<_Region> regions,
+  bool dryRun,
+  List<String> drift,
+  String root,
+) {
+  final file = File(path);
+  final rel = p.posix.relative(path, from: root);
   final current = file.readAsStringSync();
-  final updated = _replaceManaged(
-    current,
-    region.comment,
-    region.region,
-    region.body,
-  );
-  // [_regionProblem] vetted every region before the first write.
-  if (updated == null) {
-    throw StateError('$rel lost its `${region.region}` markers mid-run');
+  var updated = current;
+  for (final region in regions) {
+    final next = _replaceManaged(
+      updated,
+      region.comment,
+      region.region,
+      region.body,
+    );
+    // [_regionProblem] vetted every region before the first write.
+    if (next == null) {
+      throw StateError('$rel lost its `${region.region}` markers mid-run');
+    }
+    updated = next;
   }
   if (updated == current) return;
   drift.add(rel);

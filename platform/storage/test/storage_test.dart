@@ -21,6 +21,7 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       prefStorage = PrefStorageImpl(preferences);
       await prefStorage.init();
@@ -201,11 +202,156 @@ void main() {
     });
   });
 
+  group('PrefStorageImpl — secure-storage errors never cost preferences', () {
+    const keyId = '_internal_pref_master_key';
+    late Map<String, String> secureStore;
+    late SharedPreferences preferences;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      preferences = await SharedPreferences.getInstance();
+      secureStore = {};
+      FlutterSecureStorage.setMockInitialValues(secureStore);
+    });
+
+    PrefStorageImpl prefOver(FlutterSecureStorage storage) =>
+        PrefStorageImpl.withSecureStorage(preferences, storage);
+
+    /// A healthy first session that stores a preference.
+    Future<void> storeLocale() async {
+      final first = prefOver(const FlutterSecureStorage());
+      await first.init();
+      await first.write('locale', 'vi');
+    }
+
+    test('a transient master-key read failure is retried', () async {
+      await storeLocale();
+      final storage = _FlakyStorage(failuresBeforeSuccess: 2);
+      final pref = prefOver(storage);
+
+      await pref.init();
+
+      expect(storage.readCalls, 3);
+      expect(await pref.read<String>('locale'), 'vi');
+      expect(preferences.containsKey(keyId), isFalse);
+    });
+
+    test(
+      'a persistent failure with stored preferences rethrows and changes '
+      'nothing',
+      () async {
+        await storeLocale();
+        final key = secureStore[keyId];
+        final sealed = preferences.getString('locale');
+
+        final pref = prefOver(_FlakyStorage(failuresBeforeSuccess: 100));
+        await expectLater(pref.init(), throwsA(isA<PlatformException>()));
+
+        expect(secureStore[keyId], key);
+        expect(preferences.getString('locale'), sealed);
+        expect(preferences.containsKey(keyId), isFalse);
+
+        // Once the platform recovers, the preference is still readable.
+        final recovered = prefOver(const FlutterSecureStorage());
+        await recovered.init();
+        expect(await recovered.read<String>('locale'), 'vi');
+      },
+    );
+
+    test(
+      'with nothing stored, an unavailable secure storage falls back to a '
+      'key in SharedPreferences, adopted once it is readable',
+      () async {
+        final offline = prefOver(_FlakyStorage(failuresBeforeSuccess: 100));
+        await offline.init();
+        await offline.write('locale', 'vi');
+        final fallback = preferences.getString(keyId);
+        expect(fallback, isNotNull);
+
+        // Still offline next launch: the same fallback key opens the value.
+        final stillOffline = prefOver(
+          _FlakyStorage(failuresBeforeSuccess: 100),
+        );
+        await stillOffline.init();
+        expect(await stillOffline.read<String>('locale'), 'vi');
+
+        // Back online: the key moves into secure storage, the value survives.
+        final online = prefOver(const FlutterSecureStorage());
+        await online.init();
+        expect(await online.read<String>('locale'), 'vi');
+        expect(secureStore[keyId], fallback);
+        expect(preferences.containsKey(keyId), isFalse);
+      },
+    );
+
+    test(
+      'a stale fallback key that opens nothing gives way to the secure key',
+      () async {
+        await storeLocale();
+        // As an earlier version left it after a transient error.
+        await preferences.setString(
+          keyId,
+          encrypter.Key.fromSecureRandom(32).base64,
+        );
+
+        final pref = prefOver(const FlutterSecureStorage());
+        await pref.init();
+
+        expect(await pref.read<String>('locale'), 'vi');
+        expect(preferences.containsKey(keyId), isFalse);
+      },
+    );
+
+    test(
+      'a stale fallback key is not used while secure storage fails',
+      () async {
+        await storeLocale();
+        final stale = encrypter.Key.fromSecureRandom(32).base64;
+        await preferences.setString(keyId, stale);
+
+        final pref = prefOver(_FlakyStorage(failuresBeforeSuccess: 100));
+        await expectLater(pref.init(), throwsA(isA<PlatformException>()));
+
+        expect(preferences.getString(keyId), stale);
+        expect(preferences.containsKey('locale'), isTrue);
+      },
+    );
+
+    test('a corrupt master key is replaced', () async {
+      secureStore[keyId] = 'not-a-key';
+      final pref = prefOver(const FlutterSecureStorage());
+
+      await pref.init();
+
+      expect(secureStore[keyId], isNot('not-a-key'));
+      await pref.write('locale', 'vi');
+      expect(await pref.read<String>('locale'), 'vi');
+    });
+
+    test(
+      'a new key secure storage refuses to store is kept in SharedPreferences',
+      () async {
+        final storage = _FlakyStorage(failuresBeforeSuccess: 0)
+          ..failWrites = true;
+        final pref = prefOver(storage);
+
+        await pref.init();
+        await pref.write('locale', 'vi');
+
+        expect(preferences.containsKey(keyId), isTrue);
+        final next = prefOver(_FlakyStorage(failuresBeforeSuccess: 0));
+        await next.init();
+        expect(await next.read<String>('locale'), 'vi');
+      },
+    );
+  });
+
   group('StorageValue', () {
     late PrefStorageImpl prefStorage;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       prefStorage = PrefStorageImpl(preferences);
       await prefStorage.init();
@@ -562,6 +708,26 @@ class _FlakyStorage extends FlutterSecureStorage {
   int failuresBeforeSuccess;
   int readCalls = 0;
   int deleteAllCalls = 0;
+
+  /// When set, every write fails as a platform error.
+  bool failWrites = false;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    if (failWrites) {
+      throw PlatformException(code: 'write failed');
+    }
+    return super.write(key: key, value: value);
+  }
 
   @override
   Future<String?> read({

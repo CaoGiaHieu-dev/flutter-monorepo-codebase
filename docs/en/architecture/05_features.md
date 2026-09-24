@@ -312,7 +312,7 @@ All user-facing text is translated; hardcoded strings are forbidden. See [locali
 ## 8. Creating a feature
 
 ```bash
-# type=1 (feature), name, dir, SM: 1=Provider 2=BLoC 3=none, route: 1=stack 2=tab 3=none
+# type=1 (feature), name, prefix (type 5 only — pass ""), SM: 1=Provider 2=BLoC 3=none, route: 1=stack 2=tab 3=none
 dart tools/module_generator/generate.dart 1 profile "" 1 1
 ```
 

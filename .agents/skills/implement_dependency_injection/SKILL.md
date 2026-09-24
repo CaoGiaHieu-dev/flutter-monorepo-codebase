@@ -193,8 +193,10 @@ its own micro-package module, in the `shell` group — early in `after` (after `
 ### Step 3b: Ordering when a module opens a database
 
 A module that opens a database with `@preResolve` runs its collected `IDatabaseMigration`
-steps **during its own initialisation**, so any package contributing a step must be
-registered before it. `data_cache` opens `CacheDatabase` inside `_dataModules`, which means a
+steps **during its own initialisation**, so every step must be registered before the open.
+Inside the owning package, `@Order(1)` on the `@preResolve` open guarantees that (the step keeps
+the default order 0) — copy it onto your own database's open. Across packages it cannot help:
+a contributing package must be registered before the owning one. `data_cache` opens `CacheDatabase` inside `_dataModules`, which means a
 migration contributed by a *feature* would not be seen — features initialise afterwards.
 
 Nothing in the template hits this yet. When it does: move that feature's module ahead of the

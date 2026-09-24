@@ -255,7 +255,7 @@ Every collection point degrades gracefully when nothing is registered:
 | `IFeatureRouteModule` | empty list |
 | `INavDestinationModule` | one placeholder branch at `/_empty_dashboard` rendering `SizedBox.shrink()` |
 | `DashboardRouteModule` | the bare `navigationShell` — destinations without chrome |
-| `IAppEntryLocation` | first dashboard tab path, else `/` |
+| `IAppEntryLocation` | `AppRouter.fallbackLocation`: the first dashboard tab's path (lowest `order`), else the `/_empty_dashboard` placeholder (not `/`) |
 
 Deleting a feature package therefore cannot crash the shell.
 
@@ -283,7 +283,7 @@ WidgetsBinding.instance.endOfFrame.whenComplete(() async {
 
 Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state. With no auth module composed, `_session` is null and the app is treated as signed out.
 
-**Later transitions** arrive through two stream subscriptions opened in `initState` — `IAuthSessionState.sessionChanges` and `.sessionFailures` — and are ignored until `_bootCompleted && _session.hasRestoredSession`. The gate exists so they do not fight the boot redirect over the very first navigation. `build` itself is just `Overlay.wrap(child: widget.child)`.
+**Later transitions** arrive through two stream subscriptions opened in `initState` — `IAuthSessionState.sessionChanges` and `.sessionFailures` — and are gated differently. `_onSessionChanged` (which navigates) is ignored until `_bootCompleted && _session.hasRestoredSession`, so the restore's own emission does not fight the boot redirect over the very first navigation. `_onSessionFailure` (which only shows a toast) checks `_bootCompleted` alone — it never navigates, so it has nothing to fight over. `build` itself is just `Overlay.wrap(child: widget.child)`.
 
 > [!WARNING]
 > `_goToOnboarding()` sets `viewedOnboard.value = true` inside a `finally` block, so the flag is written even when the method returns `false` because a user is already signed in — that is, without the onboarding screen ever being shown. Harmless today, but the flag does not mean quite what its name suggests.

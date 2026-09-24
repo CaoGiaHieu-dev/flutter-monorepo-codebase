@@ -54,9 +54,8 @@ thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra 
 
 1. Tạo cây thư mục và `pubspec.yaml`
 2. Ghi `lib/di/module.dart` với `@InjectableInit.microPackage()`
-3. Đăng ký package vào danh sách `workspace:` ở `pubspec.yaml` gốc
-4. Thêm vào mục `modules:` của mọi `apps/<id>/app_manifest.yaml` — sau đó chạy `dart tools/composer/composer.dart sync` để sinh lại path dependency của app và `injection.dart`
-5. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
+3. Thêm vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — rồi tự chạy `dart tools/composer/composer.dart sync`, lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app. Bạn không phải chạy tay gì cả; nếu module không thuộc về một app nào đó, xoá dòng của nó khỏi manifest của app ấy rồi chạy lại `composer sync`
+4. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
    `build_runner build --workspace`, rồi `dart fix --apply`
 
 **Thủ công — tool in ra ở cuối:**

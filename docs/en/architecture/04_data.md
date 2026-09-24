@@ -38,8 +38,13 @@ modules/<name>/data/
 │       ├── data_sources/
 │       │   ├── remote/              # Retrofit / HTTP
 │       │   └── local/               # storage / database
+│       ├── database/                # optional — this package's own Drift database
+│       │   ├── tables/              #   (data_cache: cache_database.dart, tables/, dao/)
+│       │   └── dao/
 │       ├── models/                  # DTOs with .toEntity()
 │       ├── repositories_impl/
+│       ├── services/                # optional — core_di contract impls that are not repositories
+│       │                            #   (data_auth: AuthSessionGatewayImpl → IAuthSessionGateway)
 │       ├── utils/                   # keys, endpoints — owned by this package
 │       └── src.dart
 └── pubspec.yaml

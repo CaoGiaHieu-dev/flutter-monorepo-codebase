@@ -55,10 +55,12 @@ Một dev thuộc team auth clone monorepo mà không lấy source của team kh
 ```bash
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # chỉ của họ
-dart tools/composer/composer.dart sync --app mobile   # lắp ráp những gì đang có
+dart tools/composer/composer.dart sync              # lắp ráp những gì đang có (mọi app)
 dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barrels
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
+
+Hãy chạy `sync` cho **mọi app** — đừng thu hẹp bằng `--app mobile`. Danh sách `workspace:` ở root luôn được dựng lại từ tất cả app và bỏ đi những gì không có trên đĩa, nhưng `--app mobile` để nguyên `apps/admin/pubspec.yaml`, vẫn khai path dependency tới các module đang thiếu (chẳng hạn `settings`) — và khi đó `flutter pub get` không resolve được workspace.
 
 App chạy. Nó không có màn hình home, không settings, không dashboard — và vẫn boot được, vì mọi lần shell tra cứu một hợp đồng do module sở hữu đều là `getItOrNull` hoặc `getAllOrEmpty` (`arch_check` R8), và không file nào của shell import một module (`arch_check` R10).
 
@@ -87,12 +89,14 @@ Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thi
   modules from the app for everyone.
 
   Files changed:
-    pubspec.yaml
     apps/mobile/pubspec.yaml
     apps/mobile/lib/di/injection.dart
+    apps/admin/pubspec.yaml
+    apps/admin/lib/di/injection.dart
+    pubspec.yaml
 
   Restore them before you commit:
-    git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart
+    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart pubspec.yaml
 ```
 
 Và nếu vẫn lỡ commit, **CI Gate 0 sẽ fail**. `composer verify` sinh lại từ manifest trên một runner có đầy đủ submodule, rồi so với các file đã commit. Một phép lắp ráp thiếu module thì không thể khớp, nên sai lầm dừng lại ở pull request thay vì đi vào bản phát hành.

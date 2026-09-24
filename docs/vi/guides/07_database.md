@@ -208,6 +208,9 @@ Hai điểm cần copy nguyên xi:
 // modules/cache/data/lib/di/module.dart
 @module
 abstract class DataCacheDiModule {
+  /// `@Order(1)`: injectable registers a module's entries in ascending order,
+  /// so this package's own migrations (default order 0) exist before the open.
+  @Order(1)
   @preResolve
   @lazySingleton
   Future<CacheDatabase> cacheDatabase() =>
@@ -232,7 +235,12 @@ abstract class DataCacheDiModule {
 Cái guard `isRegistered` rất quan trọng: `getAll<T>()` **ném lỗi** khi chưa có gì đăng ký cho `T`. Không có guard này, một bản build không có migration nào sẽ crash ngay trong `configureDependencies()`.
 
 > [!WARNING]
-> **Thứ tự đăng ký.** `@preResolve` mở database — tức là chạy migration — ngay trong lúc module này khởi tạo. Một `IDatabaseMigration` được đăng ký bởi module khởi tạo *sau đó* sẽ vô hình tại thời điểm ấy. Package nào đóng góp bước migration cho database này phải nằm ở **nhóm DI sớm hơn** `data_cache` trong `app_manifest.yaml` của app. Hiện template chưa chạm phải tình huống này, nhưng nó sẽ cắn ngay khi feature đầu tiên thêm migration cho database của package khác. Xem [`05_di.md`](05_di.md) về thứ tự module.
+> **Thứ tự đăng ký.** `@preResolve` mở database — tức là chạy migration — đúng lúc injectable tới lượt đăng ký đó, nên mọi bước migration phải được đăng ký trước thời điểm ấy. Bước nào chưa có thì bị bỏ qua mà không báo lỗi: `schemaVersion` tăng nhưng schema thì không đổi.
+>
+> - **Bước nằm trong chính package sở hữu** (ở đây là `data_cache`) được thu thập **miễn là hàm mở vẫn giữ `@Order(1)`**. Injectable đăng ký các mục của một package theo `@Order` tăng dần, còn migration khai báo `@LazySingleton(as: IDatabaseMigration<CacheDatabase>)` mang order mặc định 0 — nên nó được đăng ký trước hàm mở. Bỏ `@Order(1)` đi thì hàm mở có thể được đăng ký trước; đó chính là lỗi mà `@Order(1)` được thêm vào để sửa.
+> - **Bước đến từ package khác** phải nằm ở **nhóm DI sớm hơn** package sở hữu trong `app_manifest.yaml` của app. `@Order` chỉ sắp xếp bên trong module của một package; nó không thể đẩy một đăng ký sang trước module khác. Hiện template chưa có trường hợp này, nhưng nó sẽ cắn ngay khi feature đầu tiên thêm migration cho database của package khác.
+>
+> **Sao chép pattern này cho database của riêng bạn? Hãy đặt `@Order(1)` lên hàm mở `@preResolve` của bạn** — thiếu nó, một bước migration viết y hệt §4 sẽ không bao giờ được thu thập. Xem [`05_di.md`](05_di.md) về thứ tự module.
 
 ### Bước 6 — Dùng qua `IDatabaseHandle`, không dùng thẳng database
 
@@ -341,7 +349,7 @@ abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
 }
 ```
 
-Đăng ký như một route module, nhưng gắn kiểu với database mà nó thuộc về — GetIt định danh một đăng ký theo đúng kiểu của nó, nên `CacheDatabase` chỉ thu về `IDatabaseMigration<CacheDatabase>` và bước migration của package khác không bao giờ tới được nó:
+Đăng ký như một route module, nhưng gắn kiểu với database mà nó thuộc về — GetIt định danh một đăng ký theo đúng kiểu của nó, nên `CacheDatabase` chỉ thu về `IDatabaseMigration<CacheDatabase>` và bước migration của package khác không bao giờ tới được nó. Khai báo trong chính package sở hữu, nó được thu thập vì hàm mở mang `@Order(1)` ([Bước 5](#bước-5--đăng-ký-trong-module-di-của-bạn)):
 
 ```dart
 @LazySingleton(as: IDatabaseMigration<CacheDatabase>)
@@ -351,12 +359,18 @@ class AddExpiresAtToCacheEntries
   int get version => 2;
 
   @override
-  Future<void> upgrade(Migrator m) =>
-      m.addColumn(cacheEntries, cacheEntries.expiresAt);
+  Future<void> upgrade(Migrator m) {
+    // `Migrator.database` là database đang được migrate; ép kiểu để dùng
+    // các getter bảng được sinh ra. `expiresAt` là cột mà bước này thêm vào.
+    final db = m.database as CacheDatabase;
+    return m.addColumn(db.cacheEntries, db.cacheEntries.expiresAt);
+  }
 
   @override
-  Future<void> downgrade(Migrator m) =>
-      m.alterTable(TableMigration(cacheEntries));
+  Future<void> downgrade(Migrator m) {
+    final db = m.database as CacheDatabase;
+    return m.alterTable(TableMigration(db.cacheEntries));
+  }
 }
 ```
 
@@ -406,7 +420,7 @@ Ba tính chất đáng gọi tên:
 Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải giữa chừng migration. Phát hiện lỗi wiring khi đã chạy được nửa đường sẽ để lại schema migrate dở.
 
 > [!WARNING]
-> **Drift 2.34.3 KHÔNG có `onDowngrade`.** `MigrationStrategy` chỉ expose `onCreate`, `onUpgrade` và `beforeOpen`; chính tài liệu Drift ghi rằng "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` là thật và có test, nhưng nó đi nhờ trên đúng một entry point đó thông qua so sánh `from`/`to`. Hãy implement khi thay đổi có thể đảo ngược; **ném lỗi có mô tả rõ ràng khi không thể**, để thất bại là tường minh thay vì để lại một schema không còn khớp với code đang chạy.
+> **Drift 2.x KHÔNG có `onDowngrade`** (lockfile đang resolve 2.35.0). `MigrationStrategy` chỉ expose `onCreate`, `onUpgrade` và `beforeOpen`; chính tài liệu Drift ghi rằng "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` là thật và có test, nhưng nó đi nhờ trên đúng một entry point đó thông qua so sánh `from`/`to`. Hãy implement khi thay đổi có thể đảo ngược; **ném lỗi có mô tả rõ ràng khi không thể**, để thất bại là tường minh thay vì để lại một schema không còn khớp với code đang chạy.
 
 ---
 
@@ -507,7 +521,7 @@ static bool isCorruptionError(Object error) {
 | `malformed database schema` | `attempt to write a readonly database` |
 | | `access denied` / `permission denied` / `operation not permitted` |
 
-Predicate khớp theo chuỗi thông báo thay vì bắt `SqliteException` có kiểu, vì `sqlite3` không phải dependency được khai của `core_database` — import nó là thêm một dependency mà package này vốn không cần, trong khi mọi import đều phải được khai báo. Vì khớp chuỗi vốn mong manh, predicate được thiết kế **thiên về không phục hồi**: nếu xuất hiện marker môi trường thì database được để yên, kể cả khi marker hỏng file cũng khớp.
+Predicate khớp theo chuỗi thông báo thay vì bắt `SqliteException` có kiểu. `sqlite3` *có* là dependency được khai báo của `core_database` (connection factory import nó), nên kiểu này dùng được — nhưng nó không phải thứ tới được opener. Kết nối chạy trên một background isolate (`NativeDatabase.createInBackground`), và drift trả lỗi phát sinh ở đó về dưới dạng `DriftRemoteException`, với lỗi gốc nằm trong `remoteCause`; `on SqliteException` sẽ không bao giờ khớp. `DriftRemoteException.toString()` trả về thông báo của lỗi gốc, nên khớp theo thông báo bao được lỗi từ cả hai phía ranh giới isolate. Kiểm tra theo kiểu vẫn làm được — gỡ `remoteCause` rồi kiểm tra `SqliteException` và `extendedResultCode` của nó — nhưng vẫn cần khớp chuỗi làm dự phòng cho mọi trường hợp khác. Vì khớp chuỗi vốn mong manh, predicate được thiết kế **thiên về không phục hồi**: nếu xuất hiện marker môi trường thì database được để yên, kể cả khi marker hỏng file cũng khớp.
 
 Mất dữ liệu người dùng tệ hơn là báo lỗi lúc khởi động.
 
@@ -567,6 +581,7 @@ Hai thói quen đáng học:
 - [ ] `migration` uỷ quyền cho `driftMigrationStrategy` (đừng tự viết `MigrationStrategy`)
 - [ ] Migration được **truyền vào** database, không tra cứu bên trong
 - [ ] `_registeredMigrations()` có guard `isRegistered` trước khi gọi `getAll`
+- [ ] Hàm mở `@preResolve` mang `@Order(1)`, để migration của chính package được đăng ký trước nó; bước migration từ package khác nằm ở nhóm DI sớm hơn
 - [ ] Data source nhận `IDatabaseHandle<TDb>`, không nhận database
 - [ ] Chữ ký trả về **Model**; không có class row của Drift trong API công khai
 - [ ] Bước schema mới = một `IDatabaseMigration` mới với `version >= 2`, đăng ký bằng `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` được bump cho khớp

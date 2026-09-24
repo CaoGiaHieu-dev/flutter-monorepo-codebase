@@ -221,7 +221,7 @@ Ba điều cần sao chép từ đây:
 
 1. **`@injectable`** — use case là factory, không bao giờ là singleton.
 2. **Constructor injection** — repository interface đi vào qua constructor. Tuyệt đối không gọi `getIt<T>()` bên trong use case.
-3. **Không validate lại, không bóc tách** — params đã tự validate lúc khởi tạo; repository đã trả sẵn `Result<T>`.
+3. **Không validate, không bóc tách** — use case chuyển thẳng params đi tiếp. `LoginParams` cũng không tự validate; nó chỉ mang dữ liệu đầu vào, vốn đã được form đăng nhập (`AuthFormWidget` trong `feature_auth`) validate trước khi dựng params. Quy tắc nào phải đúng bất kể bên gọi là ai thì thuộc về use case, trả về dưới dạng `Failure` — repository đã trả sẵn `Result<T>`, nên không có gì phải bóc tách.
 
 Use case đồng bộ chỉ khác ở chỗ bỏ `Future`:
 

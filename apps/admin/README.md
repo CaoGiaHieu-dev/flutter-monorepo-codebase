@@ -77,8 +77,11 @@ Notes that apply to this app specifically:
   installs `dart:io` `HttpOverrides` for SSL pinning, which has no web equivalent. This app opens
   no database: it composes neither the `cache` module nor `core_database`, so no Drift or SQLite
   code is in its dependency graph.
-- **Flavor.** `AppConfig.appFlavor` reads the flavor the app was built with and falls back to
-  `dev` when there is none, so a plain `flutter run` registers the `dev` DI environment.
+- **Flavor.** `AppConfig.appFlavor` reads the flavor the app was built with. With none, it falls
+  back by build mode: `dev` in a **debug** build, so a plain `flutter run` registers the `dev` DI
+  environment, and `prod` in a profile or release build. TLS is stricter still: certificate
+  validation is bypassed only in a debug build that *declared* `--flavor dev`, so a build with no
+  flavor keeps validation on (and logs an ERROR) even when its DI environment is `dev`.
 - **Branding.** `tools/theme_generator/theme_setting.dart` takes `--app admin`, but runs
   `flutter_native_splash` and `icons_launcher` from this directory, so both must first be added
   to this app's `dev_dependencies` — and the shared configs at the repository root only target

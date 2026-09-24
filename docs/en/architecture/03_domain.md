@@ -219,7 +219,7 @@ Three things to copy from this:
 
 1. **`@injectable`** — a use case is a factory, never a singleton.
 2. **Constructor injection** — the repository interface arrives through the constructor. Never call `getIt<T>()` inside a use case.
-3. **No re-validation, no unwrapping** — params validate themselves at construction; the repository already returns `Result<T>`.
+3. **No validation, no unwrapping** — a use case passes its params straight through. `LoginParams` does not validate itself either; it only carries the input, which the login form (`AuthFormWidget` in `feature_auth`) validated before building it. A rule that must hold whatever the caller is belongs in the use case, returned as a `Failure` — the repository already returns `Result<T>`, so there is nothing to unwrap.
 
 A synchronous use case looks the same minus the `Future`:
 

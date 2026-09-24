@@ -16,7 +16,8 @@ import '../widgets/undefine_route_widget.dart';
 /// - [DashboardRouteModule] — dashboard chrome (optional)
 /// - [IAppEntryLocation] — cold-start path (optional)
 ///
-/// Missing modules fall back to empty routes / a chromeless shell / `/`.
+/// Missing modules fall back to empty routes / a chromeless shell /
+/// [fallbackLocation] (the first destination, else `/_empty_dashboard`).
 ///
 /// Every contribution is resolved optionally and this file imports no feature
 /// package, so removing any feature leaves routing intact — including

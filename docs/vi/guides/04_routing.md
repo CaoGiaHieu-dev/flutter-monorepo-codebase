@@ -83,7 +83,11 @@ abstract class INavDestinationModule {
   int get order;                    // 0 = tab đầu tiên
   String get path;                  // path chuẩn, dùng cho fallback
   List<RouteBase> get routes;       // mount trong một StatefulShellBranch
-  void onRestore();                 // bấm lại vào tab đang active
+  // Bấm lại vào tab đang active. Là method cụ thể, không abstract: thân mặc
+  // định chỉ ghi log — override nó để "cuộn lên đầu / pop về gốc".
+  void onRestore() {
+    DynamicLogger.log('onRestore $runtimeType', level: LogLevel.INFO);
+  }
   NavDestination destination(BuildContext context);
 }
 ```

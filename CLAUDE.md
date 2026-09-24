@@ -52,7 +52,7 @@ dart fix --apply
 
 ### Tests
 
-Tests live per-package in a `test/` directory — today mostly under `platform/*/test/`, plus `modules/auth/data/test/` and `modules/cache/data/test/`. Run from the package directory:
+Tests live per-package in a `test/` directory — thirteen packages today: `platform/{app_shell,base_ui,common,data_core,database,network,provider_state_management,responsive,storage}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Run from the package directory:
 
 ```bash
 cd platform/common
@@ -549,6 +549,7 @@ class AuthLocalDataSource {
     _storageManager.getStorage(StorageType.secure),
     AuthStorageKeys.TOKEN,
   );
+  // … _authUser: StorageValue<Map<String, dynamic>> @ AuthStorageKeys.AUTH_USER, declared the same way
 
   @PostConstruct(preResolve: true)
   Future<void> initialize() async {
@@ -607,7 +608,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 1. Create the table class in **your package**, e.g. `modules/<module>/<layer>/lib/src/database/tables/`
 2. Create the DAO as `part of` **your** database library (not someone else's)
 3. Register table + DAO in **your** `@DriftDatabase` annotation
-4. Bump your `schemaVersion` and contribute an `IDatabaseMigration` implementation registered **typed to your database**: `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`. An untyped `as: IDatabaseMigration` registration is never collected — the database's module looks up exactly `IDatabaseMigration<YourDatabase>` (see `docs/en/guides/07_database.md` § 4)
+4. Bump your `schemaVersion` and contribute an `IDatabaseMigration` implementation registered **typed to your database**: `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`. An untyped `as: IDatabaseMigration` registration is never collected — the database's module looks up exactly `IDatabaseMigration<YourDatabase>` (see `docs/en/guides/07_database.md` § 4). Your `@preResolve` open needs `@Order(1)`, as `modules/cache/data/lib/di/module.dart` has, so a step in your own package registers before the open runs; a step from another package must sit in an earlier DI group
 5. Run `dart run build_runner build --workspace`
 6. Add Local DataSource → Repository → UseCase following the cache sample. **DataSource returns a Model** (`CacheEntryModel`), never the Drift row type
 

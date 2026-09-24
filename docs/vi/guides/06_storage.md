@@ -92,8 +92,8 @@ IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần
 // platform/storage/lib/src/impl/secure/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = encrypter.Key.fromSecureRandom(32).base64;
-  await _storage.write(key: masterKeyId, value: newKey);
+  final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
+  await _storage.write(key: _MASTER_KEY_ID, value: newKey); // lỗi thì ném lại
   masterKey = newKey;
 }
 ```
@@ -142,6 +142,21 @@ Future<String?> _readMasterKey() async {
 | Hỏng dữ liệu trong chính storage của plugin | xử lý ở tầng native: trên Android `AndroidOptions.resetOnError` (bật mặc định) reset phần không giải mã được trước khi trả kết quả |
 | Lỗi platform trong `read(key)` | trả `null` **và giữ nguyên giá trị** — lần đọc sau vẫn còn |
 | Giá trị giải mã hoặc decode lỗi trong `read(key)` | chỉ xoá đúng key đó và trả `null`, để một dòng hỏng không làm chết mọi lần mở app |
+
+### Master key của backend pref — cùng một quy tắc
+
+`PrefStorageImpl` mã hoá giá trị SharedPreferences bằng master key riêng, `_internal_pref_master_key`, cất trong cùng kho bảo mật. Trước đây gặp *bất kỳ* lỗi đọc nào nó cũng lùi về một key hoàn toàn mới trong SharedPreferences — chỉ sau một lỗi Keychain nhất thời, mọi preference đã lưu (theme, ngôn ngữ, cờ onboarding) giải mã lỗi và bị xoá ở lần đọc kế tiếp, còn lần khởi động bình thường sau đó lại bỏ rơi những gì phiên lỗi kia đã ghi. Giờ nó không bao giờ thay một key có thể vẫn còn tốt:
+
+| Tình huống | `PrefStorageImpl.init` làm gì |
+| :-- | :-- |
+| Lỗi platform khi đọc key | thử lại (3 lần) trước khi quyết định bất cứ điều gì |
+| Vẫn lỗi, chưa có preference nào được lưu | giữ một key mới trong SharedPreferences — không có gì để bỏ rơi |
+| Vẫn lỗi, và key trong SharedPreferences mở được các preference đã lưu | dùng key đó (thiết bị không có kho bảo mật dùng được) |
+| Vẫn lỗi, và các preference đã lưu phụ thuộc vào key không đọc được | **ném lại lỗi**, không ghi hay xoá gì — các giá trị mở lại được khi platform hồi phục |
+| Đọc được lại trong khi vẫn còn key trong SharedPreferences | key nào giải mã được các giá trị đã lưu thì thắng; nếu key trong SharedPreferences thắng, nó được chuyển vào kho bảo mật và xoá khỏi SharedPreferences |
+| Key không có hoặc không dùng được (không phải key base64 256-bit) | sinh key mới — trong kho bảo mật, hoặc trong SharedPreferences nếu kho bảo mật từ chối ghi; giá trị mã hoá bằng key đã mất sẽ bị `read()` xoá từng cái một |
+
+`StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
 
 ---
 

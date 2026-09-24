@@ -29,15 +29,24 @@ final _excludedAssetPatterns = <Glob>[
   Glob('assets/json/country.json'),
 ];
 
-void main() async {
+const _usage = '''
+Usage: dart tools/unused_checker/check_unused_assets.dart [--help]
+
+Reports assets declared or shipped by a workspace package that no Dart
+file references, and asset references that point at nothing.
+
+Works on the repository this script belongs to, whatever the working
+directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
+
+void main(List<String> args) async {
+  final projectRootPosix = MonorepoHelper.startCheck(args, usage: _usage);
+
   OutputFormatter.printHeader(
     'Monorepo Unused Assets Detector',
     subtitle: 'Analyzing unused and missing assets in the monorepo workspace',
   );
 
   final stopwatch = Stopwatch()..start();
-  final projectRoot = Directory.current.path;
-  final projectRootPosix = p.posix.normalize(projectRoot.replaceAll(r'\', '/'));
   OutputFormatter.printInfo('Project root: $projectRootPosix', icon: '📁');
 
   // Locate all packages in the workspace

@@ -22,7 +22,18 @@ final _excludedFilePatterns = <Glob>[
   Glob('lib/generated_plugin_registrant.dart'),
 ];
 
-void main() async {
+const _usage = '''
+Usage: dart tools/unused_checker/check_unused_file.dart [--help]
+
+Reports Dart files under a package's lib/ that nothing imports, exports
+or parts (entry points and generated files excluded).
+
+Works on the repository this script belongs to, whatever the working
+directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
+
+void main(List<String> args) async {
+  final projectRootPosix = MonorepoHelper.startCheck(args, usage: _usage);
+
   stdout.writeln(
     '================================================================================',
   );
@@ -34,8 +45,6 @@ void main() async {
   );
   final stopwatch = Stopwatch()..start();
 
-  final projectRoot = Directory.current.path;
-  final projectRootPosix = p.posix.normalize(projectRoot.replaceAll(r'\', '/'));
   stdout.writeln('[INFO] Project root: $projectRootPosix');
 
   // 1. Scan monorepo packages

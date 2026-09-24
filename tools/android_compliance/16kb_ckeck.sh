@@ -367,6 +367,22 @@ if ! [ -f "${dir}" -o -d "${dir}" ]; then
   exit 1
 fi
 
+# A file must be one this script knows how to open. Any other file used to be
+# scanned as if it were a directory, found no library and reported PASS.
+# An .aab keeps its libraries under <module>/lib/, which the APK path below
+# does not look at — build an APK (or extract the universal APK) instead.
+if [ -f "${dir}" ]; then
+  case "${dir}" in
+    *.apk | *.apex | *.so) ;;
+    *)
+      print_status "error" "Unsupported file: ${dir}" >&2
+      echo "  Pass an .apk, an .apex, a single .so, or a directory of native libraries." >&2
+      echo "  An .aab is not supported: check the APK built from it instead." >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # Check dependencies before proceeding
 check_dependencies
 
@@ -418,15 +434,33 @@ if [[ "${dir}" == *.apk ]]; then
   fi
 
   print_status "processing" "Extracting native libraries from APK..."
-  if ! unzip -q "${dir}" "lib/*" -d "${tmp}" 2>/dev/null; then
-    print_summary_box "NO NATIVE LIBRARIES FOUND" "success" \
-      "${PARTY} Your app contains only Java/Kotlin code!" \
-      "" \
-      "${CHECK_MARK} Apps without native libraries automatically support 16KB devices" \
-      "${CHECK_MARK} No additional changes required for Google Play compliance" \
-      "${CHECK_MARK} You're all set for the November 1st, 2025 deadline!"
-    cleanup_trap 0
-  fi
+  # unzip's exit code says WHY nothing came out, and only one reason is a pass:
+  #   0  extracted            1  extracted, with warnings
+  #   11 no entry matched lib/* — genuinely no native libraries
+  #   anything else (9 = not a zip archive, 3 = corrupt, …) — not a usable APK.
+  # Every failure used to read as "no native libraries" and PASS, so a
+  # truncated download or a mistyped path to any file was reported compliant.
+  unzip_output=$(unzip -q "${dir}" "lib/*" -d "${tmp}" 2>&1)
+  unzip_exit=$?
+  case $unzip_exit in
+    0 | 1) ;;
+    11)
+      print_summary_box "NO NATIVE LIBRARIES FOUND" "success" \
+        "${PARTY} Your app contains only Java/Kotlin code!" \
+        "" \
+        "${CHECK_MARK} Apps without native libraries automatically support 16KB devices" \
+        "${CHECK_MARK} No additional changes required for Google Play compliance" \
+        "${CHECK_MARK} You're all set for the November 1st, 2025 deadline!"
+      cleanup_trap 0
+      ;;
+    *)
+      {
+        print_status "error" "Cannot read ${dir_filename} as an APK (unzip exit ${unzip_exit})"
+        [ -n "${unzip_output}" ] && echo "${unzip_output}" | sed 's/^/      /'
+      } >&2
+      cleanup_trap 1
+      ;;
+  esac
 
   dir="${tmp}"
 fi

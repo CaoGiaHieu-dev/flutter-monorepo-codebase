@@ -19,6 +19,57 @@ class MonorepoPackage {
 class MonorepoHelper {
   static Map<String, MonorepoPackage>? _cachedPackages;
 
+  /// The common start of every `check_unused_*.dart` script.
+  ///
+  /// Prints [usage] for `--help`/`-h` (exit 0) and rejects any other argument
+  /// (exit 64). Then resolves the repository root from the script's own
+  /// location — not from the working directory — makes it the working
+  /// directory, and returns it as a POSIX path.
+  ///
+  /// The checks used to take `Directory.current` as the root: run from a
+  /// subdirectory they found 0 packages and reported "no unused …" — a clean
+  /// result for code they had never looked at. A root holding no package at
+  /// all is therefore a failure (exit 1), never a pass.
+  static String startCheck(List<String> args, {required String usage}) {
+    if (args.contains('--help') || args.contains('-h')) {
+      stdout.writeln(usage);
+      exit(0);
+    }
+    if (args.isNotEmpty) {
+      stderr.writeln('Unknown argument(s): ${args.join(' ')}');
+      stderr.writeln('');
+      stderr.writeln(usage);
+      exit(64);
+    }
+
+    final root = repoRoot();
+    Directory.current = root;
+    if (getPackages(root).isEmpty) {
+      stderr.writeln('[ERROR] No package (pubspec.yaml) found under $root.');
+      exit(1);
+    }
+    return root;
+  }
+
+  /// The repository root as a POSIX path: the nearest ancestor of the running
+  /// script holding both a `pubspec.yaml` and a `tools/` directory (the same
+  /// test `tools/docs_check` uses). Falls back to the working directory when
+  /// the script does not sit inside the repository.
+  static String repoRoot() {
+    var dir = File.fromUri(Platform.script).parent.absolute;
+    while (true) {
+      if (File(p.join(dir.path, 'pubspec.yaml')).existsSync() &&
+          Directory(p.join(dir.path, 'tools')).existsSync()) {
+        return p.posix.normalize(dir.path.replaceAll('\\', '/'));
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) {
+        return p.posix.normalize(Directory.current.path.replaceAll('\\', '/'));
+      }
+      dir = parent;
+    }
+  }
+
   /// Scans the entire monorepo workspace for packages and builds a mapping.
   static Map<String, MonorepoPackage> getPackages(String projectRootPosix) {
     if (_cachedPackages != null) return _cachedPackages!;

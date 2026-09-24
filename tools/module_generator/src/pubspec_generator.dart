@@ -70,13 +70,18 @@ class PubspecGenerator {
 
   /// The workspace packages a new module of this type starts with.
   ///
-  /// Only what the rendered templates import, so a fresh module passes
-  /// `check_unused_packages` — add `core_responsive`, `core_ui_kit` and the
-  /// rest when the code needs them. The exception is a domain/data/core
-  /// scaffold, which ships no code yet and pre-declares its layer's base
-  /// package. Note `domain` gets `domain_core` and nothing else: a domain
-  /// package that depends on a `core_*` package stops being pure Dart, which
-  /// rule 26 forbids and `arch_check` R2 blocks.
+  /// Exactly what the rendered templates import, so a fresh module passes
+  /// `check_unused_packages` — add `core_responsive`, `core_ui_kit`,
+  /// `core_network`, `core_storage` and the rest when the code needs them.
+  /// A pre-declared "you will probably want this" dependency is reported as
+  /// unused the moment the module exists, which is how generated data
+  /// packages used to fail that check out of the box.
+  ///
+  /// Note `domain` gets `domain_core` and nothing else: a domain package that
+  /// depends on a `core_*` package stops being pure Dart, which rule 26
+  /// forbids and `arch_check` R2 blocks. A data package depends on its own
+  /// module's `domain_<name>` when that exists (generate the domain first);
+  /// core and custom packages start with no workspace dependency at all.
   List<String> _dependencyNames(ModuleConfig config) {
     switch (config.type) {
       case ModuleType.feature:
@@ -93,14 +98,32 @@ class PubspecGenerator {
             'bloc_state_management',
         ];
       case ModuleType.domain:
+        // The repository template returns `Result` from domain_core.
         return ['domain_core'];
       case ModuleType.data:
-        return ['platform_kernel', 'core_network', 'core_storage', 'data_core'];
+        // The RepositoryImpl template extends data_core's `IBaseRepository`
+        // and, with a domain to implement, returns its `Result`.
+        return [
+          'data_core',
+          if (hasDomainPackage(config)) ...[
+            'domain_core',
+            'domain_${config.nameInput}',
+          ],
+        ];
       case ModuleType.core:
       case ModuleType.custom:
-        return ['platform_kernel'];
+        return const [];
     }
   }
+
+  /// Whether the module a data package belongs to already has its
+  /// `domain_<name>` — the data template then implements that domain's
+  /// repository interface.
+  static bool hasDomainPackage(ModuleConfig config) =>
+      config.type == ModuleType.data &&
+      MonorepoHelper.getPackages(
+        _posix(Directory.current.path),
+      ).containsKey('domain_${config.nameInput}');
 
   /// Renders the `name:` / `path:` pairs, indented to sit under `dependencies:`.
   ///

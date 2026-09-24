@@ -2,6 +2,7 @@ import 'dart:convert'; // For utf8 decoding
 import 'dart:io'; // For Process, exit, stdout, stderr
 
 import '../shared/toolchain.dart';
+import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
 // --- Configuration ---
@@ -111,6 +112,11 @@ void main(List<String> args) async {
     stderr.writeln('Unknown argument(s): ${args.join(' ')}. See --help.');
     exit(64);
   }
+
+  // Every check resolves the root itself; running from it here keeps the
+  // relative script paths below, and FVM detection (`.fvmrc`), valid from any
+  // working directory.
+  Directory.current = MonorepoHelper.repoRoot();
 
   OutputFormatter.printHeader(
     'Flutter Project Unused Resources Checker',

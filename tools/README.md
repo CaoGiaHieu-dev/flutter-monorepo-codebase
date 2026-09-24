@@ -93,7 +93,9 @@ dart tools/composer/composer.dart list --app admin
 
 Cờ lạ bị từ chối (exit 64). Một pubspec/manifest không phải YAML hợp lệ (thường là key trùng)
 bị từ chối với tên file và dòng lỗi thay vì crash; một package vừa nằm trong vùng
-`composer:managed:deps` vừa được khai báo tay thì có thông báo riêng. Khi một module khai báo
+`composer:managed:deps` vừa được khai báo tay thì có thông báo riêng. Manifest sai cấu trúc
+(`phase` khác `before`/`after`, layer lạ, id trùng, key lạ, …) bị từ chối trước mọi lệnh với
+`apps/<id>/app_manifest.yaml: <key>: <vấn đề>`, exit 1, không ghi gì. Khi một module khai báo
 trong manifest không có trên đĩa, cảnh báo PARTIAL COMPOSITION chỉ liệt kê file thực sự bị
 ghi lại trong lần chạy đó.
 

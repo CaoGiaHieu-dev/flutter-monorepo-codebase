@@ -45,7 +45,9 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 > usage: `<module_name>` and a prefix must be Dart package names (lowercase letters, digits,
 > `_`, starting with a letter, not a Dart keyword — `Bad-Name` is refused); `[sm]` and
 > `[route_contribution]` accept only `1`/`2`/`3` and only for type 1; unknown flags are
-> refused. `dart tools/module_generator/generate.dart --help` prints the usage.
+> refused; and the resulting package name must not already be declared by any `pubspec.yaml` in
+> the repository (`5 shell platform_app` = `platform_app_shell`, `2 core` = `domain_core`).
+> `dart tools/module_generator/generate.dart --help` prints the usage.
 
 **Examples:**
 
@@ -79,6 +81,8 @@ dart tools/module_generator/generate.dart 5 billing acme
 | Fail-safe | `assertToolchainAvailable()` runs **before any write**; an existing module directory aborts instead of being silently overwritten. |
 | Rollback | The shared files it touches — every `app_manifest.yaml`, plus what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted first; any later failure restores them and deletes the new module directory, and the tool exits `1`. |
 | Registration check | Presence in each `app_manifest.yaml` is decided by parsing the YAML, not by substring (`core_net` is no longer taken as registered because `core_network` exists). Every edit is re-parsed; a manifest the module could not be added to rolls everything back and exits `1`. |
+| Starts clean | A new package declares only the workspace packages its templates import, so `check_unused_packages` passes at once. Domain gets `domain_core` + an `I<Name>Repository` stub; data gets `data_core` + a `<Name>RepositoryImpl extends IBaseRepository` stub, implementing and registered as the domain's contract when `domain_<name>` already exists (generate the domain first); core/custom get no workspace dependency. |
+| Nav order | A `[route_contribution]` `2` destination gets `order` = highest existing `INavDestinationModule.order` under `modules/*/feature` + 10 (10 when none), so generated tabs never tie. |
 | Barrels around codegen | The barrel generator runs before `build_runner` (the templates import sibling barrels) and again after it, so generated files (`module.module.dart`, `lib/src/gen/**`) are exported too. |
 
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)

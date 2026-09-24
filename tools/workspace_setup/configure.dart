@@ -2,7 +2,46 @@ import 'dart:io';
 
 import '../shared/toolchain.dart';
 
-void main() async {
+const String _usage = '''
+Usage: dart tools/workspace_setup/configure.dart [--help]
+
+Full workspace setup — the setup step on a fresh clone. Run from anywhere in
+the repository; it works on the repository root. In order:
+
+  1. dart pub global activate flutterfire_cli
+  2. flutter clean
+  3. flutter pub get
+  4. flutter gen-l10n in every package with an l10n.yaml
+  5. dart run build_runner build --workspace
+  6. tools/barrel_generator/generate.dart for every package with a lib/
+     (apps are skipped)
+
+Step 2 deletes build output and .dart_tool/, and steps 5-6 rewrite every
+generated file and barrel. Stops at the first failing command with its exit
+code. FVM is used only when detected (tools/shared/toolchain.dart).
+
+Options:
+  -h, --help   Print this help and exit.''';
+
+void main(List<String> args) async {
+  // Setup is destructive (step 2 cleans the workspace), so an argument this
+  // script does not understand stops it before anything runs — `--help` used
+  // to fall through into the full setup.
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln(_usage);
+    exit(0);
+  }
+  if (args.isNotEmpty) {
+    stderr.writeln('[ERROR] Unknown argument(s): ${args.join(' ')}');
+    stderr.writeln('');
+    stderr.writeln(_usage);
+    exit(64);
+  }
+
+  // Every path below is relative to the repository root; resolve it from the
+  // script's own location so the working directory does not matter.
+  Directory.current = File.fromUri(Platform.script).parent.parent.parent;
+
   stdout.writeln('==========================================');
   stdout.writeln('      Project Configuration Setup');
   stdout.writeln('==========================================');

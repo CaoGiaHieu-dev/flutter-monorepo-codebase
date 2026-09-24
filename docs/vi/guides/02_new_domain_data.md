@@ -17,9 +17,12 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 ```
 
 > [!NOTE]
-> Với loại `2` và `3`, generator **chỉ tạo thư mục rỗng** cùng `pubspec.yaml` và
-> `lib/di/module.dart`. Khác với feature, ở đây không có template khởi tạo — mọi class dưới đây
-> bạn viết tay. Xem
+> Với loại `2` và `3`, generator tạo thư mục, `pubspec.yaml`, `lib/di/module.dart` và **mỗi
+> package một stub**: `IPaymentRepository` trong `domain/lib/src/repositories/` và
+> `PaymentRepositoryImpl extends IBaseRepository` trong `data/lib/src/repositories_impl/`, cả hai
+> có một method giữ chỗ `ping()`. Hãy sinh domain **trước**: package data khi đó phụ thuộc
+> `domain_payment` và đăng ký `@LazySingleton(as: IPaymentRepository)`. Thay `ping()` bằng bước
+> 3 và 7 bên dưới — mọi class khác bạn viết tay. Xem
 > the `ModuleType.domain` / `ModuleType.data` branches in
 > [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 

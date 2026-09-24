@@ -87,8 +87,9 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
 # <SM> (Feature only): 1=Provider, 2=BLoC, 3=None
 # <route> (Feature only): 1=IFeatureRouteModule (stack), 2=INavDestinationModule (bottom nav tab), 3=none
 # A feature missing <SM> or <route> prompts for it on a terminal, and exits 64 without one —
-# always pass both. Invalid names (must be Dart package names) or values are rejected up
-# front (exit 64, nothing written); --help prints usage.
+# always pass both. Invalid names (must be Dart package names), a package name any pubspec
+# already declares (`2 core` = domain_core), or bad values are rejected up front (exit 64,
+# nothing written); --help prints usage. A nav tab gets order = highest existing + 10.
 dart tools/module_generator/generate.dart 1 profile "" 1 1    # Feature+Provider+stack routes
 dart tools/module_generator/generate.dart 1 chat "" 2 2       # Feature+BLoC+bottom nav tab
 dart tools/module_generator/generate.dart 2 payment            # Domain micro-package
@@ -121,6 +122,7 @@ dart tools/code_review/code_review.dart --all --focus architecture,security
 
 # Workspace setup (cross-platform — there is no .bat/.sh wrapper)
 dart tools/workspace_setup/configure.dart
+dart tools/workspace_setup/configure.dart --help   # prints the steps, runs nothing; other args exit 64
 
 # Firebase multi-environment config
 dart tools/firebase/firebase_config.dart --app mobile   # --app is required once there are 2+ apps

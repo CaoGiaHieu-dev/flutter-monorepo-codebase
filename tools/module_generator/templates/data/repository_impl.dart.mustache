@@ -1,0 +1,34 @@
+import 'package:data_core/data_core.dart';
+{{#hasDomain}}
+import 'package:domain_core/domain_core.dart';
+import 'package:domain_{{snakeNameInput}}/domain_{{snakeNameInput}}.dart';
+import 'package:injectable/injectable.dart';
+{{/hasDomain}}
+
+{{#hasDomain}}
+/// Implements [I{{pascalNameInput}}Repository] from `domain_{{snakeNameInput}}`.
+///
+/// Every method goes through [IBaseRepository.execute] (async) or
+/// [IBaseRepository.executeSync]: a thrown exception becomes
+/// `Failure(ErrorHandler.handleError(e))`, so nothing throws past the data
+/// layer. Inject the data sources (`data_sources/remote/` for Retrofit,
+/// `data_sources/local/` for storage or a database) through the constructor;
+/// they return models, and `execute`'s `mapper` turns a model into an entity.
+@LazySingleton(as: I{{pascalNameInput}}Repository)
+class {{pascalNameInput}}RepositoryImpl extends IBaseRepository
+    implements I{{pascalNameInput}}Repository {
+  @override
+  Future<Result<void>> ping() => execute<void, void>(() async {});
+}
+{{/hasDomain}}
+{{^hasDomain}}
+/// No `domain_{{snakeNameInput}}` existed when this package was generated.
+/// Create it (`generate.dart 2 {{snakeNameInput}}`), declare it in this
+/// package's `pubspec.yaml`, then add
+/// `implements I{{pascalNameInput}}Repository` and
+/// `@LazySingleton(as: I{{pascalNameInput}}Repository)` to this class.
+///
+/// Every method goes through [IBaseRepository.execute] (async) or
+/// [IBaseRepository.executeSync], so nothing throws past the data layer.
+class {{pascalNameInput}}RepositoryImpl extends IBaseRepository {}
+{{/hasDomain}}

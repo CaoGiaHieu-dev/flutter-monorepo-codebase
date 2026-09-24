@@ -17,9 +17,12 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 ```
 
 > [!NOTE]
-> For types `2` and `3` the generator **only scaffolds empty folders** plus `pubspec.yaml` and
-> `lib/di/module.dart`. Unlike a feature, there are no starter templates — every class below you
-> write by hand. See
+> For types `2` and `3` the generator scaffolds the folders, `pubspec.yaml`, `lib/di/module.dart`
+> and **one stub each**: `IPaymentRepository` in `domain/lib/src/repositories/` and
+> `PaymentRepositoryImpl extends IBaseRepository` in `data/lib/src/repositories_impl/`, both with a
+> placeholder `ping()`. Generate the domain **first**: the data package then depends on
+> `domain_payment` and registers `@LazySingleton(as: IPaymentRepository)`. Replace `ping()` with
+> steps 3 and 7 below — every other class you write by hand. See
 > the `ModuleType.domain` / `ModuleType.data` branches in
 > [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 

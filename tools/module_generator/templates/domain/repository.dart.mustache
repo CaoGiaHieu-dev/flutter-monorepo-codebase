@@ -1,0 +1,15 @@
+import 'package:domain_core/domain_core.dart';
+
+/// Repository contract of the `{{snakeNameInput}}` module — implemented by
+/// `{{pascalNameInput}}RepositoryImpl` in `data_{{snakeNameInput}}`.
+///
+/// Every method returns a [Result]: the data layer turns failures into
+/// `Failure(AppFailure)` and never throws past this interface. Use cases in
+/// `usecases/` depend on this type, never on the implementation.
+///
+/// [ping] is a placeholder so the scaffold compiles and shows the shape —
+/// replace it with the module's real operations (entities go in
+/// `entities/`, parameter objects in `params/`).
+abstract class I{{pascalNameInput}}Repository {
+  Future<Result<void>> ping();
+}

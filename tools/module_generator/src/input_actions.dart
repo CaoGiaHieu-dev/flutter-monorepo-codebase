@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
+import '../../unused_checker/monorepo_helper.dart';
 import 'module_type.dart';
 
 /// Usage text, printed by `--help` and after every argument error.
@@ -87,6 +90,22 @@ class InputActions {
     if (_reservedWords.contains(value)) {
       _usageError('$what "$value" là từ khoá Dart — pub không chấp nhận.');
     }
+  }
+
+  /// Exits 64 when a pubspec anywhere in the repository already declares
+  /// `name: [packageName]`.
+  void _assertPackageNameFree(String packageName, String modulePath) {
+    final root = p.posix.normalize(
+      Directory.current.path.replaceAll('\\', '/'),
+    );
+    final existing = MonorepoHelper.getPackages(root)[packageName];
+    if (existing == null) return;
+    final where = p.posix.relative(existing.rootPath, from: root);
+    _usageError(
+      'Package "$packageName" đã tồn tại tại "$where" — pub không cho hai '
+      'package trùng tên trong một workspace. Chọn tên khác '
+      '(sẽ tạo "$modulePath"). Không có gì được ghi.',
+    );
   }
 
   ModuleConfig parseInput(List<String> args) {
@@ -254,6 +273,15 @@ class InputActions {
         ? 'modules/$nameInput/$typeName'
         : '$typeDir/$nameInput';
     final moduleDir = Directory(modulePath);
+
+    // Pub resolves a workspace by package NAME, so two members sharing one
+    // fails `pub get` — and only after composer has rewritten the manifests,
+    // the workspace list and injection.dart. Worse, a type-5 name can land in
+    // a fresh directory yet repeat an existing name (`5 shell platform_app`
+    // is `platform_app_shell`, already at platform/app_shell), and `2 core` /
+    // `3 core` are domain_core / data_core. Checked before anything is
+    // written, against every pubspec in the repository.
+    _assertPackageNameFree(moduleName, modulePath);
 
     // Never overwrite: deleting an existing package here would happen before
     // the rollback snapshot, so nothing could restore it.

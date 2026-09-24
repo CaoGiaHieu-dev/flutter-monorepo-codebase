@@ -19,9 +19,12 @@ import '{{snakeNameInput}}_route_module.dart';
 /// whether the app renders a bottom bar, a rail or a sidebar.
 @LazySingleton(as: INavDestinationModule)
 class {{pascalNameInput}}NavDestination extends INavDestinationModule {
-  /// Ascending order among destinations.
+  /// Ascending order among destinations. The generator picked {{navOrder}}:
+  /// 10 above the highest `order` of the destinations that existed when this
+  /// file was written, so generated tabs never tie (tied orders have no
+  /// defined sequence). Renumber freely — only the relative order matters.
   @override
-  int get order => 10;
+  int get order => {{navOrder}};
 
   @override
   String get path => {{pascalNameInput}}Path.{{screamingNameInput}};

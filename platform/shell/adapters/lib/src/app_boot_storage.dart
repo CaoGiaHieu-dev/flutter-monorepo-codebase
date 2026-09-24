@@ -4,7 +4,10 @@ import 'package:injectable/injectable.dart';
 import 'utils/app_boot_storage_keys.dart';
 
 /// Owns app-shell-level boot flags (e.g. onboarding-viewed) that don't
-/// belong to any single feature/domain. Not exposed outside apps/mobile/lib.
+/// belong to any single feature/domain.
+///
+/// Read by `platform_app_shell` (`AppRouter`'s first-launch location and
+/// `NavigatorWrapperWidget`) — no module reads it.
 @singleton
 class AppBootStorage {
   AppBootStorage(this._storageManager);

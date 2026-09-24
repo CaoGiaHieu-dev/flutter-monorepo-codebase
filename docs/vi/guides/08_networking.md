@@ -230,7 +230,7 @@ Hai getter refresh mặc định `null`, nên trong một app không có endpoin
 Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, thay vì tự đọc storage:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_config_impl.dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(this._languageStorage);
@@ -261,7 +261,7 @@ class NetworkConfigImpl implements NetworkConfig {
 ```
 
 > [!IMPORTANT]
-> `NetworkConfigImpl` không import module nào. Nó đọc token qua `IAuthSessionGateway`, được resolve bằng `getItOrNull` ngay lúc gọi thay vì inject, nên nó dựng được dù build có module auth hay không, và không thứ tự DI nào làm hỏng được nó. Khi không có gateway nào được đăng ký, `onRefreshToken` trả về null — và `ApiClient` chỉ gắn `RefreshTokenInterceptor` **khi** giá trị đó khác null, nên một build không có auth sẽ không có interceptor refresh, thay vì có một cái không bao giờ thành công. `arch_check` R1 giữ điều đó: nó nằm trong `platform_app_shell`, và package `platform/` không được import module. Xem [`05_di.md`](05_di.md).
+> `NetworkConfigImpl` không import module nào. Nó đọc token qua `IAuthSessionGateway`, được resolve bằng `getItOrNull` ngay lúc gọi thay vì inject, nên nó dựng được dù build có module auth hay không, và không thứ tự DI nào làm hỏng được nó. Khi không có gateway nào được đăng ký, `onRefreshToken` trả về null — và `ApiClient` chỉ gắn `RefreshTokenInterceptor` **khi** giá trị đó khác null, nên một build không có auth sẽ không có interceptor refresh, thay vì có một cái không bao giờ thành công. `arch_check` R1 giữ điều đó: nó nằm trong `platform_shell_adapters`, và package `platform/` không được import module. Xem [`05_di.md`](05_di.md).
 
 ---
 
@@ -270,7 +270,7 @@ class NetworkConfigImpl implements NetworkConfig {
 `_refreshSession` giao việc cho `IAuthSessionGateway`, do `data_auth` hiện thực: repository refresh và lưu thông tin đăng nhập, còn gateway đọc lại token từ chủ sở hữu. Bản thân config không lưu gì cả:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_config_impl.dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
 Future<String?> _refreshSession() async => await _session?.refreshToken();
 
 // modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
@@ -409,7 +409,7 @@ if (hashes != null && hashes.isNotEmpty) {
 `NetworkConfig implements SslPinningConfig`, nhưng đăng ký impl `as: NetworkConfig` **không** làm nó phân giải được dưới kiểu `SslPinningConfig` — GetIt khớp đúng kiểu đã đăng ký. Thiếu một binding thứ hai, `getItOrNull<SslPinningConfig>()` trả về `null` và pinning âm thầm vô hiệu trên mọi flavor, kể cả production. Binding ngăn điều đó:
 
 ```dart
-// platform/shell/app_shell/lib/di/network_binding_module.dart
+// platform/shell/adapters/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
 /// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
@@ -594,7 +594,7 @@ Repository bóc các lớp bao này thành `Result<T>` qua `execute()` — xem [
 - [ ] Login, refresh, và mọi call có `401` không mang nghĩa "hết phiên" thì set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] Impl `NetworkConfig` giữ `@LazySingleton` (không bao giờ eager)
 - [ ] `sslPinningHashes` đã điền ≥2 pin trước khi phát hành
-- [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra file sinh ra `lib/di/module.module.dart` của `platform_app_shell`
+- [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra file sinh ra `lib/di/module.module.dart` của `platform_shell_adapters`
 - [ ] Không log nguyên văn bất kỳ thông tin đăng nhập nào
 
 ## Xem thêm

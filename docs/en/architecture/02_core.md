@@ -22,18 +22,34 @@ Three rules apply to everything on this page.
 
 | Group | Folder | Packages (folder) | What belongs here | May depend on |
 |:--|:--|:--|:--|:--|
-| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | What every other package builds on: the service locator and error handling, the cross-module DI contracts, Flutter-bound helpers. No I/O, no widgets | nothing else in `platform/` |
-| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | The base contracts of the domain and data layers — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — that `modules/*/domain` and `modules/*/data` extend | foundation |
-| **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Mechanisms that reach outside the process — HTTP, key–value storage, SQLite, push. Mechanism only: no product module's keys, tables or endpoints. The default group of `generate.dart 4` / `5` | foundation, layers |
-| **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scaling and adaptive layout, design tokens, themes and global strings, the shared widget library | foundation, layers |
-| **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | The state-management bases; a feature picks one | foundation, layers, ui |
-| **shell** | `platform/shell/` | `platform_app_shell` (`app_shell/`) | The app shell every app composes: boot, router assembly, material wrapper, storage adapters | every other group |
+| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | What every other package builds on: the service locator and error handling, the cross-module DI contracts, Flutter-bound helpers. No I/O, no widgets, no transport type | foundation, `domain_core` |
+| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | The base contracts of the domain and data layers — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — that `modules/*/domain` and `modules/*/data` extend | `domain_core`: nothing. `data_core`: foundation, `domain_core` |
+| **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Mechanisms that reach outside the process — HTTP, key–value storage, SQLite, push. Mechanism only: no product module's keys, tables or endpoints. The default group of `generate.dart 4` / `5` | foundation, layers — never another infra package |
+| **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scaling and adaptive layout, design tokens, themes and global strings, the shared widget library | foundation, ui — never state, infra or shell |
+| **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | The state-management bases, and the widgets bound to them (`LoadMoreListView`); a feature picks one | foundation, layers, ui |
+| **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | The infrastructure adapters every app registers (`NetworkConfigImpl`, the storage adapters, `AppBootStorage`); the app shell every app composes: boot, router assembly, material wrapper, app state | every platform group (`app_shell → adapters`, never the reverse) |
 
-The direction, with each arrow pointing at the side that is depended on: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← all of platform/`. And, unchanged, nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` does not check the group direction yet — until it does, review holds it. Three edges run against it today, and stay until the rule is enforced and each one is either removed or approved:
+The direction, with each arrow pointing at the side that is depended on: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`. `platform_kernel → domain_core` is part of the design, not an exception to it: `ErrorHandler` produces an `AppFailure` (the approved R1 edge). And, unchanged, nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` does not check the group direction yet — until it does, review holds it.
 
-- `platform_kernel` (foundation) → `domain_core` (layers) — the approved R1 edge: `ErrorHandler` produces an `AppFailure`.
-- `core_common` (foundation) → `core_responsive` (ui) — the page transitions in `src/routing/page_transitions/` scale through it.
-- `core_ui_kit` (ui) → `provider_state_management` (state) — its widgets render a `ViewState`. The reverse edge stays forbidden (§ 2 of `.agents/AGENTS.md`): it would be a cycle.
+The package graph obeys the direction **with no exception**. Three edges used to run against it; each was removed, not approved:
+
+- `core_common` (foundation) → `core_responsive` (ui). `BottomTransitionPage`, the one widget that scaled through it, moved to `core_ui_kit` (`navigation/`); `AppInitializer`'s phone-sized portrait lock compares against a private 600 px constant (the Material 3 `medium` breakpoint).
+- `core_ui_kit` (ui) → `provider_state_management` (state). `LoadMoreListView` / `LoadingMoreWidget` — the only kit widgets bound to `LoadMoreMixin` — moved into `provider_state_management` (`src/base_view/loading_more_widget.dart`), which may depend on `ui`. The kit now declares no state-management package.
+- `platform_kernel` → `dio`. The Dio → `AppFailure` mapping moved to `core_network` as `DioFailureClassifier`, registered into `ErrorHandler` (§ 1, § 6).
+
+Two lighter edges went with them: `core_storage` now takes `TypeHelper` from `platform_kernel` instead of the whole of `core_common`, and `data_auth` no longer declares an unused `flutter`.
+
+Group-level graph (arrow = "depends on"; every package edge falls on one of these):
+
+```text
+layers/domain  -> (nothing)
+foundation     -> foundation, layers/domain
+layers/data    -> foundation, layers/domain
+infra          -> foundation, layers/domain            (no infra -> infra)
+ui             -> foundation, ui
+state          -> foundation, layers/domain, ui
+shell          -> foundation, infra, ui, state, shell
+```
 
 A new mechanism package goes in `infra` — `dart tools/module_generator/generate.dart 4 <name>` puts it there; pass `--group <group>` for another group.
 
@@ -43,24 +59,24 @@ A new mechanism package goes in `infra` — `dart tools/module_generator/generat
 
 The bottom of the infrastructure stack is two packages, split by one question: *does it need Flutter?*
 
-**`platform_kernel`** is pure Dart — no `flutter` in its dependencies, enforced by `arch_check` R9. Its only workspace dependency is `domain_core`, for the `AppFailure` that `ErrorHandler` produces. Depend on it directly unless you need something Flutter-bound.
+**`platform_kernel`** is pure Dart — no `flutter` in its dependencies, enforced by `arch_check` R9, and no transport either: it names no `dio` type. Its only workspace dependency is `domain_core`, for the `AppFailure` that `ErrorHandler` produces. Depend on it directly unless you need something Flutter-bound.
 
 | Area | Path | Contents |
 |:--|:--|:--|
 | Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
 | Config | `src/config/` | `SslPinningConfig` |
 | Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
-| Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`). `ErrorHandler.onUnclassifiedError` is a plain callback for the exceptions it cannot classify — the app shell points it at the optional `IErrorReporter` ([`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting)) |
+| Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`). `ErrorClassifier` + `ErrorHandler.registerClassifier` let the package that owns an exception type map it — `core_network` registers `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` is a plain callback for the exceptions it cannot classify — the app shell points it at the optional `IErrorReporter` ([`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting)) |
 | Extensions | `src/extensions/` | `bool`, `Enum`, `List`, `String` — no `DateTime` or `num` formatting: dates, times and currency are locale-dependent, so format them with `intl`'s `DateFormat` / `NumberFormat` and the current locale |
 | Utils **and constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
-**`core_common`** is the Flutter-bound half. It declares three workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above; `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`; and `core_di`, for the optional `IAnalytics` that `RouteAwareWidget` reports screen views to.
+**`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above; and `core_di`, for the optional `IAnalytics` that `RouteAwareWidget` reports screen views to. It depends on nothing in the `ui` group: `BottomTransitionPage` now lives in `core_ui_kit`.
 
 | Area | Path | Contents |
 |:--|:--|:--|
 | Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation — portrait lock on phone-sized displays only, system UI) |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
-| Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transitions |
+| Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget` |
 | Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
 
 ### What does *not* belong here, and why
@@ -92,7 +108,7 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 | Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
 | Action handlers | `src/actions/` | `IAuthActionHandler` — cross-feature UI actions (e.g. logout) |
 | Agnostic streams | `src/agnostic_streams/` | `IAuthStatusStream` — state sharing between a Provider feature and a BLoC feature |
-| Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell |
+| Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell's adapters package (`platform_shell_adapters`) |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
 
@@ -151,10 +167,10 @@ The shared widget library every feature may consume. It is **core, not a feature
 
 Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
-It depends on `core_common`, `core_base_ui`, `core_responsive` and `provider_state_management` — never on a feature or on `data_*`.
+It depends on `core_common`, `core_base_ui` and `core_responsive` — never on a state-management package, on infra, on a feature or on `data_*`. `navigation/` also holds `BottomTransitionPage`, a `Page` that shows a go_router route as a modal bottom sheet (it moved here from `core_common` because its corner radius scales through `core_responsive`).
 
 > [!NOTE]
-> The dependency runs **one way**: `core_ui_kit -> provider_state_management`. The reverse edge would close a cycle inside the core ring, so `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
+> The dependency runs **one way**: `state -> ui`. `provider_state_management` may depend on the ui group (its `LoadMoreListView` scales through `core_responsive`); `core_ui_kit` depends on no state-management package. A widget bound to `LoadMoreMixin` or `ViewState` therefore lives in `provider_state_management`, not here — which is where `LoadMoreListView` / `LoadingMoreWidget` moved. `provider_state_management` also keeps its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
 
 ### The UI-agnostic rule
 
@@ -272,8 +288,11 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 | Interceptors | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handlers | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler` |
 | Constants | `src/utils/network_constants.dart` | Timeouts, header names, `Bearer` prefix, extra keys, log tags |
+| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` 1003, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
 
-`NetworkConfig` is implemented **in the app shell**, not here — that is what keeps `core_network` free of any storage dependency. Both refresh callbacks default to `null`, so a client with no refresh endpoint simply surfaces the `401` unchanged.
+`DioFailureClassifier` is how the kernel's `ErrorHandler` learns about Dio without importing it: an eager `@singleton` of this package's DI module whose `@PostConstruct` calls `ErrorHandler.registerClassifier`. The module runs in the `core` DI group, so the classifier is registered before any Dio client exists (all are lazy) and before any repository runs; `ApiClient`'s constructor registers it again, idempotently, for a client built outside DI. A unit test that drives a repository into a `DioException` without DI calls `DioFailureClassifier.ensureRegistered()` first. The apps' DI smoke tests assert the registration.
+
+`NetworkConfig` is implemented **in the app shell's adapters package** (`platform_shell_adapters`), not here — that is what keeps `core_network` free of any storage dependency. Both refresh callbacks default to `null`, so a client with no refresh endpoint simply surfaces the `401` unchanged.
 
 > [!CAUTION]
 > **SSL pinning is only as good as its hash list.** `sslPinningHashes` currently returns `const []`, which disables pinning. `AppInitializer` logs an `ERROR` whenever the list is empty or the config is unregistered on any build that does not bypass validation — that is, everything but a debug build that explicitly declared `--flavor dev`, a missing or unknown flavor included (treated as `prod` for TLS), so the gap is visible rather than silent — but it is still a gap until you populate it. See [the networking guide](../guides/08_networking.md).
@@ -290,7 +309,7 @@ Provides the **mechanism only**. It defines no keys and no presets.
 |:--|:--|
 | `StorageInterface` | Backend contract |
 | `StorageManager` | `@singleton`; resolves a backend by `StorageType`, initializes the secure backend, then the others, via `@PostConstruct(preResolve: true)` — secure first because its first-launch wipe shares a keystore namespace with the pref backend's master key |
-| `StorageValue<T>` | Reactive wrapper over one key — `ChangeNotifier` + broadcast `Stream`, in-memory cache, auto-persist on write |
+| `StorageValue<T>` | Reactive wrapper over one key — `ChangeNotifier` + broadcast `Stream`, in-memory cache, auto-persist on write. Notifying after `dispose` is a no-op (`isDisposed`). The package's only workspace dependency is `platform_kernel` (`TypeHelper`) |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (hardware-backed) |
 | `ObfuscatedString` / `ObfuscatedBytes` | RAM obfuscation |
 | `PrefStorageImpl` / `SecureStorageImpl` | Internal, resolved via `@Named('Pref')` / `@Named('Secure')` |
@@ -308,9 +327,9 @@ Each consuming package declares its own `StorageValue` instances through an inje
 | Owner | Package | Keys | Backend |
 |:--|:--|:--|:--|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `ThemeStorageImpl` | `platform_app_shell` | `themeMode` | pref |
-| `LanguageStorageImpl` | `platform_app_shell` | `locale` | pref |
-| `AppBootStorage` | `platform_app_shell` | `viewed_onboard` | pref |
+| `ThemeStorageImpl` | `platform_shell_adapters` | `themeMode` | pref |
+| `LanguageStorageImpl` | `platform_shell_adapters` | `locale` | pref |
+| `AppBootStorage` | `platform_shell_adapters` | `viewed_onboard` | pref |
 
 See [`../guides/06_storage.md`](../guides/06_storage.md) for the step-by-step.
 
@@ -419,15 +438,16 @@ Local (workspace) dependencies only — pub.dev packages omitted. Which group ea
 | `core_di` | *(none)* |
 | `core_responsive` | *(none)* |
 | `platform_kernel` | `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
-| `core_common` | `platform_kernel`, `core_responsive`, `core_di` |
+| `core_common` | `platform_kernel`, `core_di` |
 | `core_network` | `platform_kernel` |
 | `core_notifications` | `platform_kernel` |
-| `core_storage` | `core_common` |
+| `core_storage` | `platform_kernel` |
 | `data_core` | `platform_kernel`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
-| `bloc_state_management` | `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
-| `provider_state_management` | `core_common`, `domain_core` *(approved exception)* |
-| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` |
-| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_storage`, `core_ui_kit`, `provider_state_management` |
+| `bloc_state_management` | `platform_kernel`, `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
+| `provider_state_management` | `core_common`, `core_responsive`, `domain_core` *(approved exception)* |
+| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive` |
+| `platform_shell_adapters` | `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (`RetryDialog` only) |
+| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |
 
 No arrow in this table points at `modules/*/feature` or `modules/*/data` — that is the invariant to preserve.

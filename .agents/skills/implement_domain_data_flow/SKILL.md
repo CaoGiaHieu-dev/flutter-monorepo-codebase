@@ -176,7 +176,8 @@ exist) and never let an exception escape the Data layer.
 
 > [!WARNING]
 > **`ErrorHandler` has no Firebase branch.** `platform/foundation/kernel/lib/src/error/error_handler.dart`
-> recognises `AppException`, `DioException`, `SocketException`, `HttpException` and
+> recognises `AppException`, whatever a registered `ErrorClassifier` claims (`core_network`'s
+> `DioFailureClassifier` maps `DioException`), `SocketException`, `HttpException` and
 > `FormatException`; everything else — including `FirebaseException`,
 > `FirebaseAuthException` and `PlatformException` — falls through to:
 > ```dart
@@ -188,7 +189,8 @@ exist) and never let an exception escape the Data layer.
 > );
 > ```
 > So in a release build every Firebase error surfaces as *"Unknown error occurred"*, and any
-> UI branching on specific codes is unreachable. If your flow uses Firebase, add the branch
+> UI branching on specific codes is unreachable. If your flow uses Firebase, register an
+> `ErrorClassifier` (`ErrorHandler.registerClassifier`, from your package's DI module)
 > or map the error inside your repository before it reaches `ErrorHandler`.
 
 ### Step 6: Define the UseCase in the `Domain` Layer

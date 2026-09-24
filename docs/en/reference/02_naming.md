@@ -104,7 +104,7 @@ The private constructor is what prevents `HomePath()` from ever being instantiat
 
 The directory is the bare name; the package name carries the prefix. `modules/home/feature/` → `name: feature_home`.
 
-Some packages break the prefix pattern by design: `platform_kernel`, `platform_app_shell`, `provider_state_management` and `bloc_state_management` (all under `platform/`), the apps (`mobile_app`, `admin_app`), and the tooling package `core_tools`.
+Some packages break the prefix pattern by design: `platform_kernel`, `platform_app_shell`, `platform_shell_adapters`, `provider_state_management` and `bloc_state_management` (all under `platform/`), the apps (`mobile_app`, `admin_app`), and the tooling package `core_tools`.
 
 ---
 

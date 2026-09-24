@@ -35,9 +35,11 @@ di_groups:
   # No `notifications` group: this app sends no push notifications, so it
   # composes no `core_notifications` and needs no `lib/firebase/`.
 
+  # Adapters first (storage adapters, AppBootStorage, NetworkConfig), then
+  # the shell itself; `ui` injects the storage adapters.
   - name: shell
     phase: after
-    packages: [platform_app_shell]
+    packages: [platform_shell_adapters, platform_app_shell]
 
   - name: ui
     phase: after

@@ -1,4 +1,4 @@
-/// Physical storage key owned exclusively by the app shell's `ThemeStorageImpl`.
+/// Physical storage key owned exclusively by `platform_shell_adapters`' `ThemeStorageImpl`.
 class ThemeStorageKeys {
   ThemeStorageKeys._();
 

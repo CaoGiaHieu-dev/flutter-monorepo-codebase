@@ -22,9 +22,9 @@ Before writing code, answer: **which package owns this value?**
 | Value | Owner | Keys file |
 | :--- | :--- | :--- |
 | Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `platform/shell/app_shell/lib/di/utils/theme_storage_keys.dart` |
-| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `platform/shell/app_shell/lib/di/utils/language_storage_keys.dart` |
-| Onboarding-seen boot flag | app shell → `AppBootStorage` | `platform/shell/app_shell/lib/di/utils/app_boot_storage_keys.dart` |
+| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
+| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `platform/shell/adapters/lib/src/utils/language_storage_keys.dart` |
+| Onboarding-seen boot flag | app shell → `AppBootStorage` | `platform/shell/adapters/lib/src/utils/app_boot_storage_keys.dart` |
 
 The owner is the package whose business logic reads/writes the value. **Never** put a key in
 `core_common`, and never let another package import the owner's key class.
@@ -153,7 +153,7 @@ abstract class IThemeStorage {
   void saveThemeMode(ThemeMode mode);
 }
 
-// 2. Implementation owns the StorageValue (platform/shell/app_shell/lib/di/theme_storage_impl.dart)
+// 2. Implementation owns the StorageValue (platform/shell/adapters/lib/src/theme_storage_impl.dart)
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);
@@ -185,7 +185,7 @@ class ThemeStorageImpl implements IThemeStorage {
 }
 ```
 
-`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `platform/shell/app_shell/lib/di/` — shared by every app — **not** in `core_storage`.
+`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `platform/shell/adapters/lib/src/` — shared by every app — **not** in `core_storage`.
 
 ---
 

@@ -54,15 +54,18 @@ di_groups:
     phase: after
     packages: [core_notifications]
 
-  # The shared app shell: storage adapters, NetworkConfig, router, providers.
-  # These used to be app-local registrations, which injectable runs *between*
-  # the two phases — so this group opens `after` (behind `notifications` only,
-  # which registers nothing it needs), the same slot.
+  # The shared app shell. These used to be app-local registrations, which
+  # injectable runs *between* the two phases — so this group opens `after`
+  # (behind `notifications` only, which registers nothing it needs), the same
+  # slot. Order inside the group is load-bearing too:
+  #   1. platform_shell_adapters — storage adapters, AppBootStorage,
+  #      NetworkConfig (+ SslPinningConfig). Needs StorageManager (`core`).
+  #   2. platform_app_shell — router, AppProvider, DeeplinkProvider.
   # `ui` depends on it: ThemeProvider / LanguageProvider inject the storage
   # adapters registered here.
   - name: shell
     phase: after
-    packages: [platform_app_shell]
+    packages: [platform_shell_adapters, platform_app_shell]
 
   # Depends on ILanguageStorage / IThemeStorage, registered by `shell` above.
   - name: ui

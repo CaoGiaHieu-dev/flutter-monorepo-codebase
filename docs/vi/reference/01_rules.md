@@ -35,7 +35,7 @@ Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật `AGEN
 | `bloc_state_management → domain_core` | `BlocViewState.error` mang thẳng `AppFailure`, nên kiểu state cơ sở cần nó. |
 
 > [!NOTE]
-> `core_ui_kit → provider_state_management` là đúng chiều. Chiều ngược lại bị cấm: nó sẽ khép thành một chu trình ngay bên trong vòng core, và đó chính là lý do `provider_state_management` tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`.
+> Ba cạnh này là những cạnh `platform → domain_core` duy nhất, và mọi cạnh platform khác đều theo chiều giữa các nhóm (`docs/vi/architecture/02_core.md` § 0): `ui` không bao giờ phụ thuộc `state`, `infra` không bao giờ phụ thuộc một package infra khác, và foundation không bao giờ phụ thuộc `ui` hay một transport. `core_ui_kit` không khai package quản lý state nào — `LoadMoreListView` nằm ở `provider_state_management` (`state → ui` là chiều được phép) — và `provider_state_management` vẫn tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`. Kernel không gọi tên kiểu Dio nào: `core_network` đóng góp `DioFailureClassifier` qua `ErrorHandler.registerClassifier`.
 
 **Kiểm chứng**
 
@@ -149,9 +149,9 @@ Các owner hiện có:
 | Owner | Package | Key | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `ThemeStorageImpl` | app shell | `themeMode` | pref |
-| `LanguageStorageImpl` | app shell | `locale` | pref |
-| `AppBootStorage` | app shell | `viewed_onboard` | pref |
+| `ThemeStorageImpl` | app shell (`platform_shell_adapters`) | `themeMode` | pref |
+| `LanguageStorageImpl` | app shell (`platform_shell_adapters`) | `locale` | pref |
+| `AppBootStorage` | app shell (`platform_shell_adapters`) | `viewed_onboard` | pref |
 
 Hướng dẫn đầy đủ: [`../guides/06_storage.md`](../guides/06_storage.md).
 
@@ -163,7 +163,7 @@ Hướng dẫn đầy đủ: [`../guides/06_storage.md`](../guides/06_storage.md
 
 **Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`, được sinh từ `di_groups` của manifest: `core` (before), rồi — sau phần đăng ký của chính app — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` không có nhóm `notifications`.
 
-Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_app_shell` đăng ký — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `IAuthSessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
+Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_shell_adapters` đăng ký (đứng đầu nhóm `shell`) — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `IAuthSessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
 
 > [!CAUTION]
 > **`flutter analyze` KHÔNG bắt được loại lỗi này.** Nó chỉ lộ ra lúc chạy thật, trên một lần boot thật.
@@ -429,7 +429,7 @@ abstract class AuthModule {
 Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, còn mọi feature khác chỉ nhìn thấy interface.
 
 > [!NOTE]
-> GetIt phân giải theo **đúng type**, không bao giờ theo supertype. Đăng ký `Impl as InterfaceA` **không** làm cho `getIt<InterfaceB>()` chạy được, kể cả khi `InterfaceA implements InterfaceB` — phải bind riêng từng cái. Xem `platform/shell/app_shell/lib/di/network_binding_module.dart`, nơi `SslPinningConfig` cần binding riêng dù `NetworkConfig implements SslPinningConfig`.
+> GetIt phân giải theo **đúng type**, không bao giờ theo supertype. Đăng ký `Impl as InterfaceA` **không** làm cho `getIt<InterfaceB>()` chạy được, kể cả khi `InterfaceA implements InterfaceB` — phải bind riêng từng cái. Xem `platform/shell/adapters/lib/di/network_binding_module.dart`, nơi `SslPinningConfig` cần binding riêng dù `NetworkConfig implements SslPinningConfig`.
 
 Đừng dùng Action Handler cho điều hướng thuần (dùng Navigator) hay cho logic thuần Domain (dùng UseCase).
 
@@ -478,7 +478,7 @@ Một file `analysis_options.yaml` duy nhất ở root áp dụng cho mọi pack
 | An toàn thứ tự DI | thứ tự module trong `apps/mobile/lib/di/injection.config.dart`; đăng ký theo type trong `lib/di/module.module.dart` của từng package |
 | core ⇏ feature / data / domain của sản phẩm | `dart tools/arch_check/check.dart` (R1) |
 | Contract removable resolve tuỳ chọn | `dart tools/arch_check/check.dart` (R8) |
-| App shell không import module nào | `dart tools/arch_check/check.dart` (R1 cho `platform_app_shell`, R10 cho `apps/*`) |
+| App shell không import module nào | `dart tools/arch_check/check.dart` (R1 cho `platform_app_shell` / `platform_shell_adapters`, R10 cho `apps/*`) |
 | Domain thuần Dart | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

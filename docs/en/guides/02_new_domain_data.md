@@ -364,7 +364,8 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 > [!WARNING]
 > **`ErrorHandler` has no Firebase branch today.** Reading `ErrorHandler._classify` (behind
 > `handleError`) in [`error_handler.dart`](../../../platform/foundation/kernel/lib/src/error/error_handler.dart):
-> it handles `AppException`, `DioException`, `SocketException`, `HttpException` and
+> it handles `AppException`, whatever a registered `ErrorClassifier` claims (`core_network`'s
+> `DioFailureClassifier` maps `DioException`), `SocketException`, `HttpException` and
 > `FormatException` — but not `FirebaseException`, `FirebaseAuthException` or `PlatformException`.
 > Every Firebase error therefore lands on the fallback:
 >
@@ -376,8 +377,9 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 > ```
 >
 > In a release build a wrong password and a network outage are indistinguishable — both say
-> *"Unknown error occurred"*. If your package uses Firebase, add a branch before relying on error
-> codes in the UI.
+> *"Unknown error occurred"*. If your package uses Firebase, register an `ErrorClassifier` for its
+> exceptions (`ErrorHandler.registerClassifier`, from your package's DI module — the way
+> `DioFailureClassifier` does) before relying on error codes in the UI.
 
 ---
 

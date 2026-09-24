@@ -36,7 +36,7 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 > [!IMPORTANT]
 > **Core tuyệt đối không được phụ thuộc feature.** `platform/*` nằm dưới cùng; nếu nó với ngược lên `modules/*/feature` thì đồ thị phụ thuộc có chu trình, và package đó không còn tách ra hay test độc lập được nữa.
 >
-> Lập luận đó áp dụng y hệt bên trong vòng core. Một lớp nền state-management cần widget placeholder cho trạng thái rỗng/đang tải, và `core_ui_kit` đã có sẵn bản có nhận diện thương hiệu — nhưng `core_ui_kit` lại phụ thuộc `provider_state_management`, nên mượn ngược lại là khép một chu trình. Vì vậy `provider_state_management` tự mang
+> Lập luận đó áp dụng y hệt bên trong vòng core, nơi phụ thuộc giữa các nhóm chỉ chạy một chiều (`state → ui`, không bao giờ `ui → state`). Một lớp nền state-management cần widget placeholder cho trạng thái rỗng/đang tải, và `core_ui_kit` đã có sẵn bản có nhận diện thương hiệu — nhưng lớp nền mà mượn từ thư viện widget thì kéo theo mọi phụ thuộc widget chỉ vì một vòng xoay. Vì vậy `provider_state_management` tự mang
 > [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../platform/state/provider/lib/src/base_view/default_state_widgets.dart) tối giản của riêng nó. Core cần widget thì core tự định nghĩa.
 
 ---
@@ -46,7 +46,7 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 | Tầng | Đường dẫn | Trách nhiệm | Được import | **Cấm** import |
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Điểm lắp ráp: `app_manifest.yaml`, `injection.dart` được sinh, `main.dart` một dòng, thứ định danh app (Firebase options) | tất cả | — |
-| **App shell** | `platform/shell/app_shell/` | Trình tự boot, lắp ráp router, material wrapper, storage adapter — dùng chung cho mọi app | các package core | mọi module (`arch_check` R1) |
+| **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Trình tự boot, lắp ráp router, material wrapper, state cấp app (`platform_app_shell`); `NetworkConfigImpl`, storage adapter, cờ boot (`platform_shell_adapters`) — dùng chung cho mọi app | các package core | mọi module (`arch_check` R1) |
 | **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, một package state-management | `data_*`, feature package khác |
 | **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
 | **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |
@@ -57,7 +57,7 @@ Mỗi tầng có trang riêng:
 
 ### Bên trong `platform/`: sáu nhóm
 
-Các package core nằm trong sáu thư mục nhóm theo vai trò: `foundation/` (kernel, hợp đồng DI, helper gắn với Flutter), `layers/` (`domain_core`, `data_core`), `infra/` (mạng, lưu trữ, database, notification), `ui/` (responsive, design system, thư viện widget), `state/` (lớp nền Provider và BLoC) và `shell/` (app shell). Chỉ thư mục thay đổi — mọi package giữ nguyên tên. Phụ thuộc trỏ vào trong: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← mọi thứ trong platform/`, và không gì trong `platform/` phụ thuộc `modules/`. Nhóm nào chứa gì, và ba cạnh hiện đang đi ngược chiều: [02_core.md § 0](02_core.md#package-nằm-ở-đâu--sáu-nhóm).
+Các package core nằm trong sáu thư mục nhóm theo vai trò: `foundation/` (kernel, hợp đồng DI, helper gắn với Flutter), `layers/` (`domain_core`, `data_core`), `infra/` (mạng, lưu trữ, database, notification), `ui/` (responsive, design system, thư viện widget), `state/` (lớp nền Provider và BLoC) và `shell/` (app shell và các adapter hạ tầng của nó). Chỉ thư mục thay đổi — mọi package giữ nguyên tên. Phụ thuộc trỏ vào trong: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← mọi thứ trong platform/`; không package infra nào phụ thuộc package infra khác, `ui` không bao giờ phụ thuộc `state`, `infra` hay `shell`, và không gì trong `platform/` phụ thuộc `modules/`. Đồ thị package tuân theo chiều này không có ngoại lệ. Nhóm nào chứa gì, và ba cạnh ngược chiều cuối cùng đã được gỡ ra sao: [02_core.md § 0](02_core.md#package-nằm-ở-đâu--sáu-nhóm).
 
 ### Yêu cầu Dart thuần của tầng Domain
 

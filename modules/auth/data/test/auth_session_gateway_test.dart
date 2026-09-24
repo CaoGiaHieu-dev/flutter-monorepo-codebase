@@ -1,3 +1,4 @@
+import 'package:core_network/core_network.dart';
 import 'package:data_auth/data_auth.dart';
 import 'package:dio/dio.dart';
 import 'package:domain_core/domain_core.dart';
@@ -12,6 +13,10 @@ void main() {
   late _FakeRemote remote;
   late _FakeLocal local;
   late AuthSessionGatewayImpl gateway;
+
+  // In the app core_network's DI module registers it; this test builds the
+  // repository by hand, so DioExceptions would otherwise stay unclassified.
+  setUpAll(DioFailureClassifier.ensureRegistered);
 
   setUp(() {
     remote = _FakeRemote();

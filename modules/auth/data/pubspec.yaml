@@ -10,8 +10,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  flutter:
-    sdk: flutter
   core_di:
     path: ../../../platform/foundation/contracts
   core_network:

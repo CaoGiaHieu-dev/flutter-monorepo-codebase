@@ -19,8 +19,9 @@ with the architecture rules enforced by CI instead of review alone.
 ### Added
 
 - `apps/admin`, a second app composing only auth + settings, to prove that modules compose per app.
-- `platform_app_shell` (`platform/shell/app_shell`): boot, dynamic router, material wrapper, storage
-  adapters and `NetworkConfigImpl`, shared by every app instead of copied into each.
+- `platform_app_shell` (`platform/shell/app_shell`): boot, dynamic router, material wrapper and
+  app state, shared by every app instead of copied into each; its storage adapters and
+  `NetworkConfigImpl` live beside it in `platform_shell_adapters` (`platform/shell/adapters`).
 - `platform_kernel` (`platform/foundation/kernel`): a pure-Dart foundation (`getIt` helpers,
   `ErrorHandler`, `AppException`, extensions) that non-Flutter packages depend on.
 - Composer: each app is generated from `apps/<id>/app_manifest.yaml` (`composer sync`,
@@ -52,6 +53,26 @@ with the architecture rules enforced by CI instead of review alone.
   updates its own relative `path:` dependencies and any hard-coded `platform/<pkg>` path.
   `module_generator` types 4/5 take `--group` (default `infra`). The allowed direction between
   groups is documented in `docs/en/architecture/02_core.md` § 0 (not yet machine-checked).
+- The platform package graph now follows that group direction with no exception (stage 2):
+  `LoadMoreListView` / `LoadingMoreWidget` moved from `core_ui_kit` to
+  `provider_state_management` (`core_ui_kit` no longer depends on a state package);
+  `BottomTransitionPage` moved from `core_common` to `core_ui_kit` (`navigation/`), and
+  `AppInitializer`'s portrait threshold became a private constant, so `core_common` no longer
+  depends on `core_responsive`; `core_storage` depends on `platform_kernel` instead of
+  `core_common`; `data_auth` drops its unused `flutter` dependency. Imports through the package
+  barrels resolve unchanged except for code that imported these two widgets' old file paths.
+- `ErrorHandler` (`platform_kernel`) no longer imports Dio. The `DioException` → `AppFailure`
+  mapping moved, unchanged, to `core_network`'s `DioFailureClassifier`, which registers itself
+  through the new `ErrorClassifier` / `ErrorHandler.registerClassifier` seam while the `core` DI
+  group initialises. A unit test that classifies `DioException`s without running DI must call
+  `DioFailureClassifier.ensureRegistered()` first.
+- `platform_app_shell` split (stage 3): its infrastructure adapters — `NetworkConfigImpl`,
+  `NetworkBindingModule`, `LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage` and their
+  storage-key classes — moved to the new `platform_shell_adapters` (`platform/shell/adapters`),
+  listed first in every app's `shell` DI group. `platform_app_shell` keeps boot, router,
+  wrappers and app state, and depends on the adapters. Storage keys are unchanged, so stored
+  values survive the update. A fork adds `platform_shell_adapters` to the `shell` group of each
+  `app_manifest.yaml` and runs `composer sync`.
 - Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere.
 - `core_database` and `core_storage` are mechanism only: each package owns its own Drift database
   and its own storage keys. The Drift cache example moved to the `cache` sample module.

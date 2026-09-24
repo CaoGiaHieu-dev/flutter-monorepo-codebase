@@ -157,7 +157,7 @@ flutter analyze
 - [ ] Every `on<Event>` handler is `async` and takes `(event, emit)`
 - [ ] The right `ViewState` is used — `BlocViewState<T>` on the BLoC side, `ViewState` on the Provider side
 - [ ] A `core_di` contract implemented under `modules/` (any layer) is resolved with `getItOrNull` / `getAllOrEmpty` outside its own module — `arch_check` R8 is clean
-- [ ] No app-shell file outside `injection.dart` imports a module package — `arch_check` R1 (`platform_app_shell`) and R10 (`apps/*`) are clean
+- [ ] No app-shell file outside `injection.dart` imports a module package — `arch_check` R1 (`platform_app_shell`, `platform_shell_adapters`) and R10 (`apps/*`) are clean
 - [ ] All sizing goes through `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; no raw doubles, no bare `16.h` form (`arch_check` R7 blocks it)
 - [ ] Design tokens called with context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, never a bare getter, never double-scaled
 - [ ] Values needed after an `await` were read from context **before** it, not across it

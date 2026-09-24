@@ -152,7 +152,8 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
 │   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
 │   └── shell/                     # App shell mà mọi app compose
-│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapter
+│       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, storage adapter, AppBootStorage
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
 │   ├── arch_check/                # Luật phân tầng R1–R10 — Cổng PR 1
@@ -325,8 +326,10 @@ const _notificationsModules = [
   ExternalModule(CoreNotificationsPackageModule),
 ];
 
-// platform_app_shell: storage adapter, NetworkConfig, router, provider.
+// platform_shell_adapters: storage adapter, AppBootStorage, NetworkConfig;
+// rồi platform_app_shell: router, provider.
 const _shellModules = [
+  ExternalModule(PlatformShellAdaptersPackageModule),
   ExternalModule(PlatformAppShellPackageModule),
 ];
 
@@ -396,7 +399,7 @@ Future<void> configureDependencies({String? environment}) async {
 >
 > **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
 > không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
-> qua `@module` (xem `platform/shell/app_shell/lib/di/network_binding_module.dart`).
+> qua `@module` (xem `platform/shell/adapters/lib/di/network_binding_module.dart`).
 
 ---
 

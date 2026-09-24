@@ -6,8 +6,8 @@ import 'package:core_di/core_di.dart';
 import 'package:core_ui_kit/dialogs/app_overlay.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 
-import '../../di/app_boot_storage.dart';
 import '../navigation/app_router.dart';
 import '../providers/deeplink_provider.dart';
 

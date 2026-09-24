@@ -263,11 +263,11 @@ Phần đăng ký — kể cả việc `await` `initialize()` mà `preResolve` y
 | Owner | Package | Key | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `ThemeStorageImpl` | app shell (`platform/shell/app_shell/lib/di/`) | `themeMode` | `pref` |
-| `LanguageStorageImpl` | app shell (`platform/shell/app_shell/lib/di/`) | `locale` | `pref` |
-| `AppBootStorage` | app shell (`platform/shell/app_shell/lib/di/`) | `viewed_onboard` | `pref` |
+| `ThemeStorageImpl` | app shell (`platform/shell/adapters/lib/src/`) | `themeMode` | `pref` |
+| `LanguageStorageImpl` | app shell (`platform/shell/adapters/lib/src/`) | `locale` | `pref` |
+| `AppBootStorage` | app shell (`platform/shell/adapters/lib/src/`) | `viewed_onboard` | `pref` |
 
-Class key của app shell nằm ở `platform/shell/app_shell/lib/di/utils/`.
+Class key của app shell nằm ở `platform/shell/adapters/lib/src/utils/`.
 
 
 ---
@@ -279,7 +279,7 @@ Class key của app shell nằm ở `platform/shell/app_shell/lib/di/utils/`.
 **Enum:**
 
 ```dart
-// platform/shell/app_shell/lib/di/theme_storage_impl.dart
+// platform/shell/adapters/lib/src/theme_storage_impl.dart
 late final _themeMode = StorageValue<ThemeMode>(
   _storageManager.getStorage(StorageType.pref),
   ThemeStorageKeys.THEME_MODE,
@@ -293,7 +293,7 @@ late final _themeMode = StorageValue<ThemeMode>(
 **Bool có giá trị mặc định rõ ràng:**
 
 ```dart
-// platform/shell/app_shell/lib/di/app_boot_storage.dart
+// platform/shell/adapters/lib/src/app_boot_storage.dart
 late final viewedOnboard = StorageValue<bool>(
   _storageManager.getStorage(StorageType.pref),
   AppBootStorageKeys.VIEWED_ONBOARD,
@@ -344,7 +344,7 @@ abstract class IThemeStorage {
 ```
 
 ```dart
-// platform/shell/app_shell/lib/di/theme_storage_impl.dart — owner implement nó
+// platform/shell/adapters/lib/src/theme_storage_impl.dart — owner implement nó
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);

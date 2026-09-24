@@ -193,7 +193,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | Layer | Path | Responsibility |
 |:------|:-----|:---------------|
 | **Apps** | `apps/<id>/` | What genuinely differs per app: `app_manifest.yaml`, the `injection.dart` generated from it, a one-line `main.dart` (`runShellApp`), flavors, and what identifies it (`lib/firebase/`). Two today: `apps/mobile` (every sample module) and `apps/admin` (auth + settings) |
-| **App Shell** | `platform/shell/app_shell/` | Shared by every app: boot (`runShellApp`, `MainScope`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes), material wrapper, storage adapters, `NetworkConfigImpl` |
+| **App Shell** | `platform/shell/app_shell/` | Shared by every app: boot (`runShellApp`, `MainScope`), **dynamic** router assembly (`app_router.dart` — collects route modules from DI, never hardcode feature routes), material wrapper, app-level providers. Its infrastructure adapters (storage adapters, `AppBootStorage`, `NetworkConfigImpl`) sit beside it in `platform/shell/adapters/` (`platform_shell_adapters`) |
 | **Core** | `platform/<group>/*` | Infrastructure shared across all layers, in six group folders — see [Platform Groups](#platform-groups) |
 | **Domain** | `modules/*/domain` | **Pure Dart** business logic — entities, use cases, repository interfaces |
 | **Data** | `modules/*/data` | Repository implementations, DTOs/models, data sources (remote + local) |
@@ -205,30 +205,32 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 
 | Group | Packages (folder) | What belongs here | May depend on |
 |:------|:------------------|:------------------|:--------------|
-| `platform/foundation/` | `platform_kernel` (`kernel`), `core_di` (`contracts`), `core_common` (`common`) | Service locator, errors, cross-module DI contracts, Flutter-bound helpers — no I/O, no widgets | nothing else in `platform/` |
-| `platform/layers/` | `domain_core` (`domain`), `data_core` (`data`) | Base contracts of the domain and data layers | foundation |
-| `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (same folder names) | Mechanisms that reach outside the process — mechanism only. Default for `generate.dart 4`/`5` | foundation, layers |
-| `platform/ui/` | `core_responsive` (`responsive`), `core_base_ui` (`design_system`), `core_ui_kit` (`ui_kit`) | Scaling/adaptive layout, design tokens + global l10n, shared widgets | foundation, layers |
-| `platform/state/` | `provider_state_management` (`provider`), `bloc_state_management` (`bloc`) | State-management bases | foundation, layers, ui |
-| `platform/shell/` | `platform_app_shell` (`app_shell`) | The app shell every app composes | every other group |
+| `platform/layers/` (domain) | `domain_core` (`domain`) | Base contracts of the domain layer (`Result`, `AppFailure`) | nothing |
+| `platform/foundation/` | `platform_kernel` (`kernel`), `core_di` (`contracts`), `core_common` (`common`) | Service locator, errors, cross-module DI contracts, Flutter-bound helpers — no I/O, no widgets, no transport | foundation, `domain_core` |
+| `platform/layers/` (data) | `data_core` (`data`) | Base contracts of the data layer (`IBaseRepository`) | foundation, `domain_core` |
+| `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (same folder names) | Mechanisms that reach outside the process — mechanism only. Default for `generate.dart 4`/`5` | foundation, layers — **no infra → infra** |
+| `platform/ui/` | `core_responsive` (`responsive`), `core_base_ui` (`design_system`), `core_ui_kit` (`ui_kit`) | Scaling/adaptive layout, design tokens + global l10n, shared widgets | foundation, ui — never state, infra or shell |
+| `platform/state/` | `provider_state_management` (`provider`), `bloc_state_management` (`bloc`) | State-management bases, and the widgets bound to them (`LoadMoreListView`) | foundation, layers, ui |
+| `platform/shell/` | `platform_shell_adapters` (`adapters`), `platform_app_shell` (`app_shell`) | Infrastructure adapters every app registers; the app shell every app composes | every platform group (`app_shell → adapters`, never the reverse) |
 
-Direction (arrow points at the side depended on): `foundation ← layers ← infra / state`, `ui ← state`, `shell ← all of platform/`; nothing in `platform/` depends on `modules/` (R1). **Not machine-checked yet** — review holds it. Three edges run against it today and stay until enforcement lands: `platform_kernel → domain_core` (approved R1 edge), `core_common → core_responsive` (page transitions), `core_ui_kit → provider_state_management` (the reverse stays forbidden — a cycle). Full explanation: `docs/en/architecture/02_core.md` § 0.
+Direction (arrow points at the side depended on): `domain_core ← foundation ← layers/data ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`; nothing in `platform/` depends on `modules/` (R1). **The graph obeys it with no exception** — the three edges that ran against it were removed: `core_common → core_responsive` (`BottomTransitionPage` moved to `core_ui_kit`; `AppInitializer`'s 600 px portrait threshold is a private constant), `core_ui_kit → provider_state_management` (`LoadMoreListView` / `LoadingMoreWidget` moved to `provider_state_management`), and the kernel's `dio` import (the Dio → `AppFailure` mapping is `core_network`'s `DioFailureClassifier`, registered into `ErrorHandler`). **Not machine-checked yet** — review holds it until the enforcement stage lands. Full explanation: `docs/en/architecture/02_core.md` § 0.
 
 ### Core Packages Detail
 
 | Package | Purpose | Key Notes |
 |:--------|:--------|:----------|
-| `platform_kernel` | **Depend on this, not `core_common`, unless you need something Flutter-bound.** Pure Dart, zero Flutter. `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` | 7 dependencies, none Flutter-bound — enforced by arch_check **R9**. Everything else may depend on it |
-| `platform_app_shell` | The reusable app shell — `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the `ILanguageStorage`/`IThemeStorage` adapters, `AppBootStorage`, `NetworkConfigImpl` | Every app composes it instead of copying it. Its DI group runs **after `core`, before `ui`**. Imports no module — arch_check R1 holds that |
-| `core_common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, `AppUtils`, `Debounce`, formatters, dialog helpers | Re-exports `platform_kernel` wholesale, so `getItOrNull`, `ErrorHandler`, `EnvConstants` etc. still resolve through it — but they live in the kernel (`platform/foundation/kernel/lib/src/`), as does the `AppFailure` re-export shim at `src/error/failures.dart` (`AppFailure` itself lives in `domain_core`) |
+| `platform_kernel` | **Depend on this, not `core_common`, unless you need something Flutter-bound.** Pure Dart, zero Flutter. `getIt`/`getItOrNull`/`getAll`/`getAllOrEmpty`, `ErrorHandler` (+ the `ErrorClassifier` seam), `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` | 6 dependencies, none Flutter-bound and no transport (`dio` left with the `DioFailureClassifier` move) — enforced by arch_check **R9**. Everything else may depend on it |
+| `platform_app_shell` | The reusable app shell — composition, UI and app state: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `RootApp`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider` | Every app composes it instead of copying it. Its DI group (`shell`) runs **after `core`, before `ui`**, right behind `platform_shell_adapters`. Imports no module — arch_check R1 holds that |
+| `platform_shell_adapters` | The shell's infrastructure adapters — `NetworkConfigImpl` + `NetworkBindingModule` (`SslPinningConfig`), `LanguageStorageImpl`/`ThemeStorageImpl` (`ILanguageStorage`/`IThemeStorage`), `AppBootStorage`, their keys in `lib/src/utils/` | First in the `shell` DI group — the storage adapters must be registered before `ui`. Depends on `core_ui_kit` only for `NetworkConfigImpl`'s `RetryDialog`. Imports no module (R1) |
+| `core_common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, `AppUtils`, `Debounce`, formatters, dialog helpers | Re-exports `platform_kernel` wholesale, so `getItOrNull`, `ErrorHandler`, `EnvConstants` etc. still resolve through it — but they live in the kernel (`platform/foundation/kernel/lib/src/`), as does the `AppFailure` re-export shim at `src/error/failures.dart` (`AppFailure` itself lives in `domain_core`) |
 | `core_di` | DI Hub — Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `NavigatorKeys`, agnostic stream interfaces, optional observability contracts (`IErrorReporter`, `IAnalytics`) | Declares **no** `domain_*` dependency — a contract carries its own value type (`AuthPrincipal`), never a domain entity |
 | `core_base_ui` | Design System — themes, color palette, typography, assets, L10n translations | **Contains zero Flutter widgets.** Feature-specific assets go in feature packages |
-| `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_app_shell` |
-| `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage) |
+| `core_network` | `ApiClient` (Dio factory), Retrofit, interceptors (Auth/Retry/Logging), SSL pinning, `DioFailureClassifier` (Dio → `AppFailure`) | `NetworkConfig` interface → `NetworkConfigImpl` in `platform_shell_adapters`. `DioFailureClassifier` is an eager `@singleton` whose `@PostConstruct` calls `ErrorHandler.registerClassifier` while the `core` group initialises — a unit test that classifies `DioException`s without DI calls `DioFailureClassifier.ensureRegistered()` |
+| `core_storage` | **Mechanism only** — `StorageInterface`, `StorageManager`, reactive `StorageValue<T>`, `StorageType`, AES-256 + RAM obfuscation, dual-layer security (Keychain/KeyStore) | **Defines zero keys/presets.** Each consumer declares its own `StorageValue` — see [Storage System](#storage-system-core_storage). Needs only `platform_kernel` from the foundation (not `core_common`) |
 | `core_database` | **Mechanism only** — `IDatabaseHandle<TDb>`, `IDatabaseMigration`, `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener` | **Owns no database/table/DAO**; its DI module registers nothing. Each package declares its own database — see [Database System](#database-system-package-owned-drift--sqlite) |
 | `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
 | `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`); scale policy (`ScaleBounds`, `ResponsiveProfile`); window classes (`WindowSizeClass`, `WindowHeightClass`, `ResponsiveBreakpoints`); adaptive layout (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`, `FoldPosture`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Scales **down only** by default. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
-| `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit` |
+| `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit`, and `LoadMoreListView`/`LoadingMoreWidget` (bound to `LoadMoreMixin`) |
 | `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union), `BlocResultMixin<T>` / `CubitResultMixin<T>` (`emitResult`) | **`BaseBloc`/`BaseCubit` are empty extension points**; `emitResult` settles a `Result` into `BlocViewState<T>` — a custom state still unwraps by hand. See [BLoC Pattern](#bloc-pattern-bloc_state_management) |
 
 ### Domain Layer Rules (Pure Dart Mandate)
@@ -247,7 +249,7 @@ Direction (arrow points at the side depended on): `foundation ← layers ← inf
 - Models use `freezed` + `json_serializable` with `.toEntity()` mapper
 - `RepositoryImpl` extends `IBaseRepository` from `data_core` and uses `execute()` (async) / `executeSync()` (sync) wrappers
 - Error handling: `ErrorHandler.handleError(e)` — there is **no** `AppFailure.fromException()`, do not invent one
-- ⚠️ `ErrorHandler` has **no Firebase branch** — `FirebaseException`/`FirebaseAuthException`/`PlatformException` all collapse to `ServerFailure(code: 9999)` → *"Unknown error occurred"* in release. Add a branch before relying on Firebase error codes in UI
+- ⚠️ `ErrorHandler` has **no Firebase branch** — `FirebaseException`/`FirebaseAuthException`/`PlatformException` all collapse to `ServerFailure(code: 9999)` → *"Unknown error occurred"* in release. Register an `ErrorClassifier` (`ErrorHandler.registerClassifier`, the way `core_network` maps Dio) before relying on Firebase error codes in UI
 - DataSources return Models only, never Entities — the one allowed wrapper is `domain_core`'s `BaseEntity<T>` response envelope (`AuthRemoteDataSource` returns `Future<BaseEntity<UserModel>>`; the repository unwraps it in `execute`'s `mapper`) — and **never leak a generated type** (a Drift row must be converted at the boundary — see `CacheEntryModel.fromRow`). They let exceptions bubble up to RepositoryImpl
 
 ### Feature Layer Rules
@@ -273,7 +275,8 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
   // (the app's own lib/ registers here, between the phases: FirebaseModule)
   externalPackageModulesAfter: [
     ..._notificationsModules, // CoreNotificationsPackageModule — injects the app's FirebaseOptions
-    ..._shellModules,    // PlatformAppShellPackageModule — storage adapters, NetworkConfig, router
+    ..._shellModules,    // PlatformShellAdaptersPackageModule — storage adapters, AppBootStorage, NetworkConfig;
+                         // then PlatformAppShellPackageModule — router, AppProvider, DeeplinkProvider
     ..._uiModules,       // CoreBaseUiPackageModule (injects the shell's storage adapters)
     ..._domainModules,   // domain_core, domain_auth, domain_cache
     ..._dataModules,     // data_core, data_auth, data_cache
@@ -297,7 +300,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 ### Critical DI Rules
 
 1. **Constructor Injection only** — no `getIt<T>()` inside business logic (VMs, Repos, UseCases)
-2. **`CoreBaseUiPackageModule` must run after the `shell` group** — it injects `ILanguageStorage`/`IThemeStorage`, which `platform_app_shell` registers. The manifest's `di_groups` order is what enforces this
+2. **`CoreBaseUiPackageModule` must run after the `shell` group** — it injects `ILanguageStorage`/`IThemeStorage`, which `platform_shell_adapters` registers (first in the `shell` group, before `platform_app_shell`). The manifest's `di_groups` order is what enforces this
 3. Never create monolithic `DomainPackageModule`/`DataPackageModule` — register each micro-package module separately
 4. Compose a package through each `apps/<id>/app_manifest.yaml`, then run `composer sync` — the `_<group>Modules` lists in `injection.dart` are generated from it. A **module** (`domain_*`/`data_*`/`feature_*`) is listed under `modules:` as `- { id: <name>, layers: [domain, data, feature] }` and gets its group from the `from_modules:` of the `domain`/`data`/`feature` groups; only **platform** packages are named in a `di_groups` entry (`core`, `notifications`, `shell`, `ui`, `domain`, `data`, `other`)
 5. `@InjectableInit.microPackage()` takes no arguments — the one exception is `core_notifications`' `ignoreUnregisteredTypesInPackages: ['firebase_core']`, because the app, not a package, registers `FirebaseOptions`
@@ -305,7 +308,7 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
 7. **`getAll<T>()` THROWS when `T` is unregistered** — use `getAllOrEmpty<T>()` for optional contributions, and `getItOrNull<T>()` + fallback for single ones
 8. **GetIt does not resolve supertypes.** `Impl as InterfaceA` leaves `getIt<InterfaceB>()` unresolvable even if `InterfaceA implements InterfaceB`. Bind the second type via `@module`:
    ```dart
-   // platform/shell/app_shell/lib/di/network_binding_module.dart
+   // platform/shell/adapters/lib/di/network_binding_module.dart
    @module
    abstract class NetworkBindingModule {
      @lazySingleton
@@ -314,9 +317,9 @@ Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart`. 
    ```
    Miss it and SSL pinning silently no-ops on staging/prod — the app still builds and still makes requests.
 
-### App-Shell Storage Adapters (`platform_app_shell`)
+### App-Shell Storage Adapters (`platform_shell_adapters`)
 
-`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `platform/shell/app_shell/lib/di/` — shared by every app — and each owns its **own** `StorageValue` (no shared preset object); their keys live in `platform/shell/app_shell/lib/di/utils/`:
+`LanguageProvider`/`ThemeProvider` (in `core_base_ui`) inject `ILanguageStorage`/`IThemeStorage` from `core_di`. Concrete impls live in `platform/shell/adapters/lib/src/` — shared by every app, split out of `platform_app_shell` so the shell keeps composition/UI/app state only — and each owns its **own** `StorageValue` (no shared preset object); their keys live in `platform/shell/adapters/lib/src/utils/`. `platform_app_shell` depends on the adapters package (`AppRouter`/`NavigatorWrapperWidget` read `AppBootStorage.viewedOnboard`), never the reverse:
 - `language_storage_impl.dart` → own `StorageValue<String>` @ `LanguageStorageKeys.LOCALE`
 - `theme_storage_impl.dart` → own `StorageValue<ThemeMode>` @ `ThemeStorageKeys.THEME_MODE`
 - `app_boot_storage.dart` → own `StorageValue<bool>` @ `AppBootStorageKeys.VIEWED_ONBOARD`
@@ -717,7 +720,7 @@ Registration order in `ApiClient.createClient()` (`platform/infra/network/lib/sr
 - **Web:** nothing is installed — the browser owns TLS and Dio uses the browser adapter, so `_setupHttpOverrides` returns after one `INFO` log (`AppInitializer.debugIsWebOverride` stands in for `kIsWeb` in tests). `dart:io` still *compiles* on the web; `apps/admin` builds and boots there (`flutter build web` after `flutter create --platforms=web .`), `apps/mobile` does not compile (`core_database` → `drift/native.dart` → `dart:ffi`). Status and known gaps: `docs/en/architecture/02_core.md` § 11
 - > [!CAUTION]
   > Pinning needs **two** things or it silently no-ops (the initializer logs an ERROR in each case):
-  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `platform/shell/app_shell/lib/di/network_binding_module.dart` binds it.
+  > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `platform/shell/adapters/lib/di/network_binding_module.dart` binds it.
   > 2. `sslPinningHashes` must be **non-empty**. It currently returns `const []`, i.e. **pinning is off** until you fill it in. See the `openssl` recipe in `network_config_impl.dart`; pin at least two keys (leaf + backup) so cert rotation cannot lock every client out.
 
 ### Data Standardization
@@ -758,7 +761,7 @@ Config: copy `apps/mobile/fastlane/Config.example.yaml` → `apps/mobile/fastlan
 | Package | Contains | Key Rule |
 |:--------|:---------|:---------|
 | `core_base_ui` | Design tokens, themes, colors, fonts, images, icons, L10n | **Zero Flutter widgets.** Only global assets |
-| `core_ui_kit` | All reusable widgets (atomic + business) | Lives in `platform/ui/ui_kit`. Depends on `core_common`, `core_base_ui`, `core_responsive`, `provider_state_management` — never on a feature |
+| `core_ui_kit` | All reusable widgets (atomic + business), `BottomTransitionPage` | Lives in `platform/ui/ui_kit`. Depends on `core_common`, `core_base_ui`, `core_responsive` — never on a state-management package, infra or a feature |
 
 ### Sharing Across Features
 
@@ -791,7 +794,7 @@ flutter pub get && dart run build_runner build --workspace
 | `IAuthRefreshListenable` (`implements Listenable`) | `AuthProvider` as GoRouter's `refreshListenable` |
 | `IAuthSessionState` + `AuthSessionFailure` | `AuthProvider`/`AuthErrorState`/`context.l10nAuth` in `NavigatorWrapperWidget` |
 | `IAppTreeWrapper` | `ChangeNotifierProvider<AuthProvider>` in `app_material_wrapper.dart` |
-| `IAuthSessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` |
+| `IAuthSessionGateway` | `AuthLocalDataSource` + `RefreshTokenUseCase` in `network_config_impl.dart` (`platform_shell_adapters`) |
 
 Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature returns `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other. Prefer a plain Dart 3 `sealed class` over Freezed in `core_di` (see `AuthSessionFailure`) — `core_di` runs only injectable's codegen (its `module.module.dart`), no Freezed/`part`-file codegen, and a `part` on a contract would make every consumer wait on `build_runner`.
 
@@ -829,7 +832,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 25. **When a type used by generated code moves package, import its new home directly.** A `show`-limited re-export cannot carry Freezed companions like `$AppFailureCopyWith`.
 26. **Domain depends on nothing.** `domain_core` has zero workspace deps and no `flutter`. Never re-add `core_common` to a domain package.
 27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
-28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10** in `apps/*` (only `injection.dart` may import a module) and **R1** in `platform_app_shell`. R10 was added after `network_config_impl.dart` — then an app file, now in `platform_app_shell` — was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
+28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10** in `apps/*` (only `injection.dart` may import a module) and **R1** in `platform_app_shell` / `platform_shell_adapters`. R10 was added after `network_config_impl.dart` — then an app file, now in `platform_shell_adapters` — was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
 
 29. **The analyzer is strict** (`analysis_options.yaml`, whose header explains every setting): `strict-casts`, `strict-inference`, `strict-raw-types`, plus `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls`, `empty_catches`. Cast `dynamic` before use (`jsonDecode(s) as Map<String, dynamic>`); give the type argument inference cannot find (`Future<void>.delayed`, `AppDialogController.show<void>`); never a raw generic — `AppFailure<dynamic>`, keeping `dynamic` because Freezed `==` compares `runtimeType`; `await` in an async body or `unawaited(...)` with a reason; cancel/close subscription and controller fields in their own class; an empty `catch` holds a comment saying why it is safe. `discarded_futures` is off on purpose (it floods synchronous `dispose()` with `cancel()`/`close()` hits). Table: `docs/en/reference/01_rules.md` § 16.
 ---
@@ -852,7 +855,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 - [ ] All sizing goes through `context.w/h/sp/r` (`core_responsive`) — `dart tools/arch_check/check.dart` R7 is clean
 - [ ] Layout choices use the window size class (`context.adaptive` / `AdaptiveLayout`), not `Platform.is*` or a device check
 - [ ] `core_di` contracts implemented under `modules/` (any layer) resolve with `getItOrNull` / `getAllOrEmpty` outside their own module — arch_check R8 is clean
-- [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R1 (`platform_app_shell`) and R10 (`apps/*`) are clean
+- [ ] No app-shell file outside `injection.dart` imports a module package — arch_check R1 (`platform_app_shell`, `platform_shell_adapters`) and R10 (`apps/*`) are clean
 - [ ] CLI tools use `stdout.writeln`/`stderr.writeln` (NOT `print()`)
 - [ ] Missing modules handled with `getAllOrEmpty`/`getItOrNull` + fallbacks
 - [ ] No `platform/*` imports or declares `feature_*`, `data_*` or `domain_*` outside the three approved `→ domain_core` edges — `arch_check` R1 is clean

@@ -104,7 +104,7 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 
 Thư mục mang tên trần; tên package mới mang tiền tố. `modules/home/feature/` → `name: feature_home`.
 
-Một số package cố ý phá vỡ quy tắc tiền tố: `platform_kernel`, `platform_app_shell`, `provider_state_management` và `bloc_state_management` (đều nằm trong `platform/`), các app (`mobile_app`, `admin_app`), và package công cụ `core_tools`.
+Một số package cố ý phá vỡ quy tắc tiền tố: `platform_kernel`, `platform_app_shell`, `platform_shell_adapters`, `provider_state_management` và `bloc_state_management` (đều nằm trong `platform/`), các app (`mobile_app`, `admin_app`), và package công cụ `core_tools`.
 
 ---
 

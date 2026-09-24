@@ -29,8 +29,9 @@ apps/admin/
         └── di.dart        barrel
 ```
 
-That is the whole app. The boot sequence, router, storage adapters and material wrapper come from
-[`platform/shell/app_shell`](../../platform/shell/app_shell/).
+That is the whole app. The boot sequence, router and material wrapper come from
+[`platform/shell/app_shell`](../../platform/shell/app_shell/), the storage adapters and
+`NetworkConfigImpl` from [`platform/shell/adapters`](../../platform/shell/adapters/).
 
 To change what it is made of, edit `app_manifest.yaml`, then from the repository root:
 

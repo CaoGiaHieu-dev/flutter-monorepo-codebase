@@ -17,8 +17,6 @@ dependencies:
     path: ../../foundation/common
   core_base_ui:
     path: ../design_system
-  provider_state_management:
-    path: ../../state/provider
   get_it: ^9.2.1
   injectable: ^3.0.0
   cached_network_image_ce: "^4.10.0"

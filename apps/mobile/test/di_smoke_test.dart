@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
+import 'package:core_network/core_network.dart';
 import 'package:drift/drift.dart' show GeneratedDatabase;
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/di/injection.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
+import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Boots this app's real, generated DI graph — the one `main.dart` runs.
@@ -172,10 +174,22 @@ void _expectShellContractsResolve() {
   getItOrNull<IErrorReporter>();
   getItOrNull<IAnalytics>();
 
-  // Registered by the shell itself: required, not optional.
+  // Registered by the shell itself (`platform_shell_adapters`): required,
+  // not optional.
   getIt<ILanguageStorage>();
   getIt<IThemeStorage>();
+  getIt<AppBootStorage>();
+  getIt<NetworkConfig>();
   getIt<SslPinningConfig>();
+
+  // `core_network` hooks its Dio classifier into the kernel's ErrorHandler
+  // while the `core` group initialises — before any client exists — so a
+  // DioException never degrades to the generic "unknown error".
+  expect(
+    ErrorHandler.classifiers.whereType<DioFailureClassifier>(),
+    hasLength(1),
+    reason: 'DioFailureClassifier must register itself during DI',
+  );
 
   // Assembles the GoRouter from every contribution above; GoRouter asserts
   // on a malformed tree (duplicate or missing paths) while it is built.

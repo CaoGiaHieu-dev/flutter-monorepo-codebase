@@ -26,6 +26,8 @@ dependencies:
     path: ../../platform/foundation/contracts
   core_notifications:
     path: ../../platform/infra/notifications
+  platform_shell_adapters:
+    path: ../../platform/shell/adapters
   platform_app_shell:
     path: ../../platform/shell/app_shell
   core_base_ui:

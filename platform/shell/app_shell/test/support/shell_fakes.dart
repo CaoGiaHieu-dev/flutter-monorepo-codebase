@@ -4,6 +4,7 @@ import 'package:core_storage/core_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
+import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 
 /// In-memory stand-ins for what the shell's DI module registers, so a test
 /// can build `AppMaterialWrapper` / `RootApp` without storage or plugins.

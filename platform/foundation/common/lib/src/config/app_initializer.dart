@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:core_responsive/core_responsive.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -208,9 +207,16 @@ class AppInitializer {
     double? shortestSide,
   ) {
     if (shortestSide == null) return const [];
-    final phoneSized = shortestSide < const ResponsiveBreakpoints().medium;
+    final phoneSized = shortestSide < _phoneMaxShortestSide;
     return phoneSized ? const [DeviceOrientation.portraitUp] : const [];
   }
+
+  /// The Material 3 `medium` breakpoint, in logical pixels — the same value
+  /// as `core_responsive`'s `ResponsiveConstants.BREAKPOINT_MEDIUM`. Spelled
+  /// out here because `core_common` is foundation and must not depend on the
+  /// ui group; the lock is a fixed device question, not a configurable
+  /// window-size-class boundary.
+  static const double _phoneMaxShortestSide = 600;
 
   /// Shortest side, in logical pixels, of the display the first view is on
   /// — or of the view itself when the display reports no size. `null` when

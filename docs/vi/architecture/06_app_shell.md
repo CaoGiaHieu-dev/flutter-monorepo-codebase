@@ -1,11 +1,11 @@
-# App Shell (`platform/shell/app_shell/` + `apps/<id>/`)
+# App Shell (`platform/shell/` + `apps/<id>/`)
 
 Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cho shell, và hiểu vì sao thứ tự các nhóm DI trong `app_manifest.yaml` không hề tuỳ tiện.
 
 Shell được tách làm hai, có chủ đích:
 
 - **`apps/<id>/`** là **điểm lắp ráp (composition root)** — nơi duy nhất được phép phụ thuộc mọi tầng, và nơi duy nhất biết danh sách đầy đủ các module. Nó chỉ chứa những gì thực sự khác nhau giữa các app, ngoài ra không có gì khác.
-- **`platform/shell/app_shell/`** (`platform_app_shell`) là mọi thứ app nào cũng cần và lẽ ra phải copy: boot scope, lắp ráp router, material wrapper, các storage adapter và `NetworkConfigImpl`. Nó không import module nào — `arch_check` R1 giữ điều đó, vì đây là một package `platform/`.
+- **`platform/shell/app_shell/`** (`platform_app_shell`) là mọi thứ app nào cũng cần và lẽ ra phải copy: boot scope, lắp ráp router, material wrapper và các provider cấp app. Các adapter hạ tầng của nó — storage adapter, `AppBootStorage` và `NetworkConfigImpl` — nằm ngay cạnh trong **`platform/shell/adapters/`** (`platform_shell_adapters`), để package shell chỉ giữ phần lắp ráp, UI và state cấp app; `platform_app_shell` phụ thuộc package adapter, không bao giờ ngược lại. Cả hai đều không import module nào — `arch_check` R1 giữ điều đó, vì cả hai là package `platform/`.
 
 Trước khi tách, thêm app thứ hai nghĩa là copy 1.369 dòng qua 24 file. Giờ một app chỉ là một manifest, một `injection.dart` được sinh ra, một `main.dart` dài một dòng, và những gì định danh chính nó — ở app mẫu là Firebase options.
 
@@ -26,14 +26,7 @@ apps/mobile/                         điểm lắp ráp
 platform/shell/app_shell/lib/              dùng chung cho mọi app
 ├── bootstrap.dart                   runShellApp — error hook, DI, splash, init
 ├── main_scope.dart                  splash → init → chuyển sang root
-├── di/
-│   ├── module.dart                  @InjectableInit.microPackage — nhóm DI `shell`
-│   ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
-│   ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
-│   ├── app_boot_storage.dart        cờ khởi động    → StorageValue<bool>
-│   ├── network_config_impl.dart     NetworkConfig
-│   ├── network_binding_module.dart  binding SslPinningConfig
-│   └── utils/                       storage key do shell sở hữu
+├── di/module.dart                   @InjectableInit.microPackage — AppRouter, AppProvider, DeeplinkProvider
 └── presentation/
     ├── root_app.dart                MaterialApp có router
     ├── app_material_wrapper.dart    cấu hình MaterialApp dùng chung
@@ -41,6 +34,17 @@ platform/shell/app_shell/lib/              dùng chung cho mọi app
     ├── providers/                   AppProvider, DeeplinkProvider
     ├── utils/                       AppShellUiConstants (trần text scale)
     └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
+
+platform/shell/adapters/lib/               adapter hạ tầng của shell (platform_shell_adapters)
+├── di/
+│   ├── module.dart                  @InjectableInit.microPackage — đứng đầu nhóm DI `shell`
+│   └── network_binding_module.dart  binding SslPinningConfig
+└── src/
+    ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
+    ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
+    ├── app_boot_storage.dart        cờ khởi động    → StorageValue<bool>
+    ├── network_config_impl.dart     NetworkConfig
+    └── utils/                       storage key do adapter sở hữu
 ```
 
 ### App thứ hai: `apps/admin`
@@ -211,7 +215,7 @@ Thứ tự resolve trong file sinh ra `injection.config.dart`:
 | 1 | `_coreModules` | `core_common`, `core_network`, `core_storage`, `core_database`, `core_di` |
 | – | `lib/` của chính app | `FirebaseModule` — `FirebaseOptions` theo flavor ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
 | 2 | `_notificationsModules` | `core_notifications` — `PushNotificationService` (eager) inject chính các `FirebaseOptions` đó, nên phải đứng sau |
-| 3 | `_shellModules` | `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider`, `AppBootStorage`, `ILanguageStorage`, `IThemeStorage`, `NetworkConfig`, `SslPinningConfig` |
+| 3 | `_shellModules` | `platform_shell_adapters` — `ILanguageStorage`, `IThemeStorage`, `AppBootStorage`, `NetworkConfig`, `SslPinningConfig`; rồi `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider` |
 | 4 | `_uiModules` | `core_base_ui` |
 | 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
 
@@ -221,7 +225,7 @@ Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn g�
 
 Đây là luật ngầm quan trọng nhất trong phần DI, và manifest có ghi rõ trong một comment.
 
-`core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai provider này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực trong `platform_app_shell` (`theme_storage_impl.dart`, `language_storage_impl.dart`), không phải trong package core nào mà các provider có thể phụ thuộc trực tiếp. Vì vậy `shell` phải khởi tạo trước. Đảo hai nhóm là app hỏng lúc khởi động với lỗi "IThemeStorage is not registered".
+`core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai provider này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực trong `platform_shell_adapters` (`theme_storage_impl.dart`, `language_storage_impl.dart`), không phải trong package core nào mà các provider có thể phụ thuộc trực tiếp. Vì vậy `shell` phải khởi tạo trước — và bên trong nhóm, `platform_shell_adapters` đứng trước `platform_app_shell`, để không gì shell đăng ký có thể phụ thuộc một adapter chưa có mặt. Đảo hai nhóm là app hỏng lúc khởi động với lỗi "IThemeStorage is not registered".
 
 Đây cũng đúng là vị trí mà các đăng ký này chiếm trước khi shell thành package. Trước đây chúng là đăng ký cục bộ của app, thứ mà injectable chạy *giữa* `…Before` và `…After`; giờ `shell` chạy sớm trong `…After` — đầu tiên ở `apps/admin`, ngay sau `notifications` ở `apps/mobile`. Thứ tự app khởi động không đổi — chỉ chỗ đặt code là đổi.
 
@@ -234,7 +238,7 @@ Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn g�
 
 Hoặc để test đọc giúp: `test/di_smoke_test.dart` của mỗi app chạy `configureDependencies()` được sinh ra cho từng flavor, với plugin được thay bằng test double (storage trong bộ nhớ, thư mục tạm cho `path_provider`, test API Firebase core của FlutterFire và channel messaging / local-notification giả trong `apps/mobile`), rồi dựng mọi lazy singleton và resolve từng contract `core_di` cùng `AppRouter.router`. Gate 3 của CI chạy nó như test của mọi package. Đảo `shell` và `ui` là test hỏng đúng với lỗi boot bên dưới.
 
-Ví dụ thật: `ThemeProvider` của `core_base_ui` inject `IThemeStorage`, do nhóm `shell` đăng ký. Đó là lý do `shell` được xếp trước `ui` trong `di_groups` của mọi app — đảo lại là app hỏng lúc boot. (`NetworkConfigImpl` từng là ví dụ ở đây, vì inject `AuthLocalDataSource` từ một module chạy sau. Giờ nó resolve `IAuthSessionGateway` ngay lúc gọi, và không còn dependency constructor nào xuyên module.)
+Ví dụ thật: `ThemeProvider` của `core_base_ui` inject `IThemeStorage`, do nhóm `shell` đăng ký (qua `platform_shell_adapters`). Smoke test còn đòi `AppBootStorage`, `NetworkConfig` và `SslPinningConfig`, và đòi `DioFailureClassifier` của `core_network` đã tự đăng ký vào `ErrorHandler` trong nhóm `core`. Đó là lý do `shell` được xếp trước `ui` trong `di_groups` của mọi app — đảo lại là app hỏng lúc boot. (`NetworkConfigImpl` từng là ví dụ ở đây, vì inject `AuthLocalDataSource` từ một module chạy sau. Giờ nó resolve `IAuthSessionGateway` ngay lúc gọi, và không còn dependency constructor nào xuyên module.)
 
 ### `AppRouter` là eager, nhưng router của nó thì không
 
@@ -250,7 +254,7 @@ late final GoRouter router = GoRouter( … );
 
 ## 4. Adapter của shell
 
-Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `platform/shell/app_shell/lib/di/utils/`.
+Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Các hiện thực nằm trong package riêng, `platform_shell_adapters` (`platform/shell/adapters/`), được đăng ký đầu tiên trong nhóm DI `shell`. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `platform/shell/adapters/lib/src/utils/`. `NetworkConfigImpl` hiển thị `RetryDialog` của `core_ui_kit` khi timeout — lý do duy nhất package này phụ thuộc nhóm ui.
 
 | File | Hiện thực | Sở hữu | Cách đăng ký |
 |:--|:--|:--|:--|

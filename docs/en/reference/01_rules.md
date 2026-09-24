@@ -35,7 +35,7 @@ Only these three exist. Adding a fourth requires updating `AGENTS.md` and the al
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries `AppFailure` directly, so the base state type needs it. |
 
 > [!NOTE]
-> `core_ui_kit → provider_state_management` is correct. The reverse is forbidden — it would close a cycle inside the core ring, which is why `provider_state_management` ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`.
+> These three are the only `platform → domain_core` edges, and every other platform edge follows the group direction (`docs/en/architecture/02_core.md` § 0): `ui` never depends on `state`, `infra` never on another infra package, and the foundation never on `ui` or a transport. `core_ui_kit` declares no state-management package — `LoadMoreListView` lives in `provider_state_management` (`state → ui` is the allowed direction) — and `provider_state_management` still ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`. The kernel names no Dio type: `core_network` contributes `DioFailureClassifier` through `ErrorHandler.registerClassifier`.
 
 **Verify**
 
@@ -149,9 +149,9 @@ Current owners:
 | Owner | Package | Keys | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | secure |
-| `ThemeStorageImpl` | app shell | `themeMode` | pref |
-| `LanguageStorageImpl` | app shell | `locale` | pref |
-| `AppBootStorage` | app shell | `viewed_onboard` | pref |
+| `ThemeStorageImpl` | app shell (`platform_shell_adapters`) | `themeMode` | pref |
+| `LanguageStorageImpl` | app shell (`platform_shell_adapters`) | `locale` | pref |
+| `AppBootStorage` | app shell (`platform_shell_adapters`) | `viewed_onboard` | pref |
 
 Full walkthrough: [`../guides/06_storage.md`](../guides/06_storage.md).
 
@@ -163,7 +163,7 @@ Full walkthrough: [`../guides/06_storage.md`](../guides/06_storage.md).
 
 **Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`, which is generated from the manifest's `di_groups`: `core` (before), then — after the app's own registrations — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` has no `notifications` group.
 
-Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_app_shell` registers — swap the two groups and boot throws. And `notifications` after the app's own registrations: `PushNotificationService` is eager and injects the `FirebaseOptions` the app registers, so `core_notifications` cannot sit in `core`. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `IAuthSessionGateway` at call time and has no such dependency.)
+Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_shell_adapters` registers (first in the `shell` group) — swap the two groups and boot throws. And `notifications` after the app's own registrations: `PushNotificationService` is eager and injects the `FirebaseOptions` the app registers, so `core_notifications` cannot sit in `core`. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `IAuthSessionGateway` at call time and has no such dependency.)
 
 > [!CAUTION]
 > **`flutter analyze` cannot detect this class of bug.** It only appears at runtime, on a real boot.
@@ -429,7 +429,7 @@ abstract class AuthModule {
 This lets the owner inject the concrete type through its constructor while every other feature sees only the interface.
 
 > [!NOTE]
-> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `platform/shell/app_shell/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
+> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `platform/shell/adapters/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
 
 Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-only logic (use a UseCase).
 
@@ -478,7 +478,7 @@ The single root `analysis_options.yaml` applies to every package. On top of `flu
 | DI order safety | module order in `apps/mobile/lib/di/injection.config.dart`; per-type registrations in each package's `lib/di/module.module.dart` |
 | core ⇏ feature / data / product domain | `dart tools/arch_check/check.dart` (R1) |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
-| The app shell imports no module | `dart tools/arch_check/check.dart` (R1 for `platform_app_shell`, R10 for `apps/*`) |
+| The app shell imports no module | `dart tools/arch_check/check.dart` (R1 for `platform_app_shell` / `platform_shell_adapters`, R10 for `apps/*`) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:core_common/core_common.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Unmapped implements Exception {}
@@ -47,12 +46,6 @@ void main() {
     ErrorHandler.handleError(const SocketException('offline'));
     ErrorHandler.handleError(const FormatException('bad json'));
     ErrorHandler.handleError(const NetworkException('No net', code: 1));
-    ErrorHandler.handleError(
-      DioException(
-        requestOptions: RequestOptions(path: '/'),
-        type: DioExceptionType.connectionTimeout,
-      ),
-    );
 
     expect(seen, isEmpty);
   });

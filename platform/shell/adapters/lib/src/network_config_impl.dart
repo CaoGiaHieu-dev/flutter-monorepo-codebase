@@ -5,10 +5,12 @@ import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Concrete implementation of NetworkConfig for the main application shell.
+/// Concrete implementation of NetworkConfig, shared by every app.
 ///
-/// This fulfills dependencies of core_network using core_base_ui for retry
-/// overlay dialogs, without creating circular package dependencies.
+/// This fulfills dependencies of core_network, using core_ui_kit's
+/// `RetryDialog` for the retry prompt — the only reason
+/// `platform_shell_adapters` depends on the ui group. `core_network` itself
+/// stays free of widgets: it only calls [onRetryCallback].
 ///
 /// Credentials are never read from a shared storage object — this delegates
 /// to the actual owners of each value ([IAuthSessionGateway] for the session,

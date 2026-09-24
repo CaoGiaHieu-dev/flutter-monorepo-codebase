@@ -349,7 +349,7 @@ abstract class RegisterModule {
 Constructing it here rather than inside the repository keeps the dependency visible to the container, which is what leaves a seam for a fake in tests.
 
 > [!NOTE]
-> **Authenticating through Firebase instead?** Swap the transport inside `AuthRepositoryImpl` and keep the shape below — but add a Firebase branch to `ErrorHandler` first (§3). Without one, every Firebase error collapses to *"Unknown error occurred"* in release.
+> **Authenticating through Firebase instead?** Swap the transport inside `AuthRepositoryImpl` and keep the shape below — but register an `ErrorClassifier` for Firebase exceptions with `ErrorHandler` first (§3; `core_network`'s `DioFailureClassifier` is the model). Without one, every Firebase error collapses to *"Unknown error occurred"* in release.
 
 ### Session persistence
 

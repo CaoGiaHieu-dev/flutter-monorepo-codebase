@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:core_common/core_common.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// The one JSON encoding every storage path shares — [StorageValue]'s RAM
 /// cache and both backends — so a value always reads back the way it was

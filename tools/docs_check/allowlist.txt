@@ -38,7 +38,7 @@ apps/mobile/fastlane/Config.yaml
 # --- (3) Tutorial targets and placeholders ---------------------------------
 # `11_design_system.md` walks the reader through creating this file; it does
 # not exist until they do.
-platform/base_ui/lib/src/styles/app_elevation.dart
+platform/ui/design_system/lib/src/styles/app_elevation.dart
 # `01_new_feature.md` builds `profile` end to end as the worked example.
 modules/profile/feature
 modules/profile/feature/l10n.yaml

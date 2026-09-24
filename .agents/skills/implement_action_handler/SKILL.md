@@ -26,7 +26,7 @@ Use this skill when requested to: "call logout from settings without importing a
 ## 📋 Detailed Steps
 
 ### Step 1: Declare the Interface in `core_di`
-Create `platform/di/lib/src/actions/i_<feature>_action_handler.dart`:
+Create `platform/foundation/contracts/lib/src/actions/i_<feature>_action_handler.dart`:
 ```dart
 import 'package:flutter/widgets.dart';
 
@@ -34,7 +34,7 @@ abstract class IAuthActionHandler {
   void logout(BuildContext context);
 }
 ```
-Do **not** hand-edit `platform/di/lib/src/actions/actions.dart` — it is a generated barrel, and the generator deletes hand-written `export` lines. Running the barrel generator (Step 4) adds the new file.
+Do **not** hand-edit `platform/foundation/contracts/lib/src/actions/actions.dart` — it is a generated barrel, and the generator deletes hand-written `export` lines. Running the barrel generator (Step 4) adds the new file.
 
 ### Step 2: Implement in the Owning Feature
 Create `modules/<owner>/feature/lib/src/handlers/<feature>_action_handler_impl.dart`:
@@ -72,13 +72,13 @@ The consumer MUST NOT import the owning feature package.
 
 ### Step 4: Barrels + Code Gen
 ```bash
-dart tools/barrel_generator/generate.dart platform/di/lib            # so the feature can import the new interface
+dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib            # so the feature can import the new interface
 dart run build_runner build --workspace
-dart tools/barrel_generator/generate.dart platform/di/lib            # final pass, after codegen
+dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib            # final pass, after codegen
 dart tools/barrel_generator/generate.dart modules/<owner>/feature/lib
 ```
 The final barrel pass must come **after** `build_runner`, because barrels also export
-generated files present on disk. The extra pass on `platform/di/lib` beforehand is harmless and
+generated files present on disk. The extra pass on `platform/foundation/contracts/lib` beforehand is harmless and
 lets the owning feature's `@Injectable(as: I…ActionHandler)` resolve the new interface through
 `core_di`'s barrel during codegen.
 

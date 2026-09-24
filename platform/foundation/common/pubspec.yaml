@@ -23,9 +23,9 @@ dependencies:
   internet_connection_checker_plus: "^3.1.1"
   package_info_plus: "^10.2.1"
   core_responsive:
-    path: ../responsive
+    path: ../../ui/responsive
   core_di:
-    path: ../di
+    path: ../contracts
   device_info_plus: "^13.2.0"
   cupertino_ui: "^1.0.2"
 dev_dependencies:

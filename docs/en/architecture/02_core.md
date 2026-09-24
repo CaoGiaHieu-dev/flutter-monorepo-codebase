@@ -16,6 +16,27 @@ Three rules apply to everything on this page.
 
 **Every package keeps its constants in its own `utils/` folder.** One approved exception: design tokens in `core_base_ui/src/styles/` stay where they are — see [`core_base_ui`](#3-core_base_ui--design-system) below.
 
+### Where a package lives — the six groups
+
+`platform/` is split into six group folders by role. Only the folder says which group a package is in — every package **name** is unchanged (`core_di` is still `core_di`, now at `platform/foundation/contracts`), so imports, `app_manifest.yaml` and the dependency names in each `pubspec.yaml` do not mention groups at all.
+
+| Group | Folder | Packages (folder) | What belongs here | May depend on |
+|:--|:--|:--|:--|:--|
+| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | What every other package builds on: the service locator and error handling, the cross-module DI contracts, Flutter-bound helpers. No I/O, no widgets | nothing else in `platform/` |
+| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | The base contracts of the domain and data layers — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — that `modules/*/domain` and `modules/*/data` extend | foundation |
+| **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Mechanisms that reach outside the process — HTTP, key–value storage, SQLite, push. Mechanism only: no product module's keys, tables or endpoints. The default group of `generate.dart 4` / `5` | foundation, layers |
+| **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scaling and adaptive layout, design tokens, themes and global strings, the shared widget library | foundation, layers |
+| **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | The state-management bases; a feature picks one | foundation, layers, ui |
+| **shell** | `platform/shell/` | `platform_app_shell` (`app_shell/`) | The app shell every app composes: boot, router assembly, material wrapper, storage adapters | every other group |
+
+The direction, with each arrow pointing at the side that is depended on: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← all of platform/`. And, unchanged, nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` does not check the group direction yet — until it does, review holds it. Three edges run against it today, and stay until the rule is enforced and each one is either removed or approved:
+
+- `platform_kernel` (foundation) → `domain_core` (layers) — the approved R1 edge: `ErrorHandler` produces an `AppFailure`.
+- `core_common` (foundation) → `core_responsive` (ui) — the page transitions in `src/routing/page_transitions/` scale through it.
+- `core_ui_kit` (ui) → `provider_state_management` (state) — its widgets render a `ViewState`. The reverse edge stays forbidden (§ 2 of `.agents/AGENTS.md`): it would be a cycle.
+
+A new mechanism package goes in `infra` — `dart tools/module_generator/generate.dart 4 <name>` puts it there; pass `--group <group>` for another group.
+
 ---
 
 ## 1. `platform_kernel` and `core_common` — shared primitives
@@ -52,7 +73,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | REST endpoints (`/user/login`, `/user/refresh-token`) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Two constants files live at the bottom of the stack, because they are genuinely global — both in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` ([`error_codes.dart`](../../../platform/kernel/lib/src/utils/error_codes.dart) — the failure codes `ErrorHandler` and `IBaseRepository` assign when there is no HTTP status, e.g. `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, all outside the HTTP range so a 5xx is always a real one).
+Two constants files live at the bottom of the stack, because they are genuinely global — both in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — the failure codes `ErrorHandler` and `IBaseRepository` assign when there is no HTTP status, e.g. `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, all outside the HTTP range so a 5xx is always a real one).
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.
@@ -75,7 +96,7 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
 
-**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
+**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
 
 A `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside a feature. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it.
 
@@ -126,7 +147,7 @@ The observer is removed in `dispose()`, which is annotated `@disposeMethod` so G
 
 ## 4. `core_ui_kit` — reusable widgets
 
-The shared widget library every feature may consume. It is **core, not a feature**: it lives at `platform/ui_kit` precisely so `modules/*/feature/` contains only removable product surfaces.
+The shared widget library every feature may consume. It is **core, not a feature**: it lives at `platform/ui/ui_kit` precisely so `modules/*/feature/` contains only removable product surfaces.
 
 Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
@@ -161,7 +182,7 @@ Scaling inside means a caller who already scaled gets it applied twice, and a ca
 
 ### Constants
 
-Defaults for these widgets live in `platform/ui_kit/lib/utils/shared_ui_constants.dart`:
+Defaults for these widgets live in `platform/ui/ui_kit/lib/utils/shared_ui_constants.dart`:
 
 ```dart
 class SharedUiConstants {
@@ -179,7 +200,7 @@ They are defaults, not policy — a caller that needs a different value passes i
 
 ## 5. `core_responsive` — responsive sizing and adaptive layout
 
-The scaling mechanism every widget in the app resolves through, and the window size classes and adaptive widgets that choose a layout. It lives at `platform/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package, and no `material` import either.
+The scaling mechanism every widget in the app resolves through, and the window size classes and adaptive widgets that choose a layout. It lives at `platform/ui/responsive` and depends on **nothing but `flutter`** — no workspace package, no third-party package, and no `material` import either.
 
 | Export | Path | What it is |
 |:--|:--|:--|
@@ -234,9 +255,9 @@ Degenerate input never collapses a layout. An empty window — Android reports 0
 `dart tools/arch_check/check.dart` rule **R7** rejects the bare form — the pattern `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — in any file importing `core_responsive`, and is Gate 1 of `pr_quality_check.yml`.
 
 > [!NOTE]
-> A widget test that scales **must** wrap its subject in `ResponsiveInit`, or `ResponsiveScope.of` asserts. The package's own tests live in `platform/responsive/test/`.
+> A widget test that scales **must** wrap its subject in `ResponsiveInit`, or `ResponsiveScope.of` asserts. The package's own tests live in `platform/ui/responsive/test/`.
 
-The assembly at the root of the tree (`_ResponsiveWrapper` in `platform/app_shell/lib/main_scope.dart`) is described in [the app shell](06_app_shell.md#_responsivewrapper); choosing an axis, changing the design canvas, the scale policy and the adaptive widgets are in [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
+The assembly at the root of the tree (`_ResponsiveWrapper` in `platform/shell/app_shell/lib/main_scope.dart`) is described in [the app shell](06_app_shell.md#_responsivewrapper); choosing an axis, changing the design canvas, the scale policy and the adaptive widgets are in [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 
@@ -352,7 +373,7 @@ The template supports Provider and BLoC. Be aware before choosing: both automate
 | Extras | `StateManager`, `OperationExecutor`, `OperationGlobalConfig`, `LoadMoreMixin`, `ProviderStateListener`, `BaseViewWidget` | — |
 
 > [!WARNING]
-> `emitResult` (`platform/bloc_state_management/lib/src/result_emitter.dart`) covers a Bloc or Cubit whose state is `BlocViewState<T>`: loading, `Result` unwrap, `none`/`cancel` undoing its own loading, exceptions through `ErrorHandler`. A Bloc with its **own Freezed state** still unwraps `Result<T>` and emits loading/terminal states by hand in every handler, and the BLoC branch has no counterpart for `OperationGlobalConfig`, `errorStateBuilder` or `LoadMoreMixin`. `bloc_state_management` depends on `platform_kernel` for `ErrorHandler` — a platform → platform edge, not one of the `→ domain_core` exceptions.
+> `emitResult` (`platform/state/bloc/lib/src/result_emitter.dart`) covers a Bloc or Cubit whose state is `BlocViewState<T>`: loading, `Result` unwrap, `none`/`cancel` undoing its own loading, exceptions through `ErrorHandler`. A Bloc with its **own Freezed state** still unwraps `Result<T>` and emits loading/terminal states by hand in every handler, and the BLoC branch has no counterpart for `OperationGlobalConfig`, `errorStateBuilder` or `LoadMoreMixin`. `bloc_state_management` depends on `platform_kernel` for `ErrorHandler` — a platform → platform edge, not one of the `→ domain_core` exceptions.
 
 ### `BlocViewState<T>`
 
@@ -389,7 +410,7 @@ Known gaps, none fixed here:
 
 ## 12. Dependency map
 
-Local (workspace) dependencies only — pub.dev packages omitted.
+Local (workspace) dependencies only — pub.dev packages omitted. Which group each package sits in, and which direction the groups may depend in: [§ 0](#where-a-package-lives--the-six-groups).
 
 | Package | Depends on |
 |:--|:--|

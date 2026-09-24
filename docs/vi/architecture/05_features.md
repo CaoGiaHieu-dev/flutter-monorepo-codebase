@@ -29,7 +29,7 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 > [!CAUTION]
 > - **Không bao giờ import `data_*`.** Feature nói chuyện với interface của Domain; app shell mới là nơi bind implementation.
 > - **Không bao giờ import feature package khác.** Không có ngoại lệ — widget dùng chung lấy từ `core_ui_kit`, vốn nằm ở core. Nhu cầu liên feature phải đi qua hợp đồng ở `core_di` — xem [giao tiếp giữa các feature](../guides/10_cross_feature.md).
-> - **Không bao giờ sửa `platform/app_shell/lib/presentation/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
+> - **Không bao giờ sửa `platform/shell/app_shell/lib/presentation/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
 
 Pubspec đã cưỡng chế phần lớn điều này: phụ thuộc workspace duy nhất của `feature_dashboard` là `core_di`, `core_responsive` và `platform_kernel`, nên nó *về mặt vật lý không thể* import một feature khác.
 
@@ -205,7 +205,7 @@ Chỉ dùng `INavDestinationModule` cho **điểm đến chính của bottom-nav
 
 ## 5. Widget dùng chung nằm ở core, không phải ở đây
 
-Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui_kit` — một package core, không phải feature. Nó nằm ngoài `modules/*/feature/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
+Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui/ui_kit` — một package core, không phải feature. Nó nằm ngoài `modules/*/feature/` để mọi thứ trong thư mục đó đều là mảng sản phẩm thực sự gỡ được. Cấu trúc, chiều phụ thuộc và quy tắc UI-agnostic của nó được mô tả ở [tầng core](02_core.md).
 
 Điều quan trọng ở phía feature là nghĩa vụ của **bên gọi**:
 

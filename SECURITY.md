@@ -36,7 +36,7 @@ These are deliberate and documented, so they are **not** vulnerabilities in them
   `key.properties` / `key-stg.properties` is absent — never ship a store build signed with it. See
   [`docs/en/operations/02_fastlane_release.md` § 4](docs/en/operations/02_fastlane_release.md).
 - **SSL pinning is off until you configure it.** `sslPinningHashes` in
-  `platform/app_shell/lib/di/network_config_impl.dart` returns an empty list, so staging/prod use
+  `platform/shell/app_shell/lib/di/network_config_impl.dart` returns an empty list, so staging/prod use
   normal certificate validation only. Fill in at least two SPKI hashes (leaf + backup) before
   relying on pinning — see [`docs/en/guides/08_networking.md` § 5](docs/en/guides/08_networking.md).
 - **Certificate validation is bypassed only in a debug build that explicitly declared
@@ -54,6 +54,6 @@ Secrets are never committed. If you find any of the following in the history, re
 ## For projects built on this template
 
 - Fill in `sslPinningHashes` and bind `SslPinningConfig` as shipped
-  (`platform/app_shell/lib/di/network_binding_module.dart`).
+  (`platform/shell/app_shell/lib/di/network_binding_module.dart`).
 - Generate your own release keystores and keep them out of git.
 - Replace the placeholder contact above and enable private vulnerability reporting in your fork.

@@ -1,11 +1,11 @@
-# App Shell (`platform/app_shell/` + `apps/<id>/`)
+# App Shell (`platform/shell/app_shell/` + `apps/<id>/`)
 
 Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cho shell, và hiểu vì sao thứ tự các nhóm DI trong `app_manifest.yaml` không hề tuỳ tiện.
 
 Shell được tách làm hai, có chủ đích:
 
 - **`apps/<id>/`** là **điểm lắp ráp (composition root)** — nơi duy nhất được phép phụ thuộc mọi tầng, và nơi duy nhất biết danh sách đầy đủ các module. Nó chỉ chứa những gì thực sự khác nhau giữa các app, ngoài ra không có gì khác.
-- **`platform/app_shell/`** (`platform_app_shell`) là mọi thứ app nào cũng cần và lẽ ra phải copy: boot scope, lắp ráp router, material wrapper, các storage adapter và `NetworkConfigImpl`. Nó không import module nào — `arch_check` R1 giữ điều đó, vì đây là một package `platform/`.
+- **`platform/shell/app_shell/`** (`platform_app_shell`) là mọi thứ app nào cũng cần và lẽ ra phải copy: boot scope, lắp ráp router, material wrapper, các storage adapter và `NetworkConfigImpl`. Nó không import module nào — `arch_check` R1 giữ điều đó, vì đây là một package `platform/`.
 
 Trước khi tách, thêm app thứ hai nghĩa là copy 1.369 dòng qua 24 file. Giờ một app chỉ là một manifest, một `injection.dart` được sinh ra, một `main.dart` dài một dòng, và những gì định danh chính nó — ở app mẫu là Firebase options.
 
@@ -23,7 +23,7 @@ apps/mobile/                         điểm lắp ráp
 ├── android/  ios/  fastlane/        project native và lane phát hành
 └── env.dev  env.stg                 giá trị theo flavor (env.prod bạn tự tạo)
 
-platform/app_shell/lib/              dùng chung cho mọi app
+platform/shell/app_shell/lib/              dùng chung cho mọi app
 ├── bootstrap.dart                   runShellApp — error hook, DI, splash, init
 ├── main_scope.dart                  splash → init → chuyển sang root
 ├── di/
@@ -89,12 +89,12 @@ sequenceDiagram
 
 ### Từng bước
 
-Trình tự này nằm trong `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`](../../../platform/app_shell/lib/bootstrap.dart)); `main.dart` của app chỉ gọi nó với `configureDependencies` được sinh cho chính app đó.
+Trình tự này nằm trong `runShellApp()` ([`platform/shell/app_shell/lib/bootstrap.dart`](../../../platform/shell/app_shell/lib/bootstrap.dart)); `main.dart` của app chỉ gọi nó với `configureDependencies` được sinh cho chính app đó.
 
 1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin — rồi **`installShellErrorHooks`**, dồn mọi lỗi không bắt được về một chỗ (xem [Lỗi và crash reporting](#lỗi-và-crash-reporting) bên dưới). Nó chạy trước `configureDependencies`, nên lỗi DI cũng được báo cáo.
 3. **`await configureDependencies()`** chạy *trước* `MainScope`. Đến lúc widget đầu tiên build, cả container đã phân giải xong.
-4. **`AppInitializer.initBeforeRunApp()`** cấu hình logger và cài `HttpOverrides.global` — certificate pinning, hoặc bypass khi build debug + flavor `dev` — một cách đồng bộ, trước khi có bất kỳ widget nào. Không thể đợi tới `initService`: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó (`AuthProvider` của auth, khôi phục phiên bằng một lần refresh token) có thể mở kết nối đầu tiên khi `initService` còn đang chạy, và `IOHttpClientAdapter` của Dio giữ lại `HttpClient` nó tạo đầu tiên — một client không pin sẽ phục vụ cả phiên. Lời gọi này idempotent; `AppInitializer.init` gọi lại và lần thứ hai không cài gì. `platform/app_shell/test/boot_order_test.dart` giữ thứ tự này. Trên **web** nó không cài gì và ghi log, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ — ở đó không có `HttpClient` nào để pin (xem [hiện trạng web của tầng core](02_core.md)).
+4. **`AppInitializer.initBeforeRunApp()`** cấu hình logger và cài `HttpOverrides.global` — certificate pinning, hoặc bypass khi build debug + flavor `dev` — một cách đồng bộ, trước khi có bất kỳ widget nào. Không thể đợi tới `initService`: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó (`AuthProvider` của auth, khôi phục phiên bằng một lần refresh token) có thể mở kết nối đầu tiên khi `initService` còn đang chạy, và `IOHttpClientAdapter` của Dio giữ lại `HttpClient` nó tạo đầu tiên — một client không pin sẽ phục vụ cả phiên. Lời gọi này idempotent; `AppInitializer.init` gọi lại và lần thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` giữ thứ tự này. Trên **web** nó không cài gì và ghi log, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ — ở đó không có `HttpClient` nào để pin (xem [hiện trạng web của tầng core](02_core.md)).
 5. **`MainScope`** được dựng với ba thứ: hiển thị splash widget nào (nếu có), widget gốc, và `initService` — ở đây là `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, lo phần còn lại: `OperationGlobalConfig`, URL reflection của GoRouter, `AppInfoHelper`, trao route observer cho `RouteAwareWidget`, hướng màn hình và system UI.
 6. **`mainScope.run()`** rẽ nhánh tuỳ theo có truyền splash widget Dart hay không.
 
@@ -110,7 +110,7 @@ Có ba loại lỗi lọt qua mọi thứ khác, và shell móc vào cả ba:
 
 Cả ba đổ về cùng một chỗ. Handler của zone và hook của dispatcher ném lại qua `FlutterError.reportError`; hook `FlutterError.onError` trước hết gọi handler đã có trước nó — mặc định là `FlutterError.presentError`, bản dump đỏ trên console ở debug — rồi báo lỗi **một lần**: tới callback `onError` (tuỳ chọn) của app, rồi tới `getItOrNull<IErrorReporter>()` với `fatal: true`. Hook của dispatcher trả về `true`: lỗi đã được xử lý, engine không log thêm lần nữa.
 
-`IErrorReporter` và `IAnalytics` là các contract tuỳ chọn trong `core_di` ([`src/observability/`](../../../platform/di/lib/src/observability/)). Template không implement cái nào, nên cả hai lookup trả `null` và không gửi gì đi. Reporter được resolve lúc lỗi xảy ra, không phải lúc boot, nên reporter do `configureDependencies` đăng ký vẫn được dùng, và lỗi do *chính* `configureDependencies` ném ra vẫn tới được `onError`. Reporter hay callback nào tự throw sẽ bị nuốt — không bao giờ bị báo cáo qua chính nó.
+`IErrorReporter` và `IAnalytics` là các contract tuỳ chọn trong `core_di` ([`src/observability/`](../../../platform/foundation/contracts/lib/src/observability/)). Template không implement cái nào, nên cả hai lookup trả `null` và không gửi gì đi. Reporter được resolve lúc lỗi xảy ra, không phải lúc boot, nên reporter do `configureDependencies` đăng ký vẫn được dùng, và lỗi do *chính* `configureDependencies` ném ra vẫn tới được `onError`. Reporter hay callback nào tự throw sẽ bị nuốt — không bao giờ bị báo cáo qua chính nó.
 
 Còn một đường thứ ba, non-fatal. `ErrorHandler` (`platform_kernel`) chuyển mọi exception của repository thành `AppFailure`; những cái nó không phân loại được — một `TypeError` trong `fromJson`, một exception của plugin — thành lỗi chung "Unknown error occurred" và thường là bug. Shell trỏ `ErrorHandler.onUnclassifiedError` tới reporter với `fatal: false`, nên những lỗi đó được ghi lại trong khi người dùng vẫn nhận một failure đã được xử lý. Failure đã phân loại (mất mạng, 401, timeout) không được báo cáo.
 
@@ -138,7 +138,7 @@ class CrashlyticsErrorReporter implements IErrorReporter {
 }
 ```
 
-Với Sentry, `recordError` gọi `Sentry.captureException(error, stackTrace: stack)` và `log` thêm một breadcrumb; khởi tạo SDK trong app (`SentryFlutter.init` bọc `main`, trước `runShellApp`). **Đừng** tự gán `FlutterError.onError` nữa — hook của shell đã chuyển tiếp nó, và nối tiếp handler nào đã được cài trước `runShellApp`. `IAnalytics` hoạt động y như vậy: đăng ký một implementation là mọi trang `GoRouteDataCustom` báo màn hình của nó qua `setCurrentScreen` (`RouteAwareWidget`, khi push và khi route phía trên pop). `platform/app_shell/test/error_hooks_test.dart` giữ phần nối dây này.
+Với Sentry, `recordError` gọi `Sentry.captureException(error, stackTrace: stack)` và `log` thêm một breadcrumb; khởi tạo SDK trong app (`SentryFlutter.init` bọc `main`, trước `runShellApp`). **Đừng** tự gán `FlutterError.onError` nữa — hook của shell đã chuyển tiếp nó, và nối tiếp handler nào đã được cài trước `runShellApp`. `IAnalytics` hoạt động y như vậy: đăng ký một implementation là mọi trang `GoRouteDataCustom` báo màn hình của nó qua `setCurrentScreen` (`RouteAwareWidget`, khi push và khi route phía trên pop). `platform/shell/app_shell/test/error_hooks_test.dart` giữ phần nối dây này.
 
 ### Hai đường splash
 
@@ -250,7 +250,7 @@ late final GoRouter router = GoRouter( … );
 
 ## 4. Adapter của shell
 
-Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `platform/app_shell/lib/di/utils/`.
+Shell hiện thực những hợp đồng mà package core khai báo nhưng tự nó không thể thoả mãn. Mỗi adapter sở hữu `StorageValue` riêng và giữ key trong `platform/shell/app_shell/lib/di/utils/`.
 
 | File | Hiện thực | Sở hữu | Cách đăng ký |
 |:--|:--|:--|:--|
@@ -280,7 +280,7 @@ Tham số khai kiểu `NetworkConfig` nên phép upcast được trình biên d�
 
 ## 5. Lắp ráp router
 
-[`app_router.dart`](../../../platform/app_shell/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
+[`app_router.dart`](../../../platform/shell/app_shell/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [
@@ -320,7 +320,7 @@ Nhờ vậy, xoá một feature package không thể làm sập shell.
 
 `refreshListenable: getItOrNull<IAuthRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter phân giải lại vị trí hiện tại — chạy mọi `redirect` gắn trên nó — khi trạng thái đăng nhập đổi. **Hiện không có redirect nào**: không có `redirect:` cấp cao nhất và không route mẫu nào khai báo, nên tự nó không tạo ra thay đổi nào thấy được. Nó được giữ làm điểm móc cho module nào thêm guard vào `GoRouteData.redirect` của riêng mình. Việc *điều hướng* khi đăng nhập / đăng xuất do `NavigatorWrapperWidget` làm, bằng cách lắng nghe `IAuthSessionState.sessionChanges` (§6). `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
 
-`observers: [routeObserver]` gắn `AppRouter.routeObserver` vào navigator gốc, và go_router chuyển tiếp các observer gốc tới mọi navigator của `ShellRoute` và `StatefulShellBranch` (`notifyRootObserver`, mặc định bật) — nên chính observer mà `AppInitializer.init` trao cho `RouteAwareWidget` thấy mọi lần push và pop, kể cả trong tab. `platform/app_shell/test/app_router_test.dart` kiểm tra cả hai cấp.
+`observers: [routeObserver]` gắn `AppRouter.routeObserver` vào navigator gốc, và go_router chuyển tiếp các observer gốc tới mọi navigator của `ShellRoute` và `StatefulShellBranch` (`notifyRootObserver`, mặc định bật) — nên chính observer mà `AppInitializer.init` trao cho `RouteAwareWidget` thấy mọi lần push và pop, kể cả trong tab. `platform/shell/app_shell/test/app_router_test.dart` kiểm tra cả hai cấp.
 
 ---
 
@@ -367,7 +367,7 @@ MultiProvider(ThemeProvider, LanguageProvider)
 
 Chính `Consumer2` ở lớp ngoài là thứ khiến thay đổi theme và ngôn ngữ lan ra toàn app.
 
-Trong cây không có `TooltipVisibility(visible: false)`. Trước đây có, để tooltip không bật lên khi nhấn giữ — nhưng nó cũng gỡ mọi tooltip khỏi cây semantics, mà screen reader đọc `tooltip` của một nút chỉ có icon làm nhãn của nút: nút ẩn/hiện mật khẩu bị đọc thành "button". Giờ theme làm việc đó thay: `ThemeProvider` đặt `tooltipTheme: TooltipThemeData(triggerMode: TooltipTriggerMode.manual)`, chặn popup khi nhấn giữ/chạm trên màn hình cảm ứng mà vẫn giữ nhãn (di chuột vẫn hiện bong bóng — trigger mode không áp dụng cho chuột). Xoá dòng đó nếu muốn lấy lại tooltip nhấn giữ mặc định của Material. `platform/app_shell/test/accessibility_test.dart` kiểm tra nhãn vẫn còn.
+Trong cây không có `TooltipVisibility(visible: false)`. Trước đây có, để tooltip không bật lên khi nhấn giữ — nhưng nó cũng gỡ mọi tooltip khỏi cây semantics, mà screen reader đọc `tooltip` của một nút chỉ có icon làm nhãn của nút: nút ẩn/hiện mật khẩu bị đọc thành "button". Giờ theme làm việc đó thay: `ThemeProvider` đặt `tooltipTheme: TooltipThemeData(triggerMode: TooltipTriggerMode.manual)`, chặn popup khi nhấn giữ/chạm trên màn hình cảm ứng mà vẫn giữ nhãn (di chuột vẫn hiện bong bóng — trigger mode không áp dụng cho chuột). Xoá dòng đó nếu muốn lấy lại tooltip nhấn giữ mặc định của Material. `platform/shell/app_shell/test/accessibility_test.dart` kiểm tra nhãn vẫn còn.
 
 Các delegate localization được gom từ DI bằng `getAllOrEmpty` — app không có feature nào đăng ký delegate vẫn resolve được bộ delegate toàn cục — nên feature không bao giờ phải sửa file này:
 
@@ -382,7 +382,7 @@ final delegates = [
 
 ### Cỡ chữ của hệ điều hành được tôn trọng, tối đa 2x
 
-`builder` của `RootApp` trước đây kết thúc bằng `MediaQuery.withNoTextScaling`, ghim mọi chữ ở 100% bất kể người dùng đặt gì — một lỗi accessibility (WCAG 2.2 SC 1.4.4 yêu cầu chữ phóng được tới 200%), không phải một lựa chọn bố cục. Giờ nó kẹp (clamp) thay vì tắt: cài đặt của người dùng đi qua nguyên vẹn tới `MAX_TEXT_SCALE_FACTOR` (2.0, trong [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), kể cả scaler phi tuyến (Android 14+), và đầu dưới không bị kẹp.
+`builder` của `RootApp` trước đây kết thúc bằng `MediaQuery.withNoTextScaling`, ghim mọi chữ ở 100% bất kể người dùng đặt gì — một lỗi accessibility (WCAG 2.2 SC 1.4.4 yêu cầu chữ phóng được tới 200%), không phải một lựa chọn bố cục. Giờ nó kẹp (clamp) thay vì tắt: cài đặt của người dùng đi qua nguyên vẹn tới `MAX_TEXT_SCALE_FACTOR` (2.0, trong [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/shell/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), kể cả scaler phi tuyến (Android 14+), và đầu dưới không bị kẹp.
 
 Điều này **không** scale chữ hai lần với `core_responsive`. Hai hệ số độc lập và được áp ở hai chỗ khác nhau:
 

@@ -19,9 +19,9 @@ with the architecture rules enforced by CI instead of review alone.
 ### Added
 
 - `apps/admin`, a second app composing only auth + settings, to prove that modules compose per app.
-- `platform_app_shell` (`platform/app_shell`): boot, dynamic router, material wrapper, storage
+- `platform_app_shell` (`platform/shell/app_shell`): boot, dynamic router, material wrapper, storage
   adapters and `NetworkConfigImpl`, shared by every app instead of copied into each.
-- `platform_kernel` (`platform/kernel`): a pure-Dart foundation (`getIt` helpers,
+- `platform_kernel` (`platform/foundation/kernel`): a pure-Dart foundation (`getIt` helpers,
   `ErrorHandler`, `AppException`, extensions) that non-Flutter packages depend on.
 - Composer: each app is generated from `apps/<id>/app_manifest.yaml` (`composer sync`,
   `composer verify`), plus `tools/composer/bootstrap.dart` for partial checkouts.
@@ -44,6 +44,14 @@ with the architecture rules enforced by CI instead of review alone.
 
 - Repository layout: `packages/core/*` → `platform/*`, product packages → vertical slices
   `modules/<name>/{domain,data,feature}`, `app/` → `apps/mobile/` (package `mobile_app`).
+- `platform/` regrouped into six role folders — `foundation/` (`kernel`, `contracts` = `core_di`,
+  `common`), `layers/` (`domain` = `domain_core`, `data` = `data_core`), `infra/` (`network`,
+  `storage`, `database`, `notifications`), `ui/` (`responsive`, `design_system` = `core_base_ui`,
+  `ui_kit`), `state/` (`provider`, `bloc` = the two `*_state_management` packages) and `shell/`
+  (`app_shell`). Package names are unchanged, so imports and manifests are untouched; a fork
+  updates its own relative `path:` dependencies and any hard-coded `platform/<pkg>` path.
+  `module_generator` types 4/5 take `--group` (default `infra`). The allowed direction between
+  groups is documented in `docs/en/architecture/02_core.md` § 0 (not yet machine-checked).
 - Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere.
 - `core_database` and `core_storage` are mechanism only: each package owns its own Drift database
   and its own storage keys. The Drift cache example moved to the `cache` sample module.

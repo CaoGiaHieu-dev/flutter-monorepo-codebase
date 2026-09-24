@@ -64,7 +64,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 > # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
->     path: ../../../platform/domain_core
+>     path: ../../../platform/layers/domain
 >   get_it: ^9.2.1
 >   injectable: ^3.0.0
 >   freezed_annotation: "^3.1.0"
@@ -83,11 +83,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ## 3. `domain_core` — bộ từ vựng dùng chung
 
-`platform/domain_core/` được mọi domain package khác phụ thuộc vào.
+`platform/layers/domain/` được mọi domain package khác phụ thuộc vào.
 
 ### `Result<T>` — kiểu trả về của mọi use case
 
-Định nghĩa tại `platform/domain_core/lib/src/repositories/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
+Định nghĩa tại `platform/layers/domain/lib/src/repositories/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
 
 ```dart
 @freezed
@@ -112,7 +112,7 @@ switch (result) {
 ```
 
 > [!NOTE]
-> **`None` và `Cancel` là hai nhánh dự phòng chưa dùng.** Grep toàn repo: không repository hay use case nào từng trả về `Result.none()` hoặc `Result.cancel()` — chúng chỉ xuất hiện trong `platform/provider_state_management/test/base_provider_test.dart`.
+> **`None` và `Cancel` là hai nhánh dự phòng chưa dùng.** Grep toàn repo: không repository hay use case nào từng trả về `Result.none()` hoặc `Result.cancel()` — chúng chỉ xuất hiện trong `platform/state/provider/test/base_provider_test.dart`.
 >
 > Nên câu trả lời trung thực cho *"khi nào `Cancel` xảy ra?"* là: **hiện tại không bao giờ.** Chúng tồn tại để union có thể mở rộng sau này mà không gây breaking change. Cái giá phải trả là bạn vẫn phải xử lý chúng trong `switch` / `whenAsync` vét cạn.
 
@@ -150,7 +150,7 @@ typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 
 ### `BaseEntity<T>` — vỏ response chuẩn
 
-`platform/domain_core/lib/src/entities/base/base_entity.dart`:
+`platform/layers/domain/lib/src/entities/base/base_entity.dart`:
 
 ```dart
 @Freezed(genericArgumentFactories: true)
@@ -169,7 +169,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 
-`platform/domain_core/lib/src/entities/base/paginate_entity.dart` — danh sách nằm ở `data` (JSON key `items`), thông tin phân trang ở `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
+`platform/layers/domain/lib/src/entities/base/paginate_entity.dart` — danh sách nằm ở `data` (JSON key `items`), thông tin phân trang ở `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
 
 ### `BaseUseCase<RType, Params>`
 

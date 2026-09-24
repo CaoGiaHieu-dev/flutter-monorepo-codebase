@@ -83,7 +83,7 @@ state-management tool.
 ### Step 1 — neutral interface in `core_di`
 
 Real code from
-[`platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart):
+[`platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart):
 
 ```dart
 abstract class IAuthStatusStream {
@@ -104,7 +104,7 @@ Two deliberate design decisions worth understanding:
 `domain_*` package (`.agents/AGENTS.md` §8.4): the import would make every consumer depend on
 `domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
 type,
-[`AuthPrincipal`](../../../platform/di/lib/src/agnostic_streams/auth_principal.dart), and the auth
+[`AuthPrincipal`](../../../platform/foundation/contracts/lib/src/agnostic_streams/auth_principal.dart), and the auth
 feature narrows its entity to it at the boundary (`toPrincipal` in step 2). The contract is
 deliberately smaller than the entity — a consumer that only asks *who is signed in* never sees the
 rest.
@@ -225,7 +225,7 @@ ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  
 ```
 
 The interface — real code from
-[`platform/di/lib/src/theme/i_theme_storage.dart`](../../../platform/di/lib/src/theme/i_theme_storage.dart):
+[`platform/foundation/contracts/lib/src/theme/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/theme/i_theme_storage.dart):
 
 ```dart
 import 'package:material_ui/material_ui.dart';
@@ -244,7 +244,7 @@ abstract class IThemeStorage {
 `package:flutter/material.dart` type. The domain layer is pure Dart and **cannot import Flutter**,
 so routing theme through it is impossible by construction — not a shortcut, a hard constraint.
 
-The implementation lives in the app shell (`platform/app_shell/lib/di/theme_storage_impl.dart`) because that is
+The implementation lives in the app shell (`platform/shell/app_shell/lib/di/theme_storage_impl.dart`) because that is
 where `core_base_ui`'s provider and `core_storage`'s mechanism meet without creating a cycle.
 
 
@@ -258,7 +258,7 @@ where `core_base_ui`'s provider and `core_storage`'s mechanism meet without crea
 Declare the builder contract in `core_di`:
 
 ```dart
-// platform/di/lib/src/builders/i_profile_card_builder.dart
+// platform/foundation/contracts/lib/src/builders/i_profile_card_builder.dart
 import 'package:flutter/widgets.dart';
 
 abstract class IProfileCardBuilder {
@@ -283,7 +283,7 @@ the canonical case.
 **Don't use for** plain navigation (use a Navigator interface) or for domain logic (use a UseCase).
 
 The interface — real code from
-[`platform/di/lib/src/actions/i_auth_action_handler.dart`](../../../platform/di/lib/src/actions/i_auth_action_handler.dart):
+[`platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart`](../../../platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -327,7 +327,7 @@ Every consumer of a cross-feature contract must tolerate the contract being **ab
 shell already does this for routing:
 
 ```dart
-// platform/app_shell/lib/presentation/navigation/app_router.dart
+// platform/shell/app_shell/lib/presentation/navigation/app_router.dart
 List<RouteBase> get _featureRoutes {
   return [
     for (final module in getAllOrEmpty<IFeatureRouteModule>())
@@ -351,7 +351,7 @@ feature-owned type is a crash waiting for the day that feature is deleted.
 getItOrNull<IAuthActionHandler>()?.logout(context);
 
 // Good — falls back to the bare branch widget rather than crashing
-// (platform/app_shell/lib/presentation/navigation/app_router.dart)
+// (platform/shell/app_shell/lib/presentation/navigation/app_router.dart)
 builder: (context, state, navigationShell) {
   return getItOrNull<DashboardRouteModule>()?.builder(
         context,
@@ -369,7 +369,7 @@ would open that app on a blank screen.
 > [!NOTE]
 > `apps/mobile/lib/di/injection.dart` naming feature packages is the composition root's one intentional
 > hard reference — it must name what it composes. No other app file imports a module (R10), and the
-> shared shell in `platform/app_shell/` cannot (R1); everything else reaches features through `core_di` contracts with
+> shared shell in `platform/shell/app_shell/` cannot (R1); everything else reaches features through `core_di` contracts with
 > `getAllOrEmpty` / `getItOrNull` fallbacks. The `core_ui_kit` imports in the shell are not
 > exceptions — that is a core package, not a removable feature.
 >

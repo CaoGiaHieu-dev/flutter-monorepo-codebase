@@ -62,7 +62,7 @@ dart tools/workspace_setup/configure.dart
 1. `dart pub global activate flutterfire_cli` — only the real-Firebase path in [§3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it) uses it.
 2. `flutter clean` at the root.
 3. `flutter pub get` at the root — resolves the whole workspace against the one root `pubspec.lock`.
-4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/base_ui` and the auth, home, onboarding, settings and splash features).
+4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/ui/design_system` and the auth, home, onboarding, settings and splash features).
 5. `dart run build_runner build --workspace` — injectable, freezed, json_serializable, retrofit, go_router_builder, drift, flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` for every package with a `lib/` — the apps are skipped, because their `injection.dart` is composer's output.
 
@@ -72,7 +72,7 @@ It uses `fvm` automatically when your machine is set up for it. There is no `con
 > **`flutter pub get` + `build_runner` alone is not a working setup.** The `lib/src/src.dart` of `core_base_ui` and of every feature with translations exports `gen/gen.dart`, and that barrel (plus `gen/language/language.dart`) is gitignored and written only by step 6. Stop after step 5 and `flutter analyze` reports around 17 errors of this shape:
 >
 > ```
-> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/base_ui/lib/src/src.dart:3:8 • uri_does_not_exist
+> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/ui/design_system/lib/src/src.dart:3:8 • uri_does_not_exist
 > error • Undefined name 'AppLocalizations' • …
 > error • Undefined name 'Assets' • …
 > ```
@@ -84,11 +84,11 @@ If you want to run the steps by hand, all of them are required, in this order �
 ```bash
 flutter pub get
 # gen-l10n in each package that has an l10n.yaml
-(cd platform/base_ui && flutter gen-l10n)
+(cd platform/ui/design_system && flutter gen-l10n)
 for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
 dart run build_runner build --workspace
 # barrels for every package with a lib/, apps excluded
-for d in platform/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
+for d in platform/*/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
 ```
 
 What to expect on a clean run:
@@ -261,7 +261,7 @@ APP_LINK_MODE=
 APP_NAME=
 ```
 
-Three of them surface in Dart through `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
+Three of them surface in Dart through `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
@@ -376,7 +376,7 @@ Confirm the file name on a device first (`adb shell run-as <applicationId> ls sh
 
 ```bash
 flutter analyze                     # expect: No issues found!
-cd platform/storage && flutter test && cd ../..
+cd platform/infra/storage && flutter test && cd ../..
 ```
 
 If `flutter analyze` is not clean:

@@ -166,7 +166,7 @@ class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
 ```
 
 `BaseUseCase` is a single-method contract
-([`base_use_case.dart`](../../../platform/domain_core/lib/src/usecases/base_use_case.dart)) —
+([`base_use_case.dart`](../../../platform/layers/domain/lib/src/usecases/base_use_case.dart)) —
 one use case, one operation. Dependencies come through the constructor; never call `getIt<T>()`
 inside a use case.
 
@@ -355,7 +355,7 @@ The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is t
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see the outer `catch (e)` of `execute` and of `executeSync` in
-[`i_base_repository.dart`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
+[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base/i_base_repository.dart).
 
 > [!CAUTION]
 > Use `ErrorHandler.handleError(e)`. **Never** `AppFailure.fromException()`. And never let a
@@ -363,7 +363,7 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 
 > [!WARNING]
 > **`ErrorHandler` has no Firebase branch today.** Reading `ErrorHandler._classify` (behind
-> `handleError`) in [`error_handler.dart`](../../../platform/kernel/lib/src/error/error_handler.dart):
+> `handleError`) in [`error_handler.dart`](../../../platform/foundation/kernel/lib/src/error/error_handler.dart):
 > it handles `AppException`, `DioException`, `SocketException`, `HttpException` and
 > `FormatException` — but not `FirebaseException`, `FirebaseAuthException` or `PlatformException`.
 > Every Firebase error therefore lands on the fallback:
@@ -393,19 +393,19 @@ not before: `check_unused_packages` fails on a dependency declared but never imp
 # modules/payment/data/pubspec.yaml
 dependencies:
   data_core:
-    path: ../../../platform/data_core
+    path: ../../../platform/layers/data
   domain_core:
-    path: ../../../platform/domain_core
+    path: ../../../platform/layers/domain
   domain_payment:
     path: ../domain
 
   # Add when you write the §8 storage owner (StorageManager, StorageValue):
   # core_storage:
-  #   path: ../../../platform/storage
+  #   path: ../../../platform/infra/storage
   # Add when you write a Retrofit data source (ApiClient, Dio) — plus `dio:`
   # and `retrofit:` with an empty value, then run dependency_sync:
   # core_network:
-  #   path: ../../../platform/network
+  #   path: ../../../platform/infra/network
 ```
 
 `platform_kernel` is not on the list: `execute()` / `executeSync()` already route every error

@@ -12,15 +12,15 @@ resolution: workspace
 dependencies:
   material_ui: ^1.1.1
   core_di:
-    path: ../../../platform/di
+    path: ../../../platform/foundation/contracts
   flutter:
     sdk: flutter
   core_common:
-    path: ../../../platform/common
+    path: ../../../platform/foundation/common
   core_base_ui:
-    path: ../../../platform/base_ui
+    path: ../../../platform/ui/design_system
   bloc_state_management:
-    path: ../../../platform/bloc_state_management
+    path: ../../../platform/state/bloc
   flutter_bloc: "^9.1.1"
 
   get_it: ^9.2.1

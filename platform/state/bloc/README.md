@@ -136,7 +136,7 @@ Widget build(BuildContext context) {
 
 ## 🔒 3. Feature-Specific Business Errors (Custom Error State)
 
-By default, `error` in `BlocViewState.error(error)` is an `AppFailure`. `AppFailure` is a Freezed `sealed class` in `domain_core` (`platform/domain_core/lib/src/failures/failures.dart`), so a feature **cannot** `extends` / `implements` it to add its own errors — an `AuthErrorState extends AppFailure` does not compile. To refine errors, define the feature's **own Freezed state** carrying a feature-owned error value, use `BaseBloc<Event, CustomState>`, and map the `AppFailure` variants to that value in the handler:
+By default, `error` in `BlocViewState.error(error)` is an `AppFailure`. `AppFailure` is a Freezed `sealed class` in `domain_core` (`platform/layers/domain/lib/src/failures/failures.dart`), so a feature **cannot** `extends` / `implements` it to add its own errors — an `AuthErrorState extends AppFailure` does not compile. To refine errors, define the feature's **own Freezed state** carrying a feature-owned error value, use `BaseBloc<Event, CustomState>`, and map the `AppFailure` variants to that value in the handler:
 
 ```dart
 // login_state.dart
@@ -228,7 +228,7 @@ Say your feature uses **BLoC**, but needs to react to changes in another feature
 
 The real example: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) takes an `IAuthStatusStream?` through `@factoryParam` — the route passes `getItOrNull<IAuthStatusStream>()`, so Home still works in an app composed without `feature_auth` — and cancels its subscription in `close()`.
 
-*(See the full architecture in [`docs/en/guides/10_cross_feature.md`](../../docs/en/guides/10_cross_feature.md) — Model 3: Agnostic Stream.)*
+*(See the full architecture in [`docs/en/guides/10_cross_feature.md`](../../../docs/en/guides/10_cross_feature.md) — Model 3: Agnostic Stream.)*
 
 For Bloc-to-Bloc links inside the same feature, you can simply pass the instance through the constructor and listen with a `StreamSubscription` inside the Bloc (cancel it in `close()`).
 

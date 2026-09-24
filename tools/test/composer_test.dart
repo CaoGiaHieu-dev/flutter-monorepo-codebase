@@ -60,8 +60,8 @@ void main() {
         '\n'
         '// composer:managed:modules — generated from app_manifest.yaml\n'
         '// composer:end:modules\n',
-    'platform/common/pubspec.yaml': 'name: core_common\n',
-    'platform/common/lib/di/module.dart': diModule(),
+    'platform/foundation/common/pubspec.yaml': 'name: core_common\n',
+    'platform/foundation/common/lib/di/module.dart': diModule(),
     'modules/foo/domain/pubspec.yaml': 'name: domain_foo\n',
     'modules/foo/domain/lib/di/module.dart': diModule(),
     'modules/foo/feature/pubspec.yaml':
@@ -94,10 +94,15 @@ void main() {
         ws.read('apps/demo/pubspec.yaml'),
         contains('  feature_foo:\n    path: ../../modules/foo/feature'),
       );
+      // A platform package sits one group folder deeper than a module layer.
+      expect(
+        ws.read('apps/demo/pubspec.yaml'),
+        contains('  core_common:\n    path: ../../platform/foundation/common'),
+      );
       final root = ws.read('pubspec.yaml');
       for (final member in [
         'apps/demo',
-        'platform/common',
+        'platform/foundation/common',
         'modules/foo/domain',
         'modules/foo/feature',
       ]) {

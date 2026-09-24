@@ -135,7 +135,7 @@ Widget build(BuildContext context) {
 
 ## 🔒 3. Quản Lý Lỗi Nghiệp Vụ Chuyên Biệt (Custom Error State)
 
-Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. `AppFailure` là một `sealed class` (Freezed) trong `domain_core` (`platform/domain_core/lib/src/failures/failures.dart`), nên feature **không thể** `extends` / `implements` nó để thêm lỗi riêng — một `AuthErrorState extends AppFailure` sẽ không compile. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa **Freezed state riêng** cho feature, mang một giá trị lỗi của chính feature, dùng `BaseBloc<Event, CustomState>`, rồi map các biến thể của `AppFailure` sang giá trị đó trong handler:
+Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. `AppFailure` là một `sealed class` (Freezed) trong `domain_core` (`platform/layers/domain/lib/src/failures/failures.dart`), nên feature **không thể** `extends` / `implements` nó để thêm lỗi riêng — một `AuthErrorState extends AppFailure` sẽ không compile. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa **Freezed state riêng** cho feature, mang một giá trị lỗi của chính feature, dùng `BaseBloc<Event, CustomState>`, rồi map các biến thể của `AppFailure` sang giá trị đó trong handler:
 
 ```dart
 // login_state.dart
@@ -227,7 +227,7 @@ Nếu Feature của bạn dùng **BLoC**, nhưng bạn cần lắng nghe sự th
 
 Mẫu thật: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) nhận `IAuthStatusStream?` qua `@factoryParam` — route truyền `getItOrNull<IAuthStatusStream>()`, nên Home vẫn chạy khi app không ghép `feature_auth` — rồi hủy subscription trong `close()`.
 
-*(Xem chi tiết kiến trúc này tại [`docs/vi/guides/10_cross_feature.md`](../../docs/vi/guides/10_cross_feature.md) — Mô hình 3: Agnostic Stream.)*
+*(Xem chi tiết kiến trúc này tại [`docs/vi/guides/10_cross_feature.md`](../../../docs/vi/guides/10_cross_feature.md) — Mô hình 3: Agnostic Stream.)*
 
 Nếu chỉ là liên kết Bloc-đến-Bloc cùng Feature, bạn hoàn toàn có thể truyền instance thông qua constructor và dùng `StreamSubscription` lắng nghe bên trong thân Bloc (nhớ `cancel()` trong `close()`).
 

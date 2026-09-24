@@ -11,7 +11,7 @@
 `core_database` provides the **mechanism** only. It declares no database, no table and no DAO — its DI module registers literally nothing:
 
 ```dart
-// platform/database/lib/di/module.dart
+// platform/infra/database/lib/di/module.dart
 /// `core_database` registers nothing on its own.
 ///
 /// It provides the persistence MECHANISM — [DriftDatabaseOpener],
@@ -78,7 +78,7 @@ dependencies:
   flutter:
     sdk: flutter              # `visibleForTesting` in the database class
   core_database:
-    path: ../../../platform/database
+    path: ../../../platform/infra/database
   drift: "^2.34.3"
   get_it: ^9.2.1              # the DI module collects migrations through GetIt
   injectable: ^3.0.0
@@ -372,7 +372,7 @@ dart tools/barrel_generator/generate.dart modules/cache/data/lib
 You never edit another package's database file to change your schema. You implement one contract and register it.
 
 ```dart
-// platform/database/lib/src/migration/i_database_migration.dart
+// platform/infra/database/lib/src/migration/i_database_migration.dart
 abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   int get version;
@@ -438,7 +438,7 @@ class AddExpiresAtToCacheEntries
 ### How the runner replays
 
 ```dart
-// platform/database/lib/src/migration/database_migration_runner.dart
+// platform/infra/database/lib/src/migration/database_migration_runner.dart
 Future<void> run(Migrator m, int from, int to) async {
   if (from == to) return;
 
@@ -484,7 +484,7 @@ Validation happens once, at construction — not mid-migration. Discovering a wi
 `PRAGMA` settings are **per-connection and are not stored in the file**, so they must be reapplied on every open. That is why they live in `beforeOpen`:
 
 ```dart
-// platform/database/lib/src/migration/drift_migration_strategy.dart
+// platform/infra/database/lib/src/migration/drift_migration_strategy.dart
 beforeOpen: (OpeningDetails details) async {
   // SQLite ships with foreign key enforcement OFF. Without this any
   // `references()` declared on a table is silently ignored, so broken
@@ -507,7 +507,7 @@ beforeOpen: (OpeningDetails details) async {
 | `journal_mode = WAL` | Readers run concurrently with a writer. Required by any read pool (`readPool > 0`; the default is `1`); avoids "database is locked" under contention. |
 | `busy_timeout = 5000` | Waits for a held lock instead of failing instantly with `SQLITE_BUSY`. Default is `0`. |
 
-`beforeOpen` runs on the **writer** connection only. The read pool — one more connection per reader, each on its own isolate — never sees it, so `DatabaseConnectionFactory` also passes drift a `setup` callback that applies `busy_timeout` to every connection it opens (`platform/database/test/database_connection_factory_test.dart` reads it back through a reader). `journal_mode` needs no such help: WAL is stored in the file. `foreign_keys` is only enforced on writes, which never reach a reader.
+`beforeOpen` runs on the **writer** connection only. The read pool — one more connection per reader, each on its own isolate — never sees it, so `DatabaseConnectionFactory` also passes drift a `setup` callback that applies `busy_timeout` to every connection it opens (`platform/infra/database/test/database_connection_factory_test.dart` reads it back through a reader). `journal_mode` needs no such help: WAL is stored in the file. `foreign_keys` is only enforced on writes, which never reach a reader.
 
 WAL adds `-wal` and `-shm` sidecar files next to the database. SQLite converts an existing file automatically and reversibly. In-memory databases (tests) ignore this and stay in `memory` journal mode — which is exactly why the WAL test in `data_cache` runs against a **real file**.
 
@@ -522,7 +522,7 @@ Opening is registered with `@preResolve`, so anything thrown there aborts `confi
 `DriftDatabaseOpener.open` handles this — and the design leans hard towards *not* touching user data:
 
 ```dart
-// platform/database/lib/src/opening/drift_database_opener.dart
+// platform/infra/database/lib/src/opening/drift_database_opener.dart
 static Future<T> open<T extends GeneratedDatabase>(
   DriftDatabaseBuilder<T> build, {
   required String fileName,
@@ -544,7 +544,7 @@ Three deliberate decisions:
 **The file is renamed, never deleted.**
 
 ```dart
-// platform/database/lib/src/connection/database_connection_factory.dart
+// platform/infra/database/lib/src/connection/database_connection_factory.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
 /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;

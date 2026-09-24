@@ -354,7 +354,7 @@ build_command += " --dart-define-from-file=#{dart_define_file.shellescape}"
 ```
 
 > [!IMPORTANT]
-> **Không build được bản prod cho tới khi bạn tạo `apps/mobile/env.prod`.** Đó là có chủ đích. Phương án còn lại — bỏ qua cờ này kèm một cảnh báo — sẽ khiến build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `platform/kernel/lib/src/utils/env_constants.dart` rơi về giá trị rỗng, cho ra một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
+> **Không build được bản prod cho tới khi bạn tạo `apps/mobile/env.prod`.** Đó là có chủ đích. Phương án còn lại — bỏ qua cờ này kèm một cảnh báo — sẽ khiến build prod vẫn *thành công* trong khi mọi `String.fromEnvironment` trong `platform/foundation/kernel/lib/src/utils/env_constants.dart` rơi về giá trị rỗng, cho ra một APK trỏ tới API URL rỗng và key rỗng, đã ký và phát hành mà không cảnh báo gì. Fail to là đánh đổi an toàn hơn.
 >
 > Sao chép danh sách key từ `apps/mobile/env.dev`; `.vscode/launch.json` vốn đã trỏ cấu hình Prod vào `env.prod`.
 

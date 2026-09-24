@@ -11,7 +11,7 @@
 `core_storage` deliberately declares **zero keys**. It ships the machinery; every package declares its own values.
 
 ```dart
-// platform/storage/lib/core_storage.dart
+// platform/infra/storage/lib/core_storage.dart
 /// Core Storage — encrypted key-value persistence layer.
 ///
 /// Provides only the storage MECHANISM — no package/feature-specific keys
@@ -38,7 +38,7 @@
 ## 2. Which backend?
 
 ```dart
-// platform/storage/lib/src/contracts/storage_type.dart
+// platform/infra/storage/lib/src/contracts/storage_type.dart
 enum StorageType {
   /// SharedPreferences storage (plain text with software-level encryption).
   pref,
@@ -63,7 +63,7 @@ enum StorageType {
 **Layer 1 — software AES-256-CBC with a fresh IV per write.** Implemented once on `StorageInterface` so both backends inherit it:
 
 ```dart
-// platform/storage/lib/src/contracts/storage_interface.dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
 /// Encrypt [data] using AES-CBC with a random IV.
 ///
 /// Returns `"iv_base64:ciphertext_base64"`.
@@ -89,7 +89,7 @@ A random IV per write means writing the same value twice produces different ciph
 **Layer 2 — hardware.** The 256-bit master key lives in Keychain/KeyStore under `_internal_master_key`, generated on first launch:
 
 ```dart
-// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
   final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
@@ -101,7 +101,7 @@ if (masterKey == null) {
 **Layer 3 (not advertised elsewhere) — RAM masking.** Neither the master key nor a cached value sits in memory as readable bytes. Both are XOR-masked with a random mask, and revealed only for the instant they are used:
 
 ```dart
-// platform/storage/lib/src/contracts/storage_interface.dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
 /// Container that obfuscates bytes in RAM using dynamic XOR masking.
 class ObfuscatedBytes {
   ObfuscatedBytes(Uint8List originalBytes)
@@ -120,7 +120,7 @@ class ObfuscatedBytes {
 Reading the master key can fail for reasons that pass: the Keychain before the first unlock after a reboot (a background launch), a busy KeyStore. `SecureStorageImpl` used to treat *any* such failure as corruption and call `deleteAll()` — which destroyed every secure value, including `PrefStorageImpl`'s master key, which lives in the same store. Now:
 
 ```dart
-// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
 Future<String?> _readMasterKey() async {
   for (var attempt = 1; ; attempt++) {
     try {
@@ -156,7 +156,7 @@ Future<String?> _readMasterKey() async {
 | Readable again while a SharedPreferences key exists | whichever key decrypts the stored values wins; a winning SharedPreferences key is moved into secure storage and removed from SharedPreferences |
 | Key absent or unusable (not a 256-bit base64 key) | a new key is generated — in secure storage, or in SharedPreferences if secure storage refuses the write; values sealed with a lost key drop one by one in `read()` |
 
-`StorageManager.initialize` runs the secure backend first, so a persistent Keychain failure normally surfaces there before the pref backend is asked. The tests (`platform/storage/test/storage_test.dart`) drive both backends through a flaky `FlutterSecureStorage` fake.
+`StorageManager.initialize` runs the secure backend first, so a persistent Keychain failure normally surfaces there before the pref backend is asked. The tests (`platform/infra/storage/test/storage_test.dart`) drive both backends through a flaky `FlutterSecureStorage` fake.
 
 ### The plugin's cipher options are pinned
 
@@ -177,7 +177,7 @@ The owning package declares it in `dependencies` (an undeclared import still com
 ```yaml
 dependencies:
   core_storage:
-    path: ../../../platform/storage
+    path: ../../../platform/infra/storage
   injectable: ^3.0.0
 
 dev_dependencies:
@@ -263,23 +263,23 @@ The registration — including the `await` of `initialize()` that `preResolve` a
 | Owner | Package | Key(s) | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `ThemeStorageImpl` | app shell (`platform/app_shell/lib/di/`) | `themeMode` | `pref` |
-| `LanguageStorageImpl` | app shell (`platform/app_shell/lib/di/`) | `locale` | `pref` |
-| `AppBootStorage` | app shell (`platform/app_shell/lib/di/`) | `viewed_onboard` | `pref` |
+| `ThemeStorageImpl` | app shell (`platform/shell/app_shell/lib/di/`) | `themeMode` | `pref` |
+| `LanguageStorageImpl` | app shell (`platform/shell/app_shell/lib/di/`) | `locale` | `pref` |
+| `AppBootStorage` | app shell (`platform/shell/app_shell/lib/di/`) | `viewed_onboard` | `pref` |
 
-App-shell key classes live in `platform/app_shell/lib/di/utils/`.
+App-shell key classes live in `platform/shell/app_shell/lib/di/utils/`.
 
 
 ---
 
 ## 6. Non-primitive types need a `reviver`
 
-`StorageValue<T>` reads `num`, `String`, `bool`, `Map<String, dynamic>` and lists of those back directly — a `List<String>` is cast element-wise, no reviver needed. An **enum** is stored by `name`, so it needs a `reviver` to turn the name back into a value. Any **other type** is stored through its `toJson()` and needs a `reviver` to rebuild it; without one the constructor throws `ArgumentError`. All paths share `StorageCodec` (`platform/storage/lib/src/contracts/storage_codec.dart`), so a value reads back the way it was written.
+`StorageValue<T>` reads `num`, `String`, `bool`, `Map<String, dynamic>` and lists of those back directly — a `List<String>` is cast element-wise, no reviver needed. An **enum** is stored by `name`, so it needs a `reviver` to turn the name back into a value. Any **other type** is stored through its `toJson()` and needs a `reviver` to rebuild it; without one the constructor throws `ArgumentError`. All paths share `StorageCodec` (`platform/infra/storage/lib/src/contracts/storage_codec.dart`), so a value reads back the way it was written.
 
 **Enum:**
 
 ```dart
-// platform/app_shell/lib/di/theme_storage_impl.dart
+// platform/shell/app_shell/lib/di/theme_storage_impl.dart
 late final _themeMode = StorageValue<ThemeMode>(
   _storageManager.getStorage(StorageType.pref),
   ThemeStorageKeys.THEME_MODE,
@@ -293,7 +293,7 @@ late final _themeMode = StorageValue<ThemeMode>(
 **Bool with an explicit default:**
 
 ```dart
-// platform/app_shell/lib/di/app_boot_storage.dart
+// platform/shell/app_shell/lib/di/app_boot_storage.dart
 late final viewedOnboard = StorageValue<bool>(
   _storageManager.getStorage(StorageType.pref),
   AppBootStorageKeys.VIEWED_ONBOARD,
@@ -344,7 +344,7 @@ abstract class IThemeStorage {
 ```
 
 ```dart
-// platform/app_shell/lib/di/theme_storage_impl.dart — the owner implements it
+// platform/shell/app_shell/lib/di/theme_storage_impl.dart — the owner implements it
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);
@@ -375,7 +375,7 @@ Consumers (here `ThemeProvider` in `core_base_ui`) depend on `IThemeStorage` onl
 `StorageInterface` refuses keys the storage layer uses for itself:
 
 ```dart
-// platform/storage/lib/src/contracts/storage_interface.dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
 static const _reservedKeys = {
   '_internal_master_key',
   '_internal_pref_master_key',

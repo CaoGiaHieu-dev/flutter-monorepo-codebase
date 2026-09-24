@@ -44,9 +44,9 @@ Only these three exist. Adding a fourth requires updating `AGENTS.md` and the al
 dart tools/arch_check/check.dart
 
 # core must never name a feature, data or product domain package
-grep -rn "package:feature_\|package:data_" platform/*/lib
-grep -lE "^  (feature_|data_)" platform/*/pubspec.yaml
-grep -rn "package:domain_" platform/*/lib | grep -v "package:domain_core"
+grep -rn "package:feature_\|package:data_" platform/*/*/lib
+grep -lE "^  (feature_|data_)" platform/*/*/pubspec.yaml
+grep -rn "package:domain_" platform/*/*/lib | grep -v "package:domain_core"
 
 # domain must never touch Flutter
 grep -rn "package:flutter" modules/*/domain/lib
@@ -56,7 +56,7 @@ grep -rn "package:flutter" modules/*/domain/lib
 
 ❌ **Wrong** — a core package borrowing a feature widget:
 ```dart
-// platform/provider_state_management/lib/src/base_view/base_view_widget.dart
+// platform/state/provider/lib/src/base_view/base_view_widget.dart
 import 'package:feature_auth/feature_auth.dart';   // core → feature
 ```
 
@@ -109,7 +109,7 @@ class AuthStorageKeys {
 ```
 
 > [!NOTE]
-> **Approved exception — design tokens.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` stay in `platform/base_ui/lib/src/styles/`, *not* in `utils/`.
+> **Approved exception — design tokens.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` stay in `platform/ui/design_system/lib/src/styles/`, *not* in `utils/`.
 >
 > They are the public API of the design system, and `styles/` carries that meaning where `utils/` reads as "miscellaneous". Moving them would break every doc reference for no gain. **Do not "fix" this in a future audit.**
 
@@ -173,7 +173,7 @@ Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_bas
 ```bash
 dart run build_runner build --workspace
 grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart       # module order
-grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # eager registrations and their gh<Dep>() calls
+grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # eager registrations and their gh<Dep>() calls
 ```
 
 `@PostConstruct(preResolve: true)` on a `@lazySingleton` is awaited during module init and re-registered as a plain sync lazy singleton, so later `gh<T>()` sync lookups are safe.
@@ -290,7 +290,7 @@ Components: `entities/` (Freezed, with `const Class._()`), `params/`, `repositor
 
 ## 11. Routing
 
-**Rule.** Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
+**Rule.** Never edit `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
 
 | Contract | Purpose | Ordered? |
 |---|---|---|
@@ -334,7 +334,7 @@ Future<void> _loadAvatar() async {
 }
 ```
 
-**Helper scaling axes** — defined in `platform/responsive/lib/src/context_extension.dart`:
+**Helper scaling axes** — defined in `platform/ui/responsive/lib/src/context_extension.dart`:
 
 | Helper | Scales by |
 |:--|:--|
@@ -353,7 +353,7 @@ Future<void> _loadAvatar() async {
 
 ❌ **Wrong** — an internal override silently discards the caller's value:
 ```dart
-// what platform/ui_kit/lib/navigation/app_bar_custom.dart once did
+// what platform/ui/ui_kit/lib/navigation/app_bar_custom.dart once did
 @override
 double? get leadingWidth => context.w(64);   // overrides super.leadingWidth forever
 ```
@@ -388,7 +388,7 @@ The bare-extension half of this rule is **enforced by machine**, not by review: 
 
 **Rule.** All user-facing text is translated — hardcoded UI strings are forbidden. Each feature owns its `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI. Access through the feature extension: `context.l10nAuth.someKey`.
 
-Features **must not** edit `platform/app_shell/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
+Features **must not** edit `platform/shell/app_shell/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
 
 Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own `.arb` files — it uses `core_base_ui`'s.
 
@@ -400,7 +400,7 @@ Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own
 
 **Rule.** Every dialog and bottom sheet is its own widget class in its own file. Writing an inline widget tree inside `showDialog()` / `showModalBottomSheet()` is forbidden.
 
-Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Real examples: `platform/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
+Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Real examples: `platform/ui/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
 
 ---
 
@@ -429,7 +429,7 @@ abstract class AuthModule {
 This lets the owner inject the concrete type through its constructor while every other feature sees only the interface.
 
 > [!NOTE]
-> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `platform/app_shell/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
+> GetIt resolves by **exact type**, never by supertype. Registering `Impl as InterfaceA` does *not* make `getIt<InterfaceB>()` work even when `InterfaceA implements InterfaceB` — bind each one explicitly. See `platform/shell/app_shell/lib/di/network_binding_module.dart`, where `SslPinningConfig` needs its own binding despite `NetworkConfig implements SslPinningConfig`.
 
 Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-only logic (use a UseCase).
 

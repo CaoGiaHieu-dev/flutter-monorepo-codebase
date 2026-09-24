@@ -11,7 +11,7 @@
 `core_storage` cố ý khai báo **zero key**. Nó chỉ cấp bộ máy; mỗi package tự khai giá trị của mình.
 
 ```dart
-// platform/storage/lib/core_storage.dart
+// platform/infra/storage/lib/core_storage.dart
 /// Core Storage — encrypted key-value persistence layer.
 ///
 /// Provides only the storage MECHANISM — no package/feature-specific keys
@@ -38,7 +38,7 @@
 ## 2. Chọn backend nào?
 
 ```dart
-// platform/storage/lib/src/contracts/storage_type.dart
+// platform/infra/storage/lib/src/contracts/storage_type.dart
 enum StorageType {
   /// SharedPreferences storage (plain text with software-level encryption).
   pref,
@@ -63,7 +63,7 @@ enum StorageType {
 **Lớp 1 — AES-256-CBC phần mềm, IV ngẫu nhiên mỗi lần ghi.** Cài đặt một lần trên `StorageInterface` nên cả hai backend đều thừa hưởng:
 
 ```dart
-// platform/storage/lib/src/contracts/storage_interface.dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
 /// Encrypt [data] using AES-CBC with a random IV.
 ///
 /// Returns `"iv_base64:ciphertext_base64"`.
@@ -89,7 +89,7 @@ IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần
 **Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới key `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
 
 ```dart
-// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
   final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
@@ -101,7 +101,7 @@ if (masterKey == null) {
 **Lớp 3 (ít nơi nhắc tới) — che trong RAM.** Cả master key lẫn giá trị đã cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Chúng bị XOR với mask ngẫu nhiên, và chỉ lộ ra đúng khoảnh khắc được dùng:
 
 ```dart
-// platform/storage/lib/src/contracts/storage_interface.dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
 /// Container that obfuscates bytes in RAM using dynamic XOR masking.
 class ObfuscatedBytes {
   ObfuscatedBytes(Uint8List originalBytes)
@@ -120,7 +120,7 @@ class ObfuscatedBytes {
 Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Trước đây `SecureStorageImpl` coi *mọi* lỗi như vậy là hỏng dữ liệu và gọi `deleteAll()` — xoá sạch mọi giá trị bảo mật, kể cả master key của `PrefStorageImpl` vốn nằm trong cùng kho. Giờ thì:
 
 ```dart
-// platform/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
 Future<String?> _readMasterKey() async {
   for (var attempt = 1; ; attempt++) {
     try {
@@ -156,7 +156,7 @@ Future<String?> _readMasterKey() async {
 | Đọc được lại trong khi vẫn còn key trong SharedPreferences | key nào giải mã được các giá trị đã lưu thì thắng; nếu key trong SharedPreferences thắng, nó được chuyển vào kho bảo mật và xoá khỏi SharedPreferences |
 | Key không có hoặc không dùng được (không phải key base64 256-bit) | sinh key mới — trong kho bảo mật, hoặc trong SharedPreferences nếu kho bảo mật từ chối ghi; giá trị mã hoá bằng key đã mất sẽ bị `read()` xoá từng cái một |
 
-`StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
+`StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/infra/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
 
 ### Tuỳ chọn cipher của plugin được ghim cố định
 
@@ -177,7 +177,7 @@ Package sở hữu khai nó trong `dependencies` (trong Pub workspace, một imp
 ```yaml
 dependencies:
   core_storage:
-    path: ../../../platform/storage
+    path: ../../../platform/infra/storage
   injectable: ^3.0.0
 
 dev_dependencies:
@@ -263,23 +263,23 @@ Phần đăng ký — kể cả việc `await` `initialize()` mà `preResolve` y
 | Owner | Package | Key | Backend |
 |---|---|---|---|
 | `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `ThemeStorageImpl` | app shell (`platform/app_shell/lib/di/`) | `themeMode` | `pref` |
-| `LanguageStorageImpl` | app shell (`platform/app_shell/lib/di/`) | `locale` | `pref` |
-| `AppBootStorage` | app shell (`platform/app_shell/lib/di/`) | `viewed_onboard` | `pref` |
+| `ThemeStorageImpl` | app shell (`platform/shell/app_shell/lib/di/`) | `themeMode` | `pref` |
+| `LanguageStorageImpl` | app shell (`platform/shell/app_shell/lib/di/`) | `locale` | `pref` |
+| `AppBootStorage` | app shell (`platform/shell/app_shell/lib/di/`) | `viewed_onboard` | `pref` |
 
-Class key của app shell nằm ở `platform/app_shell/lib/di/utils/`.
+Class key của app shell nằm ở `platform/shell/app_shell/lib/di/utils/`.
 
 
 ---
 
 ## 6. Kiểu phức tạp cần `reviver`
 
-`StorageValue<T>` đọc lại trực tiếp `num`, `String`, `bool`, `Map<String, dynamic>` và list của các kiểu đó — `List<String>` được cast từng phần tử, không cần reviver. **Enum** được lưu bằng `name`, nên cần `reviver` để đổi tên về lại giá trị. **Mọi kiểu khác** được lưu qua `toJson()` và cần `reviver` để dựng lại; thiếu nó constructor ném `ArgumentError`. Mọi đường đọc/ghi dùng chung `StorageCodec` (`platform/storage/lib/src/contracts/storage_codec.dart`), nên giá trị đọc ra đúng như lúc ghi.
+`StorageValue<T>` đọc lại trực tiếp `num`, `String`, `bool`, `Map<String, dynamic>` và list của các kiểu đó — `List<String>` được cast từng phần tử, không cần reviver. **Enum** được lưu bằng `name`, nên cần `reviver` để đổi tên về lại giá trị. **Mọi kiểu khác** được lưu qua `toJson()` và cần `reviver` để dựng lại; thiếu nó constructor ném `ArgumentError`. Mọi đường đọc/ghi dùng chung `StorageCodec` (`platform/infra/storage/lib/src/contracts/storage_codec.dart`), nên giá trị đọc ra đúng như lúc ghi.
 
 **Enum:**
 
 ```dart
-// platform/app_shell/lib/di/theme_storage_impl.dart
+// platform/shell/app_shell/lib/di/theme_storage_impl.dart
 late final _themeMode = StorageValue<ThemeMode>(
   _storageManager.getStorage(StorageType.pref),
   ThemeStorageKeys.THEME_MODE,
@@ -293,7 +293,7 @@ late final _themeMode = StorageValue<ThemeMode>(
 **Bool có giá trị mặc định rõ ràng:**
 
 ```dart
-// platform/app_shell/lib/di/app_boot_storage.dart
+// platform/shell/app_shell/lib/di/app_boot_storage.dart
 late final viewedOnboard = StorageValue<bool>(
   _storageManager.getStorage(StorageType.pref),
   AppBootStorageKeys.VIEWED_ONBOARD,
@@ -344,7 +344,7 @@ abstract class IThemeStorage {
 ```
 
 ```dart
-// platform/app_shell/lib/di/theme_storage_impl.dart — owner implement nó
+// platform/shell/app_shell/lib/di/theme_storage_impl.dart — owner implement nó
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);
@@ -375,7 +375,7 @@ Bên tiêu thụ (ở đây là `ThemeProvider` trong `core_base_ui`) chỉ ph�
 `StorageInterface` từ chối những key mà tầng storage dùng cho chính nó:
 
 ```dart
-// platform/storage/lib/src/contracts/storage_interface.dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
 static const _reservedKeys = {
   '_internal_master_key',
   '_internal_pref_master_key',

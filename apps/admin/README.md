@@ -30,7 +30,7 @@ apps/admin/
 ```
 
 That is the whole app. The boot sequence, router, storage adapters and material wrapper come from
-[`platform/app_shell`](../../platform/app_shell/).
+[`platform/shell/app_shell`](../../platform/shell/app_shell/).
 
 To change what it is made of, edit `app_manifest.yaml`, then from the repository root:
 

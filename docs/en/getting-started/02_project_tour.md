@@ -24,21 +24,27 @@ flutter-monorepo-codebase/
 │       └── pubspec.yaml           # Path deps between composer:managed markers are generated
 │
 ├── platform/                      # Infra team's ground — every module may depend on it
-│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapters — shared by every app
-│   ├── kernel/                    # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
-│   ├── base_ui/                   # Theme, LanguageProvider, design tokens & l10n (zero widgets)
-│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
-│   ├── common/                    # AppConfig, AppInitializer, Flutter-bound helpers
-│   ├── database/                  # Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
-│   ├── di/                        # DI Hub — every cross-module contract lives here
-│   ├── network/                   # Dio + Retrofit factory, interceptor chain, SSL pinning
-│   ├── notifications/             # Push Notification management module
-│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   ├── responsive/                # Design-size scaling bound to BuildContext
-│   ├── storage/                   # StorageManager + StorageValue<T> (defines NO keys)
-│   ├── ui_kit/                    # core_ui_kit — reusable widgets every module may use
-│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository, BaseModel, request models
+│   ├── foundation/                # Pure base everything builds on: getIt/errors, DI contracts, Flutter helpers
+│   │   ├── kernel/                # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
+│   │   ├── contracts/             # core_di: DI Hub — every cross-module contract lives here
+│   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
+│   ├── layers/                    # Base contracts of the domain and data layers
+│   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request models
+│   ├── infra/                     # I/O mechanisms: network, storage, database, push
+│   │   ├── network/               # core_network: Dio + Retrofit factory, interceptor chain, SSL pinning
+│   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (defines NO keys)
+│   │   ├── database/              # core_database: Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
+│   │   └── notifications/         # core_notifications: Push Notification management module
+│   ├── ui/                        # Scaling, design system, shared widgets
+│   │   ├── responsive/            # core_responsive: Design-size scaling bound to BuildContext
+│   │   ├── design_system/         # core_base_ui: Theme, LanguageProvider, design tokens & l10n (zero widgets)
+│   │   └── ui_kit/                # core_ui_kit — reusable widgets every module may use
+│   ├── state/                     # State-management bases (Provider, BLoC)
+│   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
+│   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
+│   └── shell/                     # The app shell every app composes
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapters — shared by every app
 ├── modules/                       # One vertical slice per bounded context, one per team
 │   ├── auth/                      # Sample: the full three-layer slice
 │   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
@@ -72,19 +78,19 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `platform_kernel` | `platform/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), exceptions, enums, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
-| `platform_app_shell` | `platform/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the theme/language/boot storage adapters, `NetworkConfigImpl`. Imports no module |
-| `core_common` | `platform/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
-| `core_di` | `platform/di` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
-| `core_base_ui` | `platform/base_ui` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
-| `core_ui_kit` | `platform/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
-| `core_network` | `platform/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
-| `core_storage` | `platform/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
-| `core_database` | `platform/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
-| `core_responsive` | `platform/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through (down only, by default); window size classes and the adaptive layout widgets (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
-| `core_notifications` | `platform/notifications` | Push notification service + its own `NotificationConstants` |
-| `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
-| `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
+| `platform_kernel` | `platform/foundation/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), exceptions, enums, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
+| `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, the theme/language/boot storage adapters, `NetworkConfigImpl`. Imports no module |
+| `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` + page transitions, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
+| `core_di` | `platform/foundation/contracts` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
+| `core_base_ui` | `platform/ui/design_system` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
+| `core_ui_kit` | `platform/ui/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation + `SharedUiConstants` |
+| `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract |
+| `core_storage` | `platform/infra/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
+| `core_database` | `platform/infra/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
+| `core_responsive` | `platform/ui/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through (down only, by default); window size classes and the adaptive layout widgets (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
+| `core_notifications` | `platform/infra/notifications` | Push notification service + its own `NotificationConstants` |
+| `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
+| `bloc_state_management` | `platform/state/bloc` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
 ### Domain — `modules/*/domain`
 
@@ -92,7 +98,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
+| `domain_core` | `platform/layers/domain` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
 | `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
 | `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
@@ -102,7 +108,7 @@ Implements the domain contracts. Data sources return **Models**, never entities,
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_core` | `platform/layers/data` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + `CacheEntries` table + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
 | `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
@@ -174,7 +180,7 @@ Read it as: **arrows point at what you are allowed to depend on.**
 Verify at any time:
 
 ```bash
-grep -rl "package:feature_" platform/*/lib    # must print nothing
+grep -rl "package:feature_" platform/*/*/lib    # must print nothing
 dart tools/arch_check/check.dart              # R1: no platform/* → feature_/data_/domain_ edge outside the three above
 ```
 
@@ -220,9 +226,9 @@ Consequences you must know:
 | Add a database table | The owning package's own `src/database/tables/` (reference: `modules/cache/data/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
-| Change colors / spacing / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Change colors / spacing / typography | `platform/ui/design_system/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Add a translated string | `modules/<name>/feature/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Share a widget between features | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
+| Share a widget between features | `platform/ui/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Let feature A trigger something in feature B | `core_di/src/actions/` or `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Bump a dependency version | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
 | Change the CI pipeline | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |

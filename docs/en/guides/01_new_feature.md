@@ -22,7 +22,7 @@ The five positional arguments are read by
 | :-- | :-- | :-- |
 | 1 | `1` | Module type — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
 | 2 | `profile` | Module name (snake_case). Package becomes `feature_profile` at `modules/profile/feature` |
-| 3 | `""` | Custom package prefix — only used when type is `5` (`<prefix>_<name>` at `platform/<name>`). Pass `""` for types 1–4 |
+| 3 | `""` | Custom package prefix — only used when type is `5` (`<prefix>_<name>` at `platform/<group>/<name>`). Pass `""` for types 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` none |
 | 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` none |
 
@@ -87,7 +87,7 @@ every app. An unknown id exits 64 before anything is written.
 
 1. Fill in the `TypedGoRoute` / navigator in `lib/src/routing/`
 2. Populate the route module stub (`routes`, and for a tab also `order`, `path`, `destination`)
-3. If you added a navigator contract to `core_di` (§7), run the barrel generator for `platform/di/lib` first
+3. If you added a navigator contract to `core_di` (§7), run the barrel generator for `platform/foundation/contracts/lib` first
 4. Re-run `build_runner`, then **full restart** the app — new DI registrations are not picked up by hot reload
 
 > [!NOTE]
@@ -240,7 +240,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 No `order` — these routes are matched by path, not by index.
 
 > [!CAUTION]
-> Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart` to add your routes. It collects
+> Never edit `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` to add your routes. It collects
 > contributions through `getAllOrEmpty<IFeatureRouteModule>()` and
 > `getAllOrEmpty<INavDestinationModule>()`. Hardcoding there breaks feature removability.
 
@@ -350,7 +350,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-The app shell's [`app_material_wrapper.dart`](../../../platform/app_shell/lib/presentation/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`, so **do not edit `root_app.dart`** (or the wrapper).
+The app shell's [`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/presentation/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`, so **do not edit `root_app.dart`** (or the wrapper).
 
 Regenerate after editing any `.arb`:
 
@@ -369,7 +369,7 @@ cd modules/profile/feature && flutter gen-l10n
 Other features must never import `feature_profile`. Declare the contract in `core_di`:
 
 ```dart
-// platform/di/lib/src/navigators/profile_navigator.dart
+// platform/foundation/contracts/lib/src/navigators/profile_navigator.dart
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
@@ -378,7 +378,7 @@ abstract class ProfileNavigator {
 ```
 
 That is exactly the shape of
-[`home_navigator.dart`](../../../platform/di/lib/src/navigators/home_navigator.dart).
+[`home_navigator.dart`](../../../platform/foundation/contracts/lib/src/navigators/home_navigator.dart).
 
 Implement it inside your own `routing/` — real code from
 [`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
@@ -406,8 +406,8 @@ from `NavigatorKeys`.
 ## 8. Finish and verify
 
 ```bash
-# 1. Export the new ProfileNavigator from core_di's barrel (§7 added a file to platform/di/lib)
-dart tools/barrel_generator/generate.dart platform/di/lib
+# 1. Export the new ProfileNavigator from core_di's barrel (§7 added a file to platform/foundation/contracts/lib)
+dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
 # 2. Regenerate DI / routes — injectable must see ProfileNavigator through `package:core_di/core_di.dart`
 dart run build_runner build --workspace
 # 3. Re-export your feature's new files (and the generated ones) from its barrel
@@ -418,8 +418,8 @@ flutter analyze
 > [!IMPORTANT]
 > Skip step 1 and `flutter analyze` reports `Undefined name 'ProfileNavigator'` in the navigator
 > impl and its generated registration: `core_di`'s barrel is generated, so a file added under
-> `platform/di/lib/src/` is invisible to other packages until the barrel generator runs for
-> `platform/di/lib`. The same holds for any package you add a file to — rerun the barrel generator
+> `platform/foundation/contracts/lib/src/` is invisible to other packages until the barrel generator runs for
+> `platform/foundation/contracts/lib`. The same holds for any package you add a file to — rerun the barrel generator
 > for its `lib/`.
 
 Then **full restart** the app (not hot reload) so the new DI graph is built.
@@ -480,7 +480,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > `injection.dart` naming feature packages is the composition root's **one intentional hard
 > reference** — a composition root must name what it composes. It is also the only one, and a
 > machine holds that: `arch_check` R10 fails any other file in an app that imports a module, and the
-> shared shell in `platform/app_shell/` is a `platform/` package, which R1 forbids from importing one
+> shared shell in `platform/shell/app_shell/` is a `platform/` package, which R1 forbids from importing one
 > at all. The shell does import `core_ui_kit`, which is fine — that is a core package, not a
 > removable feature.
 

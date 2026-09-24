@@ -183,11 +183,12 @@ than ignored. Bundles: `auth`, `home`, `settings`, `onboarding`, `cache`, `dashb
 
 ### 🏗️ Module Generator (new modules)
 ```bash
-# Syntax: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]
+# Syntax: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--group <g>] [--apps <id,id>]
 # <type>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<name>), 5=Custom
-# <prefix> (Custom only): package-name prefix -> <prefix>_<name> at platform/<name>; pass "" for other types
+# <prefix> (Custom only): package-name prefix -> <prefix>_<name> at platform/<group>/<name>; pass "" for other types
 # <SM> (Feature only): 1=Provider, 2=BLoC, 3=None
 # <route> (Feature only): 1=IFeatureRouteModule, 2=INavDestinationModule (primary nav tab), 3=none
+# --group (Core/Custom only): foundation|layers|infra|ui|state|shell — the platform/ group folder; default infra
 # Pick 2 only for a primary tab after sign-in — see docs/{en,vi}/guides/04_routing.md.
 
 # Feature 'profile' + Provider + stack routes (IFeatureRouteModule):
@@ -202,10 +203,13 @@ dart tools/module_generator/generate.dart 2 payment
 # Data micro-package 'payment':
 dart tools/module_generator/generate.dart 3 payment
 
-# Core package 'logging' (core_logging at platform/logging):
+# Core package 'logging' (core_logging at platform/infra/logging):
 dart tools/module_generator/generate.dart 4 logging
 
-# Custom package 'billing' with prefix 'acme' (acme_billing at platform/billing):
+# Core package 'charts' in the ui group (core_charts at platform/ui/charts):
+dart tools/module_generator/generate.dart 4 charts --group ui
+
+# Custom package 'billing' with prefix 'acme' (acme_billing at platform/infra/billing):
 dart tools/module_generator/generate.dart 5 billing acme
 
 # Interactive (no arguments, needs a terminal):

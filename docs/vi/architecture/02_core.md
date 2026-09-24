@@ -14,6 +14,27 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 **Mọi package giữ constants trong thư mục `utils/` của chính nó.** Một ngoại lệ đã duyệt: design token trong `core_base_ui/src/styles/` giữ nguyên vị trí — xem [`core_base_ui`](#3-core_base_ui--design-system) bên dưới.
 
+### Package nằm ở đâu — sáu nhóm
+
+`platform/` được chia thành sáu thư mục nhóm theo vai trò. Chỉ có thư mục cho biết package thuộc nhóm nào — **tên** mọi package giữ nguyên (`core_di` vẫn là `core_di`, nay ở `platform/foundation/contracts`), nên import, `app_manifest.yaml` và tên phụ thuộc trong từng `pubspec.yaml` hoàn toàn không nhắc tới nhóm.
+
+| Nhóm | Thư mục | Package (thư mục) | Thứ thuộc về đây | Được phụ thuộc vào |
+|:--|:--|:--|:--|:--|
+| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | Nền mà mọi package khác dựng lên: service locator và xử lý lỗi, các hợp đồng DI giữa module, helper gắn với Flutter. Không I/O, không widget | không gì khác trong `platform/` |
+| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | Hợp đồng nền của tầng domain và data — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — mà `modules/*/domain` và `modules/*/data` mở rộng | foundation |
+| **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Cơ chế với ra ngoài tiến trình — HTTP, lưu trữ key–value, SQLite, push. Chỉ cơ chế: không key, bảng hay endpoint của module sản phẩm nào. Nhóm mặc định của `generate.dart 4` / `5` | foundation, layers |
+| **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scale và layout thích ứng, design token, theme và chuỗi dùng chung, thư viện widget dùng chung | foundation, layers |
+| **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | Lớp nền quản lý state; mỗi feature chọn một | foundation, layers, ui |
+| **shell** | `platform/shell/` | `platform_app_shell` (`app_shell/`) | App shell mà mọi app compose: boot, lắp ráp router, material wrapper, storage adapter | mọi nhóm khác |
+
+Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← toàn bộ platform/`. Và, như cũ, không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` chưa kiểm chiều giữa các nhóm — cho tới khi kiểm, review giữ luật này. Hiện có ba cạnh đi ngược chiều, và sẽ còn đó cho tới khi luật được cưỡng chế và từng cạnh được gỡ bỏ hoặc được duyệt:
+
+- `platform_kernel` (foundation) → `domain_core` (layers) — cạnh R1 đã duyệt: `ErrorHandler` sinh ra `AppFailure`.
+- `core_common` (foundation) → `core_responsive` (ui) — các page transition trong `src/routing/page_transitions/` scale qua nó.
+- `core_ui_kit` (ui) → `provider_state_management` (state) — widget của nó vẽ `ViewState`. Cạnh ngược lại vẫn bị cấm (§ 2 của `.agents/AGENTS.md`): nó sẽ tạo vòng.
+
+Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/generate.dart 4 <name>` đặt nó ở đó; truyền `--group <group>` cho nhóm khác.
+
 ---
 
 ## 1. `platform_kernel` và `core_common` — nguyên thuỷ dùng chung
@@ -50,7 +71,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
-Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — cả hai trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`) và `ErrorCodes` ([`error_codes.dart`](../../../platform/kernel/lib/src/utils/error_codes.dart) — mã lỗi mà `ErrorHandler` và `IBaseRepository` gán khi không có HTTP status, ví dụ `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, đều nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
+Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — cả hai trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`) và `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — mã lỗi mà `ErrorHandler` và `IBaseRepository` gán khi không có HTTP status, ví dụ `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, đều nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.
@@ -73,7 +94,7 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
 
-**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/di/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
+**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
 
 Một `ShellRoute` và các route con phải dùng **cùng một** instance `GlobalKey`, nhưng shell do app shell dựng còn route con khai bên trong feature. Đặt key ở bên nào cũng tạo chu trình, nên Hub — nơi cả hai đều đã phụ thuộc — giữ nó.
 
@@ -124,7 +145,7 @@ Observer được gỡ trong `dispose()`, và hàm này gắn `@disposeMethod` �
 
 ## 4. `core_ui_kit` — widget dùng lại
 
-Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `platform/ui_kit` để `modules/*/feature/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
+Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `platform/ui/ui_kit` để `modules/*/feature/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
 
 Cấu trúc phẳng (không có `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
 
@@ -159,7 +180,7 @@ Scale bên trong nghĩa là bên gọi nào đã scale sẽ bị scale hai lần
 
 ### Hằng số
 
-Giá trị mặc định của các widget này nằm ở `platform/ui_kit/lib/utils/shared_ui_constants.dart`:
+Giá trị mặc định của các widget này nằm ở `platform/ui/ui_kit/lib/utils/shared_ui_constants.dart`:
 
 ```dart
 class SharedUiConstants {
@@ -177,7 +198,7 @@ class SharedUiConstants {
 
 ## 5. `core_responsive` — scale theo khung thiết kế và layout thích ứng, gắn với `BuildContext`
 
-Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kích thước cửa sổ và widget thích ứng dùng để chọn layout. Nó nằm tại `platform/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, không package bên thứ ba nào, và cũng không import `material`.
+Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kích thước cửa sổ và widget thích ứng dùng để chọn layout. Nó nằm tại `platform/ui/responsive` và **không phụ thuộc gì ngoài `flutter`** — không package nào trong workspace, không package bên thứ ba nào, và cũng không import `material`.
 
 | Thành phần export | Đường dẫn | Mục đích |
 |:--|:--|:--|
@@ -232,9 +253,9 @@ Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống:
 Luật **R7** của `dart tools/arch_check/check.dart` chặn dạng bare — mẫu `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — trong mọi file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
 
 > [!NOTE]
-> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/responsive/test/`.
+> Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/ui/responsive/test/`.
 
-Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
+Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/shell/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 
@@ -350,7 +371,7 @@ Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: giờ c
 | Thành phần thêm | `StateManager`, `OperationExecutor`, `OperationGlobalConfig`, `LoadMoreMixin`, `ProviderStateListener`, `BaseViewWidget` | — |
 
 > [!WARNING]
-> `emitResult` (`platform/bloc_state_management/lib/src/result_emitter.dart`) lo cho Bloc hoặc Cubit có state là `BlocViewState<T>`: loading, bóc `Result`, `none`/`cancel` hoàn tác loading của chính nó, exception đi qua `ErrorHandler`. Bloc dùng **state Freezed riêng** vẫn tự bóc `Result<T>` và tự emit loading/kết thúc trong từng handler, và nhánh BLoC không có bản tương ứng cho `OperationGlobalConfig`, `errorStateBuilder` hay `LoadMoreMixin`. `bloc_state_management` phụ thuộc `platform_kernel` để dùng `ErrorHandler` — một cạnh platform → platform, không phải một trong các ngoại lệ `→ domain_core`.
+> `emitResult` (`platform/state/bloc/lib/src/result_emitter.dart`) lo cho Bloc hoặc Cubit có state là `BlocViewState<T>`: loading, bóc `Result`, `none`/`cancel` hoàn tác loading của chính nó, exception đi qua `ErrorHandler`. Bloc dùng **state Freezed riêng** vẫn tự bóc `Result<T>` và tự emit loading/kết thúc trong từng handler, và nhánh BLoC không có bản tương ứng cho `OperationGlobalConfig`, `errorStateBuilder` hay `LoadMoreMixin`. `bloc_state_management` phụ thuộc `platform_kernel` để dùng `ErrorHandler` — một cạnh platform → platform, không phải một trong các ngoại lệ `→ domain_core`.
 
 ### `BlocViewState<T>`
 
@@ -387,7 +408,7 @@ Các lỗ hổng đã biết, chưa sửa ở đây:
 
 ## 12. Bản đồ phụ thuộc
 
-Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package từ pub.dev.
+Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package từ pub.dev. Package nào thuộc nhóm nào, và các nhóm được phụ thuộc theo chiều nào: [§ 0](#package-nằm-ở-đâu--sáu-nhóm).
 
 | Package | Phụ thuộc |
 |:--|:--|

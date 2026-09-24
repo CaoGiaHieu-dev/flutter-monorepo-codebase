@@ -29,7 +29,7 @@ The practical test: *if this screen were cut from the product, would the package
 > [!CAUTION]
 > - **Never import `data_*`.** A feature talks to Domain interfaces; the app shell binds the implementations.
 > - **Never import another feature package.** There is no exception — shared widgets come from `core_ui_kit`, which lives in core. Cross-feature needs go through a contract in `core_di` — see [cross-feature communication](../guides/10_cross_feature.md).
-> - **Never edit `platform/app_shell/lib/presentation/navigation/app_router.dart`** to add your routes, and never edit `root_app.dart` to add a localization delegate. Both are assembled from DI contributions.
+> - **Never edit `platform/shell/app_shell/lib/presentation/navigation/app_router.dart`** to add your routes, and never edit `root_app.dart` to add a localization delegate. Both are assembled from DI contributions.
 
 The pubspec enforces most of this: `feature_dashboard`'s only workspace dependencies are `core_di`, `core_responsive` and `platform_kernel`, so it *physically cannot* import another feature.
 
@@ -205,7 +205,7 @@ Use `INavDestinationModule` **only** for primary bottom-nav destinations that ne
 
 ## 5. Shared widgets live in core, not here
 
-The reusable widget library is **`core_ui_kit`** at `platform/ui_kit` — a core package, not a feature. It sits outside `modules/*/feature/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
+The reusable widget library is **`core_ui_kit`** at `platform/ui/ui_kit` — a core package, not a feature. It sits outside `modules/*/feature/` so that everything under that directory is a genuinely removable product surface. Its structure, dependency direction and the UI-agnostic authoring rule are documented in [the core layer](02_core.md).
 
 What matters on the feature side is the **caller's** obligation:
 

@@ -1,11 +1,11 @@
-# The App Shell (`platform/app_shell/` + `apps/<id>/`)
+# The App Shell (`platform/shell/app_shell/` + `apps/<id>/`)
 
 This document answers **"what happens between tapping the icon and seeing the first screen, and who wires everything together?"**. After reading it you should be able to debug a startup failure, add a shell adapter, and understand why the DI group order in `app_manifest.yaml` is not arbitrary.
 
 The shell is split in two, on purpose:
 
 - **`apps/<id>/`** is the **composition root** — the only place allowed to depend on every layer, and the only place that knows the full list of modules. It holds what genuinely differs between apps and nothing else.
-- **`platform/app_shell/`** (`platform_app_shell`) is everything every app needs and would otherwise copy: the boot scope, the router assembly, the material wrapper, the storage adapters and `NetworkConfigImpl`. It imports no module — `arch_check` R1 holds that, because it is a `platform/` package.
+- **`platform/shell/app_shell/`** (`platform_app_shell`) is everything every app needs and would otherwise copy: the boot scope, the router assembly, the material wrapper, the storage adapters and `NetworkConfigImpl`. It imports no module — `arch_check` R1 holds that, because it is a `platform/` package.
 
 Before the split, a second app meant copying 1,369 lines across 24 files. Now an app is a manifest, a generated `injection.dart`, a one-line `main.dart`, and whatever identifies it — in the sample, its Firebase options.
 
@@ -23,7 +23,7 @@ apps/mobile/                         the composition root
 ├── android/  ios/  fastlane/        native projects and release lanes
 └── env.dev  env.stg                 flavor values (env.prod is yours to create)
 
-platform/app_shell/lib/              shared by every app
+platform/shell/app_shell/lib/              shared by every app
 ├── bootstrap.dart                   runShellApp — error hooks, DI, splash, init
 ├── main_scope.dart                  splash → init → root transition
 ├── di/
@@ -89,12 +89,12 @@ sequenceDiagram
 
 ### Step by step
 
-The sequence lives in `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`](../../../platform/app_shell/lib/bootstrap.dart)); an app's `main.dart` only calls it with its own generated `configureDependencies`.
+The sequence lives in `runShellApp()` ([`platform/shell/app_shell/lib/bootstrap.dart`](../../../platform/shell/app_shell/lib/bootstrap.dart)); an app's `main.dart` only calls it with its own generated `configureDependencies`.
 
 1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call — then **`installShellErrorHooks`**, which routes every uncaught error to one place (see [Errors and crash reporting](#errors-and-crash-reporting) below). It runs before `configureDependencies`, so a DI failure is reported too.
 3. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
-4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/app_shell/test/boot_order_test.dart` holds the order. On the **web** it installs nothing and logs, at `INFO`, that the browser validates certificates — there is no `HttpClient` there to pin (see [the core layer's web status](02_core.md)).
+4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/shell/app_shell/test/boot_order_test.dart` holds the order. On the **web** it installs nothing and logs, at `INFO`, that the browser validates certificates — there is no `HttpClient` there to pin (see [the core layer's web status](02_core.md)).
 5. **`MainScope`** is constructed with three things: which splash widget to show (if any), the root widget, and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, which does the rest: `OperationGlobalConfig`, GoRouter's URL reflection, `AppInfoHelper`, handing the route observer to `RouteAwareWidget`, orientation and system UI.
 6. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
 
@@ -110,7 +110,7 @@ Three kinds of error escape everything else, and the shell hooks all three:
 
 They all end in the same place. The zone handler and the dispatcher hook re-raise through `FlutterError.reportError`; the `FlutterError.onError` hook first calls the handler that was there before it — by default `FlutterError.presentError`, the red console dump in debug — and then reports the error **once**: to the app's optional `onError` callback, then to `getItOrNull<IErrorReporter>()` with `fatal: true`. The dispatcher hook returns `true`: the error is handled, the engine does not log it a second time.
 
-`IErrorReporter` and `IAnalytics` are optional `core_di` contracts ([`src/observability/`](../../../platform/di/lib/src/observability/)). Nothing in the template implements them, so both lookups return `null` and nothing is sent. The reporter is resolved when an error arrives, not at boot, so one registered by `configureDependencies` is picked up, and an error thrown *by* `configureDependencies` still reaches `onError`. A reporter or callback that throws is swallowed — it is never reported through itself.
+`IErrorReporter` and `IAnalytics` are optional `core_di` contracts ([`src/observability/`](../../../platform/foundation/contracts/lib/src/observability/)). Nothing in the template implements them, so both lookups return `null` and nothing is sent. The reporter is resolved when an error arrives, not at boot, so one registered by `configureDependencies` is picked up, and an error thrown *by* `configureDependencies` still reaches `onError`. A reporter or callback that throws is swallowed — it is never reported through itself.
 
 A third path is non-fatal. `ErrorHandler` (`platform_kernel`) maps every repository exception to an `AppFailure`; the ones it cannot classify — a `TypeError` in a `fromJson`, a plugin exception — become the generic "Unknown error occurred" and are usually bugs. The shell points `ErrorHandler.onUnclassifiedError` at the reporter with `fatal: false`, so those are recorded while the user still gets a handled failure. Classified failures (no connection, 401, timeouts) are not reported.
 
@@ -138,7 +138,7 @@ class CrashlyticsErrorReporter implements IErrorReporter {
 }
 ```
 
-For Sentry, `recordError` calls `Sentry.captureException(error, stackTrace: stack)` and `log` adds a breadcrumb; initialise the SDK in the app (`SentryFlutter.init` wraps `main`, before `runShellApp`). Do **not** also set `FlutterError.onError` yourself — the shell's hook already forwards it, and chains to whatever handler was installed before `runShellApp`. `IAnalytics` works the same way: register an implementation and every `GoRouteDataCustom` page reports its screen through `setCurrentScreen` (`RouteAwareWidget`, on push and when the route above it pops). `platform/app_shell/test/error_hooks_test.dart` holds the wiring.
+For Sentry, `recordError` calls `Sentry.captureException(error, stackTrace: stack)` and `log` adds a breadcrumb; initialise the SDK in the app (`SentryFlutter.init` wraps `main`, before `runShellApp`). Do **not** also set `FlutterError.onError` yourself — the shell's hook already forwards it, and chains to whatever handler was installed before `runShellApp`. `IAnalytics` works the same way: register an implementation and every `GoRouteDataCustom` page reports its screen through `setCurrentScreen` (`RouteAwareWidget`, on push and when the route above it pops). `platform/shell/app_shell/test/error_hooks_test.dart` holds the wiring.
 
 ### The two splash paths
 
@@ -248,7 +248,7 @@ The `GoRouter` — and the `getAllOrEmpty<IFeatureRouteModule>()` calls inside i
 
 ## 4. Shell adapters
 
-The shell implements the contracts that core packages declare but cannot satisfy themselves. Each owns its own `StorageValue` and keeps its keys in `platform/app_shell/lib/di/utils/`.
+The shell implements the contracts that core packages declare but cannot satisfy themselves. Each owns its own `StorageValue` and keeps its keys in `platform/shell/app_shell/lib/di/utils/`.
 
 | File | Implements | Owns | Registration |
 |:--|:--|:--|:--|
@@ -278,7 +278,7 @@ The parameter is typed `NetworkConfig`, so the upcast is compiler-checked — no
 
 ## 5. Router assembly
 
-[`app_router.dart`](../../../platform/app_shell/lib/presentation/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
+[`app_router.dart`](../../../platform/shell/app_shell/lib/presentation/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [
@@ -318,7 +318,7 @@ Deleting a feature package therefore cannot crash the shell.
 
 `refreshListenable: getItOrNull<IAuthRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `IAuthSessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
 
-`observers: [routeObserver]` attaches `AppRouter.routeObserver` to the root navigator, and go_router forwards the root observers to every `ShellRoute` and `StatefulShellBranch` navigator (`notifyRootObserver`, on by default) — so the one observer `AppInitializer.init` hands to `RouteAwareWidget` sees pushes and pops everywhere, tabs included. `platform/app_shell/test/app_router_test.dart` checks both levels.
+`observers: [routeObserver]` attaches `AppRouter.routeObserver` to the root navigator, and go_router forwards the root observers to every `ShellRoute` and `StatefulShellBranch` navigator (`notifyRootObserver`, on by default) — so the one observer `AppInitializer.init` hands to `RouteAwareWidget` sees pushes and pops everywhere, tabs included. `platform/shell/app_shell/test/app_router_test.dart` checks both levels.
 
 ---
 
@@ -365,7 +365,7 @@ MultiProvider(ThemeProvider, LanguageProvider)
 
 The outer `Consumer2` is what makes theme and locale changes propagate app-wide.
 
-There is no `TooltipVisibility(visible: false)` in the tree. There used to be one, to stop tooltips popping up on a long press — but it also removed every tooltip from the semantics tree, and a screen reader reads an icon-only button's `tooltip` as its label: the password field's show/hide toggle was announced as "button". The theme now does that job instead: `ThemeProvider` sets `tooltipTheme: TooltipThemeData(triggerMode: TooltipTriggerMode.manual)`, which stops the long-press/tap popup on touch screens and keeps the label (a mouse hover still shows the bubble — trigger modes do not apply to mice). Delete that line to get Material's long-press tooltip back. `platform/app_shell/test/accessibility_test.dart` checks the label is there.
+There is no `TooltipVisibility(visible: false)` in the tree. There used to be one, to stop tooltips popping up on a long press — but it also removed every tooltip from the semantics tree, and a screen reader reads an icon-only button's `tooltip` as its label: the password field's show/hide toggle was announced as "button". The theme now does that job instead: `ThemeProvider` sets `tooltipTheme: TooltipThemeData(triggerMode: TooltipTriggerMode.manual)`, which stops the long-press/tap popup on touch screens and keeps the label (a mouse hover still shows the bubble — trigger modes do not apply to mice). Delete that line to get Material's long-press tooltip back. `platform/shell/app_shell/test/accessibility_test.dart` checks the label is there.
 
 Localization delegates are collected from DI with `getAllOrEmpty` — an app with no feature registering one still resolves the global delegates — so features never edit this file:
 
@@ -380,7 +380,7 @@ final delegates = [
 
 ### The OS font size is honoured, up to 2x
 
-`RootApp`'s builder used to end in `MediaQuery.withNoTextScaling`, which pinned every text at 100% whatever the user had set — an accessibility failure (WCAG 2.2 SC 1.4.4 asks for text resizable to 200%), not a layout choice. It now clamps instead: the user's setting passes through unchanged up to `MAX_TEXT_SCALE_FACTOR` (2.0, in [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), non-linear scalers (Android 14+) included, and nothing clamps the lower end.
+`RootApp`'s builder used to end in `MediaQuery.withNoTextScaling`, which pinned every text at 100% whatever the user had set — an accessibility failure (WCAG 2.2 SC 1.4.4 asks for text resizable to 200%), not a layout choice. It now clamps instead: the user's setting passes through unchanged up to `MAX_TEXT_SCALE_FACTOR` (2.0, in [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/shell/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), non-linear scalers (Android 14+) included, and nothing clamps the lower end.
 
 This does **not** double-scale text with `core_responsive`. The two factors are independent and applied at different points:
 

@@ -62,7 +62,7 @@ dart tools/workspace_setup/configure.dart
 1. `dart pub global activate flutterfire_cli`. Chỉ nhánh Firebase thật ở [§3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được) dùng tới nó.
 2. `flutter clean` tại root.
 3. `flutter pub get` tại root. Bước này resolve cả workspace theo file `pubspec.lock` duy nhất ở root.
-4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/base_ui` và các feature auth, home, onboarding, settings, splash.
+4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/ui/design_system` và các feature auth, home, onboarding, settings, splash.
 5. `dart run build_runner build --workspace`, chạy injectable, freezed, json_serializable, retrofit, go_router_builder, drift và flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì `injection.dart` của chúng do composer sinh ra.
 
@@ -72,7 +72,7 @@ Script tự dùng `fvm` nếu máy bạn đã cài sẵn. Không có bản bọc
 > **Chỉ `flutter pub get` + `build_runner` thì chưa thành một bản setup chạy được.** `lib/src/src.dart` của `core_base_ui` và của mọi feature có bản dịch đều export `gen/gen.dart`. Barrel đó, cùng `gen/language/language.dart`, bị gitignore và chỉ được bước 6 ghi ra. Nếu dừng sau bước 5, `flutter analyze` báo khoảng 17 lỗi dạng:
 >
 > ```
-> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/base_ui/lib/src/src.dart:3:8 • uri_does_not_exist
+> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/ui/design_system/lib/src/src.dart:3:8 • uri_does_not_exist
 > error • Undefined name 'AppLocalizations' • …
 > error • Undefined name 'Assets' • …
 > ```
@@ -84,11 +84,11 @@ Nếu muốn làm tay thì phải chạy đủ các bước sau, theo đúng th�
 ```bash
 flutter pub get
 # gen-l10n trong từng package có l10n.yaml
-(cd platform/base_ui && flutter gen-l10n)
+(cd platform/ui/design_system && flutter gen-l10n)
 for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
 dart run build_runner build --workspace
 # barrel cho mọi package có lib/, trừ các app
-for d in platform/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
+for d in platform/*/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
 ```
 
 Những gì sẽ thấy ở một lần chạy sạch:
@@ -261,7 +261,7 @@ APP_LINK_MODE=
 APP_NAME=
 ```
 
-Ba trong số đó xuất hiện trong Dart qua `EnvConstants` (`platform/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
+Ba trong số đó xuất hiện trong Dart qua `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
@@ -375,7 +375,7 @@ Hãy xác nhận tên file trên thiết bị trước (`adb shell run-as <appli
 
 ```bash
 flutter analyze                     # kỳ vọng: No issues found!
-cd platform/storage && flutter test && cd ../..
+cd platform/infra/storage && flutter test && cd ../..
 ```
 
 Nếu `flutter analyze` chưa sạch:

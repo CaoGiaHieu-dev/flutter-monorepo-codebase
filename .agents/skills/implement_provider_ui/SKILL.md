@@ -76,7 +76,7 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
 >   _stateManager.setState(state: const ViewState.loading());
 > }
 > ```
-> (`platform/provider_state_management/lib/src/management/operation_executor.dart`)
+> (`platform/state/provider/lib/src/management/operation_executor.dart`)
 >
 > So a **refresh** on an already-populated screen shows no spinner, and there is no flag to
 > override that. When you do need one, set it yourself before the call — this is exactly
@@ -87,7 +87,7 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
 > ```
 
 ### 3. Rendering UI: `BaseViewWidget`
-Use `BaseViewWidget` in the Screen/Page class to automate the rendering of the UI states based on the Domain data type. What it actually does (`platform/provider_state_management/lib/src/base_view/base_view_widget.dart`):
+Use `BaseViewWidget` in the Screen/Page class to automate the rendering of the UI states based on the Domain data type. What it actually does (`platform/state/provider/lib/src/base_view/base_view_widget.dart`):
 
 | State | Renders |
 | :--- | :--- |

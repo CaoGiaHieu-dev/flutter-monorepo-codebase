@@ -35,7 +35,7 @@ taken for a path. Check the exit code. `--help` prints the usage.
 - It rewrites the `export` lines of each barrel. **Hand-written `export` statements in a
   barrel will be removed.** If a file must re-export something manually, put that export in a
   normal source file instead — this is why
-  `platform/kernel/lib/src/error/failures.dart` (the `AppFailure` compatibility shim)
+  `platform/foundation/kernel/lib/src/error/failures.dart` (the `AppFailure` compatibility shim)
   is a regular file, not a barrel.
 - New `utils/` folders get their own `utils.dart` barrel automatically, wired into `src.dart`.
 - Run it **after** `build_runner` and `gen-l10n`, as `tools/workspace_setup/configure.dart`

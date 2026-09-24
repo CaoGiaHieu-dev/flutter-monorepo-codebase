@@ -14,11 +14,11 @@ dependencies:
     sdk: flutter
   material_ui: ^1.1.1
   core_common:
-    path: ../common
+    path: ../../foundation/common
   core_base_ui:
-    path: ../base_ui
+    path: ../design_system
   provider_state_management:
-    path: ../provider_state_management
+    path: ../../state/provider
   get_it: ^9.2.1
   injectable: ^3.0.0
   cached_network_image_ce: "^4.10.0"
@@ -28,7 +28,6 @@ dependencies:
   refresh_sticky: "^0.1.2"
   core_responsive:
     path: ../responsive
-
   cupertino_ui: "^1.0.2"
 dev_dependencies:
   build_runner: "^2.16.0"

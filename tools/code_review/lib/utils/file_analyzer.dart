@@ -31,7 +31,7 @@ class FileAnalyzer {
   }
 
   /// Get architecture layer from where the file sits in the workspace:
-  /// `modules/<name>/{domain,data,feature}`, `platform/<pkg>`, `apps/<id>`.
+  /// `modules/<name>/{domain,data,feature}`, `platform/<group>/<pkg>`, `apps/<id>`.
   static ArchitectureLayer getArchitectureLayer(String filePath) {
     final p = filePath.replaceAll('\\', '/');
     if (p.contains('/gen/') || p.contains('/generated/')) {

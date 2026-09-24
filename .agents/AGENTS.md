@@ -9,8 +9,21 @@ This file contains the rules for architectural design, naming conventions, depen
 This monorepo uses **Pub Workspaces** and is divided into three top-level territories — `apps/` (one composition root per app, owned by tech leads), `platform/` (infrastructure, owned by the infra team) and `modules/` (one vertical slice per bounded context, one owner each) — plus `tools/` for the repo's CLI tooling:
 
 - **`apps/<id>/`**: an app — the composition root. Holds its `app_manifest.yaml`, the `injection.dart` generated from it, a one-line `main.dart` calling `runShellApp`, and what identifies the app (its `lib/firebase/`). Nothing else.
-- **`platform/app_shell/`** (`platform_app_shell`): the shell every app shares — boot (`runShellApp`, `MainScope`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), the storage adapters and `NetworkConfigImpl`. Imports no module.
-- **`platform/`**: Infrastructure and utility packages shared across the project:
+- **`platform/shell/app_shell/`** (`platform_app_shell`): the shell every app shares — boot (`runShellApp`, `MainScope`), **dynamic** router assembly (`app_router.dart` collects `IFeatureRouteModule` / `INavDestinationModule` / `DashboardRouteModule` via DI — do not hardcode feature `$…Route` lists), the storage adapters and `NetworkConfigImpl`. Imports no module.
+- **`platform/`**: Infrastructure and utility packages shared across the project, in **six group folders** — `platform/<group>/<package-folder>`. Only the folder records the group; every package keeps its name (`core_di` at `platform/foundation/contracts`, `core_base_ui` at `platform/ui/design_system`, `provider_state_management` at `platform/state/provider`, …):
+
+  | Group | Packages (folder) | What belongs here | May depend on |
+  |:--|:--|:--|:--|
+  | `foundation/` | `platform_kernel` (`kernel`), `core_di` (`contracts`), `core_common` (`common`) | Service locator, errors, cross-module DI contracts, Flutter-bound helpers — no I/O, no widgets | nothing else in `platform/` |
+  | `layers/` | `domain_core` (`domain`), `data_core` (`data`) | Base contracts of the domain and data layers | foundation |
+  | `infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` | Mechanisms that reach outside the process — mechanism only, no product keys/tables/endpoints. Default for `generate.dart 4`/`5` | foundation, layers |
+  | `ui/` | `core_responsive` (`responsive`), `core_base_ui` (`design_system`), `core_ui_kit` (`ui_kit`) | Scaling/adaptive layout, design tokens and global strings, shared widgets | foundation, layers |
+  | `state/` | `provider_state_management` (`provider`), `bloc_state_management` (`bloc`) | State-management bases | foundation, layers, ui |
+  | `shell/` | `platform_app_shell` (`app_shell`) | The app shell every app composes | every other group |
+
+  Direction (arrow points at the side depended on): `foundation ← layers ← infra / state`, `ui ← state`, `shell ← all of platform/`; nothing in `platform/` depends on `modules/` (R1). **Not machine-checked yet** — review holds it. Three edges run against it today and stay until enforcement lands: `platform_kernel → domain_core` (approved R1 edge), `core_common → core_responsive` (page transitions), `core_ui_kit → provider_state_management` (widgets render `ViewState`; the reverse stays forbidden, § 2). A new package goes in `infra/` unless another group fits — `generate.dart 4|5 <name> --group <group>`. Full table: `docs/en/architecture/02_core.md` § 0.
+
+  The packages:
   - `platform_kernel`: **Pure Dart, no `flutter` dependency.** Service locator (`getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`), `ErrorHandler`, `AppException`, primitive extensions, `TypeHelper`, `ValidationHelper`, and the two genuinely global constants classes, `EnvConstants` and `ErrorCodes`. This is the one package every other package may depend on, so its dependency list is everyone's — 7 entries, none Flutter-bound. Enforced by `arch_check` rule **R9**.
   - **Which of the two to depend on:** if a package uses only the service locator, `ErrorHandler`, a primitive extension or a global constant, depend on `platform_kernel` — `core_network`, `core_notifications`, `data_core` and `feature_dashboard` already do. Reach for `core_common` only when you need something Flutter-bound from it (`AppConfig`, `AppInitializer`, a mixin, `GoRouteDataCustom`, `AppUtils`, the dialog controller, a formatter).
   - `core_common`: The **Flutter side** of the old `core_common` — `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom` and page transitions, `AppUtils`, the dialog controller, input formatters. Re-exports `platform_kernel` wholesale, so an existing `package:core_common/core_common.dart` import keeps resolving everything. **New code that needs only the pure-Dart foundation should import `platform_kernel` directly** rather than pulling Flutter and go_router in with it.
@@ -25,15 +38,15 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
   - `core_notifications`: Push notification management module. Owns its channel constants at `lib/src/utils/notification_constants.dart`.
   - `provider_state_management`: Provider state management base classes (`BaseProvider`, `executeOperation`, `BaseViewWidget`, `ViewStateModel`), plus the in-core `DefaultLoadingWidget` / `DefaultEmptyWidget` fallbacks.
   - `bloc_state_management`: BLoC state management base classes (`BaseBloc`, `BlocViewState<T>`; `BaseCubit` only when events are unnecessary). **`BaseBloc`/`BaseCubit` are extension points only**; the `executeOperation` counterpart is the opt-in `BlocResultMixin<T>` / `CubitResultMixin<T>` (`emitResult`) — without it a handler unwraps `Result` / maps `AppFailure` / sets loading by hand.
-- **Domain micro-packages** — the layer foundation `platform/domain_core` plus one `modules/<name>/domain` per module. Business logic core. **MUST be pure Dart (100% decoupled from Flutter UI, Dio, Retrofit, or any platform-specific dependencies)**. Current micro-packages:
-  - `domain_core` (`platform/domain_core`): Defines `Result<T>`, `AppFailure`, `BaseEntity<T>`, and shared primitive types.
+- **Domain micro-packages** — the layer foundation `platform/layers/domain` plus one `modules/<name>/domain` per module. Business logic core. **MUST be pure Dart (100% decoupled from Flutter UI, Dio, Retrofit, or any platform-specific dependencies)**. Current micro-packages:
+  - `domain_core` (`platform/layers/domain`): Defines `Result<T>`, `AppFailure`, `BaseEntity<T>`, and shared primitive types.
   - `domain_auth`: Entities, use cases, and repository interfaces for authentication.
   - `domain_cache`: The cache-entry entity, params, repository interface and use cases (sample, backing `data_cache`).
-- **Data micro-packages** — the layer foundation `platform/data_core` plus one `modules/<name>/data` per module. Data access layer (remotes, local caching, models/DTOs). Depends on `domain` packages. Current micro-packages:
-  - `data_core` (`platform/data_core`): `IBaseRepository` with `execute()` and `executeSync()` wrappers to automatically handle error conversion.
+- **Data micro-packages** — the layer foundation `platform/layers/data` plus one `modules/<name>/data` per module. Data access layer (remotes, local caching, models/DTOs). Depends on `domain` packages. Current micro-packages:
+  - `data_core` (`platform/layers/data`): `IBaseRepository` with `execute()` and `executeSync()` wrappers to automatically handle error conversion.
   - `data_auth`: Models/DTOs, Remote DataSources (Retrofit), and RepositoryImpl for authentication.
   - `data_cache`: A package-owned Drift database (`CacheDatabase`, table, DAO), its local data source and RepositoryImpl — the reference for § 21.
-- **`modules/*/feature/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `platform/ui_kit` as `core_ui_kit`.
+- **`modules/*/feature/`**: Independent functional modules. Every package here is a removable product surface — the shared widget library is **not** one of them; it lives at `platform/ui/ui_kit` as `core_ui_kit`.
   - Feature packages (e.g., `feature_onboarding`, `feature_auth`, `feature_dashboard`, `feature_home`, `feature_settings`, `feature_splash`):
     - Can only depend on `domain_*` and `core_*` packages — in practice `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, and `provider_state_management` or `bloc_state_management`.
     - **ABSOLUTELY FORBIDDEN** to directly depend on the `data` layer or on **any** other feature package. There is no exception: shared widgets come from `core_ui_kit`, which is core, not a feature.
@@ -46,9 +59,9 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
    - **ABSOLUTELY FORBIDDEN** for any `platform/*` package to import `package:feature_*/...`, `package:data_*/...` or `package:domain_*/...`, or to declare them in its `pubspec.yaml` — **except** the approved `→ domain_core` edges listed below. Core is the innermost infrastructure ring — nothing above it may own it.
    - **Enforced by machine.** `arch_check` rule **R1** blocks every core → `feature_*` / `data_*` / `domain_*` edge, by import and by pubspec, that is not in the `_approvedUpwardEdges` allow-list at the top of `tools/arch_check/check.dart`. Depending on `domain_core` is the correct Clean Architecture direction (it is the `Result` contract and depends on nothing), but each such edge is still allow-listed one by one; a core package may **never** depend on a product domain package (`domain_auth`, `domain_cache`, …) — that module is removable. Verify the full list at any time with:
      ```bash
-     grep -E "^  (domain_|data_|feature_)" platform/*/pubspec.yaml
+     grep -E "^  (domain_|data_|feature_)" platform/*/*/pubspec.yaml
      ```
-   - The grep also prints `platform/data_core → domain_core`; that is a data → domain edge (`data_core` is the data layer's foundation that happens to live under `platform/`, and R1 classifies it as data, not core). Among core packages, exactly **three** core → domain edges are approved; adding a fourth means updating this list and the allow-list in `check.dart` in the same PR, and no `core → data` or `core → feature` edge may ever be added:
+   - The grep also prints `platform/layers/data → domain_core`; that is a data → domain edge (`data_core` is the data layer's foundation that happens to live under `platform/`, and R1 classifies it as data, not core). Among core packages, exactly **three** core → domain edges are approved; adding a fourth means updating this list and the allow-list in `check.dart` in the same PR, and no `core → data` or `core → feature` edge may ever be added:
      - `provider_state_management → domain_core` — needs `Result<T>` / `PaginatedEntity<T>`.
      - `bloc_state_management → domain_core` — needs `AppFailure` for `BlocViewState.error`. It must import `domain_core` **directly**, not via `core_common`'s re-export shim: the shim's `show` clause cannot carry the Freezed-generated `$AppFailureCopyWith`, and the resulting breakage is invisible to `flutter analyze` (§ 23).
      - `platform_kernel → domain_core` — `ErrorHandler` produces `AppFailure`, which now lives in Domain.
@@ -82,15 +95,15 @@ This monorepo uses **Pub Workspaces** and is divided into three top-level territ
      - Implementation classes (`NavigatorImpl`) must reside locally under the `routing/` directory of the feature package that owns those routes (e.g., `AuthNavigatorImpl` resides in `feature_auth`).
      - **ABSOLUTELY FORBIDDEN** to hardcode route paths or call `GoRouter.of(context).go(...)` directly to navigate to another feature. Instead, fetch the target feature's Navigator from GetIt with `getItOrNull` — the owner is removable, and `arch_check` R8 blocks a throwing lookup (e.g., `getItOrNull<HomeNavigator>()?.toHome(context)`).
      - **BuildContext MUST be passed directly** as a parameter from the UI caller (Widget/Page/View). Minimize or avoid utilizing context from `NavigatorKeys` or `appRouter.currentContext` to prevent Widget Lifecycle issues.
-   - Shared utilities and UI widgets used only across features should be placed in `platform/ui_kit`.
+   - Shared utilities and UI widgets used only across features should be placed in `platform/ui/ui_kit`.
    - **Cross-Feature UI Actions (Action Handlers)**:
-     - When Feature A must trigger a UI-bound action owned by Feature B (e.g., logout) without importing Feature B, declare an `I*ActionHandler` interface in `platform/di/lib/src/actions/`.
+     - When Feature A must trigger a UI-bound action owned by Feature B (e.g., logout) without importing Feature B, declare an `I*ActionHandler` interface in `platform/foundation/contracts/lib/src/actions/`.
      - Implement `*ActionHandlerImpl` inside the owning feature under `handlers/` and register with `@Injectable(as: I*ActionHandler)` (or `@LazySingleton(as: ...)` when appropriate).
      - Consumers call `getItOrNull<I*ActionHandler>()?.method(context)` (R8). Do **not** use Action Handlers for pure route navigation (use Navigators) or Domain-only logic (use UseCases).
 4. **UI vs. Business State Workflows (Bypassing Domain)**:
    - **Pure UI State (e.g., ThemeMode, Locale)**: Cannot pass through the Domain layer because Domain must be Pure Dart (cannot import `flutter/material.dart`). UI Providers bypass Domain and persist via a DI storage Interface implemented in the App Shell:
-     - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`platform/app_shell/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`platform/app_shell/lib/di/utils/theme_storage_keys.dart`)
-     - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`platform/app_shell/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`platform/app_shell/lib/di/utils/language_storage_keys.dart`)
+     - **Theme**: `ThemeProvider` → `IThemeStorage` → `ThemeStorageImpl` (`platform/shell/app_shell/lib/di/theme_storage_impl.dart`), which owns its own `StorageValue<ThemeMode>` keyed by `ThemeStorageKeys.THEME_MODE` (`platform/shell/app_shell/lib/di/utils/theme_storage_keys.dart`)
+     - **Language**: `LanguageProvider` → `ILanguageStorage` → `LanguageStorageImpl` (`platform/shell/app_shell/lib/di/language_storage_impl.dart`), which owns its own `StorageValue<String>` keyed by `LanguageStorageKeys.LOCALE` (`platform/shell/app_shell/lib/di/utils/language_storage_keys.dart`)
 
 ---
 
@@ -188,8 +201,8 @@ All files and class names must strictly adhere to the following naming conventio
   ```
 - ⚠️ **The generator DELETES every hand-written `export '...';` line in a barrel.** It strips all lines starting with `export '` and re-emits its own sorted list (`tools/barrel_generator/generate.dart`, the `line.trim().startsWith("export '")` filter).
   - **ABSOLUTELY FORBIDDEN** to hand-add an `export` to a barrel file — it will silently vanish on the next run.
-  - Need a deliberate re-export? Put it in a **normal source file**, which the generator then picks up. Reference: `platform/kernel/lib/src/error/failures.dart` is a plain file whose whole body is the `AppFailure` compatibility re-export.
-- The generator skips `part of` files, `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart` and `firebase_options*`, but it **does export every other generated file present on disk**: `module.module.dart`, `injection.config.dart`, and the gen-l10n / flutter_gen output under `lib/src/gen/`. Some of those exports are load-bearing and committed although their targets are gitignored — `platform/base_ui/lib/src/src.dart` exports `gen/gen.dart`, which is how `core_ui_kit` reaches `Assets`.
+  - Need a deliberate re-export? Put it in a **normal source file**, which the generator then picks up. Reference: `platform/foundation/kernel/lib/src/error/failures.dart` is a plain file whose whole body is the `AppFailure` compatibility re-export.
+- The generator skips `part of` files, `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart` and `firebase_options*`, but it **does export every other generated file present on disk**: `module.module.dart`, `injection.config.dart`, and the gen-l10n / flutter_gen output under `lib/src/gen/`. Some of those exports are load-bearing and committed although their targets are gitignored — `platform/ui/design_system/lib/src/src.dart` exports `gen/gen.dart`, which is how `core_ui_kit` reaches `Assets`.
 - **Run it AFTER `gen-l10n` and `build_runner`**, one package at a time — the order `tools/workspace_setup/configure.dart` uses. It rewrites each barrel from what is on disk, so run before them on a clean checkout it drops the generated exports above. An extra run before codegen is harmless; the last run must come after.
 
 ---
@@ -239,14 +252,15 @@ dart tools/module_generator/generate.dart 2 <name>
 # Data micro-package:
 dart tools/module_generator/generate.dart 3 <name>
 
-# Core package → core_<name> at platform/<name>:
+# Core package → core_<name> at platform/<group>/<name> (group defaults to infra):
 dart tools/module_generator/generate.dart 4 <name>
+dart tools/module_generator/generate.dart 4 <name> --group ui
 
-# Custom package → <prefix>_<name> at platform/<name>:
-dart tools/module_generator/generate.dart 5 <name> <prefix>
+# Custom package → <prefix>_<name> at platform/<group>/<name>:
+dart tools/module_generator/generate.dart 5 <name> <prefix> --group infra
 ```
 
-For a feature, **always pass all five arguments** (state management: `1` Provider · `2` BLoC · `3` none; route: `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none). A feature missing `<SM>` or `<route>` prompts for it on a terminal, and without one exits `64` — always pass both. Arguments are validated before anything is written: `<name>` (and a type-5 prefix) must be a Dart package name — lowercase letters, digits, `_`, starting with a letter, not a Dart keyword — `<SM>` / `<route>` accept only `1`/`2`/`3`, a `<prefix>` / `<SM>` / `<route>` given to the wrong type and any unknown flag are refused; each refusal exits `64` with the usage (`--help` prints it). For types `1`–`4` the third argument must be empty (`""`). For type `5` it is a package-name prefix, not a directory — a layer word (`feature`, `domain`, `data`, `core`) is refused. If the module cannot be registered in an `app_manifest.yaml`, the generator rolls back and exits `1`.
+For a feature, **always pass all five arguments** (state management: `1` Provider · `2` BLoC · `3` none; route: `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none). A feature missing `<SM>` or `<route>` prompts for it on a terminal, and without one exits `64` — always pass both. Arguments are validated before anything is written: `<name>` (and a type-5 prefix) must be a Dart package name — lowercase letters, digits, `_`, starting with a letter, not a Dart keyword — `<SM>` / `<route>` accept only `1`/`2`/`3`, a `<prefix>` / `<SM>` / `<route>` given to the wrong type and any unknown flag are refused; each refusal exits `64` with the usage (`--help` prints it). For types `1`–`4` the third argument must be empty (`""`). For type `5` it is a package-name prefix, not a directory — a layer word (`feature`, `domain`, `data`, `core`) is refused. Types `4` and `5` take `--group <foundation|layers|infra|ui|state|shell>` (default `infra`) — the `platform/` group folder the package lands in (see § "Platform groups"); an unknown group, or `--group` on types `1`–`3`, exits `64`. If the module cannot be registered in an `app_manifest.yaml`, the generator rolls back and exits `1`.
 
 ---
 
@@ -265,7 +279,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
 - When calling translations, use the feature-specific extension (e.g., `context.l10nAuth.translationKey`) rather than a global delegate.
 - Hardcoding raw strings in UI components is **ABSOLUTELY FORBIDDEN**.
 - **ARB keys MUST be `lowerCamelCase`.** `flutter gen-l10n` copies each key straight through into a Dart getter, so `welcome_back` yields `context.l10nAuth.welcome_back` at every call site — an identifier that breaks Dart's naming convention. Generated files are excluded from `analysis_options.yaml`, so nothing will warn you; the `.arb` is the only place the casing is decided.
-- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@Injectable(as: IFeatureLocalization)`). The shell's `app_material_wrapper.dart` collects all delegates using `getAllOrEmpty<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with fallbacks so removing a feature package does not crash the host: no route modules → an empty list; no `IAppEntryLocation` → the first destination's path, or the placeholder branch `/_empty_dashboard` when no destination is registered either; no `DashboardRouteModule` → the bare `navigationShell`, tabs without chrome (`platform/app_shell/lib/presentation/navigation/app_router.dart`).
+- **Decentralized Delegation**: Feature packages MUST NOT modify `platform/shell/app_shell/lib/presentation/root_app.dart` to add their LocalizationsDelegates. Instead, they must provide an implementation of `IFeatureLocalization` and register it in their local DI (`@Injectable(as: IFeatureLocalization)`). The shell's `app_material_wrapper.dart` collects all delegates using `getAllOrEmpty<IFeatureLocalization>()`. The same pattern applies to routing: register `IFeatureRouteModule` (top-level routes), `INavDestinationModule` (shell tabs + bottom nav), and optionally `IAppEntryLocation` (cold start). The app shell uses `getAllOrEmpty` / `getItOrNull` with fallbacks so removing a feature package does not crash the host: no route modules → an empty list; no `IAppEntryLocation` → the first destination's path, or the placeholder branch `/_empty_dashboard` when no destination is registered either; no `DashboardRouteModule` → the bare `navigationShell`, tabs without chrome (`platform/shell/app_shell/lib/presentation/navigation/app_router.dart`).
 
 ---
 
@@ -322,7 +336,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
 
 ## 📏 14. Responsive UI & Screen Size Scaling
 
-- **Strict usage of `core_responsive`**: All UI sizing — width, height, padding, margins, font sizes, border radii — **MUST** be scaled. `core_responsive` is a first-party package at `platform/responsive`; it replaced `flutter_screenutil_plus`, which is gone from the repo.
+- **Strict usage of `core_responsive`**: All UI sizing — width, height, padding, margins, font sizes, border radii — **MUST** be scaled. `core_responsive` is a first-party package at `platform/ui/responsive`; it replaced `flutter_screenutil_plus`, which is gone from the repo.
 - **Scaling MUST go through `BuildContext`**: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (plus `context.spMin`, `context.dg`, `context.dm`).
 
   **The bare receiver form (`16.h`) does not exist and does not compile.** `core_responsive` deliberately ships **no extension on `num`**. A number carries no context, so such an extension could only read a global — and a widget that reads a global never learns the metrics changed, computing once and never updating. That is a silent stale-value bug, invisible until a device rotates. Reading through `context` registers an **InheritedWidget dependency** (`ResponsiveScope`), so exactly the widgets that scale a value rebuild on rotation, split-screen, or a desktop resize, and the ones that do not are left alone. Requiring the context makes the correct thing the only writable thing.
@@ -336,7 +350,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
 - **No `BuildContext` in scope?** In an `async` method, read the value from context **before the first `await`** and pass it forward — never hold a context across an await. Read `context.w(96)` first, `await` second, and check `mounted` before touching state afterwards — see the snippet in `docs/en/reference/01_rules.md` §12.
 - **Design tokens take context too.** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)` — never a bare getter. Their `raw*` constants are the single source of the numbers; edit `raw*`, not the accessors.
 - **UI-Agnostic Reusable Components**: Reusable atomic UI components (e.g., those in `core_ui_kit` like `CustomButton`, `CustomCacheNetworkImage`) **MUST** remain strictly UI-agnostic. They **MUST NOT** scale incoming parameter values internally: it is the *caller's* responsibility to scale arguments *before* passing them in, so a parameter arrives already in device pixels and is used as-is. A widget's **own** constants — its padding, its default gap — it must still scale, or it is not responsive; `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`.
-- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `platform/app_shell/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
+- **`ResponsiveInit` is mounted once**, above `MaterialApp`, in `platform/shell/app_shell/lib/main_scope.dart`. It is a `StatelessWidget` on purpose: it reads `MediaQuery.sizeOf(context)`, which registers a **size-only** dependency, so it rebuilds on resize and ignores brightness, text-scale and padding changes. Features never mount their own.
 - **A widget test that scales must wrap the widget under test in `ResponsiveInit`.** Without it `ResponsiveScope.of` asserts — deliberately. A silent unscaled fallback would ship a layout that is wrong on every device except the design artboard, with nothing pointing at the cause.
 - **Scale policy: down by default, up on opt-in, per window class.** Every scale factor is the window-to-artboard ratio clamped by a `ScaleBounds`. Layout (`scaleBounds` — `w`, `h`, and the `r` / `dg` / `dm` built from them) and text (`textScaleBounds` — `sp`) are clamped separately, both `ScaleBounds.downOnly()` by default: a window smaller than the artboard shrinks the design, a larger one draws it 1:1. **Do not expect sizes to grow on a tablet** — the extra room belongs to the layout. Growth is opt-in and capped, per `WindowSizeClass`, through a `ResponsiveProfile` (`designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt`; `null` inherits; the exact class applies, else the nearest smaller one). `ScaleBounds.fixed()` pins the design size; `ScaleBounds.unbounded()` is the old raw ratio. A `fontSizeResolver`'s result is never clamped; `spMin` is the explicit cap. The app's configuration (`_ResponsiveWrapper`): `AppConfig.design` (375×812), default bounds, an `expanded` profile at real logical pixels (`ScaleBounds.fixed()` for layout and text), `splitScreenMode: true`. The theme scales type with `context.sp`, so it follows `textScaleBounds`.
 - **Choose a layout by window size class, never by device.** Use `context.windowSizeClass` (`compact` < 600, `medium` 600–839, `expanded` 840–1199, `large` 1200–1599, `extraLarge` ≥ 1600 — Material 3 `ResponsiveBreakpoints`, movable through `ResponsiveInit(breakpoints:)`), `context.adaptive(...)`, `AdaptiveLayout` / `AdaptiveBuilder`, `AdaptiveSplitView`, `AdaptiveContent`. **FORBIDDEN:** branching a layout on `Platform.isIOS`, a device model or an ad-hoc `shortestSide` check — one device shows many windows (Split View, a cover screen, a resized desktop window). These members work without a `ResponsiveInit` (Material 3 fallback). `AdaptiveSplitView` honours a fold or hinge only when it spans the window along it — in a dashboard tab the rail (`medium` and up) rules out book folds and the bottom bar (`compact`) tabletop ones. `AdaptiveContent.maxWidth` (640) is a window-space limit — never scale it. Reference: `feature_dashboard` — bottom bar on `compact`, `NavigationRail` from `medium`, extended from `large`. Full guide: `docs/en/guides/11_design_system.md` §6–§7.
@@ -370,7 +384,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
 
 ## 🗂️ 16. Package Constants Live in `utils/`
 
-- **Every package, at every layer** (core / domain / data / features / app shell), MUST keep its own public constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `platform/app_shell/lib/di/utils/`. A package with no constants needs no `utils/` folder: `arch_check` **R4** flags a public `static const` outside `utils/` (or `styles/`), and never asks for an empty folder.
+- **Every package, at every layer** (core / domain / data / features / app shell), MUST keep its own public constants inside a `utils/` folder within that package — e.g. `modules/auth/feature/lib/src/utils/`, `platform/shell/app_shell/lib/di/utils/`. A package with no constants needs no `utils/` folder: `arch_check` **R4** flags a public `static const` outside `utils/` (or `styles/`), and never asks for an empty folder.
 - **ABSOLUTELY FORBIDDEN** to create a shared cross-domain constants file that many packages import. A constant belongs to exactly one owner.
 - `platform_kernel`'s `lib/src/utils/` (re-exported through `core_common`) is reserved for constants that are **genuinely global** — today `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` (the failure codes `ErrorHandler` and `IBaseRepository` assign when there is no HTTP status). Feature/domain-owned values (storage keys, route paths, API endpoints) MUST NOT live there.
 - **Precedent — constants that were evicted from `core_common`,** so nobody re-adds them:
@@ -378,7 +392,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
   | :--- | :--- | :--- |
   | `StorageKeyConstants` | deleted → per-owner `utils/` keys (§ 17) | held every domain's storage keys |
   | `ApiConstants` | `AuthApiConstants` in `modules/auth/data/lib/src/utils/` | held only auth endpoints |
-  | `NotificationConstants` | `platform/notifications/lib/src/utils/` | belongs to the notifications package |
+  | `NotificationConstants` | `platform/infra/notifications/lib/src/utils/` | belongs to the notifications package |
   | `AnalyticsConstants`, `SocketConstants`, `FirebaseRemoteConfigConstants` | deleted | zero references; dead scaffolding |
 - **Approved exception — design tokens.** `core_base_ui/lib/src/styles/` (`AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows`) stays in `styles/`, **not** `utils/`. It is the design system's public API; `styles/` names that intent, while `utils/` reads as miscellany. **Do not "fix" this in a future audit.**
 - Applied conventions:
@@ -460,7 +474,7 @@ class AuthLocalDataSource {
 Three GetIt behaviours have each caused a real, silent production bug in this repo. Learn them before touching DI.
 
 1. **`getAll<T>()` THROWS when `T` is unregistered — `getAllOrEmpty<T>()` does not.**
-   - Both live in `platform/kernel/lib/src/di/service_locator.dart`; `platform/common/lib/di/module.dart` re-exports them. `getAllOrEmpty` guards with `getIt.isRegistered<T>()` and returns `const []`.
+   - Both live in `platform/foundation/kernel/lib/src/di/service_locator.dart`; `platform/foundation/common/lib/di/module.dart` re-exports them. `getAllOrEmpty` guards with `getIt.isRegistered<T>()` and returns `const []`.
    - **MANDATORY**: every optional multi-instance contribution (`IFeatureRouteModule`, `INavDestinationModule`, `IFeatureLocalization`, `IAppTreeWrapper`) MUST be collected with `getAllOrEmpty`. `IDatabaseMigration<TDb>` is collected with the same guard written out: the database's own DI module checks `GetIt.instance.isRegistered<IDatabaseMigration<CacheDatabase>>()` and calls `getAll` only when it is true (`modules/cache/data/lib/di/module.dart`). Either form is fine; a bare `getAll` is not.
    - Real bug: `app_material_wrapper.dart` used `getIt.getAll<IFeatureLocalization>()`; with no feature contributing one, `MaterialApp` construction threw and the app died at boot.
    - Same rule for single instances: `getItOrNull<T>()` + a fallback, never bare `getIt<T>()`, whenever `T` is owned by a removable feature.
@@ -478,7 +492,7 @@ Three GetIt behaviours have each caused a real, silent production bug in this re
    - Real bug: `NetworkConfigImpl` was registered only `as NetworkConfig`, so `getItOrNull<SslPinningConfig>()` in `AppInitializer._setupHttpOverrides` returned `null` and **certificate pinning was silently skipped on staging and production**.
    - Fix pattern — bind the second type through a `@module`, typed so the compiler checks the upcast (no `as`):
      ```dart
-     // platform/app_shell/lib/di/network_binding_module.dart
+     // platform/shell/app_shell/lib/di/network_binding_module.dart
      @module
      abstract class NetworkBindingModule {
        @lazySingleton
@@ -531,7 +545,7 @@ Deleting any `modules/*/feature` package must leave the app compiling and bootin
 
 - Contracts in `core_di` MUST stay state-management agnostic: `IAppTreeWrapper.wrap()` returns a plain `Widget`, so a Provider feature can return `ChangeNotifierProvider` and a BLoC feature `BlocProvider` without either forcing its package on the other.
 - Prefer a plain Dart 3 `sealed class` over Freezed for `core_di` contracts (see `AuthSessionFailure`) — `core_di` runs only injectable's codegen (its `lib/di/module.module.dart`), no Freezed or other `part`-file codegen, and adding a `part` to a contract would make every consumer wait on `build_runner`.
-- The shared widget library is **not** a removable feature: it lives at `platform/ui_kit` as `core_ui_kit`, so `modules/*/feature/` contains only genuinely removable product surfaces.
+- The shared widget library is **not** a removable feature: it lives at `platform/ui/ui_kit` as `core_ui_kit`, so `modules/*/feature/` contains only genuinely removable product surfaces.
 
 ---
 

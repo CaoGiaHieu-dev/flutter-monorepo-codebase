@@ -161,7 +161,7 @@ class AppInitializer {
     // Requires `SslPinningConfig` to be registered in GetIt. Registering only
     // the `NetworkConfig` subtype is not enough — GetIt resolves by exact
     // type — which is why the app shell binds it explicitly in
-    // `platform/app_shell/lib/di/network_binding_module.dart`.
+    // `platform/shell/app_shell/lib/di/network_binding_module.dart`.
     final config = getItOrNull<SslPinningConfig>();
     final hashes = config?.sslPinningHashes;
 

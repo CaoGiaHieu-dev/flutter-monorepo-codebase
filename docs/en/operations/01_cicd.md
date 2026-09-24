@@ -186,7 +186,7 @@ Gates 0 and 1 run first on purpose: they only read manifests, imports and pubspe
 
 Every gate is a script under `tools/`, and a gate that has quietly stopped failing looks exactly like a clean PR. So the gates have tests of their own, in `tools/test/`, run as the second half of Gate 1: each test builds a throwaway workspace in a temp directory, runs the tool against it as a subprocess (compiled to kernel once per file, so the suite takes about 15 seconds) and asserts the exit code and output. They cover `arch_check` (a clean and a violating fixture for every rule R1–R10; R6 must warn and still exit 0), `composer verify` (a synced manifest passes; `phase: befor`, an unknown layer, a duplicate module and a module missing from disk are refused with their key path), `dependency_sync --check` (a mismatch and a malformed catalog exit 1), `docs_check` (a dead reference exits 1, a `<placeholder>` span and a removed sample bundle do not, the root comes from the script's location; an en ↔ vi pair with a missing heading, code block or table row exits 1), the barrel generator (a trailing slash, a `web/` directory inside `lib/`), composer `bootstrap --dry-run` (a missing member is reported and nothing written), the module generator's `--apps` validation (an unknown app id exits 64 and writes nothing), `configure.dart --stub-firebase`'s stubs (one per flavor, real files kept, no `package:` import reachable from `configure.dart`) and the coverage report (lcov parsing, generated files excluded, `--min`). Change a gate, add a case there. Like Gates 0 and 1 they need no codegen, which is why they run before the setup rather than in Gate 3.
 
-Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — today under `platform/*/test/` and `modules/*/*/test/`, nineteen packages — and a single `flutter test` at the root does not pick them up. It skips `tools/`, whose tests already ran.
+Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — today under `platform/*/*/test/` and `modules/*/*/test/`, nineteen packages — and a single `flutter test` at the root does not pick them up. It skips `tools/`, whose tests already ran.
 
 Each package runs with `--coverage`, which leaves `<package>/coverage/lcov.info` (gitignored). The next step, **Coverage report (advisory)**, reads them all with `dart tools/coverage_report/report.dart` and writes a per-package line-coverage table — generated files (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `gen/`, …) excluded — to the run's job summary. It runs even when a test failed (`if: !cancelled()`) and is `continue-on-error`, with no threshold. To make coverage a gate, add `--min <pct>` (the total) or `--min-package <pct>` (every package) to that step and remove `continue-on-error`; see [`../reference/03_tooling.md`](../reference/03_tooling.md).
 
@@ -282,8 +282,8 @@ dart tools/dependency_sync.dart --check
 dart tools/docs_check/check.dart
 
 # 3. Tests, per package (gate 3 — see §6), then the coverage table
-(cd platform/storage && flutter test --coverage)
-(cd platform/database && flutter test --coverage)
+(cd platform/infra/storage && flutter test --coverage)
+(cd platform/infra/database && flutter test --coverage)
 # ...repeat for any package with a test/ directory
 dart tools/coverage_report/report.dart
 

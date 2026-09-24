@@ -8,7 +8,7 @@
 
 ## 1. Ý tưởng cốt lõi: routing là phi tập trung
 
-`platform/app_shell/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
+`platform/shell/app_shell/lib/presentation/navigation/app_router.dart` **chỉ lắp ráp**. Nó không bao giờ gọi tên route của feature nào — nó gom những gì feature đã đăng ký qua DI:
 
 ```dart
 List<INavDestinationModule> get _destinations {
@@ -41,7 +41,7 @@ GoRouter (navigatorKey: NavigatorKeys.rootKey)
 
 ## 2. Bốn contract routing
 
-Tất cả nằm ở `platform/di/lib/src/routing/`.
+Tất cả nằm ở `platform/foundation/contracts/lib/src/routing/`.
 
 | Contract | Dùng cho | Có thứ tự? | Ai implement |
 |---|---|---|---|
@@ -241,7 +241,7 @@ Route của màn hình dùng controller **toàn cục** (ví dụ `LoginPage` v�
 
 Feature A không bao giờ được import Feature B. Điều hướng vượt ranh giới thông qua interface đặt ở `core_di`.
 
-**1. Khai báo** — `platform/di/lib/src/navigators/auth_navigator.dart`:
+**1. Khai báo** — `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart`:
 
 ```dart
 abstract class AuthNavigator {
@@ -254,7 +254,7 @@ Mỗi route mà feature sở hữu là một method — và chỉ những route 
 Một file **mới** trong `core_di` sẽ vô hình với mọi nơi dùng cho tới khi barrel export nó — `package:core_di/core_di.dart` re-export `src/navigators/navigators.dart`, là file được sinh ra. Hãy sinh lại nó (đừng tự thêm dòng `export`; generator xoá các dòng viết tay):
 
 ```bash
-dart tools/barrel_generator/generate.dart platform/di/lib
+dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
 ```
 
 **2. Implement trong feature sở hữu** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
@@ -288,7 +288,7 @@ getIt<AuthNavigator>().toLogin(context);
 
 ## 6. `NavigatorKeys` — vì sao đặt ở DI Hub
 
-`platform/di/lib/src/routing/navigator_keys.dart`:
+`platform/foundation/contracts/lib/src/routing/navigator_keys.dart`:
 
 ```dart
 class NavigatorKeys {
@@ -369,7 +369,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 1. **Hằng số path** → `lib/src/utils/<feature>_path.dart`.
 2. **Class route** → `lib/src/routing/<feature>_route_module.dart` với `@TypedGoRoute` / `@TypedShellRoute`; tạo controller trong `build()`.
 3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
-4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`. Feature chưa có Navigator thì cần một file **mới** trong `platform/di/lib/src/navigators/` — rồi chạy `dart tools/barrel_generator/generate.dart platform/di/lib` để barrel của `core_di` export nó (§5).
+4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`. Feature chưa có Navigator thì cần một file **mới** trong `platform/foundation/contracts/lib/src/navigators/` — rồi chạy `dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib` để barrel của `core_di` export nó (§5).
 5. **Sinh code** → `dart run build_runner build --workspace`.
 6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
@@ -384,7 +384,7 @@ Có hai dạng link đi vào app, và cả hai đều về cùng một location 
 | `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
 | `<scheme>://settings?tab=2` (custom scheme — segment đầu tiên nằm ở vị trí host) | `/settings?tab=2` |
 
-Nền tảng đưa URI cho `app_links`, và `DeeplinkProvider` (`platform/app_shell/lib/presentation/providers/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng — nhưng chỉ sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó (không bao giờ đè lên onboarding hay login). Path không module nào đăng ký sẽ rơi vào `UndefineRouteWidget`, như mọi location lạ khác.
+Nền tảng đưa URI cho `app_links`, và `DeeplinkProvider` (`platform/shell/app_shell/lib/presentation/providers/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng — nhưng chỉ sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó (không bao giờ đè lên onboarding hay login). Path không module nào đăng ký sẽ rơi vào `UndefineRouteWidget`, như mọi location lạ khác.
 
 ### Vì sao tắt deep linking có sẵn của Flutter
 

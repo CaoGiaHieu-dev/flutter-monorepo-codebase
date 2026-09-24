@@ -166,7 +166,7 @@ class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
 ```
 
 `BaseUseCase` là hợp đồng chỉ một method
-([`base_use_case.dart`](../../../platform/domain_core/lib/src/usecases/base_use_case.dart)) —
+([`base_use_case.dart`](../../../platform/layers/domain/lib/src/usecases/base_use_case.dart)) —
 một use case, một thao tác. Phụ thuộc truyền qua constructor; không bao giờ gọi `getIt<T>()` bên
 trong use case.
 
@@ -355,7 +355,7 @@ Remote data source trả về envelope `BaseEntity<UserModel>`, nên `R` là env
 
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
 khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
-[`i_base_repository.dart`](../../../platform/data_core/lib/src/base/i_base_repository.dart).
+[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base/i_base_repository.dart).
 
 > [!CAUTION]
 > Dùng `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`. Và tuyệt
@@ -363,7 +363,7 @@ khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
 
 > [!WARNING]
 > **`ErrorHandler` hiện chưa có nhánh cho Firebase.** Đọc `ErrorHandler._classify` (nằm sau
-> `handleError`) trong [`error_handler.dart`](../../../platform/kernel/lib/src/error/error_handler.dart):
+> `handleError`) trong [`error_handler.dart`](../../../platform/foundation/kernel/lib/src/error/error_handler.dart):
 > nó xử lý `AppException`, `DioException`, `SocketException`, `HttpException` và `FormatException`
 > — nhưng **không** có `FirebaseException`, `FirebaseAuthException` hay `PlatformException`. Mọi
 > lỗi Firebase vì thế rơi vào nhánh mặc định:
@@ -393,19 +393,19 @@ fail khi một package được import mà không khai.
 # modules/payment/data/pubspec.yaml
 dependencies:
   data_core:
-    path: ../../../platform/data_core
+    path: ../../../platform/layers/data
   domain_core:
-    path: ../../../platform/domain_core
+    path: ../../../platform/layers/domain
   domain_payment:
     path: ../domain
 
   # Add when you write the §8 storage owner (StorageManager, StorageValue):
   # core_storage:
-  #   path: ../../../platform/storage
+  #   path: ../../../platform/infra/storage
   # Add when you write a Retrofit data source (ApiClient, Dio) — plus `dio:`
   # and `retrofit:` with an empty value, then run dependency_sync:
   # core_network:
-  #   path: ../../../platform/network
+  #   path: ../../../platform/infra/network
 ```
 
 Danh sách không có `platform_kernel`: `execute()` / `executeSync()` đã đưa mọi lỗi qua

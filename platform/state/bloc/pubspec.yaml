@@ -16,10 +16,9 @@ dependencies:
   get_it: ^9.2.1
   injectable: ^3.0.0
   domain_core:
-    path: ../domain_core
+    path: ../../layers/domain
   platform_kernel:
-    path: ../kernel
-
+    path: ../../foundation/kernel
 dev_dependencies:
   flutter_test:
     sdk: flutter

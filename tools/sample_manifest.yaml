@@ -2,8 +2,8 @@
 #
 # This template ships working reference features. They exist to show how the
 # architecture is wired, not because your product needs them. Nothing here is
-# derivable from the folder layout alone: `platform/domain_core` is framework
-# while `modules/auth/domain` is a sample, and both live under `modules/*/domain/`.
+# derivable from the folder layout alone: `platform/layers/domain` is framework
+# while `modules/auth/domain` is a sample, and both are folders named `domain/`.
 #
 # YAML rather than JSON on purpose: this file is read by humans first and by
 # `tools/sample_cleanup/remove_sample.dart` second, and JSON cannot carry the
@@ -25,28 +25,28 @@
 
 packages:
   # --- Framework: core infrastructure -------------------------------------
-  platform_kernel: { kind: framework, path: platform/kernel }
-  platform_app_shell: { kind: framework, path: platform/app_shell }
-  core_common: { kind: framework, path: platform/common }
-  core_di: { kind: framework, path: platform/di }
-  core_base_ui: { kind: framework, path: platform/base_ui }
-  core_network: { kind: framework, path: platform/network }
-  core_storage: { kind: framework, path: platform/storage }
-  core_database: { kind: framework, path: platform/database }
-  core_notifications: { kind: framework, path: platform/notifications }
-  core_ui_kit: { kind: framework, path: platform/ui_kit }
-  core_responsive: { kind: framework, path: platform/responsive }
+  platform_kernel: { kind: framework, path: platform/foundation/kernel }
+  platform_app_shell: { kind: framework, path: platform/shell/app_shell }
+  core_common: { kind: framework, path: platform/foundation/common }
+  core_di: { kind: framework, path: platform/foundation/contracts }
+  core_base_ui: { kind: framework, path: platform/ui/design_system }
+  core_network: { kind: framework, path: platform/infra/network }
+  core_storage: { kind: framework, path: platform/infra/storage }
+  core_database: { kind: framework, path: platform/infra/database }
+  core_notifications: { kind: framework, path: platform/infra/notifications }
+  core_ui_kit: { kind: framework, path: platform/ui/ui_kit }
+  core_responsive: { kind: framework, path: platform/ui/responsive }
   provider_state_management:
-    { kind: framework, path: platform/provider_state_management }
+    { kind: framework, path: platform/state/provider }
   bloc_state_management:
-    { kind: framework, path: platform/bloc_state_management }
+    { kind: framework, path: platform/state/bloc }
 
   # --- Framework: layer foundations ---------------------------------------
   # These carry the base contracts every domain/data package builds on
   # (Result<T>, BaseEntity, IBaseRepository). They contain no sample code: the
   # Drift example that used to live inside them is the `cache` module now.
-  domain_core: { kind: framework, path: platform/domain_core }
-  data_core: { kind: framework, path: platform/data_core }
+  domain_core: { kind: framework, path: platform/layers/domain }
+  data_core: { kind: framework, path: platform/layers/data }
 
   # --- Shell ---------------------------------------------------------------
   mobile_app:
@@ -149,14 +149,14 @@ bundles:
     # Contracts declared in core_di purely so this feature could publish state
     # across the boundary. They become dead declarations once it is gone.
     orphaned_contracts:
-      - platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart
-      - platform/di/lib/src/agnostic_streams/i_auth_session_state.dart
-      - platform/di/lib/src/agnostic_streams/i_auth_refresh_listenable.dart
-      - platform/di/lib/src/agnostic_streams/auth_session_failure.dart
-      - platform/di/lib/src/actions/i_auth_action_handler.dart
-      - platform/di/lib/src/navigators/auth_navigator.dart
+      - platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart
+      - platform/foundation/contracts/lib/src/agnostic_streams/i_auth_session_state.dart
+      - platform/foundation/contracts/lib/src/agnostic_streams/i_auth_refresh_listenable.dart
+      - platform/foundation/contracts/lib/src/agnostic_streams/auth_session_failure.dart
+      - platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart
+      - platform/foundation/contracts/lib/src/navigators/auth_navigator.dart
     orphaned_keys:
-      - "NavigatorKeys.nested('auth') in platform/di/lib/src/routing/navigator_keys.dart"
+      - "NavigatorKeys.nested('auth') in platform/foundation/contracts/lib/src/routing/navigator_keys.dart"
     breaks: []
     safe_couplings:
       - "feature_home -> IAuthStatusStream (getItOrNull at the route, passed as a factory param; Home shows the signed-out state)"
@@ -166,7 +166,7 @@ bundles:
   home:
     packages: [feature_home]
     orphaned_contracts:
-      - platform/di/lib/src/navigators/home_navigator.dart
+      - platform/foundation/contracts/lib/src/navigators/home_navigator.dart
     breaks: []
     safe_couplings:
       - "platform_app_shell -> HomeNavigator (getItOrNull; after sign-in the app goes to AppRouter.fallbackLocation)"
@@ -199,7 +199,7 @@ bundles:
   dashboard:
     packages: [feature_dashboard]
     orphaned_contracts:
-      - platform/di/lib/src/routing/dashboard_route_module.dart
+      - platform/foundation/contracts/lib/src/routing/dashboard_route_module.dart
     breaks: []
     note: >-
       Tabs still render, without chrome — AppRouter falls back to the bare
@@ -208,7 +208,7 @@ bundles:
   splash:
     packages: [feature_splash]
     orphaned_contracts:
-      - platform/di/lib/src/app/i_app_splash_screen.dart
+      - platform/foundation/contracts/lib/src/app/i_app_splash_screen.dart
     breaks: []
     note: >-
       runShellApp (platform_app_shell) resolves it with getItOrNull, so the
@@ -228,11 +228,11 @@ shared_files:
 # Contracts that survive every removal: they are generic mechanisms, not
 # feature-specific. Do not delete these while chasing orphans.
 framework_contracts:
-  - platform/di/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
-  - platform/di/lib/src/routing/i_nav_destination_module.dart
-  - platform/di/lib/src/routing/i_app_entry_location.dart
-  - platform/di/lib/src/routing/navigator_keys.dart
-  - platform/di/lib/src/feature_localization.dart
-  - platform/di/lib/src/theme/i_theme_storage.dart
-  - platform/di/lib/src/language/i_language_storage.dart
-  - platform/di/lib/src/app/i_app_tree_wrapper.dart
+  - platform/foundation/contracts/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
+  - platform/foundation/contracts/lib/src/routing/i_nav_destination_module.dart
+  - platform/foundation/contracts/lib/src/routing/i_app_entry_location.dart
+  - platform/foundation/contracts/lib/src/routing/navigator_keys.dart
+  - platform/foundation/contracts/lib/src/feature_localization.dart
+  - platform/foundation/contracts/lib/src/theme/i_theme_storage.dart
+  - platform/foundation/contracts/lib/src/language/i_language_storage.dart
+  - platform/foundation/contracts/lib/src/app/i_app_tree_wrapper.dart

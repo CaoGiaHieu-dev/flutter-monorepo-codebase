@@ -18,7 +18,7 @@ void main() {
       '  # composer:managed:workspace — generated from app_manifest.yaml\n'
       '  - apps/demo\n'
       '  - modules/gone/feature\n'
-      '  - platform/common\n'
+      '  - platform/foundation/common\n'
       '  # composer:end:workspace\n';
 
   const appPubspec =
@@ -26,7 +26,7 @@ void main() {
       'dependencies:\n'
       '  # composer:managed:deps — generated from app_manifest.yaml\n'
       '  core_common:\n'
-      '    path: ../../platform/common\n'
+      '    path: ../../platform/foundation/common\n'
       '  feature_gone:\n'
       '    path: ../../modules/gone/feature\n'
       '  # composer:end:deps\n';
@@ -35,7 +35,7 @@ void main() {
     final ws = TempWorkspace.create({
       'pubspec.yaml': rootPubspec,
       'apps/demo/pubspec.yaml': appPubspec,
-      'platform/common/pubspec.yaml': 'name: core_common\n',
+      'platform/foundation/common/pubspec.yaml': 'name: core_common\n',
     });
     // The uninitialised submodule: its directory exists, empty.
     ws.mkdir('modules/gone/feature');
@@ -68,10 +68,10 @@ void main() {
 
     final root = ws.read('pubspec.yaml');
     expect(root, isNot(contains('modules/gone/feature')));
-    expect(root, contains('  - platform/common\n'));
+    expect(root, contains('  - platform/foundation/common\n'));
     final app = ws.read('apps/demo/pubspec.yaml');
     expect(app, isNot(contains('feature_gone')));
-    expect(app, contains('  core_common:\n    path: ../../platform/common\n'));
+    expect(app, contains('  core_common:\n    path: ../../platform/foundation/common\n'));
   });
 
   test('a complete checkout has nothing to prune', () async {

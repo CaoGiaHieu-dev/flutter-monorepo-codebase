@@ -15,23 +15,23 @@ dependencies:
 
   # composer:managed:deps — generated from app_manifest.yaml
   core_common:
-    path: ../../platform/common
+    path: ../../platform/foundation/common
   core_network:
-    path: ../../platform/network
+    path: ../../platform/infra/network
   core_storage:
-    path: ../../platform/storage
+    path: ../../platform/infra/storage
   core_di:
-    path: ../../platform/di
+    path: ../../platform/foundation/contracts
   platform_app_shell:
-    path: ../../platform/app_shell
+    path: ../../platform/shell/app_shell
   core_base_ui:
-    path: ../../platform/base_ui
+    path: ../../platform/ui/design_system
   domain_core:
-    path: ../../platform/domain_core
+    path: ../../platform/layers/domain
   domain_auth:
     path: ../../modules/auth/domain
   data_core:
-    path: ../../platform/data_core
+    path: ../../platform/layers/data
   data_auth:
     path: ../../modules/auth/data
   feature_auth:
@@ -39,9 +39,9 @@ dependencies:
   feature_settings:
     path: ../../modules/settings/feature
   provider_state_management:
-    path: ../../platform/provider_state_management
+    path: ../../platform/state/provider
   bloc_state_management:
-    path: ../../platform/bloc_state_management
+    path: ../../platform/state/bloc
   # composer:end:deps
 
   # External packages this app itself uses. Everything else belongs to

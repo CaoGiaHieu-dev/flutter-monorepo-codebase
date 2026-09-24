@@ -8,18 +8,22 @@ import 'module_type.dart';
 
 /// Usage text, printed by `--help` and after every argument error.
 const String moduleGeneratorUsage = '''
-Usage: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--apps <id,id>]
+Usage: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--group <group>] [--apps <id,id>]
 
-  <type>    1 = Feature  (modules/<name>/feature, package feature_<name>)
-            2 = Domain   (modules/<name>/domain,  package domain_<name>)
-            3 = Data     (modules/<name>/data,    package data_<name>)
-            4 = Core     (platform/<name>,        package core_<name>)
-            5 = Custom   (platform/<name>,        package <prefix>_<name>)
+  <type>    1 = Feature  (modules/<name>/feature,   package feature_<name>)
+            2 = Domain   (modules/<name>/domain,    package domain_<name>)
+            3 = Data     (modules/<name>/data,      package data_<name>)
+            4 = Core     (platform/<group>/<name>,  package core_<name>)
+            5 = Custom   (platform/<group>/<name>,  package <prefix>_<name>)
   <name>    lowercase_with_underscores, starting with a letter (profile, user_profile)
   <prefix>  type 5 only: the package-name prefix. Pass "" for every other type.
   <SM>      type 1 only: 1 = Provider, 2 = BLoC, 3 = none
   <route>   type 1 only: 1 = IFeatureRouteModule (stack routes),
                          2 = INavDestinationModule (primary nav tab), 3 = none
+  --group   Types 4 and 5 only: the platform group folder the package goes
+            in — foundation, layers, infra, ui, state or shell (default:
+            infra). --group ui and --group=ui both work. See
+            docs/en/architecture/02_core.md for what belongs in each group.
   --apps    Compose the module into these apps only: a comma-separated list
             of `app.id`s from apps/*/app_manifest.yaml (--apps mobile, or
             --apps=mobile,admin). Default: every app. An unknown id exits 64
@@ -30,8 +34,9 @@ Examples:
   dart tools/module_generator/generate.dart 1 chat "" 2 2      # Feature + BLoC + nav tab
   dart tools/module_generator/generate.dart 2 payment          # Domain micro-package
   dart tools/module_generator/generate.dart 3 payment          # Data micro-package
-  dart tools/module_generator/generate.dart 4 analytics        # core_analytics
-  dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/billing
+  dart tools/module_generator/generate.dart 4 analytics        # core_analytics at platform/infra/analytics
+  dart tools/module_generator/generate.dart 4 charts --group ui   # core_charts at platform/ui/charts
+  dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/infra/billing
   dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile   # mobile only, not admin
 
 Run with no arguments on a terminal to be prompted for everything; a missing
@@ -41,6 +46,18 @@ value must be passed.''';
 /// Dart package names: lowercase letters, digits and underscores, starting
 /// with a letter. (Pub also allows a leading underscore; this repo's naming
 /// does not use it.)
+/// The group folders under `platform/`, and the one a core or custom
+/// package lands in when `--group` is not given.
+const List<String> platformGroups = [
+  'foundation',
+  'layers',
+  'infra',
+  'ui',
+  'state',
+  'shell',
+];
+const String defaultPlatformGroup = 'infra';
+
 final RegExp _packageNamePattern = RegExp(r'^[a-z][a-z0-9_]*$');
 
 /// Identifiers pub refuses as package names.
@@ -160,6 +177,38 @@ class InputActions {
     return ids;
   }
 
+  /// Takes `--group <g>` / `--group=<g>` out of [args] and returns it —
+  /// `null` when the flag is absent. Validated against [platformGroups]
+  /// before anything is written.
+  String? _takeGroup(List<String> args) {
+    String? group;
+    var seen = false;
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      if (arg == '--group') {
+        if (i + 1 >= args.length) _usageError('--group needs a value.');
+        group = args[i + 1].trim();
+        args.removeRange(i, i + 2);
+      } else if (arg.startsWith('--group=')) {
+        group = arg.substring('--group='.length).trim();
+        args.removeAt(i);
+      } else {
+        continue;
+      }
+      if (seen) _usageError('--group given more than once.');
+      seen = true;
+      i--;
+    }
+    if (!seen) return null;
+    if (!platformGroups.contains(group)) {
+      _usageError(
+        'Unknown --group "$group". Platform groups: '
+        '${platformGroups.join(', ')}. Nothing was written.',
+      );
+    }
+    return group;
+  }
+
   ModuleConfig parseInput(List<String> arguments) {
     if (arguments.contains('--help') || arguments.contains('-h')) {
       stdout.writeln(moduleGeneratorUsage);
@@ -167,6 +216,7 @@ class InputActions {
     }
     final args = [...arguments];
     final apps = _takeApps(args);
+    final groupFlag = _takeGroup(args);
     final flag = args.where((a) => a.startsWith('-')).firstOrNull;
     if (flag != null) _usageError('Unknown flag: $flag');
     if (args.length > 5) {
@@ -191,9 +241,9 @@ class InputActions {
       stdout.writeln('1. Feature Package (modules/<name>/feature/)');
       stdout.writeln('2. Domain Micro-Package (modules/<name>/domain/)');
       stdout.writeln('3. Data Micro-Package (modules/<name>/data/)');
-      stdout.writeln('4. Core Package (platform/)');
+      stdout.writeln('4. Core Package (platform/<group>/<name>)');
       stdout.writeln(
-        '5. Custom Package (platform/<name>, prefix of your choice)',
+        '5. Custom Package (platform/<group>/<name>, prefix of your choice)',
       );
       typeInput = _prompt('Your choice: ');
     }
@@ -217,11 +267,11 @@ class InputActions {
         typeName = 'data';
       case '4':
         type = ModuleType.core;
-        typeDir = 'platform';
+        typeDir = 'platform/<group>';
         typeName = 'core';
       case '5':
         type = ModuleType.custom;
-        typeDir = 'platform';
+        typeDir = 'platform/<group>';
         typeName = '';
       default:
         _usageError('Invalid <type>: "$typeInput" (1-5).');
@@ -230,6 +280,32 @@ class InputActions {
     if (type != ModuleType.feature && args.length > 3) {
       _usageError('<SM> and <route> apply to type 1 (Feature) only.');
     }
+
+    final isPlatformPackage =
+        type == ModuleType.core || type == ModuleType.custom;
+    if (groupFlag != null && !isPlatformPackage) {
+      _usageError(
+        '--group applies to types 4 (Core) and 5 (Custom) only — a type '
+        '$typeInput package lives under modules/<name>/.',
+      );
+    }
+    var group = groupFlag;
+    if (isPlatformPackage && group == null && args.length < 2) {
+      // Interactive run: ask, defaulting to infra.
+      final input = _prompt(
+        '\nPlatform group (${platformGroups.join(', ')}; '
+        'default $defaultPlatformGroup): ',
+      );
+      group = input.isEmpty ? defaultPlatformGroup : input;
+      if (!platformGroups.contains(group)) {
+        _usageError(
+          'Unknown platform group "$group". Platform groups: '
+          '${platformGroups.join(', ')}.',
+        );
+      }
+    }
+    group ??= defaultPlatformGroup;
+    if (isPlatformPackage) typeDir = 'platform/$group';
 
     if (type == ModuleType.custom) {
       if (args.length < 3) {
@@ -251,7 +327,7 @@ class InputActions {
       }
       _validateName(typeDirInput, 'Prefix');
       // A custom package is a platform package with its own name prefix:
-      // `<prefix>_<name>` at `platform/<name>`.
+      // `<prefix>_<name>` at `platform/<group>/<name>`.
       typeName = typeDirInput;
     } else if (typeDirInput != null && typeDirInput.isNotEmpty) {
       _usageError(
@@ -322,7 +398,7 @@ class InputActions {
     _validateName(moduleName, 'Package name');
     // A module's layers sit side by side under the module:
     // `modules/<name>/{domain,data,feature}`. Core and custom packages live
-    // at `platform/<name>`.
+    // at `platform/<group>/<name>` (`--group`, default `infra`).
     final isModuleLayer =
         type == ModuleType.feature ||
         type == ModuleType.domain ||
@@ -336,7 +412,7 @@ class InputActions {
     // fails `pub get` — and only after composer has rewritten the manifests,
     // the workspace list and injection.dart. Worse, a type-5 name can land in
     // a fresh directory yet repeat an existing name (`5 shell platform_app`
-    // is `platform_app_shell`, already at platform/app_shell), and `2 core` /
+    // is `platform_app_shell`, already at platform/shell/app_shell), and `2 core` /
     // `3 core` are domain_core / data_core. Checked before anything is
     // written, against every pubspec in the repository.
     _assertPackageNameFree(moduleName, modulePath);

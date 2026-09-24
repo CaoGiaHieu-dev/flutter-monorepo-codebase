@@ -8,7 +8,7 @@
 
 ## 1. The core idea: routing is decentralised
 
-`platform/app_shell/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
+`platform/shell/app_shell/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
 
 ```dart
 List<INavDestinationModule> get _destinations {
@@ -41,7 +41,7 @@ GoRouter (navigatorKey: NavigatorKeys.rootKey)
 
 ## 2. The four routing contracts
 
-All live in `platform/di/lib/src/routing/`.
+All live in `platform/foundation/contracts/lib/src/routing/`.
 
 | Contract | Use for | Ordered? | Implemented by |
 |---|---|---|---|
@@ -241,7 +241,7 @@ Routes for screens backed by a **global** controller (e.g. `LoginPage` with the 
 
 Feature A must never import Feature B. Navigation crosses the boundary through an interface in `core_di`.
 
-**1. Declare** — `platform/di/lib/src/navigators/auth_navigator.dart`:
+**1. Declare** — `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart`:
 
 ```dart
 abstract class AuthNavigator {
@@ -254,7 +254,7 @@ One method per route the feature owns — and only routes it owns.
 A **new** file in `core_di` is invisible to every consumer until the barrel exports it — `package:core_di/core_di.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it (never hand-add the `export`; the generator deletes hand-written lines):
 
 ```bash
-dart tools/barrel_generator/generate.dart platform/di/lib
+dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
 ```
 
 **2. Implement in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
@@ -288,7 +288,7 @@ getIt<AuthNavigator>().toLogin(context);
 
 ## 6. `NavigatorKeys` — why they live in the DI Hub
 
-`platform/di/lib/src/routing/navigator_keys.dart`:
+`platform/foundation/contracts/lib/src/routing/navigator_keys.dart`:
 
 ```dart
 class NavigatorKeys {
@@ -369,7 +369,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 1. **Path constant** → `lib/src/utils/<feature>_path.dart`.
 2. **Route class** → `lib/src/routing/<feature>_route_module.dart` with `@TypedGoRoute` / `@TypedShellRoute`; create the controller in `build()`.
 3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
-4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`. A feature with no Navigator yet gets a **new** file in `platform/di/lib/src/navigators/` — then run `dart tools/barrel_generator/generate.dart platform/di/lib` so `core_di`'s barrel exports it (§5).
+4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`. A feature with no Navigator yet gets a **new** file in `platform/foundation/contracts/lib/src/navigators/` — then run `dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib` so `core_di`'s barrel exports it (§5).
 5. **Generate** → `dart run build_runner build --workspace`.
 6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
@@ -384,7 +384,7 @@ Two link shapes reach the app, and both land on the same router location:
 | `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
 | `<scheme>://settings?tab=2` (custom scheme — the first segment sits in the host position) | `/settings?tab=2` |
 
-The platform delivers the URI to `app_links`, and `DeeplinkProvider` (`platform/app_shell/lib/presentation/providers/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it — but only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it (never over onboarding or login). A path no module registered lands on `UndefineRouteWidget`, like any unknown location.
+The platform delivers the URI to `app_links`, and `DeeplinkProvider` (`platform/shell/app_shell/lib/presentation/providers/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it — but only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it (never over onboarding or login). A path no module registered lands on `UndefineRouteWidget`, like any unknown location.
 
 ### Why Flutter's own deep linking is off
 

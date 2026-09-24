@@ -65,7 +65,7 @@ Các package hiện có:
 
 ## 3. `IBaseRepository` — vì sao repository không có `try/catch`
 
-`platform/data_core/lib/src/base/i_base_repository.dart` cung cấp cho mọi repository hai hàm bọc. `RepositoryImpl` sẽ `extends IBaseRepository` rồi gọi chúng thay vì tự xử lý lỗi.
+`platform/layers/data/lib/src/base/i_base_repository.dart` cung cấp cho mọi repository hai hàm bọc. `RepositoryImpl` sẽ `extends IBaseRepository` rồi gọi chúng thay vì tự xử lý lỗi.
 
 ### `execute<R, T>()` — bất đồng bộ
 
@@ -120,7 +120,7 @@ Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` 
 
 ### `ErrorHandler` thực sự nhận diện được gì
 
-`platform/kernel/lib/src/error/error_handler.dart` phân nhánh theo thứ tự: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định.
+`platform/foundation/kernel/lib/src/error/error_handler.dart` phân nhánh theo thứ tự: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định.
 
 > [!WARNING]
 > **Không có nhánh nào cho `FirebaseException` / `FirebaseAuthException` / `PlatformException`.** `AuthRepositoryImpl` đi kèm template dùng Retrofit nên sample không dính lỗi này — nhưng đổi transport sang Firebase SDK thì mọi lỗi Firebase — sai mật khẩu, không tìm thấy user, mất mạng — đều rơi xuống nhánh mặc định:
@@ -145,7 +145,7 @@ Model là biểu diễn của riêng tầng Data. Nó không bao giờ lọt và
 ### Hợp đồng
 
 ```dart
-// platform/data_core/lib/src/models/base_model.dart
+// platform/layers/data/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
   E toEntity() {
     throw UnimplementedError();

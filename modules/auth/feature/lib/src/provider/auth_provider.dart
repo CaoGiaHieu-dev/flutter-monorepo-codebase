@@ -13,13 +13,13 @@ import 'auth_error_state.dart';
 /// Global auth controller, and the auth feature's side of two `core_di`
 /// contracts.
 ///
-/// Implementing [IAuthSessionState] and [IAuthRefreshListenable] here is what
+/// Implementing [ISessionState] and [ISessionRefreshListenable] here is what
 /// lets the app shell drive its boot redirect and refresh routing without
 /// importing this package — delete `feature_auth` and the shell's optional
 /// lookups simply return `null`.
 @lazySingleton
 class AuthProvider extends BaseProvider<UserEntity>
-    implements IAuthSessionState, IAuthRefreshListenable {
+    implements ISessionState, ISessionRefreshListenable {
   AuthProvider(
     this._loginUseCase,
     this._logoutUseCase,
@@ -34,7 +34,7 @@ class AuthProvider extends BaseProvider<UserEntity>
 
   StreamSubscription<ViewStateModel<UserEntity>>? _authSubscription;
 
-  final _failureController = StreamController<AuthSessionFailure>.broadcast();
+  final _failureController = StreamController<SessionFailure>.broadcast();
 
   /// Marks whether the first session restore has finished.
   /// Used by the shell to ignore the bootstrap success it already handled.
@@ -43,20 +43,21 @@ class AuthProvider extends BaseProvider<UserEntity>
   @override
   bool get hasRestoredSession => _hasRestoredSession;
 
-  // --- IAuthSessionState -----------------------------------------------------
+  // --- ISessionState -----------------------------------------------------
   //
   // The session view the app shell consumes. `sessionChanges` reuses the same
-  // broadcast stream `IAuthStatusStream` publishes, so shell and features
+  // broadcast stream `ISessionStatusStream` publishes, so shell and features
   // observe one source of truth rather than two that can drift.
 
   @override
-  AuthPrincipal? get signedInUser => AuthStatusStreamImpl.toPrincipal(data);
+  SessionPrincipal? get signedInUser => AuthStatusStreamImpl.toPrincipal(data);
 
   @override
-  Stream<AuthPrincipal?> get sessionChanges => _authStream.authStatusStream;
+  Stream<SessionPrincipal?> get sessionChanges =>
+      _authStream.sessionStatusStream;
 
   @override
-  Stream<AuthSessionFailure> get sessionFailures => _failureController.stream;
+  Stream<SessionFailure> get sessionFailures => _failureController.stream;
 
   @override
   Future<void> initialize() async {
@@ -86,18 +87,18 @@ class AuthProvider extends BaseProvider<UserEntity>
   ///
   /// Classification stays here because only the auth feature knows what its
   /// backend's codes mean; the shell just picks a string per variant.
-  AuthSessionFailure _toSessionFailure(ViewStateModel<UserEntity> value) {
+  SessionFailure _toSessionFailure(ViewStateModel<UserEntity> value) {
     final error = value.state.whenOrNull(error: (error) => error);
     if (error is AuthErrorState) {
       return error.maybeWhen(
-        invalidCredentials: () => const AuthInvalidCredentialsFailure(),
-        userNotFound: () => const AuthUserNotFoundFailure(),
+        invalidCredentials: () => const SessionInvalidCredentialsFailure(),
+        userNotFound: () => const SessionUserNotFoundFailure(),
         serverError: (message, code) =>
-            AuthServerFailure(message: message, code: code),
-        orElse: () => const AuthUnknownFailure(),
+            SessionServerFailure(message: message, code: code),
+        orElse: () => const SessionUnknownFailure(),
       );
     }
-    return const AuthUnknownFailure();
+    return const SessionUnknownFailure();
   }
 
   Future<void> _restoreSession() async {

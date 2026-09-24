@@ -15,7 +15,7 @@ Bỏ qua phần nào PR không đụng tới. Mục nào có dòng **Kiểm ch�
 ```bash
 dart run build_runner build --workspace              # code sinh đã cập nhật
 dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — luật phân tầng R1–R10 (R5: import thiếu khai)
+dart tools/arch_check/check.dart                     # Gate 1 — luật phân tầng R1–R11 (R5: import thiếu khai)
 flutter analyze                                      # Gate 2 — phân tích tĩnh
 # Gate 3 — `flutter test` ở mọi package có thư mục test/
 dart tools/dependency_sync.dart --check              # Gate 4 — lệch version catalog

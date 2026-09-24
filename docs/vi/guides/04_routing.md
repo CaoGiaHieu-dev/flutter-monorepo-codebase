@@ -48,6 +48,8 @@ Tất cả nằm ở `platform/foundation/contracts/lib/src/routing/`.
 | `IFeatureRouteModule` | Route top-level / dạng stack dưới app shell | Không — GoRouter khớp theo path | auth, onboarding, … |
 | `INavDestinationModule` | Một tab bottom-nav + `StatefulShellBranch` của nó | **Có** — `order` tăng dần | home, settings, … |
 | `IAppEntryLocation` | Điểm bắt đầu ở lần chạy đầu tiên (`initialLocation` cho tới khi đã hiện một lần) | n/a | thường là onboarding |
+| `ISignInLocation` | Nơi shell đưa người dùng chưa đăng nhập tới (boot, đăng xuất, mất phiên) | n/a | module sở hữu phiên — `feature_auth` |
+| `IPostSignInLocation` | Nơi shell đưa người dùng đã đăng nhập tới (boot, đăng nhập); không có thì `fallbackLocation` | n/a | module trang đích — `feature_home` |
 | `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
 
 ### 2.1 `IFeatureRouteModule`
@@ -208,9 +210,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -239,9 +241,9 @@ Route của màn hình dùng controller **toàn cục** (ví dụ `LoginPage` v�
 
 ## 5. Điều hướng xuyên feature
 
-Feature A không bao giờ được import Feature B. Điều hướng vượt ranh giới thông qua interface đặt ở `core_di`.
+Feature A không bao giờ được import Feature B. Điều hướng vượt ranh giới thông qua interface đặt trong **package API của module B** — `modules/<id>/api`, tên `<id>_api` — mà feature A phụ thuộc thay cho feature B (`arch_check` R3). `core_di` không chứa navigator của module nào.
 
-**1. Khai báo** — `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart`:
+**1. Khai báo** — `modules/auth/api/lib/src/navigators/auth_navigator.dart` (package `auth_api`):
 
 ```dart
 abstract class AuthNavigator {
@@ -251,10 +253,10 @@ abstract class AuthNavigator {
 
 Mỗi route mà feature sở hữu là một method — và chỉ những route nó sở hữu.
 
-Một file **mới** trong `core_di` sẽ vô hình với mọi nơi dùng cho tới khi barrel export nó — `package:core_di/core_di.dart` re-export `src/navigators/navigators.dart`, là file được sinh ra. Hãy sinh lại nó (đừng tự thêm dòng `export`; generator xoá các dòng viết tay):
+Một file **mới** trong package API sẽ vô hình với mọi nơi dùng cho tới khi barrel export nó — `package:auth_api/auth_api.dart` re-export `src/navigators/navigators.dart`, là file được sinh ra. Hãy sinh lại nó (đừng tự thêm dòng `export`; generator xoá các dòng viết tay). Module chưa có package API thì tạo nó trước: `docs/vi/guides/12_module_isolation.md` § 7.
 
 ```bash
-dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
+dart tools/barrel_generator/generate.dart modules/auth/api/lib
 ```
 
 **2. Implement trong feature sở hữu** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
@@ -267,7 +269,7 @@ class AuthNavigatorImpl implements AuthNavigator {
 }
 ```
 
-**3. Gọi từ bất kỳ đâu:**
+**3. Gọi từ bất kỳ feature nào có `auth_api` trong `dependencies:`:**
 
 ```dart
 // Từ mọi package khác package sở hữu — package sở hữu có thể bị gỡ:
@@ -283,6 +285,7 @@ getIt<AuthNavigator>().toLogin(context);
 - **Không bao giờ** hardcode chuỗi path hay gọi `GoRouter.of(context).go('/auth/login')` để sang feature khác.
 - **`BuildContext` phải được truyền trực tiếp từ widget gọi.** Đừng lấy từ `NavigatorKeys.*.currentContext` hay `appRouter.currentContext` — cách đó bỏ qua vòng đời widget và sinh lỗi "dùng sau khi dispose".
 - Dùng `getItOrNull` ở những chỗ gọi cần sống sót khi feature đích bị gỡ.
+- **App shell không dùng navigator của module nào.** Người dùng chưa đăng nhập được đưa tới `ISignInLocation.path`, người đã đăng nhập tới `IPostSignInLocation.path` — hợp đồng `core_di` trung lập với sản phẩm, do module sở hữu phiên đăng nhập và module trang đích đóng góp (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` tự gọi `context.go(path)`.
 
 ---
 
@@ -356,9 +359,10 @@ builder: (context, state, navigationShell) {
 | Toàn bộ `INavDestinationModule` | Một branch giữ chỗ `/_empty_dashboard` giữ `StatefulShellRoute` hợp lệ |
 | `DashboardRouteModule` | Các tab vẫn hiển thị, chỉ là không có chrome — `navigationShell` hiển thị nhánh hiện tại. (Trước đây là `SizedBox.shrink()`: app có tab mà không có dashboard sẽ mở ra màn hình trắng) |
 | `IAppEntryLocation` | Boot bắt đầu ở `fallbackLocation` — tab đầu tiên, hoặc branch giữ chỗ. Không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
-| `HomeNavigator` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
+| `ISignInLocation` | Không redirect tới màn đăng nhập, lúc boot hay khi đăng xuất — đúng khi không có module sở hữu phiên |
+| `IPostSignInLocation` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
 
-Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép, nhưng **chỉ ở lần chạy đầu tiên**: khi `NavigatorWrapperWidget` đã ghi nhận là đã xem (cờ `AppBootStorage.viewedOnboard` của shell), mọi lần khởi động nguội sau đó đáp xuống `fallbackLocation`, nên người dùng quay lại không phải thấy onboarding trong lúc phiên đang khôi phục. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `HomeNavigator`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
+Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép, nhưng **chỉ ở lần chạy đầu tiên**: khi `NavigatorWrapperWidget` đã ghi nhận là đã xem (cờ `AppBootStorage.viewedOnboard` của shell), mọi lần khởi động nguội sau đó đáp xuống `fallbackLocation`, nên người dùng quay lại không phải thấy onboarding trong lúc phiên đang khôi phục. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `IPostSignInLocation`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
 
 Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
 
@@ -369,7 +373,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 1. **Hằng số path** → `lib/src/utils/<feature>_path.dart`.
 2. **Class route** → `lib/src/routing/<feature>_route_module.dart` với `@TypedGoRoute` / `@TypedShellRoute`; tạo controller trong `build()`.
 3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
-4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`. Feature chưa có Navigator thì cần một file **mới** trong `platform/foundation/contracts/lib/src/navigators/` — rồi chạy `dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib` để barrel của `core_di` export nó (§5).
+4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của module đó trong package API của nó (`modules/<id>/api`) và implement trong `*_navigator_impl.dart`. Module chưa có Navigator thì cần một file **mới** trong `modules/<id>/api/lib/src/navigators/` — rồi chạy `dart tools/barrel_generator/generate.dart modules/<id>/api/lib` để barrel của package API export nó (§5).
 5. **Sinh code** → `dart run build_runner build --workspace`.
 6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
@@ -484,7 +488,7 @@ adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settin
 - [ ] Hằng số path nằm ở `src/utils/`, không phải `routing/`
 - [ ] Controller tạo trong `build()` của route, page không bọc lại
 - [ ] `INavDestinationModule.order` xếp tab vào đúng vị trí mong muốn (khóa sắp xếp tăng dần, không phải index) và là duy nhất
-- [ ] Điều hướng xuyên feature đi qua Navigator interface ở `core_di`
+- [ ] Điều hướng xuyên feature đi qua Navigator interface trong `<id>_api` của module đích
 - [ ] `BuildContext` truyền từ UI, không lấy từ `NavigatorKeys`
 - [ ] Đã chạy lại `build_runner` sau khi sửa annotation route
 - [ ] Deep link vẫn chỉ tới router qua `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` giữ nguyên `false` (§9)

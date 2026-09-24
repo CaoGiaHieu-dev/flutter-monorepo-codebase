@@ -41,7 +41,7 @@ in its order. Run them from the repository root after `configure.dart`:
 ```bash
 flutter pub get --enforce-lockfile                   # CI fails if pubspec.lock is stale
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — layering rules R1–R10
+dart tools/arch_check/check.dart                     # Gate 1 — layering rules R1–R11
 flutter analyze                                      # Gate 2 — static analysis
 # Gate 3 — flutter test in every package that has a test/ directory
 for p in $(find . -name pubspec.yaml -not -path './.git/*' -not -path '*/build/*' \

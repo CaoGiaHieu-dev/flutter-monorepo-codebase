@@ -13,12 +13,19 @@ thì app vẫn chạy.
 
 ```
 feature_a  ──✗──>  feature_b        cấm tuyệt đối
-feature_a  ──✓──>  core_di          hợp đồng nằm ở đây
-feature_b  ──✓──>  core_di          implementation đăng ký theo hợp đồng đó
+feature_a  ──✓──>  b_api            hợp đồng module B dành cho feature khác nằm ở đây
+feature_b  ──✓──>  b_api            B implement và đăng ký theo chúng
+ai cũng    ──✓──>  core_di          hợp đồng trung lập với sản phẩm (session, location, routing)
 ```
 
-`core_di` là **DI Hub**: nó chứa interface, không chứa logic. Cả hai phía đều phụ thuộc nó, không
-phía nào phụ thuộc phía kia. Chính điều đó làm cho feature có thể gỡ ra được.
+Một hợp đồng nằm ở một trong hai chỗ trung lập. **Package API của module B** (`modules/<b>/api`,
+`b_api`) chứa những gì tồn tại để *feature khác chạm tới B* — navigator, action handler, một
+widget builder (`auth_api`, `home_api` trong các sample); nó chỉ phụ thuộc foundation và
+Flutter, và feature của B implement nó. **`core_di`**, DI Hub, chỉ chứa thứ trung lập với sản
+phẩm — thứ mà chính platform cần, đặt tên theo nhu cầu đó (phiên đăng nhập, vị trí đăng nhập /
+sau đăng nhập, routing), không bao giờ theo module cung cấp nó. Dù ở đâu, cả hai phía đều phụ
+thuộc hợp đồng, không phía nào phụ thuộc phía kia. Chính điều đó làm cho feature có thể gỡ ra
+được; `arch_check` R3 giữ các luật của package API.
 
 ---
 
@@ -28,11 +35,11 @@ phía nào phụ thuộc phía kia. Chính điều đó làm cho feature có th�
 | :-- | :-- | :-- |
 | Chạy cùng một thao tác nghiệp vụ với feature khác | **UseCase** dùng chung từ `domain_*` | 1 |
 | Đọc/ghi storage, gọi API, ghi log | **Core service** (`core_storage`, `core_network`…) | 2 |
-| Phản ứng liên tục theo state của feature khác (login/logout…) | **Agnostic stream** trên `core_di` | 3 |
+| Phản ứng liên tục theo state của feature khác (login/logout…) | **Agnostic stream** — trên `core_di` khi trung lập với sản phẩm (session), còn lại ở `<id>_api` của module sở hữu | 3 |
 | Lưu một tuỳ chọn UI thuần (theme, ngôn ngữ) | **Bỏ qua Domain** qua interface storage ở `core_di` | 4 |
-| Nhúng widget mà chỉ feature khác dựng được | **Widget builder interface** trên `core_di` | 5 |
-| Kích hoạt một hành động UI một-lần do feature khác sở hữu (logout…) | **Action handler** trên `core_di` | 6 |
-| Chỉ đơn giản là điều hướng sang màn của feature khác | **Navigator interface** — xem [`04_routing.md`](04_routing.md) | — |
+| Nhúng widget mà chỉ feature khác dựng được | **Widget builder interface** trong `<id>_api` của module sở hữu | 5 |
+| Kích hoạt một hành động UI một-lần do feature khác sở hữu (logout…) | **Action handler** trong `<id>_api` của module sở hữu | 6 |
+| Chỉ đơn giản là điều hướng sang màn của feature khác | **Navigator interface** trong `<id>_api` của module sở hữu — xem [`04_routing.md`](04_routing.md) | — |
 
 ---
 
@@ -82,32 +89,32 @@ BLoC. Không bên nào được import bên kia, và cũng không nên biết b�
 ### Bước 1 — interface trung lập ở `core_di`
 
 Code thật từ
-[`platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart):
+[`platform/foundation/contracts/lib/src/session/i_session_status_stream.dart`](../../../platform/foundation/contracts/lib/src/session/i_session_status_stream.dart):
 
 ```dart
-abstract class IAuthStatusStream {
-  /// Emits on every authentication state change; `null` means signed out.
-  Stream<AuthPrincipal?> get authStatusStream;
+abstract class ISessionStatusStream {
+  /// Emits on every session change; `null` means signed out.
+  Stream<SessionPrincipal?> get sessionStatusStream;
 
   /// The currently signed-in principal, or `null` when signed out.
   ///
-  /// Read this for the state at subscription time — [authStatusStream] is a
+  /// Read this for the state at subscription time — [sessionStatusStream] is a
   /// broadcast stream and does not replay its last value to new listeners.
-  AuthPrincipal? get currentUser;
+  SessionPrincipal? get currentUser;
 }
 ```
 
 Hai quyết định thiết kế đáng hiểu rõ:
 
-**Vì sao là `AuthPrincipal` chứ không phải `UserEntity`.** Hợp đồng ở `core_di` không được gọi
+**Vì sao là `SessionPrincipal` chứ không phải `UserEntity`.** Hợp đồng ở `core_di` không được gọi
 tên một kiểu thuộc package `domain_*` (`.agents/AGENTS.md` §8.4): import đó khiến mọi bên tiêu thụ
 phụ thuộc `domain_auth` ngay lúc biên dịch, và `getItOrNull` không gỡ được điều đó. Vì vậy `core_di`
 sở hữu một value type nhỏ,
-[`AuthPrincipal`](../../../platform/foundation/contracts/lib/src/agnostic_streams/auth_principal.dart), và feature
+[`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), và feature
 auth thu hẹp entity của mình về kiểu đó tại ranh giới (`toPrincipal` ở bước 2). Hợp đồng cố ý nhỏ
 hơn entity — bên tiêu thụ chỉ hỏi *ai đang đăng nhập* sẽ không bao giờ thấy phần còn lại.
 
-**Vì sao có `currentUser` bên cạnh stream.** `authStatusStream` là stream *broadcast*: nó không
+**Vì sao có `currentUser` bên cạnh stream.** `sessionStatusStream` là stream *broadcast*: nó không
 phát lại giá trị cuối cho listener mới. Một bên đăng ký sau khi đã đăng nhập sẽ "mù" cho tới lần
 thay đổi kế tiếp, nên nó đọc `currentUser` để lấy state tại thời điểm đăng ký.
 
@@ -117,17 +124,17 @@ Code thật từ
 [`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
 
 ```dart
-/// Implementation of [IAuthStatusStream] provided by `feature_auth`.
+/// Implementation of [ISessionStatusStream] provided by `feature_auth`.
 @singleton
-class AuthStatusStreamImpl implements IAuthStatusStream {
-  final _controller = StreamController<AuthPrincipal?>.broadcast();
-  AuthPrincipal? _currentUser;
+class AuthStatusStreamImpl implements ISessionStatusStream {
+  final _controller = StreamController<SessionPrincipal?>.broadcast();
+  SessionPrincipal? _currentUser;
 
   @override
-  Stream<AuthPrincipal?> get authStatusStream => _controller.stream;
+  Stream<SessionPrincipal?> get sessionStatusStream => _controller.stream;
 
   @override
-  AuthPrincipal? get currentUser => _currentUser;
+  SessionPrincipal? get currentUser => _currentUser;
 
   /// Called by `feature_auth` when the session settles.
   void updateAuthStatus(UserEntity? user) {
@@ -137,9 +144,9 @@ class AuthStatusStreamImpl implements IAuthStatusStream {
   }
 
   /// The one place `UserEntity` is narrowed for the outside world.
-  static AuthPrincipal? toPrincipal(UserEntity? user) {
+  static SessionPrincipal? toPrincipal(UserEntity? user) {
     if (user == null) return null;
-    return AuthPrincipal(
+    return SessionPrincipal(
       id: user.id,
       displayName: user.name,
       email: user.email,
@@ -161,7 +168,7 @@ void initMicroPackage() {}
 @module
 abstract class AuthDiModule {
   @singleton
-  IAuthStatusStream bindIAuthStatusStream(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) => impl;
 }
 ```
 
@@ -178,26 +185,26 @@ Code thật từ
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._authStatusStream)
+    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
+  HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) {
     // …
   }
 
-  final IAuthStatusStream? _authStatusStream;
-  StreamSubscription<AuthPrincipal?>? _subscription;
+  final ISessionStatusStream? _sessionStatusStream;
+  StreamSubscription<SessionPrincipal?>? _subscription;
 ```
 
-`feature_home` chỉ phụ thuộc `core_di` — không phụ thuộc `feature_auth`, và cũng không phụ thuộc `domain_auth`: hợp đồng mang `AuthPrincipal`, kiểu do chính `core_di` sở hữu, nên không có package domain nào đi qua ranh giới.
+`feature_home` chỉ phụ thuộc `core_di` — không phụ thuộc `feature_auth`, và cũng không phụ thuộc `domain_auth`: hợp đồng mang `SessionPrincipal`, kiểu do chính `core_di` sở hữu, nên không có package domain nào đi qua ranh giới.
 
-Stream này **tuỳ chọn** có chủ đích. `IAuthStatusStream` do `feature_auth` đăng ký, và một app có thể không ghép nó, nên bloc nhận nó qua `@factoryParam` và route cung cấp — code thật từ [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
+Stream này **tuỳ chọn** có chủ đích. `ISessionStatusStream` do `feature_auth` đăng ký, và một app có thể không ghép nó, nên bloc nhận nó qua `@factoryParam` và route cung cấp — code thật từ [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
 
 ```dart
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -253,10 +260,11 @@ Implementation nằm ở app shell (`platform/shell/adapters/lib/src/theme_stora
 **Dùng khi** feature A phải render một widget mà chỉ feature B biết cách dựng nội dung.
 **Không dùng khi** widget đó là UI dùng chung — thứ đó thuộc về `core_ui_kit`.
 
-Khai hợp đồng builder ở `core_di`:
+Khai hợp đồng builder trong package API của module sở hữu (feature A thêm `profile_api` vào
+`dependencies:` của nó):
 
 ```dart
-// platform/foundation/contracts/lib/src/builders/i_profile_card_builder.dart
+// modules/profile/api/lib/src/builders/i_profile_card_builder.dart
 import 'package:flutter/widgets.dart';
 
 abstract class IProfileCardBuilder {
@@ -280,8 +288,9 @@ return builder?.build(context, userId: id) ?? const SizedBox.shrink();
 logout là ví dụ kinh điển.
 **Không dùng cho** điều hướng thuần (dùng Navigator interface) hay logic domain (dùng UseCase).
 
-Interface — code thật từ
-[`platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart`](../../../platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart):
+Interface — code thật từ package API của module auth,
+[`modules/auth/api/lib/src/actions/i_auth_action_handler.dart`](../../../modules/auth/api/lib/src/actions/i_auth_action_handler.dart)
+(`feature_settings` phụ thuộc `auth_api`, không bao giờ phụ thuộc `feature_auth`):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -295,7 +304,7 @@ Implementation — code thật từ
 [`modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart`](../../../modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart):
 
 ```dart
-import 'package:core_di/core_di.dart';
+import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider/provider.dart';
@@ -379,12 +388,13 @@ sẽ mở app đó trên một màn hình trống.
 
 | Đừng | Vì sao | Thay bằng |
 | :-- | :-- | :-- |
-| `import 'package:feature_b/...'` từ feature A | Trói cứng hai feature; không feature nào gỡ được | Hợp đồng ở `core_di` |
+| `import 'package:feature_b/...'` từ feature A | Trói cứng hai feature; không feature nào gỡ được | Hợp đồng trong `b_api` (hoặc hợp đồng trung lập ở `core_di`) |
+| Hợp đồng riêng của một module (`AuthNavigator`) đặt trong `core_di` | Platform khi đó gọi tên một module sản phẩm, và giữ một hợp đồng chết khi module bị gỡ | `<id>_api` của module sở hữu |
 | Lộ `Bloc` hay `ChangeNotifier` ra ngoài feature | Ép feature kia phải theo thư viện state của bạn | Mô hình 3 — neutral stream |
 | `getIt<KiểuDoFeatureSởHữu>()` | Ném lỗi khi feature đó bị gỡ | `getItOrNull<T>()` + fallback |
 | Dùng Action Handler để điều hướng | Sai công cụ; mất type-safe route | Navigator interface |
 | Đặt logic nghiệp vụ dùng chung vào `core_ui_kit` | Đó là package UI | Một UseCase ở domain |
-| Hợp đồng `core_di` gọi tên entity của `domain_*` | Mọi bên tiêu thụ phải phụ thuộc package domain đó; trái AGENTS.md §8.4 | Value type do hợp đồng sở hữu (`AuthPrincipal`) |
+| Hợp đồng `core_di` gọi tên entity của `domain_*` | Mọi bên tiêu thụ phải phụ thuộc package domain đó; trái AGENTS.md §8.4 | Value type do hợp đồng sở hữu (`SessionPrincipal`) |
 
 ---
 

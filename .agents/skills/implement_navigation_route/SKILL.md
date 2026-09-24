@@ -13,8 +13,8 @@ Use this skill when requested to: "create a new screen/page and link navigation"
 
 ## 📋 Detailed Steps
 
-### Step 1: Declare Navigator Interface in `core_di`
-Navigation across features must not be performed directly via path strings. Declare a Navigator interface under `platform/foundation/contracts/lib/src/navigators/`:
+### Step 1: Declare the Navigator Interface in the module's API package
+Navigation across features must not be performed directly via path strings. Declare a Navigator interface in the **owning module's API package**, `modules/<id>/api/lib/src/navigators/` (package `<id>_api`; create the package first if the module has none — `docs/en/guides/12_module_isolation.md` § 7). `core_di` holds no module navigator — only product-neutral contracts such as `ISignInLocation` / `IPostSignInLocation`, which the app shell uses instead:
 ```dart
 import 'package:flutter/widgets.dart';
 
@@ -25,9 +25,11 @@ abstract class ProfileNavigator {
 ```
 A navigator holds **only its own feature's routes** — `ProfileNavigator` never gets a
 `toSettings`; a caller wanting Settings asks for `SettingsNavigator`. Real examples:
-`platform/foundation/contracts/lib/src/navigators/home_navigator.dart`, `auth_navigator.dart`.
+`modules/home/api/lib/src/navigators/home_navigator.dart` (`home_api`),
+`modules/auth/api/lib/src/navigators/auth_navigator.dart` (`auth_api`). Regenerate the API
+barrel after adding a file: `dart tools/barrel_generator/generate.dart modules/<id>/api/lib`.
 
-**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — put them in `feature_settings`, and add a `SettingsNavigator` contract to `core_di` only once another module needs to navigate there. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
+**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — put them in `feature_settings`, and add a `SettingsNavigator` contract to a `settings_api` package only once another module needs to navigate there. The caller lists `<id>_api` in its `dependencies:` — never the other feature (`arch_check` R3). `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
 
 ### Step 2: Put the path constants in `utils/`
 
@@ -62,9 +64,9 @@ Instantiate the controller **in the route's `build`**, never inside the `Page`:
 Widget build(BuildContext context, GoRouterState state) {
   return BlocProvider(
     // Auth is optional: an app composed without `feature_auth` registers
-    // no IAuthStatusStream, and Home then shows the signed-out state.
+    // no ISessionStatusStream, and Home then shows the signed-out state.
     create: (_) => getIt<HomeProfileBloc>(
-      param1: getItOrNull<IAuthStatusStream>(),
+      param1: getItOrNull<ISessionStatusStream>(),
     ),
     child: const HomePage(),
   );
@@ -131,13 +133,13 @@ The shell must stay buildable when any feature package is deleted. It talks to c
 
 | Shell need | Contract | Registered by |
 | :--- | :--- | :--- |
-| `GoRouter.refreshListenable` | `IAuthRefreshListenable` | `feature_auth` (`@module` binding `AuthProvider`) |
-| Boot redirect / session + failures | `IAuthSessionState` | `feature_auth` (same module) |
+| `GoRouter.refreshListenable` | `ISessionRefreshListenable` | `feature_auth` (`@module` binding `AuthProvider`) |
+| Boot redirect / session + failures | `ISessionState` | `feature_auth` (same module) |
 | Dart splash widget | `IAppSplashScreen` | `feature_splash` |
 | Provider/Bloc scopes above the router | `IAppTreeWrapper` | any feature; shell folds them by `order` |
 
-- `refreshListenable: getItOrNull<IAuthRefreshListenable>()` — **not** `AuthProvider`.
-- `NavigatorWrapperWidget` drives the first-frame boot redirect through `IAuthSessionState`.
+- `refreshListenable: getItOrNull<ISessionRefreshListenable>()` — **not** `AuthProvider`.
+- `NavigatorWrapperWidget` drives the first-frame boot redirect through `ISessionState`.
 - Splash is managed by `MainScope`, **not** a GoRouter route; absent `IAppSplashScreen` the
   app falls back to the native splash.
 - Impl classes: `*NavigatorImpl` in `*_navigator_impl.dart` — never `I*Navigator`.

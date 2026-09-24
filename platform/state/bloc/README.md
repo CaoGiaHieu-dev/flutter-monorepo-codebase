@@ -116,7 +116,7 @@ Widget build(BuildContext context) {
     listener: (context, state) {
       state.maybeWhen(
         success: (user) {
-          // Another feature's navigator: always `getItOrNull` (arch_check R8).
+          // Another module's navigator (from its `home_api`): always `getItOrNull` (arch_check R8).
           getItOrNull<HomeNavigator>()?.toHome(context);
         },
         error: (failure) {
@@ -130,7 +130,7 @@ Widget build(BuildContext context) {
 }
 ```
 
-> This is the general pattern. For this template's own sign-in flow the **app shell** navigates when the session changes (`NavigatorWrapperWidget` listens to `IAuthSessionState`), so the real login screen does not navigate itself.
+> This is the general pattern. For this template's own sign-in flow the **app shell** navigates when the session changes (`NavigatorWrapperWidget` listens to `ISessionState`), so the real login screen does not navigate itself.
 
 ---
 
@@ -224,9 +224,9 @@ BlocBuilder<LoginBloc, LoginState>(
 This monorepo runs **more than one state-management library**.
 Say your feature uses **BLoC**, but needs to react to changes in another feature that uses **Provider** (or the other way round).
 **NEVER** import one's Bloc or Provider directly into the other's code.
-**USE neutral streams**: a neutral interface in `core_di` (for example `IAuthStatusStream`, exposing a `Stream<AuthPrincipal?>` and `currentUser`), whose implementation the owning feature registers in GetIt; your `BaseBloc` listens to that stream instead of to a Provider.
+**USE neutral streams**: a neutral interface in `core_di` (for example `ISessionStatusStream`, exposing a `Stream<SessionPrincipal?>` and `currentUser`), whose implementation the owning feature registers in GetIt; your `BaseBloc` listens to that stream instead of to a Provider.
 
-The real example: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) takes an `IAuthStatusStream?` through `@factoryParam` — the route passes `getItOrNull<IAuthStatusStream>()`, so Home still works in an app composed without `feature_auth` — and cancels its subscription in `close()`.
+The real example: `HomeProfileBloc` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`) takes an `ISessionStatusStream?` through `@factoryParam` — the route passes `getItOrNull<ISessionStatusStream>()`, so Home still works in an app composed without `feature_auth` — and cancels its subscription in `close()`.
 
 *(See the full architecture in [`docs/en/guides/10_cross_feature.md`](../../../docs/en/guides/10_cross_feature.md) — Model 3: Agnostic Stream.)*
 
@@ -252,9 +252,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );

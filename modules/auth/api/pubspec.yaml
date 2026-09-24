@@ -1,0 +1,17 @@
+name: auth_api
+description: "Public API of the auth module — the contracts other features may depend on (sample)"
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.13.3 <4.0.0"
+  flutter: ">=3.47.4"
+
+resolution: workspace
+
+# An API package holds contracts only: no DI module, no code generation, and
+# no dependency on this module's domain/data/feature or on any other module
+# (arch_check R3). Flutter is here for `BuildContext` alone.
+dependencies:
+  flutter:
+    sdk: flutter

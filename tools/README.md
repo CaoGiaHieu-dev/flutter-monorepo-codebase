@@ -16,7 +16,7 @@ Full reference (arguments, exit codes, failure modes of each tool): [`docs/en/re
 tools/
 ├── pubspec.yaml                     # The core_tools package (a workspace member)
 ├── arch_check/                      # 🛡️ Enforces the layering rules (CI Gate 1)
-│   └── check.dart                   # R1-R10: dependency direction, pure-Dart domain, feature boundaries, scaling through context…
+│   └── check.dart                   # R1-R11: dependency direction, pure-Dart domain, feature boundaries, scaling through context…
 ├── composer/                        # 🧩 Composes apps from app_manifest.yaml (CI Gate 0)
 │   ├── composer.dart                # sync / verify / list — generates the workspace list, app dependencies, injection.dart
 │   └── bootstrap.dart               # Partial checkout: prunes absent members so `pub get` resolves (no package imports)
@@ -78,7 +78,7 @@ tools/
 
 ### 🛡️ Architecture Check (layering rules)
 ```bash
-# Check the 10 architecture rules (R1–R10) — exits 1 on a violation (CI-ready):
+# Check the 11 architecture rules (R1–R11) — exits 1 on a violation (CI-ready):
 dart tools/arch_check/check.dart
 
 # Full description of each rule:

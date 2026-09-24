@@ -1,6 +1,7 @@
+import 'package:auth_api/auth_api.dart';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
-import 'package:core_di/core_di.dart';
+import 'package:home_api/home_api.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/extensions.dart';
@@ -11,6 +12,12 @@ import '../extensions/extensions.dart';
 /// build without `feature_auth`, falls back to `HomeNavigator` — so first
 /// launch never strands the user here. Only with neither module composed does
 /// it do nothing. That null-tolerance is what makes a feature removable.
+///
+/// Both navigators come from the owning modules' API packages (`auth_api`,
+/// `home_api`), never from `feature_auth` / `feature_home`: a feature may
+/// depend on another module's `*_api` only (arch_check R3). Removing the auth
+/// module keeps `auth_api` while this package still imports it
+/// (`remove_sample` reports it), so the lookup above still compiles.
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
 

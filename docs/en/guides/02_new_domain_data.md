@@ -78,7 +78,7 @@ part 'user_entity.freezed.dart';
 ///
 /// Add the fields your product needs; whatever you add here is visible to
 /// everything that can see this entity, which is why the cross-module
-/// contract carries a narrower `AuthPrincipal` instead of this type.
+/// contract carries a narrower `SessionPrincipal` instead of this type.
 ///
 /// No `fromJson`: parsing a payload is the data layer's job (`UserModel`).
 @freezed

@@ -81,13 +81,13 @@ class AuthPath {
 | Package | Mối quan tâm | State management | Đăng ký |
 |:---|:---|:---|:---|
 | `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation` |
-| `feature_auth` | Đăng nhập (một màn hình) | **Provider** | `IFeatureRouteModule`, `AuthNavigator`, `IAuthStatusStream`, `IAuthSessionState`, `IAuthRefreshListenable`, `IAuthActionHandler`, `IAppTreeWrapper` |
+| `feature_auth` | Đăng nhập (một màn hình) | **Provider** | `IFeatureRouteModule`, `ISignInLocation`, `ISessionStatusStream`, `ISessionState`, `ISessionRefreshListenable`, `IAppTreeWrapper` (`core_di`); `AuthNavigator`, `IAuthActionHandler` (`auth_api` của chính nó) |
 | `feature_dashboard` | Khung chrome điều hướng (bottom bar / rail) | không | `DashboardRouteModule` |
-| `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `HomeNavigator` |
+| `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `IPostSignInLocation` (`core_di`); `HomeNavigator` (`home_api` của chính nó) |
 | `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Màn hình splash | không | `IAppSplashScreen` — **không phải route**; do `MainScope` hiển thị |
 
-Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocalization` của mình — trừ `feature_dashboard`, vốn không có chuỗi nào. `IAuthSessionGateway` do `data_auth` đăng ký, không phải feature.
+Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocalization` của mình — trừ `feature_dashboard`, vốn không có chuỗi nào. `ISessionGateway` do `data_auth` đăng ký, không phải feature. `feature_onboarding` import `auth_api` và `home_api`, `feature_settings` import `auth_api` — những cạnh liên module duy nhất, mỗi cạnh trỏ tới một package API, không bao giờ tới feature khác.
 
 `feature_auth` và `feature_home` được xây trên **hai** hướng state khác nhau một cách có chủ đích, để template minh hoạ cả hai. Xem [state management](../guides/03_state_management.md) — và hãy đọc phần so sánh trung thực ở đó trước khi chọn, vì hai nhánh **không** được trang bị ngang nhau.
 
@@ -239,9 +239,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -282,8 +282,8 @@ Kiểu của nhánh BLoC được đặt tên là `BlocViewState<T>` chứ khôn
 ```dart
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._authStatusStream)
+    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
+  HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) { … }
 ```
 

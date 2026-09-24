@@ -96,7 +96,9 @@ void main() {
         ..registerSingleton<AppBootStorage>(
           memoryBootStorage(viewedOnboard: true),
         )
-        ..registerSingleton<HomeNavigator>(NoopHomeNavigator())
+        ..registerSingleton<IPostSignInLocation>(
+          FakePostSignInLocation('/home'),
+        )
         ..registerSingleton<INavDestinationModule>(
           FakeDestination(
             path: '/home',

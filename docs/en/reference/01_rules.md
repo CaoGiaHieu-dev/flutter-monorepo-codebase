@@ -37,10 +37,26 @@ Only these three exist. Adding a fourth requires updating `AGENTS.md` and the al
 > [!NOTE]
 > These three are the only `platform → domain_core` edges, and every other platform edge follows the group direction (`docs/en/architecture/02_core.md` § 0): `ui` never depends on `state`, `infra` never on another infra package, and the foundation never on `ui` or a transport. `core_ui_kit` declares no state-management package — `LoadMoreListView` lives in `provider_state_management` (`state → ui` is the allowed direction) — and `provider_state_management` still ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`. The kernel names no Dio type: `core_network` contributes `DioFailureClassifier` through `ErrorHandler.registerClassifier`.
 
+### Platform group direction (R11)
+
+Inside `platform/`, `arch_check` rule **R11** holds the group DAG. The group is the folder — `platform/<group>/<package>` — and a package outside a known group folder is itself a violation. Only `dependencies:` are checked: a dev dependency never ships (`platform_app_shell`'s tests use `core_storage` for fakes).
+
+| Group (folder) | May declare platform packages of |
+|---|---|
+| `layers/domain` (`domain_core`) | nothing — the leaf |
+| `foundation` | foundation, `layers/domain` |
+| `layers/data` (`data_core`, any other `layers/*`) | foundation, `layers/domain` |
+| `infra` | foundation, layers — never another infra package |
+| `ui` | foundation, ui |
+| `state` | foundation, layers, ui |
+| `shell` | every group |
+
+R11 allows an edge by group; R1 still demands its approved list for any edge into `domain_core` / `data_core` from a core package.
+
 **Verify**
 
 ```bash
-# R1 — the authoritative check; prints the approved edges on every run
+# R1 + R11 — the authoritative check; prints the approved edges on every run
 dart tools/arch_check/check.dart
 
 # core must never name a feature, data or product domain package
@@ -163,7 +179,7 @@ Full walkthrough: [`../guides/06_storage.md`](../guides/06_storage.md).
 
 **Why.** GetIt throws `"<Type> is not registered"` during boot. Modules initialise in the order declared in `apps/mobile/lib/di/injection.dart`, which is generated from the manifest's `di_groups`: `core` (before), then — after the app's own registrations — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` has no `notifications` group.
 
-Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_shell_adapters` registers (first in the `shell` group) — swap the two groups and boot throws. And `notifications` after the app's own registrations: `PushNotificationService` is eager and injects the `FirebaseOptions` the app registers, so `core_notifications` cannot sit in `core`. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `IAuthSessionGateway` at call time and has no such dependency.)
+Two constraints are live here. `shell` before `ui`: `ThemeProvider` in `core_base_ui` injects `IThemeStorage`, which `platform_shell_adapters` registers (first in the `shell` group) — swap the two groups and boot throws. And `notifications` after the app's own registrations: `PushNotificationService` is eager and injects the `FirebaseOptions` the app registers, so `core_notifications` cannot sit in `core`. (`NetworkConfigImpl` used to be the example, injecting `AuthLocalDataSource` from a later module; it now reads the session through `ISessionGateway` at call time and has no such dependency.)
 
 > [!CAUTION]
 > **`flutter analyze` cannot detect this class of bug.** It only appears at runtime, on a real boot.
@@ -186,7 +202,7 @@ grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/l
 
 **Why.** A template whose features cannot be deleted is not a template. Removability is also the practical proof that the boundaries are real.
 
-**Enforced by machine.** `arch_check` **R8** blocks a throwing `getIt` / `getAll` on a contract only a module implements, and **R10** blocks a module *import* anywhere in an app except `injection.dart`. R10 exists because R8 alone was not enough: `getItOrNull` guards a lookup, while an unresolved import fails at compile time, before any lookup runs. `network_config_impl.dart` imported `data_auth` and `domain_auth` for exactly that reason, and made the auth module unremovable while this section said otherwise.
+**Enforced by machine.** `arch_check` **R3** blocks a feature importing another feature (or any data package), **R8** blocks a throwing `getIt` / `getAll` on a contract only a module implements, and **R10** blocks a module *import* — its API package included — anywhere in an app except `injection.dart`. R10 exists because R8 alone was not enough: `getItOrNull` guards a lookup, while an unresolved import fails at compile time, before any lookup runs. `network_config_impl.dart` imported `data_auth` and `domain_auth` for exactly that reason, and made the auth module unremovable while this section said otherwise.
 
 Everything the shell consumes at runtime resolves through a `core_di` contract with a fallback:
 
@@ -199,7 +215,7 @@ Everything the shell consumes at runtime resolves through a `core_di` contract w
 > [!WARNING]
 > `getAll<T>()` and `getAllOrEmpty<T>()` differ exactly here. `getAll` throws on an unregistered type, so a bare `getAll<IFeatureLocalization>()` crashes during `MaterialApp` construction in any build where no feature contributes one.
 
-**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract implemented by a package under `modules/` — any layer: `IAuthSessionGateway` in `data_auth` counts as much as a feature's navigator — keyed by the implementing module, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
+**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract implemented by a package under `modules/` — any layer: `ISessionGateway` in `data_auth` counts as much as a feature's navigator — keyed by the implementing module, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
 
 ```bash
 dart tools/arch_check/check.dart      # rule R8 — Gate 1 of pr_quality_check.yml
@@ -213,7 +229,20 @@ This is not a style rule. The throwing lookup **compiles**: the calling package 
 2. `dart tools/composer/composer.dart sync`, which regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list;
 3. `flutter pub get` + `dart run build_runner build --workspace`.
 
-The `injection.dart` imports are the shell's **only intentional hard reference** to features — as the composition root it must name what it composes. Every other consumer goes through `core_di`.
+The `injection.dart` imports are the shell's **only intentional hard reference** to features — as the composition root it must name what it composes. Every other consumer goes through `core_di` (product-neutral contracts) or the owning module's API package.
+
+### Module API packages
+
+A contract that exists so one feature can reach **another module** — its navigator, its action handlers — lives in that module's API package, `modules/<id>/api`, named `<id>_api` (`auth_api`, `home_api`). `core_di` keeps only product-neutral contracts, named for what the platform needs: the session (`ISessionState`, `ISessionStatusStream`, …) and where the shell sends a signed-out / signed-in user (`ISignInLocation`, `IPostSignInLocation`).
+
+| Rule | Enforced by |
+|---|---|
+| An API package depends on `platform/foundation/*` and Flutter/pub packages only — not its own module's domain/data/feature, not another module or its API, not another platform group | `arch_check` R3 (imports and pubspec) |
+| A feature may import another module's API package, never its feature or data package | `arch_check` R3 |
+| A type declared in an API package and implemented only under `modules/` is resolved with `getItOrNull` / `getAllOrEmpty` outside its module | `arch_check` R8 |
+| No platform package and no app file (bar `injection.dart`) imports an API package | `arch_check` R1, R10 |
+
+An API package is composed as the `api` layer (`- { id: auth, layers: [api, domain, data, feature] }`): a workspace member, never an app dependency or an `injection.dart` entry. `remove_sample <id>` removes it with its module — unless a package outside the bundle still imports it; then it is **kept**, the importers are named, and the manifests keep `{ id: <id>, layers: [api] }`, so the build still compiles and the consumers' lookups return null.
 
 **Verify**
 
@@ -414,15 +443,15 @@ Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. R
 | 2 | Infrastructure | core service (`core_storage`, `core_network`, …) |
 | 3 | Cross-feature state | agnostic `Stream` / `ValueListenable` interface on `core_di`, dual-registered |
 | 4 | Pure UI prefs (theme, locale) | bypass Domain → `core_di` storage interface → app-shell impl |
-| 5 | Embedding another feature's widget | builder interface on `core_di` |
-| 6 | Cross-feature UI action | `I*ActionHandler` in `core_di/src/actions/` |
+| 5 | Embedding another feature's widget | builder interface in the owning module's `<id>_api` |
+| 6 | Cross-feature UI action | `I*ActionHandler` in the owning module's `modules/<id>/api/lib/src/actions/` |
 
 **Dual registration** (model 3): the owning feature registers the concrete class as `@singleton`, then binds the interface via a DI `@module`:
 
 ```dart
 @module
 abstract class AuthModule {
-  IAuthStatusStream bind(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bind(AuthStatusStreamImpl impl) => impl;
 }
 ```
 
@@ -479,6 +508,8 @@ The single root `analysis_options.yaml` applies to every package. On top of `flu
 | core ⇏ feature / data / product domain | `dart tools/arch_check/check.dart` (R1) |
 | Removable contracts resolved optionally | `dart tools/arch_check/check.dart` (R8) |
 | The app shell imports no module | `dart tools/arch_check/check.dart` (R1 for `platform_app_shell` / `platform_shell_adapters`, R10 for `apps/*`) |
+| Platform group direction | `dart tools/arch_check/check.dart` (R11) |
+| Module API packages depend on the foundation only; features import other modules' APIs, never their features | `dart tools/arch_check/check.dart` (R3) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |
 
 ---

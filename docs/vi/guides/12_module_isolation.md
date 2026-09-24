@@ -41,7 +41,7 @@ git submodule add <auth-repo-url> modules/auth
 git commit -m "chore: auth becomes a submodule"
 ```
 
-Không có gì khác phải đổi. `app_manifest.yaml` vẫn ghi `- { id: auth, layers: [domain, data, feature] }`, vì manifest gọi tên module chứ không gọi tên thư mục.
+Không có gì khác phải đổi. `app_manifest.yaml` vẫn ghi `- { id: auth, layers: [api, domain, data, feature] }`, vì manifest gọi tên module chứ không gọi tên thư mục.
 
 > [!IMPORTANT]
 > Chỉ làm điều này **sau khi** module đã ổn định. Di chuyển một file giữa hai module sẽ thôi là một thao tác rename và trở thành xoá-rồi-thêm trên hai repository, với phần review bị chẻ đôi.
@@ -142,8 +142,35 @@ Các module sản phẩm thay đổi cùng nhau và ship cùng nhau. Submodule g
 ## 6. Cô lập **không** mua cho bạn những gì
 
 - **Không phải ranh giới bảo mật.** Quyền truy cập submodule là quyền trên repository. Ai đã có bản checkout thì có source; cơ chế này chặn việc vô tình phụ thuộc lẫn nhau và việc đọc lướt qua, không chặn được người cố tình.
-- **Không miễn cho bạn khỏi hợp đồng.** Một module vẫn chỉ nói chuyện với module khác qua `core_di`. Cái thay đổi là: phá vỡ một hợp đồng giờ hiện ra thành một PR xuyên repository thay vì một chỉnh sửa âm thầm.
+- **Không miễn cho bạn khỏi hợp đồng.** Một module vẫn chỉ nói chuyện với module khác qua `core_di` và package API của module kia (§ 7). Cái thay đổi là: phá vỡ một hợp đồng giờ hiện ra thành một PR xuyên repository thay vì một chỉnh sửa âm thầm.
 - **Không phải kỷ luật tuỳ chọn.** Mọi rào chắn khiến checkout từng phần khả thi — lookup tuỳ chọn của R8, lệnh cấm import của R10, phân giải theo tên — đều ngừng hoạt động ngay khi ai đó thêm một import trực tiếp. Chính vì thế mỗi rào chắn đều đánh hỏng build chứ không chỉ nằm trong một buổi review.
+
+---
+
+## 7. Package API của một module
+
+`core_di` chỉ giữ những hợp đồng mà chính platform cần, đặt tên theo thứ nó cần — một phiên đăng nhập (`ISessionState`), một vị trí (`ISignInLocation`, `IPostSignInLocation`). Một hợp đồng tồn tại để *một feature chạm tới module khác* thuộc về module đó: package API của nó, `modules/<id>/api`, tên `<id>_api`. Các sample có hai — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) và `home_api` (`HomeNavigator`). Không có loại generator nào tạo nó; nó chỉ gồm ba file.
+
+```bash
+# modules/payment/api/pubspec.yaml — name: payment_api, resolution: workspace,
+#   dependencies: flutter (để có BuildContext) và, chỉ khi cần, core_di.
+# modules/payment/api/lib/src/navigators/payment_navigator.dart — interface.
+# Sau đó: khai báo layer, compose, và sinh barrel.
+#   apps/<id>/app_manifest.yaml:  - { id: payment, layers: [api, domain, data, feature] }
+dart tools/composer/composer.dart sync
+flutter pub get
+dart tools/barrel_generator/generate.dart modules/payment/api/lib
+```
+
+Rồi implement nó trong feature sở hữu (`@Singleton(as: PaymentNavigator)` trong `routing/`, với `payment_api` trong `dependencies:` của nó) và thêm `payment_api` vào `dependencies:` của từng nơi dùng. Nơi dùng resolve nó bằng `getItOrNull`.
+
+Những gì `arch_check` giữ bạn tuân theo:
+
+- **R3** — package API chỉ phụ thuộc `platform/foundation/*` và package Flutter/pub: không phụ thuộc domain/data/feature của chính module nó, không phụ thuộc module khác hay API của module khác, không phụ thuộc group platform khác. Một feature được import API của module khác, không bao giờ import package feature hay data của nó.
+- **R8** — một type khai báo trong package API và chỉ được implement dưới `modules/` phải resolve bằng `getItOrNull` bên ngoài module của nó.
+- **R1 / R10** — không package platform nào và không file app nào (trừ `injection.dart`) import nó.
+
+Layer `api` không cần mục `di_groups`: `composer` biến nó thành workspace member, không bao giờ thành dependency của app hay một dòng trong `injection.dart`. Trong bản checkout từng phần (§ 3), module mà bạn import API của nó cũng phải được checkout — package API nằm bên trong nó. `remove_sample <id>` giữ lại package API mà package khác vẫn import, báo ai đang import, và để mục manifest thành `{ id: <id>, layers: [api] }`; chạy lại khi không còn ai import package đó.
 
 ---
 

@@ -26,7 +26,7 @@ flutter-monorepo-codebase/
 ├── platform/                      # Infra team's ground — every module may depend on it
 │   ├── foundation/                # Pure base everything builds on: getIt/errors, DI contracts, Flutter helpers
 │   │   ├── kernel/                # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
-│   │   ├── contracts/             # core_di: DI Hub — every cross-module contract lives here
+│   │   ├── contracts/             # core_di: DI Hub — product-neutral contracts (session, locations, routing)
 │   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
 │   ├── layers/                    # Base contracts of the domain and data layers
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
@@ -47,12 +47,13 @@ flutter-monorepo-codebase/
 │       ├── adapters/              # platform_shell_adapters: NetworkConfigImpl, theme/language storage adapters, AppBootStorage
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, app providers — shared by every app
 ├── modules/                       # One vertical slice per bounded context, one per team
-│   ├── auth/                      # Sample: the full three-layer slice
+│   ├── auth/                      # Sample: the full three-layer slice, plus its API package
+│   │   ├── api/                   # auth_api: AuthNavigator, IAuthActionHandler — for other features
 │   │   ├── domain/                # Entities, UseCases, Repository interfaces — pure Dart
 │   │   ├── data/                  # Models, DataSources, RepositoryImpl
 │   │   └── feature/               # UI + Provider, login only
 │   ├── cache/                     # Sample: a package-owned Drift database (domain + data, no UI)
-│   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
+│   ├── home/{api,feature}/        # Sample: BLoC, private Freezed events, a nav destination; home_api: HomeNavigator
 │   ├── settings/feature/          # Sample: consuming another module's contract
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
@@ -83,7 +84,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Imports no module |
 | `platform_shell_adapters` | `platform/shell/adapters` | The shell's infrastructure adapters: the theme/language/boot storage adapters and `NetworkConfigImpl` (+ its `SslPinningConfig` binding). Imports no module |
 | `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
-| `core_di` | `platform/foundation/contracts` | The **DI hub**: Navigator interfaces, `I*ActionHandler`, routing contracts (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, agnostic stream interfaces, `IThemeStorage` / `ILanguageStorage` |
+| `core_di` | `platform/foundation/contracts` | The **DI hub**, product-neutral contracts only: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, the session contracts (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. A module's navigator / action handler lives in its own `modules/<id>/api` package |
 | `core_base_ui` | `platform/ui/design_system` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
 | `core_ui_kit` | `platform/ui/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation (incl. `BottomTransitionPage`) + `SharedUiConstants` |
 | `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract, `DioFailureClassifier` (Dio → `AppFailure`) |
@@ -120,7 +121,7 @@ One bounded UI concern per package. A feature may depend on `domain_*`, `core_di
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `feature_auth` | `modules/auth/feature` | A single login page, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl`, `AuthStatusStreamImpl` |
+| `feature_auth` | `modules/auth/feature` | A single login page, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl` (implementing `auth_api`), `AuthStatusStreamImpl`, `AuthSignInLocation` |
 | `feature_home` | `modules/home/feature` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination` |
 | `feature_settings` | `modules/settings/feature` | Settings tab, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Onboarding flow, `IAppEntryLocation` implementation |
@@ -226,12 +227,12 @@ Consequences you must know:
 | Add an API endpoint | `modules/<name>/data/lib/src/data_sources/remote/` + `utils/*_api_constants.dart` | [../guides/08_networking.md](../guides/08_networking.md) |
 | Persist a key/value | The **owning** package's `utils/*_storage_keys.dart` | [../guides/06_storage.md](../guides/06_storage.md) |
 | Add a database table | The owning package's own `src/database/tables/` (reference: `modules/cache/data/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
-| Add a route / navigate between features | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
+| Add a route / navigate between features | `<feature>/src/routing/` + the target's `modules/<id>/api/lib/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Register something in DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
 | Change colors / spacing / typography | `platform/ui/design_system/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Add a translated string | `modules/<name>/feature/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Share a widget between features | `platform/ui/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
-| Let feature A trigger something in feature B | `core_di/src/actions/` or `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
+| Let feature A trigger something in feature B | B's `modules/<id>/api/lib/src/actions/`, or `core_di/src/session/` for the session | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Bump a dependency version | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
 | Change the CI pipeline | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |
 

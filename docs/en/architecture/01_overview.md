@@ -47,7 +47,8 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Composition root: `app_manifest.yaml`, the generated `injection.dart`, a one-line `main.dart`, what identifies the app (Firebase options) | everything | — |
 | **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Boot sequence, router assembly, material wrapper, app state (`platform_app_shell`); `NetworkConfigImpl`, storage adapters, boot flag (`platform_shell_adapters`) — shared by every app | core packages | any module (`arch_check` R1) |
-| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, one state-management package | `data_*`, another feature package |
+| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, one state-management package, another module's `*_api` | `data_*`, another feature package |
+| **Module API** | `modules/*/api` | The contracts other features use to reach the module (`auth_api`: `AuthNavigator`, `IAuthActionHandler`) — interfaces only, implemented by the module's feature | `platform/foundation/*`, Flutter | its own module's domain/data/feature, any other module, any other platform group (`arch_check` R3) |
 | **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
 | **Core** | `platform/<group>/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `modules/*/feature`, `modules/*/data` |
@@ -57,7 +58,7 @@ Each layer has a dedicated page:
 
 ### Inside `platform/`: six groups
 
-The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell and its infrastructure adapters). Only the folder changed — every package keeps its name. Dependencies point inward: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← everything in platform/`; no infra package depends on another, `ui` never on `state`, `infra` or `shell`, and nothing in `platform/` depends on `modules/`. The package graph follows it with no exception. What belongs in each group, and how the last three contrary edges were removed: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
+The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell and its infrastructure adapters). Only the folder changed — every package keeps its name. Dependencies point inward: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← everything in platform/`; no infra package depends on another, `ui` never on `state`, `infra` or `shell`, and nothing in `platform/` depends on `modules/`. The package graph follows it with no exception, and `arch_check` **R11** keeps it that way (the group is read from the folder; `dependencies:` only). What belongs in each group, and how the last three contrary edges were removed: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
 
 ### The Domain purity mandate
 
@@ -110,6 +111,7 @@ team:
 | `platform/` | Infra | Every module depends on it, so a breaking change breaks everyone at once |
 | `platform/foundation/contracts/` | Infra + architects | Cross-module contracts — changing one is a negotiation, not a unilateral edit |
 | `modules/<name>/` | That module's team | All three layers together: the team changing the UI is the team changing the use case behind it |
+| `modules/<name>/api/` | That module's team + its consumers | The module's public surface — other features compile against it, so a change there is a cross-module change |
 | `apps/` | Tech leads | Which modules ship together, and in what order they initialise — a release decision |
 | `apps/*/app_manifest.yaml` | Tech leads + architects | The composition itself. Adding a module here changes what the product *is* |
 

@@ -175,7 +175,7 @@ Widget build(BuildContext context) {
 }
 ```
 
-> In this template `AuthProvider` is a global singleton, and the app shell (`NavigatorWrapperWidget`) **already** toasts sign-in failures through `IAuthSessionState`. The snippet illustrates the API; applied verbatim to `AuthProvider` it would toast twice.
+> In this template `AuthProvider` is a global singleton, and the app shell (`NavigatorWrapperWidget`) **already** toasts sign-in failures through `ISessionState`. The snippet illustrates the API; applied verbatim to `AuthProvider` it would toast twice.
 
 ---
 
@@ -233,7 +233,7 @@ class NewsRoute extends GoRouteDataCustom with $NewsRoute {
 }
 ```
 
-> The proxy layer only connects providers the feature is allowed to see: its own, or `core_*` ones. **Do not** proxy `AuthProvider` from another feature — importing `feature_auth` breaks module isolation. Sign-in state travels through `core_di`'s `IAuthStatusStream`.
+> The proxy layer only connects providers the feature is allowed to see: its own, or `core_*` ones. **Do not** proxy `AuthProvider` from another feature — importing `feature_auth` breaks module isolation. Sign-in state travels through `core_di`'s `ISessionStatusStream`.
 
 ---
 

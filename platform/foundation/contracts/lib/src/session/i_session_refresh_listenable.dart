@@ -4,33 +4,33 @@ import 'package:flutter/foundation.dart';
 ///
 /// `GoRouter.refreshListenable` needs *something that notifies*; it does not
 /// care what. Wiring `AuthProvider` straight into it forced `app_router.dart`
-/// to import `feature_auth` purely for the type, so removing the auth feature
+/// to import `feature_auth` purely for the type, so removing the auth module
 /// broke routing at compile time even though the value was already looked up
 /// with `getItOrNull`.
 ///
 /// ```dart
 /// GoRouter(
-///   refreshListenable: getItOrNull<IAuthRefreshListenable>(),
+///   refreshListenable: getItOrNull<ISessionRefreshListenable>(),
 ///   // …
 /// )
 /// ```
 ///
-/// `refreshListenable` is nullable, so a build without an auth feature simply
+/// `refreshListenable` is nullable, so a build with no session owner simply
 /// passes `null` and the router never refreshes on session changes — correct
 /// behaviour when there are no session changes to react to.
 ///
 /// ## Owner side
 ///
-/// Any `ChangeNotifier` already satisfies [Listenable], so the auth feature's
-/// global controller implements this with no extra code and is bound through a
-/// DI `@module`:
+/// Any `ChangeNotifier` already satisfies [Listenable], so the session
+/// owner's global controller implements this with no extra code and is bound
+/// through a DI `@module`:
 ///
 /// ```dart
 /// @module
 /// abstract class AuthDiModule {
 ///   @lazySingleton
-///   IAuthRefreshListenable bindRefreshListenable(AuthProvider provider) =>
+///   ISessionRefreshListenable bindRefreshListenable(AuthProvider provider) =>
 ///       provider;
 /// }
 /// ```
-abstract class IAuthRefreshListenable implements Listenable {}
+abstract class ISessionRefreshListenable implements Listenable {}

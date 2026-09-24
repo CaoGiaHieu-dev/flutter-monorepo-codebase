@@ -48,6 +48,8 @@ All live in `platform/foundation/contracts/lib/src/routing/`.
 | `IFeatureRouteModule` | Top-level / stack routes under the app shell | No — GoRouter matches by path | auth, onboarding, … |
 | `INavDestinationModule` | One primary destination + its `StatefulShellBranch` | **Yes** — ascending `order` | home, settings, … |
 | `IAppEntryLocation` | First-launch location (`initialLocation` until it has been shown once) | n/a | usually onboarding |
+| `ISignInLocation` | Where the shell sends a signed-out user (boot, sign-out, session loss) | n/a | the session owner — `feature_auth` |
+| `IPostSignInLocation` | Where the shell sends a signed-in user (boot, sign-in); else `fallbackLocation` | n/a | the landing module — `feature_home` |
 | `DashboardRouteModule` | Dashboard chrome (scaffold + bottom bar / rail host) | n/a | **only** `feature_dashboard` |
 
 ### 2.1 `IFeatureRouteModule`
@@ -208,9 +210,9 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) {
     return BlocProvider(
       // Auth is optional: an app composed without `feature_auth` registers
-      // no IAuthStatusStream, and Home then shows the signed-out state.
+      // no ISessionStatusStream, and Home then shows the signed-out state.
       create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<IAuthStatusStream>(),
+        param1: getItOrNull<ISessionStatusStream>(),
       ),
       child: const HomePage(),
     );
@@ -239,9 +241,9 @@ Routes for screens backed by a **global** controller (e.g. `LoginPage` with the 
 
 ## 5. Cross-feature navigation
 
-Feature A must never import Feature B. Navigation crosses the boundary through an interface in `core_di`.
+Feature A must never import Feature B. Navigation crosses the boundary through an interface in **module B's API package** — `modules/<id>/api`, named `<id>_api` — which feature A depends on instead of feature B (`arch_check` R3). `core_di` holds no module's navigator.
 
-**1. Declare** — `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart`:
+**1. Declare** — `modules/auth/api/lib/src/navigators/auth_navigator.dart` (package `auth_api`):
 
 ```dart
 abstract class AuthNavigator {
@@ -251,10 +253,10 @@ abstract class AuthNavigator {
 
 One method per route the feature owns — and only routes it owns.
 
-A **new** file in `core_di` is invisible to every consumer until the barrel exports it — `package:core_di/core_di.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it (never hand-add the `export`; the generator deletes hand-written lines):
+A **new** file in the API package is invisible to every consumer until the barrel exports it — `package:auth_api/auth_api.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it (never hand-add the `export`; the generator deletes hand-written lines). A module with no API package yet gets one first: `docs/en/guides/12_module_isolation.md` § 7.
 
 ```bash
-dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
+dart tools/barrel_generator/generate.dart modules/auth/api/lib
 ```
 
 **2. Implement in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
@@ -267,7 +269,7 @@ class AuthNavigatorImpl implements AuthNavigator {
 }
 ```
 
-**3. Consume from anywhere:**
+**3. Consume from any feature that lists `auth_api` in its `dependencies:`:**
 
 ```dart
 // From any package other than the owner — the owner is removable:
@@ -283,6 +285,7 @@ getIt<AuthNavigator>().toLogin(context);
 - **Never** hardcode a path string or call `GoRouter.of(context).go('/auth/login')` to reach another feature.
 - **`BuildContext` must be passed in directly from the calling widget.** Do not reach for `NavigatorKeys.*.currentContext` or `appRouter.currentContext` — those bypass the widget lifecycle and produce "used after dispose" bugs.
 - Use `getItOrNull` at call sites that must survive the target feature being removed.
+- **The app shell uses no module navigator.** A signed-out user goes to `ISignInLocation.path`, a signed-in one to `IPostSignInLocation.path` — product-neutral `core_di` contracts the session owner and the landing module contribute (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` calls `context.go(path)` itself.
 
 ---
 
@@ -356,9 +359,10 @@ builder: (context, state, navigationShell) {
 | All `INavDestinationModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
 | `DashboardRouteModule` | The destinations render without chrome — `navigationShell` shows the current branch. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
 | `IAppEntryLocation` | Boot starts on `fallbackLocation` — the first tab, else the placeholder branch. With no entry location there is no onboarding to show, so boot goes on to the login check |
-| `HomeNavigator` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
+| `ISignInLocation` | No redirect to a sign-in screen, at boot or on sign-out — correct with no session owner |
+| `IPostSignInLocation` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
 
-There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `HomeNavigator` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
+There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `IPostSignInLocation` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
 
 Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
 
@@ -369,7 +373,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 1. **Path constant** → `lib/src/utils/<feature>_path.dart`.
 2. **Route class** → `lib/src/routing/<feature>_route_module.dart` with `@TypedGoRoute` / `@TypedShellRoute`; create the controller in `build()`.
 3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
-4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`. A feature with no Navigator yet gets a **new** file in `platform/foundation/contracts/lib/src/navigators/` — then run `dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib` so `core_di`'s barrel exports it (§5).
+4. **Cross-feature entry?** Add a method to that module's Navigator interface in its API package (`modules/<id>/api`) and implement it in the feature's `*_navigator_impl.dart`. A module with no Navigator yet gets a **new** file in `modules/<id>/api/lib/src/navigators/` — then run `dart tools/barrel_generator/generate.dart modules/<id>/api/lib` so the API barrel exports it (§5).
 5. **Generate** → `dart run build_runner build --workspace`.
 6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 
@@ -484,7 +488,7 @@ adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settin
 - [ ] Path constants under `src/utils/`, not `routing/`
 - [ ] Controller created in the route's `build()`, page does not re-wrap
 - [ ] `INavDestinationModule.order` sorts the tab into the intended position (ascending sort key, not an index) and is unique
-- [ ] Cross-feature navigation goes through a `core_di` Navigator interface
+- [ ] Cross-feature navigation goes through the target module's `<id>_api` Navigator interface
 - [ ] `BuildContext` passed from the UI, never taken from `NavigatorKeys`
 - [ ] `build_runner` re-run after touching route annotations
 - [ ] Deep links still reach the router only through `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` stay `false` (§9)

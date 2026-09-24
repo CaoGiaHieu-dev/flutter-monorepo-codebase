@@ -10,7 +10,7 @@ permanently, instead of only in a thought experiment:
 |:--|:--|
 | `feature_splash` (`IAppSplashScreen`) | keeps the native splash through boot |
 | `feature_onboarding` (`IAppEntryLocation`) | starts on the first destination and goes straight to the login check |
-| `feature_home` (`HomeNavigator`) | after sign-in, goes to `AppRouter.fallbackLocation` — the settings tab |
+| `feature_home` (`IPostSignInLocation`) | after sign-in, goes to `AppRouter.fallbackLocation` — the settings tab |
 | `feature_dashboard` (`DashboardRouteModule`) | renders the destinations without chrome |
 | `core_notifications` + Firebase | nothing: no `notifications` DI group, no `lib/firebase/` |
 | `cache` (the Drift sample) | no SQLite file is opened at boot |

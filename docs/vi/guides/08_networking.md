@@ -238,7 +238,7 @@ class NetworkConfigImpl implements NetworkConfig {
   final ILanguageStorage _languageStorage;
 
   /// Null in a build that composes no auth module.
-  IAuthSessionGateway? get _session => getItOrNull<IAuthSessionGateway>();
+  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
 
   @override
   String? Function() get getToken => () => _session?.readToken();
@@ -249,7 +249,7 @@ class NetworkConfigImpl implements NetworkConfig {
 
   /// Whether an auth module is composed — without resolving it: resolving
   /// the gateway while `Dio` is being built closes a dependency cycle.
-  bool get _hasSession => getIt.isRegistered<IAuthSessionGateway>();
+  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
 
   @override
   Future<String?> Function()? get onRefreshToken =>
@@ -261,13 +261,13 @@ class NetworkConfigImpl implements NetworkConfig {
 ```
 
 > [!IMPORTANT]
-> `NetworkConfigImpl` không import module nào. Nó đọc token qua `IAuthSessionGateway`, được resolve bằng `getItOrNull` ngay lúc gọi thay vì inject, nên nó dựng được dù build có module auth hay không, và không thứ tự DI nào làm hỏng được nó. Khi không có gateway nào được đăng ký, `onRefreshToken` trả về null — và `ApiClient` chỉ gắn `RefreshTokenInterceptor` **khi** giá trị đó khác null, nên một build không có auth sẽ không có interceptor refresh, thay vì có một cái không bao giờ thành công. `arch_check` R1 giữ điều đó: nó nằm trong `platform_shell_adapters`, và package `platform/` không được import module. Xem [`05_di.md`](05_di.md).
+> `NetworkConfigImpl` không import module nào. Nó đọc token qua `ISessionGateway`, được resolve bằng `getItOrNull` ngay lúc gọi thay vì inject, nên nó dựng được dù build có module auth hay không, và không thứ tự DI nào làm hỏng được nó. Khi không có gateway nào được đăng ký, `onRefreshToken` trả về null — và `ApiClient` chỉ gắn `RefreshTokenInterceptor` **khi** giá trị đó khác null, nên một build không có auth sẽ không có interceptor refresh, thay vì có một cái không bao giờ thành công. `arch_check` R1 giữ điều đó: nó nằm trong `platform_shell_adapters`, và package `platform/` không được import module. Xem [`05_di.md`](05_di.md).
 
 ---
 
 ## 4. Luồng refresh token
 
-`_refreshSession` giao việc cho `IAuthSessionGateway`, do `data_auth` hiện thực: repository refresh và lưu thông tin đăng nhập, còn gateway đọc lại token từ chủ sở hữu. Bản thân config không lưu gì cả:
+`_refreshSession` giao việc cho `ISessionGateway`, do `data_auth` hiện thực: repository refresh và lưu thông tin đăng nhập, còn gateway đọc lại token từ chủ sở hữu. Bản thân config không lưu gì cả:
 
 ```dart
 // platform/shell/adapters/lib/src/network_config_impl.dart
@@ -311,7 +311,7 @@ Câu trả lời của gateway quyết định số phận của phiên đăng n
 | `null` | server **từ chối** (401/403, mọi 4xx, hoặc một 200 mà envelope báo lỗi — `ErrorCodes.RESPONSE_REJECTED`) | gọi `onRefreshFailed` một lần, reject tất cả |
 | ném lỗi | không nhận được câu trả lời (mất mạng, HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
 
-`onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `IAuthSessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token.
+`onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `ISessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token.
 
 Một `401` tới *sau* khi refresh đã xong — request được gửi bằng token cũ — không khởi động refresh mới: `RefreshTokenHandler` so header `Authorization` của request với `NetworkConfig.getToken` và, nếu khác nhau, chỉ gửi lại request. Với refresh token xoay vòng, một lần refresh thừa có thể làm mất hiệu lực chính phiên vừa được gia hạn.
 

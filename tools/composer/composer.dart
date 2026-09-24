@@ -361,7 +361,17 @@ const _appKeys = {'id', 'kind', 'entrypoint'};
 const _groupKeys = {'name', 'phase', 'packages', 'from_modules'};
 const _moduleKeys = {'id', 'layers'};
 const _phases = ['before', 'after'];
-const _layers = ['domain', 'data', 'feature'];
+const _layers = ['api', 'domain', 'data', 'feature'];
+
+/// Layers a module may list without any `di_groups` entry collecting them.
+///
+/// A module's API package (`<id>_api`, `modules/<id>/api`) holds contracts
+/// only — interfaces other features implement against, no DI module — so it
+/// is not composed into `injection.dart` and the app does not depend on it.
+/// Listing it makes it a workspace member (and, under `--strict`, a package
+/// that must be on disk). A group may still collect it with
+/// `from_modules: api`, should an API package ever register something.
+const _workspaceOnlyLayers = {'api'};
 
 /// A Dart package name — what a module id and a package entry must be.
 final _packageName = RegExp(r'^[a-z_][a-z0-9_]*$');
@@ -646,7 +656,9 @@ AppManifest? _parseManifest(
             );
           } else if (layers.contains(layer)) {
             bad('$path.layers[$j]', '`$layer` is listed more than once');
-          } else if (groupsOk && !collected.containsKey(layer)) {
+          } else if (groupsOk &&
+              !collected.containsKey(layer) &&
+              !_workspaceOnlyLayers.contains(layer)) {
             bad(
               '$path.layers[$j]',
               '`$layer` is not collected by any di_groups entry — add '
@@ -701,7 +713,13 @@ String? _modulePackage(
 
 class Resolved {
   final diGroups = <({String name, String phase, List<String> packages})>[];
+
+  /// Everything the app depends on: its DI groups' packages and extras.
   final allPackages = <String>[];
+
+  /// Module packages of a layer no group collects (an `api` layer): workspace
+  /// members, but neither app dependencies nor DI modules.
+  final workspaceOnly = <String>[];
   final missing = <String>[];
 }
 
@@ -747,6 +765,14 @@ Resolved _resolve(
     } else {
       r.missing.add(pkg);
     }
+  }
+
+  final collected = {
+    for (final g in app.groups)
+      if (g.fromModules != null) g.fromModules!,
+  };
+  for (final layer in _workspaceOnlyLayers) {
+    if (!collected.contains(layer)) r.workspaceOnly.addAll(fromModules(layer));
   }
 
   for (final m in r.missing) {
@@ -925,6 +951,12 @@ void _list(
         '${g.packages.join(', ')}',
       );
     }
+    if (r.workspaceOnly.isNotEmpty) {
+      stdout.writeln(
+        '    ${'api'.padRight(6)} ${'(no DI)'.padRight(8)} '
+        '${r.workspaceOnly.join(', ')}',
+      );
+    }
     if (r.missing.isNotEmpty) {
       OutputFormatter.printWarning('    missing: ${r.missing.join(', ')}');
     }
@@ -992,7 +1024,10 @@ void _sync(
     workspace.add(p.posix.relative(app.dir, from: root));
     final r = _resolve(app, packages, warnings);
     missing.addAll(r.missing);
-    for (final pkg in _closure(r.allPackages, packages)) {
+    for (final pkg in _closure([
+      ...r.allPackages,
+      ...r.workspaceOnly,
+    ], packages)) {
       workspace.add(p.posix.relative(packages[pkg]!, from: root));
     }
   }
@@ -1305,6 +1340,12 @@ OPTIONS
   --strict          A module declared in a manifest but absent from disk is an
                     error instead of a warning. CI runs with this, so a release
                     can never silently ship without a module.
+
+MODULE LAYERS
+  `modules: - { id: <m>, layers: [api, domain, data, feature] }`. `domain`,
+  `data` and `feature` need a di_groups entry with `from_modules: <layer>`.
+  `api` (the module's `<m>_api` contracts package) needs none: it becomes a
+  workspace member only — no app dependency, no injection.dart entry.
 
 WHY
   The root workspace list, an app's dependencies and its injection.dart all had

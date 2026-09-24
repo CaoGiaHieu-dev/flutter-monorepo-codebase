@@ -83,8 +83,8 @@ part 'home_profile_bloc.freezed.dart';
 
 @injectable
 class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<AuthPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._authStatusStream)
+    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
+  HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) {
     on<_HomeProfileStarted>(_onStarted);
     on<_HomeProfileRefreshed>(_onRefreshed);
@@ -93,30 +93,30 @@ class HomeProfileBloc
     add(const HomeProfileEvent.started());
   }
 
-  final IAuthStatusStream? _authStatusStream;
-  StreamSubscription<AuthPrincipal?>? _subscription;
+  final ISessionStatusStream? _sessionStatusStream;
+  StreamSubscription<SessionPrincipal?>? _subscription;
 
   Future<void> _onStarted(
     _HomeProfileStarted event,
-    Emitter<BlocViewState<AuthPrincipal?>> emit,
+    Emitter<BlocViewState<SessionPrincipal?>> emit,
   ) async {
     await _subscription?.cancel();
-    _subscription = _authStatusStream?.authStatusStream.listen((user) {
+    _subscription = _sessionStatusStream?.sessionStatusStream.listen((user) {
       add(HomeProfileEvent.authStatusChanged(user));
     });
-    emit(BlocViewState.success(_authStatusStream?.currentUser));
+    emit(BlocViewState.success(_sessionStatusStream?.currentUser));
   }
 
   Future<void> _onRefreshed(
     _HomeProfileRefreshed event,
-    Emitter<BlocViewState<AuthPrincipal?>> emit,
+    Emitter<BlocViewState<SessionPrincipal?>> emit,
   ) async {
-    emit(BlocViewState.success(_authStatusStream?.currentUser));
+    emit(BlocViewState.success(_sessionStatusStream?.currentUser));
   }
 
   Future<void> _onAuthStatusChanged(
     _HomeProfileAuthStatusChanged event,
-    Emitter<BlocViewState<AuthPrincipal?>> emit,
+    Emitter<BlocViewState<SessionPrincipal?>> emit,
   ) async {
     emit(BlocViewState.success(event.user));
   }
@@ -138,7 +138,7 @@ part of 'home_profile_bloc.dart';
 abstract class HomeProfileEvent with _$HomeProfileEvent {
   const factory HomeProfileEvent.started() = _HomeProfileStarted;
   const factory HomeProfileEvent.refreshed() = _HomeProfileRefreshed;
-  const factory HomeProfileEvent.authStatusChanged(AuthPrincipal? user) =
+  const factory HomeProfileEvent.authStatusChanged(SessionPrincipal? user) =
       _HomeProfileAuthStatusChanged;
 }
 ```
@@ -178,7 +178,7 @@ non-nullable `Foo`.
 ### 4. Rendering UI: `BlocBuilder` & Pattern Matching
 
 ```dart
-BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
+BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
   builder: (context, state) {
     return state.when(
       initial: () => const SizedBox.shrink(),
@@ -193,7 +193,7 @@ BlocBuilder<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
 ### 5. Side-effects: `BlocListener`
 
 ```dart
-BlocListener<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
+BlocListener<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
   listener: (context, state) {
     state.maybeWhen(
       error: (failure) {
@@ -217,9 +217,9 @@ BlocListener<HomeProfileBloc, BlocViewState<AuthPrincipal?>>(
 Widget build(BuildContext context, GoRouterState state) {
   return BlocProvider(
     // Auth is optional: an app composed without `feature_auth` registers
-    // no IAuthStatusStream, and Home then shows the signed-out state.
+    // no ISessionStatusStream, and Home then shows the signed-out state.
     create: (_) => getIt<HomeProfileBloc>(
-      param1: getItOrNull<IAuthStatusStream>(),
+      param1: getItOrNull<ISessionStatusStream>(),
     ),
     child: const HomePage(),
   );

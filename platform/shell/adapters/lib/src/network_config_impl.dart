@@ -13,7 +13,7 @@ import 'package:material_ui/material_ui.dart';
 /// stays free of widgets: it only calls [onRetryCallback].
 ///
 /// Credentials are never read from a shared storage object — this delegates
-/// to the actual owners of each value ([IAuthSessionGateway] for the session,
+/// to the actual owners of each value ([ISessionGateway] for the session,
 /// [ILanguageStorage] for the locale) so no cross-domain storage key leaks.
 ///
 /// **This file imports no module.** It used to pull `AuthLocalDataSource` and
@@ -25,7 +25,7 @@ import 'package:material_ui/material_ui.dart';
 /// Enforced now by `arch_check` rule **R10**.
 ///
 /// The gateway is resolved at call time rather than injected, so this class
-/// constructs fine whether or not an auth module is in the build, and no
+/// constructs fine whether or not a session owner is in the build, and no
 /// module-initialisation ordering matters.
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
@@ -33,10 +33,10 @@ class NetworkConfigImpl implements NetworkConfig {
 
   final ILanguageStorage _languageStorage;
 
-  /// Null in a build that composes no auth module.
-  IAuthSessionGateway? get _session => getItOrNull<IAuthSessionGateway>();
+  /// Null in a build that composes no session owner.
+  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
 
-  /// Whether an auth module is composed — *without* resolving it.
+  /// Whether a session owner is composed — *without* resolving it.
   ///
   /// `ApiClient` reads [onRefreshToken] while `Dio` is being constructed, and
   /// the gateway's own dependency chain (`IAuthRepository` →
@@ -44,7 +44,7 @@ class NetworkConfigImpl implements NetworkConfig {
   /// here closed the loop: GetIt threw "Circular dependency detected" and
   /// the app booted to an error screen. The lookup itself stays lazy, inside
   /// the callbacks, which run long after construction.
-  bool get _hasSession => getIt.isRegistered<IAuthSessionGateway>();
+  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
 
   @override
   String? Function() get getToken =>
@@ -79,7 +79,7 @@ class NetworkConfigImpl implements NetworkConfig {
   /// storage alone changes nothing anyone observes.
   Future<void> _clearSession() async {
     await _session?.clearSession();
-    getItOrNull<IAuthSessionState>()?.onSessionLost();
+    getItOrNull<ISessionState>()?.onSessionLost();
   }
 
   @override

@@ -27,7 +27,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | Lớp nền quản lý state, và các widget gắn với nó (`LoadMoreListView`); mỗi feature chọn một | foundation, layers, ui |
 | **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | Các adapter hạ tầng mà mọi app đăng ký (`NetworkConfigImpl`, storage adapter, `AppBootStorage`); app shell mà mọi app compose: boot, lắp ráp router, material wrapper, state cấp app | mọi nhóm platform (`app_shell → adapters`, không bao giờ ngược lại) |
 
-Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← toàn bộ platform/`. `platform_kernel → domain_core` là một phần của thiết kế, không phải ngoại lệ: `ErrorHandler` sinh ra `AppFailure` (cạnh R1 đã duyệt). Và, như cũ, không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` chưa kiểm chiều giữa các nhóm — cho tới khi kiểm, review giữ luật này.
+Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← toàn bộ platform/`. `platform_kernel → domain_core` là một phần của thiết kế, không phải ngoại lệ: `ErrorHandler` sinh ra `AppFailure` (cạnh R1 đã duyệt). Và, như cũ, không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` **R11** bắt buộc chiều giữa các nhóm: nó đọc nhóm của package từ thư mục (`platform/<group>/<package>`; package nằm ngoài thư mục nhóm hợp lệ tự nó là vi phạm) và đối chiếu mọi mục `dependencies:` là package platform với bảng trên. Dev dependency không bị kiểm — chúng không bao giờ được ship; test của `platform_app_shell` dùng `core_storage` cho fake. Một cạnh trỏ vào `domain_core` / `data_core` vẫn cần thêm danh sách đã duyệt của R1.
 
 Đồ thị package tuân theo chiều này **không có ngoại lệ nào**. Ba cạnh từng đi ngược chiều; cả ba đều được gỡ bỏ, không phải được duyệt:
 
@@ -98,14 +98,12 @@ Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn c�
 
 ## 2. `core_di` — DI Hub
 
-Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây là vùng trung lập để hai package không được import nhau vẫn gặp được nhau.
+Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây là vùng trung lập nơi platform gặp các module — và mọi hợp đồng ở đây đều **trung lập với sản phẩm**: đặt tên theo thứ platform cần (một phiên đăng nhập, một vị trí), không bao giờ theo module tình cờ cung cấp nó.
 
 | Nhóm hợp đồng | Đường dẫn | Mục đích |
 |:--|:--|:--|
-| Navigator | `src/navigators/` | `AuthNavigator`, `HomeNavigator` — khai ở đây, hiện thực trong feature sở hữu |
-| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`, `NavigatorKeys` |
-| Action handler | `src/actions/` | `IAuthActionHandler` — hành động UI xuyên feature (vd đăng xuất) |
-| Agnostic stream | `src/agnostic_streams/` | `IAuthStatusStream` — chia sẻ state giữa feature Provider và feature BLoC |
+| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (nơi shell đưa người dùng đã đăng xuất / đã đăng nhập tới), `DashboardRouteModule`, `NavigatorKeys` |
+| Session | `src/session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (phía shell), `ISessionStatusStream` (phía feature: chia sẻ state giữa feature Provider và feature BLoC), `ISessionRefreshListenable`, `ISessionGateway` (transport) — do module nào sở hữu đăng nhập hiện thực |
 | Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong package adapter của app shell (`platform_shell_adapters`) |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
@@ -119,7 +117,7 @@ Key được *yêu cầu theo id* chứ không khai sẵn: `NavigatorKeys.nested
 > [!NOTE]
 > `core_di` phụ thuộc `go_router`. Đây không phải rò rỉ: `IFeatureRouteModule` trả về `List<RouteBase>`, `INavDestinationModule` cũng trả về `List<RouteBase>`. Đây *chính là* hợp đồng routing nên buộc phải nói ngôn ngữ của GoRouter — nhưng `INavDestinationModule` mô tả điểm đến bằng `NavDestination` của chính Hub, không phải `BottomNavigationBarItem`, nên hợp đồng không cam kết vào thanh bottom bar. Trừu tượng thêm một lớp nữa chỉ tạo adapter vô ích.
 
-**Không thuộc về đây:** bất cứ thứ gì có phần hiện thực. Nếu bạn viết `class …Impl` trong `core_di`, nó đang nằm sai package.
+**Không thuộc về đây:** bất cứ thứ gì có phần hiện thực. Nếu bạn viết `class …Impl` trong `core_di`, nó đang nằm sai package. Cũng không phải hợp đồng tồn tại để một feature chạm tới *một module khác* — `AuthNavigator`, `IAuthActionHandler`, `HomeNavigator`: chúng nằm trong package API của module sở hữu (`modules/auth/api` → `auth_api`, `modules/home/api` → `home_api`), vốn chỉ được phụ thuộc foundation và Flutter (`arch_check` R3).
 
 ---
 

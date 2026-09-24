@@ -15,7 +15,7 @@ void main() {
     test('routes while someone is signed in', () {
       expect(
         DeeplinkProvider.canRoute(
-          _Session(const AuthPrincipal(id: 'u1')),
+          _Session(const SessionPrincipal(id: 'u1')),
         ),
         isTrue,
       );
@@ -52,11 +52,11 @@ void main() {
   });
 }
 
-class _Session implements IAuthSessionState {
+class _Session implements ISessionState {
   _Session(this.signedInUser);
 
   @override
-  final AuthPrincipal? signedInUser;
+  final SessionPrincipal? signedInUser;
 
   @override
   bool get hasRestoredSession => true;
@@ -65,10 +65,10 @@ class _Session implements IAuthSessionState {
   Future<void> ensureInitialized() async {}
 
   @override
-  Stream<AuthPrincipal?> get sessionChanges => const Stream.empty();
+  Stream<SessionPrincipal?> get sessionChanges => const Stream.empty();
 
   @override
-  Stream<AuthSessionFailure> get sessionFailures => const Stream.empty();
+  Stream<SessionFailure> get sessionFailures => const Stream.empty();
 
   @override
   void onSessionLost() {}

@@ -125,9 +125,9 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── docs/                          # Documentation hub — en/ and vi/ twins (start at docs/en/README.md)
 ├── fastlane/                      # Root Fastfile/Pluginfile: import apps/mobile/fastlane so lanes run from the root
 ├── modules/                       # One vertical slice per bounded context, one per team
-│   ├── auth/                      # Sample: the full three-layer slice (domain, data, feature)
+│   ├── auth/                      # Sample: the full three-layer slice (domain, data, feature) + api (auth_api)
 │   ├── cache/                     # Sample: a package-owned Drift database (domain + data, no UI)
-│   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
+│   ├── home/{api,feature}/        # Sample: BLoC, private Freezed events, a nav destination; home_api
 │   ├── settings/feature/          # Sample: consuming another module's contract
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
@@ -135,7 +135,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── platform/                      # Infra team's ground — every module may depend on it
 │   ├── foundation/                # Pure base everything builds on: getIt/errors, DI contracts, Flutter helpers
 │   │   ├── kernel/                # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
-│   │   ├── contracts/             # core_di: DI Hub — every cross-module contract lives here
+│   │   ├── contracts/             # core_di: DI Hub — product-neutral contracts (session, locations, routing)
 │   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
 │   ├── layers/                    # Base contracts of the domain and data layers
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
@@ -157,7 +157,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, app providers
 ├── tools/                         # Command-line toolset (a workspace member) — see tools/README.md
 │   ├── android_compliance/        # 16KB page size compatibility check (Android 15+)
-│   ├── arch_check/                # Layering rules R1–R10 — PR Gate 1
+│   ├── arch_check/                # Layering rules R1–R11 — PR Gate 1
 │   ├── barrel_generator/          # Regenerates barrel files for a package's lib/
 │   ├── code_review/               # Gemini AI source code review
 │   ├── composer/                  # sync/verify apps against app_manifest.yaml — PR Gate 0
@@ -277,19 +277,19 @@ All tools can be run from the root directory.
 > `getAll<T>()` **throws** when nothing is registered — always prefer `getAllOrEmpty<T>()`.
 
 ### Dependency Inversion Principle (DIP)
-Features communicate across each other entirely through intermediate interfaces in `core_di`:
+Features communicate across each other entirely through intermediate interfaces — in the owning module's API package (`modules/<id>/api`, `<id>_api`) for a module-specific contract, in `core_di` for a product-neutral one (the session, the sign-in / post-sign-in locations the app shell uses):
 
 ```text
-[Feature Auth]
+[Feature Onboarding]
    │
    ▼ (Requests redirection to Home)
-[Interface HomeNavigator (core_di)]  ◄── (Contract definition)
+[Interface HomeNavigator (home_api)]  ◄── (Contract definition)
    ▲
    │ (Concrete implementation in the owning feature)
 [HomeNavigatorImpl (modules/home/feature/lib/src/routing/)]
 ```
 
-Cross-feature UI actions (e.g. logout) use the same DIP shape with `I*ActionHandler` in `core_di` and `*ActionHandlerImpl` inside the owning feature (`feature_auth/handlers/`).
+Cross-feature UI actions (e.g. logout) use the same DIP shape with `I*ActionHandler` in the owning module's API package (`auth_api`) and `*ActionHandlerImpl` inside the owning feature (`feature_auth/handlers/`).
 
 ---
 
@@ -421,7 +421,7 @@ Each Feature Package owns its own routing structure and files:
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list
 - `getItOrNull<DashboardRouteModule>()` → dashboard chrome (optional)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` on the first launch only (later launches, or none registered: the first destination's path, else `/_empty_dashboard`)
-- `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
+- `getItOrNull<ISessionRefreshListenable>()` → `refreshListenable`
 
 Note the last one: the router depends on a **`core_di` contract**, not on `AuthProvider`. The shell
 holds no feature type at all, which is what makes `feature_auth` removable.

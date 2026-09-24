@@ -99,14 +99,17 @@ di_groups:
 # ---------------------------------------------------------------------------
 # Modules this app composes.
 #
-# `layers` picks which of a module's packages are included. A module absent
+# `layers` picks which of a module's packages are included. `api` is the
+# module's contracts package (`<id>_api`) other features may import: a
+# workspace member only — no DI group collects it and this app does not
+# depend on it. A module absent
 # from disk is skipped with a warning by `sync`, and is an error under
 # `sync --strict` — which is what CI runs, so a release can never silently
 # ship without one.
 # ---------------------------------------------------------------------------
 modules:
-  - { id: auth, layers: [domain, data, feature] }
-  - { id: home, layers: [feature] }
+  - { id: auth, layers: [api, domain, data, feature] }
+  - { id: home, layers: [api, feature] }
   - { id: settings, layers: [feature] }
   - { id: onboarding, layers: [feature] }
   - { id: splash, layers: [feature] }

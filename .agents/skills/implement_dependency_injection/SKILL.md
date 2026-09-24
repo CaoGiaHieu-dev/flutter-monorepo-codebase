@@ -33,7 +33,7 @@ constructor needs a type registered by a module that runs *later* in
 `configureDependencies()`, boot throws `... is not registered inside GetIt`.
 
 The historical case: `NetworkConfigImpl` once injected `AuthLocalDataSource` (from
-`data_auth`, a later module) and had to be lazy for it. It now resolves `IAuthSessionGateway`
+`data_auth`, a later module) and had to be lazy for it. It now resolves `ISessionGateway`
 at call time and has no such dependency, but it keeps the lazy annotation — the shape is the
 one to copy whenever a constructor needs something from a later group:
 
@@ -76,8 +76,8 @@ abstract class NetworkBindingModule {
 ```
 
 Typing the parameter as `NetworkConfig` makes the upcast compiler-checked — no `as` needed.
-The same dual-registration pattern binds `IAuthStatusStream`, `IAuthSessionState` and
-`IAuthRefreshListenable` in `modules/auth/feature/lib/di/module.dart`.
+The same dual-registration pattern binds `ISessionStatusStream`, `ISessionState` and
+`ISessionRefreshListenable` in `modules/auth/feature/lib/di/module.dart`.
 
 ### Third-party SDKs go through `@module` too
 

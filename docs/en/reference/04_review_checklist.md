@@ -15,7 +15,7 @@ The same gates `.github/workflows/pr_quality_check.yml` runs, in its order (CI f
 ```bash
 dart run build_runner build --workspace              # generated code up to date
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — layering rules R1–R10 (R5: undeclared imports)
+dart tools/arch_check/check.dart                     # Gate 1 — layering rules R1–R11 (R5: undeclared imports)
 flutter analyze                                      # Gate 2 — static analysis
 # Gate 3 — `flutter test` in every package that has a test/ directory
 dart tools/dependency_sync.dart --check              # Gate 4 — version catalog drift

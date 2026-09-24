@@ -13,6 +13,8 @@ dependencies:
   material_ui: ^1.1.1
   core_di:
     path: ../../../platform/foundation/contracts
+  auth_api:
+    path: ../../auth/api
   flutter:
     sdk: flutter
   core_common:

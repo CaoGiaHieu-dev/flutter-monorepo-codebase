@@ -238,7 +238,7 @@ class NetworkConfigImpl implements NetworkConfig {
   final ILanguageStorage _languageStorage;
 
   /// Null in a build that composes no auth module.
-  IAuthSessionGateway? get _session => getItOrNull<IAuthSessionGateway>();
+  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
 
   @override
   String? Function() get getToken => () => _session?.readToken();
@@ -249,7 +249,7 @@ class NetworkConfigImpl implements NetworkConfig {
 
   /// Whether an auth module is composed — without resolving it: resolving
   /// the gateway while `Dio` is being built closes a dependency cycle.
-  bool get _hasSession => getIt.isRegistered<IAuthSessionGateway>();
+  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
 
   @override
   Future<String?> Function()? get onRefreshToken =>
@@ -261,13 +261,13 @@ class NetworkConfigImpl implements NetworkConfig {
 ```
 
 > [!IMPORTANT]
-> `NetworkConfigImpl` imports no module. It reads the token through `IAuthSessionGateway`, resolved with `getItOrNull` at call time rather than injected, so it constructs whether or not an auth module is in the build and no DI ordering can break it. With no gateway registered, `onRefreshToken` returns null — and `ApiClient` installs `RefreshTokenInterceptor` **only** when that is non-null, so a build without auth gets no refresh interceptor rather than one that can never succeed. `arch_check` R1 keeps it that way: it lives in `platform_shell_adapters`, and a `platform/` package may not import a module. See [`05_di.md`](05_di.md).
+> `NetworkConfigImpl` imports no module. It reads the token through `ISessionGateway`, resolved with `getItOrNull` at call time rather than injected, so it constructs whether or not an auth module is in the build and no DI ordering can break it. With no gateway registered, `onRefreshToken` returns null — and `ApiClient` installs `RefreshTokenInterceptor` **only** when that is non-null, so a build without auth gets no refresh interceptor rather than one that can never succeed. `arch_check` R1 keeps it that way: it lives in `platform_shell_adapters`, and a `platform/` package may not import a module. See [`05_di.md`](05_di.md).
 
 ---
 
 ## 4. Refresh-token flow
 
-`_refreshSession` hands the work to `IAuthSessionGateway`, which `data_auth` implements: the repository refreshes and persists the credentials, and the gateway re-reads the token from its owner. The config never persists anything itself:
+`_refreshSession` hands the work to `ISessionGateway`, which `data_auth` implements: the repository refreshes and persists the credentials, and the gateway re-reads the token from its owner. The config never persists anything itself:
 
 ```dart
 // platform/shell/adapters/lib/src/network_config_impl.dart
@@ -311,7 +311,7 @@ The gateway's answer decides what happens to the session:
 | `null` | the server **refused** (401/403, any 4xx, or a 200 whose envelope reports an error — `ErrorCodes.RESPONSE_REJECTED`) | calls `onRefreshFailed` once, rejects them all |
 | throws | never got an answer (no network, a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
 
-`onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `IAuthSessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
+`onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `ISessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
 
 A `401` that arrives *after* a refresh finished — a request sent with the old token — does not start another one: `RefreshTokenHandler` compares the request's `Authorization` header with `NetworkConfig.getToken` and, when they differ, just replays it. With rotating refresh tokens a redundant refresh could otherwise invalidate the session it just renewed.
 

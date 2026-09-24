@@ -13,14 +13,16 @@ import '../providers/deeplink_provider.dart';
 
 /// App shell chrome wrapped around every routed page.
 ///
-/// Owns the cold-start redirect (onboarding → login → home) and reacts to
-/// later sign-in / sign-out.
+/// Owns the cold-start redirect (entry location → sign-in location →
+/// post-sign-in location) and reacts to later sign-in / sign-out.
 ///
-/// Everything feature-specific arrives through `core_di` contracts resolved
-/// with `getItOrNull`, so this file imports no feature package. With no auth
-/// feature in the build [IAuthSessionState] resolves to `null`, the shell
-/// treats the app as signed out, and boot falls through to the registered
-/// entry location instead of throwing.
+/// Everything module-specific arrives through product-neutral `core_di`
+/// contracts resolved with `getItOrNull` — [ISessionState] for the session,
+/// [ISignInLocation] / [IPostSignInLocation] for where each case lands — so
+/// this file imports no module package and names no product flow (no auth,
+/// no home). With no session owner in the build [ISessionState] resolves to
+/// `null`, the shell treats the app as signed out, and boot falls through to
+/// the registered entry location instead of throwing.
 ///
 /// (`core_ui_kit` is still imported for [AppOverlay]; it lives under
 /// `platform/` because it is a shared UI library, not a removable
@@ -35,11 +37,11 @@ class NavigatorWrapperWidget extends StatefulWidget {
 }
 
 class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
-  final _session = getItOrNull<IAuthSessionState>();
+  final _session = getItOrNull<ISessionState>();
   final deeplinkProvider = getIt<DeeplinkProvider>();
 
-  StreamSubscription<AuthPrincipal?>? _sessionSubscription;
-  StreamSubscription<AuthSessionFailure>? _failureSubscription;
+  StreamSubscription<SessionPrincipal?>? _sessionSubscription;
+  StreamSubscription<SessionFailure>? _failureSubscription;
 
   /// Boot redirect owns the first navigation. The listeners below handle later
   /// sign-in / sign-out transitions only.
@@ -61,21 +63,21 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
       final isGoToOnboarding = _goToOnboarding();
       if (isGoToOnboarding) {
         _bootCompleted = true;
-        // With an auth module, leaving onboarding leads to a sign-in, and
-        // `_onSessionChanged` → `_goToHome` starts deep links. Without one no
-        // sign-in ever comes, so start them once the user leaves the entry
-        // location instead — still never over onboarding itself.
+        // With a session owner, leaving onboarding leads to a sign-in, and
+        // `_onSessionChanged` → `_goToPostSignIn` starts deep links. Without
+        // one no sign-in ever comes, so start them once the user leaves the
+        // entry location instead — still never over onboarding itself.
         if (_session == null) _startDeepLinksOnLeavingEntry();
         return;
       }
 
-      final isGoToLogin = _goToLogin();
-      if (isGoToLogin) {
+      final isGoToSignIn = _goToSignIn();
+      if (isGoToSignIn) {
         _bootCompleted = true;
         return;
       }
 
-      _goToHome();
+      _goToPostSignIn();
       _bootCompleted = true;
     });
   }
@@ -142,39 +144,37 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
 
   /// Returns `true` only when it actually navigated, so the caller can stop.
   ///
-  /// `getItOrNull`: `AuthNavigator` is owned by `feature_auth`. If that package
-  /// is not part of the build the navigator is unregistered, and boot must fall
-  /// through to the next destination instead of throwing — matching
-  /// [_onSessionChanged] below, which resolves it optionally too.
-  bool _goToLogin() {
+  /// `getItOrNull`: [ISignInLocation] is contributed by whichever module owns
+  /// sign-in (`feature_auth` in the samples). If none is part of the build
+  /// boot must fall through to the next destination instead of throwing —
+  /// matching [_onSessionChanged] below, which resolves it optionally too.
+  bool _goToSignIn() {
     if (_session?.signedInUser != null) return false;
 
-    final navigator = getItOrNull<AuthNavigator>();
-    if (navigator == null) return false;
+    final signIn = getItOrNull<ISignInLocation>();
+    if (signIn == null) return false;
 
-    navigator.toLogin(context);
+    context.go(signIn.path);
     return true;
   }
 
-  /// Goes to the home module when one is composed, otherwise to
-  /// [AppRouter.fallbackLocation].
+  /// Goes to the registered [IPostSignInLocation] (the home tab in the
+  /// samples), otherwise to [AppRouter.fallbackLocation].
   ///
   /// The fallback used to be implicit — "the router's initial location
   /// decides" — which only holds at boot. After a sign-in nothing navigated
-  /// at all, so a build without `feature_home` left a signed-in user on the
-  /// login screen.
+  /// at all, so a build without a landing module left a signed-in user on the
+  /// sign-in screen.
   ///
   /// Also starts deep-link routing — here rather than only at boot, so a user
   /// who started signed out gets it after signing in. `initAppLink` is
   /// idempotent.
-  void _goToHome() {
+  void _goToPostSignIn() {
     deeplinkProvider.initAppLink();
-    final home = getItOrNull<HomeNavigator>();
-    if (home != null) {
-      home.toHome(context);
-      return;
-    }
-    context.go(getIt<AppRouter>().fallbackLocation);
+    context.go(
+      getItOrNull<IPostSignInLocation>()?.path ??
+          getIt<AppRouter>().fallbackLocation,
+    );
   }
 
   /// Routes on settled session transitions (sign-in / sign-out).
@@ -182,30 +182,31 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// Ignored until the boot redirect has run and the first session restore has
   /// finished — otherwise the restore's own emission would navigate a second
   /// time, on top of the destination boot just chose.
-  void _onSessionChanged(AuthPrincipal? user) {
+  void _onSessionChanged(SessionPrincipal? user) {
     if (!mounted || !_bootCompleted) return;
     if (!(_session?.hasRestoredSession ?? false)) return;
 
     if (user == null) {
-      getItOrNull<AuthNavigator>()?.toLogin(context);
+      final signIn = getItOrNull<ISignInLocation>();
+      if (signIn != null) context.go(signIn.path);
     } else {
-      _goToHome();
+      _goToPostSignIn();
     }
   }
 
   /// Surfaces a failed session operation as a toast.
   ///
   /// Strings come from `core_base_ui`'s global translations rather than a
-  /// feature's, so the shell stays translatable with no feature present.
-  void _onSessionFailure(AuthSessionFailure failure) {
+  /// module's, so the shell stays translatable with no module present.
+  void _onSessionFailure(SessionFailure failure) {
     if (!mounted || !_bootCompleted) return;
 
     final l10n = context.l10n;
     final content = switch (failure) {
-      AuthInvalidCredentialsFailure() => l10n.invalidCredentials,
-      AuthUserNotFoundFailure() => l10n.userNotFound,
-      AuthServerFailure(:final message) => message,
-      AuthUnknownFailure() => l10n.somethingWentWrong,
+      SessionInvalidCredentialsFailure() => l10n.invalidCredentials,
+      SessionUserNotFoundFailure() => l10n.userNotFound,
+      SessionServerFailure(:final message) => message,
+      SessionUnknownFailure() => l10n.somethingWentWrong,
     };
 
     AppOverlay.showToast(content: content);

@@ -16,7 +16,7 @@ Tham chiếu đầy đủ (tham số, mã thoát, chế độ lỗi của từng
 tools/
 ├── pubspec.yaml                     # Package core_tools (thành viên workspace)
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
-│   └── check.dart                   # R1-R10: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
+│   └── check.dart                   # R1-R11: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
 ├── composer/                        # 🧩 Ghép app từ app_manifest.yaml (Gate 0 của CI)
 │   ├── composer.dart                # sync / verify / list — sinh workspace list, dependency của app, injection.dart
 │   └── bootstrap.dart               # Checkout từng phần: bỏ member vắng mặt để `pub get` resolve được (không import package)
@@ -78,7 +78,7 @@ tools/
 
 ### 🛡️ Architecture Check (Cưỡng chế luật phân tầng)
 ```bash
-# Kiểm tra 10 luật kiến trúc (R1–R10) — exit 1 nếu có vi phạm (dùng được cho CI):
+# Kiểm tra 11 luật kiến trúc (R1–R11) — exit 1 nếu có vi phạm (dùng được cho CI):
 dart tools/arch_check/check.dart
 
 # Xem mô tả đầy đủ từng luật:

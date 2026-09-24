@@ -24,6 +24,8 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 | Suspect dead assets / files / translations / packages | `dart tools/unused_checker/check_script.dart` |
 | Want to know what is outdated on pub.dev | `dart tools/check_outdated.dart` |
 | Fresh clone, need everything wired up | `dart tools/workspace_setup/configure.dart` |
+| No Firebase project, but the app must compile and build | `dart tools/workspace_setup/configure.dart --stub-firebase` |
+| How much of each package do the tests cover? | `flutter test --coverage` per package, then `dart tools/coverage_report/report.dart` |
 | Set up Firebase for dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
 | Regenerate splash screen and app icons | `dart tools/theme_generator/theme_setting.dart --app mobile` |
 | Check Android 15+ 16 KB page-size compliance | `./tools/android_compliance/16kb_ckeck.sh <apk>` |
@@ -115,7 +117,7 @@ Exit `0` when it pruned or found nothing to prune (a full checkout — it writes
 **Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names, collects every one that is not there, prints them grouped by file, then exits 1. References into a sample bundle you removed with `remove_sample` are the one exception — summarised as INFO, never a failure (below).
 
 ```bash
-dart tools/docs_check/check.dart            # exits 1 on any dead reference
+dart tools/docs_check/check.dart            # exits 1 on any dead reference or en ↔ vi parity mismatch
 dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block and every removed-sample reference
 dart tools/docs_check/check.dart --help     # usage; any other argument exits 64
 ```
@@ -150,6 +152,16 @@ Anything else is drift, and the fix is to correct the document. An entry without
 > [!NOTE]
 > The check deliberately says nothing about whether a document is *correct*, only whether the things it points at exist. That is a low bar, and it is the only bar a machine can hold. Line-number citations (`generate.dart:90-101`) fail it by design — they are the fastest-rotting reference there is, and naming the symbol instead survives every edit above it.
 
+**en ↔ vi parity.** The same run compares every translated pair — `docs/en/<path>.md` with `docs/vi/<path>.md`, and `<name>.md` with a `<name>.vi.md` beside it anywhere (`README.md`, `tools/README.md`, package READMEs) — by shape, since a translation cannot be diffed word for word: the count of headings at each level (`h1`–`h6`), of fenced code blocks (`code-blocks`) and of table rows (`table-rows`, quoted tables included) must match. Headings and tables inside a code block do not count. Every difference fails the run:
+
+```text
+1 parity mismatch(es):
+
+  docs/en/guides/01_new_feature.md  table-rows: en 18 vs vi 17  (docs/vi/guides/01_new_feature.md)
+```
+
+A difference nearly always means a section, command or table row reached one language only — translate it across. A genuinely intentional one goes in `tools/docs_check/parity_allowlist.txt` as `<english file> <metric>` (or `*` for every metric) with a `#` reason; an entry without a reason is refused, and one that no longer matches any difference prints a `WARN` so it can be deleted. The list is empty today: every pair has the same shape. The logic lives in `tools/docs_check/parity.dart`.
+
 ---
 
 ## `sample_cleanup`
@@ -180,7 +192,7 @@ Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid
 Scaffolds a package and registers it across the workspace.
 
 ```bash
-dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>]
+dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>] [--apps <id,id>]
 dart tools/module_generator/generate.dart --help   # usage
 ```
 
@@ -191,6 +203,7 @@ dart tools/module_generator/generate.dart --help   # usage
 | `<prefix>` | type `5` only — the package-name prefix: `<prefix>_<name>` at `platform/<name>`, same naming rule as `<name>`. A layer word (`feature`, `domain`, `data`, `core`) is refused; use types 1–4. For types 1–4 it must be empty — pass `""` |
 | `<sm>` | feature only — `1` Provider · `2` BLoC · `3` none |
 | `<route>` | feature only — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none |
+| `--apps` | optional, any type — compose the module into these apps only: comma-separated `app.id`s from `apps/*/app_manifest.yaml` (`--apps mobile`, `--apps=mobile,admin`). Default: every app |
 
 ```bash
 dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provider + stack route
@@ -198,13 +211,14 @@ dart tools/module_generator/generate.dart 1 chat    "" 2 2   # feature + BLoC + 
 dart tools/module_generator/generate.dart 2 payment          # domain micro-package
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
 dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/billing
+dart tools/module_generator/generate.dart 1 chat    "" 2 2 --apps mobile   # mobile only — admin untouched
 ```
 
-**Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, more than five arguments, or a **package name already taken** by any `pubspec.yaml` in the repository. Pub resolves a workspace by name, so a duplicate used to surface only at `pub get`, after composer had rewritten the manifests — and a new directory does not mean a new name: `5 shell platform_app` is `platform_app_shell` (already at `platform/app_shell`), `2 core` / `3 core` are `domain_core` / `data_core`.
+**Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, more than five arguments, an `--apps` with no value, an empty list, given twice, or naming an id no `app_manifest.yaml` declares (the message lists the known ids), or a **package name already taken** by any `pubspec.yaml` in the repository. Pub resolves a workspace by name, so a duplicate used to surface only at `pub get`, after composer had rewritten the manifests — and a new directory does not mean a new name: `5 shell platform_app` is `platform_app_shell` (already at `platform/app_shell`), `2 core` / `3 core` are `domain_core` / `data_core`.
 
 With no arguments on a terminal it prompts for everything. A feature missing `<sm>` or `<route>` prompts for what is missing (an empty answer takes `1`). **Without a terminal** — CI, an agent's shell, stdin at end of input — a value that would be prompted for is an error, exit `64`, never a silent default: always pass all five arguments for a feature. All tool output is in English.
 
-**What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates (the new pubspec copies the root `pubspec.yaml`'s `environment:`), adds the module to every `app_manifest.yaml`, runs `composer sync` (which regenerates the root `workspace:` list and each app's `pubspec.yaml` and `lib/di/injection.dart`), then dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, the barrel generator **again**, and `dart fix --apply` on the new package. Barrels run twice because the templates import sibling barrels, which must exist before `build_runner` reads the package, while the barrels also export generated files (`module.module.dart`, `lib/src/gen/**`) — so the last run has to follow codegen.
+**What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates (the new pubspec copies the root `pubspec.yaml`'s `environment:`), adds the module to every `app_manifest.yaml` — or only to the apps `--apps` names — runs `composer sync` (which regenerates the root `workspace:` list and each app's `pubspec.yaml` and `lib/di/injection.dart`), then dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, the barrel generator **again**, and `dart fix --apply` on the new package. Barrels run twice because the templates import sibling barrels, which must exist before `build_runner` reads the package, while the barrels also export generated files (`module.module.dart`, `lib/src/gen/**`) — so the last run has to follow codegen.
 
 > [!IMPORTANT]
 > It never writes the root `workspace:` list, an app's `pubspec.yaml` or `lib/di/injection.dart` itself. Those sit between `composer:managed` markers, and only `composer sync` writes them — an entry added outside the markers is one composer never removes, and hand edits inside them are the drift CI Gate 0 fails on.
@@ -218,6 +232,10 @@ With no arguments on a terminal it prompts for everything. A feature missing `<s
 - **FVM is auto-detected** — by every tool that shells out, through `tools/shared/toolchain.dart` — requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
 **What a new package declares.** Only the packages its templates import, so it passes `check_unused_packages` from the first run — add `core_network`, `core_storage` and the rest when the code needs them. A feature declares `core_di`, `core_common`, `core_base_ui` and `core_responsive` (every generated page lays out through `AdaptiveContent`, with `AppSpacing` / `AppTextStyles` sizing through context), plus `provider_state_management` + `domain_core` for Provider, or `bloc_state_management` + `core_ui_kit` for BLoC (its loading state is the kit's `LoadingWidget`); only a feature gets `flutter_localizations` and `intl`, which its generated `gen-l10n` output imports. A domain package gets `domain_core` and a repository contract `I<Name>Repository` (in `repositories/`, one placeholder `ping()` returning `Result<void>`). A data package gets `data_core` and a `<Name>RepositoryImpl extends IBaseRepository` (in `repositories_impl/`); when `domain_<name>` already exists it also declares `domain_core` + `domain_<name>`, implements that contract and registers as it (`@LazySingleton(as: I<Name>Repository)`) — so generate the domain first. Core and custom packages start with no workspace dependency.
+
+**Generated tests.** A feature starts with tests that pass untouched, so CI Gate 3 has something to run from the first commit: `test/<name>_page_test.dart` pumps the page under `ResponsiveInit` and the feature's localizations — with its real controller provided above it exactly as the route provides it — and checks the localized title and that it lays out on a phone and a tablet window; `test/<name>_provider_test.dart` (Provider) waits for `initialize()` and expects success, `test/<name>_bloc_test.dart` (BLoC) expects `initial` and then `success` after the `started` event. SM `3` gets the page test only. `flutter_test` is in the feature pubspec's `dev_dependencies`. Replace the real controller with a fake once it takes use cases (see `modules/auth/feature/test/auth_provider_test.dart`).
+
+**Build time.** Nearly all of a run is `build_runner` over the whole workspace (~76 s of ~92 s measured on a warm cache), and ~50 s of that is recompiling the AOT builder script, which a new workspace package forces. `--build-filter` limited to the new package and the apps' `di/` saved nothing (77 s) and left 21 outputs elsewhere unbuilt until the next full build, so the generator keeps the full `build_runner build --workspace`.
 
 **Nav destination order.** A `<route>` `2` feature's `INavDestinationModule.order` is 10 above the highest `order` any existing destination under `modules/*/feature` returns (10 when there is none), so generated tabs never tie. Renumber freely; only the relative order matters.
 
@@ -298,12 +316,15 @@ It exits `1` when resolving the catalog, `pub outdated`, reading its JSON, or ap
 
 ```bash
 dart tools/workspace_setup/configure.dart
+dart tools/workspace_setup/configure.dart --stub-firebase   # plus compile-only Firebase stubs where absent
 dart tools/workspace_setup/configure.dart --help   # what it runs, in order — runs nothing
 ```
 
 Full setup for a fresh clone. It runs, in order: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` in every package with an `l10n.yaml`, `build_runner build --workspace`, then the barrel generator for every package with a `lib/` (apps skipped). It is **the** setup step. `pub get` + `build_runner` alone leaves the gitignored `lib/src/gen/gen.dart` barrels missing, and `flutter analyze` then fails on `gen/gen.dart`, `AppLocalizations` and `Assets`.
 
-It works on the repository root whatever the working directory. `--help` / `-h` prints the steps and exits `0`; any other argument exits `64` **before anything runs** — the script used to ignore its arguments, so `--help` ran the full, destructive setup.
+It works on the repository root whatever the working directory. `--help` / `-h` prints the steps and exits `0`; any argument other than `--stub-firebase` exits `64` **before anything runs** — the script used to ignore its arguments, so `--help` ran the full, destructive setup.
+
+**`--stub-firebase`** — also write **compile-only** Firebase stand-ins, first, before any codegen (`build_runner` must resolve each `firebase_module.dart`'s imports; the list of what was written is printed at the end), for a checkout with no Firebase project, the same files CI writes (its jobs call this flag): a `firebase_options_<flavor>.dart` for every flavor an app's `lib/firebase/firebase_module.dart` imports, and an `android/app/src/<flavor>/google-services.json` for every product flavor of an app whose `android/app/build.gradle(.kts)` applies the Google Services plugin, with `package_name` = `applicationId` + that flavor's `applicationIdSuffix` read from the same file. **Only absent files are written** — real ones are always kept — and every path is printed, followed by a boxed warning that these are not real configs: the app compiles and an APK builds, but push notifications, the FCM token and every other Firebase call do not work. The content lives in `tools/workspace_setup/firebase_stubs.dart`, which imports only `dart:io`: `configure.dart` runs `pub get` itself, so nothing it imports may need a resolved package.
 
 > [!CAUTION]
 > There is **no** `configure.sh` and **no** `configure.bat`. Only `configure.dart` exists — invoke it with `dart`, never through a shell wrapper.
@@ -382,6 +403,19 @@ Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs a Gem
 
 ---
 
+## `coverage_report`
+
+```bash
+flutter test --coverage                              # in each package: writes <pkg>/coverage/lcov.info (gitignored)
+dart tools/coverage_report/report.dart               # every */coverage/lcov.info under the root
+dart tools/coverage_report/report.dart --min 60      # exit 1 when the TOTAL is below 60 %
+dart tools/coverage_report/report.dart --min-package 40   # exit 1 when ANY package is below 40 %
+```
+
+Prints per-package line coverage as a Markdown table — package, path, files, lines, covered, % and a total row — and appends it to `$GITHUB_STEP_SUMMARY` when that is set (`--no-summary` turns that off). CI Gate 3 runs every package's tests with `--coverage` and then this step, advisory: no threshold, `continue-on-error`, and it runs even when a test failed. Generated files — `*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gr.dart`, `*.mocks.dart`, anything under `gen/` — are excluded, and a line is counted once however many `DA:` records name it. Only files some test loaded appear in `lcov.info`, so an untested file nothing imports does not lower the number. With no `lcov.info` found it exits `1`; a bad argument exits `64`.
+
+---
+
 ## Tests for the tools (`tools/test/`)
 
 Every gate in `pr_quality_check.yml` is one of the scripts above, and a gate that has quietly stopped failing looks exactly like a clean PR. `tools/test/` is what stops that: it runs as the second half of CI Gate 1, right after `arch_check`.
@@ -398,7 +432,10 @@ Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` �
 | `arch_check_test.dart` | A clean and a violating fixture for every rule R1–R10 (R6 warns and still exits `0`); an empty workspace fails; an unknown flag exits `64` |
 | `composer_test.dart` | `sync` then `verify` passes; a hand-edited region, a module missing from disk, `phase: befor`, an unknown layer and a duplicate module exit `1` naming the key path |
 | `dependency_sync_test.dart` | `--check`: in step passes; a version mismatch, a malformed catalog and invalid YAML exit `1` |
-| `docs_check_test.dart` | A dead path or link exits `1`; a `<placeholder>` span, an allowlisted path and a removed sample bundle (INFO) exit `0`; the root comes from the script, not the cwd |
+| `docs_check_test.dart` | A dead path or link exits `1`; a `<placeholder>` span, an allowlisted path and a removed sample bundle (INFO) exit `0`; the root comes from the script, not the cwd; en ↔ vi parity: a missing heading, code block or table row exits `1` with both counts, fences are ignored, an allowlisted difference passes, a stale entry warns, an entry without a reason is refused |
+| `module_generator_test.dart` | `--apps` with an unknown id, no value, an empty list or given twice exits `64` and writes nothing; `registerInAppManifests` touches every manifest by default and only the listed ones with `apps:` |
+| `firebase_stubs_test.dart` | `--stub-firebase`'s stubs: one Dart file per imported flavor, one `google-services.json` per Gradle product flavor with the suffixed package name (not `signingConfigs`), real files kept, apps without Firebase or the plugin skipped; `configure.dart` reaches no `package:` import |
+| `coverage_report_test.dart` | lcov parsing (generated files dropped, a line counted once), the table and total, the job summary, `--min` / `--min-package`, exit `1` with no `lcov.info`, `64` on bad arguments |
 | `barrel_generator_test.dart` | A trailing slash on the path; a `web/` directory inside `lib/` is exported, the platform `web/` beside it is not; hand-written exports are replaced |
 | `bootstrap_test.dart` | `--dry-run` reports a missing workspace member and app dependency and writes nothing; without it the managed regions are pruned |
 

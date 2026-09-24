@@ -24,7 +24,7 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 ### Step 1: Initialize Structure using the Automated Tool
 
 ```bash
-# Syntax: dart tools/module_generator/generate.dart <type> <module_name> [prefix] [sm] [route_contribution]
+# Syntax: dart tools/module_generator/generate.dart <type> <module_name> [prefix] [sm] [route_contribution] [--apps <id,id>]
 # <type>: 1 (Feature), 2 (Domain), 3 (Data), 4 (Core → core_<name> at platform/<name>), 5 (Custom)
 # <module_name>: Business entity name (e.g., profile, payment, logging)
 # [prefix]: pass "" except for Custom — there it is the package-name PREFIX, not a directory:
@@ -32,6 +32,8 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 #           (feature, domain, data, core) is refused.
 # [sm]: (Feature only) 1 (Provider), 2 (BLoC), 3 (None)
 # [route_contribution]: (Feature only) 1 (IFeatureRouteModule), 2 (INavDestinationModule), 3 (none)
+# --apps: (optional, any type) compose into these apps only — app.id from apps/*/app_manifest.yaml.
+#         Default: EVERY app, admin included.
 ```
 
 > [!IMPORTANT]
@@ -49,6 +51,11 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 > the repository (`5 shell platform_app` = `platform_app_shell`, `2 core` = `domain_core`).
 > `dart tools/module_generator/generate.dart --help` prints the usage.
 
+> [!IMPORTANT]
+> **Decide which apps compose the module before generating.** Without `--apps` it joins every
+> `apps/<id>/app_manifest.yaml` — `apps/admin` (auth + settings only) included. A module meant for
+> `mobile` only is `... --apps mobile`; an unknown id exits `64` before anything is written.
+
 **Examples:**
 
 1. Feature `profile` with Provider + stack routes:
@@ -59,6 +66,11 @@ dart tools/module_generator/generate.dart 1 profile "" 1 1
 2. Feature `chat` as a dashboard bottom-nav tab with BLoC:
 ```bash
 dart tools/module_generator/generate.dart 1 chat "" 2 2
+```
+
+   The same, composed into the mobile app only:
+```bash
+dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
 ```
 
 3. Domain micro-package `payment`:
@@ -83,6 +95,8 @@ dart tools/module_generator/generate.dart 5 billing acme
 | Registration check | Presence in each `app_manifest.yaml` is decided by parsing the YAML, not by substring (`core_net` is no longer taken as registered because `core_network` exists). Every edit is re-parsed; a manifest the module could not be added to rolls everything back and exits `1`. |
 | Starts clean | A new package declares only the workspace packages its templates import, so `check_unused_packages` passes at once. Domain gets `domain_core` + an `I<Name>Repository` stub; data gets `data_core` + a `<Name>RepositoryImpl extends IBaseRepository` stub, implementing and registered as the domain's contract when `domain_<name>` already exists (generate the domain first); core/custom get no workspace dependency. |
 | Nav order | A `[route_contribution]` `2` destination gets `order` = highest existing `INavDestinationModule.order` under `modules/*/feature` + 10 (10 when none), so generated tabs never tie. |
+| Tests from the start | A feature gets `test/<name>_page_test.dart` (page under `ResponsiveInit` + its localizations, controller provided as the route provides it, phone and tablet windows) and `test/<name>_provider_test.dart` or `test/<name>_bloc_test.dart` (none for SM `3`), passing as generated. Keep them green as you build: `cd modules/<name>/feature && flutter test`. Swap the real controller for one built from fakes once it takes use cases. |
+| Composition | Every `app_manifest.yaml`, or only those `--apps` names. |
 | Barrels around codegen | The barrel generator runs before `build_runner` (the templates import sibling barrels) and again after it, so generated files (`module.module.dart`, `lib/src/gen/**`) are exported too. |
 
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)

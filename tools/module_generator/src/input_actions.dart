@@ -2,12 +2,13 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../shared/app_locator.dart';
 import '../../unused_checker/monorepo_helper.dart';
 import 'module_type.dart';
 
 /// Usage text, printed by `--help` and after every argument error.
 const String moduleGeneratorUsage = '''
-Usage: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]
+Usage: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--apps <id,id>]
 
   <type>    1 = Feature  (modules/<name>/feature, package feature_<name>)
             2 = Domain   (modules/<name>/domain,  package domain_<name>)
@@ -19,6 +20,10 @@ Usage: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>]
   <SM>      type 1 only: 1 = Provider, 2 = BLoC, 3 = none
   <route>   type 1 only: 1 = IFeatureRouteModule (stack routes),
                          2 = INavDestinationModule (primary nav tab), 3 = none
+  --apps    Compose the module into these apps only: a comma-separated list
+            of `app.id`s from apps/*/app_manifest.yaml (--apps mobile, or
+            --apps=mobile,admin). Default: every app. An unknown id exits 64
+            before anything is written.
 
 Examples:
   dart tools/module_generator/generate.dart 1 profile "" 1 1   # Feature + Provider + stack routes
@@ -27,6 +32,7 @@ Examples:
   dart tools/module_generator/generate.dart 3 payment          # Data micro-package
   dart tools/module_generator/generate.dart 4 analytics        # core_analytics
   dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/billing
+  dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile   # mobile only, not admin
 
 Run with no arguments on a terminal to be prompted for everything; a missing
 <SM> or <route> for a feature is prompted for too. Without a terminal every
@@ -108,11 +114,59 @@ class InputActions {
     );
   }
 
-  ModuleConfig parseInput(List<String> args) {
-    if (args.contains('--help') || args.contains('-h')) {
+  /// Takes `--apps <ids>` / `--apps=<ids>` out of [args] and returns the
+  /// validated ids — `null` when the flag is absent (every app).
+  ///
+  /// Checked against every `app_manifest.yaml` before anything is written:
+  /// a typo would otherwise compose the module into no app at all, which
+  /// looks like success until the feature never shows up.
+  List<String>? _takeApps(List<String> args) {
+    String? raw;
+    var seen = false;
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      if (arg == '--apps') {
+        if (i + 1 >= args.length) _usageError('--apps needs a value.');
+        raw = args[i + 1];
+        args.removeRange(i, i + 2);
+      } else if (arg.startsWith('--apps=')) {
+        raw = arg.substring('--apps='.length);
+        args.removeAt(i);
+      } else {
+        continue;
+      }
+      if (seen) _usageError('--apps given more than once.');
+      seen = true;
+      i--;
+    }
+    if (!seen) return null;
+
+    final ids = <String>{
+      for (final id in raw!.split(','))
+        if (id.trim().isNotEmpty) id.trim(),
+    }.toList();
+    if (ids.isEmpty) {
+      _usageError('--apps needs at least one app id (e.g. --apps mobile).');
+    }
+    final known = {for (final app in discoverApps()) app.id};
+    final unknown = ids.where((id) => !known.contains(id)).toList();
+    if (unknown.isNotEmpty) {
+      _usageError(
+        'Unknown app id(s) in --apps: ${unknown.join(', ')}. '
+        'Known apps (app.id in apps/*/app_manifest.yaml): '
+        '${(known.toList()..sort()).join(', ')}. Nothing was written.',
+      );
+    }
+    return ids;
+  }
+
+  ModuleConfig parseInput(List<String> arguments) {
+    if (arguments.contains('--help') || arguments.contains('-h')) {
       stdout.writeln(moduleGeneratorUsage);
       exit(0);
     }
+    final args = [...arguments];
+    final apps = _takeApps(args);
     final flag = args.where((a) => a.startsWith('-')).firstOrNull;
     if (flag != null) _usageError('Unknown flag: $flag');
     if (args.length > 5) {
@@ -306,6 +360,7 @@ class InputActions {
       routeContribution: routeContribution,
       moduleName: moduleName,
       modulePath: modulePath,
+      apps: apps,
     );
   }
 }

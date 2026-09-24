@@ -1,9 +1,10 @@
 import 'dart:io';
 
 import '../shared/toolchain.dart';
+import 'firebase_stubs.dart';
 
 const String _usage = '''
-Usage: dart tools/workspace_setup/configure.dart [--help]
+Usage: dart tools/workspace_setup/configure.dart [--stub-firebase] [--help]
 
 Full workspace setup — the setup step on a fresh clone. Run from anywhere in
 the repository; it works on the repository root. In order:
@@ -21,7 +22,22 @@ generated file and barrel. Stops at the first failing command with its exit
 code. FVM is used only when detected (tools/shared/toolchain.dart).
 
 Options:
-  -h, --help   Print this help and exit.''';
+  --stub-firebase  Before step 1, write COMPILE-ONLY Firebase stand-ins for a
+                   checkout with no Firebase project — exactly what CI does
+                   (build_runner must resolve firebase_module.dart's imports;
+                   what was written is listed at the end):
+                     * lib/firebase/firebase_options_<flavor>.dart for every
+                       app with a lib/firebase/firebase_module.dart (one per
+                       flavor it imports)
+                     * android/app/src/<flavor>/google-services.json for every
+                       app whose android/app applies the Google Services
+                       plugin (package_name = applicationId + the flavor's
+                       applicationIdSuffix)
+                   Only files that are ABSENT are written; real ones are kept.
+                   The app then compiles and builds, but nothing
+                   Firebase-backed works (push, FCM token). Replace them with
+                   `dart tools/firebase/firebase_config.dart --app <id>`.
+  -h, --help       Print this help and exit.''';
 
 void main(List<String> args) async {
   // Setup is destructive (step 2 cleans the workspace), so an argument this
@@ -31,8 +47,10 @@ void main(List<String> args) async {
     stdout.writeln(_usage);
     exit(0);
   }
-  if (args.isNotEmpty) {
-    stderr.writeln('[ERROR] Unknown argument(s): ${args.join(' ')}');
+  final stubFirebase = args.contains('--stub-firebase');
+  final unknown = args.where((a) => a != '--stub-firebase').toList();
+  if (unknown.isNotEmpty) {
+    stderr.writeln('[ERROR] Unknown argument(s): ${unknown.join(' ')}');
     stderr.writeln('');
     stderr.writeln(_usage);
     exit(64);
@@ -50,6 +68,20 @@ void main(List<String> args) async {
   reportToolchain();
   final flutterCmd = flutterExecutable;
   final dartCmd = dartExecutable;
+
+  // --stub-firebase writes FIRST, before any codegen: build_runner reads
+  // each app's firebase_module.dart, whose options imports must resolve —
+  // CI always stubbed before this script for that reason. dart:io only, so
+  // it needs nothing resolved. What was written is reported at the end,
+  // where it cannot scroll away.
+  FirebaseStubReport? stubs;
+  if (stubFirebase) {
+    stdout.writeln(
+      '[!] Writing compile-only Firebase stubs (--stub-firebase) — '
+      'summary at the end...',
+    );
+    stubs = writeFirebaseStubs('.');
+  }
 
   // 1. Activating global CLIs
   stdout.writeln('[!] Activating global CLIs...');
@@ -125,9 +157,49 @@ void main(List<String> args) async {
     ]);
   }
 
+  if (stubs != null) _reportFirebaseStubs(stubs);
+
   stdout.writeln('==========================================');
   stdout.writeln('[V] Configuration completed successfully!');
   stdout.writeln('==========================================');
+}
+
+/// `--stub-firebase`: what was stubbed, and a warning that cannot be
+/// missed saying these are not real configs.
+void _reportFirebaseStubs(FirebaseStubReport report) {
+  stdout.writeln('[!] Firebase stubs (--stub-firebase):');
+  for (final path in report.kept) {
+    stdout.writeln('    - kept existing $path');
+  }
+  for (final path in report.written) {
+    stdout.writeln('    - stubbed $path');
+  }
+  for (final note in report.notes) {
+    stdout.writeln('    - $note');
+  }
+  if (report.written.isEmpty) {
+    stdout.writeln('    Nothing to stub: every Firebase file already exists.');
+    return;
+  }
+  stdout.writeln('');
+  stdout.writeln(
+    '  ************************************************************',
+  );
+  stdout.writeln(
+    '  * ${report.written.length} Firebase file(s) above are STUBS, not real configs.',
+  );
+  stdout.writeln(
+    '  * The app compiles and builds; push notifications, the FCM',
+  );
+  stdout.writeln(
+    '  * token and every other Firebase call do NOT work. Replace',
+  );
+  stdout.writeln('  * them with a real project before relying on any of it:');
+  stdout.writeln('  *   dart tools/firebase/firebase_config.dart --app <id>');
+  stdout.writeln('  * (docs/en/getting-started/01_setup.md section 3.1)');
+  stdout.writeln(
+    '  ************************************************************',
+  );
 }
 
 Future<void> _runCommand(

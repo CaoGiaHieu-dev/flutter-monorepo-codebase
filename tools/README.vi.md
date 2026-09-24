@@ -22,7 +22,9 @@ tools/
 │   └── bootstrap.dart               # Checkout từng phần: bỏ member vắng mặt để `pub get` resolve được (không import package)
 ├── docs_check/                      # 📚 Mọi đường dẫn docs nhắc tới phải tồn tại (Gate 5 của CI)
 │   ├── check.dart
-│   └── allowlist.txt                # Đường dẫn vắng mặt có chủ đích, kèm lý do
+│   ├── parity.dart                  # Tương đương en <-> vi: heading từng cấp, code block, dòng bảng
+│   ├── allowlist.txt                # Đường dẫn vắng mặt có chủ đích, kèm lý do
+│   └── parity_allowlist.txt         # Chênh lệch hình dạng en/vi có chủ đích, kèm lý do
 ├── shared/                          # 🔗 Code dùng chung giữa các tool
 │   ├── app_locator.dart             # Tìm app qua app_manifest.yaml, chọn app bằng --app <id>
 │   └── toolchain.dart               # Phát hiện FVM (.fvmrc + `fvm --version`) cho mọi tool gọi dart/flutter
@@ -36,7 +38,7 @@ tools/
 │   │   ├── module_type.dart         # Enum ModuleType, StateManagementType, FeatureRouteContribution; ModuleConfig
 │   │   ├── pubspec_generator.dart   # Sinh pubspec.yaml với dependencies đúng tầng
 │   │   └── common_helpers.dart      # Tạo thư mục/template, ghi app_manifest.yaml, chạy lệnh, rollback
-│   └── templates/                   # Template mustache (common, domain, data, feature/{bloc,provider,default,routing,localization})
+│   └── templates/                   # Template mustache (common, domain, data, feature/{bloc,provider,default,routing,localization,test})
 ├── barrel_generator/                # 📦 Sinh barrel files (export *.dart)
 │   └── generate.dart                # Quét lib/ và tạo file barrel tự động
 ├── code_review/                     # 🤖 AI-powered code review (Gemini)
@@ -54,7 +56,11 @@ tools/
 │   ├── monorepo_helper.dart         # Dùng chung: tìm gốc repo, liệt kê package
 │   └── output_formatter.dart        # Dùng chung: định dạng kết quả
 ├── workspace_setup/                 # ⚙️ Thiết lập workspace tổng
-│   └── configure.dart               # Script đa nền tảng (Windows/macOS/Linux)
+│   ├── configure.dart               # Script đa nền tảng (Windows/macOS/Linux)
+│   └── firebase_stubs.dart          # --stub-firebase: Firebase options + google-services.json chỉ để compile (chỉ dart:io)
+├── coverage_report/                 # 📊 Line coverage từng package từ lcov.info (CI Gate 3, tham khảo)
+│   └── report.dart
+├── test/                            # ✅ Test riêng của các tool (`cd tools && dart test`, CI Gate 1)
 ├── firebase/                        # 🔥 Cấu hình Firebase đa môi trường
 │   └── firebase_config.dart
 ├── theme_generator/                 # 🎨 Sinh Splash Screen & App Icons
@@ -135,6 +141,11 @@ dart tools/docs_check/check.dart
 dart tools/docs_check/check.dart --verbose
 ```
 
+Cùng lần chạy đó kiểm tra **tương đương en ↔ vi**: mọi `docs/en/**.md` có bản `docs/vi` tương
+ứng, và mọi `<name>.md` có `<name>.vi.md` nằm cạnh, phải có cùng số heading ở mỗi cấp, số code
+block và số dòng bảng ở cả hai ngôn ngữ. Chênh lệch thì exit 1 kèm cả hai con số; chênh lệch có
+chủ đích ghi vào `tools/docs_check/parity_allowlist.txt` dạng `<english file> <metric>` kèm lý do.
+
 Kiểm tra mọi file `*.md` trong repo: span trong backtick bắt đầu bằng một thư mục cấp gốc có
 thật, và link Markdown (tính tương đối từ file chứa nó). Đường dẫn vắng mặt có chủ đích (file
 sinh ra, secret, "tự tạo file này") nằm trong `tools/docs_check/allowlist.txt` kèm lý do.
@@ -197,11 +208,14 @@ dart tools/module_generator/generate.dart 5 billing acme
 # Interactive (không tham số, cần terminal):
 dart tools/module_generator/generate.dart
 
+# Chỉ một số app: compose vào mobile, không đụng admin (id = app.id trong apps/*/app_manifest.yaml):
+dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
+
 # Xem cú pháp:
 dart tools/module_generator/generate.dart --help
 ```
 
-CLI thêm module vào mọi `app_manifest.yaml` (Feature/Domain/Data vào danh sách `modules:`,
+CLI thêm module vào mọi `app_manifest.yaml` (hoặc chỉ các app mà `--apps` nêu tên) (Feature/Domain/Data vào danh sách `modules:`,
 Core/Custom vào nhóm DI `core`), scaffold stub DI route, rồi **tự chạy**
 `dart tools/composer/composer.dart sync` (sinh lại workspace list, dependency của app và
 `injection.dart`), `dependency_sync`, `flutter pub get`, `gen-l10n` (chỉ với Feature), barrel
@@ -213,8 +227,13 @@ Có lỗi giữa chừng thì tool rollback và exit 1.
 Tham số được kiểm tra **trước** khi ghi bất cứ thứ gì (lỗi → exit 64 kèm usage):
 - `<name>` (và `<prefix>`) phải là tên package Dart hợp lệ: chữ thường, số, `_`, bắt đầu bằng chữ cái, không phải từ khoá Dart (`Bad-Name` bị từ chối ngay); tên package đã có trong repo cũng bị từ chối.
 - `<SM>` và `<route>` chỉ nhận `1`/`2`/`3`; `<prefix>`, `<SM>`, `<route>` truyền cho sai loại module bị từ chối; cờ lạ bị từ chối.
+- `--apps` phải nêu ít nhất một id app có thật; id lạ (hoặc giá trị rỗng, hoặc truyền cờ hai lần) bị từ chối và các id có thật được liệt kê.
 - Feature thiếu `<SM>` hoặc `<route>` thì hỏi giá trị còn thiếu trên terminal (bỏ trống = `1`); không có terminal (hoặc stdin hết) thì báo lỗi thay vì lặng lẽ lấy mặc định.
 - Việc ghép vào `app_manifest.yaml` đọc manifest bằng YAML (không so chuỗi con — `core_net` không còn bị coi là "đã có" vì `core_network`); nếu không ghép được vào manifest nào thì exit 1 và rollback.
+
+Feature khởi đầu với các test pass ngay khi sinh: `test/<name>_page_test.dart` (page dưới
+`ResponsiveInit` và localization của nó, controller được cung cấp đúng như route cung cấp) cộng
+`test/<name>_provider_test.dart` hoặc `test/<name>_bloc_test.dart` (không có với SM `3`).
 
 ### 📦 Barrel Files Generator
 ```bash
@@ -298,6 +317,8 @@ không dựa vào lời của `unused_checker`.
 ```bash
 # Thiết lập workspace (bước setup trên một bản clone mới):
 dart tools/workspace_setup/configure.dart   # đa nền tảng
+# ...kèm stub Firebase chỉ để compile ở nơi chưa có file thật (chưa có project Firebase; CI chạy đúng lệnh này):
+dart tools/workspace_setup/configure.dart --stub-firebase
 
 # Firebase config (ghi vào apps/<id>/lib/firebase/, ios/, android/ của app đó):
 dart tools/firebase/firebase_config.dart --app mobile
@@ -312,6 +333,10 @@ dart tools/theme_generator/theme_setting.dart --app mobile
   `flutter clean` → `flutter pub get` → `flutter gen-l10n` ở mọi package có `l10n.yaml` →
   `dart run build_runner build --workspace` → barrel generator cho mọi package có `lib/` (bỏ qua
   app). Dừng ở lệnh lỗi đầu tiên với đúng exit code của nó.
+  `--stub-firebase` ghi thêm — đầu tiên, trước codegen, và liệt kê ở cuối — **chỉ khi chưa có**, một `firebase_options_<flavor>.dart` cho mỗi
+  flavor của mọi app có `lib/firebase/firebase_module.dart` và một
+  `android/app/src/<flavor>/google-services.json` cho mỗi flavor Gradle (package name đọc từ
+  `build.gradle.kts`). Chúng giúp app compile và build được; mọi thứ dựa trên Firebase đều không chạy.
 - `firebase_config.dart` chạy tương tác (cần terminal) và cần Firebase CLI đã cài
   (`npm install -g firebase-tools`) và đã `firebase login` — tool **không** tự cài Firebase CLI
   (FlutterFire CLI thì được tự cài qua `dart pub global activate` nếu thiếu); thiếu Firebase CLI
@@ -321,6 +346,18 @@ dart tools/theme_generator/theme_setting.dart --app mobile
   `flutter_native_splash` + `icons_launcher` trong `pubspec.yaml` của app — thiếu thì báo lỗi
   trước khi ghi gì (`--app admin` hiện bị từ chối vì admin chưa có thư mục nền tảng). Generator
   thất bại thì mọi file nó tạo/sửa dưới `android/`, `ios/`, `web/` được khôi phục.
+
+### 📊 Coverage Report
+```bash
+# Sau `flutter test --coverage` trong từng package — bảng theo package, kèm dòng tổng:
+dart tools/coverage_report/report.dart
+# Biến thành gate: tổng dưới 60 %, hoặc bất kỳ package nào dưới 40 %, thì exit 1:
+dart tools/coverage_report/report.dart --min 60 --min-package 40
+```
+
+Đọc mọi `*/coverage/lcov.info`, loại file sinh ra (`*.g.dart`, `*.freezed.dart`, `*.config.dart`,
+`*.module.dart`, `gen/`, …) và nối bảng vào `$GITHUB_STEP_SUMMARY` khi chạy trên GitHub Actions.
+CI Gate 3 chạy nó sau các test, chỉ để tham khảo (không ngưỡng).
 
 ### 📱 Android 16KB Page Size
 ```bash

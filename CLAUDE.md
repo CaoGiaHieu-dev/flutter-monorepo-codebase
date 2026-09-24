@@ -52,7 +52,7 @@ dart fix --apply
 
 ### Tests
 
-Tests live per-package in a `test/` directory — nineteen packages today: `platform/{app_shell,base_ui,bloc_state_management,common,data_core,database,domain_core,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature,home/feature,onboarding/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Flutter packages use `flutter_test`; pure-Dart ones (`domain_core`, `tools`) use `package:test`, pinned in the catalog. Fakes are hand-written — the repo uses no mockito/mocktail. Run from the package directory:
+Tests live per-package in a `test/` directory — twenty-one packages today: `apps/{admin,mobile}/test/` (the DI smoke tests — see [Application Boot Lifecycle](#application-boot-lifecycle)), `platform/{app_shell,base_ui,bloc_state_management,common,data_core,database,domain_core,network,notifications,provider_state_management,responsive,storage,ui_kit}/test/` and `modules/{auth/data,auth/feature,cache/data,dashboard/feature,home/feature,onboarding/feature}/test/` (CI Gate 3 finds every `test/` directory itself). Flutter packages use `flutter_test`; pure-Dart ones (`domain_core`, `tools`) use `package:test`, pinned in the catalog. Fakes are hand-written — the repo uses no mockito/mocktail. Run from the package directory:
 
 ```bash
 cd platform/common
@@ -81,6 +81,10 @@ dart tools/arch_check/check.dart --help   # full rule descriptions (R1-R10)
 # exist. References into a sample bundle removed with remove_sample (all its
 # packages gone; bundles read from tools/sample_manifest.yaml, which
 # remove_sample never edits) print one INFO line per bundle and do not fail.
+# The same run checks en <-> vi parity: every docs/en/**.md with a docs/vi
+# twin (and every X.md with an X.vi.md beside it) must have the same count of
+# headings per level, fenced code blocks and table rows — exit 1 otherwise.
+# Intentional differences: tools/docs_check/parity_allowlist.txt, with reason.
 dart tools/docs_check/check.dart
 dart tools/docs_check/check.dart --verbose   # + copy-paste allowlist block, removed-sample refs
 
@@ -92,7 +96,7 @@ dart tools/sample_cleanup/remove_sample.dart auth           # dry-run (default)
 dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
 
 # Generate a new module
-# Syntax: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]
+# Syntax: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--apps <id,id>]
 # <type>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<name>), 5=Custom
 # <prefix> (Custom only; pass "" otherwise): package-name prefix → <prefix>_<name> at platform/<name>
 # <SM> (Feature only): 1=Provider, 2=BLoC, 3=None
@@ -101,12 +105,17 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply   # actually remove
 # always pass both. Invalid names (must be Dart package names), a package name any pubspec
 # already declares (`2 core` = domain_core), or bad values are rejected up front (exit 64,
 # nothing written); --help prints usage. A nav tab gets order = highest existing + 10.
+# --apps <id,id> composes the module into those apps' manifests only (app.id from
+# apps/*/app_manifest.yaml); default is every app — admin included. Unknown id → exit 64.
+# A feature ships test/<name>_page_test.dart + <name>_provider_test.dart / <name>_bloc_test.dart
+# (none for SM=3) that pass as generated: `cd modules/<name>/feature && flutter test`.
 dart tools/module_generator/generate.dart 1 profile "" 1 1    # Feature+Provider+stack routes
 dart tools/module_generator/generate.dart 1 chat "" 2 2       # Feature+BLoC+bottom nav tab
 dart tools/module_generator/generate.dart 2 payment            # Domain micro-package
 dart tools/module_generator/generate.dart 3 payment            # Data micro-package
 dart tools/module_generator/generate.dart 4 analytics          # Core package (core_analytics)
 dart tools/module_generator/generate.dart 5 billing acme       # Custom package (acme_billing at platform/billing)
+dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile   # mobile only, admin untouched
 
 # Regenerate barrel files after adding/renaming/deleting files in a package's lib/ —
 # AFTER gen-l10n / build_runner: barrels also export generated files present on disk
@@ -133,6 +142,14 @@ dart tools/code_review/code_review.dart --all --focus architecture,security
 
 # Workspace setup (cross-platform — there is no .bat/.sh wrapper)
 dart tools/workspace_setup/configure.dart
+# No Firebase project? Also write (first, before codegen) COMPILE-ONLY stubs (firebase_options_<flavor>.dart per
+# app with lib/firebase/firebase_module.dart, android/app/src/<flavor>/google-services.json per
+# flavor) — only where the file is absent. What CI runs. Nothing Firebase-backed works with them.
+dart tools/workspace_setup/configure.dart --stub-firebase
+
+# Per-package line coverage (generated files excluded) from each package's coverage/lcov.info,
+# after `flutter test --coverage`. Advisory in CI Gate 3 (job summary); --min / --min-package <pct> gate it
+dart tools/coverage_report/report.dart
 
 # Partial checkout (a module submodule not initialised): composer imports package:path/yaml, and pub
 # refuses a workspace listing a member with no pubspec.yaml. bootstrap uses dart:io only and prunes
@@ -195,7 +212,7 @@ Each package is a workspace member listed in root `pubspec.yaml`.
 | `core_notifications` | Push notification management | Owns `NotificationConstants` at `lib/src/utils/` |
 | `core_responsive` | **Mechanism only** — `ResponsiveInit`, `ResponsiveScope` (InheritedWidget), `ResponsiveMetrics`, the `BuildContext` scaling extension (`context.w/h/r/sp/spMin/dg/dm`); scale policy (`ScaleBounds`, `ResponsiveProfile`); window classes (`WindowSizeClass`, `WindowHeightClass`, `ResponsiveBreakpoints`); adaptive layout (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`, `FoldPosture`) | **Ships no `num` extension** — `16.w` does not compile, on purpose. Scales **down only** by default. Zero workspace deps. See [Responsive UI](#responsive-ui-core_responsive--strict) |
 | `provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `MultiProviderStateListener`, `BaseViewWidget`, `BaseProxyWidget` | Also ships `DefaultLoadingWidget`/`DefaultEmptyWidget` so core never borrows from `core_ui_kit` |
-| `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union) | **`BaseBloc`/`BaseCubit` are empty extension points** — no `executeOperation` equivalent; handlers unwrap `Result` by hand |
+| `bloc_state_management` | `BaseBloc`, `BaseCubit` (only when events unnecessary), `BlocViewState<T>` (optional Freezed union), `BlocResultMixin<T>` / `CubitResultMixin<T>` (`emitResult`) | **`BaseBloc`/`BaseCubit` are empty extension points**; `emitResult` settles a `Result` into `BlocViewState<T>` — a custom state still unwraps by hand. See [BLoC Pattern](#bloc-pattern-bloc_state_management) |
 
 ### Domain Layer Rules (Pure Dart Mandate)
 
@@ -366,7 +383,8 @@ Widget build(BuildContext context, GoRouterState state) {
 1. `main.dart` → `runShellApp(configureDependencies: …)` (`platform/app_shell/lib/bootstrap.dart`) → `runZonedGuarded` → `WidgetsFlutterBinding.ensureInitialized()` → `installShellErrorHooks`
    - **Error hooks:** the zone handler, `FlutterError.onError` and `PlatformDispatcher.instance.onError` all funnel into one hook that keeps the previous handler (console dump in debug), then calls the app's optional `onError` and `getItOrNull<IErrorReporter>()` (`fatal: true`); `ErrorHandler.onUnclassifiedError` sends exceptions `ErrorHandler` could not classify to the same reporter as `fatal: false`. **To plug Crashlytics/Sentry, register an `IErrorReporter` impl in the app** (`@LazySingleton(as: IErrorReporter)` in its own `lib/`) — never set `FlutterError.onError` yourself. `IAnalytics` likewise: register one and `RouteAwareWidget` (every `GoRouteDataCustom` page) reports screens via `setCurrentScreen`. Both are optional `core_di` contracts (`src/observability/`); guide: `docs/en/architecture/06_app_shell.md` § "Errors and crash reporting"
 2. `configureDependencies()` — the app's generated DI graph (GetIt)
-   - then `AppInitializer.initBeforeRunApp()` — synchronous: Logger + `HttpOverrides.global` (SSL pinning / dev bypass), installed **before any widget is built**, so the first Dio client (the splash's session restore) is already pinned
+   - then `AppInitializer.initBeforeRunApp()` — synchronous: Logger + `HttpOverrides.global` (SSL pinning / dev bypass), installed **before any widget is built**, so the first Dio client (the splash's session restore) is already pinned (on the web: nothing installed, see [SSL Certificate Pinning](#ssl-certificate-pinning))
+   - **Each app's `test/di_smoke_test.dart` runs this step for real** — every flavor, plugins replaced by test doubles, every lazy singleton built, every `core_di` contract and `AppRouter.router` resolved — so a DI ordering bug (`"<Type> is not registered"`) fails CI Gate 3 instead of the first boot. A new plugin touched during DI (a `@preResolve`/`@PostConstruct(preResolve: true)`) needs its test double added there
 3. `MainScope.run()`:
    - Removes native splash (`FlutterNativeSplash.remove()`)
    - Shows the splash from `getItOrNull<IAppSplashScreen>()` via `AppMaterialWrapper(home: splashScreen)` (no router); none registered, or iOS → native splash kept
@@ -390,7 +408,9 @@ Widget build(BuildContext context, GoRouterState state) {
 ### BLoC Pattern (`bloc_state_management`)
 
 - **Prefer `BaseBloc`** — use `BaseCubit` only when events are unnecessary
-- ⚠️ **`BaseBloc`/`BaseCubit` are empty extension points.** There is no BLoC equivalent of Provider's `executeOperation`: each handler must unwrap `Result`, map `AppFailure`, and set loading by hand. The two branches are **not** at parity
+- **`emitResult` is the BLoC `executeOperation`** — for a `BlocViewState<T>` state only. Mix `BlocResultMixin<T>` into the Bloc and write the handler as `=> emitResult(emit, () => _useCase(params))` (a Cubit: `CubitResultMixin<T>`, `emitResult(() => …)`). It emits `loading` (skipped while a `success` is on screen, or with `showLoading: false`), then `success(data)` (`convert:` maps another payload type; `success(null)` → `success(null)` for a nullable `T`, else `initial`), `error(AppFailure)`, or — for `none`/`cancel` — the state from before its own `loading`. A **thrown** error becomes `error(ErrorHandler.handleError(e))` plus `addError` (Provider's `executeOperation` lets it propagate). Nothing is emitted once the handler is done (closed, or replaced by `restartable()`). Source: `platform/bloc_state_management/lib/src/result_emitter.dart`; `bloc_state_management → platform_kernel` is a legal platform edge
+- ⚠️ **Still not at parity.** `BaseBloc`/`BaseCubit` remain empty extension points; a Bloc with a **custom** Freezed state unwraps `Result`, maps `AppFailure` and emits loading by hand (end every branch in a terminal state); and there is no BLoC counterpart of `OperationGlobalConfig` hooks, `errorStateBuilder` or `LoadMoreMixin`
+- **Never emit a `const` state from generic code:** inside a `<T>` helper `const BlocViewState.loading()` is a `BlocViewState<Never>`, unequal to `BlocViewState<T>.loading()` — write the type argument
 - **`BlocViewState<T>`** (renamed from `ViewState` to avoid colliding with Provider's `ViewState`) is a shared optional helper (initial/loading/success/error) — not mandatory. It carries data and takes a required `AppFailure` in `error`; Provider's `ViewState` has 5 variants, no generic, and a nullable `ErrorState`
 - Complex features may define custom Freezed UI state (`BaseBloc<Event, CustomState>`)
 - **Freezed Event Rules:**
@@ -677,6 +697,7 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 - **Global:** `HttpOverrides.global` with `HttpSecurityPinningClient` (SPKI SHA-256), installed by `AppInitializer._setupHttpOverrides`
 - **Dev:** SSL bypass for self-signed certs — **only in a debug build that explicitly declared `--flavor dev`** (`AppConfig.bypassesCertificateValidation`). A missing/unknown flavor is treated as prod (validation on, ERROR logged); `appFlavor` falls back to `dev` in debug, `prod` otherwise
 - **Staging/Prod:** strict SPKI hash matching
+- **Web:** nothing is installed — the browser owns TLS and Dio uses the browser adapter, so `_setupHttpOverrides` returns after one `INFO` log (`AppInitializer.debugIsWebOverride` stands in for `kIsWeb` in tests). `dart:io` still *compiles* on the web; `apps/admin` builds and boots there (`flutter build web` after `flutter create --platforms=web .`), `apps/mobile` does not compile (`core_database` → `drift/native.dart` → `dart:ffi`). Status and known gaps: `docs/en/architecture/02_core.md` § 11
 - > [!CAUTION]
   > Pinning needs **two** things or it silently no-ops (the initializer logs an ERROR in each case):
   > 1. `SslPinningConfig` must be **registered in its own right** — GetIt does not resolve supertypes, so registering `NetworkConfigImpl as NetworkConfig` is not enough. `platform/app_shell/lib/di/network_binding_module.dart` binds it.
@@ -776,7 +797,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 10. **Features must not edit `root_app.dart`** for delegates — use `IFeatureLocalization` DI.
 11. **Error handling:** Use `ErrorHandler.handleError(e)` — never `AppFailure.fromException()`.
 12. **No `throw` from Data layer to UI** — wrap in `Result.failure(AppFailure)`.
-13. **Module generator** adds the new module to every `app_manifest.yaml` and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the workspace list, each app's dependencies and `injection.dart`. Never hand-edit those three — they sit between `composer:managed` markers and CI Gate 0 fails on drift.
+13. **Module generator** adds the new module to every `app_manifest.yaml` (or only the apps named with `--apps mobile,admin`) and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the workspace list, each app's dependencies and `injection.dart`. Never hand-edit those three — they sit between `composer:managed` markers and CI Gate 0 fails on drift.
 14. **Barrel files:** Run `dart tools/barrel_generator/generate.dart` after creating/renaming/deleting files — and **after** `gen-l10n` / `build_runner`, because it also exports generated files present on disk (`module.module.dart`, `lib/src/gen/**`; `core_base_ui`'s `src.dart` exports `gen/gen.dart`). An extra run before codegen is harmless; the last run must come after.
 15. **Build runner flags:** plain `dart run build_runner build --workspace`. `--delete-conflicting-outputs` (short form `-d`) was removed from build_runner and is ignored with a warning — do not pass it.
 16. **Flat workspace:** `resolution: workspace` at root `pubspec.yaml` only — no intermediate workspace nodes.

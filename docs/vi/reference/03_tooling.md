@@ -24,6 +24,8 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | Nghi có asset / file / translation / package chết | `dart tools/unused_checker/check_script.dart` |
 | Muốn biết gì đã lỗi thời trên pub.dev | `dart tools/check_outdated.dart` |
 | Vừa clone về, cần dựng mọi thứ | `dart tools/workspace_setup/configure.dart` |
+| Chưa có project Firebase nhưng app phải compile và build được | `dart tools/workspace_setup/configure.dart --stub-firebase` |
+| Test phủ bao nhiêu phần trăm mỗi package? | `flutter test --coverage` trong từng package, rồi `dart tools/coverage_report/report.dart` |
 | Cấu hình Firebase cho dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
 | Sinh lại splash screen và app icon | `dart tools/theme_generator/theme_setting.dart --app mobile` |
 | Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_ckeck.sh <apk>` |
@@ -115,7 +117,7 @@ Exit `0` khi đã cắt bớt hoặc không có gì để cắt (checkout đầy
 **Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, gom tất cả những path không tồn tại, in ra theo từng file, rồi thoát với mã 1. Ngoại lệ duy nhất là tham chiếu vào một sample bundle bạn đã gỡ bằng `remove_sample` — được tóm tắt dạng INFO, không bao giờ làm fail (xem bên dưới).
 
 ```bash
-dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết
+dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết hoặc lệch cấu trúc en ↔ vi
 dart tools/docs_check/check.dart --verbose  # kèm block allowlist để copy-paste và mọi tham chiếu tới sample đã gỡ
 dart tools/docs_check/check.dart --help     # cú pháp; mọi tham số khác thoát mã 64
 ```
@@ -150,6 +152,16 @@ Mọi trường hợp khác là drift, và cách sửa là sửa tài liệu. M�
 > [!NOTE]
 > Check này cố ý không nói gì về việc tài liệu có *đúng* hay không, chỉ nói những thứ nó trỏ tới có tồn tại hay không. Đó là một chuẩn thấp, và là chuẩn duy nhất máy giữ được. Trích dẫn theo số dòng (`generate.dart:90-101`) fail check này theo thiết kế — đó là loại tham chiếu mục nhanh nhất, còn gọi tên symbol thì sống sót qua mọi chỉnh sửa phía trên nó.
 
+**Tương đương cấu trúc en ↔ vi.** Cùng lần chạy đó so sánh mọi cặp bản dịch — `docs/en/<path>.md` với `docs/vi/<path>.md`, và `<name>.md` với `<name>.vi.md` nằm cạnh ở bất kỳ đâu (`README.md`, `tools/README.md`, README của package) — theo hình dạng, vì bản dịch không thể diff từng chữ: số heading ở mỗi cấp (`h1`–`h6`), số code block rào (`code-blocks`) và số dòng bảng (`table-rows`, kể cả bảng trong trích dẫn) phải khớp. Heading và bảng nằm trong code block không được tính. Mọi chênh lệch đều làm lần chạy fail:
+
+```text
+1 parity mismatch(es):
+
+  docs/en/guides/01_new_feature.md  table-rows: en 18 vs vi 17  (docs/vi/guides/01_new_feature.md)
+```
+
+Chênh lệch gần như luôn có nghĩa là một mục, một lệnh hay một dòng bảng chỉ tới được một ngôn ngữ — hãy dịch nó sang. Chênh lệch thật sự có chủ đích thì ghi vào `tools/docs_check/parity_allowlist.txt` dạng `<english file> <metric>` (hoặc `*` cho mọi metric) kèm lý do sau `#`; entry không có lý do bị từ chối, còn entry không còn khớp chênh lệch nào sẽ in `WARN` để xoá đi. Hiện danh sách này rỗng: mọi cặp đều cùng hình dạng. Logic nằm ở `tools/docs_check/parity.dart`.
+
 ---
 
 ## `sample_cleanup`
@@ -180,7 +192,7 @@ Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot tr
 Dựng khung package và đăng ký nó khắp workspace.
 
 ```bash
-dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>]
+dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>] [--apps <id,id>]
 dart tools/module_generator/generate.dart --help   # cú pháp
 ```
 
@@ -191,6 +203,7 @@ dart tools/module_generator/generate.dart --help   # cú pháp
 | `<prefix>` | chỉ cho type `5` — tiền tố tên package: `<prefix>_<name>` tại `platform/<name>`, cùng quy tắc đặt tên như `<name>`. Từ chỉ tầng (`feature`, `domain`, `data`, `core`) bị từ chối; hãy dùng type 1–4. Với type 1–4 tham số này phải rỗng — truyền `""` |
 | `<sm>` | chỉ feature — `1` Provider · `2` BLoC · `3` không dùng |
 | `<route>` | chỉ feature — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` không |
+| `--apps` | tuỳ chọn, mọi loại — chỉ compose module vào các app này: danh sách `app.id` cách nhau bằng dấu phẩy, lấy từ `apps/*/app_manifest.yaml` (`--apps mobile`, `--apps=mobile,admin`). Mặc định: mọi app |
 
 ```bash
 dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provider + route stack
@@ -198,13 +211,14 @@ dart tools/module_generator/generate.dart 1 chat    "" 2 2   # feature + BLoC + 
 dart tools/module_generator/generate.dart 2 payment          # domain micro-package
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
 dart tools/module_generator/generate.dart 5 billing acme     # acme_billing tại platform/billing
+dart tools/module_generator/generate.dart 1 chat    "" 2 2 --apps mobile   # chỉ mobile — admin không bị đụng
 ```
 
-**Tham số được kiểm tra trước khi ghi bất cứ thứ gì**, và mọi lần từ chối đều thoát với mã `64` kèm cú pháp: `<name>` hay `<prefix>` không hợp lệ (`Bad-Name`), `<sm>` / `<route>` khác `1`/`2`/`3`, `<prefix>` / `<sm>` / `<route>` truyền cho loại module không nhận nó, cờ lạ, nhiều hơn năm tham số, hoặc **tên package đã có** trong một `pubspec.yaml` bất kỳ của repo. Pub resolve workspace theo tên, nên trùng tên trước đây chỉ lộ ra ở `pub get`, sau khi composer đã ghi lại các manifest — và thư mục mới không có nghĩa là tên mới: `5 shell platform_app` là `platform_app_shell` (đã có ở `platform/app_shell`), `2 core` / `3 core` là `domain_core` / `data_core`.
+**Tham số được kiểm tra trước khi ghi bất cứ thứ gì**, và mọi lần từ chối đều thoát với mã `64` kèm cú pháp: `<name>` hay `<prefix>` không hợp lệ (`Bad-Name`), `<sm>` / `<route>` khác `1`/`2`/`3`, `<prefix>` / `<sm>` / `<route>` truyền cho loại module không nhận nó, cờ lạ, nhiều hơn năm tham số, `--apps` không có giá trị, danh sách rỗng, truyền hai lần, hoặc chứa id mà không `app_manifest.yaml` nào khai báo (thông báo liệt kê các id có thật), hoặc **tên package đã có** trong một `pubspec.yaml` bất kỳ của repo. Pub resolve workspace theo tên, nên trùng tên trước đây chỉ lộ ra ở `pub get`, sau khi composer đã ghi lại các manifest — và thư mục mới không có nghĩa là tên mới: `5 shell platform_app` là `platform_app_shell` (đã có ở `platform/app_shell`), `2 core` / `3 core` là `domain_core` / `data_core`.
 
 Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `<sm>` hoặc `<route>` thì hỏi phần còn thiếu (bỏ trống câu trả lời là chọn `1`). **Không có terminal** — CI, shell của agent, stdin đã hết — thì giá trị cần hỏi trở thành lỗi, exit `64`, không bao giờ lặng lẽ lấy mặc định: với feature hãy luôn truyền đủ năm tham số. Mọi output của tool đều bằng tiếng Anh.
 
-**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template (pubspec mới chép `environment:` từ `pubspec.yaml` gốc), thêm module vào mọi `app_manifest.yaml`, chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, barrel generator **lần nữa**, và `dart fix --apply` trên package mới. Barrel chạy hai lần vì template import các barrel anh em, nên chúng phải có trước khi `build_runner` đọc package, trong khi barrel cũng export file sinh ra (`module.module.dart`, `lib/src/gen/**`) — nên lần chạy cuối phải đứng sau codegen.
+**Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template (pubspec mới chép `environment:` từ `pubspec.yaml` gốc), thêm module vào mọi `app_manifest.yaml` — hoặc chỉ các app mà `--apps` nêu tên — chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, barrel generator **lần nữa**, và `dart fix --apply` trên package mới. Barrel chạy hai lần vì template import các barrel anh em, nên chúng phải có trước khi `build_runner` đọc package, trong khi barrel cũng export file sinh ra (`module.module.dart`, `lib/src/gen/**`) — nên lần chạy cuối phải đứng sau codegen.
 
 > [!IMPORTANT]
 > Nó không bao giờ tự ghi danh sách `workspace:` ở root, `pubspec.yaml` hay `lib/di/injection.dart` của app. Các file đó nằm giữa marker `composer:managed` và chỉ `composer sync` ghi chúng — một dòng thêm ngoài marker là dòng composer không bao giờ xoá, còn sửa tay bên trong là drift mà CI Gate 0 chặn.
@@ -218,6 +232,10 @@ Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `
 - **Tự phát hiện FVM** — mọi tool có gọi lệnh ngoài đều dùng chung `tools/shared/toolchain.dart` — yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
 **Package mới khai báo gì.** Chỉ những package mà template của nó import, nên nó qua `check_unused_packages` ngay lần chạy đầu — thêm `core_network`, `core_storage`… khi code cần. Feature khai `core_di`, `core_common`, `core_base_ui` và `core_responsive` (mọi page được sinh đều bố cục qua `AdaptiveContent`, với `AppSpacing` / `AppTextStyles` scale qua context), cộng `provider_state_management` + `domain_core` cho Provider, hoặc `bloc_state_management` + `core_ui_kit` cho BLoC (trạng thái loading là `LoadingWidget` của kit); chỉ feature mới nhận `flutter_localizations` và `intl`, thứ mà output `gen-l10n` của nó import. Package domain nhận `domain_core` và một contract repository `I<Name>Repository` (trong `repositories/`, một method giữ chỗ `ping()` trả `Result<void>`). Package data nhận `data_core` và `<Name>RepositoryImpl extends IBaseRepository` (trong `repositories_impl/`); khi `domain_<name>` đã tồn tại, nó khai thêm `domain_core` + `domain_<name>`, implements contract đó và đăng ký dưới contract (`@LazySingleton(as: I<Name>Repository)`) — vì vậy hãy sinh domain trước. Package core và custom khởi đầu không có dependency workspace nào.
+
+**Test được sinh sẵn.** Feature khởi đầu với các test pass ngay không cần sửa, nên CI Gate 3 có thứ để chạy từ commit đầu tiên: `test/<name>_page_test.dart` pump page dưới `ResponsiveInit` và localization của feature — với controller thật được cung cấp phía trên đúng như route cung cấp — rồi kiểm tra tiêu đề đã dịch và page bố cục được trên cửa sổ điện thoại lẫn tablet; `test/<name>_provider_test.dart` (Provider) chờ `initialize()` và mong đợi success, `test/<name>_bloc_test.dart` (BLoC) mong đợi `initial` rồi `success` sau event `started`. SM `3` chỉ có test page. `flutter_test` nằm trong `dev_dependencies` của pubspec feature. Khi controller nhận use case, hãy thay controller thật bằng fake (xem `modules/auth/feature/test/auth_provider_test.dart`).
+
+**Thời gian build.** Gần như toàn bộ một lần chạy là `build_runner` trên cả workspace (~76 giây trong ~92 giây, đo với cache nóng), và ~50 giây trong đó là compile lại build script AOT, việc mà một package workspace mới buộc phải làm. `--build-filter` giới hạn vào package mới và `di/` của các app không tiết kiệm được gì (77 giây) mà còn để lại 21 output ở chỗ khác chưa build cho tới lần build đầy đủ kế tiếp, nên generator giữ nguyên `build_runner build --workspace` đầy đủ.
 
 **Thứ tự nav destination.** `INavDestinationModule.order` của feature `<route>` `2` bằng `order` cao nhất trong các destination hiện có dưới `modules/*/feature` cộng 10 (10 nếu chưa có cái nào), nên các tab được sinh ra không bao giờ trùng thứ tự. Đánh số lại tuỳ ý; chỉ thứ tự tương đối là quan trọng.
 
@@ -298,12 +316,15 @@ Tool thoát với mã `1` khi resolve catalog, `pub outdated`, đọc JSON của
 
 ```bash
 dart tools/workspace_setup/configure.dart
+dart tools/workspace_setup/configure.dart --stub-firebase   # kèm stub Firebase chỉ-để-compile nơi còn thiếu
 dart tools/workspace_setup/configure.dart --help   # các bước sẽ chạy, theo thứ tự — không chạy gì
 ```
 
 Dựng đầy đủ cho một bản clone mới. Script chạy theo thứ tự: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` trong mọi package có `l10n.yaml`, `build_runner build --workspace`, rồi barrel generator cho mọi package có `lib/` (bỏ qua các app). Đây **chính là** bước setup. Chỉ chạy `pub get` + `build_runner` thì các barrel `lib/src/gen/gen.dart` bị gitignore sẽ không có, và `flutter analyze` khi đó báo lỗi ở `gen/gen.dart`, `AppLocalizations` và `Assets`.
 
-Script làm việc trên gốc repo bất kể thư mục làm việc. `--help` / `-h` in các bước và thoát `0`; mọi tham số khác thoát `64` **trước khi chạy bất cứ gì** — trước đây script bỏ qua tham số, nên `--help` chạy toàn bộ bước setup có tính phá huỷ.
+Script làm việc trên gốc repo bất kể thư mục làm việc. `--help` / `-h` in các bước và thoát `0`; mọi tham số khác ngoài `--stub-firebase` thoát `64` **trước khi chạy bất cứ gì** — trước đây script bỏ qua tham số, nên `--help` chạy toàn bộ bước setup có tính phá huỷ.
+
+**`--stub-firebase`** — ghi thêm các file Firebase thay thế **chỉ để compile**, ngay đầu tiên, trước mọi bước codegen (`build_runner` phải resolve được các import của mỗi `firebase_module.dart`; danh sách file đã ghi được in ở cuối), cho bản checkout chưa có project Firebase, đúng những file CI ghi (các job của CI gọi chính cờ này): một `firebase_options_<flavor>.dart` cho mỗi flavor mà `lib/firebase/firebase_module.dart` của app import, và một `android/app/src/<flavor>/google-services.json` cho mỗi product flavor của app có `android/app/build.gradle(.kts)` áp dụng plugin Google Services, với `package_name` = `applicationId` + `applicationIdSuffix` của flavor đó, đọc từ cùng file. **Chỉ ghi file còn thiếu** — file thật luôn được giữ — và mọi đường dẫn đều được in ra, kèm một khung cảnh báo rằng đây không phải cấu hình thật: app compile được và build được APK, nhưng push notification, FCM token và mọi lời gọi Firebase khác đều không hoạt động. Nội dung nằm ở `tools/workspace_setup/firebase_stubs.dart`, file chỉ import `dart:io`: `configure.dart` tự chạy `pub get`, nên không thứ gì nó import được phép cần một package đã resolve.
 
 > [!CAUTION]
 > **Không có** `configure.sh` và **không có** `configure.bat`. Chỉ tồn tại `configure.dart` — gọi nó bằng `dart`, đừng bao giờ qua một wrapper shell.
@@ -382,6 +403,19 @@ Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`
 
 ---
 
+## `coverage_report`
+
+```bash
+flutter test --coverage                              # trong từng package: ghi <pkg>/coverage/lcov.info (gitignore)
+dart tools/coverage_report/report.dart               # mọi */coverage/lcov.info dưới gốc repo
+dart tools/coverage_report/report.dart --min 60      # thoát 1 khi TỔNG thấp hơn 60 %
+dart tools/coverage_report/report.dart --min-package 40   # thoát 1 khi BẤT KỲ package nào thấp hơn 40 %
+```
+
+In line coverage của từng package thành bảng Markdown — package, đường dẫn, số file, số dòng, số dòng được phủ, % và một dòng tổng — và nối nó vào `$GITHUB_STEP_SUMMARY` khi biến này được đặt (`--no-summary` tắt việc đó). CI Gate 3 chạy test của mọi package với `--coverage` rồi chạy bước này, chỉ mang tính tham khảo: không ngưỡng, `continue-on-error`, và vẫn chạy khi có test fail. File sinh ra — `*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gr.dart`, `*.mocks.dart`, mọi thứ dưới `gen/` — bị loại, và một dòng chỉ được đếm một lần dù có bao nhiêu bản ghi `DA:` nhắc tới nó. Chỉ file mà một test nào đó đã nạp mới xuất hiện trong `lcov.info`, nên một file chưa test mà không ai import sẽ không kéo con số xuống. Không tìm thấy `lcov.info` nào thì thoát `1`; tham số sai thoát `64`.
+
+---
+
 ## Test cho các tool (`tools/test/`)
 
 Mọi gate trong `pr_quality_check.yml` là một trong các script ở trên, và một gate đã âm thầm thôi fail trông y hệt một PR sạch. `tools/test/` là thứ ngăn điều đó: nó chạy như nửa sau của CI Gate 1, ngay sau `arch_check`.
@@ -398,7 +432,10 @@ Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp
 | `arch_check_test.dart` | Một fixture sạch và một fixture vi phạm cho mỗi luật R1–R10 (R6 cảnh báo mà vẫn exit `0`); workspace rỗng thì fail; flag lạ exit `64` |
 | `composer_test.dart` | `sync` rồi `verify` thì qua; vùng managed bị sửa tay, module không có trên đĩa, `phase: befor`, layer lạ và module trùng exit `1` kèm đường dẫn key |
 | `dependency_sync_test.dart` | `--check`: khớp thì qua; lệch version, catalog sai định dạng và YAML hỏng exit `1` |
-| `docs_check_test.dart` | Đường dẫn hay link chết exit `1`; span `<placeholder>`, đường dẫn trong allowlist và sample bundle đã gỡ (INFO) exit `0`; gốc repo lấy từ script chứ không từ cwd |
+| `docs_check_test.dart` | Đường dẫn hay link chết exit `1`; span `<placeholder>`, đường dẫn trong allowlist và sample bundle đã gỡ (INFO) exit `0`; gốc repo lấy từ script chứ không từ cwd; tương đương en ↔ vi: thiếu heading, code block hay dòng bảng exit `1` kèm cả hai con số, fence bị bỏ qua, chênh lệch có trong allowlist thì qua, entry cũ thì cảnh báo, entry không lý do bị từ chối |
+| `module_generator_test.dart` | `--apps` với id lạ, không có giá trị, danh sách rỗng hoặc truyền hai lần exit `64` và không ghi gì; `registerInAppManifests` mặc định đụng mọi manifest, với `apps:` thì chỉ các manifest được liệt kê |
+| `firebase_stubs_test.dart` | Stub của `--stub-firebase`: một file Dart cho mỗi flavor được import, một `google-services.json` cho mỗi product flavor Gradle với package name có hậu tố (không lấy `signingConfigs`), file thật được giữ, app không dùng Firebase hay plugin thì bỏ qua; `configure.dart` không chạm tới import `package:` nào |
+| `coverage_report_test.dart` | Parse lcov (bỏ file sinh ra, mỗi dòng đếm một lần), bảng và dòng tổng, job summary, `--min` / `--min-package`, exit `1` khi không có `lcov.info`, `64` khi tham số sai |
 | `barrel_generator_test.dart` | Dấu `/` ở cuối đường dẫn; thư mục `web/` bên trong `lib/` được export, `web/` nền tảng nằm cạnh thì không; export viết tay bị thay |
 | `bootstrap_test.dart` | `--dry-run` báo member workspace và dependency của app bị thiếu mà không ghi gì; bỏ `--dry-run` thì các vùng managed bị cắt |
 

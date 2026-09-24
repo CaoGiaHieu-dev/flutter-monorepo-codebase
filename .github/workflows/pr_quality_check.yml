@@ -65,54 +65,30 @@ jobs:
       # builds throwaway workspaces in a temp directory and runs each gating
       # tool against them as a subprocess, asserting exit code and output:
       # arch_check (a clean and a violating fixture for every rule R1-R10),
-      # composer verify, dependency_sync --check, docs_check, the barrel
-      # generator and composer bootstrap. Pure Dart and no codegen, so it
-      # runs here rather than in Gate 3, which skips tools/.
+      # composer verify, dependency_sync --check, docs_check (paths and en↔vi
+      # parity), the barrel generator, composer bootstrap, the module
+      # generator's argument checks, configure's Firebase stubs and the
+      # coverage report. Pure Dart and no codegen, so it runs here rather
+      # than in Gate 3, which skips tools/.
       - name: Gate tools' own tests
         working-directory: tools
         run: dart test
 
-      # Each app that uses Firebase owns `lib/firebase/firebase_module.dart`,
-      # which imports three generated `firebase_options_*.dart` files that
-      # are gitignored, so a clean checkout does not compile. Analysis and
-      # unit tests never reach Firebase, so a stub is enough to build —
-      # it is written only when the real file is absent, so a workflow
-      # that does restore real options keeps them. An app without that
-      # module does not use Firebase and gets no stub.
-      - name: Stub Firebase options (compile only)
-        run: |
-          for module in apps/*/lib/firebase/firebase_module.dart; do
-          [ -f "$module" ] || continue
-          dir="$(dirname "$module")"
-          for env in dev staging prod; do
-            file="$dir/firebase_options_$env.dart"
-            if [ -f "$file" ]; then
-              echo "kept existing $file"
-              continue
-            fi
-            cat > "$file" <<'DART'
-          // CI-only stub. Not a real Firebase configuration: analysis and unit
-          // tests never initialise Firebase, they only need this to compile.
-          // Generate the real file with `flutterfire configure`.
-          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-
-          class DefaultFirebaseOptions {
-            static FirebaseOptions get currentPlatform => const FirebaseOptions(
-                  apiKey: 'ci-stub',
-                  appId: 'ci-stub',
-                  messagingSenderId: 'ci-stub',
-                  projectId: 'ci-stub',
-                );
-          }
-          DART
-            echo "stubbed $file"
-          done
-          done
-
       # flutter clean → pub get → gen-l10n → build_runner → barrels. Gates 2+
       # need the generated code; Gates 0 and 1 above did not.
-      - name: Install dependencies and run code generation
-        run: dart tools/workspace_setup/configure.dart
+      #
+      # --stub-firebase: each app that uses Firebase owns
+      # `lib/firebase/firebase_module.dart`, which imports generated
+      # `firebase_options_<flavor>.dart` files that are gitignored, so a clean
+      # checkout does not compile. Analysis and unit tests never reach
+      # Firebase, so the flag writes compile-only stubs for them (and a
+      # google-services.json per Android flavor) before any codegen — only
+      # where the file is absent, so a workflow that restores real options
+      # keeps them. The stub
+      # content lives in tools/workspace_setup/firebase_stubs.dart, the one
+      # copy CI and docs/en/getting-started/01_setup.md § 3.2 share.
+      - name: Install dependencies, run code generation, stub Firebase
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
 
       # Gate 2 — static analysis.
       # Note this cannot see generated code: analysis_options.yaml excludes
@@ -131,6 +107,8 @@ jobs:
       # wherever it lives. The count is asserted for the same reason: a
       # discovery bug that finds zero packages must fail, not succeed quietly.
       # tools/ is the one exception: its tests ran right after Gate 1.
+      # --coverage leaves coverage/lcov.info in each package (gitignored) for
+      # the report below.
       - name: Test
         run: |
           set -e
@@ -142,7 +120,7 @@ jobs:
             [ "$dir" = "./tools" ] && continue
             found=$((found + 1))
             echo "::group::flutter test $dir"
-            ( cd "$dir" && flutter test ) || failed=1
+            ( cd "$dir" && flutter test --coverage ) || failed=1
             echo "::endgroup::"
           done < <(find . -name pubspec.yaml -not -path './.git/*' \
                         -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort)
@@ -152,6 +130,16 @@ jobs:
             exit 1
           fi
           exit $failed
+
+      # Advisory, not a gate: per-package line coverage (generated files
+      # excluded) as a table in this run's job summary. Runs even when a test
+      # failed, so the numbers are there to read. No threshold — an adopter
+      # who wants one adds `--min <pct>` (total) or `--min-package <pct>`
+      # and drops continue-on-error.
+      - name: Coverage report (advisory)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: dart tools/coverage_report/report.dart
 
       # Gate 4 — the version catalog is the single source of truth.
       - name: Dependency catalog in sync
@@ -164,6 +152,10 @@ jobs:
       # fails if there is any.
       # Paths that are correctly absent (generated, secret, or a file the
       # reader is told to create) live in tools/docs_check/allowlist.txt.
+      # The same run holds every translated pair (docs/en ↔ docs/vi,
+      # X.md ↔ X.vi.md) to the same count of headings per level, code blocks
+      # and table rows; intentional differences, each with its reason, live
+      # in tools/docs_check/parity_allowlist.txt.
       - name: Documentation accuracy
         run: dart tools/docs_check/check.dart
 
@@ -204,36 +196,12 @@ jobs:
       - name: Get dependencies from the committed lockfile
         run: flutter pub get --enforce-lockfile
 
-      # `flutter analyze` below reads every app; see the quality job.
-      - name: Stub Firebase options (compile only)
-        run: |
-          for module in apps/*/lib/firebase/firebase_module.dart; do
-          [ -f "$module" ] || continue
-          dir="$(dirname "$module")"
-          for env in dev staging prod; do
-            file="$dir/firebase_options_$env.dart"
-            [ -f "$file" ] && continue
-            cat > "$file" <<'DART'
-          // CI-only stub — see the quality job.
-          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-
-          class DefaultFirebaseOptions {
-            static FirebaseOptions get currentPlatform => const FirebaseOptions(
-                  apiKey: 'ci-stub',
-                  appId: 'ci-stub',
-                  messagingSenderId: 'ci-stub',
-                  projectId: 'ci-stub',
-                );
-          }
-          DART
-          done
-          done
-
       # The generator runs pub get, gen-l10n, build_runner and the barrels
       # for its own module, but `flutter analyze` needs every other
-      # package's generated files as well.
+      # package's generated files as well — and every app's Firebase options
+      # (see the quality job).
       - name: Workspace setup
-        run: dart tools/workspace_setup/configure.dart
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
 
       # Feature `smoke`, BLoC, bottom-nav tab: registers it in every
       # app_manifest.yaml, runs composer sync and dependency_sync, then
@@ -243,6 +211,12 @@ jobs:
 
       - name: Analyze
         run: flutter analyze
+
+      # The generator emits a page test and a controller test; they must
+      # pass untouched, or every new module starts with a red Gate 3.
+      - name: The generated module's own tests
+        working-directory: modules/smoke/feature
+        run: flutter test
 
       - name: Architecture rules
         run: dart tools/arch_check/check.dart
@@ -303,69 +277,15 @@ jobs:
       - name: Get dependencies from the committed lockfile
         run: flutter pub get --enforce-lockfile
 
-      # The same compile-only Firebase options stub as the quality job, plus
-      # the one extra file an Android build needs: the google-services.json
-      # for the flavor being built, without which the Google Services Gradle
-      # plugin fails `processDevDebugGoogleServices`. This is the stub from
-      # docs/en/getting-started/01_setup.md section 3.2; its package_name must
-      # equal the dev application ID (applicationId + ".dev"). Real files, if
-      # a workflow ever restores them, are kept.
-      - name: Stub Firebase config for the dev build (compile only)
-        run: |
-          set -euo pipefail
-          APP=apps/mobile
-          for env in dev staging prod; do
-            file="$APP/lib/firebase/firebase_options_$env.dart"
-            if [ -f "$file" ]; then echo "kept existing $file"; continue; fi
-            cat > "$file" <<'DART'
-          // CI-only stub. Not a real Firebase configuration: analysis and unit
-          // tests never initialise Firebase, they only need this to compile.
-          // Generate the real file with `flutterfire configure`.
-          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-
-          class DefaultFirebaseOptions {
-            static FirebaseOptions get currentPlatform => const FirebaseOptions(
-                  apiKey: 'ci-stub',
-                  appId: 'ci-stub',
-                  messagingSenderId: 'ci-stub',
-                  projectId: 'ci-stub',
-                );
-          }
-          DART
-            echo "stubbed $file"
-          done
-          json="$APP/android/app/src/dev/google-services.json"
-          if [ -f "$json" ]; then
-            echo "kept existing $json"
-          else
-            mkdir -p "$(dirname "$json")"
-            cat > "$json" <<'JSON'
-          {
-            "project_info": {
-              "project_number": "000000000000",
-              "project_id": "local-stub"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
-                  "android_client_info": {
-                    "package_name": "com.example.codebase.dev"
-                  }
-                },
-                "api_key": [
-                  { "current_key": "local-stub" }
-                ]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-            echo "stubbed $json"
-          fi
-
-      - name: Install dependencies and run code generation
-        run: dart tools/workspace_setup/configure.dart
+      # --stub-firebase writes the same compile-only Firebase options as the
+      # quality job, plus what an Android build also needs: a
+      # google-services.json per flavor, without which the Google Services
+      # Gradle plugin fails `processDevDebugGoogleServices`. Its package_name
+      # is read from apps/mobile/android/app/build.gradle.kts (applicationId
+      # + the flavor's applicationIdSuffix — `.dev` here). Real files, if a
+      # workflow ever restores them, are kept.
+      - name: Install dependencies, run code generation, stub Firebase
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
 
       # From apps/mobile — the workspace root has no android/. env.dev is
       # committed. Debug needs no release keystore.

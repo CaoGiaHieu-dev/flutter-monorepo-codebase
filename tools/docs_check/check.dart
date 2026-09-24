@@ -5,6 +5,8 @@ import 'package:glob/list_local_fs.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import 'parity.dart';
+
 /// Mechanical accuracy check for the Markdown documentation.
 ///
 /// Prose rots silently: a package gets renamed, a file moves, and the guide
@@ -42,7 +44,15 @@ import 'package:yaml/yaml.dart';
 ///     entry from the manifest once the docs are updated — or never, if you
 ///     do not mind the note.
 ///
-/// Exit code 0 = clean, 1 = at least one dead reference, 64 = bad argument.
+/// A second check runs on the same documents: **en ↔ vi parity**
+/// (`parity.dart`). Every `docs/en/**.md` with a `docs/vi` counterpart, and
+/// every `<name>.md` with a `<name>.vi.md` beside it, must have the same
+/// number of headings per level, fenced code blocks and table rows in both
+/// languages. Intentional differences are listed, with a reason, in
+/// `parity_allowlist.txt` next to this file.
+///
+/// Exit code 0 = clean, 1 = at least one dead reference or unexplained parity
+/// mismatch, 64 = bad argument.
 
 /// Directories never walked for Markdown: tool state, build output, and the
 /// native dependency trees Flutter and CocoaPods fetch.
@@ -237,6 +247,8 @@ void main(List<String> args) {
     }
   }
 
+  final parityFailed = _reportParity(repoRoot, docs, verbose);
+
   if (hits.isEmpty) {
     stdout.writeln(
       sampleHits.isEmpty
@@ -244,6 +256,7 @@ void main(List<String> args) {
           : '\nOK — every documented path outside the removed samples exists '
                 'on disk.',
     );
+    if (parityFailed) exit(1);
     return;
   }
 
@@ -295,9 +308,76 @@ remove_sample.dart has removed (every package of the bundle absent, per
 tools/sample_manifest.yaml) is summarised as INFO and does not fail the run.
 
 Known-absent paths belong in tools/docs_check/allowlist.txt, one per line,
-with a `#` comment saying why. Exit 1 on any unexplained dead reference,
-64 on an unknown argument.
+with a `#` comment saying why.
+
+It also checks en <-> vi parity: every docs/en/**.md with a docs/vi
+counterpart, and every <name>.md with a <name>.vi.md beside it, must have the
+same count of headings per level (h1-h6), fenced code blocks (code-blocks)
+and table rows (table-rows). An intentional difference goes in
+tools/docs_check/parity_allowlist.txt as "<english file> <metric>" (or "*")
+with a `#` reason.
+
+Exit 1 on any unexplained dead reference or parity mismatch, 64 on an
+unknown argument.
 ''';
+
+/// Runs the en <-> vi parity check over [docs] and prints its section.
+/// Returns whether it failed.
+bool _reportParity(String repoRoot, List<File> docs, bool verbose) {
+  final file = File(
+    p.join(repoRoot, 'tools', 'docs_check', 'parity_allowlist.txt'),
+  );
+  final allowlist = ParityAllowlist.parse(
+    file.existsSync() ? file.readAsStringSync() : '',
+  );
+  final rel = [
+    for (final doc in docs)
+      p.posix.relative(_posix(doc.path), from: _posix(repoRoot)),
+  ];
+  final result = checkParity(repoRoot, rel, allowlist);
+
+  stdout.writeln('');
+  stdout.writeln('en <-> vi parity');
+  stdout.writeln('  pairs     : ${result.pairs}');
+  stdout.writeln('  allowlist : ${allowlist.entries.length}');
+  if (verbose) {
+    for (final m in result.allowed) {
+      stdout.writeln('  allowed   : $m');
+    }
+  }
+  for (final entry in result.stale) {
+    stdout.writeln(
+      'WARN: parity_allowlist.txt entry "$entry" matches no difference any '
+      'more — delete it.',
+    );
+  }
+  if (allowlist.errors.isNotEmpty) {
+    stdout.writeln('\nparity_allowlist.txt is malformed:');
+    for (final error in allowlist.errors) {
+      stdout.writeln('  $error');
+    }
+  }
+  if (result.mismatches.isEmpty) {
+    if (allowlist.errors.isEmpty) {
+      stdout.writeln(
+        'OK — every translated document has the shape of its original.',
+      );
+    }
+    return allowlist.errors.isNotEmpty;
+  }
+
+  stdout.writeln('\n${result.mismatches.length} parity mismatch(es):\n');
+  for (final m in result.mismatches) {
+    stdout.writeln('  $m');
+  }
+  stdout.writeln(
+    '\nA heading, code block or table row exists in one language only. '
+    'Translate\nit across, or — when the difference is intentional — add '
+    '"<english file> <metric>"\nto tools/docs_check/parity_allowlist.txt '
+    'WITH the reason.',
+  );
+  return true;
+}
 
 /// Windows hands back `\` separators; every path this tool compares, prints or
 /// looks up in the allowlist is POSIX, so normalise once at the boundary.

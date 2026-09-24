@@ -36,6 +36,10 @@ obfuscate
 .pub/
 build/
 **/doc/api/
+# `flutter test --coverage` output (lcov.info), one per package: CI Gate 3
+# writes it in every package it tests, tools/coverage_report/report.dart
+# reads it.
+coverage/
 
 # FVM
 

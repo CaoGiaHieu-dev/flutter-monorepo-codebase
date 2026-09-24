@@ -22,7 +22,9 @@ tools/
 │   └── bootstrap.dart               # Partial checkout: prunes absent members so `pub get` resolves (no package imports)
 ├── docs_check/                      # 📚 Every path the docs name must exist (CI Gate 5)
 │   ├── check.dart
-│   └── allowlist.txt                # Deliberately absent paths, each with its reason
+│   ├── parity.dart                  # en <-> vi parity: headings per level, code blocks, table rows
+│   ├── allowlist.txt                # Deliberately absent paths, each with its reason
+│   └── parity_allowlist.txt         # Intentional en/vi shape differences, each with its reason
 ├── shared/                          # 🔗 Code shared between tools
 │   ├── app_locator.dart             # Finds apps by app_manifest.yaml, picks one with --app <id>
 │   └── toolchain.dart               # FVM detection (.fvmrc + `fvm --version`) for every tool that runs dart/flutter
@@ -36,7 +38,7 @@ tools/
 │   │   ├── module_type.dart         # ModuleType, StateManagementType, FeatureRouteContribution enums; ModuleConfig
 │   │   ├── pubspec_generator.dart   # Generates pubspec.yaml with the right dependencies for the layer
 │   │   └── common_helpers.dart      # Creates folders/templates, writes app_manifest.yaml, runs commands, rollback
-│   └── templates/                   # Mustache templates (common, domain, data, feature/{bloc,provider,default,routing,localization})
+│   └── templates/                   # Mustache templates (common, domain, data, feature/{bloc,provider,default,routing,localization,test})
 ├── barrel_generator/                # 📦 Generates barrel files (export *.dart)
 │   └── generate.dart                # Scans lib/ and writes the barrels
 ├── code_review/                     # 🤖 AI-powered code review (Gemini)
@@ -54,7 +56,11 @@ tools/
 │   ├── monorepo_helper.dart         # Shared: repo root, package discovery
 │   └── output_formatter.dart        # Shared: output formatting
 ├── workspace_setup/                 # ⚙️ Whole-workspace setup
-│   └── configure.dart               # Cross-platform script (Windows/macOS/Linux)
+│   ├── configure.dart               # Cross-platform script (Windows/macOS/Linux)
+│   └── firebase_stubs.dart          # --stub-firebase: compile-only Firebase options + google-services.json (dart:io only)
+├── coverage_report/                 # 📊 Per-package line coverage from lcov.info (CI Gate 3, advisory)
+│   └── report.dart
+├── test/                            # ✅ The tools' own tests (`cd tools && dart test`, CI Gate 1)
 ├── firebase/                        # 🔥 Multi-environment Firebase configuration
 │   └── firebase_config.dart
 ├── theme_generator/                 # 🎨 Splash screen & app icons
@@ -136,6 +142,12 @@ dart tools/docs_check/check.dart
 dart tools/docs_check/check.dart --verbose
 ```
 
+The same run checks **en ↔ vi parity**: every `docs/en/**.md` with a `docs/vi` counterpart, and
+every `<name>.md` with a `<name>.vi.md` beside it, must have the same number of headings per level,
+fenced code blocks and table rows in both languages. A difference exits 1 with both counts; an
+intentional one goes in `tools/docs_check/parity_allowlist.txt` as `<english file> <metric>` with a
+reason.
+
 It checks every `*.md` in the repository: backticked spans that start with a real top-level
 directory, and Markdown links (resolved relative to the file containing them). Deliberately absent
 paths (generated files, secrets, "create this file yourself") live in
@@ -199,11 +211,14 @@ dart tools/module_generator/generate.dart 5 billing acme
 # Interactive (no arguments, needs a terminal):
 dart tools/module_generator/generate.dart
 
+# Only some apps: compose into mobile, leave admin alone (ids = app.id in apps/*/app_manifest.yaml):
+dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
+
 # Show the syntax:
 dart tools/module_generator/generate.dart --help
 ```
 
-The CLI adds the module to every `app_manifest.yaml` (Feature/Domain/Data to the `modules:` list,
+The CLI adds the module to every `app_manifest.yaml` (or only those `--apps` names) (Feature/Domain/Data to the `modules:` list,
 Core/Custom to the `core` DI group), scaffolds the route DI stub, then **runs by itself**
 `dart tools/composer/composer.dart sync` (regenerating the workspace list, the apps' dependencies
 and `injection.dart`), `dependency_sync`, `flutter pub get`, `gen-l10n` (Feature only), the barrel
@@ -215,8 +230,13 @@ collects routes through DI. A failure midway rolls back and exits 1.
 Arguments are validated **before** anything is written (an error → exit 64 with the usage):
 - `<name>` (and `<prefix>`) must be a valid Dart package name: lowercase letters, digits, `_`, starting with a letter, not a Dart keyword (`Bad-Name` is refused at once); a package name already in the repo is refused too.
 - `<SM>` and `<route>` accept only `1`/`2`/`3`; `<prefix>`, `<SM>`, `<route>` passed to the wrong module type are refused; unknown flags are refused.
+- `--apps` must name at least one existing app id; an unknown id (or an empty value, or the flag twice) is refused and the known ids are listed.
 - A feature missing `<SM>` or `<route>` is prompted for the missing value on a terminal (empty = `1`); with no terminal (or stdin at end of input) it fails instead of silently taking a default.
 - Adding to `app_manifest.yaml` parses the manifest as YAML (no substring matching — `core_net` is no longer taken as "already present" because of `core_network`); if a manifest cannot be updated the tool exits 1 and rolls back.
+
+A Feature starts with tests that pass as generated: `test/<name>_page_test.dart` (the page under
+`ResponsiveInit` and its localizations, controller provided as the route provides it) plus
+`test/<name>_provider_test.dart` or `test/<name>_bloc_test.dart` (none for SM `3`).
 
 ### 📦 Barrel Files Generator
 ```bash
@@ -301,6 +321,8 @@ sample with `remove_sample.dart`, not on the word of `unused_checker`.
 ```bash
 # Workspace setup (the setup step on a fresh clone):
 dart tools/workspace_setup/configure.dart   # cross-platform
+# ...plus compile-only Firebase stubs where no real file exists (no Firebase project yet; what CI runs):
+dart tools/workspace_setup/configure.dart --stub-firebase
 
 # Firebase config (writes to apps/<id>/lib/firebase/ and that app's ios/, android/):
 dart tools/firebase/firebase_config.dart --app mobile
@@ -315,6 +337,10 @@ dart tools/theme_generator/theme_setting.dart --app mobile
   `flutter clean` → `flutter pub get` → `flutter gen-l10n` in every package with an `l10n.yaml` →
   `dart run build_runner build --workspace` → the barrel generator for every package with a `lib/`
   (apps skipped). It stops at the first failing command with that command's exit code.
+  `--stub-firebase` also writes — first, before codegen, and listed at the end — **only where absent**, a `firebase_options_<flavor>.dart` per
+  flavor for each app with `lib/firebase/firebase_module.dart` and an
+  `android/app/src/<flavor>/google-services.json` per Gradle flavor (package name read from
+  `build.gradle.kts`). They make the app compile and build; nothing Firebase-backed works with them.
 - `firebase_config.dart` is interactive (needs a terminal) and needs the Firebase CLI installed
   (`npm install -g firebase-tools`) and logged in (`firebase login`) — the tool does **not** install
   the Firebase CLI (it does install the FlutterFire CLI through `dart pub global activate` when
@@ -325,6 +351,18 @@ dart tools/theme_generator/theme_setting.dart --app mobile
   `icons_launcher` in the app's `pubspec.yaml` — anything missing is reported before anything is
   written (`--app admin` is refused today because admin has no platform folders). If a generator
   fails, every file it created or changed under `android/`, `ios/`, `web/` is restored.
+
+### 📊 Coverage Report
+```bash
+# After `flutter test --coverage` in each package — a per-package table, total included:
+dart tools/coverage_report/report.dart
+# Make it a gate: total below 60 %, or any package below 40 %, exits 1:
+dart tools/coverage_report/report.dart --min 60 --min-package 40
+```
+
+Reads every `*/coverage/lcov.info`, excludes generated files (`*.g.dart`, `*.freezed.dart`,
+`*.config.dart`, `*.module.dart`, `gen/`, …) and appends the table to `$GITHUB_STEP_SUMMARY` on
+GitHub Actions. CI Gate 3 runs it after the tests, advisory (no threshold).
 
 ### 📱 Android 16KB Page Size
 ```bash

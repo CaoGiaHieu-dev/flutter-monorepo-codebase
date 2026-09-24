@@ -329,6 +329,8 @@ Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout)
 
 `PushNotificationService` bọc Firebase Messaging và `flutter_local_notifications`. Channel ID và loại payload nằm ở `src/utils/notification_constants.dart`, tức ngay trong package tiêu thụ chúng — một channel ID thông báo không có lý do gì để mọi package trong app đọc được.
 
+Khởi động không bao giờ chờ người dùng hay mạng: `init()` (được await bên trong `configureDependencies()`) chỉ thiết lập Firebase, các channel, listener và plugin local-notifications. Hộp xin quyền và việc đăng ký FCM token chạy sau đó, không await, và ghi log lỗi thay vì throw — hãy đọc token từ `tokenStream`, vì `fcmToken` có thể vẫn là `null` ngay sau khi khởi động. Loại payload bị chặn (`addBlockedTypes`) so khớp không phân biệt hoa thường. Dòng tóm tắt và tiêu đề của inbox gộp do app cung cấp (`inboxSummaryBuilder` / `inboxTitleBuilder`, mặc định đều `null`) để chữ đến từ localization của chính app.
+
 Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự đăng ký từ `lib/firebase/firebase_module.dart` của mình. Vì thế manifest của app đặt `core_notifications` trong nhóm `notifications` với `phase: after` thay vì trong `core`: `before` chạy trước phần đăng ký của chính app. App không dùng push notification thì bỏ nhóm này đi.
 
 ---

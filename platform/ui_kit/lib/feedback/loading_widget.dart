@@ -1,5 +1,8 @@
 import 'package:core_base_ui/core_base_ui.dart';
+import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../utils/shared_ui_constants.dart';
 
 /// A reusable loading widget that displays a centered circular progress indicator
 ///
@@ -32,8 +35,8 @@ class LoadingWidget extends StatelessWidget {
   const LoadingWidget({
     super.key,
     this.color,
-    this.radius = 16,
-    this.dimension = 100,
+    this.radius,
+    this.dimension,
   });
 
   /// Background color for the loading container
@@ -41,21 +44,32 @@ class LoadingWidget extends StatelessWidget {
   /// When null, the widget uses the current theme's surface color
   /// to ensure proper contrast with the progress indicator.
   final Color? color;
-  final double radius;
-  final double dimension;
+
+  /// Corner radius, already scaled by the caller. Defaults to
+  /// [SharedUiConstants.LOADING_WIDGET_RADIUS], scaled with `r`.
+  final double? radius;
+
+  /// Side length of the square, already scaled by the caller. Defaults to
+  /// [SharedUiConstants.LOADING_WIDGET_DIMENSION], scaled with `r` so the
+  /// square stays square.
+  final double? dimension;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: ClipRRect(
         // Rounded corners for a modern appearance
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: BorderRadius.circular(
+          radius ?? context.r(SharedUiConstants.LOADING_WIDGET_RADIUS),
+        ),
         child: ColoredBox(
           // Use provided color or fallback to theme surface color
           color: color ?? context.surface,
           child: SizedBox.square(
-            // Fixed square dimensions for consistent sizing
-            dimension: dimension,
+            // Square dimensions for consistent sizing
+            dimension:
+                dimension ??
+                context.r(SharedUiConstants.LOADING_WIDGET_DIMENSION),
             child: const UnconstrainedBox(
               // Adaptive progress indicator that follows platform conventions
               // - Material design on Android

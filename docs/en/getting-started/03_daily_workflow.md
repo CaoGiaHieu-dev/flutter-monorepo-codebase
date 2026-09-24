@@ -136,9 +136,11 @@ cd platform/common                  && flutter test && cd -
 cd platform/data_core               && flutter test && cd -
 cd platform/database                && flutter test && cd -
 cd platform/network                 && flutter test && cd -
+cd platform/notifications           && flutter test && cd -
 cd platform/provider_state_management && flutter test && cd -
 cd platform/responsive              && flutter test && cd -
 cd platform/storage                 && flutter test && cd -
+cd platform/ui_kit                  && flutter test && cd -
 cd modules/auth/data                && flutter test && cd -
 cd modules/auth/feature             && flutter test && cd -
 cd modules/cache/data               && flutter test && cd -
@@ -153,7 +155,7 @@ dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. Only the thirteen packages above ship tests today (CI Gate 3 finds every `test/` directory on its own); add yours next to the code you write.
+Tests live at `<package>/test/`, wherever the package lives. Only the fifteen packages above ship tests today (CI Gate 3 finds every `test/` directory on its own); add yours next to the code you write.
 
 > [!CAUTION]
 > `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, check the module order in the generated `apps/mobile/lib/di/injection.config.dart`, and your type's registration and its `gh<Dep>()` calls in the package's generated `lib/di/module.module.dart`. See [../guides/05_di.md](../guides/05_di.md).

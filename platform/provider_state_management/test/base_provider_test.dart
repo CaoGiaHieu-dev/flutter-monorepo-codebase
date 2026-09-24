@@ -83,6 +83,10 @@ class TestProvider extends BaseProvider<String> {
     );
   }
 
+  Future<void> runOperation(Future<Result<String>> Function() operation) async {
+    await executeOperation(OperationConfig(operation: operation));
+  }
+
   void exposeUpdateState({
     ViewState? state,
     String? data,
@@ -407,6 +411,34 @@ void main() {
       expect(provider.data, isNull);
     });
 
+    test(
+      'a repeated identical failure after data loaded is emitted again',
+      () async {
+        await provider.runSuccessOperation('data');
+
+        final states = <ViewStateModel<String>>[];
+        final sub = provider.listen(states.add);
+        var notifications = 0;
+        void listener() => notifications++;
+        provider.addListener(listener);
+
+        const failure = NetworkFailure(message: 'offline');
+        await provider.runFailureOperation(failure);
+        await provider.runFailureOperation(failure);
+        await Future<void>.delayed(Duration.zero);
+
+        // Data exists, so no loading state separates the two failures — both
+        // must still be delivered, and the data is kept.
+        expect(states, hasLength(2));
+        expect(states.every((s) => s.isError), isTrue);
+        expect(notifications, equals(2));
+        expect(provider.data, equals('data'));
+
+        provider.removeListener(listener);
+        await sub.cancel();
+      },
+    );
+
     test('operations after dispose are no-ops', () async {
       await provider.runSuccessOperation('alive');
       provider.dispose();
@@ -415,6 +447,56 @@ void main() {
 
       expect(provider.isDisposed, isTrue);
       expect(provider.data, equals('alive'));
+    });
+  });
+
+  group('OperationGlobalConfig onStart / onFinish pairing', () {
+    var starts = 0;
+    var finishes = 0;
+
+    setUp(() {
+      starts = 0;
+      finishes = 0;
+      OperationGlobalConfig.instance.setup(
+        onStart: () => starts++,
+        onFinish: () => finishes++,
+      );
+    });
+
+    tearDown(OperationGlobalConfig.instance.reset);
+
+    test('onFinish runs after a completed operation', () async {
+      final provider = TestProvider();
+      await provider.runSuccessOperation('done');
+
+      expect(starts, equals(1));
+      expect(finishes, equals(1));
+      provider.dispose();
+    });
+
+    test('onFinish runs when the provider is disposed mid-operation', () async {
+      final provider = TestProvider();
+      final pending = provider.runOperation(() async {
+        provider.dispose();
+        return const Result.success('late');
+      });
+      await pending;
+
+      expect(starts, equals(1));
+      expect(finishes, equals(1));
+    });
+
+    test('onFinish runs when the operation throws', () async {
+      final provider = TestProvider();
+
+      await expectLater(
+        provider.runOperation(() async => throw StateError('boom')),
+        throwsStateError,
+      );
+
+      expect(starts, equals(1));
+      expect(finishes, equals(1));
+      provider.dispose();
     });
   });
 }

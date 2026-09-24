@@ -10,5 +10,7 @@
   "passwordTooShort": "Password must be at least 6 characters",
   "enterYourEmail": "Enter your email",
   "password": "Password",
-  "enterYourPassword": "Enter your password"
+  "enterYourPassword": "Enter your password",
+  "showPassword": "Show password",
+  "hidePassword": "Hide password"
 }

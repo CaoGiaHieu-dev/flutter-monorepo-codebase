@@ -120,6 +120,9 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
               hint: context.l10nAuth.enterYourPassword,
               icon: Icons.lock_outline,
               suffix: IconButton(
+                tooltip: _obscurePassword
+                    ? context.l10nAuth.showPassword
+                    : context.l10nAuth.hidePassword,
                 icon: Icon(
                   _obscurePassword ? Icons.visibility : Icons.visibility_off,
                 ),

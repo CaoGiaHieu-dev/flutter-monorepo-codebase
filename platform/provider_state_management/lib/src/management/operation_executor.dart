@@ -34,26 +34,32 @@ class OperationExecutor<T> {
     // Execute global onStart hook
     OperationGlobalConfig.instance.onStart?.call();
 
-    // Show loading state if configured
-    if (config.showLoading && _stateManager.data == null) {
-      _stateManager.setState(state: const ViewState.loading());
+    // onFinish pairs with onStart on every path — including a provider
+    // disposed mid-operation and an operation that throws — so a global
+    // hook such as a loading overlay counter never stays unbalanced.
+    try {
+      // Show loading state if configured. Skipped once data exists so the
+      // view keeps showing it instead of flashing a spinner over it.
+      if (config.showLoading && _stateManager.data == null) {
+        _stateManager.setState(state: const ViewState.loading());
+      }
+
+      // Execute operation
+      final result = await config.operation();
+
+      if (_stateManager.isDisposed) return;
+
+      // Await the whenAsync call to handle async branches correctly.
+      await result.whenAsync(
+        success: (data) => _handleSuccess(data, config, convert: convert),
+        failure: (failure) => _handleFailure(failure, config),
+        none: _handleNone,
+        cancel: _handleCancel,
+      );
+    } finally {
+      // Execute global onFinish hook
+      OperationGlobalConfig.instance.onFinish?.call();
     }
-
-    // Execute operation
-    final result = await config.operation();
-
-    if (_stateManager.isDisposed) return;
-
-    // Await the whenAsync call to handle async branches correctly.
-    await result.whenAsync(
-      success: (data) => _handleSuccess(data, config, convert: convert),
-      failure: (failure) => _handleFailure(failure, config),
-      none: _handleNone,
-      cancel: _handleCancel,
-    );
-
-    // Execute global onFinish hook
-    OperationGlobalConfig.instance.onFinish?.call();
   }
 
   /// Handle successful response
@@ -97,9 +103,13 @@ class OperationExecutor<T> {
     if (_stateManager.isDisposed) return;
 
     final errorState = config.errorStateBuilder?.call(failure);
+    // Forced: with data already loaded no loading state sits between two
+    // failures, so a repeated identical failure would otherwise be equal to
+    // the current state and never reach a listener.
     _stateManager.setState(
       state: ViewState.error(error: errorState),
       message: failure.message,
+      force: true,
     );
 
     // Execute local callback if provided, otherwise execute global callback

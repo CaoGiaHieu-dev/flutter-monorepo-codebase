@@ -41,6 +41,7 @@ class _DialogSession {
   final Completer<dynamic>
   completer; // Completer for when THIS dialog is dismissed
   final AnimationController animationController;
+  final bool barrierDismissible;
 
   _DialogSession({
     required this.internalId,
@@ -48,6 +49,7 @@ class _DialogSession {
     required this.overlayEntry,
     required this.completer,
     required this.animationController,
+    required this.barrierDismissible,
   });
 
   @override
@@ -112,7 +114,7 @@ class AppDialogController {
   ///     the *queued* request will be removed before the new request is added. Its original Future completes with null.
   ///   - This identity can be used with `dismiss` to close the *currently visible* dialog if it matches.
   /// - [forceReopen]: If true, dismisses the *currently visible* dialog if it has the same [identity] before queueing the new one. Defaults to false.
-  /// - [barrierDismissible]: Whether the dialog can be dismissed by tapping the barrier. Defaults to false.
+  /// - [barrierDismissible]: Whether the dialog can be dismissed by tapping the barrier or with the system back (Android back button / gesture). A dialog that is not dismissible swallows the system back instead, so the page behind it is not popped. Defaults to false.
   /// - [barrierColor]: Color of the barrier. Defaults to Colors.black54.
   /// - [barrierLabel]: Semantic label for the barrier.
   /// - [useSafeArea]: Whether to wrap the dialog content in a SafeArea. Defaults to true.
@@ -518,6 +520,7 @@ class AppDialogController {
       overlayEntry: overlayEntry,
       completer: sessionCompleter, // Use the session-specific completer
       animationController: animationController,
+      barrierDismissible: barrierDismissible,
     );
 
     // Store the currently visible session
@@ -537,6 +540,28 @@ class AppDialogController {
 
     // Return the future that completes when this specific dialog is dismissed
     return sessionCompleter.future;
+  }
+
+  /// Handles a system back (Android back button / back gesture) while a
+  /// dialog is on screen, returning `true` when the back was consumed.
+  ///
+  /// Dialogs live in raw [OverlayEntry]s, outside every route, so neither the
+  /// [Navigator] nor a `PopScope` inside the dialog ever sees the back: left
+  /// alone it would pop the page *behind* the dialog. Instead a
+  /// `barrierDismissible` dialog is dismissed, and any other dialog swallows
+  /// the back so the page underneath stays put.
+  bool _handleSystemBack() {
+    final session = _currentDialogSession;
+    if (session == null) return false;
+
+    DynamicLogger.log(
+      "[AppDialog] System back while '${session.userIdentity ?? session.internalId}' is visible — ${session.barrierDismissible ? 'dismissing' : 'ignored'}.",
+      level: LogLevel.INFO,
+    );
+    if (session.barrierDismissible) {
+      _dismissInternal<dynamic>(internalId: session.internalId);
+    }
+    return true;
   }
 
   // Helper to find the *current* session by its internal unique ID.
@@ -682,7 +707,6 @@ class AppDialogController {
 }
 
 // --- _AppDialogOverlayEntry Widget ---
-// (No changes needed here)
 class _AppDialogOverlayEntry extends StatefulWidget {
   final String internalId;
   final WidgetBuilder builder;
@@ -790,10 +814,17 @@ class AppDialogControllerInitializer extends StatefulWidget {
 }
 
 class _AppDialogControllerInitializerState
-    extends State<AppDialogControllerInitializer> {
+    extends State<AppDialogControllerInitializer>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Registered synchronously, here, on purpose: [WidgetsBinding] asks its
+    // observers in registration order, and this widget sits in the app's
+    // `builder` — above the Router — so it registers before the Router's
+    // back button dispatcher and sees a system back while a dialog is
+    // visible before the page behind it is popped.
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.endOfFrame.whenComplete(() {
       // Ensure the widget is still mounted before trying to use context or setState
       if (AppDialogController._instance == null && mounted) {
@@ -828,7 +859,12 @@ class _AppDialogControllerInitializerState
   }
 
   @override
+  Future<bool> didPopRoute() async =>
+      AppDialogController._instance?._handleSystemBack() ?? false;
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Only dispose the controller if this initializer instance was likely the one
     // that should be managing its lifecycle. Given it's a static instance,
     // care must be taken if multiple initializers could exist.

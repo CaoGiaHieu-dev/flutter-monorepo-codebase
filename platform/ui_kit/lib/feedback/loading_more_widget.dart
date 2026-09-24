@@ -70,10 +70,13 @@ class LoadMoreListView<P extends LoadMoreMixin> extends BoxScrollView {
     final SliverChildDelegate childrenDelegate;
 
     final isLoadMore = context.select<P, bool>((value) => value.isLoadingMore);
+    final actualChildCount = _computeActualChildCount(itemCount);
 
     childrenDelegate = SliverChildBuilderDelegate(
       (BuildContext context, int index) {
-        if (index == _computeActualChildCount(itemCount) - 1 && isLoadMore) {
+        // The spinner takes the slot appended past the last item — never the
+        // last item's own slot, and with no items it is the only child.
+        if (isLoadMore && index == actualChildCount) {
           return SafeArea(
             minimum: context.edgeInsets(vertical: 10),
             child: const Center(child: CircularProgressIndicator.adaptive()),
@@ -86,7 +89,7 @@ class LoadMoreListView<P extends LoadMoreMixin> extends BoxScrollView {
         return separatorBuilder?.call(context, itemIndex) ?? const SizedBox();
       },
       findChildIndexCallback: findChildIndexCallback,
-      childCount: _computeActualChildCount(itemCount) + (isLoadMore ? 1 : 0),
+      childCount: actualChildCount + (isLoadMore ? 1 : 0),
       addAutomaticKeepAlives: true,
       addRepaintBoundaries: true,
       addSemanticIndexes: true,

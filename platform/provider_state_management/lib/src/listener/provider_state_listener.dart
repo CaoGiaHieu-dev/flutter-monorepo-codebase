@@ -44,6 +44,8 @@ typedef ListenWhenCallback<T> = bool Function(
 /// **Key behaviors:**
 /// - Automatically subscribes in `initState` and cancels in `dispose`
 /// - Only fires callbacks when the state **actually changes** (not on rebuilds)
+///   — except [onError], which fires for every failed operation, even one
+///   identical to the previous failure
 /// - Supports optional [listenWhen] filter for fine-grained control
 ///
 /// Example:
@@ -130,8 +132,10 @@ class _ProviderStateListenerState<P extends BaseProvider<T>, T>
   }
 
   void _onStateChanged(ViewStateModel<T> currentState) {
-    // Skip if state hasn't actually changed
-    if (_previousState == currentState) return;
+    // Skip if state hasn't actually changed. An error is the exception: the
+    // provider re-emits an identical error only for a new failed operation,
+    // and each of those must reach onError.
+    if (_previousState == currentState && !currentState.isError) return;
 
     // Apply optional filter
     if (widget.listenWhen != null &&

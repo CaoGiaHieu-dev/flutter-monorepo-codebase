@@ -24,6 +24,12 @@ class _BlockedTypeOperation {
   _BlockedTypeOperation(this.type, this.operationType);
 }
 
+/// Builds a piece of text for the grouped (inbox-style) Android notification
+/// that summarises the [activeCount] notifications already on screen.
+///
+/// Returning `null` leaves that piece of text out.
+typedef NotificationInboxTextBuilder = String? Function(int activeCount);
+
 /// Android notification channel for app messages.
 const _initializationSettingsAndroid = AndroidInitializationSettings(
   NotificationConstants.ANDROID_DEFAULT_ICON,
@@ -62,7 +68,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 ///
 /// Registered as a `@singleton` in DI. The [init] method is called
 /// automatically when the DI container starts up thanks to
-/// `@PostConstruct(preResolve: true)`.
+/// `@PostConstruct(preResolve: true)` — so everything it awaits delays
+/// `configureDependencies()`, and with it the first frame. It therefore awaits
+/// only what must exist by then (Firebase, the channels, the message handlers,
+/// the initial message); the permission prompt and the FCM token fetch run in
+/// the background. Read the token from [tokenStream], not [fcmToken], right
+/// after boot.
 @singleton
 class PushNotificationService {
   /// Flutter local notifications plugin instance.
@@ -129,45 +140,89 @@ class PushNotificationService {
   /// Getter for the initial message.
   RemoteMessage? get initialMessage => _initialMessage;
 
+  /// Builds the summary line of the grouped (inbox-style) Android
+  /// notification, e.g. "3 new messages".
+  ///
+  /// `null` by default: this package owns no translations, and a hardcoded
+  /// sentence would be English on every device. Set it from the app — which
+  /// has its localizations — to show a summary.
+  NotificationInboxTextBuilder? inboxSummaryBuilder;
+
+  /// Builds the title of the grouped (inbox-style) Android notification.
+  ///
+  /// `null` by default, in which case the notification keeps its own title.
+  NotificationInboxTextBuilder? inboxTitleBuilder;
+
   /// Message queue for handling blocked types.
   final MessageQueue<_BlockedTypeOperation> _blockedTypeQueue = MessageQueue();
 
   /// Initializes the notification service.
   ///
-  /// This method initializes Firebase, sets up Flutter notifications, requests permissions,
-  /// sets notification listeners, gets the initial message, and initializes Flutter local notifications.
+  /// Awaits only what must be ready when DI finishes: Firebase, the Android
+  /// channels, the message handlers, the local notifications plugin and the
+  /// message that launched the app. The permission prompt and the FCM token
+  /// fetch are started but **not** awaited — awaiting them held the whole boot
+  /// on a system dialog (until the user answered it) or on the network (the
+  /// token fetch, offline). Their failures are logged, never thrown.
   /// Automatically called during DI setup.
   @PostConstruct(preResolve: true)
   Future<void> init() async {
     await _initializeFirebase();
     await _setupFlutterNotifications();
-
-    final settings = await _firebaseMessaging.requestPermission(
-      alert: true,
-      announcement: true,
-      badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
-    DynamicLogger.log(
-      'User granted permission: ${settings.authorizationStatus}',
-      tag: 'PushNotificationService.init',
-    );
-
-    if (Platform.isAndroid) {
-      await _requestNotificationPermissionAndroid();
-    } else if (Platform.isIOS) {
-      await _requestNotificationPermissionIOS();
-    }
-
-    await _setNotificationListeners();
+    _setNotificationListeners();
     await _initializeFlutterLocalNotifications();
 
     // Determines the initial message that opened the app, prioritizing local notifications.
     // This is crucial for handling app launches from terminated state via a notification tap.
     await _getInitialMessage();
+
+    unawaited(_requestPermissionsAndRegisterToken());
+  }
+
+  /// Requests notification permission, then registers the FCM token.
+  ///
+  /// Runs in the background from [init]; never throws.
+  Future<void> _requestPermissionsAndRegisterToken() async {
+    try {
+      final settings = await _firebaseMessaging.requestPermission(
+        alert: true,
+        announcement: true,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      );
+      DynamicLogger.log(
+        'User granted permission: ${settings.authorizationStatus}',
+        tag: 'PushNotificationService.init',
+      );
+
+      if (Platform.isAndroid) {
+        await _requestNotificationPermissionAndroid();
+      } else if (Platform.isIOS) {
+        await _requestNotificationPermissionIOS();
+      }
+    } catch (e, s) {
+      DynamicLogger.log(
+        'Requesting notification permission failed: $e',
+        tag: 'PushNotificationService.init',
+        level: LogLevel.ERROR,
+        stackTrace: s,
+      );
+    }
+
+    try {
+      await registerToken();
+      DynamicLogger.log(fcmToken, tag: 'PushNotificationService.Fcm token');
+    } catch (e, s) {
+      DynamicLogger.log(
+        'Registering the FCM token failed: $e',
+        tag: 'PushNotificationService.init',
+        level: LogLevel.ERROR,
+        stackTrace: s,
+      );
+    }
   }
 
   /// Fetches the initial [RemoteMessage] that caused the application to open.
@@ -263,12 +318,12 @@ class PushNotificationService {
   }
 
   /// Sets notification listeners.
-  Future<void> _setNotificationListeners() async {
+  ///
+  /// The token itself is fetched by [registerToken], in the background.
+  void _setNotificationListeners() {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedAppMessage);
-
-    await registerToken();
 
     _firebaseMessaging.onTokenRefresh.listen((newToken) {
       if (_fcmToken == newToken) return;
@@ -279,13 +334,18 @@ class PushNotificationService {
         tag: 'PushNotificationService.Fcm onTokenRefresh',
       );
     });
-
-    DynamicLogger.log(fcmToken, tag: 'PushNotificationService.Fcm token');
   }
 
   /// Initializes Flutter local notifications.
   Future<void> _initializeFlutterLocalNotifications() async {
-    final initializationSettingsDarwin = const DarwinInitializationSettings();
+    // No permission request here: on iOS it would make this awaited call wait
+    // for the user to answer the prompt. [_requestPermissionsAndRegisterToken]
+    // asks, in the background.
+    final initializationSettingsDarwin = const DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
     final initializationSettings = InitializationSettings(
       android: _initializationSettingsAndroid,
       iOS: initializationSettingsDarwin,
@@ -359,10 +419,7 @@ class PushNotificationService {
     if (notification == null) return;
 
     // Check if the notification type is blocked, unless forced.
-    if (!force &&
-        _blockedNotificationTypes
-            .map((e) => e.toLowerCase())
-            .contains(message.data['type'])) {
+    if (!force && isTypeBlocked(message.data['type']?.toString())) {
       return;
     }
 
@@ -385,10 +442,11 @@ class PushNotificationService {
               .map((element) => element.body ?? '')
               .toList() ??
           [];
+      final activeCount = activeNotifications?.length ?? 0;
       inboxStyleInformation = InboxStyleInformation(
         lines.take(min(3, lines.length)).toList(),
-        contentTitle: NotificationConstants.CHANNEL_NAME,
-        summaryText: 'You have ${activeNotifications?.length} messages',
+        contentTitle: inboxTitleBuilder?.call(activeCount),
+        summaryText: inboxSummaryBuilder?.call(activeCount),
       );
     }
 
@@ -466,16 +524,28 @@ class PushNotificationService {
     );
   }
 
+  /// Normalizes a notification type for comparison: blocking is
+  /// case-insensitive and ignores surrounding whitespace.
+  static String _normalizeType(String type) => type.trim().toLowerCase();
+
+  /// Whether notifications of [type] are currently blocked.
+  ///
+  /// Case-insensitive: blocking `Promo` also blocks `promo` and `PROMO`.
+  bool isTypeBlocked(String? type) =>
+      type != null && _blockedNotificationTypes.contains(_normalizeType(type));
+
   /// Processing function for blocked type operations.
   Future<void> _processBlockedTypeOperation(
     _BlockedTypeOperation operation,
   ) async {
+    // Stored normalized, so add/remove/lookup all agree on one spelling.
+    final type = _normalizeType(operation.type);
     if (operation.operationType == _BlockedTypeOperationType.add) {
-      if (!_blockedNotificationTypes.contains(operation.type)) {
-        _blockedNotificationTypes.add(operation.type);
+      if (!_blockedNotificationTypes.contains(type)) {
+        _blockedNotificationTypes.add(type);
       }
     } else if (operation.operationType == _BlockedTypeOperationType.remove) {
-      _blockedNotificationTypes.remove(operation.type);
+      _blockedNotificationTypes.remove(type);
     }
   }
 

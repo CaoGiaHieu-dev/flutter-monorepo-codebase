@@ -6,7 +6,7 @@ class TextScaleDown extends StatelessWidget {
   const TextScaleDown(
     this.text, {
     super.key,
-    this.alignment = Alignment.centerLeft,
+    this.alignment = AlignmentDirectional.centerStart,
     this.textSpan,
     this.style,
     this.strutStyle,

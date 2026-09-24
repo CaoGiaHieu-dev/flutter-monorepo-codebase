@@ -57,12 +57,27 @@ class CustomInputField extends StatefulWidget {
 }
 
 class _CustomInputFieldState extends State<CustomInputField> {
-  late FocusNode focusNode;
+  /// Created only when the caller passes no [CustomInputField.focusNode]; this
+  /// state owns — and must dispose — that node alone, never the caller's.
+  FocusNode? _ownedFocusNode;
+
+  FocusNode get focusNode =>
+      widget.focusNode ?? (_ownedFocusNode ??= FocusNode());
 
   @override
-  void initState() {
-    focusNode = widget.focusNode ?? FocusNode();
-    super.initState();
+  void didUpdateWidget(CustomInputField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Switched to a caller-provided node: the one we created is now unused.
+    if (widget.focusNode != null && _ownedFocusNode != null) {
+      _ownedFocusNode!.dispose();
+      _ownedFocusNode = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ownedFocusNode?.dispose();
+    super.dispose();
   }
 
   @override

@@ -26,7 +26,7 @@ import 'package:path/path.dart' as p;
 /// secrets, and "Step 1 — create this file" tutorial targets are the three
 /// legitimate cases; everything else is drift.
 ///
-/// Exit code 0 = clean, 1 = at least one dead reference.
+/// Exit code 0 = clean, 1 = at least one dead reference, 64 = bad argument.
 
 /// Directories never walked for Markdown: tool state, build output, and the
 /// native dependency trees Flutter and CocoaPods fetch.
@@ -83,6 +83,15 @@ void main(List<String> args) {
   if (args.contains('--help') || args.contains('-h')) {
     stdout.writeln(_usage);
     return;
+  }
+  // A misspelt flag (`--verbos`) used to be ignored and the run reported as
+  // if it had been asked for; anything unrecognised is a usage error.
+  const known = {'--verbose', '-v'};
+  final unknown = args.where((a) => !known.contains(a)).toList();
+  if (unknown.isNotEmpty) {
+    stderr.writeln('docs_check: unknown argument(s): ${unknown.join(' ')}');
+    stderr.writeln(_usage);
+    exit(64);
   }
 
   final repoRoot = _findRepoRoot();
@@ -204,7 +213,8 @@ Checks every Markdown file in the repository (skipping ${_skippedDirs.join(', ')
   * markdown links, resolved relative to the file containing them
 
 Known-absent paths belong in tools/docs_check/allowlist.txt, one per line,
-with a `#` comment saying why. Exit 1 on any unexplained dead reference.
+with a `#` comment saying why. Exit 1 on any unexplained dead reference,
+64 on an unknown argument.
 ''';
 
 /// Windows hands back `\` separators; every path this tool compares, prints or

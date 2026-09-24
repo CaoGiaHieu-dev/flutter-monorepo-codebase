@@ -7,15 +7,23 @@ import 'package:path/path.dart' as p;
 import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
-void main() async {
+const _usage = '''
+Usage: dart tools/unused_checker/check_unused_translate.dart [--help]
+
+Reports ARB translation keys that no Dart file reads.
+
+Works on the repository this script belongs to, whatever the working
+directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
+
+void main(List<String> args) async {
+  final projectRootPosix = MonorepoHelper.startCheck(args, usage: _usage);
+
   OutputFormatter.printHeader(
     'Monorepo Translation Key Checker',
     subtitle: 'Analyzing unused translation keys in the monorepo workspace',
   );
 
   final stopwatch = Stopwatch()..start();
-  final projectRoot = Directory.current.path;
-  final projectRootPosix = p.posix.normalize(projectRoot.replaceAll(r'\', '/'));
 
   // 1. Locate all packages which contain translation keys
   final packages = MonorepoHelper.getPackages(projectRootPosix);

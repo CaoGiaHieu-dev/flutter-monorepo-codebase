@@ -30,15 +30,24 @@ final _excludedSourceFilePatterns = <Glob>[
   Glob('lib/**.freezed.dart'),
 ];
 
-void main() async {
+const _usage = '''
+Usage: dart tools/unused_checker/check_unused_packages.dart [--help]
+
+Reports dependencies a workspace package declares but never imports
+(its lib/, bin/, test/ and tool/; common SDK/implicit packages allowed).
+
+Works on the repository this script belongs to, whatever the working
+directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
+
+void main(List<String> args) async {
+  final projectRootPosix = MonorepoHelper.startCheck(args, usage: _usage);
+
   OutputFormatter.printHeader(
     'Monorepo Unused Packages Detector',
     subtitle: 'Analyzing unused dependencies across all workspace packages',
   );
 
   final stopwatch = Stopwatch()..start();
-  final projectRoot = Directory.current.path;
-  final projectRootPosix = p.posix.normalize(projectRoot.replaceAll(r'\', '/'));
 
   // 1. Find all packages in workspace
   final packages = MonorepoHelper.getPackages(projectRootPosix);

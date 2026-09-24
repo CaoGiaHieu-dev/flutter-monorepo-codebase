@@ -72,6 +72,24 @@ class CodeReviewTool {
       return;
     }
 
+    // A path the caller named explicitly must exist. A typo used to print
+    // "File not found", review nothing and exit 0 — a CI step reviewing a
+    // renamed file passed without reviewing anything. Checked before the API
+    // key is resolved, so a bad path never costs a prompt or a request.
+    final missing = <String>[
+      for (final file in fileList ?? const <String>[])
+        if (!File(file).existsSync()) file,
+      if (_args['folder'] case final String folder
+          when !Directory(folder).existsSync())
+        folder,
+    ];
+    if (missing.isNotEmpty) {
+      for (final path in missing) {
+        stderr.writeln('❌ Not found: $path');
+      }
+      exit(1);
+    }
+
     // `--language` applies to this run only. It used to be written into the
     // tracked code_review_config.json, so one CI run changed the repo's
     // default for everyone; `--config` is the way to change that.

@@ -90,6 +90,8 @@ void main(List<String> args) async {
           'snakeNameInput': snakeName,
           'snakeName': snakeName,
           'screamingNameInput': CommonHelpers.toScreamingSnakeCase(snakeName),
+          if (config.routeContribution == FeatureRouteContribution.dashboardTab)
+            'navOrder': CommonHelpers.nextNavDestinationOrder(),
         };
 
         if (config.routeContribution == FeatureRouteContribution.featureRoute) {
@@ -118,6 +120,7 @@ void main(List<String> args) async {
         CommonHelpers.createDir('${config.modulePath}/lib/src/entities');
         CommonHelpers.createDir('${config.modulePath}/lib/src/usecases');
         CommonHelpers.createDir('${config.modulePath}/lib/src/repositories');
+        CommonHelpers.createDomainTemplates(config);
         break;
       case ModuleType.data:
         CommonHelpers.createDir('${config.modulePath}/lib/src/models');
@@ -125,6 +128,10 @@ void main(List<String> args) async {
           '${config.modulePath}/lib/src/repositories_impl',
         );
         CommonHelpers.createDir('${config.modulePath}/lib/src/data_sources');
+        CommonHelpers.createDataTemplates(
+          config,
+          hasDomain: PubspecGenerator.hasDomainPackage(config),
+        );
         break;
       case ModuleType.core:
       case ModuleType.custom:

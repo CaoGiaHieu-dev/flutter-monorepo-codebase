@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../shared/toolchain.dart';
 
 const _usage = '''
@@ -14,10 +16,17 @@ Hand-written `export` lines in a barrel are replaced. Run it after
 gen-l10n / build_runner: generated files on disk are exported too.
 Exits 2 when the path does not exist, 1 when generation or formatting fails.''';
 
-const excludedDirs = {
-  'lib/gen',
-  '.git',
-  '.dart_tool',
+/// Directories never given a barrel, matched as whole path SEGMENTS relative
+/// to the package root (the nearest ancestor of the target holding a
+/// `pubspec.yaml`) — never as substrings, and never inside `lib/`.
+///
+/// They used to be matched as substrings of the whole path, anywhere. That was
+/// meant for runs over a package root, but it also dropped legitimate source:
+/// `lib/src/widgets/web/web_view.dart` was never exported because `web`
+/// appeared in its path. Inside `lib/` only `lib/gen` (flutter_gen output,
+/// exported by nothing) and hidden directories are skipped; `lib/src/gen`,
+/// whose barrel `core_base_ui` exports, is walked as before.
+const _excludedOutsideLib = {
   'build',
   'ios',
   'android',
@@ -25,8 +34,6 @@ const excludedDirs = {
   'windows',
   'linux',
   'web',
-  '.idea',
-  '.vscode',
 };
 
 // Cross-platform path helpers
@@ -45,13 +52,23 @@ String _join(String part1, String part2) {
 }
 
 String _basename(String path) {
-  final normalized = path.replaceAll('\\', '/');
-  final parts = normalized.split('/');
+  final parts = path
+      .replaceAll('\\', '/')
+      .split('/')
+      .where((s) => s.isNotEmpty)
+      .toList();
   return parts.isEmpty ? '' : parts.last;
 }
 
-String _normalize(String path) {
-  return path.replaceAll('\\', '/');
+/// `lib/` and `lib` name the same directory. Left in, the trailing separator
+/// made the package directory's basename empty and the barrel came out as
+/// `lib/.dart`.
+String _stripTrailingSeparators(String path) {
+  var out = path;
+  while (out.length > 1 && (out.endsWith('/') || out.endsWith('\\'))) {
+    out = out.substring(0, out.length - 1);
+  }
+  return out;
 }
 
 void main(List<String> args) {
@@ -73,7 +90,7 @@ void main(List<String> args) {
 
   var targetDir = 'lib';
   if (args.isNotEmpty) {
-    targetDir = args[0];
+    targetDir = _stripTrailingSeparators(args[0]);
   }
 
   var dir = Directory(targetDir);
@@ -92,7 +109,7 @@ void main(List<String> args) {
     if (input == null || input.trim().toLowerCase() == 'exit') {
       exit(1);
     }
-    targetDir = input.trim();
+    targetDir = _stripTrailingSeparators(input.trim());
     dir = Directory(targetDir);
   }
 
@@ -136,22 +153,24 @@ void main(List<String> args) {
 
 List<Directory> _getAllDirectories(Directory root) {
   final result = <Directory>[];
+  final packageRoot = _packageRoot(root);
 
-  bool shouldExclude(String path) {
-    final normalized = _normalize(path);
-    for (final ex in excludedDirs) {
-      if (normalized.contains('/$ex/') ||
-          normalized.endsWith('/$ex') ||
-          normalized == ex ||
-          normalized.startsWith('$ex/')) {
-        return true;
-      }
-    }
-    return false;
+  bool shouldExclude(Directory dir) {
+    final rel = p.relative(
+      p.normalize(dir.absolute.path),
+      from: packageRoot,
+    );
+    final segments = p.split(rel).where((s) => s != '.').toList();
+    if (segments.any((s) => s.startsWith('.'))) return true;
+    // Only what sits above the first `lib` is outside the Dart sources.
+    final lib = segments.indexOf('lib');
+    final outside = lib == -1 ? segments : segments.sublist(0, lib);
+    if (outside.any(_excludedOutsideLib.contains)) return true;
+    return lib != -1 && segments.length > lib + 1 && segments[lib + 1] == 'gen';
   }
 
   void walk(Directory current) {
-    if (shouldExclude(current.path)) return;
+    if (shouldExclude(current)) return;
 
     try {
       final entities = current
@@ -167,6 +186,21 @@ List<Directory> _getAllDirectories(Directory root) {
 
   walk(root);
   return result;
+}
+
+/// The directory exclusions are relative to: the nearest ancestor-or-self of
+/// [target] holding a `pubspec.yaml`; failing that, the parent of a target
+/// named `lib`, else the target itself.
+String _packageRoot(Directory target) {
+  final start = p.normalize(target.absolute.path);
+  var dir = start;
+  while (true) {
+    if (File(p.join(dir, 'pubspec.yaml')).existsSync()) return dir;
+    final parent = p.dirname(dir);
+    if (parent == dir) break;
+    dir = parent;
+  }
+  return p.basename(start) == 'lib' ? p.dirname(start) : start;
 }
 
 void _createOrUpdateBarrelForDir(Directory dir) {

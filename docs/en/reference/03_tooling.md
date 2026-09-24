@@ -77,6 +77,8 @@ dart tools/composer/composer.dart verify            # CI gate 0 — fails on dri
 
 `--app <id>` narrows `list`, `sync` and `verify` alike; the root `workspace:` list is still computed from every app. An unknown flag, or `--app` without an id, exits `64`. A pubspec or manifest that is not valid YAML — usually a duplicate key — is refused by name, `file:line` and parser message, exit `1`, instead of crashing the tool.
 
+Every `app_manifest.yaml` is also **validated before any command runs**; each problem is printed as `apps/<id>/app_manifest.yaml: <key>: <problem>` (e.g. `di_groups[0].phase: expected \`before\` or \`after\`, got a string (\`befor\`)`), and the tool exits `1` having written nothing. Refused: a manifest that is empty or not a map; an unknown key at any level (`module:` for `modules:`); a missing or empty `di_groups`; a group without a `name` (a Dart identifier, unique per manifest) or with a `phase` other than `before`/`after`, or a `before` group after an `after` one; `packages` that is not a list; a `from_modules` that is not `domain`/`data`/`feature`, or a layer collected by two groups; a group with neither `packages` nor `from_modules`; a module that is not `{ id, layers }`, a duplicate module id, empty `layers`, a layer outside `domain`/`data`/`feature` or not collected by any group's `from_modules`; a package composed twice (by two groups, or by a group and `extra_dependencies`); and two manifests with the same `app.id`. Each of these used to crash with a stack trace or — worse — exit `0` having generated an `injection.dart` without the modules it silently dropped.
+
 Three things had to agree and were maintained by hand: the root `workspace:` list, an app's path dependencies, and its `lib/di/injection.dart`. Adding a module meant editing all three in step, and getting it wrong fails at boot with `"<Type> is not registered"` — invisible to `flutter analyze`.
 
 `composer` generates all three from the apps' `app_manifest.yaml` files — each app's own files from its manifest, and the shared root `workspace:` list from all of them together — but only between `composer:managed:<region>` and `composer:end:<region>` markers. External dependencies, flavors and asset declarations stay hand-written.
@@ -102,6 +104,7 @@ A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block
 ```bash
 dart tools/docs_check/check.dart            # exits 1 on any dead reference
 dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block
+dart tools/docs_check/check.dart --help     # usage; any other argument exits 64
 ```
 
 Two kinds of reference are checked in every Markdown file in the repository — only tool state, build output and fetched native dependencies (`.dart_tool`, `build`, `Pods`, …) are skipped. It used to cover just `docs/`, `.agents/`, `README.md` and `CLAUDE.md`; widening it found 11 dead links in the `.github` guides, a package README and the fastlane README:
@@ -174,7 +177,7 @@ dart tools/module_generator/generate.dart 3 payment          # data micro-packag
 dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/billing
 ```
 
-**Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, or more than five arguments.
+**Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, more than five arguments, or a **package name already taken** by any `pubspec.yaml` in the repository. Pub resolves a workspace by name, so a duplicate used to surface only at `pub get`, after composer had rewritten the manifests — and a new directory does not mean a new name: `5 shell platform_app` is `platform_app_shell` (already at `platform/app_shell`), `2 core` / `3 core` are `domain_core` / `data_core`.
 
 With no arguments on a terminal it prompts for everything. A feature missing `<sm>` or `<route>` prompts for what is missing (an empty answer takes `1`). **Without a terminal** — CI, an agent's shell, stdin at end of input — a value that would be prompted for is an error, exit `64`, never a silent default: always pass all five arguments for a feature. The prompts and many progress and error messages are in Vietnamese, as is the output of `barrel_generator` and `sample_cleanup`.
 
@@ -191,8 +194,12 @@ With no arguments on a terminal it prompts for everything. A feature missing `<s
 - **Registration is verified.** Whether a manifest already lists the package is decided by parsing it as YAML, not by substring — a line test once took `core_net` for registered because `core_network` contains it, and the package silently joined no app with exit `0`. Each edit is re-parsed; if the module could not be added to a manifest (no `modules:` list, or no `core` DI group, in the expected shape), the run rolls back and exits `1`.
 - **FVM is auto-detected** — by every tool that shells out, through `tools/shared/toolchain.dart` — requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
+**What a new package declares.** Only the workspace packages its templates import, so it passes `check_unused_packages` from the first run — add `core_network`, `core_storage`, `core_responsive` and the rest when the code needs them. A domain package gets `domain_core` and a repository contract `I<Name>Repository` (in `repositories/`, one placeholder `ping()` returning `Result<void>`). A data package gets `data_core` and a `<Name>RepositoryImpl extends IBaseRepository` (in `repositories_impl/`); when `domain_<name>` already exists it also declares `domain_core` + `domain_<name>`, implements that contract and registers as it (`@LazySingleton(as: I<Name>Repository)`) — so generate the domain first. Core and custom packages start with no workspace dependency.
+
+**Nav destination order.** A `<route>` `2` feature's `INavDestinationModule.order` is 10 above the highest `order` any existing destination under `modules/*/feature` returns (10 when there is none), so generated tabs never tie. Renumber freely; only the relative order matters.
+
 > [!NOTE]
-> Domain and data modules get directories and pubspec wiring only — entities, use cases and repositories are written by hand. See [`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md).
+> Beyond those stubs, entities, use cases, models and data sources are written by hand. See [`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md).
 
 ---
 
@@ -205,7 +212,9 @@ dart tools/barrel_generator/generate.dart --help   # usage
 
 Regenerates `*.dart` barrels for every directory under the given path, then runs `dart format` on it through the repo's toolchain (FVM when set up). Run it after **any** file add / rename / delete under `lib/` — and after `build_runner` / `gen-l10n`, because generated files present on disk are exported too (`core_ui_kit` reaches `core_base_ui`'s generated `Assets` that way).
 
-Exit codes: `2` when the path does not exist (it prompts for another path only when run with no argument on a terminal); `1` when `dart format` fails — the barrels are written but unformatted; `64` for a flag or a second path. A flag is never taken for a path (`--help` used to be read as a directory name).
+Exit codes: `2` when the path does not exist (it prompts for another path only when run with no argument on a terminal); `1` when `dart format` fails — the barrels are written but unformatted; `64` for a flag or a second path. A flag is never taken for a path (`--help` used to be read as a directory name), and `<pkg>/lib/` is the same as `<pkg>/lib` (a trailing separator used to produce `lib/.dart`).
+
+Skipped directories: hidden ones, `lib/gen`, and the platform / build folders (`android`, `ios`, `web`, `build`, …) **outside** `lib/` only — matched as path segments relative to the package root, so `lib/src/widgets/web/` is exported like any other directory. `lib/src/gen` is walked as always.
 
 Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_options*`, and files declaring `part of`. Other generated files — `module.module.dart`, `injection.config.dart`, `lib/src/gen/**` — are exported when present.
 
@@ -227,7 +236,7 @@ dart tools/dependency_sync.dart --help   # usage; any other flag exits 64 withou
 Also repairs broken local `path:` entries. Use `--check` in CI and pre-commit.
 
 > [!NOTE]
-> It parses line-by-line rather than with a YAML parser, so `dependency_overrides` and multi-line/anchor syntax are not handled. Native Gradle dependencies (e.g. `play-services-auth` in `apps/mobile/android/app/build.gradle.kts`) are outside its scope entirely — they have no single source of truth.
+> The catalog and every pubspec are read with a YAML parser, so a trailing comment on a header (`dependencies: # runtime`) is fine. The catalog must be a map of at most `dependencies:` and `dev_dependencies:`, each a map of package → **version-constraint string**; anything else — an unknown section, a nested `git:`/`path:` source, an unquoted number, an empty value, a package pinned in both sections, invalid YAML — is refused as `pubspec_dependencies.yaml: <section>.<package>: <problem>` (or `file:line` for invalid YAML), exit `1`, in `--check` too, and nothing is written. An unparsable workspace pubspec is refused the same way before any file is touched. Rewrites replace only the characters of the one value, so comments and formatting stay. `dependency_overrides` is deliberately left alone, and a dependency given as a map (`path:`/`git:`/`sdk:`/`hosted:`) is never overwritten — only a workspace package's `path:` is repaired. Native Gradle dependencies (e.g. `play-services-auth` in `apps/mobile/android/app/build.gradle.kts`) are outside its scope entirely — they have no single source of truth.
 
 ---
 
@@ -240,6 +249,8 @@ dart tools/unused_checker/check_unused_translate.dart    # .arb keys never used
 dart tools/unused_checker/check_unused_file.dart         # orphaned Dart files
 dart tools/unused_checker/check_unused_packages.dart     # declared but unused deps
 ```
+
+Each check resolves the repository root from its own location, so it works from any working directory; a root holding no package is a failure (exit `1`), never a clean result — run from a subdirectory they used to find 0 packages and report success. Every script takes `--help`; any other argument exits `64`.
 
 [Rule 2](01_rules.md#2-explicit-dependency-declaration) has two halves: `arch_check` R5 catches a package imported but not declared; `check_unused_packages.dart` catches one declared but never imported (it scans `lib/`, `bin/`, `test/` and `tool/` — a package with no `lib/`, like `core_tools`, is read whole — so a dependency used only by tests counts as used). Run both before every PR.
 
@@ -264,9 +275,12 @@ It exits `1` when resolving the catalog, `pub outdated`, reading its JSON, or ap
 
 ```bash
 dart tools/workspace_setup/configure.dart
+dart tools/workspace_setup/configure.dart --help   # what it runs, in order — runs nothing
 ```
 
 Full setup for a fresh clone. It runs, in order: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` in every package with an `l10n.yaml`, `build_runner build --workspace`, then the barrel generator for every package with a `lib/` (apps skipped). It is **the** setup step. `pub get` + `build_runner` alone leaves the gitignored `lib/src/gen/gen.dart` barrels missing, and `flutter analyze` then fails on `gen/gen.dart`, `AppLocalizations` and `Assets`.
+
+It works on the repository root whatever the working directory. `--help` / `-h` prints the steps and exits `0`; any other argument exits `64` **before anything runs** — the script used to ignore its arguments, so `--help` ran the full, destructive setup.
 
 > [!CAUTION]
 > There is **no** `configure.sh` and **no** `configure.bat`. Only `configure.dart` exists — invoke it with `dart`, never through a shell wrapper.
@@ -316,7 +330,7 @@ Before writing anything it checks the app can take them: the app needs `android/
 .\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
 ```
 
-Checks an APK (zip alignment, then the ELF alignment of its native `.so` libraries), an APEX, or a directory of native libraries for Android 15+ 16 KB page-size compliance. It takes exactly one path; with none it prints the usage and exits `1`, and `--help` prints it with exit `0`. The `.sh` is executable, so the `./` call works as written; the `.bat` is a thin wrapper that runs the `.sh` through Git Bash and returns its exit code. The only tools in the repo that are shell scripts rather than Dart.
+Checks an APK (zip alignment, then the ELF alignment of its native `.so` libraries), an APEX, or a directory of native libraries for Android 15+ 16 KB page-size compliance. It takes exactly one path; with none it prints the usage and exits `1`, and `--help` prints it with exit `0`. A file must be an `.apk`, an `.apex` or a single `.so` — anything else (an `.aab` included) exits `1`. An APK that `unzip` cannot read (not a zip, truncated) exits `1`; only "no `lib/*` entry" (unzip exit `11`) is the no-native-libraries pass — every unzip failure used to be reported as that pass. The `.sh` is executable, so the `./` call works as written; the `.bat` is a thin wrapper that runs the `.sh` through Git Bash and returns its exit code. The only tools in the repo that are shell scripts rather than Dart.
 
 > [!NOTE]
 > The filename really is `16kb_ckeck` — a typo that is preserved because scripts and docs reference it.
@@ -333,7 +347,7 @@ dart tools/code_review/code_review.dart --all --focus architecture,security
 dart tools/code_review/code_review.dart --all --language vi   # this run only
 ```
 
-Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs a Gemini API key: `GEMINI_API_KEY`, `--api-key`, or — when the tool prompts for one and you agree to save it — the gitignored `tools/code_review/.gemini_api_key`. With no key and no terminal to prompt on (CI, a pipe), it says where to set one on stderr and exits `1`. The key is sent in the `x-goog-api-key` header, never in the URL, and is scrubbed from every error message, so a network failure cannot print it to a terminal or CI log. Run from the repository root, `--all` reviews every `lib/` under `apps/`, `modules/` and `platform/`. Valid `--focus` values: `security`, `performance`, `bugs`, `style`, `architecture`, `testing`.
+Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs a Gemini API key: `GEMINI_API_KEY`, `--api-key`, or — when the tool prompts for one and you agree to save it — the gitignored `tools/code_review/.gemini_api_key`. With no key and no terminal to prompt on (CI, a pipe), it says where to set one on stderr and exits `1`. The key is sent in the `x-goog-api-key` header, never in the URL, and is scrubbed from every error message, so a network failure cannot print it to a terminal or CI log. Run from the repository root, `--all` reviews every `lib/` under `apps/`, `modules/` and `platform/`. A `--file` or `--folder` that does not exist exits `1` before the API key is even read — it used to print "File not found", review nothing and exit `0`. Valid `--focus` values: `security`, `performance`, `bugs`, `style`, `architecture`, `testing`.
 
 - **Always excluded**, whatever `--exclude` adds: generated files (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gen.dart`, `*.mocks.dart`, `lib/src/gen/**`, `firebase_options_*.dart`), tests, and every git-ignored file. (A single `--exclude` used to switch the built-in exclusions off.)
 - **`--language`** applies to that run only and is not saved; the default is `reportLanguage` in the tracked `code_review_config.json`, changed with `--config`.

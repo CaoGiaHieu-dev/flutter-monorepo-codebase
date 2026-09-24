@@ -668,4 +668,83 @@ class CommonHelpers {
       '  -> Đã tạo template mã nguồn cho ${config.smType.name.toUpperCase()}, Route và Page',
     );
   }
+
+  /// The values every non-feature template is rendered with.
+  static Map<String, Object> _layerValues(ModuleConfig config) => {
+    'moduleName': config.moduleName,
+    'pascalNameInput': toPascalCase(config.nameInput),
+    'snakeNameInput': config.nameInput,
+  };
+
+  /// Domain scaffold: the module's repository contract, so the package
+  /// starts out using the `domain_core` it declares.
+  static void createDomainTemplates(ModuleConfig config) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/domain/repository.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(
+      '${config.modulePath}/lib/src/repositories/i_${config.nameInput}_repository.dart',
+    ).writeAsStringSync(tpl.renderString(_layerValues(config)));
+  }
+
+  /// Data scaffold: a `RepositoryImpl` on data_core's `IBaseRepository`,
+  /// implementing and registered as the domain's contract when [hasDomain].
+  static void createDataTemplates(
+    ModuleConfig config, {
+    required bool hasDomain,
+  }) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/data/repository_impl.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(
+      '${config.modulePath}/lib/src/repositories_impl/${config.nameInput}_repository_impl.dart',
+    ).writeAsStringSync(
+      tpl.renderString({..._layerValues(config), 'hasDomain': hasDomain}),
+    );
+    if (!hasDomain) {
+      stdout.writeln(
+        '  !! Chưa có domain_${config.nameInput}: RepositoryImpl được tạo mà '
+        'không implements interface nào — tạo domain rồi nối lại '
+        '(xem chú thích trong file).',
+      );
+    }
+  }
+
+  /// The `order` for a newly generated `INavDestinationModule`: 10 above the
+  /// highest order any existing destination under `modules/*/feature` returns
+  /// (10 when there is none).
+  ///
+  /// A fixed value made every generated tab tie, and the dashboard's sort is
+  /// not stable, so tied tabs could swap places between builds. Spacing by 10
+  /// leaves room to slot a destination in between by hand.
+  static int nextNavDestinationOrder() {
+    final orderPattern = RegExp(r'int\s+get\s+order\s*=>\s*(-?\d+)\s*;');
+    var highest = -1;
+    var found = false;
+    final modules = Directory('modules');
+    if (!modules.existsSync()) return 10;
+    for (final module in modules.listSync().whereType<Directory>()) {
+      final lib = Directory('${module.path}/feature/lib');
+      if (!lib.existsSync()) continue;
+      for (final file in lib.listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.dart')) continue;
+        final text = file.readAsStringSync();
+        if (!RegExp(
+          r'(extends|implements)\s+INavDestinationModule\b',
+        ).hasMatch(text)) {
+          continue;
+        }
+        for (final match in orderPattern.allMatches(text)) {
+          final value = int.parse(match.group(1)!);
+          if (!found || value > highest) highest = value;
+          found = true;
+        }
+      }
+    }
+    return found ? highest + 10 : 10;
+  }
 }

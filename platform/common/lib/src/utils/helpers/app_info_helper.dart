@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// Helper class for retrieving application and device information.
@@ -18,7 +19,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 /// Example usage:
 /// ```dart
 /// // Initialize during app startup
-/// await AppInfoHelper.instance.initialize();
+/// await AppInfoHelper.initialize();
 ///
 /// // Get app information
 /// final version = AppInfoHelper.instance.fullVersion;
@@ -43,9 +44,26 @@ class AppInfoHelper {
   /// device info plugin.
   ///
   /// Should be called during app startup, typically in main() or app initialization.
+  ///
+  /// Never throws: `AppInitializer` starts it without awaiting, so a platform
+  /// failure (no plugin in a unit test, an unsupported platform) is logged and
+  /// the getters keep their fallback values instead of surfacing as an
+  /// uncaught error.
   static Future<void> initialize() async {
-    _instance?._packageInfo = await PackageInfo.fromPlatform();
-    _instance?._deviceInfo = DeviceInfoPlugin();
+    // Through [instance], not `_instance?`: the singleton does not exist yet
+    // on the first call, and writing through a null-aware access silently
+    // dropped the loaded info.
+    final helper = instance;
+    helper._deviceInfo ??= DeviceInfoPlugin();
+    try {
+      helper._packageInfo = await PackageInfo.fromPlatform();
+    } catch (e) {
+      DynamicLogger.log(
+        'Package info unavailable (${e.runtimeType}); using fallbacks.',
+        tag: 'AppInfoHelper',
+        level: LogLevel.WARNING,
+      );
+    }
   }
 
   /// Gets the application name as defined in the platform configuration.

@@ -14,7 +14,8 @@ Regenerates the `export` barrel of every directory under the given path
 
 Hand-written `export` lines in a barrel are replaced. Run it after
 gen-l10n / build_runner: generated files on disk are exported too.
-Exits 2 when the path does not exist, 1 when generation or formatting fails.''';
+Exits 64 when the path does not exist or on a flag, 1 when generation or
+formatting fails.''';
 
 /// Directories never given a barrel, matched as whole path SEGMENTS relative
 /// to the package root (the nearest ancestor of the target holding a

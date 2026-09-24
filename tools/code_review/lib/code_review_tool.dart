@@ -293,9 +293,11 @@ class CodeReviewTool {
     );
     stdout.writeln('🔑 API Key Setup:');
     stdout.writeln(
-      '  1. Environment variable: export GEMINI_API_KEY="your_key"',
+      '  1. Command line: --api-key "your_key" (wins over the rest)',
     );
-    stdout.writeln('  2. Command line: --api-key "your_key"');
+    stdout.writeln(
+      '  2. Environment variable: export GEMINI_API_KEY="your_key"',
+    );
     stdout.writeln(
       '  3. Saved key: tools/code_review/.gemini_api_key (gitignored)',
     );

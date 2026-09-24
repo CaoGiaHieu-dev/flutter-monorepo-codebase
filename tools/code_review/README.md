@@ -1,154 +1,163 @@
-# 🤖 Công Cụ Đánh Giá Code AI - Flutter Clean Architecture
+🌍 *Choose Language:* [English](README.md) | [Tiếng Việt](README.vi.md)
 
-Một công cụ đánh giá code thông minh, chính xác được cung cấp bởi Gemini AI, được thiết kế đặc biệt cho các dự án Flutter theo nguyên tắc Clean Architecture.
+# 🤖 AI Code Review Tool - Flutter Clean Architecture
 
-## ✨ Tính Năng Chính
+A code review tool powered by Gemini AI (model `gemini-3-flash-preview`, set in `lib/core/constants.dart`), built specifically for Flutter projects that follow Clean Architecture. The instructions given to the AI live in `review_prompt.md`.
 
-- **🎯 Chính xác & Thông minh**: Chỉ báo cáo các vấn đề thực sự (lỗi kiến trúc, logic, hiệu năng), không báo cáo các lỗi nhỏ nhặt về style để tránh gây nhiễu.
-- **🏗️ Tập trung vào Kiến trúc**: Xác thực sự tuân thủ các lớp của Clean Architecture, các nguyên tắc SOLID, và các pattern của dự án.
-- **🚀 Phân tích Hiệu năng & Bảo mật**: Xác định các điểm nghẽn cổ chai, rò rỉ bộ nhớ (memory leak) và các lỗ hổng bảo mật.
-- **📊 Báo cáo Toàn diện**: Phân tích chi tiết theo từng file, chấm điểm chất lượng theo 5 hạng mục và đưa ra các hành động cần ưu tiên.
-- **🌐 Hỗ trợ Đa ngôn ngữ**: Báo cáo có thể được tạo bằng 8 ngôn ngữ khác nhau (bao gồm tiếng Việt).
-- **⚡ Xử lý Hiệu quả**: Chế độ xử lý hàng loạt (batch mode) giúp review nhiều file song song, có cơ chế tự động xử lý khi gặp giới hạn của API.
+## ✨ Key Features
 
-## 🚀 Hướng Dẫn Nhanh
+- **🎯 Focused on real problems**: The prompt asks for real issues only (architecture, logic, performance), not style nitpicks, to keep the noise down.
+- **🏗️ Architecture-focused**: Checks compliance with the Clean Architecture layers, SOLID principles and the project's patterns.
+- **🚀 Performance & security analysis**: Finds bottlenecks, memory leaks and security holes.
+- **📊 Consolidated report**: Per-file analysis with a score table (`Project Rules`, `Architecture`, `SOLID/Code` and `Overall`, on an X/10 scale) and prioritised actions.
+- **🌐 Multi-language**: Reports in 8 languages (`en`, `vi`, `ja`, `ko`, `zh`, `fr`, `de`, `es`).
+- **⚡ Batch mode**: With more than one file, the tool asks for Batch (the default) or Individual. Batch reviews the files of a batch in parallel, pauses between batches, and retries files that hit the API rate limit or time out.
 
-### 1. Lấy API Key
-Lấy Gemini API key miễn phí của bạn tại: https://aistudio.google.com/app/apikey
+## 🚀 Quick Start
 
-### 2. Thiết Lập API Key
-**Cách 1: Biến môi trường (Khuyến khích)**
+### 1. Get an API key
+Get a free Gemini API key at: https://aistudio.google.com/app/apikey
+
+### 2. Set up the API key
+**Option 1: Environment variable (recommended)**
 ```bash
 export GEMINI_API_KEY="your_api_key_here"
 ```
 
-**Cách 2: Để tool tự hỏi**
-Chạy tool khi chưa có key: nó sẽ hỏi key và đề nghị lưu vào `tools/code_review/.gemini_api_key` — file đã được gitignore, nên key không bao giờ lọt vào commit. (`--api-key "<key>"` cũng dùng được cho một lần chạy.)
+**Option 2: Let the tool ask**
+Run the tool without a key: it asks for one and offers to save it to `tools/code_review/.gemini_api_key` — the file is gitignored, so the key never lands in a commit. (`--api-key "<key>"` also works for a single run.)
 
-### 3. Chạy Review
-**Chế độ tương tác (Dễ nhất cho người mới)**
+Key lookup order: `--api-key` → `GEMINI_API_KEY` → `tools/code_review/.gemini_api_key` → a prompt on the terminal.
+
+### 3. Run a review
+**Interactive mode (easiest for newcomers)** — run it without any file selection (or with `-i`):
 ```bash
 dart tools/code_review/code_review.dart
 ```
 
-**Review tất cả các file**
+**Review every file** (every `lib/` under `apps/`, `modules/`, `platform/`)
 ```bash
 dart tools/code_review/code_review.dart --all
 ```
 
-**Review các file đã thay đổi (so với Git)**
+**Review files changed against the current commit** (`git diff HEAD`: staged + unstaged; untracked files are not included)
 ```bash
 dart tools/code_review/code_review.dart --changed
 ```
 
-## 📖 Hướng Dẫn Sử Dụng Chi Tiết
+## 📖 Detailed Usage
 
-### Các Lệnh Phổ Biến
+### Common commands
 
-- **Review theo thư mục**:
+- **Review specific files** (repeat `--file` for several):
   ```bash
-  # Chỉ review domain layer (quan trọng nhất)
+  dart tools/code_review/code_review.dart --file apps/mobile/lib/main.dart
+  ```
+- **Review a folder**:
+  ```bash
+  # Only the domain layer (the most important one)
   dart tools/code_review/code_review.dart --folder modules/auth/domain
   ```
-- **Review các file đã dàn dựng (staged) cho commit**:
+- **Review the files staged for commit**:
   ```bash
   dart tools/code_review/code_review.dart --staged
   ```
-- **Tập trung vào các khía cạnh cụ thể**:
+- **Focus on specific aspects**:
   ```bash
-  # Chỉ kiểm tra bảo mật
+  # Security only
   dart tools/code_review/code_review.dart --all --focus security
 
-  # Kiểm tra nhiều khía cạnh
+  # Several aspects
   dart tools/code_review/code_review.dart --all --focus security,performance,bugs
   ```
-  *Các `focus` hợp lệ: `architecture`, `security`, `performance`, `bugs`, `style`, `testing`. Giá trị khác bị từ chối.*
+  *Valid `focus` values: `architecture`, `security`, `performance`, `bugs`, `style`, `testing`. Anything else is refused.*
 
-- **Loại trừ file**:
+- **Excluding files**:
   ```bash
-  # Loại trừ thêm theo glob
+  # Exclude more by glob
   dart tools/code_review/code_review.dart --all --exclude "**/routing/**"
   ```
-  File sinh tự động (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gen.dart`, `*.mocks.dart`, `lib/src/gen/**`, `firebase_options_*.dart`), file test và mọi file bị git ignore **luôn** bị loại, dù có `--exclude` hay không.
+  Generated files (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `*.gen.dart`, `*.mocks.dart`, anything under `gen/` / `generated/`, `firebase_options_*.dart`), test files (`/test/`) and every gitignored file are **always** excluded, with or without `--exclude`.
 
-- **Tùy chọn Ngôn ngữ & Định dạng**:
+- **Language & format options**:
   ```bash
-  # Báo cáo bằng tiếng Việt
+  # Report in Vietnamese
   dart tools/code_review/code_review.dart --all --language vi
   ```
-  `--language` chỉ áp dụng cho lần chạy đó — không ghi vào `code_review_config.json`; đổi mặc định bằng `--config`.
-  Báo cáo luôn là Markdown (`code_review_reports/code_review_report_<ngày>_<giờ>.md`). `--format` chỉ nhận `markdown` — giữ lại để các script đang truyền `--format markdown` không vỡ.
+  `--language` applies to that run only — it is not written to `code_review_config.json`; change the default with `--config`.
+  Reports are always Markdown (`code_review_reports/code_review_report_<date>_<time>.md`; change the folder with `--output-dir`, skip the report file with `--no-summary`). `--format` accepts only `markdown` — it is kept so scripts passing `--format markdown` keep working. `-v` / `--verbose` prints more detail.
 
-### Quy trình làm việc hiệu quả
+### An effective workflow
 
-1.  **Trước khi Commit**:
+1.  **Before committing**:
     ```bash
-    # Review các file đã staged để đảm bảo chất lượng trước khi commit
+    # Review the staged files before you commit
     dart tools/code_review/code_review.dart --staged
     ```
-2.  **Review theo Tầng (hàng tuần)**:
+2.  **Layer by layer (weekly)**:
     ```bash
-    # Thứ 2: Review domain layer
+    # Monday: the domain layer
     dart tools/code_review/code_review.dart --folder modules/auth/domain --focus architecture
 
-    # Thứ 4: Review data layer
+    # Wednesday: the data layer
     dart tools/code_review/code_review.dart --folder modules/auth/data
     ```
-3.  **Trước khi Release**:
+3.  **Before a release**:
     ```bash
-    # Kiểm tra bảo mật và hiệu năng toàn bộ dự án
+    # Security and performance across the whole project
     dart tools/code_review/code_review.dart --all --focus security,performance
     ```
 
-## 🔧 Cấu Hình
+## 🔧 Configuration
 
-- **Xem cấu hình hiện tại**:
+- **Show the current settings**:
   ```bash
   dart tools/code_review/code_review.dart --show-config
   ```
-- **Thay đổi cấu hình (tương tác)**:
+- **Change settings (interactive)**:
   ```bash
   dart tools/code_review/code_review.dart --config
   ```
-- **Các tùy chọn cấu hình**:
-  - `reportLanguage`: Ngôn ngữ báo cáo (`en`, `vi`, `ja`, `ko`, `zh`, `fr`, `de`, `es`).
-  - `batchSize`: Số lượng file xử lý song song trong một lô (1-20).
-  - `delayBetweenBatches`: Thời gian chờ (ms) giữa các lô để tránh giới hạn API.
+- **Settings in `code_review_config.json`** (committed values: `vi`, `3`, `1000`):
+  - `reportLanguage`: Report language (`en`, `vi`, `ja`, `ko`, `zh`, `fr`, `de`, `es`).
+  - `batchSize`: Files reviewed in parallel per batch (1-20; `5` when absent).
+  - `delayBetweenBatches`: Pause (ms) between batches to stay under the API limits (`2000` when absent).
+  - `includeTimestamps`: Write the generation time into the report.
 
-## 🔗 Tích Hợp CI/CD
+## 🔗 CI/CD Integration
 
-Workflow thật là [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): trên mỗi Pull Request chạm tới file Dart trong `apps/*/lib`, `modules/` hoặc `platform/`, nó chạy tool với `--file` cho từng file thay đổi, tải report lên thành artifact và đăng gợi ý inline lên PR. Secret cần có: `GEMINI_API_KEY`. Workflow này không chặn merge.
+The real workflow is [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): on every pull request (into `main`, `develop`, `master`) touching Dart files in `apps/*/lib`, `modules/` or `platform/` (except `*.g.dart`, `*.freezed.dart`, `*.module.dart`), it runs the tool with one `--file` per changed file (`--language vi`), uploads the report as an artifact and posts a review with inline suggestions on the PR. It can also be run by hand (`workflow_dispatch`) with a `changed` / `all` / `domain` / `data` / `platform` / `presentation` scope. Required secret: `GEMINI_API_KEY`. This workflow does not block a merge.
 
-## 🐛 Xử Lý Sự Cố
+## 🐛 Troubleshooting
 
-- **Lỗi "API key not found"**:
-  - Đặt biến môi trường `GEMINI_API_KEY`, truyền `--api-key`, hoặc chạy tool và đồng ý lưu key khi được hỏi.
+- **"Gemini API key not found"**:
+  - Set the `GEMINI_API_KEY` environment variable, pass `--api-key`, or run the tool and agree to save the key when asked.
 
-- **Lỗi "Rate limit exceeded"**:
-  - Công cụ sẽ tự động chờ và thử lại.
-  - Nếu vẫn bị, hãy tăng thời gian chờ: `dart tools/code_review/code_review.dart --config` và đặt `delayBetweenBatches` thành `2000`-`3000` ms.
+- **"Rate limit exceeded"** (HTTP 429 / 503):
+  - In Batch mode the tool waits (per `Retry-After`, 60 seconds by default) and retries, up to 3 times. Individual mode does not retry.
+  - If it keeps happening, raise the delay: `dart tools/code_review/code_review.dart --config` and set `delayBetweenBatches` to `2000`-`3000` ms, or lower `batchSize`.
 
-- **Lỗi "Timeout" hoặc "Failed to parse response"**:
-  - Thường do file quá lớn hoặc prompt bị chặn. Công cụ sẽ tự động thử lại.
-  - Nếu vẫn thất bại, hãy thử review riêng file đó.
+- **"Timeout" or "Failed to parse successful API response"**:
+  - A timeout (60 seconds per request) is retried by Batch mode after 30 / 60 / 90 seconds. A response that fails to parse is not retried.
+  - Usually the file is too large or the response was blocked/truncated. If it still fails, review that file on its own (`--file`).
 
 ---
 
-## 📚 Phụ Lục A: Checklist Review Nhanh
+## 📚 Appendix A: Quick Review Checklist
 
-Sử dụng checklist này để tự review code của bạn.
+Use this checklist to self-review your code.
 
-### 🏛️ Kiến Trúc
-- [ ] **Quy Tắc Phụ Thuộc**: Code có vi phạm quy tắc `Presentation → Domain ← Data` không?
-- [ ] **Lớp Domain Thuần Túy**: Lớp Domain có import `flutter` hoặc `dart:ui` không? (Cấm).
+### 🏛️ Architecture
+- [ ] **Dependency rule**: Does the code break `Presentation → Domain ← Data`?
+- [ ] **Pure Domain layer**: Does the Domain layer import `flutter`, `dart:ui`, `dio`, `retrofit` or any `core_*` package? (Forbidden.)
 
-### 🧬 Theo Từng Lớp
-- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `platform/*` KHÔNG được phụ thuộc `feature_*` hay `data_*`.
-- **Domain**: `Entity` phải thuần túy (không có `statusCode`, `message`). `Repository` phải trả về `Future<Result<T>>`.
-- **Data**: `RepositoryImpl` phải `implement` interface từ Domain và bọc mọi lệnh gọi trong `execute()` / `executeSync()` của `IBaseRepository` (`data_core`).
-- **Presentation**: `Provider` KHÔNG được chứa controller UI. Các lệnh gọi bất đồng bộ phải dùng `executeOperation`.
+### 🧬 Per layer
+- **Core**: No direct `SharedPreferences` (go through `core_storage`'s `StorageManager` + `StorageValue<T>`). `platform/*` must NOT depend on `feature_*`, `data_*` or `domain_*` — except the three approved edges to `domain_core` (arch_check R1).
+- **Domain**: An `Entity` stays pure (no `statusCode`, `message`). A `Repository` returns `Future<Result<T>>`.
+- **Data**: A `RepositoryImpl` `implements` the Domain interface and wraps every call in `IBaseRepository`'s `execute()` / `executeSync()` (`data_core`).
+- **Presentation**: A `Provider` must NOT hold UI controllers. Async calls go through `executeOperation`.
 
-### 💅 Đặt Tên & Style
-- **Hằng Số**: Biến `static const` phải ở dạng `UPPER_SNAKE_CASE`.
-- **Thành Viên Private**: Phải bắt đầu bằng `_`.
-- **`final`**: Các biến không gán lại phải là `final`.
+### 💅 Naming & style
+- **Constants**: `static const` fields are `UPPER_SNAKE_CASE`.
+- **Private members**: Start with `_`.
+- **`final`**: Variables that are never reassigned are `final`.

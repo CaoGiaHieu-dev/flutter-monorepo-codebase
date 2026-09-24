@@ -147,7 +147,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
 │   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
 │   └── data_core/                 # IBaseRepository, BaseModel, request model
-├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.md
+├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
 │   ├── arch_check/                # Luật phân tầng R1–R10 — Cổng PR 1
 │   ├── barrel_generator/          # Sinh lại barrel file cho lib/ của một package

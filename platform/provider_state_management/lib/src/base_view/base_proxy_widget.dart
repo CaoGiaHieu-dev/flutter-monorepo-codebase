@@ -61,6 +61,7 @@ class BaseProxyWidget2<T1, T2, R extends ChangeNotifier>
           },
         ),
       ],
+      builder: builder,
       child: child,
     );
   }
@@ -100,6 +101,7 @@ class BaseProxyWidget3<T1, T2, T3, R extends ChangeNotifier>
           },
         ),
       ],
+      builder: builder,
       child: child,
     );
   }
@@ -140,6 +142,7 @@ class BaseProxyWidget4<T1, T2, T3, T4, R extends ChangeNotifier>
           },
         ),
       ],
+      builder: builder,
       child: child,
     );
   }

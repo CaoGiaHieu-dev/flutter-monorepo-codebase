@@ -8,6 +8,13 @@
 # location instead (FASTLANE_DIR / APP_DIR in helpers.rb), so the working
 # directory does not matter.
 
+# fastlane reads every imported file and the files the lanes open (pubspec.yaml,
+# Config.yaml) in the locale's encoding. Under a C/POSIX locale (a bare Linux
+# container, some CI images) that is US-ASCII, and the first non-ASCII byte is
+# a SyntaxError or "invalid byte sequence in US-ASCII". Pin UTF-8 before any
+# import so the lanes do not depend on LANG / LC_ALL.
+Encoding.default_external = Encoding::UTF_8
+
 # fastlane rewrites README.md in the fastlane folder after every run. The one in
 # apps/mobile/fastlane/ is hand-written; one here would be an untracked stray.
 ENV['FASTLANE_SKIP_DOCS'] = '1'

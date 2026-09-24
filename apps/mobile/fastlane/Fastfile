@@ -9,6 +9,13 @@
 # The root `fastlane/Fastfile` imports the same modules, so every lane runs
 # identically from the repository root and from apps/mobile/.
 
+# fastlane reads every imported file and the files the lanes open (pubspec.yaml,
+# Config.yaml) in the locale's encoding. Under a C/POSIX locale (a bare Linux
+# container, some CI images) that is US-ASCII, and the first non-ASCII byte is
+# a SyntaxError or "invalid byte sequence in US-ASCII". Pin UTF-8 before any
+# import so the lanes do not depend on LANG / LC_ALL.
+Encoding.default_external = Encoding::UTF_8
+
 # fastlane regenerates README.md in this folder after every run; ours is
 # hand-written and tracked, so the generator stays off.
 ENV['FASTLANE_SKIP_DOCS'] = '1'

@@ -165,8 +165,27 @@ def get_dart_define_file(flavor)
   end
 end
 
+# --- Prompts ---
+#
+# Every lane prompts for a parameter left off the command line. Without a
+# terminal (CI, a pipe, `< /dev/null`) fastlane cannot prompt: UI.input crashes
+# with "Could not retrieve response as fastlane runs in non-interactive mode"
+# and a Ruby backtrace. So in that case a prompt that has a safe default takes
+# it and says so, and one without (the flavor) stops with the option to pass.
+# Distribution prompts default to NO when non-interactive: nothing is uploaded
+# unless the command line asks for it.
+
+def non_interactive_default(option, default_value)
+  if default_value.nil?
+    UI.user_error!("#{option}: was not passed and fastlane is running non-interactively (no terminal / CI), so it cannot prompt for it. Pass #{option}:<value> on the command line.")
+  end
+  UI.important("Non-interactive: #{option} not passed, using #{default_value.inspect}. Pass #{option}:<value> to choose.")
+  default_value
+end
+
 # Get user input with a default value
-def get_input(prompt_text, default_value = nil)
+def get_input(prompt_text, default_value = nil, option: nil)
+  return non_interactive_default(option || prompt_text, default_value) unless UI.interactive?
   prompt = default_value.nil? ? "#{prompt_text}: " : "#{prompt_text} (default: #{default_value}): "
   input = UI.input(prompt)
   input.empty? ? default_value : input.strip
@@ -174,7 +193,7 @@ end
 
 # Get build number input with 'auto' option
 def get_build_number_input(prompt_text, default_value = nil)
-  input = get_input(prompt_text, default_value)
+  input = get_input(prompt_text, default_value, option: 'build_number')
   return default_value if input.nil?
   input.downcase == 'auto' ? 'auto' : input # Return 'auto' string for easier checking
 end
@@ -191,8 +210,21 @@ def normalize_build_number_input(value)
   s.to_i
 end
 
-# Get boolean user input with a default value
-def get_boolean_input(prompt_text, default_value)
+# `version` (the build name, `--build-name`): one to three dot-separated
+# integers, e.g. 1.2.0. iOS rejects anything else as CFBundleShortVersionString
+# at upload time; failing here costs seconds instead of a whole build.
+def normalize_version_input(value)
+  s = value.to_s.strip
+  unless s.match?(/\A\d+(\.\d+){0,2}\z/)
+    UI.user_error!("Invalid version '#{s}': pass one to three dot-separated integers, e.g. version:1.2.0.")
+  end
+  s
+end
+
+# Get boolean user input with a default value. `non_interactive` is the answer
+# used when there is no terminal (see above); it defaults to `default_value`.
+def get_boolean_input(prompt_text, default_value, option: nil, non_interactive: default_value)
+  return non_interactive_default(option || prompt_text, non_interactive) unless UI.interactive?
   input = UI.input("#{prompt_text} (y/n, default: #{default_value ? 'y' : 'n'}): ").strip.downcase
   return default_value if input.empty?
   return true if ['y', 'yes', 'true'].include?(input)
@@ -201,7 +233,8 @@ def get_boolean_input(prompt_text, default_value)
 end
 
 # Get multiline user input
-def get_multiline_input(prompt_text, end_keyword = "END")
+def get_multiline_input(prompt_text, end_keyword = "END", option: nil, non_interactive: "")
+  return non_interactive_default(option || prompt_text, non_interactive) unless UI.interactive?
   UI.important("#{prompt_text} (end with '#{end_keyword}' on a new line):")
   UI.important("--------------------------------------------------")
   input_lines = []
@@ -214,13 +247,36 @@ def get_multiline_input(prompt_text, end_keyword = "END")
 end
 
 # Get flavor input with validation
-def get_validated_input(prompt_text, valid_options, default_value)
-  input = get_input("#{prompt_text} (#{valid_options.join(', ')}, default: #{default_value})", default_value)
-  input_lower = input.downcase
-  unless valid_options.include?(input_lower)
-    UI.user_error!("Invalid input '#{input}'. Please enter one of the following: #{valid_options.join(', ')}.")
+def get_validated_input(prompt_text, valid_options, default_value, option: nil)
+  input = get_input("#{prompt_text} (#{valid_options.join(', ')}, default: #{default_value})", default_value, option: option)
+  validate_choice(input, valid_options, option || prompt_text)
+end
+
+# `value` (from the command line or a prompt) lower-cased, if it is one of
+# `valid_options`; otherwise the lane stops naming the accepted values.
+def validate_choice(value, valid_options, option)
+  normalized = value.to_s.strip.downcase
+  unless valid_options.include?(normalized)
+    UI.user_error!("Invalid #{option} '#{value}'. Please enter one of the following: #{valid_options.join(', ')}.")
   end
-  input_lower
+  normalized
+end
+
+# The flavor from `flavor:` or the prompt; nil for a flavor-less build.
+# Non-interactively there is no default: a flavor-less build of this app is
+# never what a pipeline meant, so the lane asks for `flavor:` instead.
+def resolve_flavor(options)
+  flavor_input = if options.key?(:flavor)
+                   options[:flavor]
+                 elsif UI.interactive?
+                   get_input("Enter flavor (#{VALID_FLAVORS.join(', ')}) or press Enter for none")
+                 else
+                   non_interactive_default('flavor', nil)
+                 end
+  flavor = flavor_input.to_s.strip
+  return nil if flavor == 'none' || flavor.empty?
+  UI.user_error!("Invalid flavor '#{flavor}'. Valid options are: #{VALID_FLAVORS.join(', ')}.") unless VALID_FLAVORS.include?(flavor)
+  flavor
 end
 
 # The value for a flavor in a per-flavor map of Config.yaml (`firebase.app_ids.
@@ -240,10 +296,20 @@ def flavor_config_value(map_path, flavor)
   [value, key]
 end
 
+# True for a value still holding Config.example.yaml's placeholder
+# (`YOUR_...` / `<YOUR_...>`), so a half-filled Config.yaml stops with the key
+# to fill in instead of a 404 from Firebase or App Store Connect.
+def config_placeholder?(value)
+  value.to_s.strip.match?(/\A<?YOUR_/i)
+end
+
 # Helper to get Firebase App ID based on platform and flavor
 def get_firebase_app_id(platform, flavor)
   app_id, key = flavor_config_value(['firebase', 'app_ids', platform.to_s], flavor)
   UI.user_error!("Firebase App ID for platform '#{platform}' and flavor '#{key}' (or 'default') not set in #{CONFIG_FILE}.") unless app_id
+  if config_placeholder?(app_id)
+    UI.user_error!("firebase.app_ids.#{platform}.#{key} in #{CONFIG_FILE} is still the example placeholder '#{app_id}'. Fill in the real Firebase App ID.")
+  end
   app_id
 end
 
@@ -393,7 +459,7 @@ def resolve_change_log(change_log_input, change_log_file)
     return File.read(change_log_file)
   end
 
-  get_multiline_input("Enter the change log")
+  get_multiline_input("Enter the change log", option: 'change_log')
 end
 
 # Write a change log to a fresh temp directory (outside the repository) for
@@ -430,7 +496,7 @@ def fetch_latest_build_number_from_firebase(platform, flavor)
     latest_build_number
   rescue => e
     UI.error("Error fetching latest Firebase build number: #{e.message}")
-    UI.user_error!("Failed to fetch the latest release from Firebase.")
+    UI.user_error!("build_number:auto could not read the latest Firebase release: #{e.message} Pass build_number:<n> or fix the Firebase settings in #{CONFIG_FILE}.")
   end
 end
 
@@ -454,7 +520,7 @@ def fetch_latest_build_number_app_store(bundle_id, version)
     latest_build
   rescue => e
     UI.error("Error fetching latest App Store build number: #{e.message}")
-    UI.user_error!("Failed to fetch the latest build number from App Store Connect.")
+    UI.user_error!("build_number:auto could not read the latest TestFlight build: #{e.message} Pass build_number:<n> or fix the App Store Connect settings in #{CONFIG_FILE}.")
   end
 end
 
@@ -475,7 +541,7 @@ def fetch_latest_build_number_google_play(bundle_id, track, flavor)
     latest_build
   rescue => e
     UI.error("Error fetching latest Google Play build number: #{e.message}")
-    UI.user_error!("Failed to fetch the latest build number from Google Play.")
+    UI.user_error!("build_number:auto could not read the Google Play track: #{e.message} Pass build_number:<n> or fix paths.google_play_key_* in #{CONFIG_FILE}.")
   end
 end
 
@@ -786,55 +852,98 @@ def distribute_to_firebase(platform, artifact_path, build_type, flavor, change_l
   download_link ? "Firebase Download Link" : "[Firebase Distribution]"
 end
 
+# iOS lanes build with `flutter build ipa`, CocoaPods and Xcode, and upload
+# with `xcrun altool`: none of that exists off macOS. Stop before any prompt or
+# setup instead of failing minutes later inside `pod` or `xcrun`.
+def ensure_ios_host!(lane_name)
+  return if FastlaneCore::Helper.mac?
+  UI.user_error!(
+    "`fastlane #{lane_name}` needs macOS with Xcode (flutter build ipa, CocoaPods, xcrun altool); " \
+    "this machine is #{RUBY_PLATFORM}. Build Android here with `fastlane android build` / `fastlane android store`, " \
+    "and run the iOS lanes on a Mac."
+  )
+end
+
+# The Android release keystore guard, checked before any setup. The Gradle
+# guard at the bottom of android/app/build.gradle.kts refuses a staging/prod
+# release without its properties file too, but only in `pre<Flavor>ReleaseBuild`
+# — after the toolchain setup (flutter clean, codegen) and Gradle configuration,
+# a minute or more in — and its message is buried in `flutter build --verbose`
+# output under a generic "Exit status of command 'flutter build ...'". Same rule
+# and same escape hatch: staging may use the dev key when the Gradle property
+# allowDevKeystoreForStaging=true is set (ORG_GRADLE_PROJECT_* env, or a
+# gradle.properties the build reads); prod never.
+def ensure_release_keystore!(flavor)
+  file = { 'prod' => 'key.properties', 'staging' => 'key-stg.properties' }[flavor]
+  return unless file
+  path = File.join(APP_DIR, 'android', file)
+  return if File.exist?(path)
+
+  if flavor == 'staging' && allow_dev_keystore_for_staging?
+    UI.important("#{display_path(path)} is missing; allowDevKeystoreForStaging=true, so this staging release is signed with the public dev keystore.")
+    return
+  end
+  hatch = flavor == 'staging' ? " For a staging build that may carry the dev key, set ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true." : ""
+  UI.user_error!(
+    "Refusing to build the #{flavor} release: #{display_path(path)} is missing. Without it the release " \
+    "would be signed with the committed, public dev keystore. Create it (docs/en/operations/02_fastlane_release.md, section 4).#{hatch}"
+  )
+end
+
+def allow_dev_keystore_for_staging?
+  truthy = ->(v) { v.to_s.strip.casecmp('true').zero? }
+  return true if truthy.call(ENV['ORG_GRADLE_PROJECT_allowDevKeystoreForStaging'])
+  gradle_home = ENV['GRADLE_USER_HOME'].to_s.empty? ? File.join(Dir.home, '.gradle') : ENV['GRADLE_USER_HOME']
+  [File.join(APP_DIR, 'android', 'gradle.properties'), File.join(gradle_home, 'gradle.properties')].any? do |props|
+    File.exist?(props) && File.foreach(props).any? { |line| line =~ /\A\s*allowDevKeystoreForStaging\s*[=:]\s*(\S+)/ && truthy.call($1) }
+  end
+end
+
 # --- Shared Build Logic ---
 
 # Common build logic encapsulated
 def run_build(platform:, options:)
+  ensure_ios_host!(Fastlane::Actions.lane_context[Fastlane::Actions::SharedValues::LANE_NAME] || "ios") if platform == :ios
+
   # --- 1. Gather Inputs ---
   is_store_lane = options[:is_store_lane] || false
+  flavor = is_store_lane ? 'prod' : resolve_flavor(options)
 
-  if is_store_lane
-    flavor = 'prod'
-  else
-    if options.key?(:flavor)
-      flavor_input = options[:flavor]
-    else
-      flavor_prompt = "Enter flavor (#{VALID_FLAVORS.join(', ')}) or press Enter for none"
-      flavor_input = get_input(flavor_prompt)
-    end
-
-    flavor = flavor_input.to_s.strip
-    if flavor == 'none' || flavor.empty?
-      flavor = nil
-    elsif !VALID_FLAVORS.include?(flavor)
-      UI.user_error!("Invalid flavor '#{flavor}'. Valid options are: #{VALID_FLAVORS.join(', ')}.")
-    end
-  end
-
-  flutter_version = options[:flutter_version] || get_input("Enter the Flutter version", CONFIG.dig('flutter', 'default_version') || 'stable')
-  version = options[:version] || get_input("Enter the app version", DEFAULT_APP_VERSION)
+  flutter_version = options[:flutter_version] || get_input("Enter the Flutter version", CONFIG.dig('flutter', 'default_version') || 'stable', option: 'flutter_version')
+  version = normalize_version_input(options[:version] || get_input("Enter the app version", DEFAULT_APP_VERSION, option: 'version'))
   # `options.key?` — `build_number:` with an empty value must mean `auto`, not
   # "prompt" and not 0; normalize_build_number_input handles both.
   build_number_input = options.key?(:build_number) ? options[:build_number] : get_build_number_input("Enter build number ('auto' for auto-increment)", 'auto')
+  build_number_input = normalize_build_number_input(build_number_input) # fail fast, before any setup
   skip_setup = options[:skip_setup].nil? ? false : options[:skip_setup]
 
   # Platform specific inputs
   if platform == :android
-    build_type = is_store_lane ? 'aab' : (options[:build_type] || get_validated_input("Build to apk or aab?", VALID_BUILD_TYPES, "apk"))
+    build_type = if is_store_lane
+                   'aab'
+                 elsif options[:build_type]
+                   validate_choice(options[:build_type], VALID_BUILD_TYPES, 'build_type')
+                 else
+                   get_validated_input("Build to apk or aab?", VALID_BUILD_TYPES, "apk", option: 'build_type')
+                 end
   else
     build_type = nil # Not applicable for iOS build command
   end
 
-  # Distribution options
+  # Distribution options. Non-interactively, an omitted distribute_* is `false`:
+  # nothing is uploaded unless the command line says so.
   if is_store_lane
     distribute_store = true
     distribute_firebase = false
-    track = platform == :android ? (options[:track] || get_validated_input("Enter Play Store track", VALID_TRACKS, "internal")) : nil
+    track = platform == :android ? (options[:track] || get_validated_input("Enter Play Store track", VALID_TRACKS, "internal", option: 'track')) : nil
   else
-    distribute_store = options[:distribute_store].nil? ? get_boolean_input("Distribute to #{platform == :ios ? 'App Store' : 'Play Store'}?", false) : options[:distribute_store]
-    distribute_firebase = options[:distribute_firebase].nil? ? get_boolean_input("Distribute to Firebase?", !distribute_store) : options[:distribute_firebase] # Default firebase=true if store=false
-    track = (platform == :android && distribute_store) ? (options[:track] || get_validated_input("Enter Play Store track", VALID_TRACKS, "internal")) : nil
+    distribute_store = options[:distribute_store].nil? ? get_boolean_input("Distribute to #{platform == :ios ? 'App Store' : 'Play Store'}?", false, option: 'distribute_store') : options[:distribute_store]
+    distribute_firebase = options[:distribute_firebase].nil? ? get_boolean_input("Distribute to Firebase?", !distribute_store, option: 'distribute_firebase', non_interactive: false) : options[:distribute_firebase] # Default firebase=true if store=false (interactive only)
+    track = (platform == :android && distribute_store) ? (options[:track] || get_validated_input("Enter Play Store track", VALID_TRACKS, "internal", option: 'track')) : nil
   end
+
+  # Fail in seconds, before the change-log prompt, store lookups and setup.
+  ensure_release_keystore!(flavor) if platform == :android && !options[:skip_build]
 
   # --- 2. Change Log ---
   change_log = resolve_change_log(options[:change_log], options[:change_log_file])
@@ -846,7 +955,10 @@ def run_build(platform:, options:)
   bundle_id = get_bundle_id_with_suffix(base_bundle_id, flavor, platform)
 
   # --- 4. Determine Build Number ---
-  build_number = determine_build_number(
+  # An upload of an existing artifact (skip_build) keeps the version code baked
+  # into it; asking a store for "latest + 1" would only need credentials for a
+  # number nothing uses.
+  build_number = options[:skip_build] ? (build_number_input == 'auto' ? 'from artifact' : build_number_input) : determine_build_number(
     platform: platform,
     flavor: flavor,
     version: version,

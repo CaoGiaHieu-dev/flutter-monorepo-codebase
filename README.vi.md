@@ -129,7 +129,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
 │   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
-│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
+│   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
 │   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
 │   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter

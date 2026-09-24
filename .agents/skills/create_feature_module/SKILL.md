@@ -122,7 +122,7 @@ unnecessary). Note the BLoC branch has no `executeOperation` — see `implement_
 
 ### Step 3: Expose routes via DI (do **not** edit `app_router.dart` lists)
 - Fill `IFeatureRouteModule.routes` **or** `INavDestinationModule` (`order`, `path`, `routes`, `destination`).
-- Optional cold-start: `@LazySingleton(as: IAppEntryLocation)`.
+- Optional first-launch location: `@LazySingleton(as: IAppEntryLocation)` (later cold starts land on the first tab).
 - Host already collects with `getAllOrEmpty` / `getItOrNull`. Follow `implement_navigation_route` Step 6.
 
 ### Step 4: Run Code Generation & Sync

@@ -130,7 +130,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
 │   ├── settings/feature/          # Sample: consuming another module's contract
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
-│   ├── onboarding/feature/        # Sample: IAppEntryLocation, the cold-start location
+│   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── platform/                      # Infra team's ground — every module may depend on it
 │   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapters

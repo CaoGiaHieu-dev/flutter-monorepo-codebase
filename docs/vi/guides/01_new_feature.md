@@ -30,7 +30,8 @@ Chạy không kèm tham số trên terminal thì tool sẽ hỏi tương tác t�
 thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra cách dùng.
 
 > [!NOTE]
-> Nếu `modules/profile/feature` đã tồn tại, tool **từ chối** và thoát với mã 1 — nó không bao giờ
+> Nếu đã có package tên `feature_profile`, tool **từ chối** và thoát với mã 64 (mã 1 nếu thư mục
+> `modules/profile/feature` tồn tại mà không chứa package đó) — nó không bao giờ
 > ghi đè hay xoá một package có sẵn. Hãy tự xoá hoặc đổi tên trước.
 
 ### Chọn tham số 5 — quyết định hình dạng routing của bạn

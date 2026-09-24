@@ -14,7 +14,7 @@ From `app_manifest.yaml`:
 | `auth` | domain, data, feature | the full three-layer slice: login, token storage, session contracts |
 | `home` | feature | BLoC, private Freezed events, a nav destination |
 | `settings` | feature | a nav destination consuming another module's contract |
-| `onboarding` | feature | `IAppEntryLocation`, the cold-start location |
+| `onboarding` | feature | `IAppEntryLocation`, the first-launch location |
 | `splash` | feature | `IAppSplashScreen`, shown before the router exists |
 | `dashboard` | feature | shell chrome only: bottom bar / navigation rail |
 | `cache` | domain, data | a package-owned Drift database (no UI) |

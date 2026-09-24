@@ -145,7 +145,7 @@ The dashboard **must not**:
 - hardcode a destination list instead of reading DI
 - register `INavDestinationModule` itself for a "fake" tab
 
-Note `tabs.length < 2` drops the bar (or rail) entirely when fewer than two tabs are registered — part of the graceful-degradation story in §6. A tab's `destination` is a neutral `NavDestination`, so the same contribution renders as a bar item or a rail item; why the chrome switches on window size class is in [`11_design_system.md`](11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
+Note `tabs.length < 2` drops the bar (or rail) entirely when fewer than two tabs are registered — part of the graceful-degradation story in §7. A tab's `destination` is a neutral `NavDestination`, so the same contribution renders as a bar item or a rail item; why the chrome switches on window size class is in [`11_design_system.md`](11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
 
 ---
 

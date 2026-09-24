@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
 
 import 'support/tool_harness.dart';
@@ -145,7 +147,7 @@ void main() {
       'README.md': 'See `modules/kept/feature/lib/missing.dart`.\n',
     });
     expect(run, exitsWith(1));
-    expect(run.output, isNot(contains('INFO:')));
+    expect(run.output, isNot(contains('removed sample bundle')));
   });
 
   test('the root comes from the script location, not the cwd', () async {
@@ -271,4 +273,256 @@ void main() {
       expect(run.output, contains('1 parity mismatch(es)'));
     });
   });
+
+  group('RULE-ID citations', () {
+    String registry(List<String> ids) =>
+        '# Rules\n\n| ID | Rule |\n|---|---|\n'
+        '${ids.map((id) => '| $id | text |\n').join()}';
+
+    test('no registry yet: skipped with INFO, citations ignored', () async {
+      final run = await check({
+        'docs/en/guide.md': 'See RULE-42.\n',
+      });
+      expect(run, exitsWith(0));
+      expect(run.output, contains('citation check skipped'));
+    });
+
+    test('citations of registered IDs pass, in any Markdown file', () async {
+      final run = await check({
+        'docs/en/reference/01_rules.md': registry(['RULE-01', 'RULE-02']),
+        'docs/vi/reference/01_rules.md': registry(['RULE-01', 'RULE-02']),
+        'docs/en/guide.md': 'Layering (RULE-01, RULE-02). Cite as RULE-NN.\n',
+        '.claude/skills/x/SKILL.md': 'Follow RULE-02.\n',
+        'tools/code_review/review_prompt.md': 'Tag findings RULE-01.\n',
+      });
+      expect(run, exitsWith(0));
+      expect(run.output, contains('registry  : 2 rule(s)'));
+      expect(run.output, contains('every cited RULE-ID is defined'));
+    });
+
+    test('a dangling citation exits 1 with file:line', () async {
+      final run = await check({
+        'docs/en/reference/01_rules.md': registry(['RULE-01']),
+        'docs/vi/reference/01_rules.md': registry(['RULE-01']),
+        'docs/en/guide.md': 'intro\nSee RULE-09 and RULE-1.\n',
+        '.claude/skills/x/SKILL.md': 'Follow RULE-77.\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('3 RULE-ID problem(s)'));
+      expect(
+        run.output,
+        contains('docs/en/guide.md:2  RULE-09 is not in the registry'),
+      );
+      expect(
+        run.output,
+        contains('docs/en/guide.md:2  RULE-1 is not in the registry'),
+      );
+      expect(run.output, contains('.claude/skills/x/SKILL.md:1  RULE-77'));
+    });
+
+    test('en and vi registries defining different IDs fail', () async {
+      final run = await check({
+        'docs/en/reference/01_rules.md': registry(['RULE-01', 'RULE-02']),
+        // Same shape, so parity passes: only the ID sets differ.
+        'docs/vi/reference/01_rules.md': registry(['RULE-01', 'RULE-03']),
+      });
+      expect(run, exitsWith(1));
+      expect(
+        run.output,
+        contains(
+          'docs/en/reference/01_rules.md:6  RULE-02 has no row in '
+          'docs/vi/reference/01_rules.md',
+        ),
+      );
+      expect(
+        run.output,
+        contains(
+          'docs/vi/reference/01_rules.md:6  RULE-03 has no row in '
+          'docs/en/reference/01_rules.md',
+        ),
+      );
+      expect(run.output, contains('every translated document has the shape'));
+    });
+
+    test('an ID defined twice fails', () async {
+      final run = await check({
+        'docs/en/reference/01_rules.md': registry(['RULE-01', 'RULE-01']),
+        'docs/vi/reference/01_rules.md': registry(['RULE-01', 'RULE-01']),
+      });
+      expect(run, exitsWith(1));
+      expect(
+        run.output,
+        contains(
+          'docs/en/reference/01_rules.md:6  RULE-01 is defined more than '
+          'once (lines 5, 6)',
+        ),
+      );
+    });
+  });
+
+  group('stale translations', () {
+    /// A git repository holding [files], committed once.
+    TempWorkspace repo(Map<String, String> files) {
+      final ws = TempWorkspace.create({'pubspec.yaml': 'name: ws\n', ...files});
+      git(ws, ['init', '-q']);
+      commitAll(ws, 'initial');
+      return ws;
+    }
+
+    Future<ToolRun> run(TempWorkspace ws, [List<String> args = const []]) =>
+        tool.run(
+          args,
+          workingDirectory: ws.root,
+          scriptPath: 'tools/docs_check/check.dill',
+        );
+
+    test('no stamp anywhere: nothing is printed', () async {
+      final ws = repo({
+        'docs/en/a.md': '# A\n',
+        'docs/vi/a.md': '# A vi\n',
+      });
+      final result = await run(ws);
+      expect(result, exitsWith(0));
+      expect(result.output, isNot(contains('Stale translations')));
+    });
+
+    test('--stamp-translations stamps the named file only', () async {
+      final ws = repo({
+        'docs/en/a.md': '# A\n',
+        'docs/vi/a.md': '# A vi\n\nbody\n',
+        'docs/en/b.md': '# B\n',
+        'docs/vi/b.md': '# B vi\n',
+      });
+      final sha = git(ws, ['log', '-1', '--format=%h', '--', 'docs/en/a.md']);
+      final result = await run(ws, ['--stamp-translations', 'docs/vi/a.md']);
+      expect(result, exitsWith(0));
+      expect(result.output, contains('1 written'));
+      expect(
+        ws.read('docs/vi/a.md'),
+        '<!-- translated-from: docs/en/a.md@$sha -->\n# A vi\n\nbody\n',
+      );
+      expect(ws.read('docs/vi/b.md'), '# B vi\n');
+    });
+
+    test(
+      'an English commit after the stamp is reported, never failed',
+      () async {
+        final ws = repo({
+          'docs/en/a.md': '# A\n',
+          'docs/vi/a.md': '# A vi\n',
+          'docs/en/b.md': '# B\n',
+          'docs/vi/b.md': '# B vi\n',
+        });
+        // Adopting stamps: every file at once.
+        final stamped = await run(ws, ['--stamp-translations']);
+        expect(stamped.output, contains('2 written'));
+        commitAll(ws, 'stamp translations');
+
+        ws.write({'docs/en/a.md': '# A\n\nNew paragraph.\n'});
+        commitAll(ws, 'expand A');
+        final latest = git(ws, ['log', '-1', '--format=%h']);
+
+        final summary = await run(ws);
+        expect(summary, exitsWith(0));
+        expect(
+          summary.output,
+          contains(
+            'INFO: 1 of 2 stamped translation(s) are behind their English '
+            'source.',
+          ),
+        );
+        expect(summary.output, contains('(--stale-translations lists them)'));
+        expect(summary.output, isNot(contains('docs/vi/a.md  <-')));
+
+        final detailed = await run(ws, ['--stale-translations']);
+        expect(detailed, exitsWith(0));
+        expect(
+          detailed.output,
+          contains('docs/vi/a.md  <- docs/en/a.md: 1 commit(s) since'),
+        );
+        expect(detailed.output, contains('(now $latest)'));
+        expect(detailed.output, isNot(contains('docs/vi/b.md  <-')));
+
+        // Re-syncing and re-stamping clears it; the old stamp is replaced.
+        final restamp = await run(ws, ['--stamp-translations', 'docs/vi/a.md']);
+        expect(restamp.output, contains('1 written'));
+        expect(
+          ws.read('docs/vi/a.md'),
+          '<!-- translated-from: docs/en/a.md@$latest -->\n# A vi\n',
+        );
+        final after = await run(ws);
+        expect(after.output, contains('INFO: 0 of 2 stamped'));
+      },
+    );
+
+    test(
+      'a stamp naming an unknown commit or a missing file is listed',
+      () async {
+        final ws = repo({
+          'docs/en/a.md': '# A\n',
+          'docs/vi/a.md':
+              '<!-- translated-from: docs/en/a.md@0000000 -->\n# A vi\n',
+          'docs/vi/c.md':
+              '<!-- translated-from: docs/en/gone.md@0000000 -->\n# C vi\n',
+        });
+        final result = await run(ws, ['--stale-translations']);
+        expect(result, exitsWith(0));
+        expect(
+          result.output,
+          contains('docs/vi/a.md  <- docs/en/a.md: commit 0000000 not in'),
+        );
+        expect(
+          result.output,
+          contains('docs/vi/c.md  <- docs/en/gone.md: English file not found'),
+        );
+      },
+    );
+
+    test('outside a git checkout stamps are not compared', () async {
+      final result = await check({
+        'docs/en/a.md': '# A\n',
+        'docs/vi/a.md':
+            '<!-- translated-from: docs/en/a.md@1234567 -->\n# A vi\n',
+      });
+      expect(result, exitsWith(0));
+      expect(result.output, contains('no git history here'));
+    });
+
+    test('a path outside docs/vi, or one without the flag, exits 64', () async {
+      final ws = repo({'docs/en/a.md': '# A\n', 'docs/vi/a.md': '# A vi\n'});
+      expect(
+        await run(ws, ['--stamp-translations', 'docs/en/a.md']),
+        exitsWith(64),
+      );
+      expect(await run(ws, ['docs/vi/a.md']), exitsWith(64));
+      expect(
+        await run(ws, ['--stamp-translations', '--stale-translations']),
+        exitsWith(64),
+      );
+    });
+  });
+}
+
+/// Runs git in [ws] and returns its trimmed stdout; fails the test on error.
+/// Identity and signing are set per call so no global config is needed.
+String git(TempWorkspace ws, List<String> args) {
+  final r = Process.runSync('git', [
+    '-c',
+    'user.name=docs_check test',
+    '-c',
+    'user.email=test@example.invalid',
+    '-c',
+    'commit.gpgsign=false',
+    ...args,
+  ], workingDirectory: ws.root);
+  if (r.exitCode != 0) {
+    throw StateError('git ${args.join(' ')} failed: ${r.stderr}');
+  }
+  return '${r.stdout}'.trim();
+}
+
+/// Commits everything but the tool snapshot the harness copies in.
+void commitAll(TempWorkspace ws, String message) {
+  git(ws, ['add', '-A', '--', '.', ':(exclude)tools/docs_check/check.dill']);
+  git(ws, ['commit', '-q', '-m', message]);
 }

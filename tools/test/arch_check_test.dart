@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
 
 import 'support/tool_harness.dart';
@@ -415,6 +417,141 @@ void main() {
       });
       expectViolation(run, 'R11', 'platform/stray/pubspec.yaml');
       expect(run.output, contains('not in a platform group folder'));
+    });
+  });
+
+  group('R12 no PowerShell scripts', () {
+    test('.sh, .bat and Dart scripts pass', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'tools/x/run.sh': 'echo ok\n',
+        'tools/x/run.bat': '@echo ok\n',
+        'tools/x/run.dart': 'void main() {}\n',
+      });
+      expectClean(run, 'R12');
+    });
+
+    test('a .ps1 anywhere fails', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'tools/x/Setup.PS1': 'Write-Host ok\n',
+      });
+      expectViolation(run, 'R12', 'tools/x/Setup.PS1');
+    });
+
+    test('a .ps1 git ignores is skipped, an untracked one is not', () async {
+      final ws = TempWorkspace.create({
+        'pubspec.yaml': 'name: ws\n',
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        '.gitignore': 'local/\n',
+        'local/mine.ps1': 'Write-Host ok\n',
+        'tools/shared.ps1': 'Write-Host ok\n',
+      });
+      final init = await Process.run('git', [
+        'init',
+        '-q',
+      ], workingDirectory: ws.root);
+      expect(init.exitCode, 0, reason: '${init.stderr}');
+      final run = await tool.run(const [], workingDirectory: ws.root);
+      // Untracked but not ignored: about to be committed, so reported.
+      expectViolation(run, 'R12', 'tools/shared.ps1');
+      expect(run.output, isNot(contains('local/mine.ps1')));
+    });
+  });
+
+  group('R13 no analyzer suppressions', () {
+    test(
+      'the words in a string, a doc comment or generated code pass',
+      () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/foo.dart':
+              '/// Never write `// ignore: x`.\n'
+              "const tip = '// ignore: not a comment';\n"
+              "const t2 = '''\n// ignore_for_file: template text\n''';\n",
+          'platform/infra/foo/lib/foo.g.dart':
+              '// GENERATED CODE - DO NOT MODIFY BY HAND\n'
+              '// ignore_for_file: type=lint\n',
+          'platform/infra/foo/lib/src/gen/assets.dart':
+              '// ignore_for_file: type=lint\n',
+        });
+        expectClean(run, 'R13');
+      },
+    );
+
+    test('ignore and ignore_for_file comments fail, in tools/ too', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/infra/foo/test/foo_test.dart':
+            '// ignore_for_file: avoid_print\nvoid main() {}\n',
+        'tools/x/run.dart':
+            'void main() {\n'
+            "  final s = '\${1}'; // ignore: unused_local_variable\n"
+            '}\n',
+      });
+      expectViolation(run, 'R13', 'platform/infra/foo/test/foo_test.dart:1');
+      expect(run.output, contains('tools/x/run.dart:2'));
+    });
+  });
+
+  group('R14 data_sources/, never datasources/', () {
+    test('data_sources/ passes', () async {
+      final run = await check({
+        'modules/a/data/pubspec.yaml': pubspec('data_a'),
+        'modules/a/data/lib/src/data_sources/remote/a_remote.dart': '',
+      });
+      expectClean(run, 'R14');
+    });
+
+    test('a datasources/ folder fails, empty or not', () async {
+      final ws = TempWorkspace.create({
+        'pubspec.yaml': 'name: ws\n',
+        'modules/a/data/pubspec.yaml': pubspec('data_a'),
+        'modules/a/data/lib/src/datasources/a_remote.dart': '',
+      });
+      ws.mkdir('platform/infra/foo/lib/dataSources');
+      final run = await tool.run(const [], workingDirectory: ws.root);
+      expectViolation(run, 'R14', 'modules/a/data/lib/src/datasources');
+      expect(run.output, contains('platform/infra/foo/lib/dataSources'));
+    });
+  });
+
+  group('R15 the I prefix is reserved for interfaces', () {
+    test('abstract, interface and sealed I-types pass', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/infra/foo/lib/foo.dart':
+            'abstract class IFoo {}\n'
+            'abstract interface class IBar {}\n'
+            'interface class IBaz {}\n'
+            'sealed class IQux {}\n'
+            'abstract mixin class IMix {}\n'
+            'mixin IPlainMixin {}\n'
+            'class Icon {}\n'
+            'class FooImpl implements IFoo {}\n'
+            '// class INotCode {}\n'
+            "const template = 'class ITemplate {}';\n",
+        // Outside modules/, platform/ and apps/*/lib: not checked.
+        'tools/x/fake.dart': 'class IToolFake {}\n',
+        'apps/demo/test/fake.dart': 'class ITestFake {}\n',
+      });
+      expectClean(run, 'R15');
+    });
+
+    test('a concrete I-named class fails, modifiers or not', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'modules/a/feature/pubspec.yaml': pubspec('feature_a'),
+        'modules/a/feature/lib/a.dart':
+            '@immutable\n'
+            'class IAuthProvider {}\n'
+            'final class IFinal {}\n',
+        'apps/demo/lib/main.dart': '@immutable class IAppThing {}\n',
+      });
+      expectViolation(run, 'R15', 'modules/a/feature/lib/a.dart:2');
+      expect(run.output, contains('modules/a/feature/lib/a.dart:3'));
+      expect(run.output, contains('apps/demo/lib/main.dart:1'));
+      expect(run.output, contains('`AuthProviderImpl`'));
     });
   });
 

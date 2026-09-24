@@ -288,7 +288,8 @@ class CommonHelpers {
     File('$modulePath/.gitignore').writeAsStringSync(content);
   }
 
-  /// Adds the new module to every app manifest, then leaves the wiring alone.
+  /// Adds the new module to every app manifest — or, with [apps], only to
+  /// the manifests whose `app.id` is listed — then leaves the wiring alone.
   ///
   /// This used to patch `apps/mobile/pubspec.yaml` and `apps/mobile/lib/di/injection.dart`
   /// directly. Both now live between `composer:managed` markers, so writing
@@ -308,9 +309,15 @@ class CommonHelpers {
   static void registerInAppManifests(
     String packageName,
     ModuleType moduleType,
-    String moduleName,
-  ) {
-    final manifests = _findManifests(Directory('.'));
+    String moduleName, {
+    List<String>? apps,
+    String root = '.',
+  }) {
+    final manifests = _findManifests(Directory(root)).where((manifest) {
+      if (apps == null) return true;
+      final app = _parseManifest(manifest.readAsStringSync())['app'];
+      return app is Map && apps.contains(app['id']);
+    }).toList();
     if (manifests.isEmpty) {
       stdout.writeln(
         '  !! No app_manifest.yaml found — skipping app composition.',
@@ -331,6 +338,9 @@ class CommonHelpers {
         ? _hasModuleLayer(text, moduleName, layer)
         : _hasPlatformPackage(text, packageName);
 
+    if (apps != null) {
+      stdout.writeln('  -> --apps: composing into ${apps.join(', ')} only');
+    }
     for (final manifest in manifests) {
       final original = manifest.readAsStringSync();
       if (isRegistered(original)) {
@@ -580,7 +590,7 @@ class CommonHelpers {
     final camelNameInput = toCamelCase(config.nameInput);
     final snakeNameInput = config.nameInput;
 
-    final values = {
+    final values = <String, Object>{
       'moduleName': config.moduleName,
       'pascalName': toPascalCase(config.moduleName),
       'pascalNameInput': pascalNameInput,
@@ -666,9 +676,46 @@ class CommonHelpers {
       '${config.modulePath}/lib/src/routing/${snakeNameInput}_route_module.dart',
     ).writeAsStringSync(routeModuleTpl.renderString(values));
 
+    createFeatureTests(config, values);
+
     stdout.writeln(
       '  -> Created the ${config.smType.name.toUpperCase()}, route and page templates',
     );
+  }
+
+  /// The tests a feature starts with, so `flutter test` has something to run
+  /// the moment the package exists (CI Gate 3 runs every `test/` it finds):
+  ///
+  /// * `test/<name>_page_test.dart` — the page under `ResponsiveInit` and the
+  ///   feature's localizations, with its controller provided the way the
+  ///   route provides it, on a phone and a tablet window.
+  /// * `test/<name>_provider_test.dart` (Provider) or
+  ///   `test/<name>_bloc_test.dart` (BLoC) — the controller on its own.
+  ///   Nothing controller-specific for SM = none.
+  static void createFeatureTests(
+    ModuleConfig config,
+    Map<String, Object> values,
+  ) {
+    const dir = 'tools/module_generator/templates/feature/test';
+    final testDir = '${config.modulePath}/test';
+    createDir(testDir);
+    void render(String template, String out) {
+      File('$testDir/$out').writeAsStringSync(
+        Template(File('$dir/$template').readAsStringSync())
+            .renderString(values),
+      );
+    }
+
+    final name = config.nameInput;
+    render('page_test.dart.mustache', '${name}_page_test.dart');
+    switch (config.smType) {
+      case StateManagementType.provider:
+        render('provider_test.dart.mustache', '${name}_provider_test.dart');
+      case StateManagementType.bloc:
+        render('bloc_test.dart.mustache', '${name}_bloc_test.dart');
+      case StateManagementType.none:
+        break;
+    }
   }
 
   /// The values every non-feature template is rendered with.

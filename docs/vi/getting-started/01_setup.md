@@ -173,7 +173,9 @@ Phải có đủ **cả ba** file Dart kể cả khi bạn chỉ định chạy 
 
 Để app biên dịch được và build ra APK mà không cần tài khoản Firebase, hãy tự tạo các file thay thế. App **build được**, nhưng mọi thứ dựa trên Firebase (push notification, FCM token) sẽ không hoạt động, và các lời gọi Firebase lúc chạy có thể ghi log lỗi. Hãy thay stub bằng cấu hình thật (§3.1) trước khi dựa vào những tính năng đó.
 
-**1. Ba file Dart.** Tạo chúng trong `apps/mobile/lib/firebase/`, đặt tên `firebase_options_dev.dart`, `firebase_options_staging.dart` và `firebase_options_prod.dart`, mỗi file có nội dung dưới đây. Đây đúng là stub mà `.github/workflows/pr_quality_check.yml` ghi ra:
+Hoặc để script setup ghi giúp: `dart tools/workspace_setup/configure.dart --stub-firebase` ghi mọi file dưới đây — Dart options cho từng flavor và một `google-services.json` cho từng flavor Android, package name đọc từ `build.gradle.kts` — chỉ khi file chưa tồn tại, và liệt kê những gì đã stub.
+
+**1. Ba file Dart.** Tạo chúng trong `apps/mobile/lib/firebase/`, đặt tên `firebase_options_dev.dart`, `firebase_options_staging.dart` và `firebase_options_prod.dart`, mỗi file có nội dung dưới đây. Đây đúng là stub mà `tools/workspace_setup/firebase_stubs.dart` ghi ra (thứ `configure.dart --stub-firebase` và CI dùng):
 
 ```dart
 // CI-only stub. Not a real Firebase configuration: analysis and unit

@@ -29,6 +29,10 @@ The five positional arguments are read by
 Run it with no arguments on a terminal to get an interactive prompt instead; without a terminal a
 missing argument exits 64 rather than guessing. `--help` prints the usage.
 
+An optional `--apps <id,id>` after the positional arguments composes the module into those apps
+only — `app.id`s from `apps/*/app_manifest.yaml`, e.g. `--apps mobile`. Without it the module joins
+every app. An unknown id exits 64 before anything is written.
+
 > [!NOTE]
 > If a package named `feature_profile` already exists the tool **refuses** and exits 64 (exit 1 if
 > the directory `modules/profile/feature` exists without that package) — it never
@@ -55,12 +59,23 @@ missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 1. Creates the directory tree and `pubspec.yaml`
 2. Writes `lib/di/module.dart` with `@InjectableInit.microPackage()`
-3. Adds it to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`. Nothing to run by hand — but see the note below if the module does not belong in every app
+3. Adds it to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — unless `--apps` names a subset, and then runs `dart tools/composer/composer.dart sync` itself, which regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`. Nothing to run by hand — but see the note below if the module does not belong in every app
 4. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator,
    `build_runner build --workspace`, then `dart fix --apply`
+5. Writes tests that pass as generated: `test/profile_page_test.dart` (the page under
+   `ResponsiveInit` and its localizations, with the controller provided the way the route provides
+   it) and `test/profile_provider_test.dart` — `test/<name>_bloc_test.dart` for BLoC, no controller
+   test for SM `3`. Run them with `cd modules/profile/feature && flutter test`; CI Gate 3 runs them
+   too
 
 > [!IMPORTANT]
-> **Every app composes the new module — `apps/admin` included.** The generator cannot know which apps want it, so it adds the module to all of them. `apps/admin` is deliberately a subset (auth + settings); a module meant for `mobile` only has to be taken back out of it:
+> **Without `--apps`, every app composes the new module — `apps/admin` included.** `apps/admin` is deliberately a subset (auth + settings), so for a module meant for `mobile` only, say so when generating:
+>
+> ```bash
+> dart tools/module_generator/generate.dart 1 profile "" 1 1 --apps mobile
+> ```
+>
+> Already generated it into every app? Take it back out of `admin` by hand:
 >
 > 1. Delete its `- { id: <name>, layers: [...] }` line under `modules:` in `apps/admin/app_manifest.yaml` (or drop only the layers that app does not want from `layers:`).
 > 2. `dart tools/composer/composer.dart sync` — rewrites `apps/admin/pubspec.yaml`'s path dependencies and `apps/admin/lib/di/injection.dart`; the root `workspace:` list keeps the package as long as another app composes it.

@@ -1,0 +1,20 @@
+# Intentional structural differences between an English document and its
+# Vietnamese translation, for the en <-> vi parity half of
+# `dart tools/docs_check/check.dart`.
+#
+# The check compares, per translated pair (docs/en/X.md <-> docs/vi/X.md, and
+# <name>.md <-> <name>.vi.md anywhere), the count of headings per level
+# (h1 ... h6), fenced code blocks (code-blocks) and table rows (table-rows).
+# A difference almost always means a section, command or table row was added
+# to one language and never reached the other: translate it across.
+#
+# When the difference is genuinely intentional, list it here:
+#
+#   <english file, repo-relative> <metric or *>  # the reason
+#
+#   docs/en/guides/05_example.md table-rows  # vi merges two rows the en splits
+#
+# An entry without a `#` reason is refused, and one that matches no
+# difference any more is reported so it can be deleted.
+#
+# Empty today: every translated pair has the same shape.

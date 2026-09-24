@@ -27,6 +27,9 @@ apps/mobile/env.prod
 # Android release signing. `01_cicd.md` explains how CI materialises both.
 apps/mobile/android/keystore.jks
 apps/mobile/android/key.properties
+# Staging release signing (build.gradle.kts refuses a staging release without it);
+# gitignored, supplied by the adopter — 01_cicd.md says CI should restore it.
+apps/mobile/android/key-stg.properties
 # A Gemini API key the code_review tool saves when asked to; gitignored.
 tools/code_review/.gemini_api_key
 # Fastlane credentials. The repo ships `apps/mobile/fastlane/Config.example.yaml`.

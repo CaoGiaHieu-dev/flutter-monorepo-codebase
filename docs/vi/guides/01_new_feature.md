@@ -29,6 +29,10 @@ Năm tham số vị trí được đọc bởi
 Chạy không kèm tham số trên terminal thì tool sẽ hỏi tương tác từng bước; không có terminal thì
 thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra cách dùng.
 
+Tuỳ chọn `--apps <id,id>` đặt sau các tham số vị trí chỉ compose module vào những app đó —
+`app.id` lấy từ `apps/*/app_manifest.yaml`, ví dụ `--apps mobile`. Không có nó thì module vào mọi
+app. Id lạ sẽ thoát mã 64 trước khi ghi bất cứ thứ gì.
+
 > [!NOTE]
 > Nếu đã có package tên `feature_profile`, tool **từ chối** và thoát với mã 64 (mã 1 nếu thư mục
 > `modules/profile/feature` tồn tại mà không chứa package đó) — nó không bao giờ
@@ -55,12 +59,23 @@ thiếu tham số sẽ thoát với mã 64 thay vì tự đoán. `--help` in ra 
 
 1. Tạo cây thư mục và `pubspec.yaml`
 2. Ghi `lib/di/module.dart` với `@InjectableInit.microPackage()`
-3. Thêm vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — rồi tự chạy `dart tools/composer/composer.dart sync`, lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app. Bạn không phải chạy tay gì cả — nhưng xem ghi chú bên dưới nếu module không thuộc về mọi app
+3. Thêm vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — trừ khi `--apps` chỉ định một tập con, rồi tự chạy `dart tools/composer/composer.dart sync`, lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app. Bạn không phải chạy tay gì cả — nhưng xem ghi chú bên dưới nếu module không thuộc về mọi app
 4. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator,
    `build_runner build --workspace`, rồi `dart fix --apply`
+5. Ghi sẵn các test pass ngay khi sinh ra: `test/profile_page_test.dart` (page dưới
+   `ResponsiveInit` và localization của nó, controller được cung cấp đúng như route cung cấp) và
+   `test/profile_provider_test.dart` — `test/<name>_bloc_test.dart` với BLoC, không có test
+   controller với SM `3`. Chạy bằng `cd modules/profile/feature && flutter test`; CI Gate 3 cũng
+   chạy chúng
 
 > [!IMPORTANT]
-> **Mọi app đều compose module mới — kể cả `apps/admin`.** Generator không biết app nào cần nó, nên thêm vào tất cả. `apps/admin` cố ý chỉ là một tập con (auth + settings); module chỉ dành cho `mobile` phải được gỡ ra khỏi nó:
+> **Không có `--apps` thì mọi app đều compose module mới — kể cả `apps/admin`.** `apps/admin` cố ý chỉ là một tập con (auth + settings), nên với module chỉ dành cho `mobile`, hãy nói rõ ngay khi sinh:
+>
+> ```bash
+> dart tools/module_generator/generate.dart 1 profile "" 1 1 --apps mobile
+> ```
+>
+> Lỡ sinh vào mọi app rồi? Gỡ nó ra khỏi `admin` bằng tay:
 >
 > 1. Xoá dòng `- { id: <name>, layers: [...] }` của nó dưới `modules:` trong `apps/admin/app_manifest.yaml` (hoặc chỉ bỏ khỏi `layers:` những layer app đó không cần).
 > 2. `dart tools/composer/composer.dart sync` — viết lại path dependency trong `apps/admin/pubspec.yaml` và `apps/admin/lib/di/injection.dart`; danh sách `workspace:` ở root vẫn giữ package chừng nào còn app khác compose nó.

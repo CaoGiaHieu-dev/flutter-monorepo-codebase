@@ -173,7 +173,9 @@ All three Dart files must exist even if you only intend to run `dev`. `firebase_
 
 To get the app compiling and an APK building without a Firebase account, create stand-in files by hand. The app **builds**, but everything Firebase-backed (push notifications, FCM token) will not work, and Firebase calls at runtime may log errors. Replace the stubs with real config (§3.1) before you rely on any of it.
 
-**1. Three Dart files.** Create them in `apps/mobile/lib/firebase/`, named `firebase_options_dev.dart`, `firebase_options_staging.dart` and `firebase_options_prod.dart`, each with this content. It is the exact stub `.github/workflows/pr_quality_check.yml` writes:
+Or let the setup script write them: `dart tools/workspace_setup/configure.dart --stub-firebase` writes every file below — the Dart options for each flavor and a `google-services.json` for each Android flavor, with the package name read from `build.gradle.kts` — only where the file does not exist yet, and lists what it stubbed.
+
+**1. Three Dart files.** Create them in `apps/mobile/lib/firebase/`, named `firebase_options_dev.dart`, `firebase_options_staging.dart` and `firebase_options_prod.dart`, each with this content. It is the exact stub `tools/workspace_setup/firebase_stubs.dart` writes (what `configure.dart --stub-firebase` and CI use):
 
 ```dart
 // CI-only stub. Not a real Firebase configuration: analysis and unit

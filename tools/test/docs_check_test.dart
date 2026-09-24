@@ -147,4 +147,107 @@ void main() {
     final run = await check(const {'README.md': ''}, args: const ['--fix']);
     expect(run, exitsWith(64));
   });
+
+  group('en <-> vi parity', () {
+    const en =
+        '# Guide\n\n## Setup\n\n```bash\nflutter pub get\n```\n\n'
+        '| a | b |\n|---|---|\n| 1 | 2 |\n\n> | quoted | row |\n';
+    const vi =
+        '# Hướng dẫn\n\n## Cài đặt\n\n```bash\nflutter pub get\n```\n\n'
+        '| a | b |\n|---|---|\n| 1 | 2 |\n\n> | quoted | row |\n';
+
+    test('translated pairs with the same shape pass', () async {
+      final run = await check({
+        'docs/en/guide.md': en,
+        'docs/vi/guide.md': vi,
+        'README.md': en,
+        'README.vi.md': vi,
+        // No counterpart: not compared.
+        'docs/en/only_english.md': '## lonely\n',
+      });
+      expect(run, exitsWith(0));
+      expect(run.output, contains('pairs     : 2'));
+      expect(run.output, contains('every translated document has the shape'));
+    });
+
+    test(
+      'a missing section, block and row fail with en vs vi counts',
+      () async {
+        final run = await check({
+          'docs/en/guide.md': '$en\n### Extra\n\n```\nmore\n```\n| 3 | 4 |\n',
+          'docs/vi/guide.md': vi,
+        });
+        expect(run, exitsWith(1));
+        expect(run.output, contains('3 parity mismatch(es)'));
+        expect(
+          run.output,
+          contains('docs/en/guide.md  h3: en 1 vs vi 0  (docs/vi/guide.md)'),
+        );
+        expect(
+          run.output,
+          contains('docs/en/guide.md  code-blocks: en 2 vs vi 1'),
+        );
+        expect(
+          run.output,
+          contains('docs/en/guide.md  table-rows: en 5 vs vi 4'),
+        );
+      },
+    );
+
+    test('a README.vi.md beside its README.md is a pair', () async {
+      final run = await check({
+        'tools/x/README.md': '## One\n## Two\n',
+        'tools/x/README.vi.md': '## Một\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('tools/x/README.md  h2: en 2 vs vi 1'));
+    });
+
+    test('a heading or table inside a fence is code, not structure', () async {
+      final run = await check({
+        'docs/en/guide.md':
+            '````md\n## not a heading\n| x |\n```\n````\n'
+            '> ```bash\n> | quoted fence |\n> ```\n',
+        'docs/vi/guide.md': '````md\nkhác\n````\n> ```bash\n> khác\n> ```\n',
+      });
+      expect(run, exitsWith(0));
+    });
+
+    test('an allowlisted difference passes; a stale entry warns', () async {
+      final run = await check({
+        'docs/en/guide.md': '## One\n## Two\n',
+        'docs/vi/guide.md': '## Một\n',
+        'tools/docs_check/parity_allowlist.txt':
+            'docs/en/guide.md h2  # vi merges the two sections\n'
+            'docs/en/gone.md *  # was different once\n',
+      });
+      expect(run, exitsWith(0));
+      expect(
+        run.output,
+        contains(
+          'WARN: parity_allowlist.txt entry '
+          '"docs/en/gone.md *" matches no difference',
+        ),
+      );
+    });
+
+    test('an allowlist entry without a reason is refused', () async {
+      final run = await check({
+        'docs/en/guide.md': '## One\n## Two\n',
+        'docs/vi/guide.md': '## Một\n',
+        'tools/docs_check/parity_allowlist.txt':
+            'docs/en/guide.md h2\ndocs/en/guide.md words  # bad metric\n',
+      });
+      expect(run, exitsWith(1));
+      expect(
+        run.output,
+        contains('line 1: "docs/en/guide.md h2" has no reason'),
+      );
+      expect(
+        run.output,
+        contains('line 2: expected "<english file> <metric>"'),
+      );
+      expect(run.output, contains('1 parity mismatch(es)'));
+    });
+  });
 }

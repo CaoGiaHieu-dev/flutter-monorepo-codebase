@@ -155,13 +155,14 @@ void main(List<String> args) async {
       '${config.modulePath}/lib/di/module.dart',
     ).writeAsStringSync(diTemplate.renderString({}));
 
-    // 6. Register in every app manifest — the only hand-edited composition
-    // input.
+    // 6. Register in every app manifest (or only those `--apps` names) —
+    // the only hand-edited composition input.
     stdout.writeln('[!] Registering in app_manifest.yaml...');
     CommonHelpers.registerInAppManifests(
       config.moduleName,
       config.type,
       config.nameInput,
+      apps: config.apps,
     );
 
     // 7. Regenerate what the manifests drive: the root `workspace:` list, each

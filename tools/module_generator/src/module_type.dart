@@ -24,6 +24,10 @@ class ModuleConfig {
   final String moduleName;
   final String modulePath;
 
+  /// The `app.id`s whose manifests compose the module (`--apps`); `null`
+  /// means every app.
+  final List<String>? apps;
+
   ModuleConfig({
     required this.type,
     required this.typeDir,
@@ -33,5 +37,6 @@ class ModuleConfig {
     this.routeContribution = FeatureRouteContribution.featureRoute,
     required this.moduleName,
     required this.modulePath,
+    this.apps,
   });
 }

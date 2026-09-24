@@ -1,0 +1,30 @@
+# Line endings: LF in the repository and in every working tree, whatever the
+# OS or the committer's core.autocrlf. Windows-only scripts are the exception.
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.sh   text eol=lf
+gradlew text eol=lf
+
+# Binary files: never convert line endings, never attempt a text diff.
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.webp     binary
+*.ico      binary
+*.ttf      binary
+*.otf      binary
+*.jar      binary
+*.jks      binary
+*.keystore binary
+*.p12      binary
+
+# Generated Dart. Gitignored inside each package, so normally never committed;
+# if one ever is, GitHub collapses it in diffs and leaves it out of the
+# language statistics.
+*.g.dart       linguist-generated=true
+*.freezed.dart linguist-generated=true
+*.config.dart  linguist-generated=true
+*.module.dart  linguist-generated=true

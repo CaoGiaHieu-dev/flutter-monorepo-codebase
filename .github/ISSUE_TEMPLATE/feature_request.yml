@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a capability, tool or documentation improvement for the template.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is a template: proposals that make the patterns clearer, safer or easier to
+        adopt fit best. Product features for the sample modules usually do not.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should change? Name the packages or tools involved if you know them.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Architecture / layering rules
+        - A platform package (platform/*)
+        - Sample modules (modules/*)
+        - App shell / composition (apps/*, composer)
+        - Repo tooling (tools/*)
+        - CI / Fastlane
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches, including how you work around it today.
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - label: This would change an architecture rule (docs/*/reference/01_rules.md, AGENTS.md, CLAUDE.md).
+        - label: This would break existing projects built on the template (MAJOR version bump).
+        - label: I am willing to open a pull request for it.

@@ -1,0 +1,13 @@
+# Blank issues stay allowed for anything the forms do not fit, but most
+# questions are answered in the docs — the links below come first.
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation hub
+    url: https://github.com/CaoGiaHieu-dev/flutter-monorepo-codebase/blob/main/docs/en/README.md
+    about: Setup, architecture, how-to guides and reference — English.
+  - name: Tài liệu (Tiếng Việt)
+    url: https://github.com/CaoGiaHieu-dev/flutter-monorepo-codebase/blob/main/docs/vi/README.md
+    about: Hướng dẫn cài đặt, kiến trúc, hướng dẫn và tham chiếu — Tiếng Việt.
+  - name: Report a security vulnerability
+    url: https://github.com/CaoGiaHieu-dev/flutter-monorepo-codebase/security/advisories/new
+    about: Report privately — never in a public issue. See SECURITY.md.

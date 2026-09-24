@@ -14,6 +14,7 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 |---|---|
 | **Kiểm tra luật phân tầng còn đúng không** | `dart tools/arch_check/check.dart` |
 | **Kiểm tra docs còn mô tả đúng cây thư mục hiện tại** | `dart tools/docs_check/check.dart` |
+| **Sửa một tool gate — chứng minh nó vẫn fail đúng chỗ** | `cd tools && dart test` |
 | **Package nào là code mẫu có thể xoá?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
 | **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` (bỏ `--apply` để xem trước) — `<bundle>` là một trong `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` |
 | Tạo package feature / domain / data / core mới | `dart tools/module_generator/generate.dart …` |
@@ -378,6 +379,30 @@ Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`
 
 > [!NOTE]
 > Workflow GitHub chạy nó ở **chế độ cảnh báo** — bước "fail on critical issues" có dòng `exit 1` bị comment lại, nên nó không bao giờ chặn PR. Xem [`../operations/01_cicd.md`](../operations/01_cicd.md).
+
+---
+
+## Test cho các tool (`tools/test/`)
+
+Mọi gate trong `pr_quality_check.yml` là một trong các script ở trên, và một gate đã âm thầm thôi fail trông y hệt một PR sạch. `tools/test/` là thứ ngăn điều đó: nó chạy như nửa sau của CI Gate 1, ngay sau `arch_check`.
+
+```bash
+cd tools && dart test                            # cả bộ, ~15 giây
+cd tools && dart test test/arch_check_test.dart  # một tool
+```
+
+Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp.createTemp` — vài pubspec, một manifest, một file nguồn — chạy tool trên đó như một subprocess rồi kiểm tra exit code và output. Không có gì chạm vào repo thật. `test/support/tool_harness.dart` compile mỗi tool thành kernel snapshot một lần cho mỗi file test (snapshot khởi động ~0,5 giây thay vì ~1,7 giây), và với `docs_check` — tool tìm repo từ vị trí script của chính nó — thì copy snapshot vào workspace tạm tại `tools/docs_check/`.
+
+| File | Phủ |
+|:---|:---|
+| `arch_check_test.dart` | Một fixture sạch và một fixture vi phạm cho mỗi luật R1–R10 (R6 cảnh báo mà vẫn exit `0`); workspace rỗng thì fail; flag lạ exit `64` |
+| `composer_test.dart` | `sync` rồi `verify` thì qua; vùng managed bị sửa tay, module không có trên đĩa, `phase: befor`, layer lạ và module trùng exit `1` kèm đường dẫn key |
+| `dependency_sync_test.dart` | `--check`: khớp thì qua; lệch version, catalog sai định dạng và YAML hỏng exit `1` |
+| `docs_check_test.dart` | Đường dẫn hay link chết exit `1`; span `<placeholder>`, đường dẫn trong allowlist và sample bundle đã gỡ (INFO) exit `0`; gốc repo lấy từ script chứ không từ cwd |
+| `barrel_generator_test.dart` | Dấu `/` ở cuối đường dẫn; thư mục `web/` bên trong `lib/` được export, `web/` nền tảng nằm cạnh thì không; export viết tay bị thay |
+| `bootstrap_test.dart` | `--dry-run` báo member workspace và dependency của app bị thiếu mà không ghi gì; bỏ `--dry-run` thì các vùng managed bị cắt |
+
+Khi sửa một gate, hãy thêm case lẽ ra đã bắt được bug đó. `package:test` là dev dependency duy nhất (ghim trong `pubspec_dependencies.yaml`); fake chỉ là file thường trên đĩa.
 
 ---
 

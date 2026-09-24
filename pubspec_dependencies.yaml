@@ -87,6 +87,11 @@ dev_dependencies:
   flutter_gen_runner: "^5.15.0"
   flutter_lints: "^6.0.0"
 
+  # Testing — `package:test` for pure-Dart packages (tools/, domain_core);
+  # Flutter packages use the SDK's `flutter_test` instead. The exact version
+  # must agree with the `test_api` that `flutter_test` pins.
+  test: "^1.31.1"
+
   # Release Tooling
   icons_launcher: "^3.1.0"
   package_rename: "^1.10.1"

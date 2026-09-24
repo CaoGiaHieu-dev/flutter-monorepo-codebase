@@ -16,10 +16,10 @@ Template có **năm** pipeline — bốn trên GitHub Actions, một trên Azure
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Thủ công (`workflow_dispatch`) | APK release đã ký → Firebase App Distribution, kèm symbol obfuscation làm artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR vào `main`/`develop`/`master` + thủ công | Báo cáo Markdown + comment trên PR |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Thủ công (`workflow_dispatch`) | Uỷ quyền cho các lane Fastlane |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — chặn merge; sau đó build một APK dev bản debug |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — chặn merge; sau đó build một APK dev bản debug và smoke test module generator |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (chỉ chạy tay) | Artifact APK prod + symbol obfuscation → Firebase |
 
-`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Nó chạy sáu gate chặn theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cộng một audit chỉ cảnh báo — rồi ở job thứ hai, build app (APK `dev` bản debug), điều mà không gate nào chứng minh được. Xem [§6](#6-quality-gate).
+`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Nó chạy sáu gate chặn theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cộng một audit chỉ cảnh báo, và bộ test riêng của các tool gate chạy ngay sau Gate 1 — rồi ở hai job tiếp theo, build app (APK `dev` bản debug), điều mà không gate nào chứng minh được, và smoke test module generator. Xem [§6](#6-quality-gate).
 
 ---
 
@@ -167,21 +167,24 @@ Các task build và distribute cho iOS có mặt nhưng đã bị comment toàn 
 
 `pr_quality_check.yml` chạy trên mọi pull request vào `main`, `develop` hoặc `master`. Đây là pipeline duy nhất có thể chặn merge.
 
-Job `quality`, từng bước: checkout → Flutter từ `.fvmrc` → **`flutter pub get --enforce-lockfile`** → Gate 0 → Gate 1 → tạo stub Firebase options → `dart tools/workspace_setup/configure.dart` (clean, pub get, gen-l10n, `build_runner`, barrel) → Gate 2–5 → audit chỉ cảnh báo. Bước `--enforce-lockfile` chính là thứ buộc PR tuân theo `pubspec.lock` đã commit: nó fail khi lockfile không còn khớp các pubspec, trong khi `flutter pub get` thường bên trong `configure.dart` sẽ âm thầm resolve lại.
+Job `quality`, từng bước: checkout → Flutter từ `.fvmrc` → **`flutter pub get --enforce-lockfile`** → Gate 0 → Gate 1 → test của các tool gate (`cd tools && dart test`) → tạo stub Firebase options → `dart tools/workspace_setup/configure.dart` (clean, pub get, gen-l10n, `build_runner`, barrel) → Gate 2–5 → audit chỉ cảnh báo. Bước `--enforce-lockfile` chính là thứ buộc PR tuân theo `pubspec.lock` đã commit: nó fail khi lockfile không còn khớp các pubspec, trong khi `flutter pub get` thường bên trong `configure.dart` sẽ âm thầm resolve lại.
 
 | # | Gate | Lệnh | Chặn merge |
 |:--|:---|:---|:---|
 | 0 | Composition khớp manifest của mọi app | `dart tools/composer/composer.dart verify` | có |
 | 1 | Luật kiến trúc | `dart tools/arch_check/check.dart` | có |
+| 1 | …và test riêng của các tool gate | `cd tools && dart test` | có |
 | 2 | Phân tích tĩnh | `flutter analyze` | có |
-| 3 | Test theo từng package | `flutter test` trong mọi package có thư mục `test/` | có |
+| 3 | Test theo từng package | `flutter test` trong mọi package có thư mục `test/`, trừ `tools/` | có |
 | 4 | Lệch catalog version | `dart tools/dependency_sync.dart --check` | có |
 | 5 | Độ chính xác của docs | `dart tools/docs_check/check.dart` | có |
 | — | Audit dependency thừa | `dart tools/unused_checker/check_unused_packages.dart` | không (chỉ cảnh báo) |
 
 Gate 0 và 1 chạy đầu tiên là có chủ đích: chúng chỉ đọc manifest, import và pubspec và không cần codegen — `pub get` là đủ, vì `tools/` là thành viên của workspace — mỗi gate xong trong một hai giây, nên lỗi composition hay phân tầng fail ngay sau bước resolve dependency thay vì sau cả chu kỳ thiết lập, analyze và test. Gate 1 cũng là gate **duy nhất** nhìn thấy được phân tầng; không có gì trong `analysis_options.yaml` biết rằng core không được import feature.
 
-Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm trong `test/` của từng package — hiện phần lớn ở `platform/*/test/` — nên chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng.
+Mọi gate đều là một script trong `tools/`, và một gate đã âm thầm thôi fail trông y hệt một PR sạch. Vì vậy các gate có test riêng, trong `tools/test/`, chạy như nửa sau của Gate 1: mỗi test dựng một workspace dùng một lần trong thư mục tạm, chạy tool trên đó như một subprocess (compile sang kernel một lần cho mỗi file, nên cả bộ mất khoảng 15 giây) rồi kiểm tra exit code và output. Chúng phủ `arch_check` (một fixture sạch và một fixture vi phạm cho mỗi luật R1–R10; R6 phải cảnh báo mà vẫn exit 0), `composer verify` (manifest đã sync thì qua; `phase: befor`, layer lạ, module trùng và module không có trên đĩa bị từ chối kèm đường dẫn key), `dependency_sync --check` (lệch version và catalog sai định dạng exit 1), `docs_check` (tham chiếu chết exit 1, span `<placeholder>` và sample bundle đã gỡ thì không, gốc repo lấy từ vị trí script), barrel generator (dấu `/` ở cuối, thư mục `web/` bên trong `lib/`) và composer `bootstrap --dry-run` (báo member bị thiếu, không ghi gì). Sửa một gate thì thêm case vào đó. Giống Gate 0 và 1, chúng không cần codegen, nên chạy trước bước thiết lập chứ không nằm trong Gate 3.
+
+Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm trong `test/` của từng package — hiện ở `platform/*/test/` và `modules/*/*/test/`, mười chín package — nên chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng. Gate này bỏ qua `tools/`, vì test của nó đã chạy rồi.
 
 > [!IMPORTANT]
 > `flutter analyze` sạch **không** chứng minh app build được. `analysis_options.yaml` loại trừ `**.freezed.dart`, `**.g.dart`, `**.config.dart` và `**.module.dart`, nên analyzer không bao giờ nhìn vào code sinh ra. Chuyển một type sang package khác là đủ để một file `.freezed.dart` tham chiếu tới symbol nó không thấy được: analyze vẫn xanh trong khi build APK fail. Chỉ build thật mới bắt được loại lỗi đó.
@@ -192,7 +195,17 @@ Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm 
 flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 ```
 
-Bản debug không cần keystore release và `env.dev` đã được commit, nên job này không cần secret nào. Hãy đặt **cả hai** job là required status check trong branch protection rule.
+Bản debug không cần keystore release và `env.dev` đã được commit, nên job này không cần secret nào.
+
+Job thứ ba, **`generator-smoke`**, cũng `needs: quality`. Không có gì khác chạy thử các template của module generator — chúng là file Mustache mà không analyzer nào đọc — nên một template sinh ra dependency thừa, vi phạm phân tầng hay code không còn analyze được sẽ đến tay developer kế tiếp chạy nó. Job làm đúng việc developer đó sẽ làm: pub get, stub Firebase options, `configure.dart`, rồi
+
+```bash
+dart tools/module_generator/generate.dart 1 smoke "" 2 2   # feature BLoC, tab bottom-nav
+```
+
+— template rộng nhất: routing, localization, DI và mọi `app_manifest.yaml` — và bắt kết quả qua các gate: `flutter analyze`, `arch_check`, `composer verify`, và `check_unused_packages`, chỉ fail khi dependency thừa nằm trong `feature_smoke` (ở chỗ khác thì vẫn là audit chỉ cảnh báo của job quality, hiện dưới dạng warning). Không commit gì; bản checkout bị bỏ đi.
+
+Hãy đặt **cả ba** job là required status check trong branch protection rule.
 
 **Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 0–5 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
 
@@ -254,6 +267,7 @@ Chạy những lệnh này trước khi push; chúng đúng là những lệnh p
 flutter pub get --enforce-lockfile
 dart tools/composer/composer.dart verify
 dart tools/arch_check/check.dart
+(cd tools && dart test)                # test riêng của các tool gate
 
 # 2. Thiết lập toàn workspace — bước "Install dependencies and run code
 #    generation" của CI — rồi các gate còn lại, theo đúng thứ tự
@@ -267,11 +281,16 @@ dart tools/docs_check/check.dart
 (cd platform/database && flutter test)
 # ...lặp cho mọi package có thư mục test/
 
-# 4. Job build của pr_quality_check.yml (cần stub Firebase hoặc file thật —
+# 4. Job generator-smoke — trong một bản clone nháp, không phải working tree
+#    của bạn: nó đăng ký `smoke` vào mọi manifest và ghi lại lockfile
+#    dart tools/module_generator/generate.dart 1 smoke "" 2 2
+#    flutter analyze && dart tools/arch_check/check.dart && dart tools/composer/composer.dart verify
+
+# 5. Job build của pr_quality_check.yml (cần stub Firebase hoặc file thật —
 #    xem bên dưới) — chú ý cd
 (cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev)
 
-# 5. Đúng lệnh build release mà CI chạy — chú ý cd
+# 6. Đúng lệnh build release mà CI chạy — chú ý cd
 cd apps/mobile
 flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
   --dart-define-from-file=env.dev --obfuscate --split-debug-info=../../obfuscate/ \

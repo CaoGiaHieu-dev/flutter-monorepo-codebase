@@ -59,6 +59,19 @@ jobs:
       - name: Architecture rules
         run: dart tools/arch_check/check.dart
 
+      # Gate 1 (continued) — the gate tools' own tests.
+      # Every gate in this job is a script under tools/, and a gate that has
+      # quietly stopped failing looks exactly like a clean PR. tools/test/
+      # builds throwaway workspaces in a temp directory and runs each gating
+      # tool against them as a subprocess, asserting exit code and output:
+      # arch_check (a clean and a violating fixture for every rule R1-R10),
+      # composer verify, dependency_sync --check, docs_check, the barrel
+      # generator and composer bootstrap. Pure Dart and no codegen, so it
+      # runs here rather than in Gate 3, which skips tools/.
+      - name: Gate tools' own tests
+        working-directory: tools
+        run: dart test
+
       # Each app that uses Firebase owns `lib/firebase/firebase_module.dart`,
       # which imports three generated `firebase_options_*.dart` files that
       # are gitignored, so a clean checkout does not compile. Analysis and
@@ -117,6 +130,7 @@ jobs:
       # holding both a pubspec.yaml and a test/ is a package with tests,
       # wherever it lives. The count is asserted for the same reason: a
       # discovery bug that finds zero packages must fail, not succeed quietly.
+      # tools/ is the one exception: its tests ran right after Gate 1.
       - name: Test
         run: |
           set -e
@@ -125,6 +139,7 @@ jobs:
           while IFS= read -r pubspec; do
             dir=$(dirname "$pubspec")
             [ -d "$dir/test" ] || continue
+            [ "$dir" = "./tools" ] && continue
             found=$((found + 1))
             echo "::group::flutter test $dir"
             ( cd "$dir" && flutter test ) || failed=1
@@ -160,6 +175,99 @@ jobs:
       - name: Unused dependency audit (advisory)
         continue-on-error: true
         run: dart tools/unused_checker/check_unused_packages.dart
+
+  # Template regression check: generate a module the way a developer would,
+  # then hold the result to the same gates as hand-written code. Nothing else
+  # exercises the generator's templates — they are mustache files no analyzer
+  # reads — so a template that emits an unused dependency, a layering
+  # violation or code that no longer analyzes would otherwise ship to the
+  # next person who runs it. A BLoC feature with a bottom-nav tab is the
+  # widest template: it touches routing, localization, DI and every app
+  # manifest. Nothing here is committed; the checkout is thrown away.
+  generator-smoke:
+    name: Module generator smoke test
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+
+      - name: Get dependencies from the committed lockfile
+        run: flutter pub get --enforce-lockfile
+
+      # `flutter analyze` below reads every app; see the quality job.
+      - name: Stub Firebase options (compile only)
+        run: |
+          for module in apps/*/lib/firebase/firebase_module.dart; do
+          [ -f "$module" ] || continue
+          dir="$(dirname "$module")"
+          for env in dev staging prod; do
+            file="$dir/firebase_options_$env.dart"
+            [ -f "$file" ] && continue
+            cat > "$file" <<'DART'
+          // CI-only stub — see the quality job.
+          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+
+          class DefaultFirebaseOptions {
+            static FirebaseOptions get currentPlatform => const FirebaseOptions(
+                  apiKey: 'ci-stub',
+                  appId: 'ci-stub',
+                  messagingSenderId: 'ci-stub',
+                  projectId: 'ci-stub',
+                );
+          }
+          DART
+          done
+          done
+
+      # The generator runs pub get, gen-l10n, build_runner and the barrels
+      # for its own module, but `flutter analyze` needs every other
+      # package's generated files as well.
+      - name: Workspace setup
+        run: dart tools/workspace_setup/configure.dart
+
+      # Feature `smoke`, BLoC, bottom-nav tab: registers it in every
+      # app_manifest.yaml, runs composer sync and dependency_sync, then
+      # codegen. The lockfile changes here, which is expected.
+      - name: Generate a feature module
+        run: dart tools/module_generator/generate.dart 1 smoke "" 2 2
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Architecture rules
+        run: dart tools/arch_check/check.dart
+
+      - name: Composition in sync with manifest
+        run: dart tools/composer/composer.dart verify
+
+      # Blocking only for the generated package: an unused dependency there
+      # is a template bug. Anywhere else it is the quality job's advisory
+      # audit, and is reported here as a warning.
+      - name: No unused dependency in the generated module
+        run: |
+          set +e
+          out="$(dart tools/unused_checker/check_unused_packages.dart 2>&1)"
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -eq 2 ] && ! grep -q "Package: feature_smoke" <<<"$out"; then
+            echo "::warning::Unused dependencies outside the generated module (advisory — see the quality job)."
+            exit 0
+          fi
+          if [ "$code" -ne 0 ]; then
+            echo "::error::The generated module declares a dependency it never uses, or the check failed (exit $code)."
+          fi
+          exit "$code"
 
   # Not a gate: the proof that the app actually builds. Gate 2 cannot give it
   # (analysis_options.yaml excludes every generated file), and the release

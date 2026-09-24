@@ -14,6 +14,7 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 |---|---|
 | **Check the layering rules hold** | `dart tools/arch_check/check.dart` |
 | **Check the docs still describe this tree** | `dart tools/docs_check/check.dart` |
+| **Changed a gate tool — prove it still fails where it should** | `cd tools && dart test` |
 | **Which packages are sample code I can delete?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
 | **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` (omit `--apply` to preview) — `<bundle>` is one of `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` |
 | Create a new feature / domain / data / core package | `dart tools/module_generator/generate.dart …` |
@@ -378,6 +379,30 @@ Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs a Gem
 
 > [!NOTE]
 > The GitHub workflow runs this in **advisory mode** — its "fail on critical issues" step has `exit 1` commented out, so it never blocks a PR. See [`../operations/01_cicd.md`](../operations/01_cicd.md).
+
+---
+
+## Tests for the tools (`tools/test/`)
+
+Every gate in `pr_quality_check.yml` is one of the scripts above, and a gate that has quietly stopped failing looks exactly like a clean PR. `tools/test/` is what stops that: it runs as the second half of CI Gate 1, right after `arch_check`.
+
+```bash
+cd tools && dart test                            # the whole suite, ~15 s
+cd tools && dart test test/arch_check_test.dart  # one tool
+```
+
+Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` — a few pubspecs, a manifest, a source file — runs the tool against it as a subprocess and asserts the exit code and the output. Nothing touches the real repository. `test/support/tool_harness.dart` compiles each tool to a kernel snapshot once per test file (a snapshot starts in ~0.5 s instead of ~1.7 s), and for `docs_check`, which finds the repository from its own script location, copies the snapshot into the temp workspace at `tools/docs_check/`.
+
+| File | Covers |
+|:---|:---|
+| `arch_check_test.dart` | A clean and a violating fixture for every rule R1–R10 (R6 warns and still exits `0`); an empty workspace fails; an unknown flag exits `64` |
+| `composer_test.dart` | `sync` then `verify` passes; a hand-edited region, a module missing from disk, `phase: befor`, an unknown layer and a duplicate module exit `1` naming the key path |
+| `dependency_sync_test.dart` | `--check`: in step passes; a version mismatch, a malformed catalog and invalid YAML exit `1` |
+| `docs_check_test.dart` | A dead path or link exits `1`; a `<placeholder>` span, an allowlisted path and a removed sample bundle (INFO) exit `0`; the root comes from the script, not the cwd |
+| `barrel_generator_test.dart` | A trailing slash on the path; a `web/` directory inside `lib/` is exported, the platform `web/` beside it is not; hand-written exports are replaced |
+| `bootstrap_test.dart` | `--dry-run` reports a missing workspace member and app dependency and writes nothing; without it the managed regions are pruned |
+
+When you change a gate, add the case that would have caught the bug. `package:test` is the only dev dependency (pinned in `pubspec_dependencies.yaml`); fakes are plain files on disk.
 
 ---
 

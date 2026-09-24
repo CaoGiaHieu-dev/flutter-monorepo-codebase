@@ -137,6 +137,10 @@ for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/bui
   (cd "$dir" && flutter test) || { echo "FAILED: $dir"; break; }
 done
 
+# 2b. Changed anything under tools/? The gate tools have their own suite
+#     (throwaway temp workspaces, ~15 s) — CI runs it right after Gate 1
+(cd tools && dart test)
+
 # 3. Version catalog is in sync
 dart tools/dependency_sync.dart --check
 
@@ -146,7 +150,7 @@ dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some — CI Gate 3 discovers them the same way. It stops at the first failing package and names it; add your tests next to the code you write. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
+Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some — CI Gate 3 discovers them the same way. It stops at the first failing package and names it; add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail) — `flutter_test` in a Flutter package, `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` is step 2b. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
 
 > [!CAUTION]
 > `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, check the module order in the generated `apps/mobile/lib/di/injection.config.dart`, and your type's registration and its `gh<Dep>()` calls in the package's generated `lib/di/module.module.dart`. See [../guides/05_di.md](../guides/05_di.md).

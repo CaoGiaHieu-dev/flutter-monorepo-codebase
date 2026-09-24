@@ -114,7 +114,7 @@ class RouteAwareProbe extends StatefulWidget {
 }
 
 class _RouteAwareProbeState extends State<RouteAwareProbe> with RouteAware {
-  RouteObserver<ModalRoute>? _observer;
+  RouteObserver<ModalRoute<void>>? _observer;
 
   @override
   void didChangeDependencies() {

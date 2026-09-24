@@ -33,7 +33,7 @@ sealed class Result<T> with _$Result<T> {
   const Result._();
 
   const factory Result.success([T? data]) = Success<T>;
-  const factory Result.failure(AppFailure error) = Failure<T>;
+  const factory Result.failure(AppFailure<dynamic> error) = Failure<T>;
   const factory Result.none() = None<T>;
   const factory Result.cancel() = Cancel<T>;
 
@@ -54,7 +54,7 @@ sealed class Result<T> with _$Result<T> {
   };
 
   /// Returns the [AppFailure] if the result is a [Failure], otherwise `null`.
-  AppFailure? get errorOrNull => switch (this) {
+  AppFailure<dynamic>? get errorOrNull => switch (this) {
     Failure<T>(:final error) => error,
     _ => null,
   };
@@ -69,7 +69,7 @@ sealed class Result<T> with _$Result<T> {
   /// For fully synchronous branches, prefer the Freezed-generated [when].
   Future<R> whenAsync<R>({
     required FutureOr<R> Function(T? data) success,
-    required FutureOr<R> Function(AppFailure error) failure,
+    required FutureOr<R> Function(AppFailure<dynamic> error) failure,
     required FutureOr<R> Function() none,
     required FutureOr<R> Function() cancel,
   }) async {

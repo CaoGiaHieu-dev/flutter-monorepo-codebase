@@ -16,7 +16,7 @@ class OperationGlobalConfig {
 
   void Function()? _onStart;
   void Function(dynamic data)? _onSuccess;
-  void Function(AppFailure failure)? _onFailure;
+  void Function(AppFailure<dynamic> failure)? _onFailure;
   void Function()? _onFinish;
 
   /// Default callback when an operation starts (e.g., global logging)
@@ -26,7 +26,7 @@ class OperationGlobalConfig {
   void Function(dynamic data)? get onSuccess => _onSuccess;
 
   /// Default callback when an operation fails (e.g., showing a global error dialog)
-  void Function(AppFailure failure)? get onFailure => _onFailure;
+  void Function(AppFailure<dynamic> failure)? get onFailure => _onFailure;
 
   /// Default callback when an operation finishes (regardless of success/failure)
   void Function()? get onFinish => _onFinish;
@@ -50,7 +50,7 @@ class OperationGlobalConfig {
   void setup({
     void Function()? onStart,
     void Function(dynamic data)? onSuccess,
-    void Function(AppFailure failure)? onFailure,
+    void Function(AppFailure<dynamic> failure)? onFailure,
     void Function()? onFinish,
   }) {
     _onStart = onStart ?? _onStart;

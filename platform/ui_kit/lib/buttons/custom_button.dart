@@ -59,7 +59,13 @@ enum OptionsButtonType { edit, duplicate, close }
 
 /// CustomButton is a versatile button widget that supports multiple styles such as rectangle, circle, options, and drop-down.
 /// It can be used to create buttons with different shapes, sizes, and functionalities.
-class CustomButton<T> extends StatefulWidget {
+///
+/// [T] is the item type of [options] / [dropDown]. The plain buttons
+/// (`rectangle`, `outlined`, `circle`) have no items, so nothing at their
+/// call sites fixes [T]; the explicit `Object?` bound is what they
+/// instantiate to, which keeps `CustomButton.rectangle(...)` free of a type
+/// argument under `strict-inference`.
+class CustomButton<T extends Object?> extends StatefulWidget {
   /// Constructor for rectangle style button
   const CustomButton.rectangle({
     super.key,
@@ -137,7 +143,7 @@ class CustomButton<T> extends StatefulWidget {
        gradientBorderColors = null;
 
   /// Static method to create an options button
-  static CustomButton options({
+  static CustomButton<OptionsButtonType> options({
     Key? key,
     List<OptionsButtonType> items = OptionsButtonType.values,
     ValueChanged<OptionsButtonType>? onSelected,
@@ -177,7 +183,7 @@ class CustomButton<T> extends StatefulWidget {
   }
 
   /// Static method to create a drop-down button
-  static CustomButton dropDown<S>({
+  static CustomButton<S> dropDown<S>({
     Key? key,
     required String displayText,
     required List<S> items,

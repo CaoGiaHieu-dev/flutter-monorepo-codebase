@@ -180,7 +180,11 @@ List<Directory> _getAllDirectories(Directory root) {
       for (final entity in entities) {
         walk(entity);
       }
-    } catch (_) {}
+    } on FileSystemException {
+      // An unlistable directory (permissions, removed mid-walk) has no
+      // subdirectories to visit; it is still added below, and processing it
+      // reports the problem instead of writing a barrel.
+    }
 
     result.add(current);
   }
@@ -262,7 +266,11 @@ void _createOrUpdateBarrelForDir(Directory dir) {
         exports.add("export '$filename';");
       }
     }
-  } catch (_) {}
+  } on FileSystemException catch (e) {
+    // A barrel built from a partial listing would silently drop exports.
+    stderr.writeln('  !! Skipped ${dir.path}: ${e.message}');
+    return;
+  }
 
   // 2. Get child directories containing their own barrel files
   try {
@@ -274,7 +282,10 @@ void _createOrUpdateBarrelForDir(Directory dir) {
         exports.add("export '$subdirName/$subdirName.dart';");
       }
     }
-  } catch (_) {}
+  } on FileSystemException catch (e) {
+    stderr.writeln('  !! Skipped ${dir.path}: ${e.message}');
+    return;
+  }
 
   if (exports.isEmpty && !barrelFile.existsSync()) {
     return;

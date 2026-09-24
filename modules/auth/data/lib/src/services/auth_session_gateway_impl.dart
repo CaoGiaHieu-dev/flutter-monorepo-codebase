@@ -54,7 +54,7 @@ class AuthSessionGatewayImpl implements IAuthSessionGateway {
   /// renewal never got an answer — so the session must be kept.
   ///
   /// Exposed for tests: this predicate decides whether a user is signed out.
-  static bool isTransient(AppFailure? failure) {
+  static bool isTransient(AppFailure<dynamic>? failure) {
     if (failure is NetworkFailure) return true;
     if (failure is! ServerFailure) return false;
     final code = failure.code;

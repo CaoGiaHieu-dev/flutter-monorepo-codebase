@@ -32,7 +32,7 @@ class AppRouter {
   /// root observers to each `ShellRoute` and `StatefulShellBranch` navigator
   /// (`notifyRootObserver`, on by default) — so one instance sees the whole
   /// app. `AppInitializer.init` hands it to `RouteAwareWidget`.
-  final routeObserver = RouteObserver<ModalRoute>();
+  final routeObserver = RouteObserver<ModalRoute<void>>();
 
   BuildContext get currentContext {
     final context = router.routerDelegate.navigatorKey.currentContext;

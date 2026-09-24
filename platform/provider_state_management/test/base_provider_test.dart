@@ -46,19 +46,19 @@ class TestProvider extends BaseProvider<String> {
     );
   }
 
-  Future<void> runFailureOperation(AppFailure failure) async {
+  Future<void> runFailureOperation(AppFailure<dynamic> failure) async {
     await executeOperation(
-      OperationConfig(operation: () async => Result.failure(failure)),
+      OperationConfig(operation: () async => Result<String>.failure(failure)),
     );
   }
 
   Future<void> runFailureOperationWithCustomError(
-    AppFailure failure,
+    AppFailure<dynamic> failure,
     ErrorState customError,
   ) async {
     await executeOperation(
       OperationConfig(
-        operation: () async => Result.failure(failure),
+        operation: () async => Result<String>.failure(failure),
         errorStateBuilder: (f) => customError,
       ),
     );
@@ -66,13 +66,13 @@ class TestProvider extends BaseProvider<String> {
 
   Future<void> runNoneOperation() async {
     await executeOperation(
-      OperationConfig(operation: () async => const Result.none()),
+      OperationConfig(operation: () async => const Result<String>.none()),
     );
   }
 
   Future<void> runCancelOperation() async {
     await executeOperation(
-      OperationConfig(operation: () async => const Result.cancel()),
+      OperationConfig(operation: () async => const Result<String>.cancel()),
     );
   }
 
@@ -315,7 +315,10 @@ void main() {
         states.add(stateModel.state);
       });
 
-      const failure = ServerFailure(message: 'Request Timeout', code: 504);
+      const failure = ServerFailure<dynamic>(
+        message: 'Request Timeout',
+        code: 504,
+      );
       await provider.runFailureOperation(failure);
 
       expect(provider.isError, isTrue);
@@ -328,7 +331,10 @@ void main() {
     });
 
     test('maps failure to custom ErrorState via errorStateBuilder', () async {
-      const failure = ServerFailure(message: 'Internal Error', code: 500);
+      const failure = ServerFailure<dynamic>(
+        message: 'Internal Error',
+        code: 500,
+      );
       const customError = CustomAppErrorState(
         errorCode: 'ERR_500',
         description: 'Server Internal Error',
@@ -422,7 +428,7 @@ void main() {
         void listener() => notifications++;
         provider.addListener(listener);
 
-        const failure = NetworkFailure(message: 'offline');
+        const failure = NetworkFailure<dynamic>(message: 'offline');
         await provider.runFailureOperation(failure);
         await provider.runFailureOperation(failure);
         await Future<void>.delayed(Duration.zero);

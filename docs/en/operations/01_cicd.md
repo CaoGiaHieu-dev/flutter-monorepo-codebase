@@ -175,7 +175,7 @@ Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter p
 | 0 | Composition matches every app's manifest | `dart tools/composer/composer.dart verify` | yes |
 | 1 | Architecture rules | `dart tools/arch_check/check.dart` | yes |
 | 1 | …and the gate tools' own tests | `cd tools && dart test` | yes |
-| 2 | Static analysis | `flutter analyze` | yes |
+| 2 | Static analysis — strict modes on, 0 issues incl. infos ([rules § 16](../reference/01_rules.md)) | `flutter analyze` | yes |
 | 3 | Tests, per package | `flutter test --coverage` in every package that has a `test/` directory, except `tools/` | yes |
 | — | Coverage report | `dart tools/coverage_report/report.dart` — per-package line coverage in the job summary | no (advisory) |
 | 4 | Catalog drift | `dart tools/dependency_sync.dart --check` | yes |

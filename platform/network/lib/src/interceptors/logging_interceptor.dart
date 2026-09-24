@@ -93,7 +93,10 @@ class LoggingInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     if (_loggerResponse) {
       // Log relevant response information in a structured map.
       // This allows DynamicLogger to format the data nicely.

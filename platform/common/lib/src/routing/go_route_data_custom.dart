@@ -12,7 +12,7 @@ import 'package:platform_kernel/platform_kernel.dart';
 abstract class GoRouteDataCustom extends GoRouteData {
   const GoRouteDataCustom();
 
-  ValueKey? get pageKey => null;
+  ValueKey<Object?>? get pageKey => null;
 
   bool get canPop => true;
 
@@ -69,7 +69,7 @@ class RouteAwareWidget extends StatefulWidget {
   final Widget child;
 
   /// Global route observer registered at app shell level.
-  static RouteObserver<ModalRoute>? observer;
+  static RouteObserver<ModalRoute<void>>? observer;
 
   const RouteAwareWidget(this.name, {super.key, required this.child});
 

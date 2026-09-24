@@ -151,7 +151,7 @@ class AppInfoHelper {
   /// on an emulator or simulator. Useful for debugging and analytics.
   Future<bool> isPhysicalDevice() async {
     final deviceInfo = await getDeviceInfo();
-    return deviceInfo['isPhysicalDevice'] ?? false;
+    return deviceInfo['isPhysicalDevice'] as bool? ?? false;
   }
 
   /// Gets the current platform name.

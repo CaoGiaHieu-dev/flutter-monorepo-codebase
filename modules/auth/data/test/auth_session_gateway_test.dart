@@ -40,7 +40,7 @@ void main() {
 
       final result = await AuthRepositoryImpl(remote, local).refreshToken();
       final failure = result.errorOrNull;
-      expect(failure, isA<ServerFailure>());
+      expect(failure, isA<ServerFailure<dynamic>>());
       expect(failure?.code, ErrorCodes.RESPONSE_REJECTED);
       expect(failure?.message, 'Token revoked');
 

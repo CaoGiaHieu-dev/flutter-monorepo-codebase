@@ -244,7 +244,10 @@ class PrefStorageImpl extends StorageInterface {
       try {
         jsonDecode(decryptData(value));
         return true;
-      } catch (_) {}
+      } catch (_) {
+        // Expected while probing: this sample does not open with [key]
+        // (bad padding or not JSON). Try the next one; none → `false`.
+      }
     }
     return false;
   }

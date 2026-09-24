@@ -555,7 +555,7 @@ List<_RemovedBundle> _removedSampleBundles(String repoRoot) {
           if (dir.startsWith('modules/') &&
               !_exists(repoRoot, p.posix.dirname(dir)))
             p.posix.dirname(dir),
-        if (value['orphaned_contracts'] case final List contracts)
+        if (value['orphaned_contracts'] case final List<Object?> contracts)
           for (final c in contracts)
             if (c is String) c,
       ]),

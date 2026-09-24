@@ -26,7 +26,7 @@ abstract class BlocViewState<T> with _$BlocViewState<T> {
   const factory BlocViewState.initial() = _Initial<T>;
   const factory BlocViewState.loading() = _Loading<T>;
   const factory BlocViewState.success(T data) = _Success<T>;
-  const factory BlocViewState.error(AppFailure error) = _Error<T>;
+  const factory BlocViewState.error(AppFailure<dynamic> error) = _Error<T>;
 
   T? get data => mapOrNull(success: (s) => s.data);
 }

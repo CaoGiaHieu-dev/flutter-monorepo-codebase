@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:core_common/core_common.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
@@ -16,19 +14,10 @@ class AppProvider extends ChangeNotifier
     startListenOnNetworkConnect();
   }
 
-  StreamSubscription? _notificationDataSubscription;
-  StreamSubscription? _onDeviceTokenChange;
-  StreamSubscription? _userTokenChange;
-  StreamSubscription? _chatNotifySubscription;
-
   @override
   void dispose() {
     stopListenOnLifecycleChange();
     stopListenOnNetworkConnect();
-    _notificationDataSubscription?.cancel();
-    _onDeviceTokenChange?.cancel();
-    _userTokenChange?.cancel();
-    _chatNotifySubscription?.cancel();
     super.dispose();
   }
 

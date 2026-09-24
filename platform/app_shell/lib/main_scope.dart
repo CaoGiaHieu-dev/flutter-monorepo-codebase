@@ -46,7 +46,10 @@ class MainScope {
       FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
       // Perform initialization tasks and delay for 2 seconds.
-      await Future.wait([initService.call(), Future.delayed(_minimumDelay)]);
+      await Future.wait([
+        initService.call(),
+        Future<void>.delayed(_minimumDelay),
+      ]);
 
       // Remove the splash screen after initialization.
       _removeNativeSplash();
@@ -87,7 +90,10 @@ class MainScope {
     await WidgetsBinding.instance.endOfFrame;
 
     // Perform initialization tasks and delay for 2 seconds.
-    await Future.wait([initService.call(), Future.delayed(_minimumDelay)]);
+    await Future.wait([
+      initService.call(),
+      Future<void>.delayed(_minimumDelay),
+    ]);
 
     // Update the widget to the root widget after initialization.
     widget.value = root;

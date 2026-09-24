@@ -17,6 +17,9 @@ class _FakeAuthStatusStream implements IAuthStatusStream {
 
   @override
   Stream<AuthPrincipal?> get authStatusStream => controller.stream;
+
+  /// Closes [controller]; each test registers it with `addTearDown`.
+  Future<void> close() => controller.close();
 }
 
 const _ada = AuthPrincipal(id: '1', displayName: 'Ada');
@@ -41,7 +44,7 @@ void main() {
 
   test('starts from the stream\'s current user', () async {
     final auth = _FakeAuthStatusStream(currentUser: _ada);
-    addTearDown(auth.controller.close);
+    addTearDown(auth.close);
     final bloc = HomeProfileBloc(auth);
     addTearDown(bloc.close);
 
@@ -53,7 +56,7 @@ void main() {
 
   test('follows every auth status change, sign-out included', () async {
     final auth = _FakeAuthStatusStream();
-    addTearDown(auth.controller.close);
+    addTearDown(auth.close);
     final bloc = HomeProfileBloc(auth);
     addTearDown(bloc.close);
 
@@ -72,7 +75,7 @@ void main() {
 
   test('refreshed re-reads the current user', () async {
     final auth = _FakeAuthStatusStream();
-    addTearDown(auth.controller.close);
+    addTearDown(auth.close);
     final bloc = HomeProfileBloc(auth);
     addTearDown(bloc.close);
     await pumpEventQueue();
@@ -88,7 +91,7 @@ void main() {
 
   test('close cancels the auth subscription', () async {
     final auth = _FakeAuthStatusStream();
-    addTearDown(auth.controller.close);
+    addTearDown(auth.close);
     final bloc = HomeProfileBloc(auth);
     await pumpEventQueue();
     expect(auth.controller.hasListener, isTrue);

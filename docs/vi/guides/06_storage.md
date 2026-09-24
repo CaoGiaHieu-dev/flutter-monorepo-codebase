@@ -158,6 +158,12 @@ Future<String?> _readMasterKey() async {
 
 `StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
 
+### Tuỳ chọn cipher của plugin được ghim cố định
+
+Cả hai backend mở `flutter_secure_storage` (11.x) với cùng một cặp Android tường minh — `KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding` và `StorageCipherAlgorithm.AES_GCM_NoPadding` — và `KeychainAccessibility.first_unlock` trên iOS. Trên Android, plugin ghi lại cặp nó đã dùng để ghi và, khi cặp được cấu hình khác đi, sẽ mã hoá lại toàn bộ store (`migrateOnAlgorithmChange`, mặc định bật) hoặc, nếu không được, reset nó (`resetOnError`, cũng bật). Đừng đổi hai tuỳ chọn này trừ khi bạn thật sự muốn migrate dữ liệu bảo mật của mọi người dùng.
+
+Cặp này là thứ template đã ghi từ bản phát hành đầu tiên (10.x) và vẫn là mặc định của 11.x, nên nâng cấp 10 → 11 đọc được giá trị cũ nguyên vẹn: cùng alias KeyStore, cùng khoá đã bọc, không có bước migrate. Cái 11.x bỏ đi là các cipher trước 10 (RSA-PKCS1, AES-CBC, EncryptedSharedPreferences). App nào từng phát hành `flutter_secure_storage` 9.x trở xuống phải phát hành một bản 10.x trước — thiết bị nhảy thẳng từ 9 lên 11 sẽ mất giá trị bảo mật, gồm cả token và master key của `PrefStorageImpl`. Trên Android, `FlutterSecureStorage.checkUpgradeStatus()` (11.1+), gọi trước lần đọc đầu tiên, báo cho bạn biết điều đó có xảy ra hay không.
+
 ---
 
 ## 4. Cách thêm một giá trị lưu trữ mới (công thức chính)

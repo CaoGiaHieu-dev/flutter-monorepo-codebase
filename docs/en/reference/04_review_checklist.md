@@ -182,6 +182,7 @@ flutter analyze
 
 - [ ] CLI tools use `stdout.writeln` / `stderr.writeln`, never `print()`
 - [ ] No `// ignore_for_file:` or other lint suppression was added
+- [ ] `flutter analyze` is clean under the strict modes: no raw generics, no uncast `dynamic`, fire-and-forget futures wrapped in `unawaited(...)` with a reason, every empty `catch` commented ([`01_rules.md` § 16](01_rules.md))
 - [ ] No `.ps1` script was added
 - [ ] Deprecation warnings were resolved by real migration, not silenced
 - [ ] Versions were changed in `pubspec_dependencies.yaml` and synced — not hardcoded per package

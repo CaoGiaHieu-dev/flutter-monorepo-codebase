@@ -37,7 +37,7 @@ class _CountBloc extends BaseBloc<Object, BlocViewState<int>>
   }
 
   final successes = <int?>[];
-  final failures = <AppFailure>[];
+  final failures = <AppFailure<dynamic>>[];
   final reported = <Object>[];
 
   @override

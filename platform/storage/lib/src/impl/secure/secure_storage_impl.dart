@@ -55,7 +55,15 @@ class SecureStorageImpl extends StorageInterface {
   /// Base delay between master-key read attempts (grows linearly).
   final Duration _retryDelay;
 
-  /// Android options for FlutterSecureStorage
+  /// Android options for FlutterSecureStorage.
+  ///
+  /// Pinned explicitly, never left to the plugin's defaults: the plugin
+  /// records the pair it wrote with and re-encrypts (or, failing that,
+  /// resets) the whole store when the configured pair differs. RSA-OAEP key
+  /// wrapping + AES-GCM storage is what every release of this template has
+  /// written (flutter_secure_storage 10.x) and is still 11.x's default, so
+  /// the 10 → 11 upgrade reads existing values as they are — no migration.
+  /// `PrefStorageImpl` opens the same store and must use the same pair.
   static AndroidOptions get aOptions => const AndroidOptions(
     keyCipherAlgorithm: KeyCipherAlgorithm
         .RSA_ECB_OAEPwithSHA_256andMGF1Padding, // RSA encryption for key
@@ -164,7 +172,12 @@ class SecureStorageImpl extends StorageInterface {
   Future<void> _deleteUnnecessaryKeepAlive() async {
     try {
       await _storage.deleteAll();
-    } catch (_) {}
+    } catch (_) {
+      // Best effort: this only clears what a previous install left behind
+      // (the iOS Keychain survives an uninstall). Failing it must not stop
+      // the first launch — the flag is already set, so it is not retried,
+      // and the app starts with those leftovers still present.
+    }
   }
 
   /// Write a value to secure storage.
@@ -232,7 +245,10 @@ class SecureStorageImpl extends StorageInterface {
       // not fail the same way forever.
       try {
         await _storage.delete(key: key);
-      } catch (_) {}
+      } catch (_) {
+        // Best effort: the read already returns null for these bytes, and
+        // the next read retries the delete.
+      }
       return null;
     }
   }

@@ -105,7 +105,11 @@ class RefreshTokenHandler {
     // must not leave this request — or the ones queued behind it — unsettled.
     try {
       await onRefreshFailed();
-    } catch (_) {}
+    } catch (_) {
+      // Safe to drop: the session is already over and this request is
+      // rejected below either way — the callback's own failure changes
+      // nothing, while letting it escape would leave the queue unsettled.
+    }
     completer.complete(null);
     _completer = null;
     return handler.reject(err);
@@ -123,7 +127,7 @@ class RefreshTokenHandler {
           ? _recreateOptions(err.requestOptions)
           : err.requestOptions;
 
-      final response = await dio.fetch(requestOptions);
+      final response = await dio.fetch<dynamic>(requestOptions);
       return handler.resolve(response);
     } on DioException catch (e) {
       return handler.reject(e);

@@ -612,8 +612,12 @@ void main() {
         final obStr = ObfuscatedString(json);
         final revealed = obStr.reveal();
         expect(revealed, equals(json));
-        expect(jsonDecode(revealed), isA<Map<String, dynamic>>());
-        expect(jsonDecode(revealed)['displayName'], '你好 こんにちは 안녕 😀');
+        final decoded = jsonDecode(revealed);
+        expect(decoded, isA<Map<String, dynamic>>());
+        expect(
+          (decoded as Map<String, dynamic>)['displayName'],
+          '你好 こんにちは 안녕 😀',
+        );
         obStr.dispose();
       });
 

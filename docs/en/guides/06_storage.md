@@ -158,6 +158,12 @@ Future<String?> _readMasterKey() async {
 
 `StorageManager.initialize` runs the secure backend first, so a persistent Keychain failure normally surfaces there before the pref backend is asked. The tests (`platform/storage/test/storage_test.dart`) drive both backends through a flaky `FlutterSecureStorage` fake.
 
+### The plugin's cipher options are pinned
+
+Both backends open `flutter_secure_storage` (11.x) with the same explicit Android pair — `KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding` and `StorageCipherAlgorithm.AES_GCM_NoPadding` — and `KeychainAccessibility.first_unlock` on iOS. On Android the plugin records the pair it wrote with and, when the configured pair differs, re-encrypts the store (`migrateOnAlgorithmChange`, on by default) or, failing that, resets it (`resetOnError`, also on). Leave both options alone unless you mean to migrate every user's secure data.
+
+This pair is what the template has written since its first release (10.x) and it is still the 11.x default, so the 10 → 11 upgrade reads existing values unchanged: same KeyStore alias, same wrapped key, no migration step. What 11.x dropped is the pre-10 ciphers (RSA-PKCS1, AES-CBC, EncryptedSharedPreferences). An app that ever shipped `flutter_secure_storage` 9.x or older must ship a 10.x release first — a device going straight from 9 to 11 loses its secure values, tokens and `PrefStorageImpl`'s master key included. On Android, `FlutterSecureStorage.checkUpgradeStatus()` (11.1+), called before the first read, reports whether that happened.
+
 ---
 
 ## 4. How to add a new stored value (the main recipe)

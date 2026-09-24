@@ -35,7 +35,7 @@ class InteractiveService {
         args.add('--all');
         break;
       case 'folder':
-        args.addAll(['--folder', scope['path']]);
+        args.addAll(['--folder', scope['path'] as String]);
         break;
       case 'files':
         for (final file in scope['files'] as List<String>) {

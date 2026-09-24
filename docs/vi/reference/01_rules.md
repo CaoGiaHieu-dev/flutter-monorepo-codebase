@@ -447,6 +447,22 @@ Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, c�
 | Chạy lại barrel generator | sau khi thêm, đổi tên, hoặc xoá file trong `lib/` |
 | Xử lý deprecation đàng hoàng | nghiên cứu đường migrate; cấm vá tạm và cấm ignore |
 
+### Độ nghiêm của analyzer
+
+Một file `analysis_options.yaml` duy nhất ở root áp dụng cho mọi package. Ngoài `flutter_lints`, nó bật ba strict mode của ngôn ngữ và một nhóm rule; phần header của file giải thích từng cái và cách thêm rule. `flutter analyze` phải báo **0 issue** — CI Gate 2 fail cả với info.
+
+| Thiết lập | Yêu cầu với code của bạn |
+|---|---|
+| `strict-casts` | cast giá trị `dynamic` trước khi dùng như kiểu cụ thể — `jsonDecode(body) as Map<String, dynamic>` |
+| `strict-inference` | ghi type argument mà suy luận không tìm ra — `Future<void>.delayed(...)`, `catchError((Object e, StackTrace s) {...})` |
+| `strict-raw-types` | không bỏ type argument của kiểu generic — `StreamSubscription<User>`, `AppFailure<dynamic>` (giữ `<dynamic>` cho `AppFailure`: `==` do Freezed sinh so sánh `runtimeType`) |
+| `unawaited_futures` | trong thân async, `await` Future hoặc bọc bằng `unawaited(...)` của `dart:async` kèm comment giải thích lý do |
+| `cancel_subscriptions` / `close_sinks` | field `StreamSubscription` phải được cancel, field `StreamController` phải được close, ngay trong class sở hữu nó |
+| `avoid_dynamic_calls` | không gọi method hay truy cập property trên `dynamic` — cast trước |
+| `empty_catches` | `catch` rỗng phải chứa comment giải thích vì sao bỏ lỗi là an toàn; ưu tiên thu hẹp nó (`on FileSystemException`) |
+
+`discarded_futures` **không** được bật: trong Flutter nó chủ yếu báo `subscription.cancel()` / `controller.close()` trong `dispose()` đồng bộ và dialog mở từ callback `void`. Thêm một rule nghĩa là sửa mọi chỗ nó báo — không bao giờ `// ignore:` — và sinh thử một module (`generate.dart 1 smoke "" 2 2`) để chứng minh template của generator vẫn đạt.
+
 ---
 
 ## Bảng tra luật → lệnh

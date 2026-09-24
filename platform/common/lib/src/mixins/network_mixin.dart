@@ -53,9 +53,11 @@ mixin NetworkMixin {
   /// This method should be called in the `dispose` method of the widget.
   @mustCallSuper
   Future<void> stopListenOnNetworkConnect() async {
-    final previous = _internetConnectionSubscription;
+    // Cancel and clear the slot synchronously — only the wait is async — so
+    // a start that overlaps this stop keeps the subscription it creates.
+    final cancelled = _internetConnectionSubscription?.cancel();
     _internetConnectionSubscription = null;
-    await previous?.cancel();
+    await cancelled;
   }
 
   /// Called when the network connection is established.

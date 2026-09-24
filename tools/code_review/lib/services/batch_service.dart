@@ -106,7 +106,7 @@ class BatchService {
           stdout.writeln(
             '⏳ Waiting ${delayBetweenBatches.inSeconds} seconds before next batch...\n',
           );
-          await Future.delayed(delayBetweenBatches);
+          await Future<void>.delayed(delayBetweenBatches);
         }
       }
 
@@ -153,7 +153,7 @@ class BatchService {
           stdout.writeln(
             '⏳ Waiting ${waitDuration.inSeconds} seconds for next retry...',
           );
-          await Future.delayed(waitDuration);
+          await Future<void>.delayed(waitDuration);
         }
         continue;
       }
@@ -184,7 +184,7 @@ class BatchService {
 
       // Add small delay between retry batches
       if (_retryQueue.isNotEmpty) {
-        await Future.delayed(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(seconds: 2));
       }
     }
   }

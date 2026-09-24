@@ -33,11 +33,11 @@ class OperationConfig<R, T> {
   final FutureOr<void> Function(T? data)? onSuccess;
 
   /// Optional callback when operation fails with system failure
-  final FutureOr<void> Function(AppFailure failure)? onFailure;
+  final FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure;
 
   /// Whether to show loading state (default: true)
   final bool showLoading;
 
   /// Optional builder to map failure to ErrorState
-  final ErrorState? Function(AppFailure failure)? errorStateBuilder;
+  final ErrorState? Function(AppFailure<dynamic> failure)? errorStateBuilder;
 }

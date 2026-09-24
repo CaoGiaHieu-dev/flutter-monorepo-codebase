@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:domain_core/domain_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -14,19 +16,19 @@ class TestProvider extends BaseProvider<String> {
     );
   }
 
-  Future<void> runFailureOperation(AppFailure failure) async {
+  Future<void> runFailureOperation(AppFailure<dynamic> failure) async {
     await executeOperation(
-      OperationConfig(operation: () async => Result.failure(failure)),
+      OperationConfig(operation: () async => Result<String>.failure(failure)),
     );
   }
 
   Future<void> runFailureWithCustomError(
-    AppFailure failure,
+    AppFailure<dynamic> failure,
     ErrorState customError,
   ) async {
     await executeOperation(
       OperationConfig(
-        operation: () async => Result.failure(failure),
+        operation: () async => Result<String>.failure(failure),
         errorStateBuilder: (f) => customError,
       ),
     );
@@ -71,8 +73,9 @@ void main() {
         ),
       );
 
-      // Trigger operation (will go to loading first)
-      provider.runSuccessOperation('data');
+      // Trigger operation (will go to loading first). Not awaited: the test
+      // must observe the loading state before the operation completes.
+      unawaited(provider.runSuccessOperation('data'));
       await tester.pump();
 
       expect(loadingCalled, isTrue);
@@ -118,7 +121,7 @@ void main() {
         ),
       );
 
-      const failure = ServerFailure(message: 'Server down', code: 500);
+      const failure = ServerFailure<dynamic>(message: 'Server down', code: 500);
       await provider.runFailureOperation(failure);
       await tester.pump();
 
@@ -145,7 +148,7 @@ void main() {
 
       // With data loaded no loading state sits between the failures, so the
       // second one (the user taps Retry, still offline) equals the first.
-      const failure = NetworkFailure(message: 'offline');
+      const failure = NetworkFailure<dynamic>(message: 'offline');
       await provider.runFailureOperation(failure);
       await tester.pump();
       await provider.runFailureOperation(failure);
@@ -171,7 +174,10 @@ void main() {
         ),
       );
 
-      const failure = ServerFailure(message: 'Unauthorized', code: 401);
+      const failure = ServerFailure<dynamic>(
+        message: 'Unauthorized',
+        code: 401,
+      );
       const customError = ErrorState.raw({'type': 'auth', 'code': 401});
 
       await provider.runFailureWithCustomError(failure, customError);
@@ -227,7 +233,7 @@ void main() {
         ),
       );
 
-      const failure = ServerFailure(message: 'Fail', code: 500);
+      const failure = ServerFailure<dynamic>(message: 'Fail', code: 500);
       await provider.runFailureOperation(failure);
       await tester.pump();
 

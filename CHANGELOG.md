@@ -58,6 +58,15 @@ with the architecture rules enforced by CI instead of review alone.
   `pubspec_dependencies.yaml` catalog.
 - Fastlane runs through Bundler, from the repository root or `apps/mobile`.
 - `data_core` no longer depends on Flutter.
+- The analyzer runs strict: `strict-casts`, `strict-inference` and `strict-raw-types`, plus
+  `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls` and
+  `empty_catches` (`analysis_options.yaml`, whose header now explains each). Code built on the
+  template may need explicit type arguments and casts to pass Gate 2. The phantom type parameter
+  of `InitialWidgetBuilder` / `LoadingWidgetBuilder` / `EmptyWidgetBuilder` is gone, and
+  `CustomButton`'s `T` is bounded by `Object?` so plain buttons need no type argument.
+- `flutter_secure_storage` 10.3.1 → 11.2.0 (`flutter_secure_storage_darwin` 0.4.x: iOS 13+,
+  Android minSdk 24). Values written by 10.x are read unchanged — same pinned RSA-OAEP + AES-GCM
+  pair; see `docs/en/guides/06_storage.md` § 3 for apps that once shipped 9.x.
 
 ### Fixed
 

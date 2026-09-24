@@ -63,7 +63,7 @@ void runShellApp({
       // on web.
       final usesDartSplash = kIsWeb || !Platform.isIOS;
 
-      MainScope(
+      await MainScope(
         // Resolved through `core_di` rather than importing the splash feature:
         // with no implementation registered this stays null and `MainScope`
         // falls back to the native splash.

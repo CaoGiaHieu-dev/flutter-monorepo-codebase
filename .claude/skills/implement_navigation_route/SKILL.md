@@ -1,13 +1,15 @@
 ---
 name: implement_navigation_route
-description: Guide for creating Routes, declaring local Navigator interfaces, and implementing navigation in the monorepo.
+description: Use when adding a screen or route, linking navigation between features, or adding a tab — "create a new page and navigate to it", "navigate from feature A to feature B", "add a bottom-nav tab", "add route parameters". Covers GoRouteDataCustom routes, path constants in utils/, navigator contracts in the owner's <id>_api, and IFeatureRouteModule / INavDestinationModule registration.
 ---
 
 # 🚦 Skill: Implement Navigation & Routing (Implement Navigation Route)
 
 Use this skill when requested to: "create a new screen/page and link navigation", "navigate from Feature A to Feature B", "add routing parameters", etc.
 
-**Read first:** `docs/{en,vi}/guides/04_routing.md` § Dashboard — when to use `INavDestinationModule` vs `IFeatureRouteModule`, and what `feature_dashboard` must not own.
+**Read first:** [`docs/en/guides/04_routing.md`](../../../docs/en/guides/04_routing.md) § Dashboard — when to use `INavDestinationModule` vs `IFeatureRouteModule`, and what `feature_dashboard` must not own.
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-04, RULE-09, RULE-12, RULE-20,
+RULE-21, RULE-22, RULE-23, RULE-24, RULE-75, RULE-78.
 
 ---
 
@@ -29,12 +31,11 @@ A navigator holds **only its own feature's routes** — `ProfileNavigator` never
 `modules/auth/api/lib/src/navigators/auth_navigator.dart` (`auth_api`). Regenerate the API
 barrel after adding a file: `dart tools/barrel_generator/generate.dart modules/<id>/api/lib`.
 
-**Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — put them in `feature_settings`, and add a `SettingsNavigator` contract to a `settings_api` package only once another module needs to navigate there. The caller lists `<id>_api` in its `dependencies:` — never the other feature (`arch_check` R3). `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
+Navigators are per owning feature (RULE-22, RULE-24): Settings routes live in `feature_settings`, and a `SettingsNavigator` contract goes into a `settings_api` package only once another module needs it. The caller lists `<id>_api` in its `dependencies:`, never the other feature (RULE-04).
 
 ### Step 2: Put the path constants in `utils/`
 
-Route paths are constants, so they follow the repo-wide rule: every package keeps its
-constants in `lib/src/utils/`. **Not** in `routing/` — they were moved.
+Route paths are constants, so they live in `lib/src/utils/`, not `routing/` (RULE-09).
 
 `modules/home/feature/lib/src/utils/home_path.dart`:
 ```dart
@@ -52,13 +53,12 @@ Inject and call the Navigator interface from the UI layer, passing the local `Bu
 ```dart
 getItOrNull<ProfileNavigator>()?.toEditProfile(context);
 ```
-Use `getItOrNull` (not `getIt`) so the call degrades to a no-op when the owning feature has
-been removed from the build — `arch_check` R8 blocks a throwing `getIt` outside the owning module.
+`getItOrNull`, not `getIt` (RULE-12); `context` straight from the widget (RULE-23).
 
 ### Step 4: Define Route Class using `GoRouteDataCustom`
 Declare a type-safe route in the feature's `routing/*_route_module.dart` file (inherit `GoRouteDataCustom`), importing the path constant from `../utils/`.
 
-Instantiate the controller **in the route's `build`**, never inside the `Page`:
+Instantiate the controller **in the route's `build`**, never inside the `Page` (RULE-21):
 ```dart
 @override
 Widget build(BuildContext context, GoRouterState state) {
@@ -89,13 +89,13 @@ Pick **one** contribution type:
 
 1. Implement the chosen contract with `@LazySingleton(as: …)` (or `@Singleton` for chrome).
 2. Compose the package: list its module in each `apps/<id>/app_manifest.yaml` (the generator does this) and run `dart tools/composer/composer.dart sync` — never hand-edit an app's `pubspec.yaml` or `injection.dart`.
-3. **Never** append `$fooRoute` into `app_router.dart` manually — host already uses `getAllOrEmpty` / `getItOrNull`.
-4. Export the new navigator from `core_di` first (Step 1 added a file there; without this the
-   impl reports `Undefined name 'ProfileNavigator'`), then codegen, then the feature's barrels
-   (after `build_runner` — they export generated files too), then a **full restart** (hot reload
-   does not pick up new DI registrations):
+3. **Never** append `$fooRoute` into `app_router.dart` (RULE-20) — the host collects contributions with `getAllOrEmpty` / `getItOrNull`.
+4. Export the new navigator from its API package first (Step 1 added a file there; without this
+   the impl reports `Undefined name 'ProfileNavigator'`), then codegen, then the feature's barrels
+   (after `build_runner` — RULE-75), then a **full restart** (hot reload does not pick up new DI
+   registrations):
    ```bash
-   dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
+   dart tools/barrel_generator/generate.dart modules/profile/api/lib
    dart run build_runner build --workspace
    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    ```
@@ -142,7 +142,7 @@ The shell must stay buildable when any feature package is deleted. It talks to c
 - `NavigatorWrapperWidget` drives the first-frame boot redirect through `ISessionState`.
 - Splash is managed by `MainScope`, **not** a GoRouter route; absent `IAppSplashScreen` the
   app falls back to the native splash.
-- Impl classes: `*NavigatorImpl` in `*_navigator_impl.dart` — never `I*Navigator`.
+- Impl classes: `*NavigatorImpl` in `*_navigator_impl.dart` (RULE-78).
 - Missing modules must not crash (`platform/shell/app_shell/lib/presentation/navigation/app_router.dart`):
   no route modules → empty lists; no destination → a placeholder branch at `/_empty_dashboard`;
   no `IAppEntryLocation` → the first destination's path (else `/_empty_dashboard`); no

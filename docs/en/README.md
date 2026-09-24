@@ -74,7 +74,7 @@ Short, dense, built for Ctrl+F.
 
 | Page | Answers |
 |---|---|
-| [`01_rules.md`](reference/01_rules.md) | What is allowed, what is forbidden, and *why* — for every layer. |
+| [`01_rules.md`](reference/01_rules.md) | The rule registry — every rule once, as `RULE-NN`, with why, what enforces it and how to verify. |
 | [`02_naming.md`](reference/02_naming.md) | What do I call this file, this class, this folder? |
 | [`03_tooling.md`](reference/03_tooling.md) | Which script do I run, with what arguments, and when? |
 | [`04_review_checklist.md`](reference/04_review_checklist.md) | What must hold before this PR merges? |
@@ -115,6 +115,19 @@ Building, signing and shipping.
 
 ---
 
+## Documentation contract
+
+The full contract is in [`CONTRIBUTING.md` § 5](../../CONTRIBUTING.md#5-documentation-contract). In short:
+
+1. **Source of truth, most authoritative first:** the code → the rule registry ([`reference/01_rules.md`](reference/01_rules.md)) → `docs/en/**` → `CLAUDE.md` / `.agents/AGENTS.md` / skills → `README.md` → `docs/vi/**`. When two disagree, fix the lower one.
+2. **A rule is stated once**, in the registry. Everywhere else cites its `RULE-NN` and links there; `docs_check` fails on an id the registry does not define.
+3. **`docs/vi` mirrors `docs/en`** — same files, headings, code blocks and table rows, in the same PR. After syncing a translation, stamp it: `dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md`.
+4. **Never document an intention.** Code samples are copied from real files; commands run against the tree in that commit; limitations are stated plainly.
+
+History that is no longer current guidance lives in [`../history/`](../history/restructure-log.md), English only.
+
+---
+
 ## Conventions in these pages
 
 - **Every link is relative.** They work on GitHub, in an IDE preview, and on a local docs server alike.
@@ -123,4 +136,4 @@ Building, signing and shipping.
 - Where a rule has an approved exception, the exception is written down with its reasoning — so a later audit does not "fix" it by mistake.
 
 > [!NOTE]
-> The feature, domain and data packages shipped here (auth, cache, home, settings, onboarding, splash, dashboard) are **reference sample code**. They demonstrate the wiring; they are patterns to copy or delete, not production logic. The AI-agent rules live in [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md).
+> The feature, domain and data packages shipped here (auth, cache, home, settings, onboarding, splash, dashboard) are **reference sample code**. They demonstrate the wiring; they are patterns to copy or delete, not production logic. AI agents start from [`../../CLAUDE.md`](../../CLAUDE.md) or [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md), which cite the registry rather than restate it.

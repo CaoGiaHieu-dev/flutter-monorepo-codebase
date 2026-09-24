@@ -8,6 +8,8 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 ## 0. Ba luật chi phối mọi package core
 
+Ba luật áp dụng cho mọi thứ trong trang này — RULE-01, RULE-44 / RULE-46 (cơ chế, không phải chính sách) và RULE-09 trong [bảng đăng ký](../reference/01_rules.md#bảng-đăng-ký-luật).
+
 **Core không được phụ thuộc feature hay data.** Có ba ngoại lệ đã duyệt, liệt kê ở [phần tổng quan](01_overview.md#các-ngoại-lệ-đã-được-duyệt). `tools/arch_check/check.dart` cưỡng chế danh sách này ở mọi PR.
 
 **Core cấp cơ chế, không cấp chính sách.** `core_storage` cho bạn `StorageValue<T>`; nó không quyết định rằng tồn tại một key tên `token`. `core_database` cho bạn kết nối và hợp đồng migration; nó không biết ý nghĩa nghiệp vụ của bảng. Hễ một package core bắt đầu gọi tên một khái niệm domain cụ thể, cái tên đó thuộc về chỗ khác.
@@ -412,7 +414,7 @@ Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`
 Điều gì giúp đường boot dùng chung an toàn trên web:
 
 - `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Shell không gọi chúng ở đó: `runShellApp` kiểm tra `kIsWeb` trước `Platform.isIOS`, `GoRouteDataCustom.buildPage` trả về trước nhánh `Platform.isIOS`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
-- `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ. Trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được; cài vào thì vô hại nhưng gây hiểu lầm, và dòng `ERROR` "not pinned" từng ghi ra mô tả một cấu hình sai mà web không thể sửa.
+- `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ. Trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được; cài vào thì vô hại nhưng gây hiểu lầm, và dòng `ERROR` "not pinned" từng ghi ra mô tả một cấu hình sai mà web không thể sửa. Trong test, `AppInitializer.debugIsWebOverride` đóng vai `kIsWeb`.
 
 Các lỗ hổng đã biết, chưa sửa ở đây:
 

@@ -332,7 +332,7 @@ abstract class HomeProfileEvent with _$HomeProfileEvent {
 }
 ```
 
-Ba quy tắc bắt buộc:
+Ba quy tắc bắt buộc (RULE-51, RULE-52):
 
 1. **Event subclass phải private** — `_HomeProfileStarted`, không phải `HomeProfileStarted`. Chúng không được lộ ra ngoài package.
 2. **Bố cục `part` / `part of`** để BLoC gọi được các subclass private đó:

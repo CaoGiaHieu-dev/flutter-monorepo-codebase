@@ -223,9 +223,13 @@ Dữ liệu đến từ SQLite chứ không phải API, nên không có hợp đ
 
 ### Quy tắc 1 — trả Model, không bao giờ trả Entity
 
+Bảng đăng ký: RULE-41.
+
 Nhiệm vụ của data source dừng ở mức "object có kiểu". Ánh xạ sang Domain là việc của repository.
 
 ### Quy tắc 2 — không để lộ kiểu của tầng vận chuyển
+
+Bảng đăng ký: RULE-41.
 
 Đây chính là lý do `CacheEntryModel` tồn tại. `modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
@@ -267,9 +271,13 @@ Inject nguyên object database sẽ trao cho lớp này **mọi DAO** có trên 
 
 ### Quy tắc 3 — để exception nổi lên
 
+Bảng đăng ký: RULE-42.
+
 Data source **không** bắt lỗi. `execute()` trong repository là điểm bắt duy nhất; nuốt lỗi ở tầng dưới đồng nghĩa repository báo thành công cho một lời gọi đã thất bại.
 
 ### Quy tắc 4 — storage key thuộc về package sở hữu nó
+
+Bảng đăng ký: RULE-44.
 
 `core_storage` chỉ cung cấp cơ chế. Mỗi bên tiêu thụ tự khai `StorageValue` của mình và giữ key trong `utils/` của chính nó.
 

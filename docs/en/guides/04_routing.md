@@ -281,11 +281,11 @@ getIt<AuthNavigator>().toLogin(context);
 
 ### Rules
 
-- A Navigator interface exposes **only** routes its own feature owns.
-- **Never** hardcode a path string or call `GoRouter.of(context).go('/auth/login')` to reach another feature.
-- **`BuildContext` must be passed in directly from the calling widget.** Do not reach for `NavigatorKeys.*.currentContext` or `appRouter.currentContext` — those bypass the widget lifecycle and produce "used after dispose" bugs.
-- Use `getItOrNull` at call sites that must survive the target feature being removed.
-- **The app shell uses no module navigator.** A signed-out user goes to `ISignInLocation.path`, a signed-in one to `IPostSignInLocation.path` — product-neutral `core_di` contracts the session owner and the landing module contribute (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` calls `context.go(path)` itself.
+- **RULE-22** · A Navigator interface exposes **only** routes its own feature owns.
+- **RULE-22** · **Never** hardcode a path string or call `GoRouter.of(context).go('/auth/login')` to reach another feature.
+- **RULE-23** · **`BuildContext` must be passed in directly from the calling widget.** Do not reach for `NavigatorKeys.*.currentContext` or `appRouter.currentContext` — those bypass the widget lifecycle and produce "used after dispose" bugs.
+- **RULE-12** · Use `getItOrNull` at call sites that must survive the target feature being removed.
+- **RULE-22** · **The app shell uses no module navigator.** A signed-out user goes to `ISignInLocation.path`, a signed-in one to `IPostSignInLocation.path` — product-neutral `core_di` contracts the session owner and the landing module contribute (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` calls `context.go(path)` itself.
 
 ---
 

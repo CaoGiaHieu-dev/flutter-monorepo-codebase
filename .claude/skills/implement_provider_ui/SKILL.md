@@ -1,6 +1,6 @@
 ---
 name: implement_provider_ui
-description: Guide for UI state management using Provider (BaseProvider, executeOperation, BaseViewWidget, ProviderStateListener).
+description: Use when a screen's logic is written with Provider — "implement screen logic using Provider", "automate loading/error states", "show a dialog when state changes", pagination with load-more. Covers BaseProvider<T> with executeOperation, BaseViewWidget rendering, ProviderStateListener side-effects and route-level ChangeNotifierProvider.
 ---
 
 # 🧠 Skill: UI State Management with Provider (Implement Provider UI)
@@ -9,8 +9,13 @@ Use this skill when requested to: "implement screen logic using Provider", "auto
 
 > [!NOTE]
 > This is the more complete of the two state-management branches: `BaseProvider` ships
-> `executeOperation`, `StateManager`, `LoadMoreMixin` and `ensureInitialized`. The BLoC
-> branch (`implement_bloc_ui`) has no equivalent automation — pick deliberately.
+> `executeOperation`, `StateManager`, `LoadMoreMixin` and `ensureInitialized`. The BLoC branch
+> (`implement_bloc_ui`) has `emitResult` for `BlocViewState<T>`, but no counterpart of
+> `OperationGlobalConfig` hooks, `errorStateBuilder` or `LoadMoreMixin` — pick deliberately.
+>
+> **Guide:** [`docs/en/guides/03_state_management.md`](../../../docs/en/guides/03_state_management.md).
+> **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-10, RULE-21, RULE-30,
+> RULE-34, RULE-36, RULE-50.
 
 ---
 
@@ -188,8 +193,8 @@ Widget build(BuildContext context, GoRouterState state) {
 ```
 
 > [!CAUTION]
-> Never register a screen-scoped ViewModel as a singleton, and never wrap the `Page` in a
-> second `ChangeNotifierProvider` — both cause duplicate instances and leaks.
+> Screen-scoped means `@injectable` (RULE-10), and the `Page` never wraps itself in a second
+> `ChangeNotifierProvider` (RULE-21).
 
 ---
 

@@ -223,9 +223,13 @@ Rows come from SQLite, not from an API, so there is no JSON contract to honour �
 
 ### Rule 1 — return Models, never Entities
 
+Registry: RULE-41.
+
 A data source's job stops at "typed object". Mapping to Domain is the repository's job.
 
 ### Rule 2 — never leak the transport type
+
+Registry: RULE-41.
 
 This is the rule that `CacheEntryModel` exists to satisfy. `modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
@@ -267,9 +271,13 @@ Injecting `CacheDatabase` itself would hand this class every DAO on that databas
 
 ### Rule 3 — let exceptions bubble
 
+Registry: RULE-42.
+
 Data sources do **not** catch. `execute()` in the repository is the single catch point; swallowing an error lower down means the repository reports success on a failed call.
 
 ### Rule 4 — storage keys belong to the package that owns them
+
+Registry: RULE-44.
 
 `core_storage` provides only the mechanism. Each consumer declares its own `StorageValue`s and keeps its keys in its own `utils/`.
 

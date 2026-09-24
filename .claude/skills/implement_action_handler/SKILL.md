@@ -1,11 +1,15 @@
 ---
 name: implement_action_handler
-description: Guide for declaring cross-feature UI Action Handler interfaces in the owning module's API package (<id>_api) and implementing them in the owning feature.
+description: Use when feature A must trigger a UI-bound action owned by feature B without importing it — e.g. "call logout from settings", "add an action handler", "trigger another feature's dialog or provider method". Declares I*ActionHandler in the owner's <id>_api package, implements it in the owning feature's handlers/, and resolves it with getItOrNull.
 ---
 
 # 🎛️ Skill: Implement Cross-Feature Action Handler
 
 Use this skill when requested to: "call logout from settings without importing auth", "trigger Feature B UI action from Feature A", "add an Action Handler", etc.
+
+**Guide:** [`docs/en/guides/10_cross_feature.md`](../../../docs/en/guides/10_cross_feature.md).
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-04, RULE-12, RULE-23, RULE-25,
+RULE-75, RULE-78.
 
 ---
 
@@ -62,13 +66,9 @@ getItOrNull<IAuthActionHandler>()?.logout(context);
 The consumer lists `<owner>_api` in its `dependencies:` and MUST NOT import the owning feature package.
 
 > [!CAUTION]
-> **Prefer `getItOrNull` over `getIt` for cross-feature calls.** The app must still run when
-> any feature package is deleted, and the handler's implementation lives in the *owning*
-> feature. `getIt<T>()` throws when that feature is gone; `getItOrNull<T>()?` degrades to a
-> no-op.
->
-> If the action must visibly do *something* when the owner is absent, branch on the null and
-> show a fallback rather than letting the widget throw.
+> Resolve it with `getItOrNull` (RULE-12 — arch_check R8 blocks a throwing `getIt` here). If the
+> action must visibly do *something* when the owner is absent, branch on the null and show a
+> fallback rather than letting the widget throw.
 
 ### Step 4: Barrels + Code Gen
 ```bash
@@ -90,7 +90,7 @@ resolve the new interface through the `<owner>_api` barrel.
 | Interface | `i_<name>_action_handler.dart` | `I*ActionHandler` |
 | Implementation | `<name>_action_handler_impl.dart` | `*ActionHandlerImpl` |
 
-**ABSOLUTELY FORBIDDEN**: Naming an implementation with the `I` prefix (e.g., `IAuthActionHandlerImpl` as a class name for the interface, or renaming navigator impls to `IAuthNavigator`).
+The `I` prefix belongs to the interface only (RULE-78, arch_check R15).
 
 ---
 

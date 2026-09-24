@@ -1,28 +1,27 @@
 ---
 name: implement_dependency_injection
-description: Declare, register, and wire Dependency Injection (DI) using the Injectable and GetIt libraries.
+description: Use when registering or wiring anything in GetIt/injectable — "register a service/repository", "inject a provider or bloc", "fix <Type> is not registered", adding a package's DI module, binding a second interface, choosing @injectable vs @lazySingleton, or placing a package in an app manifest's di_groups.
 ---
 
 # 💉 Skill: Implement Dependency Injection (Implement Dependency Injection)
 
 Use this skill when requested to: "register a new Service/Repository in DI", "inject a ViewModel/Provider", "fix a GetIt instance not found error", etc.
 
+**Guide:** [`docs/en/guides/05_di.md`](../../../docs/en/guides/05_di.md).
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-06, RULE-10, RULE-11, RULE-12,
+RULE-13, RULE-14, RULE-15, RULE-16, RULE-45, RULE-47, RULE-63.
+
 ---
 
-## 📋 Annotation Rules
+## 📋 Choosing the annotation
 
-1. **ViewModels / Feature Providers / Blocs**:
-   - **Must use `@injectable`** (factory registration) to instantiate a new object every time it is requested (prevents memory leaks by disposing of resources when the screen is closed).
-   - **DO NOT USE** `@singleton` or `@lazySingleton` for feature view models or UI controllers.
-2. **Global app controllers** (e.g. `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`):
-   - Allowed to use `@lazySingleton` / `@singleton`.
+1. **Screen controllers** (Provider, Bloc, Cubit) — `@injectable` (RULE-10).
+2. **Global app controllers** (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`) — `@lazySingleton`.
 3. **Repositories / Services**:
    - Use `@lazySingleton` (lazily instantiated and cached) or `@singleton`.
    - If registering an implementation class for an interface: `@LazySingleton(as: IMyRepository)`.
    - **UseCases are `@injectable`** — a use case is a factory, never a singleton (every one in the template is).
-4. **Storage owners** (a class holding `StorageValue` fields):
-   - **Must** be a singleton + `@PostConstruct(preResolve: true)`. `@injectable` would hand
-     out fresh instances with an empty RAM cache. See `implement_package_storage`.
+4. **Storage owners** (a class holding `StorageValue` fields) — singleton + `@PostConstruct(preResolve: true)` (RULE-45). See `implement_package_storage`.
 
 ---
 
@@ -46,11 +45,17 @@ class NetworkConfigImpl implements NetworkConfig { ... }
 Deferring is safe whenever every consumer is itself lazy — nothing resolves it during startup.
 
 > [!CAUTION]
-> **`flutter analyze` cannot catch this** — it is a runtime ordering fault, not a type error.
-> Verify by reading the generated files after `build_runner`. `apps/mobile/lib/di/injection.config.dart`
-> holds only the **module order** (one `…PackageModule().init(gh)` per package); your type's
-> registration, and the `gh<Dep>()` calls its constructor makes, are in its package's
-> `lib/di/module.module.dart`:
+> **`flutter analyze` cannot catch this** (RULE-13) — it is a runtime ordering fault. **Verify with
+> the DI smoke test**, which boots the real graph for every flavor (RULE-63; CI Gate 3):
+> ```bash
+> cd apps/mobile && flutter test test/di_smoke_test.dart
+> cd apps/admin && flutter test test/di_smoke_test.dart
+> ```
+> If you added a plugin that DI touches (`@preResolve`, `@PostConstruct(preResolve: true)`), add its
+> test double there. To **diagnose** a failure, read the generated files after `build_runner`:
+> `apps/mobile/lib/di/injection.config.dart` holds only the **module order** (one
+> `…PackageModule().init(gh)` per package); your type's registration, and the `gh<Dep>()` calls its
+> constructor makes, are in its package's `lib/di/module.module.dart`:
 > ```bash
 > grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart   # module order
 > grep -rn -A4 "YourType" modules/*/*/lib/di/module.module.dart platform/*/*/lib/di/module.module.dart
@@ -121,8 +126,8 @@ exposes four lookups; picking the wrong one breaks feature removal:
 | `getAll<T>()` | **throws** |
 | `getAllOrEmpty<T>()` | returns empty iterable |
 
-Anything the **app shell** consumes from a feature must use the `…OrNull` / `…OrEmpty`
-variants plus a fallback, so deleting that feature leaves the app bootable.
+A module-owned contract is resolved with the `…OrNull` / `…OrEmpty` variants plus a fallback
+outside its own module (RULE-12, arch_check R8).
 
 ---
 
@@ -149,8 +154,7 @@ class MyProvider extends BaseProvider<MyEntity> {
 }
 ```
 
-Constructor injection only — **never** call `getIt<T>()` inside a ViewModel, Repository or
-UseCase.
+Constructor injection only (RULE-11).
 
 ### Step 3: Compose the package into the app — through its manifest
 *Note: `module_generator` adds a new module to every `app_manifest.yaml` for you.*
@@ -181,10 +185,9 @@ Then regenerate:
 dart tools/composer/composer.dart sync --app <id>
 ```
 
-**ABSOLUTELY FORBIDDEN:**
-- Putting `core_base_ui` in `core` / `phase: before` (Language/Theme providers will fail to resolve storage interfaces).
-- Putting `core_notifications` in `core` (it would resolve `FirebaseOptions` before the app registers them).
-- Hand-editing `injection.dart`, the app's managed path dependencies, or the root `workspace:` list — `composer verify` (CI Gate 0) fails on drift.
+**Do not** put `core_base_ui` in `core` (its providers inject the shell's storage adapters) or
+`core_notifications` in `core` (it injects the app's `FirebaseOptions`) — both break RULE-13 and the
+smoke test catches it. Never hand-edit the generated regions (RULE-16).
 
 App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
 `NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_shell_adapters` and register through
@@ -213,10 +216,7 @@ Then **hot restart** — new DI registrations are not applied by hot reload.
 
 ### Step 5: Declare the dependency explicitly
 
-Pub Workspaces share one `package_config.json`, so a package you *use* but never *declare*
-still compiles — and breaks the moment the package is extracted. Every import must have a
-matching `pubspec.yaml` entry, in `dependencies` (not `dev_dependencies`) when production
-code uses it. Verify with:
+Every import needs a `dependencies:` entry (RULE-06). Verify with:
 
 ```bash
 dart tools/arch_check/check.dart                      # R5: imported but not in `dependencies:` (blocking)

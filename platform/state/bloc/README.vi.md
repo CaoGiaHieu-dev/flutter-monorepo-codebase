@@ -28,7 +28,7 @@ Barrel `package:bloc_state_management/bloc_state_management.dart` re-export toà
 **`BlocViewState<T>` không bắt buộc** với BLoC. Đây là state agnostic sẵn có (giống Provider) cho màn hình CRUD / load-success-error đơn giản.
 
 - **Nên dùng `BlocViewState<T>`** khi UI chỉ cần `initial` / `loading` / `success` / `error` quanh một payload `T`.
-- **Được phép (và khuyến khích) tự tạo Freezed state riêng** khi feature cần state phức tạp hơn (nhiều field, wizard, form dirty, pagination + filter kết hợp, v.v.). Khi đó `BaseBloc<Event, YourCustomState>` là hợp lệ — chỉ cần giữ Event Freezed private theo AGENTS §13.
+- **Được phép (và khuyến khích) tự tạo Freezed state riêng** khi feature cần state phức tạp hơn (nhiều field, wizard, form dirty, pagination + filter kết hợp, v.v.). Khi đó `BaseBloc<Event, YourCustomState>` là hợp lệ — chỉ cần giữ Event Freezed private theo RULE-51 ([`docs/vi/reference/01_rules.md`](../../../docs/vi/reference/01_rules.md)).
 
 Kết hợp Pattern Matching (`when` / `maybeWhen`) trên Freezed state để UI type-safe. Các biến thể của `BlocViewState` là private, nên với nó hãy dùng `when` / `maybeWhen` / `whenOrNull` thay vì `switch`.
 

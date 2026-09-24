@@ -74,7 +74,7 @@ Ngắn, đặc, làm ra để Ctrl+F.
 
 | Trang | Trả lời |
 |---|---|
-| [`01_rules.md`](reference/01_rules.md) | Cái gì được phép, cái gì cấm, và *vì sao* — cho từng tầng. |
+| [`01_rules.md`](reference/01_rules.md) | Bảng đăng ký luật — mỗi luật một lần, dạng `RULE-NN`, kèm lý do, thứ thực thi và cách kiểm chứng. |
 | [`02_naming.md`](reference/02_naming.md) | File này, class này, thư mục này đặt tên là gì? |
 | [`03_tooling.md`](reference/03_tooling.md) | Chạy script nào, với tham số gì, khi nào? |
 | [`04_review_checklist.md`](reference/04_review_checklist.md) | PR này phải thoả điều gì trước khi merge? |
@@ -115,6 +115,19 @@ Build, ký và phát hành.
 
 ---
 
+## Hợp đồng tài liệu
+
+Bản đầy đủ nằm ở [`CONTRIBUTING.md` § 5](../../CONTRIBUTING.md#5-documentation-contract). Tóm tắt:
+
+1. **Nguồn chân lý, uy tín nhất trước:** code → bảng đăng ký luật ([`reference/01_rules.md`](reference/01_rules.md)) → `docs/en/**` → `CLAUDE.md` / `.agents/AGENTS.md` / skill → `README.md` → `docs/vi/**`. Khi hai nơi mâu thuẫn, sửa nơi thấp hơn.
+2. **Một luật được phát biểu một lần**, trong bảng đăng ký. Mọi nơi khác trích `RULE-NN` và link về đó; `docs_check` fail khi gặp id mà bảng đăng ký không định nghĩa.
+3. **`docs/vi` phản chiếu `docs/en`** — cùng file, heading, code block và dòng bảng, trong cùng PR. Sau khi đồng bộ một bản dịch, đóng dấu nó: `dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md`.
+4. **Không bao giờ viết tài liệu cho một ý định.** Code mẫu chép từ file thật; lệnh chạy được trên cây code của commit đó; hạn chế được nói thẳng.
+
+Lịch sử không còn là hướng dẫn hiện hành nằm ở [`../history/`](../history/restructure-log.md), chỉ có tiếng Anh.
+
+---
+
 ## Quy ước trong bộ tài liệu này
 
 - **Mọi link đều là đường dẫn tương đối.** Chúng chạy đúng trên GitHub, trong bản xem trước của IDE, và trên docs server chạy cục bộ.
@@ -123,4 +136,4 @@ Build, ký và phát hành.
 - Nơi nào một luật có ngoại lệ đã được duyệt, ngoại lệ đó được ghi lại kèm lý do — để lần audit sau không ai "sửa" nhầm.
 
 > [!NOTE]
-> Các package feature / domain / data có sẵn ở đây (auth, cache, home, settings, onboarding, splash, dashboard) là **mã mẫu tham chiếu**. Chúng minh hoạ cách wiring; đó là pattern để copy hoặc xoá, không phải business logic production. Luật dành cho AI Agent nằm ở [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md).
+> Các package feature / domain / data có sẵn ở đây (auth, cache, home, settings, onboarding, splash, dashboard) là **mã mẫu tham chiếu**. Chúng minh hoạ cách wiring; đó là pattern để copy hoặc xoá, không phải business logic production. AI agent bắt đầu từ [`../../CLAUDE.md`](../../CLAUDE.md) hoặc [`../../.agents/AGENTS.md`](../../.agents/AGENTS.md), vốn trích bảng đăng ký thay vì phát biểu lại.

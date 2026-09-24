@@ -57,8 +57,12 @@ It takes no other argument: anything besides `--help` (a `--fix`, a typo of `--h
 | R9 | `platform_kernel` and every `*_contracts` package neither import nor **declare** a Flutter-bound package |
 | R10 | Nothing in an app (`apps/<id>/`) imports a module (its API package included) — only `injection.dart`, the composition root, may name one. (`platform/shell/app_shell` is core, so R1 covers it) |
 | R11 | Platform group direction — a `platform/*` package sits at `platform/<group>/<package>` and its `dependencies:` (not dev) name only platform packages its group may reach: `layers/domain` nothing; foundation → foundation, `layers/domain`; `layers/data` → foundation, `layers/domain`; infra → foundation, layers; ui → foundation, ui; state → foundation, layers, ui; shell → any |
+| R12 | No PowerShell — no `*.ps1` anywhere in the working tree (Windows' default execution policy blocks unsigned scripts); write a cross-platform Dart script |
+| R13 | No analyzer suppressions — no `// ignore:` / `// ignore_for_file:` line comment in any hand-written `.dart` (`tools/` and `test/` included; generated `*.g` / `.freezed` / `.config` / `.module` / `.gr` / `.mocks.dart`, `firebase_options_*` and `lib/src/gen/**` skipped). Text inside a string or a `///` doc comment is not reported |
+| R14 | Data source folders are `data_sources/` — no directory named `datasources` (any case) under `modules/` or `platform/`, empty ones included |
+| R15 | The `I` prefix is reserved for interfaces — under `modules/`, `platform/` and `apps/*/lib` a class named `I[A-Z]…` must be `abstract`, `interface` or `sealed`; a plain / `base` / `final` class or a non-abstract `mixin class` fails. A concrete class starting with a two-letter acronym (`IOClient`) is flagged too |
 
-The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fourth means editing the allow-list in `check.dart` — without that the build fails — and recording the edge in `.agents/AGENTS.md` §2, which the tool does not read.
+The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fourth means editing the allow-list in `check.dart` — without that the build fails — and recording the edge under RULE-01 in [`01_rules.md`](01_rules.md) (both locales), which the tool does not read.
 
 R7 exists because `flutter analyze` cannot see the difference. `core_responsive` ships no `num` extension, so `16.h` cannot resolve against it — but an extension declared in another package, or one someone adds locally, would type-check fine while reading a global that never notifies anyone. Only `context.h(16)` registers an `InheritedWidget` dependency on `ResponsiveScope` and therefore rebuilds when metrics change. The bare form is a silent stale-value bug, and a linter has no rule for it. The check only runs on files that reference `core_responsive`, and matches a numeric or closing-paren receiver followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 
@@ -67,6 +71,8 @@ R10 exists because removability is a promise the template makes in four document
 R11 exists because the group direction was documented in four places and held only by review. The group is read from the folder — the one thing that records it — so a package moved into the wrong group, or left outside any, fails as surely as a bad edge. Dev dependencies are excluded on purpose: they never reach a consumer's graph (`platform_app_shell`'s tests use `core_storage` for fakes).
 
 R8 exists because removability is a property the app shell depends on, and nothing was holding it. The tool derives the set at run time: every type declared in `core_di` or in a module API package (`<id>_api`), narrowed to those with an `implements` / `extends` / `as:` binding in a package under `modules/` — any layer, so `ISessionGateway`, implemented in `data_auth`, is in the set as surely as a feature's navigator — and keyed by the module that implements it. A throwing lookup against one of those compiles — the calling package depends on `core_di`, not on the module — and then crashes at runtime in any build without that module. Contracts implemented in the app shell (`IThemeStorage`, `ILanguageStorage`) are always registered, so they are deliberately outside the set. A module is removed whole, so every package of the implementing module may resolve its contracts eagerly: if one of its packages is in the build, so is the registration.
+
+R12–R15 read files, not the package graph: every file git does not ignore — tracked, new, and modules checked out as submodules (outside a git checkout, every file). R13 and R15 run a small Dart lexer (`tools/arch_check/dart_source.dart`) that blanks comments and string literals first, so text inside a string, a template or a doc comment is never reported. Each rule has a registry id: RULE-72 (R12), RULE-71 (R13), RULE-40 (R14), RULE-78 (R15).
 
 R5 is the mirror image of `unused_checker`: that tool finds dependencies *declared but unused*, this one finds them *used but undeclared*. Pub Workspaces hide the second kind entirely — everything resolves locally through the shared `package_config.json` and only breaks when a package is extracted or published.
 
@@ -122,7 +128,7 @@ Exit `0` when it pruned or found nothing to prune (a full checkout — it writes
 **Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names, collects every one that is not there, prints them grouped by file, then exits 1. References into a sample bundle you removed with `remove_sample` are the one exception — summarised as INFO, never a failure (below).
 
 ```bash
-dart tools/docs_check/check.dart            # exits 1 on any dead reference or en ↔ vi parity mismatch
+dart tools/docs_check/check.dart            # exits 1 on a dead reference, en ↔ vi parity mismatch or RULE-ID problem
 dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block and every removed-sample reference
 dart tools/docs_check/check.dart --help     # usage; any other argument exits 64
 ```
@@ -167,6 +173,21 @@ Anything else is drift, and the fix is to correct the document. An entry without
 
 A difference nearly always means a section, command or table row reached one language only — translate it across. A genuinely intentional one goes in `tools/docs_check/parity_allowlist.txt` as `<english file> <metric>` (or `*` for every metric) with a `#` reason; an entry without a reason is refused, and one that no longer matches any difference prints a `WARN` so it can be deleted. The list is empty today: every pair has the same shape. The logic lives in `tools/docs_check/parity.dart`.
 
+**RULE-ID citations.** Every `RULE-<digits>` token in any Markdown file — code blocks, `SKILL.md` files and `tools/code_review/review_prompt.md` included — must be the id of a `| RULE-NN |` row in the registry of [`01_rules.md`](01_rules.md). No id may be defined twice, and `docs/vi/reference/01_rules.md` must define exactly the same ids. Each failure is printed as `file:line` and exits 1. A retired rule keeps its row, marked retired, so old citations still resolve; an id is never reused. While no registry exists the check is skipped with one `INFO` line. The logic lives in `tools/docs_check/rule_ids.dart`.
+
+**Stale translations (advisory).** A `docs/vi` file may start with a stamp naming the English commit it was synced to:
+
+```text
+<!-- translated-from: docs/en/<path>.md@<short-sha> -->
+```
+
+A normal run prints one `INFO` line counting the translations whose English source has commits after the stamped one — it never fails. `--stale-translations` lists them; `git diff <sha> -- <en file>` shows what to carry across. After syncing, commit the English change first, then run `--stamp-translations docs/vi/<file>.md`; without file arguments it stamps every `docs/vi` file as current, which is right only when first adopting stamps. The logic lives in `tools/docs_check/translations.dart`.
+
+```bash
+dart tools/docs_check/check.dart --stale-translations                       # list translations behind their English source
+dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md      # after syncing one
+```
+
 ---
 
 ## `sample_cleanup`
@@ -184,7 +205,7 @@ Its source of truth is [`tools/sample_manifest.yaml`](../../../tools/sample_mani
 
 The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from the root `pubspec.yaml` and from every app's manifest, pubspec and `injection.dart`, the **API packages it keeps** (below), **and which other samples break and how** (the `breaks` list in `tools/sample_manifest.yaml` — empty for every sample today) — as well as the couplings that degrade safely, such as `feature_settings` hiding its logout row when `getItOrNull<IAuthActionHandler>()` is null, or `feature_home` showing the signed-out state when the route's `getItOrNull<ISessionStatusStream>()` is null.
 
-Both the dry-run and `--apply` also count the **Markdown references** to the paths the removal deletes — backticked paths and relative links in every `*.md` (`docs/`, `.agents/`, READMEs), matched the way `docs_check` matches them. They are informational: `dart tools/docs_check/check.dart` (CI Gate 5) recognises them as pointing into a removed sample bundle, prints one INFO summary for the bundle and still passes — update those docs at your leisure. That is also why the tool never edits `tools/sample_manifest.yaml`: the bundle definition staying there is how `docs_check` knows. The first 15 are printed; `--verbose` lists them all.
+Both the dry-run and `--apply` also count the **Markdown references** to the paths the removal deletes — backticked paths and relative links in every `*.md` (`docs/`, `.claude/`, READMEs), matched the way `docs_check` matches them. They are informational: `dart tools/docs_check/check.dart` (CI Gate 5) recognises them as pointing into a removed sample bundle, prints one INFO summary for the bundle and still passes — update those docs at your leisure. That is also why the tool never edits `tools/sample_manifest.yaml`: the bundle definition staying there is how `docs_check` knows. The first 15 are printed; `--verbose` lists them all.
 
 **A module's API package is kept while something still imports it.** `auth` includes `auth_api`, but `feature_onboarding` and `feature_settings` depend on it; deleting it would break their compile. So any `modules/<id>/api` package of the bundle that a package outside the bundle still declares (`dependencies:` or `dev_dependencies:`) is **kept**: the dry run marks it `k` with its importers, `--apply` says so again, the root `workspace:` entry stays and every manifest entry that listed it is rewritten to `{ id: <id>, layers: [api] }`. Its contracts then have no implementation — the consumers' `getItOrNull` returns null and they take their fallback. Once nothing imports it, run `remove_sample <id> --apply` again and it goes too. `docs_check` treats a bundle whose only survivor is its API package as removed.
 
@@ -438,7 +459,7 @@ Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` �
 
 | File | Covers |
 |:---|:---|
-| `arch_check_test.dart` | A clean and a violating fixture for every rule R1–R11 (R6 warns and still exits `0`), the group DAG edge by edge (ui → state, infra → infra, anything from `domain_core`, foundation → shell, a package outside a group folder) and the module API rules (own domain, another API, a non-foundation platform package, a throwing lookup, R1/R10 imports); an empty workspace fails; an unknown flag exits `64` |
+| `arch_check_test.dart` | A clean and a violating fixture for every rule R1–R15 (R6 warns and still exits `0`), the group DAG edge by edge (ui → state, infra → infra, anything from `domain_core`, foundation → shell, a package outside a group folder) and the module API rules (own domain, another API, a non-foundation platform package, a throwing lookup, R1/R10 imports); an empty workspace fails; an unknown flag exits `64` |
 | `composer_test.dart` | `sync` then `verify` passes; an `api` layer is a workspace member only, an API package reached only through a feature joins the workspace, a missing one fails `verify`; a hand-edited region, a module missing from disk, `phase: befor`, an unknown layer and a duplicate module exit `1` naming the key path |
 | `dependency_sync_test.dart` | `--check`: in step passes; a version mismatch, a malformed catalog and invalid YAML exit `1` |
 | `docs_check_test.dart` | A dead path or link exits `1`; a `<placeholder>` span, an allowlisted path and a removed sample bundle (INFO) exit `0`; the root comes from the script, not the cwd; en ↔ vi parity: a missing heading, code block or table row exits `1` with both counts, fences are ignored, an allowlisted difference passes, a stale entry warns, an entry without a reason is refused |

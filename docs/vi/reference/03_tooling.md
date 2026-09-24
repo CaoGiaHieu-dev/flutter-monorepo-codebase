@@ -57,8 +57,12 @@ Tool không nhận tham số nào khác: bất cứ thứ gì ngoài `--help` (m
 | R9 | `platform_kernel` và mọi package `*_contracts` không import **và không khai** package kéo theo Flutter |
 | R10 | Không file nào trong một app (`apps/<id>/`) import module (kể cả package API của nó) — chỉ `injection.dart`, điểm lắp ráp, được phép gọi tên một module. (`platform/shell/app_shell` là core nên do R1 phủ) |
 | R11 | Chiều giữa các nhóm platform — package `platform/*` nằm ở `platform/<group>/<package>` và `dependencies:` (không tính dev) của nó chỉ gọi tên package platform mà nhóm của nó được chạm tới: `layers/domain` không gì cả; foundation → foundation, `layers/domain`; `layers/data` → foundation, `layers/domain`; infra → foundation, layers; ui → foundation, ui; state → foundation, layers, ui; shell → mọi nhóm |
+| R12 | Không PowerShell — không có `*.ps1` nào trong cây làm việc (chính sách thực thi mặc định của Windows chặn script chưa ký); hãy viết script Dart đa nền tảng |
+| R13 | Không tắt analyzer — không có comment dòng `// ignore:` / `// ignore_for_file:` trong bất kỳ `.dart` viết tay nào (kể cả `tools/` và `test/`; bỏ qua file sinh `*.g` / `.freezed` / `.config` / `.module` / `.gr` / `.mocks.dart`, `firebase_options_*` và `lib/src/gen/**`). Chữ nằm trong chuỗi hoặc doc comment `///` không bị báo |
+| R14 | Thư mục data source là `data_sources/` — không có thư mục nào tên `datasources` (mọi kiểu hoa/thường) dưới `modules/` hay `platform/`, kể cả thư mục rỗng |
+| R15 | Tiền tố `I` dành riêng cho interface — dưới `modules/`, `platform/` và `apps/*/lib`, class tên `I[A-Z]…` phải là `abstract`, `interface` hoặc `sealed`; class thường / `base` / `final` hay `mixin class` không abstract đều fail. Class cụ thể bắt đầu bằng từ viết tắt hai chữ (`IOClient`) cũng bị báo |
 
-Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ tư nghĩa là phải sửa danh sách cho phép trong `check.dart` — thiếu bước này build sẽ fail — và ghi cạnh đó vào `.agents/AGENTS.md` §2, file mà tool không đọc.
+Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ tư nghĩa là phải sửa danh sách cho phép trong `check.dart` — thiếu bước này build sẽ fail — và ghi cạnh đó dưới RULE-01 trong [`01_rules.md`](01_rules.md) (cả hai ngôn ngữ), file mà tool không đọc.
 
 R7 tồn tại vì `flutter analyze` không thấy được khác biệt này. Bản thân `core_responsive` không cung cấp extension nào trên `num`, nên `16.h` không phân giải được về nó — nhưng một extension khai ở package khác, hoặc do ai đó tự thêm cục bộ, vẫn type-check sạch trong khi đọc một biến toàn cục chẳng báo cho ai. Chỉ `context.h(16)` mới đăng ký dependency `InheritedWidget` lên `ResponsiveScope`, tức mới rebuild khi metrics đổi. Dạng trần là một lỗi giá trị cũ âm thầm, và không linter nào có luật cho nó. Check chỉ chạy trên file có tham chiếu `core_responsive`, và khớp receiver là số hoặc dấu đóng ngoặc theo sau bởi `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`.
 
@@ -67,6 +71,8 @@ R10 tồn tại vì tính tháo-lắp được là lời hứa template đưa ra
 R11 tồn tại vì chiều giữa các nhóm được viết ra ở bốn nơi mà chỉ review giữ nó. Nhóm được đọc từ thư mục — thứ duy nhất ghi nhận nó — nên một package bị chuyển vào sai nhóm, hay nằm ngoài mọi nhóm, fail chắc chắn như một cạnh sai. Dev dependency được loại trừ có chủ đích: chúng không bao giờ đi vào đồ thị của bên dùng (test của `platform_app_shell` dùng `core_storage` cho fake).
 
 R8 tồn tại vì khả năng tháo module là tính chất mà app shell dựa vào, nhưng trước đó không có gì giữ nó. Tool tự suy ra tập hợp lúc chạy: mọi type khai trong `core_di` hay trong một package API của module (`<id>_api`), thu hẹp lại còn những type có ràng buộc `implements` / `extends` / `as:` trong một package dưới `modules/` — ở bất kỳ tầng nào, nên `ISessionGateway` do `data_auth` implement cũng nằm trong tập hợp chẳng kém gì navigator của một feature — và gắn với module implement nó. Một lookup ném lỗi lên các type đó vẫn compile — package gọi nó phụ thuộc `core_di` chứ không phụ thuộc module — rồi crash lúc runtime ở bản build không có module đó. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký, nên cố ý nằm ngoài tập hợp này. Module bị gỡ nguyên khối, nên mọi package của chính module implement được phép resolve contract của nó theo kiểu eager: chỉ cần một package của module có trong build thì đăng ký cũng có.
+
+R12–R15 đọc file, không đọc đồ thị package: mọi file mà git không bỏ qua — đã track, mới thêm, và module được checkout dạng submodule (ngoài một git checkout thì là mọi file). R13 và R15 chạy một lexer Dart nhỏ (`tools/arch_check/dart_source.dart`) xoá trắng comment và chuỗi trước, nên chữ nằm trong chuỗi, template hay doc comment không bao giờ bị báo. Mỗi luật có id trong bảng đăng ký: RULE-72 (R12), RULE-71 (R13), RULE-40 (R14), RULE-78 (R15).
 
 R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai mà không dùng*, tool này tìm dependency *đang dùng mà không khai*. Pub Workspaces che giấu hoàn toàn loại thứ hai — mọi thứ resolve được cục bộ qua `package_config.json` dùng chung, và chỉ vỡ khi tách package ra hay publish.
 
@@ -122,7 +128,7 @@ Exit `0` khi đã cắt bớt hoặc không có gì để cắt (checkout đầy
 **Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, gom tất cả những path không tồn tại, in ra theo từng file, rồi thoát với mã 1. Ngoại lệ duy nhất là tham chiếu vào một sample bundle bạn đã gỡ bằng `remove_sample` — được tóm tắt dạng INFO, không bao giờ làm fail (xem bên dưới).
 
 ```bash
-dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết hoặc lệch cấu trúc en ↔ vi
+dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết, lệch cấu trúc en ↔ vi hoặc lỗi RULE-ID
 dart tools/docs_check/check.dart --verbose  # kèm block allowlist để copy-paste và mọi tham chiếu tới sample đã gỡ
 dart tools/docs_check/check.dart --help     # cú pháp; mọi tham số khác thoát mã 64
 ```
@@ -167,6 +173,21 @@ Mọi trường hợp khác là drift, và cách sửa là sửa tài liệu. M�
 
 Chênh lệch gần như luôn có nghĩa là một mục, một lệnh hay một dòng bảng chỉ tới được một ngôn ngữ — hãy dịch nó sang. Chênh lệch thật sự có chủ đích thì ghi vào `tools/docs_check/parity_allowlist.txt` dạng `<english file> <metric>` (hoặc `*` cho mọi metric) kèm lý do sau `#`; entry không có lý do bị từ chối, còn entry không còn khớp chênh lệch nào sẽ in `WARN` để xoá đi. Hiện danh sách này rỗng: mọi cặp đều cùng hình dạng. Logic nằm ở `tools/docs_check/parity.dart`.
 
+**Trích dẫn RULE-ID.** Mọi token `RULE-<chữ số>` trong bất kỳ file Markdown nào — kể cả trong code block, các file `SKILL.md` và `tools/code_review/review_prompt.md` — phải là id của một dòng `| RULE-NN |` trong bảng đăng ký của [`01_rules.md`](01_rules.md). Không id nào được định nghĩa hai lần, và `docs/vi/reference/01_rules.md` phải định nghĩa đúng cùng tập id. Mỗi lỗi được in dạng `file:line` và thoát 1. Luật bị bỏ vẫn giữ dòng của nó, đánh dấu retired, để trích dẫn cũ vẫn phân giải được; id không bao giờ bị tái sử dụng. Khi chưa có bảng đăng ký, phép kiểm bị bỏ qua kèm một dòng `INFO`. Logic nằm ở `tools/docs_check/rule_ids.dart`.
+
+**Bản dịch cũ (tham khảo).** Một file `docs/vi` có thể bắt đầu bằng dấu ghi tên commit tiếng Anh mà nó được đồng bộ theo:
+
+```text
+<!-- translated-from: docs/en/<path>.md@<short-sha> -->
+```
+
+Một lần chạy bình thường in một dòng `INFO` đếm số bản dịch mà nguồn tiếng Anh có commit mới hơn commit đã ghi — nó không bao giờ fail. `--stale-translations` liệt kê chúng; `git diff <sha> -- <en file>` cho thấy cần mang gì sang. Sau khi đồng bộ, commit thay đổi tiếng Anh trước, rồi chạy `--stamp-translations docs/vi/<file>.md`; không truyền file thì nó đóng dấu mọi file `docs/vi` là mới nhất, chỉ đúng khi mới bắt đầu dùng dấu. Logic nằm ở `tools/docs_check/translations.dart`.
+
+```bash
+dart tools/docs_check/check.dart --stale-translations                       # liệt kê bản dịch chậm hơn nguồn tiếng Anh
+dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md      # sau khi đồng bộ một file
+```
+
 ---
 
 ## `sample_cleanup`
@@ -184,7 +205,7 @@ Nguồn chân lý của nó là [`tools/sample_manifest.yaml`](../../../tools/sa
 
 Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml` gốc và khỏi manifest, pubspec, `injection.dart` của mọi app, **các package API nó giữ lại** (bên dưới), **và sample nào sẽ vỡ, vỡ như thế nào** (danh sách `breaks` trong `tools/sample_manifest.yaml` — hiện trống với mọi sample) — cùng các liên kết xuống cấp an toàn, như `feature_settings` ẩn dòng logout khi `getItOrNull<IAuthActionHandler>()` trả về null, hay `feature_home` hiển thị trạng thái chưa đăng nhập khi `getItOrNull<ISessionStatusStream>()` ở route trả về null.
 
-Cả dry-run lẫn `--apply` đều đếm các **tham chiếu Markdown** tới những đường dẫn sắp bị xoá — đường dẫn trong backtick và link tương đối trong mọi `*.md` (`docs/`, `.agents/`, các README), so khớp đúng như cách `docs_check` làm. Chúng chỉ mang tính thông tin: `dart tools/docs_check/check.dart` (CI Gate 5) nhận ra chúng trỏ vào một sample bundle đã gỡ, in một dòng INFO cho bundle đó và vẫn đạt — sửa các tài liệu đó lúc nào tiện. Đó cũng là lý do tool không bao giờ sửa `tools/sample_manifest.yaml`: định nghĩa bundle còn nằm đó là cách `docs_check` biết. Tool in 15 dòng đầu; `--verbose` liệt kê đủ.
+Cả dry-run lẫn `--apply` đều đếm các **tham chiếu Markdown** tới những đường dẫn sắp bị xoá — đường dẫn trong backtick và link tương đối trong mọi `*.md` (`docs/`, `.claude/`, các README), so khớp đúng như cách `docs_check` làm. Chúng chỉ mang tính thông tin: `dart tools/docs_check/check.dart` (CI Gate 5) nhận ra chúng trỏ vào một sample bundle đã gỡ, in một dòng INFO cho bundle đó và vẫn đạt — sửa các tài liệu đó lúc nào tiện. Đó cũng là lý do tool không bao giờ sửa `tools/sample_manifest.yaml`: định nghĩa bundle còn nằm đó là cách `docs_check` biết. Tool in 15 dòng đầu; `--verbose` liệt kê đủ.
 
 **Package API của module được giữ lại khi vẫn còn nơi import nó.** `auth` gồm cả `auth_api`, nhưng `feature_onboarding` và `feature_settings` phụ thuộc nó; xoá nó sẽ làm hỏng biên dịch của chúng. Vì vậy mọi package `modules/<id>/api` của bundle mà một package ngoài bundle vẫn khai (`dependencies:` hay `dev_dependencies:`) đều được **giữ lại**: dry-run đánh dấu nó `k` kèm các nơi import, `--apply` báo lại lần nữa, mục `workspace:` ở root được giữ và mọi mục manifest từng liệt kê nó được viết lại thành `{ id: <id>, layers: [api] }`. Các hợp đồng của nó khi đó không còn implementation — `getItOrNull` của nơi dùng trả về null và chúng dùng fallback. Khi không còn ai import, chạy lại `remove_sample <id> --apply` thì nó cũng bị xoá. `docs_check` coi một bundle chỉ còn sót package API là đã gỡ.
 
@@ -438,7 +459,7 @@ Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp
 
 | File | Phủ |
 |:---|:---|
-| `arch_check_test.dart` | Một fixture sạch và một fixture vi phạm cho mỗi luật R1–R11 (R6 cảnh báo mà vẫn exit `0`), DAG giữa các nhóm theo từng cạnh (ui → state, infra → infra, mọi thứ từ `domain_core`, foundation → shell, package nằm ngoài thư mục nhóm) và các luật package API (domain của chính nó, API khác, package platform ngoài foundation, lookup ném lỗi, import R1/R10); workspace rỗng thì fail; flag lạ exit `64` |
+| `arch_check_test.dart` | Một fixture sạch và một fixture vi phạm cho mỗi luật R1–R15 (R6 cảnh báo mà vẫn exit `0`), DAG giữa các nhóm theo từng cạnh (ui → state, infra → infra, mọi thứ từ `domain_core`, foundation → shell, package nằm ngoài thư mục nhóm) và các luật package API (domain của chính nó, API khác, package platform ngoài foundation, lookup ném lỗi, import R1/R10); workspace rỗng thì fail; flag lạ exit `64` |
 | `composer_test.dart` | `sync` rồi `verify` thì qua; layer `api` chỉ là workspace member, package API chỉ được chạm tới qua một feature vẫn vào workspace, thiếu nó thì `verify` fail; vùng managed bị sửa tay, module không có trên đĩa, `phase: befor`, layer lạ và module trùng exit `1` kèm đường dẫn key |
 | `dependency_sync_test.dart` | `--check`: khớp thì qua; lệch version, catalog sai định dạng và YAML hỏng exit `1` |
 | `docs_check_test.dart` | Đường dẫn hay link chết exit `1`; span `<placeholder>`, đường dẫn trong allowlist và sample bundle đã gỡ (INFO) exit `0`; gốc repo lấy từ script chứ không từ cwd; tương đương en ↔ vi: thiếu heading, code block hay dòng bảng exit `1` kèm cả hai con số, fence bị bỏ qua, chênh lệch có trong allowlist thì qua, entry cũ thì cảnh báo, entry không lý do bị từ chối |

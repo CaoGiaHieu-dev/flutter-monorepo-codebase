@@ -100,7 +100,8 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 
 ```text
 / (Workspace Root)
-├── .agents/                       # Luật cho AI agent: AGENTS.md, skills/, RESTRUCTURE.md (kế hoạch di chuyển)
+├── .agents/                       # AGENTS.md — điểm vào cho các công cụ AI khác Claude Code
+├── .claude/                       # skills/ — công thức tác vụ cho agent (Claude Code tự tìm ở đây)
 ├── .github/                       # CODEOWNERS, SETUP_GUIDE.md và các workflow CI
 │   └── workflows/
 │       ├── pr_quality_check.yml   # Cổng PR 0–5: composer, arch_check, analyze, test, catalog, docs_check
@@ -156,7 +157,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
-│   ├── arch_check/                # Luật phân tầng R1–R11 — Cổng PR 1
+│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R15 — Cổng PR 1
 │   ├── barrel_generator/          # Sinh lại barrel file cho lib/ của một package
 │   ├── code_review/               # Review mã nguồn bằng Gemini AI
 │   ├── composer/                  # sync/verify app theo app_manifest.yaml — Cổng PR 0
@@ -175,7 +176,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── analysis_options.yaml          # Lint cho cả workspace
 ├── azure-ci-cd.yml                # Pipeline Azure DevOps
 ├── build.yaml                     # Tuỳ chọn build_runner (injectable, retrofit, json_serializable…)
-├── CLAUDE.md                      # Tóm tắt luật cho Claude Code — bản đầy đủ ở .agents/AGENTS.md
+├── CLAUDE.md                      # Bản tóm lược cho Claude Code — luật nằm ở docs/vi/reference/01_rules.md
 ├── devtools_options.yaml          # Cấu hình Flutter DevTools
 ├── flutter_native_splash-{dev,staging,prod}.yaml  # Cấu hình splash theo flavor (theme_generator)
 ├── icons_launcher-{dev,staging,prod}.yaml         # Cấu hình icon app theo flavor (theme_generator)
@@ -250,30 +251,23 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
 ## 🏛️ 4. Quy Tắc Vàng của Clean Architecture & SOLID
 
 ### Tách Biệt Mối Quan Tâm (Separation of Concerns)
-1. **Tầng Domain (`modules/*/domain`)**:
-   - **Pure Dart, được bảo đảm bởi package graph** — không chỉ bằng quy ước. `domain_core` có
-     **0** workspace dependency và không package domain nào khai Flutter SDK.
-   - Không import `flutter/material.dart`, `dio`, `retrofit`, hay bất kỳ thư viện UI/Network nào.
-   - Định nghĩa `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` và `AppFailure`.
-2. **Tầng Data (`modules/*/data`)**:
-   - Triển khai các hợp đồng (contracts) từ `domain`.
-   - Dùng `core_network` (API), `core_storage` (key-value) và `core_database` (SQL) như *cơ chế* —
-     mỗi package data tự khai storage key và tự sở hữu database riêng.
-   - DataSource trả về **Model**, không bao giờ trả Entity, và không phơi class do Drift sinh.
-   - Biến đổi Models → Entities qua hàm `.toEntity()`.
-3. **Tầng Presentation (`modules/*/feature`)**:
-   - Hiển thị UI và quản lý trạng thái (Provider hoặc BLoC).
-   - **Chỉ giao tiếp với Domain thông qua UseCases**, tuyệt đối không gọi trực tiếp API.
-   - **CẤM phụ thuộc vào tầng `data`** hoặc bất kỳ feature package nào khác — không ngoại lệ; widget dùng chung lấy từ package core `core_ui_kit`.
-4. **Tầng Core (`platform/*`)**:
-   - Chỉ cung cấp cơ chế. **CẤM phụ thuộc bất kỳ package `feature_*` hoặc `data_*` nào.**
-   - Được phép phụ thuộc `domain_*` (Domain là tâm): `platform_kernel → domain_core`,
-     `provider_state_management → domain_core`, `bloc_state_management → domain_core`.
+Mọi luật dưới đây được phát biểu một lần, kèm lý do và thứ thực thi nó, trong
+[bảng đăng ký luật](docs/vi/reference/01_rules.md#bảng-đăng-ký-luật); đây là bản đồ, không phải luật.
+
+1. **Tầng Domain (`modules/*/domain`)** — Dart thuần, được bảo đảm bởi package graph (RULE-03):
+   `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` và `AppFailure`.
+2. **Tầng Data (`modules/*/data`)** — triển khai contract của domain trên `core_network` (API),
+   `core_storage` (key-value) và `core_database` (SQL) như *cơ chế*; mỗi package data sở hữu khoá và
+   database của riêng mình (RULE-44, RULE-46). DataSource trả về **Model**, ánh xạ bằng `.toEntity()`
+   (RULE-41).
+3. **Tầng Presentation (`modules/*/feature`)** — UI và state (Provider hoặc BLoC), chỉ nói chuyện
+   với Domain qua UseCase; không bao giờ qua package `data` hay feature khác (RULE-04).
+4. **Tầng Core (`platform/*`)** — chỉ cơ chế; không bao giờ phụ thuộc module, trừ ba cạnh
+   `→ domain_core` đã duyệt (RULE-01) và theo chiều giữa các nhóm (RULE-02).
 
 > [!IMPORTANT]
-> **Gỡ bất kỳ feature nào app vẫn khởi động bình thường.** Mọi thứ app shell tiêu thụ lúc runtime
-> đều đi qua contract ở `core_di` sau `getItOrNull` / `getAllOrEmpty` kèm fallback an toàn.
-> `getAll<T>()` **ném lỗi** khi chưa có gì đăng ký — luôn ưu tiên `getAllOrEmpty<T>()`.
+> **Gỡ bất kỳ feature nào app vẫn khởi động bình thường** (RULE-05): shell chỉ tiêu thụ module qua
+> contract ở `core_di` sau `getItOrNull` / `getAllOrEmpty` kèm fallback an toàn (RULE-12).
 
 ### Nguyên Lý Đảo Ngược Phụ Thuộc (DIP)
 Features giao tiếp chéo hoàn toàn qua giao diện trung gian — trong package API của module sở hữu (`modules/<id>/api`, `<id>_api`) với hợp đồng riêng của module, trong `core_di` với hợp đồng trung lập với sản phẩm (session, vị trí đăng nhập / sau đăng nhập mà app shell dùng):
@@ -393,13 +387,12 @@ Future<void> configureDependencies({String? environment}) async {
 ### Hai quy tắc thứ tự dễ gây lỗi
 
 > [!CAUTION]
-> **`@Singleton` eager KHÔNG được phụ thuộc type đăng ký ở module chạy sau** — sẽ ném
-> *"not registered"* ngay lúc boot. `flutter analyze` không bắt được lỗi này; phải kiểm chứng ở file
-> sinh ra `apps/mobile/lib/di/injection.config.dart`. Dùng `@LazySingleton` khi phụ thuộc nằm ở module sau.
+> **RULE-13** — `@Singleton` eager không được phụ thuộc type do module chạy sau đăng ký; nó ném
+> *"not registered"* lúc boot, và `flutter analyze` không thấy. `test/di_smoke_test.dart` của mỗi app
+> boot đồ thị thật trong CI (Gate 3) và bắt được lỗi này.
 >
-> **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
-> không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
-> qua `@module` (xem `platform/shell/adapters/lib/di/network_binding_module.dart`).
+> **RULE-14** — GetIt không resolve theo supertype: bind interface thứ hai qua `@module`
+> (xem `platform/shell/adapters/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -451,8 +444,8 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 
 ## 🛠️ 8. Quy Tắc Lập Trình Công Cụ Phát Triển (DevTools CLI Policy)
 
-1. **Cấm Sử Dụng Lệnh `print`**: Tất cả các CLI Tools trong `tools/` bắt buộc dùng `stdout.writeln(...)` và `stderr.writeln(...)`.
-2. **Cấm Tắt Cảnh Báo Linter**: Không sử dụng `// ignore_for_file: avoid_print`.
+1. **Không `print`** — CLI tool ghi bằng `stdout.writeln(...)` / `stderr.writeln(...)` (RULE-65).
+2. **Không tắt lint, không `.ps1`, không hardcode `fvm`** — RULE-71, RULE-72, RULE-73.
 
 ---
 
@@ -567,8 +560,9 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 | [01. CI/CD](docs/vi/operations/01_cicd.md) | Pipeline GitHub Actions & Azure, secrets cần thiết |
 | [02. Fastlane & phát hành](docs/vi/operations/02_fastlane_release.md) | Lane, ký ứng dụng, phân phối store |
 
-> Luật dành cho AI Agent nằm riêng ở [`.agents/AGENTS.md`](.agents/AGENTS.md) và
-> [`.agents/skills/`](.agents/skills/).
+> AI agent bắt đầu từ [`CLAUDE.md`](CLAUDE.md) (Claude Code) hoặc [`.agents/AGENTS.md`](.agents/AGENTS.md)
+> (công cụ khác); công thức tác vụ nằm ở [`.claude/skills/`](.claude/skills/). Cả hai trích
+> [bảng đăng ký luật](docs/vi/reference/01_rules.md) thay vì phát biểu lại.
 
 ---
 

@@ -56,8 +56,8 @@
 #   1. Add `rule_name: true` under `linter: rules:` (or a mode under
 #      `analyzer: language:`) with a one-line comment saying why.
 #   2. Run `flutter analyze` from the root and fix every hit properly.
-#      `// ignore:` / `// ignore_for_file:` are not allowed (AGENTS.md: no
-#      lint suppressions) — if a rule cannot be satisfied honestly, leave it
+#      `// ignore:` / `// ignore_for_file:` are not allowed (RULE-71, arch_check
+#      R13) — if a rule cannot be satisfied honestly, leave it
 #      off and say why here.
 #   3. Prove the generator templates still pass: in a throwaway clone, run
 #      `dart tools/module_generator/generate.dart 1 smoke "" 2 2` and

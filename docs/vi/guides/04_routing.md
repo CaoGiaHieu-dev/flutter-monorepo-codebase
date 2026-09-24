@@ -281,11 +281,11 @@ getIt<AuthNavigator>().toLogin(context);
 
 ### Quy tắc
 
-- Một Navigator interface **chỉ** phơi ra route mà chính feature đó sở hữu.
-- **Không bao giờ** hardcode chuỗi path hay gọi `GoRouter.of(context).go('/auth/login')` để sang feature khác.
-- **`BuildContext` phải được truyền trực tiếp từ widget gọi.** Đừng lấy từ `NavigatorKeys.*.currentContext` hay `appRouter.currentContext` — cách đó bỏ qua vòng đời widget và sinh lỗi "dùng sau khi dispose".
-- Dùng `getItOrNull` ở những chỗ gọi cần sống sót khi feature đích bị gỡ.
-- **App shell không dùng navigator của module nào.** Người dùng chưa đăng nhập được đưa tới `ISignInLocation.path`, người đã đăng nhập tới `IPostSignInLocation.path` — hợp đồng `core_di` trung lập với sản phẩm, do module sở hữu phiên đăng nhập và module trang đích đóng góp (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` tự gọi `context.go(path)`.
+- **RULE-22** · Một Navigator interface **chỉ** phơi ra route mà chính feature đó sở hữu.
+- **RULE-22** · **Không bao giờ** hardcode chuỗi path hay gọi `GoRouter.of(context).go('/auth/login')` để sang feature khác.
+- **RULE-23** · **`BuildContext` phải được truyền trực tiếp từ widget gọi.** Đừng lấy từ `NavigatorKeys.*.currentContext` hay `appRouter.currentContext` — cách đó bỏ qua vòng đời widget và sinh lỗi "dùng sau khi dispose".
+- **RULE-12** · Dùng `getItOrNull` ở những chỗ gọi cần sống sót khi feature đích bị gỡ.
+- **RULE-22** · **App shell không dùng navigator của module nào.** Người dùng chưa đăng nhập được đưa tới `ISignInLocation.path`, người đã đăng nhập tới `IPostSignInLocation.path` — hợp đồng `core_di` trung lập với sản phẩm, do module sở hữu phiên đăng nhập và module trang đích đóng góp (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` tự gọi `context.go(path)`.
 
 ---
 

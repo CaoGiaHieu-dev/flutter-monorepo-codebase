@@ -48,6 +48,6 @@ body:
     attributes:
       label: Impact
       options:
-        - label: This would change an architecture rule (docs/*/reference/01_rules.md, AGENTS.md, CLAUDE.md).
+        - label: This would change an architecture rule (the rule registry, docs/*/reference/01_rules.md).
         - label: This would break existing projects built on the template (MAJOR version bump).
         - label: I am willing to open a pull request for it.

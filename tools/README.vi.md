@@ -16,7 +16,7 @@ Tham chiếu đầy đủ (tham số, mã thoát, chế độ lỗi của từng
 tools/
 ├── pubspec.yaml                     # Package core_tools (thành viên workspace)
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
-│   └── check.dart                   # R1-R11: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
+│   └── check.dart                   # R1-R15: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
 ├── composer/                        # 🧩 Ghép app từ app_manifest.yaml (Gate 0 của CI)
 │   ├── composer.dart                # sync / verify / list — sinh workspace list, dependency của app, injection.dart
 │   └── bootstrap.dart               # Checkout từng phần: bỏ member vắng mặt để `pub get` resolve được (không import package)
@@ -78,7 +78,7 @@ tools/
 
 ### 🛡️ Architecture Check (Cưỡng chế luật phân tầng)
 ```bash
-# Kiểm tra 11 luật kiến trúc (R1–R11) — exit 1 nếu có vi phạm (dùng được cho CI):
+# Kiểm tra 15 luật kiến trúc (R1–R15) — exit 1 nếu có vi phạm (dùng được cho CI):
 dart tools/arch_check/check.dart
 
 # Xem mô tả đầy đủ từng luật:
@@ -169,7 +169,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --verbose
 Dry-run in ra cả những sample khác sẽ vỡ và vỡ ở đâu — thông tin mà hướng dẫn
 gỡ feature thủ công không có.
 
-Cả dry-run lẫn `--apply` đều đếm các tham chiếu trong tài liệu (`docs/`, `.agents/`,
+Cả dry-run lẫn `--apply` đều đếm các tham chiếu trong tài liệu (`docs/`, `.claude/`,
 mọi `*.md`) tới đường dẫn sắp bị xoá. Chúng chỉ mang tính thông tin: sau khi gỡ,
 `dart tools/docs_check/check.dart` (CI Gate 5) nhận ra chúng trỏ vào một sample bundle đã gỡ
 (mọi package của bundle vắng mặt, theo `tools/sample_manifest.yaml` — tool gỡ không bao giờ sửa

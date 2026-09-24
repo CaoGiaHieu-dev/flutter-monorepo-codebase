@@ -59,8 +59,10 @@ flutter-monorepo-codebase/
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── tools/                  # Dart CLI tooling (generators, checkers, sync)
-├── docs/                   # This documentation (en/ + vi/)
-├── .agents/                # AGENTS.md rules + skills for AI agents
+├── docs/                   # This documentation (en/ + vi/), plus history/
+├── .agents/                # AGENTS.md — entry point for AI tools other than Claude Code
+├── .claude/skills/         # Task recipes for AI agents
+├── CLAUDE.md               # Agent brief for Claude Code — cites the rule registry
 │
 ├── pubspec.yaml            # Workspace root — lists all 28 members
 ├── pubspec_dependencies.yaml  # Version catalog — the single source of truth

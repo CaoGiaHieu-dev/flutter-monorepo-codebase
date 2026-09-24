@@ -6,8 +6,8 @@ import '../unused_checker/monorepo_helper.dart';
 import '../unused_checker/output_formatter.dart';
 import 'dart_source.dart';
 
-/// Mechanical enforcement of the architecture rules in
-/// `.agents/AGENTS.md` / `docs/en/reference/01_rules.md`.
+/// Mechanical enforcement of the architecture rules in the rule registry,
+/// `docs/en/reference/01_rules.md` (RULE-NN ids).
 ///
 /// A rule nobody can break by accident is a rule; a rule you have to remember
 /// is a suggestion. Every check here maps to a numbered rule and prints
@@ -18,7 +18,7 @@ import 'dart_source.dart';
 // ---------------------------------------------------------------------------
 // Approved exceptions — the ONLY upward edges allowed out of `core/*`.
 // Printed on every run so they stay visible instead of rotting in a comment.
-// Adding one here without updating `.agents/AGENTS.md` is itself a violation.
+// Adding one here without updating the registry (RULE-01) is itself a violation.
 // ---------------------------------------------------------------------------
 const _approvedUpwardEdges = <String, String>{
   'provider_state_management -> domain_core':
@@ -401,7 +401,7 @@ void main(List<String> args) {
 
   OutputFormatter.printHeader(
     'Architecture Check',
-    subtitle: 'Mechanical enforcement of .agents/AGENTS.md',
+    subtitle: 'Mechanical enforcement of docs/en/reference/01_rules.md',
   );
 
   final stopwatch = Stopwatch()..start();
@@ -594,7 +594,7 @@ void main(List<String> args) {
               'R1',
               pubspecRel,
               'core package `${pkg.name}` declares `$dep`. '
-                  'Add it to the approved list in AGENTS.md, or remove it.',
+                  'Add it to _approvedUpwardEdges and RULE-01, or remove it.',
             ),
           );
         }
@@ -762,7 +762,7 @@ void main(List<String> args) {
     // `getAll<T>()` throws when `T` is unregistered and `getIt<T>()` throws
     // when nothing implements it. For a contract whose only implementers
     // live in a module, that is a crash the moment the module is removed —
-    // and modules are removable by design (AGENTS §22). The failure is
+    // and modules are removable by design (RULE-05). The failure is
     // invisible to `flutter analyze` because the lookup type-checks fine; it
     // surfaces at runtime, on whichever screen happens to call it.
     for (final file in files) {
@@ -1157,15 +1157,14 @@ void _report(
   }
 
   OutputFormatter.printInfo(
-    'Rules and rationale: docs/en/reference/01_rules.md '
-    '(authoritative: .agents/AGENTS.md)',
+    'Rules and rationale: docs/en/reference/01_rules.md (the RULE-NN registry)',
   );
   OutputFormatter.printTiming('Architecture check', elapsed);
 }
 
 void _printHelp() {
   stdout.writeln('''
-Architecture Check — enforces the layering rules in .agents/AGENTS.md.
+Architecture Check — enforces the layering rules in docs/en/reference/01_rules.md.
 
 USAGE
   dart tools/arch_check/check.dart [--help]

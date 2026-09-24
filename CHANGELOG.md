@@ -38,7 +38,7 @@ with the architecture rules enforced by CI instead of review alone.
 - `arch_check` **R11** — platform group direction, read from `platform/<group>/<package>`,
   `dependencies:` only; R3 extended to module API packages (foundation + Flutter only; features
   may import another module's API, never its feature), R1/R8/R10 cover them too.
-- CI merge gate `pr_quality_check.yml`: composer verify, `arch_check` (rules R1–R11, including
+- CI merge gate `pr_quality_check.yml`: composer verify, `arch_check` (rules R1–R15, including
   R8 optional contract lookup, R10 app-level removability and R11 platform group direction),
   analyze, per-package tests,
   catalog sync, `docs_check`, an unused-dependency advisory, and a debug APK build job.
@@ -49,10 +49,30 @@ with the architecture rules enforced by CI instead of review alone.
   `provider_state_management`.
 - Bilingual documentation hub (`docs/en`, `docs/vi`) grouped as getting-started, architecture,
   guides, reference and operations; English + Vietnamese READMEs for the state-management,
-  responsive and tooling packages; agent skills under `.agents/skills/`.
+  responsive and tooling packages; agent skills under `.claude/skills/`.
 - Tests in 16 packages; the Plus Jakarta Sans font bundled so bold text uses the bold face.
 
 ### Changed
+
+- Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is now the
+  single rule registry — 65 rules with stable ids `RULE-01`…`RULE-79`, each with its reason, what
+  enforces it (`arch_check` R1–R15, analyzer, a test, a CI gate, `composer verify`, `docs_check` or
+  review) and a command to verify it. New rules for testing, logging, error reporting and
+  accessibility. Every other document cites ids instead of restating rules, and `docs_check`
+  fails on an undefined id. Drift fixed on the way: DI ordering is proven by each app's
+  `test/di_smoke_test.dart` (CI Gate 3), not by reading `injection.config.dart`; navigators and
+  action handlers live in the owning module's `<id>_api`, not `core_di`; the BLoC branch has
+  `emitResult`.
+- `CLAUDE.md` is a ~200-line agent brief (was 938 lines) — top rules by id first, layout,
+  essential commands, where to look; `.agents/AGENTS.md` is a short pointer for other AI tools.
+- Agent skills moved from .agents/skills/ to `.claude/skills/`, where Claude Code discovers
+  them; every description starts with "Use when…", each skill links its guide and cites rule ids;
+  `run_ai_code_review`, `run_barrel_generator`, `run_dependency_sync` and `run_unused_checker`
+  merged into `run_repo_tooling`.
+- The documentation contract moved to `CONTRIBUTING.md` § 5; the restructure runbook moved from
+  .agents/RESTRUCTURE.md to `docs/history/restructure-log.md`.
+- `tools/code_review/review_prompt.md` checks against the registry (ids + one-liners), now
+  including BLoC, database, optional lookups, ARB casing, double-wrapping, accessibility and testing.
 
 - Repository layout: `packages/core/*` → `platform/*`, product packages → vertical slices
   `modules/<name>/{domain,data,feature}`, `app/` → `apps/mobile/` (package `mobile_app`).

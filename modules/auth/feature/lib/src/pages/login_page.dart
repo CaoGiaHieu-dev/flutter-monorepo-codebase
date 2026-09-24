@@ -15,7 +15,7 @@ import '../widgets/auth_header_widget.dart';
 /// - **No `ChangeNotifierProvider` in this file.** `AuthProvider` is mounted
 ///   once by `AuthTreeWrapper` (an `IAppTreeWrapper` contributed through DI).
 ///   Wrapping again here would build a second instance and desynchronise state
-///   — see AGENTS §3.1.
+///   — see RULE-21.
 /// - **`Consumer<AuthProvider>`** rebuilds only the form on `isLoading`.
 /// - **No navigation on success.** `AuthProvider` publishes the session change,
 ///   the app shell listens and routes. A page that navigates itself would

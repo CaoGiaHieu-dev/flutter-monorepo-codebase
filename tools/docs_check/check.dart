@@ -102,6 +102,7 @@ const _topLevelDirs = <String>[
   'tools/',
   'docs/',
   '.agents/',
+  '.claude/',
   '.github/',
   'modules/',
   'platform/',

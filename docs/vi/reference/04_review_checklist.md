@@ -4,7 +4,7 @@
 
 **Đọc xong bạn có thể:** review một thay đổi theo đúng kiến trúc trong vài phút, và biết mục nào có lệnh tự kiểm hộ bạn.
 
-Bỏ qua phần nào PR không đụng tới. Mục nào có dòng **Kiểm chứng** thì phải *chạy*, đừng nhìn bằng mắt.
+Mỗi ô ghi tên dòng trong bảng đăng ký mà nó kiểm. Bản thân luật, lý do và lệnh kiểm chứng nằm một lần duy nhất ở [`01_rules.md`](01_rules.md) — trang này chỉ nói cần nhìn vào đâu. Bỏ qua phần nào PR không đụng tới. Thứ gì có gate thực thi thì phải *chạy*, đừng nhìn bằng mắt.
 
 ---
 
@@ -15,43 +15,43 @@ Bỏ qua phần nào PR không đụng tới. Mục nào có dòng **Kiểm ch�
 ```bash
 dart run build_runner build --workspace              # code sinh đã cập nhật
 dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — luật phân tầng R1–R11 (R5: import thiếu khai)
-flutter analyze                                      # Gate 2 — phân tích tĩnh
-# Gate 3 — `flutter test` ở mọi package có thư mục test/
+dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R15
+(cd tools && dart test)                              # Gate 1 — test của chính các gate tool
+flutter analyze                                      # Gate 2 — phân tích tĩnh, 0 issue
+# Gate 3 — `flutter test` ở mọi package có thư mục test/ (apps/*: smoke test DI)
 dart tools/dependency_sync.dart --check              # Gate 4 — lệch version catalog
-dart tools/docs_check/check.dart                     # Gate 5 — mọi đường dẫn repo mà docs nhắc tới đều tồn tại
+dart tools/docs_check/check.dart                     # Gate 5 — đường dẫn trong docs, tương đồng en ↔ vi, trích dẫn RULE-ID
 dart tools/unused_checker/check_unused_packages.dart # tham khảo — đã khai mà không import
 ```
 
 - [ ] Gate 0–5 đều sạch (bước kiểm dependency thừa chỉ mang tính tham khảo)
-- [ ] Test pass ở mọi package bị đụng có thư mục `test/` — `cd modules/<module>/<layer> && flutter test`
-- [ ] Không file nào trong `lib/` bị sửa tay nếu nó kết thúc bằng `.g.dart`, `.freezed.dart`, `.module.dart` hoặc `.config.dart`
-- [ ] Đã chạy lại barrel generator — sau `build_runner` / `gen-l10n` — nếu có file được thêm, đổi tên hoặc xoá
+- [ ] **RULE-60 · RULE-63** — test pass ở mọi package bị đụng có thư mục `test/`, kể cả smoke test DI của mỗi app
+- [ ] **RULE-76** — không file sinh ra nào (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) bị sửa tay
+- [ ] **RULE-75** — đã chạy lại barrel generator, sau codegen, nếu có file trong `lib/` được thêm, đổi tên hoặc xoá
+- [ ] **RULE-77** — thay đổi DI, dependency hay chuyển chỗ type đã được theo sau bởi một lần build APK debug (job `build` của CI)
 
 ---
 
 ## 1. Cấu trúc package
 
-- [ ] Package mới khai `resolution: workspace` trong `pubspec.yaml` của nó
-- [ ] Package mới có mặt trong khối `workspace:` của `pubspec.yaml` gốc — do `dart tools/composer/composer.dart sync` ghi (module generator tự chạy lệnh này); sửa tay ở đó sẽ làm fail Gate 0
-- [ ] API công khai được export qua barrel `lib/<package_name>.dart`; phần cài đặt nằm trong `src/`
-- [ ] Tên package khớp tiền tố tầng — `core_` / `domain_` / `data_` / `feature_`
-- [ ] Hằng số public của package nằm trong thư mục `utils/` **của chính nó** — package không có hằng số thì không cần thư mục này ([luật 3](01_rules.md#3-hằng-số-nằm-trong-utils))
+- [ ] **RULE-16** — package mới khai `resolution: workspace` và vào danh sách `workspace:` ở gốc qua `composer sync`, không sửa tay
+- [ ] **RULE-78** — tên của nó khớp tiền tố tầng (`core_` / `domain_` / `data_` / `feature_` / `<id>_api`); file và class theo bảng hậu tố
+- [ ] **RULE-75** — API công khai được export qua barrel; phần hiện thực nằm dưới `src/`
+- [ ] **RULE-09** — hằng số công khai nằm trong `utils/` của chính nó
 
 ---
 
 ## 2. Hướng phụ thuộc
 
-- [ ] Không package `core/*` nào import hay khai `feature_*`, `data_*` hay `domain_*`, trừ ba cạnh `→ domain_core` đã duyệt (`arch_check` R1)
-- [ ] Mọi cạnh core → `domain_core` mới đều được thêm vào danh sách cho phép trong `tools/arch_check/check.dart` và vào `AGENTS.md` trong cùng PR
-- [ ] Mọi `package:` import trong `lib/` đều có mục tương ứng trong `pubspec.yaml`
-- [ ] Import phục vụ production nằm ở `dependencies`, không phải `dev_dependencies`
-- [ ] Code bị xoá thì dependency không còn dùng cũng được gỡ theo
+- [ ] **RULE-01** — không package platform nào phụ thuộc module; cạnh `→ domain_core` mới được duyệt đã cập nhật danh sách cho phép và bảng đăng ký trong cùng PR
+- [ ] **RULE-02** — package platform mới nằm trong một thư mục nhóm và `dependencies:` của nó theo DAG nhóm
+- [ ] **RULE-06** — mọi import `package:` đều được khai trong `dependencies:`; code bị xoá đã xoá luôn mục không còn dùng
+- [ ] **RULE-04** — không feature nào import feature khác hay package data; package API của module chỉ phụ thuộc foundation
 
 **Kiểm chứng**
 
 ```bash
-dart tools/arch_check/check.dart                            # R1 hướng phụ thuộc, R5 import thiếu khai
+dart tools/arch_check/check.dart                            # R1, R2, R3, R5, R11
 grep -rn "package:feature_\|package:data_" platform/*/*/lib   # phải rỗng
 dart tools/unused_checker/check_unused_packages.dart        # đã khai mà không dùng
 ```
@@ -60,11 +60,8 @@ dart tools/unused_checker/check_unused_packages.dart        # đã khai mà khô
 
 ## 3. Tầng Domain
 
-- [ ] Không có import `flutter` / `dio` / `retrofit` trong `modules/*/domain`
-- [ ] Không `pubspec.yaml` domain nào khai Flutter SDK
-- [ ] Entity dùng `freezed` với private constructor `const Class._()`
-- [ ] Mỗi use case làm đúng một việc và trả `Result<T>`
-- [ ] Use case được đánh dấu `@injectable`
+- [ ] **RULE-03** — không import hay dependency Flutter, Dio, Retrofit hay `core_*` trong `modules/*/domain`
+- [ ] **RULE-49** — entity dùng Freezed với `const Class._()`; mỗi use case là `@injectable`, làm một việc và trả `Result<T>`
 
 **Kiểm chứng**
 
@@ -76,57 +73,50 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 
 ## 4. Tầng Data
 
-- [ ] Thư mục là `data_sources/remote/` và `data_sources/local/` — không phải `datasources/`
-- [ ] **DataSource trả Model, không bao giờ trả Entity** — lớp bọc duy nhất được phép là envelope phản hồi `BaseEntity<T>` của `domain_core`
-- [ ] Không class nào do Drift sinh xuất hiện trong chữ ký công khai — chuyển đổi ở lớp biên (`CacheEntryModel`)
-- [ ] Model có `.toEntity()` và implement `BaseModel<E>`
-- [ ] `RepositoryImpl` kế thừa `IBaseRepository` và bọc công việc trong `execute()` / `executeSync()`
-- [ ] Lỗi đi qua `ErrorHandler.handleError(e)` — **không** dùng `AppFailure.fromException()`
-- [ ] Không có `throw` nào từ Data lên UI; lỗi trả về dạng `Result.failure(AppFailure)`
+- [ ] **RULE-40** — data source nằm dưới `data_sources/remote/` và `data_sources/local/`
+- [ ] **RULE-41** — data source trả Model (`BaseEntity<T>` là vỏ bọc duy nhất); không có row Drift trong chữ ký công khai; Model implement `BaseModel<E>` với `.toEntity()`
+- [ ] **RULE-42** — `RepositoryImpl` kế thừa `IBaseRepository` và dùng `execute()` / `executeSync()`; không gì ném lỗi lên UI
+- [ ] **RULE-43** — lỗi đi qua `ErrorHandler.handleError(e)`; họ exception mới đã đăng ký `ErrorClassifier`
 
 ---
 
-## 5. Quyền sở hữu storage
+## 5. Storage và database
 
-- [ ] Storage key mới nằm trong `utils/` của **package sở hữu**, không nằm ở `core_common`
-- [ ] Owner tự khai `StorageValue<T>` từ `StorageManager` được inject
-- [ ] Owner được đăng ký là **singleton** (`@singleton` / `@lazySingleton` / `@Singleton(as:)`) kèm `@PostConstruct(preResolve: true)`
-- [ ] Nó **không** phải `@injectable` — factory sẽ phát ra cache rỗng
-- [ ] Backend được chọn có chủ đích: `StorageType.secure` cho token/PII, `StorageType.pref` cho cài đặt
-- [ ] Không `StorageValue` nào bị truyền giữa các package; truy cập xuyên package đi qua interface ở `core_di`
+- [ ] **RULE-44** — khoá mới nằm trong `utils/` của package sở hữu; chủ sở hữu khai `StorageValue<T>` của riêng mình, chọn `secure` / `pref` có chủ đích, và chỉ chia sẻ qua interface trên `core_di`
+- [ ] **RULE-45** — chủ sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`, không bao giờ `@injectable`
+- [ ] **RULE-46** — bảng và DAO mới nằm trong database riêng của package sở hữu
+- [ ] **RULE-47** — thay đổi schema đã tăng `schemaVersion` và đăng ký `IDatabaseMigration<YourDatabase>`; lệnh mở mang `@Order(1)`
+- [ ] **RULE-48** — thay đổi chạm tới networking giữ `SslPinningConfig` được bind và nói rõ `sslPinningHashes` đã được điền hay chưa
 
 ---
 
 ## 6. Dependency injection
 
-- [ ] Package mới khai `@InjectableInit.microPackage()` tại `lib/di/module.dart`
-- [ ] Nó được ghép trong mỗi `apps/<id>/app_manifest.yaml` — module thì nằm dưới `modules:`, package platform thì nằm đúng mục `di_groups` — và `composer verify` sạch
-- [ ] Controller gắn màn hình là `@injectable` — **không bao giờ** `@singleton` / `@lazySingleton`
-- [ ] Controller singleton phải thực sự dùng toàn app
-- [ ] Không `@Singleton` eager nào phụ thuộc type đăng ký ở module chạy sau ([luật 5](01_rules.md#5-thứ-tự-đăng-ký-di))
-- [ ] Phụ thuộc đi qua constructor; không gọi `getIt<T>()` trong ViewModel, Repository hay UseCase
-- [ ] Bind một impl cho interface thứ hai phải dùng `@module` tường minh — GetIt không phân giải theo supertype
+- [ ] **RULE-15** — package mới khai `@InjectableInit.microPackage()` ở `lib/di/module.dart`
+- [ ] **RULE-16** — nó được ghép qua từng `apps/<id>/app_manifest.yaml` và `composer verify` sạch
+- [ ] **RULE-10** — controller của màn hình là `@injectable`; singleton thực sự là toàn app
+- [ ] **RULE-11** — dependency đến qua constructor; không `getIt<T>()` trong ViewModel, Bloc, Repository hay UseCase
+- [ ] **RULE-13 · RULE-63** — không `@Singleton` eager nào phụ thuộc nhóm chạy sau; plugin được chạm tới trong lúc DI có test double trong smoke test
+- [ ] **RULE-14** — interface thứ hai trên cùng một implementation được bind qua `@module`
 
-**Kiểm chứng** — sau bất kỳ thay đổi DI nào, đọc các file sinh ra: `apps/mobile/lib/di/injection.config.dart` chỉ chứa thứ tự module; `lib/di/module.module.dart` của từng package mới chứa đăng ký theo type và các lệnh `gh<Dep>()` mà mỗi đăng ký gọi. Mọi phụ thuộc của một `gh.singleton…` eager phải được đăng ký phía trên nó, hoặc bởi một module có `init` chạy sớm hơn:
+**Kiểm chứng** — smoke test DI boot đồ thị thật cho mọi flavor:
 
 ```bash
-grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart
-grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
+cd apps/mobile && flutter test test/di_smoke_test.dart
+cd apps/admin && flutter test test/di_smoke_test.dart
 ```
 
 ---
 
 ## 7. Ranh giới feature và khả năng gỡ bỏ
 
-- [ ] Mỗi package feature giữ đúng một mối quan tâm UI
-- [ ] Không feature nào import feature khác (không ngoại lệ — widget dùng chung lấy từ `core_ui_kit`)
-- [ ] Điều hướng xuyên feature dùng interface Navigator ở `core_di`, không import trực tiếp
-- [ ] Hành động UI xuyên feature dùng `I*ActionHandler`
-- [ ] Đóng góp tuỳ chọn được đọc bằng `getAllOrEmpty` / `getItOrNull` kèm fallback — **không bao giờ `getAll`**
-- [ ] App shell không phát sinh tham chiếu cứng mới tới feature ngoài `injection.dart`
-- [ ] Nếu thêm hợp đồng `core_di` mới, phía tiêu thụ phải suy biến an toàn khi không ai đăng ký
+- [ ] **RULE-24** — mỗi package feature một mối quan tâm UI có biên
+- [ ] **RULE-04 · RULE-22 · RULE-25** — điều hướng và hành động UI xuyên feature đi qua `<id>_api` của chủ sở hữu
+- [ ] **RULE-12** — contract do module sở hữu được resolve bằng `getItOrNull` / `getAllOrEmpty` + fallback
+- [ ] **RULE-05** — không file nào của app ngoài `injection.dart`, và không package shell nào, import một module
+- [ ] **RULE-08** — contract `core_di` mới trung lập sản phẩm, mang value type riêng, và bên tiêu thụ xuống cấp an toàn khi không ai đăng ký
 
-**Kiểm chứng** — với feature lẽ ra phải gỡ được, hãy gỡ nó khỏi manifest của app rồi xác nhận:
+**Kiểm chứng** — với feature lẽ ra phải gỡ được, xoá nó khỏi manifest của app rồi xác nhận:
 
 ```bash
 dart tools/composer/composer.dart sync
@@ -139,63 +129,57 @@ flutter analyze
 
 ## 8. Routing
 
-- [ ] `app_router.dart` **không** bị sửa để thêm route
-- [ ] Feature đăng ký `IFeatureRouteModule` và/hoặc `INavDestinationModule` (kèm `IAppEntryLocation` tuỳ chọn)
-- [ ] `INavDestinationModule.order` xếp tab vào đúng vị trí mong muốn (khóa sắp xếp tăng dần, không phải index) và là duy nhất
-- [ ] `INavDestinationModule` chỉ dùng cho điểm đến bottom-nav thật, không dùng cho màn hình chỉ push
-- [ ] `feature_dashboard` vẫn chỉ là chrome — không có page của tab, không hardcode danh sách nav item
-- [ ] Hằng số route path nằm ở `lib/src/utils/<feature>_path.dart`
-- [ ] Controller được tạo tại route; widget `Page` **không** bọc lại lần nữa
-- [ ] `BuildContext` được truyền từ nơi gọi ở UI, không lấy từ `NavigatorKeys`
+- [ ] **RULE-20** — `app_router.dart` không bị sửa; feature đóng góp `IFeatureRouteModule` / `INavDestinationModule` / `IAppEntryLocation`
+- [ ] **RULE-24** — `INavDestinationModule` chỉ dùng cho destination chính, `order` duy nhất, và `feature_dashboard` vẫn chỉ là chrome
+- [ ] **RULE-09** — hằng số path route nằm trong `lib/src/utils/<feature>_path.dart`
+- [ ] **RULE-21** — controller được tạo ở route; `Page` không tự bọc thêm lần nữa
+- [ ] **RULE-23** — `BuildContext` đến từ nơi gọi ở UI, không từ `NavigatorKeys`
 
 ---
 
 ## 9. UI và tầng trình bày
 
-- [ ] Controller kế thừa `BaseProvider` / `BaseBloc`
-- [ ] Event của BLoC là subclass private dùng `part` / `part of`
-- [ ] Mọi handler `on<Event>` đều `async` và nhận `(event, emit)`
-- [ ] Dùng đúng loại `ViewState` — `BlocViewState<T>` cho nhánh BLoC, `ViewState` cho nhánh Provider
-- [ ] Contract `core_di` được implement dưới `modules/` (ở bất kỳ tầng nào) được resolve bằng `getItOrNull` / `getAllOrEmpty` khi ở ngoài chính module đó — `arch_check` R8 sạch
-- [ ] Không file nào trong app shell ngoài `injection.dart` import package module — `arch_check` R1 (`platform_app_shell`, `platform_shell_adapters`) và R10 (`apps/*`) sạch
-- [ ] Mọi kích thước đi qua `BuildContext` — `context.w(x)` / `context.h(x)` / `context.sp(x)` / `context.r(x)`; không double thô, không dạng bare `16.h` (`arch_check` R7 chặn)
-- [ ] Design token gọi kèm context — `AppSpacing.lg(context)`, `AppRadius.md(context)`, không dùng getter trần, không scale hai lần
-- [ ] Giá trị cần dùng sau `await` được đọc từ context **trước** đó, không giữ context xuyên qua
-- [ ] Widget dùng lại trong `core_ui_kit` dùng tham số **đúng như nhận được** — bên gọi đã scale — và chỉ scale hằng số của chính nó
-- [ ] Dialog và bottom sheet là class widget riêng, không phải builder inline
-- [ ] Màu lấy từ `context.colors.*`, typography lấy từ `AppTextStyles.*(context)`
+- [ ] **RULE-50** — controller kế thừa `BaseProvider` / `BaseBloc` (`BaseCubit` chỉ khi không có event)
+- [ ] **RULE-51 · RULE-52** — event BLoC là subclass `part` private; mọi handler `on<Event>` là `async (event, emit)`
+- [ ] **RULE-53** — state `BlocViewState<T>` được chốt qua `emitResult`; code generic ghi rõ đối số kiểu
+- [ ] **RULE-54** — state xuyên feature là interface `Stream` / `ValueListenable` trung lập, đăng ký kép
+- [ ] **RULE-30** — mọi kích thước đi qua `BuildContext`; giá trị cần sau `await` đã được đọc trước nó
+- [ ] **RULE-31** — widget tái sử dụng dùng tham số đúng như nhận; không gì bị scale hai lần
+- [ ] **RULE-32** — lựa chọn layout dùng window size class, không `Platform.is*` hay kiểm tra thiết bị
+- [ ] **RULE-33** — màu, kiểu chữ, khoảng cách và bo góc lấy từ design token
+- [ ] **RULE-36** — dialog và bottom sheet là widget class riêng
 
 ---
 
-## 10. Đa ngôn ngữ
+## 10. Đa ngôn ngữ, asset và khả năng truy cập
 
-- [ ] Không có chuỗi hiển thị nào bị hardcode
-- [ ] Chuỗi của feature nằm trong `assets/language/*.arb` của chính feature đó
-- [ ] Feature đăng ký `IFeatureLocalization` — `root_app.dart` không bị sửa
-- [ ] Chuỗi được đọc qua extension của feature (`context.l10nAuth.someKey`)
-- [ ] `core_ui_kit` không định nghĩa `.arb` riêng; nó dùng của `core_base_ui`
-- [ ] Asset riêng của feature nằm trong `assets/` của feature đó, không nằm ở `core_base_ui`
+- [ ] **RULE-34** — không chuỗi hiển thị nào bị hardcode; chuỗi của feature nằm trong ARB riêng, đăng ký qua `IFeatureLocalization`
+- [ ] **RULE-35** — khoá ARB mới là `lowerCamelCase`
+- [ ] **RULE-37** — asset riêng của feature nằm trong `assets/` của feature đó
+- [ ] **RULE-38** — không ghi đè text scaling hay khung chữ cao cố định; nút chỉ có icon có `tooltip`, ảnh có nghĩa có `semanticLabel`
+- [ ] **RULE-39** — vùng chạm tối thiểu 48 × 48 dp; padding đầu/cuối dòng dùng `edgeInsetsDirectional`
 
 ---
 
-## 11. Công cụ và vệ sinh code
+## 11. Công cụ, kiểm thử và vệ sinh code
 
-- [ ] Công cụ CLI dùng `stdout.writeln` / `stderr.writeln`, không bao giờ `print()`
-- [ ] Không thêm `// ignore_for_file:` hay bất kỳ cách tắt lint nào
-- [ ] `flutter analyze` sạch dưới các strict mode: không generic thô, không dùng `dynamic` chưa cast, Future chạy ngầm được bọc `unawaited(...)` kèm lý do, mọi `catch` rỗng đều có comment ([`01_rules.md` § 16](01_rules.md))
-- [ ] Không thêm script `.ps1`
-- [ ] Cảnh báo deprecation được xử lý bằng migrate thật, không phải bị bịt đi
-- [ ] Version được đổi trong `pubspec_dependencies.yaml` rồi sync — không hardcode ở từng package
-- [ ] Không commit secret (file env, keystore, API key)
+- [ ] **RULE-70 · RULE-71** — `flutter analyze` sạch mà không thêm chỗ tắt lint nào; deprecation đã được migrate
+- [ ] **RULE-72** — không thêm script `.ps1`
+- [ ] **RULE-73** — không lệnh hay tool nào hardcode `fvm`
+- [ ] **RULE-74** — version được đổi trong `pubspec_dependencies.yaml` rồi sync
+- [ ] **RULE-65 · RULE-66** — không `print`; không gì bí mật bị commit hay log
+- [ ] **RULE-67** — báo lỗi đi qua `IErrorReporter`, không gán lại `FlutterError.onError`
+- [ ] **RULE-61 · RULE-62** — fake viết tay; widget test có scale bọc đối tượng trong `ResponsiveInit`
+- [ ] **RULE-64** — thay đổi một gate tool đã thêm ca kiểm vào `tools/test/`
 
 ---
 
 ## 12. Tài liệu
 
-- [ ] Thay đổi hành vi được phản ánh vào **cả** `docs/en/` **và** `docs/vi/`
-- [ ] Luật kiến trúc mới được thêm vào `.agents/AGENTS.md` và vào [`01_rules.md`](01_rules.md)
-- [ ] Code mẫu trong docs được copy từ file thật, không viết theo trí nhớ
-- [ ] Giới hạn đã biết được nói thẳng chứ không bỏ qua
+- [ ] **RULE-79** — thay đổi hành vi được phản ánh ở `docs/en/` **và** `docs/vi/`, và `docs_check` pass
+- [ ] Luật mới hoặc thay đổi là một dòng trong bảng đăng ký ở cả hai ngôn ngữ, với cột **Thực thi bởi** nói đúng sự thật; trang khác trích id thay vì phát biểu lại
+- [ ] Code mẫu trong docs được chép từ file thật, không viết theo trí nhớ
+- [ ] Hạn chế đã biết được nói thẳng thay vì lược đi
 
 ---
 

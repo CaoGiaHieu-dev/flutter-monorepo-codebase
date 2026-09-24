@@ -1,6 +1,6 @@
 ---
 name: implement_package_database
-description: Give a package its own Drift database — tables, a DAO as `part of` the database, a typed migration registration, a DI-opened database reached through IDatabaseHandle, and a data source that returns Models. Modelled on modules/cache/data.
+description: Use when a package needs relational or offline storage — "add a table", "store a list of X locally", "add a Drift/SQLite database", "query rows or relations offline", "add a schema migration". Gives the package its own Drift database (tables, DAO as part of it, typed migration registration, @Order(1) @preResolve open, IDatabaseHandle, data source returning Models), modelled on modules/cache/data.
 ---
 
 # 🗄️ Skill: Implement a Package-Owned Database
@@ -8,15 +8,15 @@ description: Give a package its own Drift database — tables, a DAO as `part of
 Use this skill when requested to: "add a table", "store a list of X locally", "add a Drift/SQLite database", "query rows / relations offline", "add a schema migration", etc.
 
 > [!IMPORTANT]
-> **There is no `AppDatabase`.** `core_database` ships the **mechanism only**
-> (`IDatabaseHandle<TDb>`, `IDatabaseMigration<TDb>`, `DatabaseMigrationRunner`,
-> `DatabaseConnectionFactory`, `DriftDatabaseOpener`, `driftMigrationStrategy`) and its DI module
-> registers nothing. Drift resolves `@DriftDatabase(tables:, daos:)` at compile time and a DAO must
-> be `part of` its database library, so one shared database would force its package to own every
-> table. **Each package that needs relational storage declares its own database.**
+> **There is no `AppDatabase`** — each package declares its own database (RULE-46) on top of
+> `core_database`'s mechanism (`IDatabaseHandle<TDb>`, `IDatabaseMigration<TDb>`,
+> `DatabaseMigrationRunner`, `DatabaseConnectionFactory`, `DriftDatabaseOpener`,
+> `driftMigrationStrategy`). Migrations register typed to the database, and the open carries
+> `@Order(1)` (RULE-47); data sources return Models (RULE-41).
 >
 > Reference implementation: `modules/cache/data` (`data_cache`). It is sample code with no
-> runtime consumer — copy its shape. Long-form guide: `docs/{en,vi}/guides/07_database.md`.
+> runtime consumer — copy its shape. **Guide:** [`docs/en/guides/07_database.md`](../../../docs/en/guides/07_database.md).
+> **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-09, RULE-41, RULE-46, RULE-47, RULE-74, RULE-75.
 
 ---
 

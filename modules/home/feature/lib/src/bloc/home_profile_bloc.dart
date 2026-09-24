@@ -13,7 +13,7 @@ part 'home_profile_bloc.freezed.dart';
 /// Demonstrates template wiring:
 /// - `@injectable` factory (not a singleton)
 /// - Instantiated at the route via [BlocProvider]
-/// - Private Freezed event subclasses + `part` / `part of` (AGENTS §13)
+/// - Private Freezed event subclasses + `part` / `part of` (RULE-51)
 /// - Uses optional [BlocViewState] for a simple screen; complex features may use
 ///   a custom Freezed state instead of [BlocViewState]
 /// - Listens to [ISessionStatusStream] **when one is registered**. The contract

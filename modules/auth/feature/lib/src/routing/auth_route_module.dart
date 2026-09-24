@@ -27,7 +27,7 @@ class AuthShellRoute extends ShellRouteData {
   }
 }
 
-/// Controllers are instantiated at the route, not inside the page — AGENTS §3.1.
+/// Controllers are instantiated at the route, not inside the page — RULE-21.
 /// Here `AuthProvider` is a global `@lazySingleton` mounted by `AuthTreeWrapper`,
 /// so this route builds the page directly. A screen-scoped controller would wrap
 /// it in `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.

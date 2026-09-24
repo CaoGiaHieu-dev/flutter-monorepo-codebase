@@ -10,8 +10,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  flutter:
-    sdk: flutter
   platform_kernel:
     path: ../kernel
   domain_core:

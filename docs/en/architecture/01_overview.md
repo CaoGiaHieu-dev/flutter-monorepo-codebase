@@ -37,7 +37,7 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 > **Core must never depend on a feature.** `platform/*` sits underneath everything; if it reaches back up into `modules/*/feature`, the dependency graph gains a cycle and a package can no longer be extracted or tested in isolation.
 >
 > The same reasoning applies inside the core ring. A state-management base needs an empty/loading placeholder, and `core_ui_kit` already has branded ones — but `core_ui_kit` depends on `provider_state_management`, so borrowing them back would close a cycle. `provider_state_management` therefore ships its own minimal
-> [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../platform/provider_state_management/lib/src/base_view/default_state_widgets.dart). When core needs a widget, core defines it.
+> [`DefaultLoadingWidget` / `DefaultEmptyWidget`](../../../platform/state/provider/lib/src/base_view/default_state_widgets.dart). When core needs a widget, core defines it.
 
 ---
 
@@ -46,14 +46,18 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 | Layer | Path | Responsibility | May import | Must **never** import |
 |:--|:--|:--|:--|:--|
 | **App** | `apps/<id>/` | Composition root: `app_manifest.yaml`, the generated `injection.dart`, a one-line `main.dart`, what identifies the app (Firebase options) | everything | — |
-| **App shell** | `platform/app_shell/` | Boot sequence, router assembly, material wrapper, storage adapters — shared by every app | core packages | any module (`arch_check` R1) |
+| **App shell** | `platform/shell/app_shell/` | Boot sequence, router assembly, material wrapper, storage adapters — shared by every app | core packages | any module (`arch_check` R1) |
 | **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, one state-management package | `data_*`, another feature package |
 | **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
 | **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
-| **Core** | `platform/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `modules/*/feature`, `modules/*/data` |
+| **Core** | `platform/<group>/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `modules/*/feature`, `modules/*/data` |
 
 Each layer has a dedicated page:
 [Core](02_core.md) · [Domain](03_domain.md) · [Data](04_data.md) · [Features](05_features.md) · [App Shell](06_app_shell.md).
+
+### Inside `platform/`: six groups
+
+The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell). Only the folder changed — every package keeps its name. Dependencies point inward: `foundation ← layers ← infra / state`, `ui ← state`, `shell ← everything in platform/`, and nothing in `platform/` depends on `modules/`. What belongs in each group, and the three edges that run against the direction today: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
 
 ### The Domain purity mandate
 
@@ -104,7 +108,7 @@ team:
 | Directory | Owner | What changing it means |
 |:--|:--|:--|
 | `platform/` | Infra | Every module depends on it, so a breaking change breaks everyone at once |
-| `platform/di/` | Infra + architects | Cross-module contracts — changing one is a negotiation, not a unilateral edit |
+| `platform/foundation/contracts/` | Infra + architects | Cross-module contracts — changing one is a negotiation, not a unilateral edit |
 | `modules/<name>/` | That module's team | All three layers together: the team changing the UI is the team changing the use case behind it |
 | `apps/` | Tech leads | Which modules ship together, and in what order they initialise — a release decision |
 | `apps/*/app_manifest.yaml` | Tech leads + architects | The composition itself. Adding a module here changes what the product *is* |
@@ -127,9 +131,9 @@ submodule per module possible.
 |:--|:--|:--|
 | **`Result<T>` instead of thrown exceptions** across layer boundaries | `throw` / `try-catch` at the call site | An exception is invisible in a function signature — the caller has no way to know it must handle failure. `Future<Result<UserEntity>>` puts the failure case *in the type*, so the compiler reminds you. The Data layer never lets an exception escape; `IBaseRepository.execute()` converts it into `Result.failure(AppFailure)`. |
 | **Decentralized DI via micro-package modules** | One giant `injection.dart` listing every registration | Each package owns `lib/di/module.dart` with `@InjectableInit.microPackage()`. Adding a package means one line in an app's `app_manifest.yaml` (then `composer sync`), not editing a 500-line central file. Deleting a package removes its registrations with it. |
-| **Decentralized routing via DI contracts** | Hardcoding every `GoRoute` in `app_router.dart` | Features register [`IFeatureRouteModule`](../../../platform/di/lib/src/routing/routing_interfaces.dart) / `INavDestinationModule`; `AppRouter` collects them with `getAllOrEmpty<T>()`. A feature can be deleted from the workspace without touching the app shell — the router simply collects one contribution fewer and falls back gracefully. |
+| **Decentralized routing via DI contracts** | Hardcoding every `GoRoute` in `app_router.dart` | Features register [`IFeatureRouteModule`](../../../platform/foundation/contracts/lib/src/routing/routing_interfaces.dart) / `INavDestinationModule`; `AppRouter` collects them with `getAllOrEmpty<T>()`. A feature can be deleted from the workspace without touching the app shell — the router simply collects one contribution fewer and falls back gracefully. |
 | **Package-owned storage keys** | A single shared "presets" object holding every key | A shared object hands *every* injector read/write access to *every* other feature's data. Each package declares its own `StorageValue` instances with its own keys in its own `utils/` folder. See [the storage guide](../guides/06_storage.md). |
-| **Package-owned database access** | One shared app-wide database injected everywhere | Same reasoning: a shared database object exposes every DAO to every injector, and forces whichever package declares it to own every table. Packages depend on [`IDatabaseHandle`](../../../platform/database/lib/src/access/i_database_handle.dart) and receive only the accessor they ask for. See [the database guide](../guides/07_database.md). |
+| **Package-owned database access** | One shared app-wide database injected everywhere | Same reasoning: a shared database object exposes every DAO to every injector, and forces whichever package declares it to own every table. Packages depend on [`IDatabaseHandle`](../../../platform/infra/database/lib/src/access/i_database_handle.dart) and receive only the accessor they ask for. See [the database guide](../guides/07_database.md). |
 | **Constants live in each package's `utils/`** | A central `constants/` folder in `core_common` | A central constants file becomes a god object: auth endpoints, chat channel IDs and theme keys all sitting where every package can read them. The bottom of the stack keeps only genuinely global values (`EnvConstants`, `ErrorCodes`, in `platform_kernel`). |
 
 ---

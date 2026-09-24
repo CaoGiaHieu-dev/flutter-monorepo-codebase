@@ -32,14 +32,14 @@ graph TD
         FeatDash["dashboard"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (platform/data_core + modules/*/data)"]
+    subgraph DataLayer ["🔌 Data Layer (platform/layers/data + modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
         DataCache["data_cache"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (platform/domain_core + modules/*/domain)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (platform/layers/domain + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
@@ -132,21 +132,27 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
 │   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
-│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter
-│   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
-│   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
-│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
-│   ├── common/                    # AppConfig, AppInitializer, helper gắn với Flutter
-│   ├── database/                  # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
-│   ├── di/                        # DI Hub — mọi hợp đồng liên module nằm ở đây
-│   ├── network/                   # Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
-│   ├── notifications/             # Module quản lý Push Notification
-│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   ├── responsive/                # Scale theo design-size, gắn với BuildContext
-│   ├── storage/                   # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
-│   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
-│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository, BaseModel, request model
+│   ├── foundation/                # Nền thuần mà mọi thứ dựng lên: getIt/lỗi, hợp đồng DI, helper Flutter
+│   │   ├── kernel/                # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
+│   │   ├── contracts/             # core_di: DI Hub — mọi hợp đồng liên module nằm ở đây
+│   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
+│   ├── layers/                    # Hợp đồng nền của tầng domain và data
+│   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request model
+│   ├── infra/                     # Cơ chế I/O: mạng, lưu trữ, database, push
+│   │   ├── network/               # core_network: Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
+│   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
+│   │   ├── database/              # core_database: Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
+│   │   └── notifications/         # core_notifications: Module quản lý Push Notification
+│   ├── ui/                        # Scale, design system, widget dùng chung
+│   │   ├── responsive/            # core_responsive: Scale theo design-size, gắn với BuildContext
+│   │   ├── design_system/         # core_base_ui: Theme, LanguageProvider, design token & l10n (không có widget)
+│   │   └── ui_kit/                # core_ui_kit — widget tái sử dụng cho mọi module
+│   ├── state/                     # Nền quản lý state (Provider, BLoC)
+│   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
+│   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
+│   └── shell/                     # App shell mà mọi app compose
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapter
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
 │   ├── arch_check/                # Luật phân tầng R1–R10 — Cổng PR 1
@@ -390,7 +396,7 @@ Future<void> configureDependencies({String? environment}) async {
 >
 > **GetIt không resolve theo supertype.** Đăng ký `Impl as InterfaceA` thì `getIt<InterfaceB>()` vẫn
 > không resolve được dù `InterfaceA implements InterfaceB` — phải bind interface thứ hai tường minh
-> qua `@module` (xem `platform/app_shell/lib/di/network_binding_module.dart`).
+> qua `@module` (xem `platform/shell/app_shell/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -405,7 +411,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)
-`platform/app_shell/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeRoute`. Nó thu thập:
+`platform/shell/app_shell/lib/presentation/navigation/app_router.dart` **không** hardcode list `$onboardingRoute` / `$homeRoute`. Nó thu thập:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`

@@ -65,7 +65,7 @@ class LoginProvider extends BaseProvider<UserEntity> {
 }
 ```
 
-Behaviour worth knowing (`platform/provider_state_management/lib/src/management/operation_executor.dart`):
+Behaviour worth knowing (`platform/state/provider/lib/src/management/operation_executor.dart`):
 
 - **Success** → `ViewState.success()` with the data. When the result type `R` differs from the provider's state type `T`, pass `convert:` to `executeOperation`.
 - **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))` with `message = failure.message`. This emission is **forced**, so two identical failures in a row (the user taps Retry while still offline) both reach listeners.

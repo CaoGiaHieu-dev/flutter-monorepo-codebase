@@ -15,7 +15,7 @@ Use this skill when requested to: "create a new business flow/API call to displa
   dependencies and no `flutter` entry in its pubspec; `domain_auth`
   and `domain_cache` depend only on `domain_core`. Never add `flutter`, `dio`, `retrofit`, `drift` or a `core_*`
   package to a domain pubspec.
-- `AppFailure` lives in **`domain_core`** (`platform/domain_core/lib/src/failures/`). It is
+- `AppFailure` lives in **`domain_core`** (`platform/layers/domain/lib/src/failures/`). It is
   part of the `Result` contract. `core_common` keeps a re-export shim so existing
   `package:core_common/core_common.dart` imports still resolve it, but prefer importing
   `package:domain_core/domain_core.dart` in new code.
@@ -175,7 +175,7 @@ by `ErrorHandler.handleError(e)` — **never** call `AppFailure.fromException()`
 exist) and never let an exception escape the Data layer.
 
 > [!WARNING]
-> **`ErrorHandler` has no Firebase branch.** `platform/kernel/lib/src/error/error_handler.dart`
+> **`ErrorHandler` has no Firebase branch.** `platform/foundation/kernel/lib/src/error/error_handler.dart`
 > recognises `AppException`, `DioException`, `SocketException`, `HttpException` and
 > `FormatException`; everything else — including `FirebaseException`,
 > `FirebaseAuthException` and `PlatformException` — falls through to:

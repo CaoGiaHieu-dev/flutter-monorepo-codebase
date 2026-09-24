@@ -11,7 +11,7 @@
 `core_database` chỉ cấp **cơ chế**. Nó không khai database, không khai bảng, không khai DAO — module DI của nó đăng ký đúng nghĩa là rỗng:
 
 ```dart
-// platform/database/lib/di/module.dart
+// platform/infra/database/lib/di/module.dart
 /// `core_database` registers nothing on its own.
 ///
 /// It provides the persistence MECHANISM — [DriftDatabaseOpener],
@@ -78,7 +78,7 @@ dependencies:
   flutter:
     sdk: flutter              # `visibleForTesting` trong class database
   core_database:
-    path: ../../../platform/database
+    path: ../../../platform/infra/database
   drift: "^2.34.3"
   get_it: ^9.2.1              # module DI thu thập migration qua GetIt
   injectable: ^3.0.0
@@ -372,7 +372,7 @@ dart tools/barrel_generator/generate.dart modules/cache/data/lib
 Bạn không bao giờ sửa file database của package khác để đổi schema của mình. Bạn implement một hợp đồng và đăng ký nó.
 
 ```dart
-// platform/database/lib/src/migration/i_database_migration.dart
+// platform/infra/database/lib/src/migration/i_database_migration.dart
 abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
   int get version;
@@ -438,7 +438,7 @@ class AddExpiresAtToCacheEntries
 ### Runner replay thế nào
 
 ```dart
-// platform/database/lib/src/migration/database_migration_runner.dart
+// platform/infra/database/lib/src/migration/database_migration_runner.dart
 Future<void> run(Migrator m, int from, int to) async {
   if (from == to) return;
 
@@ -484,7 +484,7 @@ Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải gi�
 `PRAGMA` là thiết lập **theo từng kết nối và không được lưu trong file**, nên phải áp lại mỗi lần mở. Đó là lý do chúng nằm trong `beforeOpen`:
 
 ```dart
-// platform/database/lib/src/migration/drift_migration_strategy.dart
+// platform/infra/database/lib/src/migration/drift_migration_strategy.dart
 beforeOpen: (OpeningDetails details) async {
   // SQLite ships with foreign key enforcement OFF. Without this any
   // `references()` declared on a table is silently ignored, so broken
@@ -507,7 +507,7 @@ beforeOpen: (OpeningDetails details) async {
 | `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi có read pool (`readPool > 0`; mặc định là `1`); tránh lỗi "database is locked" khi tranh chấp. |
 | `busy_timeout = 5000` | Chờ khoá được nhả thay vì fail ngay với `SQLITE_BUSY`. Mặc định là `0`. |
 
-`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
+`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/infra/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
 
 WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_cache` phải chạy trên **file thật**.
 
@@ -522,7 +522,7 @@ Việc mở database được đăng ký với `@preResolve`, nên bất cứ th
 `DriftDatabaseOpener.open` xử lý việc này — và thiết kế nghiêng hẳn về phía *không* đụng vào dữ liệu người dùng:
 
 ```dart
-// platform/database/lib/src/opening/drift_database_opener.dart
+// platform/infra/database/lib/src/opening/drift_database_opener.dart
 static Future<T> open<T extends GeneratedDatabase>(
   DriftDatabaseBuilder<T> build, {
   required String fileName,
@@ -544,7 +544,7 @@ Ba quyết định có chủ đích:
 **File được đổi tên, không bao giờ bị xoá.**
 
 ```dart
-// platform/database/lib/src/connection/database_connection_factory.dart
+// platform/infra/database/lib/src/connection/database_connection_factory.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
 /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;

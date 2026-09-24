@@ -39,7 +39,7 @@ Run it whenever you add, remove, or edit any of these:
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
 | `@DriftDatabase`, `@DriftAccessor`, a new table | `drift_dev` | `<name>_database.g.dart`, next to your database (e.g. `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
-| New asset in `platform/base_ui/assets/` | `flutter_gen_runner` (declared only by `core_base_ui`) | `lib/src/gen/assets.gen.dart` |
+| New asset in `platform/ui/design_system/assets/` | `flutter_gen_runner` (declared only by `core_base_ui`) | `lib/src/gen/assets.gen.dart` |
 
 > [!WARNING]
 > Symptoms of forgetting: `Undefined class '_$SomethingImpl'`, `The getter '$myRoute' isn't defined`, `Type X is not registered inside GetIt`, or your new DI binding silently not existing.
@@ -64,7 +64,7 @@ Every package exposes its public API through barrel files (`src.dart`, `<package
 ```bash
 dart tools/barrel_generator/generate.dart modules/auth/feature/lib
 dart tools/barrel_generator/generate.dart modules/auth/domain/lib
-dart tools/barrel_generator/generate.dart platform/storage/lib
+dart tools/barrel_generator/generate.dart platform/infra/storage/lib
 ```
 
 The tool skips generated files (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`) and `part of` files, then formats what it wrote.

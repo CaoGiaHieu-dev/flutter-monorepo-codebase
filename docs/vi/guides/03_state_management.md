@@ -78,7 +78,7 @@ class AuthProvider extends BaseProvider<UserEntity>
 
 ### 2.2 `OperationConfig`
 
-`platform/provider_state_management/lib/src/management/operation_config.dart`:
+`platform/state/provider/lib/src/management/operation_config.dart`:
 
 ```dart
 class OperationConfig<R, T> {
@@ -105,7 +105,7 @@ class OperationConfig<R, T> {
 `executeOperation` generic theo kiểu kết quả `R` của operation; provider giữ `T`. Khi hai kiểu khác nhau — use case trả `UserEntity`, provider hiển thị `ProfileViewData` — hãy truyền `convert`, một named argument của chính `executeOperation` (không phải của `OperationConfig`):
 
 ```dart
-// platform/provider_state_management/lib/src/base/base_provider.dart
+// platform/state/provider/lib/src/base/base_provider.dart
 Future<void> executeOperation<R>(
   OperationConfig<R, T> config, {
   T? Function(R? data)? convert,
@@ -132,7 +132,7 @@ Giá trị thành công trở thành `data` của provider thế nào (`Operatio
 | Không `convert`, kết quả là `null` | `null` |
 | Không `convert`, kết quả không phải `T` | **debug:** một `assert` fail, nêu tên cả hai kiểu. **release:** assert bị loại bỏ, nên state thành `success` với `data: null` — màn hình lặng lẽ render trống |
 
-`onSuccess` nhận giá trị **đã convert** (`T?`), không phải `R` gốc. Test `platform/provider_state_management/test/base_provider_test.dart` (`runConvertedOperation`) phủ nhánh này.
+`onSuccess` nhận giá trị **đã convert** (`T?`), không phải `R` gốc. Test `platform/state/provider/test/base_provider_test.dart` (`runConvertedOperation`) phủ nhánh này.
 
 > [!CAUTION]
 > **`showLoading: true` KHÔNG phải lúc nào cũng hiện loading.** Trong `OperationExecutor.execute` (`operation_executor.dart`, nằm sau `executeOperation`) điều kiện là:
@@ -147,7 +147,7 @@ Giá trị thành công trở thành `data` của provider thế nào (`Operatio
 
 ### 2.3 `ViewState` và `ViewStateModel<T>`
 
-Hai kiểu khác nhau trong `platform/provider_state_management/lib/src/base/view_state_model.dart`:
+Hai kiểu khác nhau trong `platform/state/provider/lib/src/base/view_state_model.dart`:
 
 ```dart
 @freezed
@@ -217,7 +217,7 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 > [!WARNING]
 > **Bỏ qua `emptyWidget` là bạn nhận màn hình trắng.** Fallback mặc định là `DefaultEmptyWidget`, trả về `SizedBox.shrink()`. Còn `DefaultLoadingWidget` trả về `CircularProgressIndicator.adaptive()`.
 >
-> Chúng cố ý tối giản: `provider_state_management` là package **core**, mà core tuyệt đối không được phụ thuộc package feature — nên nó không thể dùng widget đã thiết kế trong `core_ui_kit`. Xem `platform/provider_state_management/lib/src/base_view/default_state_widgets.dart`. **Hãy luôn truyền `emptyWidget` / `loadingWidget` của riêng bạn trên màn hình người dùng thấy.**
+> Chúng cố ý tối giản: `provider_state_management` là package **core**, mà core tuyệt đối không được phụ thuộc package feature — nên nó không thể dùng widget đã thiết kế trong `core_ui_kit`. Xem `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Hãy luôn truyền `emptyWidget` / `loadingWidget` của riêng bạn trên màn hình người dùng thấy.**
 
 ### 2.5 Side effect với `ProviderStateListener`
 
@@ -251,7 +251,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-Đây là listener minh hoạ, đúng như một màn hình trong `feature_auth` sẽ viết — chú ý nó điều hướng qua **Navigator interface resolve bằng `getItOrNull`**, không bao giờ hardcode path. Xem [`04_routing.md`](04_routing.md). App shell làm cùng việc đó mà không dùng widget này: [`navigator_wrapper_widget.dart`](../../../platform/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`, nên nó lắng nghe `IAuthSessionState.sessionChanges` / `sessionFailures` của `core_di`.
+Đây là listener minh hoạ, đúng như một màn hình trong `feature_auth` sẽ viết — chú ý nó điều hướng qua **Navigator interface resolve bằng `getItOrNull`**, không bao giờ hardcode path. Xem [`04_routing.md`](04_routing.md). App shell làm cùng việc đó mà không dùng widget này: [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`, nên nó lắng nghe `IAuthSessionState.sessionChanges` / `sessionFailures` của `core_di`.
 
 `MultiProviderStateListener` cho phép lồng nhiều listener mà không tạo kim tự tháp widget.
 
@@ -358,7 +358,7 @@ Ba quy tắc bắt buộc:
 
 ### 3.3 `BlocViewState<T>`
 
-`platform/bloc_state_management/lib/src/bloc_view_state.dart`:
+`platform/state/bloc/lib/src/bloc_view_state.dart`:
 
 ```dart
 @freezed
@@ -401,7 +401,7 @@ Bắn event bằng `context.read<HomeProfileBloc>().add(const HomeProfileEvent.r
 
 ### 3.5 Bóc `Result` — `emitResult`
 
-`platform/bloc_state_management/lib/src/result_emitter.dart` là `executeOperation` của nhánh BLoC. Trộn `BlocResultMixin<T>` vào Bloc có state là `BlocViewState<T>` rồi đưa `emit` của từng handler cho `emitResult`:
+`platform/state/bloc/lib/src/result_emitter.dart` là `executeOperation` của nhánh BLoC. Trộn `BlocResultMixin<T>` vào Bloc có state là `BlocViewState<T>` rồi đưa `emit` của từng handler cho `emitResult`:
 
 ```dart
 @injectable

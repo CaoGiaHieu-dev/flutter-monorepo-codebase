@@ -12,17 +12,17 @@ resolution: workspace
 dependencies:
   material_ui: ^1.1.1
   core_di:
-    path: ../../../platform/di
+    path: ../../../platform/foundation/contracts
   flutter:
     sdk: flutter
   core_common:
-    path: ../../../platform/common
+    path: ../../../platform/foundation/common
 
   get_it: ^9.2.1
   injectable: ^3.0.0
   go_router: "^18.0.0"
   core_base_ui:
-    path: ../../../platform/base_ui
+    path: ../../../platform/ui/design_system
   flutter_localizations:
     sdk: flutter
   intl: "^0.20.3"
@@ -31,7 +31,7 @@ dev_dependencies:
   go_router_builder: "^4.4.0"
   injectable_generator: "^3.1.3"
   core_responsive:
-    path: ../../../platform/responsive
+    path: ../../../platform/ui/responsive
   flutter_test:
     sdk: flutter
 

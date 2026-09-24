@@ -21,10 +21,9 @@ dependencies:
   get_it: ^9.2.1
   injectable: ^3.0.0
   core_di:
-    path: ../di
+    path: ../../foundation/contracts
   core_common:
-    path: ../common
-
+    path: ../../foundation/common
   cupertino_ui: "^1.0.2"
   intl: "^0.20.3"
 dev_dependencies:

@@ -55,7 +55,7 @@ It takes no other argument: anything besides `--help` (a `--fix`, a typo of `--h
 | R7 | Responsive sizing goes through `BuildContext` — no bare `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` receiver, in any file that mentions `core_responsive` |
 | R8 | A `core_di` contract implemented under `modules/` — any layer — is resolved with `getItOrNull` / `getAllOrEmpty`, never a throwing `getIt` / `getAll`, outside the module that implements it |
 | R9 | `platform_kernel` and every `*_contracts` package neither import nor **declare** a Flutter-bound package |
-| R10 | Nothing in an app (`apps/<id>/`) imports a module — only `injection.dart`, the composition root, may name one. (`platform/app_shell` is core, so R1 covers it) |
+| R10 | Nothing in an app (`apps/<id>/`) imports a module — only `injection.dart`, the composition root, may name one. (`platform/shell/app_shell` is core, so R1 covers it) |
 
 The three approved upward exceptions are hardcoded in the tool **and printed on every run**, with the reason for each — so they cannot quietly rot inside a comment. Adding a fourth means editing the allow-list in `check.dart` — without that the build fails — and recording the edge in `.agents/AGENTS.md` §2, which the tool does not read.
 
@@ -126,7 +126,7 @@ Two kinds of reference are checked in every Markdown file in the repository — 
 
 | Kind | Example | How it is resolved |
 |---|---|---|
-| Backticked path | `` `platform/kernel/lib/platform_kernel.dart` `` | Repo-rooted, but only when the span starts with a real top-level directory |
+| Backticked path | `` `platform/foundation/kernel/lib/platform_kernel.dart` `` | Repo-rooted, but only when the span starts with a real top-level directory |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Relative to the **file containing the link**, not the working directory |
 
 The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves about 1 900 genuine references (at the time of writing) — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
@@ -192,7 +192,7 @@ Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid
 Scaffolds a package and registers it across the workspace.
 
 ```bash
-dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>] [--apps <id,id>]
+dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>] [--group <g>] [--apps <id,id>]
 dart tools/module_generator/generate.dart --help   # usage
 ```
 
@@ -200,9 +200,10 @@ dart tools/module_generator/generate.dart --help   # usage
 |---|---|
 | `<type>` | `1` feature · `2` domain · `3` data · `4` core · `5` custom |
 | `<name>` | bare directory name (`profile`) — the package becomes `feature_profile`. Must be a Dart package name: lowercase letters, digits and `_`, starting with a letter, not a Dart keyword |
-| `<prefix>` | type `5` only — the package-name prefix: `<prefix>_<name>` at `platform/<name>`, same naming rule as `<name>`. A layer word (`feature`, `domain`, `data`, `core`) is refused; use types 1–4. For types 1–4 it must be empty — pass `""` |
+| `<prefix>` | type `5` only — the package-name prefix: `<prefix>_<name>` at `platform/<group>/<name>`, same naming rule as `<name>`. A layer word (`feature`, `domain`, `data`, `core`) is refused; use types 1–4. For types 1–4 it must be empty — pass `""` |
 | `<sm>` | feature only — `1` Provider · `2` BLoC · `3` none |
 | `<route>` | feature only — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` none |
+| `--group` | types `4`/`5` only — the `platform/` group folder: `foundation` · `layers` · `infra` · `ui` · `state` · `shell` (`--group ui`, `--group=ui`). Default `infra`. What belongs in each group: [`02_core.md`](../architecture/02_core.md). An unknown group, or `--group` on types 1–3, exits 64 |
 | `--apps` | optional, any type — compose the module into these apps only: comma-separated `app.id`s from `apps/*/app_manifest.yaml` (`--apps mobile`, `--apps=mobile,admin`). Default: every app |
 
 ```bash
@@ -210,11 +211,12 @@ dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provide
 dart tools/module_generator/generate.dart 1 chat    "" 2 2   # feature + BLoC + bottom-nav tab
 dart tools/module_generator/generate.dart 2 payment          # domain micro-package
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
-dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/billing
+dart tools/module_generator/generate.dart 4 charts --group ui # core_charts at platform/ui/charts
+dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/infra/billing
 dart tools/module_generator/generate.dart 1 chat    "" 2 2 --apps mobile   # mobile only — admin untouched
 ```
 
-**Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, more than five arguments, an `--apps` with no value, an empty list, given twice, or naming an id no `app_manifest.yaml` declares (the message lists the known ids), or a **package name already taken** by any `pubspec.yaml` in the repository. Pub resolves a workspace by name, so a duplicate used to surface only at `pub get`, after composer had rewritten the manifests — and a new directory does not mean a new name: `5 shell platform_app` is `platform_app_shell` (already at `platform/app_shell`), `2 core` / `3 core` are `domain_core` / `data_core`.
+**Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, more than five arguments, an `--apps` with no value, an empty list, given twice, or naming an id no `app_manifest.yaml` declares (the message lists the known ids), or a **package name already taken** by any `pubspec.yaml` in the repository. Pub resolves a workspace by name, so a duplicate used to surface only at `pub get`, after composer had rewritten the manifests — and a new directory does not mean a new name: `5 shell platform_app` is `platform_app_shell` (already at `platform/shell/app_shell`), `2 core` / `3 core` are `domain_core` / `data_core`.
 
 With no arguments on a terminal it prompts for everything. A feature missing `<sm>` or `<route>` prompts for what is missing (an empty answer takes `1`). **Without a terminal** — CI, an agent's shell, stdin at end of input — a value that would be prompted for is an error, exit `64`, never a silent default: always pass all five arguments for a feature. All tool output is in English.
 

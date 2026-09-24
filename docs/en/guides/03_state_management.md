@@ -78,7 +78,7 @@ Note `AuthProvider` is `@lazySingleton` because it is a **global** controller (s
 
 ### 2.2 `OperationConfig`
 
-`platform/provider_state_management/lib/src/management/operation_config.dart`:
+`platform/state/provider/lib/src/management/operation_config.dart`:
 
 ```dart
 class OperationConfig<R, T> {
@@ -105,7 +105,7 @@ class OperationConfig<R, T> {
 `executeOperation` is generic in the operation's result type `R`; the provider holds `T`. When they differ — the use case returns a `UserEntity`, the provider shows a `ProfileViewData` — pass `convert`, a named argument of `executeOperation` itself (not of `OperationConfig`):
 
 ```dart
-// platform/provider_state_management/lib/src/base/base_provider.dart
+// platform/state/provider/lib/src/base/base_provider.dart
 Future<void> executeOperation<R>(
   OperationConfig<R, T> config, {
   T? Function(R? data)? convert,
@@ -132,7 +132,7 @@ How the success value becomes the provider's data (`OperationExecutor._handleSuc
 | no `convert`, result is `null` | `null` |
 | no `convert`, result is not a `T` | **debug:** an `assert` fails, naming both types. **release:** asserts are stripped, so the state becomes `success` with `data: null` — a screen that silently renders empty |
 
-`onSuccess` receives the **converted** value (`T?`), not the raw `R`. The test `platform/provider_state_management/test/base_provider_test.dart` (`runConvertedOperation`) covers the path.
+`onSuccess` receives the **converted** value (`T?`), not the raw `R`. The test `platform/state/provider/test/base_provider_test.dart` (`runConvertedOperation`) covers the path.
 
 > [!CAUTION]
 > **`showLoading: true` does not always show loading.** In `OperationExecutor.execute` (`operation_executor.dart`, behind `executeOperation`) the guard is:
@@ -147,7 +147,7 @@ How the success value becomes the provider's data (`OperationExecutor._handleSuc
 
 ### 2.3 `ViewState` vs `ViewStateModel<T>`
 
-Two distinct types in `platform/provider_state_management/lib/src/base/view_state_model.dart`:
+Two distinct types in `platform/state/provider/lib/src/base/view_state_model.dart`:
 
 ```dart
 @freezed
@@ -217,7 +217,7 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 > [!WARNING]
 > **Omit `emptyWidget` and you get a blank screen.** The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()`.
 >
-> They are intentionally minimal: `provider_state_management` is a **core** package, and core must never depend on a feature package — so it cannot reach for the branded widgets in `core_ui_kit`. See `platform/provider_state_management/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
+> They are intentionally minimal: `provider_state_management` is a **core** package, and core must never depend on a feature package — so it cannot reach for the branded widgets in `core_ui_kit`. See `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
 
 ### 2.5 Side effects with `ProviderStateListener`
 
@@ -251,7 +251,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-An illustrative listener, as a screen inside `feature_auth` would write it — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md). The app shell does the same job without this widget: [`navigator_wrapper_widget.dart`](../../../platform/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`, so it subscribes to `IAuthSessionState.sessionChanges` / `sessionFailures` from `core_di` instead.
+An illustrative listener, as a screen inside `feature_auth` would write it — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md). The app shell does the same job without this widget: [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`, so it subscribes to `IAuthSessionState.sessionChanges` / `sessionFailures` from `core_di` instead.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 
@@ -358,7 +358,7 @@ Three non-negotiable rules:
 
 ### 3.3 `BlocViewState<T>`
 
-`platform/bloc_state_management/lib/src/bloc_view_state.dart`:
+`platform/state/bloc/lib/src/bloc_view_state.dart`:
 
 ```dart
 @freezed
@@ -401,7 +401,7 @@ Dispatch events with `context.read<HomeProfileBloc>().add(const HomeProfileEvent
 
 ### 3.5 Unwrapping `Result` — `emitResult`
 
-`platform/bloc_state_management/lib/src/result_emitter.dart` is the BLoC branch's `executeOperation`. Mix `BlocResultMixin<T>` into a Bloc whose state is `BlocViewState<T>` and hand each handler's `emit` to `emitResult`:
+`platform/state/bloc/lib/src/result_emitter.dart` is the BLoC branch's `executeOperation`. Mix `BlocResultMixin<T>` into a Bloc whose state is `BlocViewState<T>` and hand each handler's `emit` to `emitResult`:
 
 ```dart
 @injectable

@@ -16,8 +16,8 @@ import 'parity.dart';
 ///
 /// Two classes of reference are verified:
 ///
-///   1. **Backticked repo paths** — `` `platform/kernel/lib/...` `` — any
-///      backtick span that starts with a real top-level directory of this
+///   1. **Backticked repo paths** — `` `platform/foundation/kernel/lib` `` —
+///      any backtick span that starts with a real top-level directory of this
 ///      repo. A span that does not (`utils/`, `routing/`, `ViewState`) is a
 ///      convention or a symbol, not a path, and is ignored.
 ///   2. **Markdown links** — `[text](target)` — resolved relative to the file
@@ -437,7 +437,7 @@ bool _isExternal(String target) =>
 /// span is plainly not a path at all.
 String? _normalisePath(String raw) {
   var ref = raw;
-  // `platform/kernel/` and `platform/kernel` are the same thing.
+  // `platform/ui/ui_kit/` and `platform/ui/ui_kit` are the same thing.
   while (ref.endsWith('/')) {
     ref = ref.substring(0, ref.length - 1);
   }
@@ -450,7 +450,7 @@ String? _normalisePath(String raw) {
 }
 
 /// A span that names a *set* of paths — `modules/<name>/feature/`,
-/// `platform/*/pubspec.yaml`, `modules/<m>/{domain,data}/lib` — returned with
+/// `platform/*/*/pubspec.yaml`, `modules/<m>/{domain,data}/lib` — returned with
 /// its trailing slash removed, or null for an ordinary path or a non-path.
 ///
 /// These used to be skipped outright. A glob (`*`, `{a,b}`) names

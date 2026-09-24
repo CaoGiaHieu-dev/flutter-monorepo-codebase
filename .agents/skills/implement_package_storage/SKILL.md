@@ -22,9 +22,9 @@ Before writing code, answer: **which package owns this value?**
 | Value | Owner | Keys file |
 | :--- | :--- | :--- |
 | Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `platform/app_shell/lib/di/utils/theme_storage_keys.dart` |
-| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `platform/app_shell/lib/di/utils/language_storage_keys.dart` |
-| Onboarding-seen boot flag | app shell → `AppBootStorage` | `platform/app_shell/lib/di/utils/app_boot_storage_keys.dart` |
+| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `platform/shell/app_shell/lib/di/utils/theme_storage_keys.dart` |
+| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `platform/shell/app_shell/lib/di/utils/language_storage_keys.dart` |
+| Onboarding-seen boot flag | app shell → `AppBootStorage` | `platform/shell/app_shell/lib/di/utils/app_boot_storage_keys.dart` |
 
 The owner is the package whose business logic reads/writes the value. **Never** put a key in
 `core_common`, and never let another package import the owner's key class.
@@ -147,13 +147,13 @@ await _isBioLocked.readFromStorage();   // Re-hydrate from disk
 **Never** hand another package your `StorageValue` or your keys class. Publish a narrow interface on `core_di`, implement it in the owner, and let the consumer depend on the interface only — the pattern already used for theme and language:
 
 ```dart
-// 1. Interface in core_di (platform/di/lib/src/theme/i_theme_storage.dart)
+// 1. Interface in core_di (platform/foundation/contracts/lib/src/theme/i_theme_storage.dart)
 abstract class IThemeStorage {
   ThemeMode getThemeMode();
   void saveThemeMode(ThemeMode mode);
 }
 
-// 2. Implementation owns the StorageValue (platform/app_shell/lib/di/theme_storage_impl.dart)
+// 2. Implementation owns the StorageValue (platform/shell/app_shell/lib/di/theme_storage_impl.dart)
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
   ThemeStorageImpl(this._storageManager);
@@ -185,7 +185,7 @@ class ThemeStorageImpl implements IThemeStorage {
 }
 ```
 
-`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `platform/app_shell/lib/di/` — shared by every app — **not** in `core_storage`.
+`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `platform/shell/app_shell/lib/di/` — shared by every app — **not** in `core_storage`.
 
 ---
 

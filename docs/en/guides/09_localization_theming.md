@@ -21,12 +21,12 @@ Each feature owns its translations. The app shell never learns their names.
 | `core_base_ui` | Global / fallback strings shared by everyone |
 
 > [!CAUTION]
-> A feature must **never** edit `platform/app_shell/lib/presentation/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI — see §3.
+> A feature must **never** edit `platform/shell/app_shell/lib/presentation/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI — see §3.
 
 ## 2. The contract
 
 ```dart
-// platform/di/lib/src/feature_localization.dart
+// platform/foundation/contracts/lib/src/feature_localization.dart
 /// Interface for feature localization delegates.
 /// Enables safe registration and retrieval via getAllOrEmpty<IFeatureLocalization>() in the app shell.
 abstract class IFeatureLocalization {
@@ -37,7 +37,7 @@ abstract class IFeatureLocalization {
 ## 3. How the shell collects delegates
 
 ```dart
-// platform/app_shell/lib/presentation/app_material_wrapper.dart
+// platform/shell/app_shell/lib/presentation/app_material_wrapper.dart
 // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
 // registers `IFeatureLocalization`. Every feature package is removable, so
 // an app built without any of them must still resolve its delegates —
@@ -127,7 +127,7 @@ Adding a language touches `core_base_ui` **and every feature that ships strings*
 
 ### Step 1 — `core_base_ui`: the ARB, and the language's name
 
-Create `ja.arb` in `platform/base_ui/assets/language/` with `"@@locale": "ja"` and every key of the template `en.arb`. Then add the language's display name to **every** `core_base_ui` ARB — `en.arb` and `vi.arb` as well as `ja.arb` — next to `languageEn` / `languageVi`:
+Create `ja.arb` in `platform/ui/design_system/assets/language/` with `"@@locale": "ja"` and every key of the template `en.arb`. Then add the language's display name to **every** `core_base_ui` ARB — `en.arb` and `vi.arb` as well as `ja.arb` — next to `languageEn` / `languageVi`:
 
 ```json
 {
@@ -138,11 +138,11 @@ Create `ja.arb` in `platform/base_ui/assets/language/` with `"@@locale": "ja"` a
 }
 ```
 
-`core_base_ui`'s `AppLocalizations.supportedLocales` is what the app offers: `MaterialApp.supportedLocales` (`platform/app_shell/lib/presentation/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`) all read it. `gen-l10n` builds it from the ARB files present, so the new file is what adds the locale.
+`core_base_ui`'s `AppLocalizations.supportedLocales` is what the app offers: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`) all read it. `gen-l10n` builds it from the ARB files present, so the new file is what adds the locale.
 
 ### Step 2 — name it in the picker
 
-`platform/base_ui/lib/src/extensions/locale_extension.dart` maps a language code to that name; without a case the picker shows the bare tag `ja`:
+`platform/ui/design_system/lib/src/extensions/locale_extension.dart` maps a language code to that name; without a case the picker shows the bare tag `ja`:
 
 ```dart
 return switch (languageCode) {
@@ -165,7 +165,7 @@ FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 
 ### Step 4 — `preferred-supported-locales`
 
-`platform/base_ui/l10n.yaml` and each feature's `l10n.yaml` say `preferred-supported-locales: [en, vi]`, as does the generator's `l10n.yaml.mustache`. `gen-l10n` still picks up `ja.arb` without an edit — the list only **orders** the locales, and those it omits follow alphabetically — but the first supported locale is the fallback (`localeResolutionCallback` and `LanguageProvider` both fall back to `supportedLocales.first`). Append the new locale to keep the order explicit: `[en, vi, ja]`.
+`platform/ui/design_system/l10n.yaml` and each feature's `l10n.yaml` say `preferred-supported-locales: [en, vi]`, as does the generator's `l10n.yaml.mustache`. `gen-l10n` still picks up `ja.arb` without an edit — the list only **orders** the locales, and those it omits follow alphabetically — but the first supported locale is the fallback (`localeResolutionCallback` and `LanguageProvider` both fall back to `supportedLocales.first`). Append the new locale to keep the order explicit: `[en, vi, ja]`.
 
 ### Step 5 — regenerate
 
@@ -173,7 +173,7 @@ FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 dart tools/workspace_setup/configure.dart   # gen-l10n in every package with an l10n.yaml, then codegen + barrels
 ```
 
-Or `flutter gen-l10n` in `platform/base_ui` and in each feature. Check every package's `untranslated-messages.txt` is empty.
+Or `flutter gen-l10n` in `platform/ui/design_system` and in each feature. Check every package's `untranslated-messages.txt` is empty.
 
 ## 6. Rules
 
@@ -188,7 +188,7 @@ Or `flutter gen-l10n` in `platform/base_ui` and in each feature. Check every pac
 
 ## 7. Design tokens and colours
 
-Tokens live in `platform/base_ui/lib/src/styles/`; colours come from a
+Tokens live in `platform/ui/design_system/lib/src/styles/`; colours come from a
 `ThemeExtension` so they flip with light/dark automatically.
 
 | Token class | File | Purpose |
@@ -230,7 +230,7 @@ Container(
 `ThemeMode.system` resolves against OS brightness, which can change while the app is running. `ThemeProvider` observes it:
 
 ```dart
-// platform/base_ui/lib/src/theme/theme_provider.dart
+// platform/ui/design_system/lib/src/theme/theme_provider.dart
 /// Called by the framework when the OS switches between Light and Dark.
 ///
 /// Only [ThemeMode.system] derives its appearance from the platform, so an
@@ -324,7 +324,7 @@ double? get leadingWidth => context.w(64);
 That override scales internally **and** silently discards the `leadingWidth` the caller passed through `super.leadingWidth` — the parameter is dead. `AppBarCustom` instead forwards everything to `AppBar`:
 
 ```dart
-// platform/ui_kit/lib/navigation/app_bar_custom.dart
+// platform/ui/ui_kit/lib/navigation/app_bar_custom.dart
 class AppBarCustom extends AppBar {
   AppBarCustom({
     super.key,
@@ -346,7 +346,7 @@ AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 Non-size defaults for shared widgets live in the package's own `utils/`:
 
 ```dart
-// platform/ui_kit/lib/utils/shared_ui_constants.dart
+// platform/ui/ui_kit/lib/utils/shared_ui_constants.dart
 /// Timing and overlay constants owned by `core_ui_kit`.
 ///
 /// Package-internal by convention: these are defaults for the reusable
@@ -371,7 +371,7 @@ class SharedUiConstants {
 | Dialog | `_dialog.dart` | `Dialog` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` |
 
-Existing examples in `platform/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
+Existing examples in `platform/ui/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
 
 Inline builders cannot be reused, previewed, or tested in isolation — and they invariably end up with hard-coded strings and sizes.
 

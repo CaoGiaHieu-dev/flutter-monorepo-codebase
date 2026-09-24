@@ -22,7 +22,7 @@ Năm tham số vị trí được đọc bởi
 | :-- | :-- | :-- |
 | 1 | `1` | Loại module — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
 | 2 | `profile` | Tên module (snake_case). Package thành `feature_profile` tại `modules/profile/feature` |
-| 3 | `""` | Tiền tố package tuỳ chỉnh — chỉ dùng khi loại là `5` (`<tiền_tố>_<tên>` tại `platform/<tên>`). Truyền `""` cho loại 1–4 |
+| 3 | `""` | Tiền tố package tuỳ chỉnh — chỉ dùng khi loại là `5` (`<tiền_tố>_<tên>` tại `platform/<nhóm>/<tên>`). Truyền `""` cho loại 1–4 |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` không dùng |
 | 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` không sinh |
 
@@ -87,7 +87,7 @@ app. Id lạ sẽ thoát mã 64 trước khi ghi bất cứ thứ gì.
 
 1. Hoàn thiện `TypedGoRoute` / navigator trong `lib/src/routing/`
 2. Điền nội dung cho stub route module (`routes`, và với tab thì thêm `order`, `path`, `destination`)
-3. Nếu bạn thêm một hợp đồng navigator vào `core_di` (§7), chạy barrel generator cho `platform/di/lib` trước
+3. Nếu bạn thêm một hợp đồng navigator vào `core_di` (§7), chạy barrel generator cho `platform/foundation/contracts/lib` trước
 4. Chạy lại `build_runner`, rồi **restart hoàn toàn** app — DI mới không được hot reload nhận
 
 > [!NOTE]
@@ -241,7 +241,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 Không có `order` — nhóm route này khớp theo path chứ không theo chỉ số.
 
 > [!CAUTION]
-> Tuyệt đối không sửa `platform/app_shell/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
+> Tuyệt đối không sửa `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` để thêm route của bạn. Nó
 > gom các đóng góp qua `getAllOrEmpty<IFeatureRouteModule>()` và
 > `getAllOrEmpty<INavDestinationModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
 
@@ -350,7 +350,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-[`app_material_wrapper.dart`](../../../platform/app_shell/lib/presentation/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`, nên **không sửa `root_app.dart`** (hay wrapper đó).
+[`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/presentation/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`, nên **không sửa `root_app.dart`** (hay wrapper đó).
 
 Sinh lại sau mỗi lần đổi `.arb`:
 
@@ -369,7 +369,7 @@ cd modules/profile/feature && flutter gen-l10n
 Feature khác không được import `feature_profile`. Khai hợp đồng ở `core_di`:
 
 ```dart
-// platform/di/lib/src/navigators/profile_navigator.dart
+// platform/foundation/contracts/lib/src/navigators/profile_navigator.dart
 import 'package:flutter/widgets.dart';
 
 abstract class ProfileNavigator {
@@ -378,7 +378,7 @@ abstract class ProfileNavigator {
 ```
 
 Đúng hình dạng của
-[`home_navigator.dart`](../../../platform/di/lib/src/navigators/home_navigator.dart).
+[`home_navigator.dart`](../../../platform/foundation/contracts/lib/src/navigators/home_navigator.dart).
 
 Cài đặt nó ngay trong `routing/` của bạn — code thật từ
 [`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
@@ -405,8 +405,8 @@ Bên gọi ở package khác dùng `getItOrNull<ProfileNavigator>()?.toProfile(c
 ## 8. Hoàn tất và kiểm chứng
 
 ```bash
-# 1. Export ProfileNavigator mới từ barrel của core_di (§7 đã thêm một file vào platform/di/lib)
-dart tools/barrel_generator/generate.dart platform/di/lib
+# 1. Export ProfileNavigator mới từ barrel của core_di (§7 đã thêm một file vào platform/foundation/contracts/lib)
+dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
 # 2. Sinh lại DI / route — injectable phải thấy ProfileNavigator qua `package:core_di/core_di.dart`
 dart run build_runner build --workspace
 # 3. Export lại các file mới của feature (và các file được sinh) từ barrel của nó
@@ -417,8 +417,8 @@ flutter analyze
 > [!IMPORTANT]
 > Bỏ bước 1 thì `flutter analyze` báo `Undefined name 'ProfileNavigator'` ở navigator impl và ở
 > phần đăng ký được sinh của nó: barrel của `core_di` là file được sinh, nên một file thêm vào
-> `platform/di/lib/src/` sẽ vô hình với package khác cho tới khi chạy barrel generator cho
-> `platform/di/lib`. Điều này đúng với mọi package bạn thêm file vào — chạy lại barrel generator cho
+> `platform/foundation/contracts/lib/src/` sẽ vô hình với package khác cho tới khi chạy barrel generator cho
+> `platform/foundation/contracts/lib`. Điều này đúng với mọi package bạn thêm file vào — chạy lại barrel generator cho
 > `lib/` của nó.
 
 Sau đó **restart hoàn toàn** app (không phải hot reload) để đồ thị DI mới được dựng lại.
@@ -478,7 +478,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > [!NOTE]
 > Việc `injection.dart` gọi tên các package feature là **tham chiếu cứng có chủ đích duy nhất** của
 > composition root — nơi lắp ráp thì buộc phải biết nó lắp cái gì. Đó cũng là chỗ duy nhất: không
-> file nào khác trong app import module (`arch_check` R10 giữ điều đó), và shell dùng chung ở `platform/app_shell/` là
+> file nào khác trong app import module (`arch_check` R10 giữ điều đó), và shell dùng chung ở `platform/shell/app_shell/` là
 > package `platform/`, nên R1 cấm nó import module ngay từ đầu. Shell có import `core_ui_kit` ở vài
 > nơi, và điều đó hoàn toàn ổn — đó là package core, không phải feature có thể gỡ.
 

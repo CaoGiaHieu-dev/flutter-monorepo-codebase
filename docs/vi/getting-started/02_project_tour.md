@@ -24,21 +24,27 @@ flutter-monorepo-codebase/
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
 │
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
-│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapter — dùng chung cho mọi app
-│   ├── kernel/                    # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
-│   ├── base_ui/                   # Theme, LanguageProvider, design token & l10n (không có widget)
-│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
-│   ├── common/                    # AppConfig, AppInitializer, helper gắn với Flutter
-│   ├── database/                  # Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
-│   ├── di/                        # DI Hub — mọi hợp đồng liên module nằm ở đây
-│   ├── network/                   # Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
-│   ├── notifications/             # Module quản lý Push Notification
-│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   ├── responsive/                # Scale theo design-size, gắn với BuildContext
-│   ├── storage/                   # StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
-│   ├── ui_kit/                    # core_ui_kit — widget tái sử dụng cho mọi module
-│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository, BaseModel, request model
+│   ├── foundation/                # Nền thuần mà mọi thứ dựng lên: getIt/lỗi, hợp đồng DI, helper Flutter
+│   │   ├── kernel/                # platform_kernel: helper getIt, ErrorHandler, tiện ích thuần Dart
+│   │   ├── contracts/             # core_di: DI Hub — mọi hợp đồng liên module nằm ở đây
+│   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
+│   ├── layers/                    # Hợp đồng nền của tầng domain và data
+│   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request model
+│   ├── infra/                     # Cơ chế I/O: mạng, lưu trữ, database, push
+│   │   ├── network/               # core_network: Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
+│   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
+│   │   ├── database/              # core_database: Cơ chế Drift: IDatabaseHandle, IDatabaseMigration, opener
+│   │   └── notifications/         # core_notifications: Module quản lý Push Notification
+│   ├── ui/                        # Scale, design system, widget dùng chung
+│   │   ├── responsive/            # core_responsive: Scale theo design-size, gắn với BuildContext
+│   │   ├── design_system/         # core_base_ui: Theme, LanguageProvider, design token & l10n (không có widget)
+│   │   └── ui_kit/                # core_ui_kit — widget tái sử dụng cho mọi module
+│   ├── state/                     # Nền quản lý state (Provider, BLoC)
+│   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
+│   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
+│   └── shell/                     # App shell mà mọi app compose
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapter — dùng chung cho mọi app
 ├── modules/                       # Mỗi bounded context một lát cắt dọc, mỗi team một module
 │   ├── auth/                      # Mẫu: lát cắt đủ ba tầng
 │   │   ├── domain/                # Entity, UseCase, interface Repository — thuần Dart
@@ -72,19 +78,19 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `platform_kernel` | `platform/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
-| `platform_app_shell` | `platform/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, các storage adapter cho theme/ngôn ngữ/cờ boot, `NetworkConfigImpl`. Không import module nào |
-| `core_common` | `platform/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom` + page transition, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
-| `core_di` | `platform/di` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
-| `core_base_ui` | `platform/base_ui` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
-| `core_ui_kit` | `platform/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
-| `core_network` | `platform/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
-| `core_storage` | `platform/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
-| `core_database` | `platform/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
-| `core_responsive` | `platform/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale (mặc định chỉ thu nhỏ); lớp kích thước cửa sổ và các widget layout thích ứng (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
-| `core_notifications` | `platform/notifications` | Service push notification + `NotificationConstants` của riêng nó |
-| `provider_state_management` | `platform/provider_state_management` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
-| `bloc_state_management` | `platform/bloc_state_management` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
+| `platform_kernel` | `platform/foundation/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
+| `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, các storage adapter cho theme/ngôn ngữ/cờ boot, `NetworkConfigImpl`. Không import module nào |
+| `core_common` | `platform/foundation/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom` + page transition, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
+| `core_di` | `platform/foundation/contracts` | **Trạm DI**: interface Navigator, `I*ActionHandler`, hợp đồng routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, interface stream trung lập, `IThemeStorage` / `ILanguageStorage` |
+| `core_base_ui` | `platform/ui/design_system` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
+| `core_ui_kit` | `platform/ui/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation + `SharedUiConstants` |
+| `core_network` | `platform/infra/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning |
+| `core_storage` | `platform/infra/storage` | **Chỉ cơ chế** lưu trữ: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, che dữ liệu trong RAM. **Không định nghĩa key nào.** |
+| `core_database` | `platform/infra/database` | **Chỉ cơ chế** Drift/SQLite: bộ mở database trên isolate nền, connection factory, `IDatabaseHandle`, hợp đồng migration. **Không sở hữu database, bảng hay DAO nào** — mỗi package tự khai của mình. |
+| `core_responsive` | `platform/ui/responsive` | Sizing đáp ứng: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, và bộ extension `context.w/h/sp/r` mà mọi widget dùng để scale (mặc định chỉ thu nhỏ); lớp kích thước cửa sổ và các widget layout thích ứng (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
+| `core_notifications` | `platform/infra/notifications` | Service push notification + `NotificationConstants` của riêng nó |
+| `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin` |
+| `bloc_state_management` | `platform/state/bloc` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
 
 ### Domain — `modules/*/domain`
 
@@ -92,7 +98,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `domain_core` | `platform/domain_core` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
+| `domain_core` | `platform/layers/domain` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
 | `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
 | `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
 
@@ -102,7 +108,7 @@ Hiện thực hợp đồng của domain. Data source trả về **Model**, khô
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `data_core` | `platform/data_core` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_core` | `platform/layers/data` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + bảng `CacheEntries` + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
 | `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
@@ -174,7 +180,7 @@ graph BT
 Kiểm tra bất cứ lúc nào:
 
 ```bash
-grep -rl "package:feature_" platform/*/lib    # phải không in ra gì
+grep -rl "package:feature_" platform/*/*/lib    # phải không in ra gì
 dart tools/arch_check/check.dart              # R1: không có cạnh platform/* → feature_/data_/domain_ nào ngoài ba cạnh trên
 ```
 
@@ -220,9 +226,9 @@ Những hệ quả bạn bắt buộc phải biết:
 | Thêm bảng database | Thư mục `src/database/tables/` của chính package sở hữu (tham chiếu: `modules/cache/data/lib/src/database/tables/`) | [../guides/07_database.md](../guides/07_database.md) |
 | Thêm route / điều hướng giữa các feature | `<feature>/src/routing/` + `core_di/src/navigators/` | [../guides/04_routing.md](../guides/04_routing.md) |
 | Đăng ký thứ gì đó vào DI | `<package>/lib/di/module.dart` | [../guides/05_di.md](../guides/05_di.md) |
-| Đổi màu / khoảng cách / typography | `platform/base_ui/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
+| Đổi màu / khoảng cách / typography | `platform/ui/design_system/lib/src/styles/` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
 | Thêm chuỗi cần dịch | `modules/<tên>/feature/assets/language/*.arb` | [../guides/09_localization_theming.md](../guides/09_localization_theming.md) |
-| Chia sẻ widget giữa các feature | `platform/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
+| Chia sẻ widget giữa các feature | `platform/ui/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Cho feature A kích hoạt hành động ở feature B | `core_di/src/actions/` hoặc `src/agnostic_streams/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Nâng version một thư viện | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
 | Sửa pipeline CI | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |

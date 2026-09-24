@@ -26,7 +26,7 @@ Reference sample in the template: `modules/home/feature/lib/src/bloc/home_profil
 > - map `AppFailure` into your UI state
 > - emit the loading state before the async work and a terminal state after
 >
-> Read `platform/bloc_state_management/lib/src/result_emitter.dart` before choosing.
+> Read `platform/state/bloc/lib/src/result_emitter.dart` before choosing.
 
 ---
 
@@ -39,7 +39,7 @@ Reference sample in the template: `modules/home/feature/lib/src/bloc/home_profil
 > its own, semantically different `ViewState`; both barrels are public, so sharing the name
 > would collide in any file importing both.
 
-`platform/bloc_state_management/lib/src/bloc_view_state.dart`:
+`platform/state/bloc/lib/src/bloc_view_state.dart`:
 
 ```dart
 @freezed
@@ -146,7 +146,7 @@ abstract class HomeProfileEvent with _$HomeProfileEvent {
 ### 3. Unwrapping a `Result<T>` by hand
 
 There is no helper — this is the shape you write in every handler that calls a use case
-(the same example as the doc comment in `platform/bloc_state_management/lib/src/base_bloc.dart`):
+(the same example as the doc comment in `platform/state/bloc/lib/src/base_bloc.dart`):
 
 ```dart
 Future<void> _onStarted(

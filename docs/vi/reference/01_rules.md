@@ -44,9 +44,9 @@ Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật `AGEN
 dart tools/arch_check/check.dart
 
 # core tuyệt đối không được nhắc tên package feature, data hay domain của sản phẩm
-grep -rn "package:feature_\|package:data_" platform/*/lib
-grep -lE "^  (feature_|data_)" platform/*/pubspec.yaml
-grep -rn "package:domain_" platform/*/lib | grep -v "package:domain_core"
+grep -rn "package:feature_\|package:data_" platform/*/*/lib
+grep -lE "^  (feature_|data_)" platform/*/*/pubspec.yaml
+grep -rn "package:domain_" platform/*/*/lib | grep -v "package:domain_core"
 
 # domain tuyệt đối không chạm Flutter
 grep -rn "package:flutter" modules/*/domain/lib
@@ -56,7 +56,7 @@ grep -rn "package:flutter" modules/*/domain/lib
 
 ❌ **Sai** — package core mượn widget của feature:
 ```dart
-// platform/provider_state_management/lib/src/base_view/base_view_widget.dart
+// platform/state/provider/lib/src/base_view/base_view_widget.dart
 import 'package:feature_auth/feature_auth.dart';   // core → feature
 ```
 
@@ -109,7 +109,7 @@ class AuthStorageKeys {
 ```
 
 > [!NOTE]
-> **Ngoại lệ được duyệt — design token.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` ở nguyên `platform/base_ui/lib/src/styles/`, *không* chuyển vào `utils/`.
+> **Ngoại lệ được duyệt — design token.** `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` ở nguyên `platform/ui/design_system/lib/src/styles/`, *không* chuyển vào `utils/`.
 >
 > Chúng là API công khai của design system, và `styles/` mang đúng ngữ nghĩa đó trong khi `utils/` đọc lên là "linh tinh". Di chuyển sẽ làm hỏng mọi tham chiếu trong docs mà chẳng được gì. **Đừng "sửa" chỗ này ở lần audit sau.**
 
@@ -173,7 +173,7 @@ Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvid
 ```bash
 dart run build_runner build --workspace
 grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart       # thứ tự module
-grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # đăng ký eager và các lệnh gh<Dep>() của nó
+grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart   # đăng ký eager và các lệnh gh<Dep>() của nó
 ```
 
 `@PostConstruct(preResolve: true)` trên `@lazySingleton` được await trong lúc module init rồi đăng ký lại thành lazy singleton đồng bộ thuần, nên các lệnh `gh<T>()` đồng bộ về sau đều an toàn.
@@ -290,7 +290,7 @@ Thành phần: `entities/` (Freezed, có `const Class._()`), `params/`, `reposit
 
 ## 11. Routing
 
-**Luật.** Tuyệt đối không sửa `platform/app_shell/lib/presentation/navigation/app_router.dart` để thêm route. Thay vào đó feature tự đăng ký một hợp đồng `core_di`:
+**Luật.** Tuyệt đối không sửa `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` để thêm route. Thay vào đó feature tự đăng ký một hợp đồng `core_di`:
 
 | Hợp đồng | Mục đích | Có thứ tự? |
 |---|---|---|
@@ -334,7 +334,7 @@ Future<void> _loadAvatar() async {
 }
 ```
 
-**Trục scale của các helper** — đọc từ `platform/responsive/lib/src/context_extension.dart`:
+**Trục scale của các helper** — đọc từ `platform/ui/responsive/lib/src/context_extension.dart`:
 
 | Helper | Scale theo |
 |:--|:--|
@@ -353,7 +353,7 @@ Future<void> _loadAvatar() async {
 
 ❌ **Sai** — một lệnh ghi đè bên trong âm thầm vứt bỏ giá trị của caller:
 ```dart
-// điều platform/ui_kit/lib/navigation/app_bar_custom.dart từng làm
+// điều platform/ui/ui_kit/lib/navigation/app_bar_custom.dart từng làm
 @override
 double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩnh viễn
 ```
@@ -388,7 +388,7 @@ Nửa "extension trần" của luật này được **cưỡng chế bằng máy
 
 **Luật.** Toàn bộ chữ hiển thị cho người dùng phải được dịch — cấm hardcode chuỗi UI. Mỗi feature sở hữu file `.arb` trong `assets/language/` của mình và đăng ký `IFeatureLocalization` qua DI. Truy cập qua extension của feature: `context.l10nAuth.someKey`.
 
-Feature **không được** sửa `platform/app_shell/lib/presentation/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
+Feature **không được** sửa `platform/shell/app_shell/lib/presentation/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
 
 Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** định nghĩa `.arb` riêng — nó dùng của `core_base_ui`.
 
@@ -400,7 +400,7 @@ Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** 
 
 **Luật.** Mỗi dialog và bottom sheet là một class widget riêng trong file riêng. Cấm viết cây widget inline bên trong `showDialog()` / `showModalBottomSheet()`.
 
-Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Ví dụ thật: `platform/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
+Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Ví dụ thật: `platform/ui/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
 
 ---
 
@@ -429,7 +429,7 @@ abstract class AuthModule {
 Nhờ vậy chủ sở hữu inject được type cụ thể qua constructor, còn mọi feature khác chỉ nhìn thấy interface.
 
 > [!NOTE]
-> GetIt phân giải theo **đúng type**, không bao giờ theo supertype. Đăng ký `Impl as InterfaceA` **không** làm cho `getIt<InterfaceB>()` chạy được, kể cả khi `InterfaceA implements InterfaceB` — phải bind riêng từng cái. Xem `platform/app_shell/lib/di/network_binding_module.dart`, nơi `SslPinningConfig` cần binding riêng dù `NetworkConfig implements SslPinningConfig`.
+> GetIt phân giải theo **đúng type**, không bao giờ theo supertype. Đăng ký `Impl as InterfaceA` **không** làm cho `getIt<InterfaceB>()` chạy được, kể cả khi `InterfaceA implements InterfaceB` — phải bind riêng từng cái. Xem `platform/shell/app_shell/lib/di/network_binding_module.dart`, nơi `SslPinningConfig` cần binding riêng dù `NetworkConfig implements SslPinningConfig`.
 
 Đừng dùng Action Handler cho điều hướng thuần (dùng Navigator) hay cho logic thuần Domain (dùng UseCase).
 

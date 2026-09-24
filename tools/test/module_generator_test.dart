@@ -110,6 +110,66 @@ modules:
     });
   });
 
+  group('--group places a core/custom package under platform/<group>/', () {
+    for (final (label, args, message) in [
+      (
+        'an unknown group',
+        ['4', 'charts', '--group', 'widgets'],
+        'Unknown --group "widgets". Platform groups: foundation, layers, '
+            'infra, ui, state, shell.',
+      ),
+      ('no value', ['4', 'charts', '--group'], '--group needs a value.'),
+      (
+        'given twice',
+        ['4', 'charts', '--group', 'ui', '--group=infra'],
+        '--group given more than once.',
+      ),
+      (
+        'a module layer',
+        ['2', 'charts', '--group', 'ui'],
+        '--group applies to types 4 (Core) and 5 (Custom) only',
+      ),
+    ]) {
+      test('$label exits 64', () async {
+        final ws = workspace();
+        final run = await generate(ws, args);
+        expect(run, exitsWith(64));
+        expect(run.output, contains(message));
+        expect(ws.exists('platform'), isFalse);
+        expect(ws.exists('modules/charts'), isFalse);
+      });
+    }
+
+    // The target directory is resolved before the toolchain check, so an
+    // existing directory there shows exactly where the package would go.
+    for (final (label, args, path) in [
+      ('type 4 defaults to infra', ['4', 'charts'], 'platform/infra/charts'),
+      (
+        'type 4 with --group ui',
+        ['4', 'charts', '--group', 'ui'],
+        'platform/ui/charts',
+      ),
+      (
+        'type 5 with --group=foundation',
+        ['5', 'charts', 'acme', '--group=foundation'],
+        'platform/foundation/charts',
+      ),
+    ]) {
+      test('$label resolves to $path', () async {
+        final ws = workspace()..mkdir(path);
+        final run = await generate(ws, args);
+        expect(run, exitsWith(1));
+        expect(run.output, contains('Directory "$path" already exists'));
+      });
+    }
+
+    test('--help documents the flag', () async {
+      final run = await generate(workspace(), ['--help']);
+      expect(run, exitsWith(0));
+      expect(run.output, contains('--group <group>'));
+    });
+  });
+
   group('registerInAppManifests', () {
     test('without apps, composes into every manifest', () {
       final ws = workspace();

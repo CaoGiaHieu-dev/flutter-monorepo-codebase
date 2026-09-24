@@ -14,7 +14,7 @@ Use this skill when requested to: "create a new screen/page and link navigation"
 ## 📋 Detailed Steps
 
 ### Step 1: Declare Navigator Interface in `core_di`
-Navigation across features must not be performed directly via path strings. Declare a Navigator interface under `platform/di/lib/src/navigators/`:
+Navigation across features must not be performed directly via path strings. Declare a Navigator interface under `platform/foundation/contracts/lib/src/navigators/`:
 ```dart
 import 'package:flutter/widgets.dart';
 
@@ -25,7 +25,7 @@ abstract class ProfileNavigator {
 ```
 A navigator holds **only its own feature's routes** — `ProfileNavigator` never gets a
 `toSettings`; a caller wanting Settings asks for `SettingsNavigator`. Real examples:
-`platform/di/lib/src/navigators/home_navigator.dart`, `auth_navigator.dart`.
+`platform/foundation/contracts/lib/src/navigators/home_navigator.dart`, `auth_navigator.dart`.
 
 **Clean Architecture / feature boundary:** Navigators are per owning feature. Do not put Settings routes inside `feature_home` — put them in `feature_settings`, and add a `SettingsNavigator` contract to `core_di` only once another module needs to navigate there. `feature_dashboard` supplies **chrome only** (`DashboardRouteModule`); tab branches come from each feature's `INavDestinationModule`.
 
@@ -93,7 +93,7 @@ Pick **one** contribution type:
    (after `build_runner` — they export generated files too), then a **full restart** (hot reload
    does not pick up new DI registrations):
    ```bash
-   dart tools/barrel_generator/generate.dart platform/di/lib
+   dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib
    dart run build_runner build --workspace
    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    ```
@@ -102,7 +102,7 @@ Pick **one** contribution type:
 
 ## 🔑 `NavigatorKeys`
 
-Lives at `platform/di/lib/src/routing/navigator_keys.dart`. The whole API:
+Lives at `platform/foundation/contracts/lib/src/routing/navigator_keys.dart`. The whole API:
 
 ```dart
 class NavigatorKeys {
@@ -141,7 +141,7 @@ The shell must stay buildable when any feature package is deleted. It talks to c
 - Splash is managed by `MainScope`, **not** a GoRouter route; absent `IAppSplashScreen` the
   app falls back to the native splash.
 - Impl classes: `*NavigatorImpl` in `*_navigator_impl.dart` — never `I*Navigator`.
-- Missing modules must not crash (`platform/app_shell/lib/presentation/navigation/app_router.dart`):
+- Missing modules must not crash (`platform/shell/app_shell/lib/presentation/navigation/app_router.dart`):
   no route modules → empty lists; no destination → a placeholder branch at `/_empty_dashboard`;
   no `IAppEntryLocation` → the first destination's path (else `/_empty_dashboard`); no
   `DashboardRouteModule` → the bare `navigationShell`, i.e. tabs without chrome.

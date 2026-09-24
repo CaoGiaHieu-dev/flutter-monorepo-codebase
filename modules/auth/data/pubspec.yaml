@@ -13,19 +13,19 @@ dependencies:
   flutter:
     sdk: flutter
   core_di:
-    path: ../../../platform/di
+    path: ../../../platform/foundation/contracts
   core_network:
-    path: ../../../platform/network
+    path: ../../../platform/infra/network
   core_storage:
-    path: ../../../platform/storage
+    path: ../../../platform/infra/storage
   domain_core:
-    path: ../../../platform/domain_core
+    path: ../../../platform/layers/domain
   domain_auth:
     path: ../domain
   data_core:
-    path: ../../../platform/data_core
+    path: ../../../platform/layers/data
   platform_kernel:
-    path: ../../../platform/kernel
+    path: ../../../platform/foundation/kernel
   get_it: ^9.2.1
   injectable: ^3.0.0
   freezed_annotation: "^3.1.0"

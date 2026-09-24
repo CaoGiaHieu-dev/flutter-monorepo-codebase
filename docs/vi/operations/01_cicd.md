@@ -185,7 +185,7 @@ Gate 0 và 1 chạy đầu tiên là có chủ đích: chúng chỉ đọc manif
 
 Mọi gate đều là một script trong `tools/`, và một gate đã âm thầm thôi fail trông y hệt một PR sạch. Vì vậy các gate có test riêng, trong `tools/test/`, chạy như nửa sau của Gate 1: mỗi test dựng một workspace dùng một lần trong thư mục tạm, chạy tool trên đó như một subprocess (compile sang kernel một lần cho mỗi file, nên cả bộ mất khoảng 15 giây) rồi kiểm tra exit code và output. Chúng phủ `arch_check` (một fixture sạch và một fixture vi phạm cho mỗi luật R1–R10; R6 phải cảnh báo mà vẫn exit 0), `composer verify` (manifest đã sync thì qua; `phase: befor`, layer lạ, module trùng và module không có trên đĩa bị từ chối kèm đường dẫn key), `dependency_sync --check` (lệch version và catalog sai định dạng exit 1), `docs_check` (tham chiếu chết exit 1, span `<placeholder>` và sample bundle đã gỡ thì không, gốc repo lấy từ vị trí script; cặp en ↔ vi thiếu heading, code block hay dòng bảng thì exit 1), barrel generator (dấu `/` ở cuối, thư mục `web/` bên trong `lib/`), composer `bootstrap --dry-run` (báo member bị thiếu, không ghi gì), phần kiểm tra `--apps` của module generator (id app lạ exit 64 và không ghi gì), các stub của `configure.dart --stub-firebase` (mỗi flavor một file, file thật được giữ, `configure.dart` không chạm tới import `package:` nào) và báo cáo coverage (parse lcov, loại file sinh ra, `--min`). Sửa một gate thì thêm case vào đó. Giống Gate 0 và 1, chúng không cần codegen, nên chạy trước bước thiết lập chứ không nằm trong Gate 3.
 
-Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm trong `test/` của từng package — hiện ở `platform/*/test/` và `modules/*/*/test/`, mười chín package — nên chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng. Gate này bỏ qua `tools/`, vì test của nó đã chạy rồi.
+Gate 3 phải lặp theo từng package vì đây là Pub Workspace: test nằm trong `test/` của từng package — hiện ở `platform/*/*/test/` và `modules/*/*/test/`, mười chín package — nên chạy một lệnh `flutter test` ở gốc sẽ không thấy chúng. Gate này bỏ qua `tools/`, vì test của nó đã chạy rồi.
 
 Mỗi package chạy với `--coverage`, để lại `<package>/coverage/lcov.info` (đã gitignore). Bước kế tiếp, **Coverage report (advisory)**, đọc tất cả bằng `dart tools/coverage_report/report.dart` và ghi bảng line coverage theo từng package — đã loại file sinh ra (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `gen/`, …) — vào job summary của lần chạy. Nó vẫn chạy khi có test fail (`if: !cancelled()`), là `continue-on-error` và không có ngưỡng. Muốn biến coverage thành gate, thêm `--min <pct>` (tổng) hoặc `--min-package <pct>` (từng package) vào bước đó và bỏ `continue-on-error`; xem [`../reference/03_tooling.md`](../reference/03_tooling.md).
 
@@ -281,8 +281,8 @@ dart tools/dependency_sync.dart --check
 dart tools/docs_check/check.dart
 
 # 3. Test theo từng package (gate 3 — xem §6), rồi bảng coverage
-(cd platform/storage && flutter test --coverage)
-(cd platform/database && flutter test --coverage)
+(cd platform/infra/storage && flutter test --coverage)
+(cd platform/infra/database && flutter test --coverage)
 # ...lặp cho mọi package có thư mục test/
 dart tools/coverage_report/report.dart
 

@@ -11,7 +11,7 @@
 `core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (§3), do app shell implement.
 
 ```dart
-// platform/network/lib/src/api_client.dart
+// platform/infra/network/lib/src/api_client.dart
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
@@ -41,7 +41,7 @@ Tham số của `createClient()`:
 `core_network` đăng ký đúng một client — `Dio` mặc định mà mọi Retrofit data source nhận được:
 
 ```dart
-// platform/network/lib/di/register_module.dart
+// platform/infra/network/lib/di/register_module.dart
 @module
 abstract class RegisterModule {
   @lazySingleton
@@ -68,7 +68,7 @@ abstract class RegisterModule {
 }
 ```
 
-`getIt<Dio>()` và mọi tham số `Dio` không đặt tên vẫn nhận client mặc định; chỉ tham số gắn `@Named('public_api')` mới nhận client này — xem [§6](#6-khai-api-service-bằng-retrofit). Mỗi tên chỉ đăng ký được **một lần** trong container: nếu package thứ hai cũng cần client đó, hãy chuyển phần đăng ký vào `platform/network/lib/di/register_module.dart` thay vì khai hai lần.
+`getIt<Dio>()` và mọi tham số `Dio` không đặt tên vẫn nhận client mặc định; chỉ tham số gắn `@Named('public_api')` mới nhận client này — xem [§6](#6-khai-api-service-bằng-retrofit). Mỗi tên chỉ đăng ký được **một lần** trong container: nếu package thứ hai cũng cần client đó, hãy chuyển phần đăng ký vào `platform/infra/network/lib/di/register_module.dart` thay vì khai hai lần.
 
 ---
 
@@ -84,7 +84,7 @@ Dio chạy interceptor theo **đúng thứ tự được thêm vào** — cho c�
 ```
 
 ```dart
-// platform/network/lib/src/api_client.dart
+// platform/infra/network/lib/src/api_client.dart
 dio.interceptors.add(
   AuthInterceptor(
     getToken: _config.getToken,
@@ -127,7 +127,7 @@ Auth chạy trước để token được gắn trước mọi thứ; refresh đ
 Cả ba cờ nằm trong `RequestOptions.extra` và mặc định là `true`:
 
 ```dart
-// platform/network/lib/src/utils/network_constants.dart
+// platform/infra/network/lib/src/utils/network_constants.dart
 /// Set `false` to stop [AuthInterceptor] attaching the bearer token.
 static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
@@ -146,7 +146,7 @@ static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
 Gắn header `language` viết hoa (fallback về locale thiết bị, rồi về `vi`), và bearer token khi request cần auth:
 
 ```dart
-// platform/network/lib/src/interceptors/auth_interceptor.dart
+// platform/infra/network/lib/src/interceptors/auth_interceptor.dart
 if (needAuthentication) {
   final token = getToken() ?? '';
   if (token.isNotEmpty) {
@@ -166,7 +166,7 @@ if (needAuthentication) {
 Chỉ lỗi tầng vận chuyển mới được retry — **không** retry theo HTTP status code:
 
 ```dart
-// platform/network/lib/src/handlers/retry_handler.dart
+// platform/infra/network/lib/src/handlers/retry_handler.dart
 bool retryWhen(DioExceptionType type) {
   return type == DioExceptionType.receiveTimeout ||
       type == DioExceptionType.sendTimeout ||
@@ -182,7 +182,7 @@ Nhiều request lỗi đồng thời được gom vào một hàng đợi và ch
 Cả ba hook đều nằm sau `kDebugMode`, và header chứa thông tin đăng nhập bị che **ngay cả ở bản debug**:
 
 ```dart
-// platform/network/lib/src/interceptors/logging_interceptor.dart
+// platform/infra/network/lib/src/interceptors/logging_interceptor.dart
 Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
   const redactedKeys = {
     HttpHeaders.authorizationHeader,
@@ -207,7 +207,7 @@ Body cũng được che, ở mọi độ sâu: giá trị dưới `password`, `t
 ## 3. `NetworkConfig` — app shell cung cấp chi tiết
 
 ```dart
-// platform/network/lib/src/network_config.dart
+// platform/infra/network/lib/src/network_config.dart
 abstract class NetworkConfig implements SslPinningConfig {
   String? Function() get getToken;
   String? Function() get getLocale;
@@ -230,7 +230,7 @@ Hai getter refresh mặc định `null`, nên trong một app không có endpoin
 Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, thay vì tự đọc storage:
 
 ```dart
-// platform/app_shell/lib/di/network_config_impl.dart
+// platform/shell/app_shell/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(this._languageStorage);
@@ -270,7 +270,7 @@ class NetworkConfigImpl implements NetworkConfig {
 `_refreshSession` giao việc cho `IAuthSessionGateway`, do `data_auth` hiện thực: repository refresh và lưu thông tin đăng nhập, còn gateway đọc lại token từ chủ sở hữu. Bản thân config không lưu gì cả:
 
 ```dart
-// platform/app_shell/lib/di/network_config_impl.dart
+// platform/shell/app_shell/lib/di/network_config_impl.dart
 Future<String?> _refreshSession() async => await _session?.refreshToken();
 
 // modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
@@ -320,7 +320,7 @@ Một `401` tới *sau* khi refresh đã xong — request được gửi bằng 
 `RefreshTokenHandler` xếp hàng mọi thứ sau một `Completer`. Request 401 đầu tiên thực hiện refresh; những cái còn lại chờ trên cùng future đó:
 
 ```dart
-// platform/network/lib/src/handlers/refresh_token_handler.dart
+// platform/infra/network/lib/src/handlers/refresh_token_handler.dart
 // If a refresh is already in progress, wait for it to complete.
 if (_completer != null) {
   final String? newToken = await _completer!.future;
@@ -348,7 +348,7 @@ Body dạng `FormData` được dựng lại trước khi replay, vì stream c�
 ### Ba lớp chống đệ quy vô hạn
 
 ```dart
-// platform/network/lib/src/interceptors/refresh_token_interceptor.dart
+// platform/infra/network/lib/src/interceptors/refresh_token_interceptor.dart
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
 ///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
@@ -383,7 +383,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 Initializer **không im lặng bỏ qua** chuyện này:
 
 ```dart
-// platform/common/lib/src/config/app_initializer.dart
+// platform/foundation/common/lib/src/config/app_initializer.dart
 if (hashes != null && hashes.isNotEmpty) {
   HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
 } else {
@@ -402,14 +402,14 @@ if (hashes != null && hashes.isNotEmpty) {
 
 ### Được cài lúc nào
 
-`_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi ngay sau `configureDependencies()` và **trước** khi `MainScope` dựng splash. Thời điểm là mấu chốt: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó — auth khôi phục phiên bằng một lần refresh token — có thể gửi request đầu tiên ngay lập tức, và `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`. Override cài muộn hơn, trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
+`_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi ngay sau `configureDependencies()` và **trước** khi `MainScope` dựng splash. Thời điểm là mấu chốt: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó — auth khôi phục phiên bằng một lần refresh token — có thể gửi request đầu tiên ngay lập tức, và `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`. Override cài muộn hơn, trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
 
 ### Cái bẫy khi đăng ký DI
 
 `NetworkConfig implements SslPinningConfig`, nhưng đăng ký impl `as: NetworkConfig` **không** làm nó phân giải được dưới kiểu `SslPinningConfig` — GetIt khớp đúng kiểu đã đăng ký. Thiếu một binding thứ hai, `getItOrNull<SslPinningConfig>()` trả về `null` và pinning âm thầm vô hiệu trên mọi flavor, kể cả production. Binding ngăn điều đó:
 
 ```dart
-// platform/app_shell/lib/di/network_binding_module.dart
+// platform/shell/app_shell/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
 /// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
@@ -477,7 +477,7 @@ abstract class AuthRemoteDataSource {
    ```yaml
    dependencies:
      core_network:
-       path: ../../../platform/network
+       path: ../../../platform/infra/network
      dio: "^5.11.0"
      retrofit: "^4.10.0"
      injectable: ^3.0.0
@@ -546,7 +546,7 @@ Hằng số endpoint nằm cùng package sở hữu chúng, không bao giờ ở
 `BaseEntity<T>` bao một response chuẩn của server:
 
 ```dart
-// platform/domain_core/lib/src/entities/base/base_entity.dart
+// platform/layers/domain/lib/src/entities/base/base_entity.dart
 const factory BaseEntity({
   @JsonKey(name: 'statusCode') @Default(200) int statusCode,
   @JsonKey(name: 'data') T? data,
@@ -560,7 +560,7 @@ bool get hasError => !isSuccess;
 `PaginatedEntity<T>` mang theo trang dữ liệu cộng metadata:
 
 ```dart
-// platform/domain_core/lib/src/entities/base/paginate_entity.dart
+// platform/layers/domain/lib/src/entities/base/paginate_entity.dart
 typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
 
 const factory PaginatedEntity({
@@ -574,7 +574,7 @@ const factory PaginatedEntity({
 `BaseRequest<T>` là bộ dựng request phân trang:
 
 ```dart
-// platform/data_core/lib/src/models/base_request.dart
+// platform/layers/data/lib/src/models/base_request.dart
 const factory BaseRequest({
   @JsonKey(name: 'page') @Default(1) int page,
   @JsonKey(name: 'pageSize') @Default(25) int pageSize,

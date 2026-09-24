@@ -253,8 +253,8 @@ void main(List<String> args) async {
           break;
       }
       stdout.writeln(
-        '3. Added a navigator contract to core_di (platform/di/lib/src/navigators/)? '
-        'Run "dart tools/barrel_generator/generate.dart platform/di/lib" first',
+        '3. Added a navigator contract to core_di (platform/foundation/contracts/lib/src/navigators/)? '
+        'Run "dart tools/barrel_generator/generate.dart platform/foundation/contracts/lib" first',
       );
       stdout.writeln(
         '4. Re-run "dart run build_runner build --workspace", then fully '

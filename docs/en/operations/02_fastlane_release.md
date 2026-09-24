@@ -354,7 +354,7 @@ build_command += " --dart-define-from-file=#{dart_define_file.shellescape}"
 ```
 
 > [!IMPORTANT]
-> **A prod release cannot be built until you create `apps/mobile/env.prod`.** That is deliberate. The alternative — skipping the flag with a warning — lets a prod build *succeed* with every `String.fromEnvironment` in `platform/kernel/lib/src/utils/env_constants.dart` falling back to empty, producing an APK that points at empty API URLs and empty keys, signed and shipped with no warning. Failing loudly is the safer trade.
+> **A prod release cannot be built until you create `apps/mobile/env.prod`.** That is deliberate. The alternative — skipping the flag with a warning — lets a prod build *succeed* with every `String.fromEnvironment` in `platform/foundation/kernel/lib/src/utils/env_constants.dart` falling back to empty, producing an APK that points at empty API URLs and empty keys, signed and shipped with no warning. Failing loudly is the safer trade.
 >
 > Copy the key names from `apps/mobile/env.dev`; `.vscode/launch.json` already points its Prod configuration at `env.prod`.
 

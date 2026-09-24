@@ -52,7 +52,7 @@ dart tools/unused_checker/check_unused_packages.dart # tham khảo — đã khai
 
 ```bash
 dart tools/arch_check/check.dart                            # R1 hướng phụ thuộc, R5 import thiếu khai
-grep -rn "package:feature_\|package:data_" platform/*/lib   # phải rỗng
+grep -rn "package:feature_\|package:data_" platform/*/*/lib   # phải rỗng
 dart tools/unused_checker/check_unused_packages.dart        # đã khai mà không dùng
 ```
 
@@ -111,7 +111,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 
 ```bash
 grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart
-grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
+grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
 ```
 
 ---

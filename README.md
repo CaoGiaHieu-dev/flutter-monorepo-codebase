@@ -32,14 +32,14 @@ graph TD
         FeatDash["dashboard"]:::feature
     end
 
-    subgraph DataLayer ["🔌 Data Layer (platform/data_core + modules/*/data)"]
+    subgraph DataLayer ["🔌 Data Layer (platform/layers/data + modules/*/data)"]
         direction LR
         DataCore["data_core"]:::data
         DataAuth["data_auth"]:::data
         DataCache["data_cache"]:::data
     end
 
-    subgraph DomainLayer ["⚙️ Domain Layer (platform/domain_core + modules/*/domain)"]
+    subgraph DomainLayer ["⚙️ Domain Layer (platform/layers/domain + modules/*/domain)"]
         direction LR
         DomCore["domain_core"]:::domain
         DomAuth["domain_auth"]:::domain
@@ -133,21 +133,27 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── platform/                      # Infra team's ground — every module may depend on it
-│   ├── app_shell/                 # platform_app_shell: boot scope, router, material wrapper, storage adapters
-│   ├── kernel/                    # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
-│   ├── base_ui/                   # Theme, LanguageProvider, design tokens & l10n (zero widgets)
-│   ├── bloc_state_management/     # BaseBloc, BaseCubit, BlocViewState<T>
-│   ├── common/                    # AppConfig, AppInitializer, Flutter-bound helpers
-│   ├── database/                  # Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
-│   ├── di/                        # DI Hub — every cross-module contract lives here
-│   ├── network/                   # Dio + Retrofit factory, interceptor chain, SSL pinning
-│   ├── notifications/             # Push Notification management module
-│   ├── provider_state_management/ # BaseProvider, executeOperation, ViewStateModel
-│   ├── responsive/                # Design-size scaling bound to BuildContext
-│   ├── storage/                   # StorageManager + StorageValue<T> (defines NO keys)
-│   ├── ui_kit/                    # core_ui_kit — reusable widgets every module may use
-│   ├── domain_core/               # Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   └── data_core/                 # IBaseRepository, BaseModel, request models
+│   ├── foundation/                # Pure base everything builds on: getIt/errors, DI contracts, Flutter helpers
+│   │   ├── kernel/                # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
+│   │   ├── contracts/             # core_di: DI Hub — every cross-module contract lives here
+│   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
+│   ├── layers/                    # Base contracts of the domain and data layers
+│   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
+│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request models
+│   ├── infra/                     # I/O mechanisms: network, storage, database, push
+│   │   ├── network/               # core_network: Dio + Retrofit factory, interceptor chain, SSL pinning
+│   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (defines NO keys)
+│   │   ├── database/              # core_database: Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
+│   │   └── notifications/         # core_notifications: Push Notification management module
+│   ├── ui/                        # Scaling, design system, shared widgets
+│   │   ├── responsive/            # core_responsive: Design-size scaling bound to BuildContext
+│   │   ├── design_system/         # core_base_ui: Theme, LanguageProvider, design tokens & l10n (zero widgets)
+│   │   └── ui_kit/                # core_ui_kit — reusable widgets every module may use
+│   ├── state/                     # State-management bases (Provider, BLoC)
+│   │   ├── provider/              # provider_state_management: BaseProvider, executeOperation, ViewStateModel
+│   │   └── bloc/                  # bloc_state_management: BaseBloc, BaseCubit, BlocViewState<T>
+│   └── shell/                     # The app shell every app composes
+│       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, storage adapters
 ├── tools/                         # Command-line toolset (a workspace member) — see tools/README.md
 │   ├── android_compliance/        # 16KB page size compatibility check (Android 15+)
 │   ├── arch_check/                # Layering rules R1–R10 — PR Gate 1
@@ -391,7 +397,7 @@ Future<void> configureDependencies({String? environment}) async {
 >
 > **GetIt does not resolve supertypes.** Registering `Impl as InterfaceA` leaves
 > `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB` — bind the second
-> interface explicitly through an `@module` (see `platform/app_shell/lib/di/network_binding_module.dart`).
+> interface explicitly through an `@module` (see `platform/shell/app_shell/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -406,7 +412,7 @@ Each Feature Package owns its own routing structure and files:
 - Routes inherit from `GoRouteDataCustom` to inherently possess automatic screen tracking and smooth cross-platform transitions.
 
 ### Runtime Assembly (Assembly)
-`platform/app_shell/lib/presentation/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeRoute` lists. It collects:
+`platform/shell/app_shell/lib/presentation/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeRoute` lists. It collects:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list

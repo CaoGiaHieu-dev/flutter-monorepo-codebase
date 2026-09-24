@@ -38,7 +38,7 @@ at call time and has no such dependency, but it keeps the lazy annotation — th
 one to copy whenever a constructor needs something from a later group:
 
 ```dart
-// platform/app_shell/lib/di/network_config_impl.dart
+// platform/shell/app_shell/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)   // NOT @Singleton
 class NetworkConfigImpl implements NetworkConfig { ... }
 ```
@@ -53,7 +53,7 @@ Deferring is safe whenever every consumer is itself lazy — nothing resolves it
 > `lib/di/module.module.dart`:
 > ```bash
 > grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart   # module order
-> grep -rn -A4 "YourType" modules/*/*/lib/di/module.module.dart platform/*/lib/di/module.module.dart
+> grep -rn -A4 "YourType" modules/*/*/lib/di/module.module.dart platform/*/*/lib/di/module.module.dart
 > ```
 > Check that every `gh<Dep>()` your eager singleton makes is registered on an *earlier* line of
 > the same file, or by a module whose `init` runs earlier.
@@ -65,7 +65,7 @@ supertype chain. Registering `@LazySingleton(as: NetworkConfig)` therefore leave
 `getItOrNull<SslPinningConfig>()` returning `null` even though `NetworkConfig implements
 SslPinningConfig` — and certificate pinning then silently no-ops.
 
-Bind the second type explicitly with a `@module` (`platform/app_shell/lib/di/network_binding_module.dart`):
+Bind the second type explicitly with a `@module` (`platform/shell/app_shell/lib/di/network_binding_module.dart`):
 
 ```dart
 @module
@@ -94,7 +94,7 @@ abstract class RegisterModule {
 }
 ```
 
-And where construction is genuinely async, `platform/storage/lib/di/module.dart`:
+And where construction is genuinely async, `platform/infra/storage/lib/di/module.dart`:
 
 ```dart
 @module
@@ -111,7 +111,7 @@ Use `@preResolve` only where construction is genuinely async; the rest are plain
 
 ## ⚠️ Trap 3 — `getAll` throws when nothing is registered
 
-`platform_kernel` (`platform/kernel/lib/src/di/service_locator.dart`, re-exported by `core_common`)
+`platform_kernel` (`platform/foundation/kernel/lib/src/di/service_locator.dart`, re-exported by `core_common`)
 exposes four lookups; picking the wrong one breaks feature removal:
 
 | Function | Missing registration |

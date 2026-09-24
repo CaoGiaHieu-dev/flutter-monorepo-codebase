@@ -64,7 +64,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 > # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
->     path: ../../../platform/domain_core
+>     path: ../../../platform/layers/domain
 >   get_it: ^9.2.1
 >   injectable: ^3.0.0
 >   freezed_annotation: "^3.1.0"
@@ -83,11 +83,11 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ## 3. `domain_core` — the shared vocabulary
 
-`platform/domain_core/` is depended on by every other domain package.
+`platform/layers/domain/` is depended on by every other domain package.
 
 ### `Result<T>` — the return type of every use case
 
-Defined in `platform/domain_core/lib/src/repositories/result.dart`, with `AppFailure` alongside it in `src/failures/`:
+Defined in `platform/layers/domain/lib/src/repositories/result.dart`, with `AppFailure` alongside it in `src/failures/`:
 
 ```dart
 @freezed
@@ -112,7 +112,7 @@ switch (result) {
 ```
 
 > [!NOTE]
-> **`None` and `Cancel` are unused reserve variants.** Grep the repo: no repository or use case ever returns `Result.none()` or `Result.cancel()` — they appear only in `platform/provider_state_management/test/base_provider_test.dart`. So the honest answer to *"when does `Cancel` happen?"* is: **it does not, today.** They exist so the union can grow without a breaking change. You still have to handle them in exhaustive `switch` / `whenAsync`, which is the cost of keeping them.
+> **`None` and `Cancel` are unused reserve variants.** Grep the repo: no repository or use case ever returns `Result.none()` or `Result.cancel()` — they appear only in `platform/state/provider/test/base_provider_test.dart`. So the honest answer to *"when does `Cancel` happen?"* is: **it does not, today.** They exist so the union can grow without a breaking change. You still have to handle them in exhaustive `switch` / `whenAsync`, which is the cost of keeping them.
 
 #### API surface
 
@@ -148,7 +148,7 @@ typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 
 ### `BaseEntity<T>` — standard server envelope
 
-`platform/domain_core/lib/src/entities/base/base_entity.dart`:
+`platform/layers/domain/lib/src/entities/base/base_entity.dart`:
 
 ```dart
 @Freezed(genericArgumentFactories: true)
@@ -167,7 +167,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 
-`platform/domain_core/lib/src/entities/base/paginate_entity.dart` — items land in `data` (JSON key `items`), page info in `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
+`platform/layers/domain/lib/src/entities/base/paginate_entity.dart` — items land in `data` (JSON key `items`), page info in `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
 
 ### `BaseUseCase<RType, Params>`
 

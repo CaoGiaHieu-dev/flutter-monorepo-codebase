@@ -25,10 +25,10 @@ All scaling goes through `BuildContext`. That is not a style convention — it i
 
 ## 🚀 1. Setup
 
-Already wired in `platform/app_shell/lib/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — `AppConfig.design` is a `375x812` artboard, not the package's `360x690` default:
+Already wired in `platform/shell/app_shell/lib/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — `AppConfig.design` is a `375x812` artboard, not the package's `360x690` default:
 
 ```dart
-// platform/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
   // The phone artboard every window class starts from.
   designSize: AppConfig.design,
@@ -70,7 +70,7 @@ A scale factor is the window / artboard ratio, then clamped by a `ScaleBounds`. 
 | `ScaleBounds.fixed()` | 1 – 1 | Always the design size |
 | `ScaleBounds.unbounded()` | 0 – ∞ | The raw ratio, the behaviour before bounds existed |
 
-So **do not expect sizes to grow on a tablet**. To let a window class grow, opt that class in with a `ResponsiveProfile`; a profile set on one class also covers every wider class that has none of its own. Details: [`docs/en/guides/11_design_system.md`](../../docs/en/guides/11_design_system.md) §6.
+So **do not expect sizes to grow on a tablet**. To let a window class grow, opt that class in with a `ResponsiveProfile`; a profile set on one class also covers every wider class that has none of its own. Details: [`docs/en/guides/11_design_system.md`](../../../docs/en/guides/11_design_system.md) §6.
 
 ---
 
@@ -135,7 +135,7 @@ AdaptiveContent(child: form)
 > [!WARNING]
 > `AdaptiveSplitView` honours a fold only when it spans the window along the fold (fold coordinates are window coordinates): as wide as the window for a vertical fold (`book`), as tall as the window for a horizontal one (`tabletop`). Beside a `NavigationRail` a vertical fold is ignored; under an app bar a horizontal one is — the `splitAt` rule decides instead.
 
-**Choose a layout by window class, never by `Platform.isIOS`, device model or an ad-hoc `shortestSide` check.** Reference: `modules/dashboard/feature/lib/src/pages/dashboard_page.dart` — a bottom bar on `compact`, a `NavigationRail` from `medium`, extended from `large`. Details: [`docs/en/guides/11_design_system.md`](../../docs/en/guides/11_design_system.md) §7.
+**Choose a layout by window class, never by `Platform.isIOS`, device model or an ad-hoc `shortestSide` check.** Reference: `modules/dashboard/feature/lib/src/pages/dashboard_page.dart` — a bottom bar on `compact`, a `NavigationRail` from `medium`, extended from `large`. Details: [`docs/en/guides/11_design_system.md`](../../../docs/en/guides/11_design_system.md) §7.
 
 ---
 
@@ -172,4 +172,4 @@ The assert is deliberate. Silently falling back to unscaled values would ship a 
 
 `dart tools/arch_check/check.dart` — rule **R7**, Gate 1 of `pr_quality_check.yml` — scans every file under `lib/` that mentions `core_responsive` (in practice: imports it) and **blocks the merge** (exit 1) on any bare sizing extension (`16.w`, `(x).sp`, …), printing `file:line`. The rule does not depend on review.
 
-The package's tests live in `platform/responsive/test/`.
+The package's tests live in `platform/ui/responsive/test/`.

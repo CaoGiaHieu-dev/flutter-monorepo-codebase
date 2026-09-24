@@ -21,12 +21,12 @@ Mỗi feature tự sở hữu bản dịch của mình. App shell không hề bi
 | `core_base_ui` | Chuỗi global / fallback dùng chung |
 
 > [!CAUTION]
-> Một feature **tuyệt đối không** được sửa `platform/app_shell/lib/presentation/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI — xem §3.
+> Một feature **tuyệt đối không** được sửa `platform/shell/app_shell/lib/presentation/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI — xem §3.
 
 ## 2. Hợp đồng
 
 ```dart
-// platform/di/lib/src/feature_localization.dart
+// platform/foundation/contracts/lib/src/feature_localization.dart
 /// Interface for feature localization delegates.
 /// Enables safe registration and retrieval via getAllOrEmpty<IFeatureLocalization>() in the app shell.
 abstract class IFeatureLocalization {
@@ -37,7 +37,7 @@ abstract class IFeatureLocalization {
 ## 3. App shell gom delegate như thế nào
 
 ```dart
-// platform/app_shell/lib/presentation/app_material_wrapper.dart
+// platform/shell/app_shell/lib/presentation/app_material_wrapper.dart
 // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
 // registers `IFeatureLocalization`. Every feature package is removable, so
 // an app built without any of them must still resolve its delegates —
@@ -128,7 +128,7 @@ Thêm một ngôn ngữ đụng tới `core_base_ui` **và mọi feature có chu
 
 ### Bước 1 — `core_base_ui`: file ARB, và tên của ngôn ngữ
 
-Tạo `ja.arb` trong `platform/base_ui/assets/language/` với `"@@locale": "ja"` và mọi key của file template `en.arb`. Rồi thêm tên hiển thị của ngôn ngữ vào **mọi** ARB của `core_base_ui` — `en.arb`, `vi.arb` lẫn `ja.arb` — cạnh `languageEn` / `languageVi`:
+Tạo `ja.arb` trong `platform/ui/design_system/assets/language/` với `"@@locale": "ja"` và mọi key của file template `en.arb`. Rồi thêm tên hiển thị của ngôn ngữ vào **mọi** ARB của `core_base_ui` — `en.arb`, `vi.arb` lẫn `ja.arb` — cạnh `languageEn` / `languageVi`:
 
 ```json
 {
@@ -139,11 +139,11 @@ Tạo `ja.arb` trong `platform/base_ui/assets/language/` với `"@@locale": "ja"
 }
 ```
 
-`AppLocalizations.supportedLocales` của `core_base_ui` chính là những gì app cung cấp: `MaterialApp.supportedLocales` (`platform/app_shell/lib/presentation/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider` và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`) đều đọc nó. `gen-l10n` dựng nó từ các file ARB đang có, nên chính file mới là thứ thêm locale vào.
+`AppLocalizations.supportedLocales` của `core_base_ui` chính là những gì app cung cấp: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider` và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`) đều đọc nó. `gen-l10n` dựng nó từ các file ARB đang có, nên chính file mới là thứ thêm locale vào.
 
 ### Bước 2 — đặt tên cho nó trong bộ chọn
 
-`platform/base_ui/lib/src/extensions/locale_extension.dart` ánh xạ mã ngôn ngữ sang tên đó; thiếu một nhánh thì bộ chọn chỉ hiện tag trần `ja`:
+`platform/ui/design_system/lib/src/extensions/locale_extension.dart` ánh xạ mã ngôn ngữ sang tên đó; thiếu một nhánh thì bộ chọn chỉ hiện tag trần `ja`:
 
 ```dart
 return switch (languageCode) {
@@ -166,7 +166,7 @@ FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 
 ### Bước 4 — `preferred-supported-locales`
 
-`platform/base_ui/l10n.yaml` và `l10n.yaml` của từng feature ghi `preferred-supported-locales: [en, vi]`, `l10n.yaml.mustache` của generator cũng vậy. `gen-l10n` vẫn nhận `ja.arb` mà không cần sửa — danh sách này chỉ **sắp thứ tự** các locale, locale nào không có trong đó thì xếp sau theo bảng chữ cái — nhưng locale được hỗ trợ đầu tiên là locale dự phòng (`localeResolutionCallback` và `LanguageProvider` đều lùi về `supportedLocales.first`). Hãy thêm locale mới vào cuối để thứ tự rõ ràng: `[en, vi, ja]`.
+`platform/ui/design_system/l10n.yaml` và `l10n.yaml` của từng feature ghi `preferred-supported-locales: [en, vi]`, `l10n.yaml.mustache` của generator cũng vậy. `gen-l10n` vẫn nhận `ja.arb` mà không cần sửa — danh sách này chỉ **sắp thứ tự** các locale, locale nào không có trong đó thì xếp sau theo bảng chữ cái — nhưng locale được hỗ trợ đầu tiên là locale dự phòng (`localeResolutionCallback` và `LanguageProvider` đều lùi về `supportedLocales.first`). Hãy thêm locale mới vào cuối để thứ tự rõ ràng: `[en, vi, ja]`.
 
 ### Bước 5 — sinh lại
 
@@ -174,7 +174,7 @@ FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 dart tools/workspace_setup/configure.dart   # gen-l10n cho mọi package có l10n.yaml, rồi codegen + barrel
 ```
 
-Hoặc `flutter gen-l10n` trong `platform/base_ui` và trong từng feature. Kiểm tra `untranslated-messages.txt` của mọi package đều trống.
+Hoặc `flutter gen-l10n` trong `platform/ui/design_system` và trong từng feature. Kiểm tra `untranslated-messages.txt` của mọi package đều trống.
 
 ## 6. Quy tắc
 
@@ -189,7 +189,7 @@ Hoặc `flutter gen-l10n` trong `platform/base_ui` và trong từng feature. Ki�
 
 ## 7. Design token và màu sắc
 
-Token nằm trong `platform/base_ui/lib/src/styles/`; màu đến từ một
+Token nằm trong `platform/ui/design_system/lib/src/styles/`; màu đến từ một
 `ThemeExtension` nên tự đổi theo light/dark.
 
 | Class token | File | Nhiệm vụ |
@@ -231,7 +231,7 @@ Container(
 `ThemeMode.system` phân giải theo độ sáng của OS, mà giá trị này có thể đổi khi app đang chạy. `ThemeProvider` lắng nghe điều đó:
 
 ```dart
-// platform/base_ui/lib/src/theme/theme_provider.dart
+// platform/ui/design_system/lib/src/theme/theme_provider.dart
 /// Called by the framework when the OS switches between Light and Dark.
 ///
 /// Only [ThemeMode.system] derives its appearance from the platform, so an
@@ -326,7 +326,7 @@ double? get leadingWidth => context.w(64);
 Đoạn override đó vừa scale bên trong, **vừa âm thầm vứt bỏ** giá trị `leadingWidth` mà người gọi truyền qua `super.leadingWidth` — tham số trở thành vô dụng. `AppBarCustom` thay vào đó chuyển tiếp mọi thứ cho `AppBar`:
 
 ```dart
-// platform/ui_kit/lib/navigation/app_bar_custom.dart
+// platform/ui/ui_kit/lib/navigation/app_bar_custom.dart
 class AppBarCustom extends AppBar {
   AppBarCustom({
     super.key,
@@ -348,7 +348,7 @@ AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 Các giá trị mặc định không phải kích thước nằm trong `utils/` của chính package:
 
 ```dart
-// platform/ui_kit/lib/utils/shared_ui_constants.dart
+// platform/ui/ui_kit/lib/utils/shared_ui_constants.dart
 /// Timing and overlay constants owned by `core_ui_kit`.
 ///
 /// Package-internal by convention: these are defaults for the reusable
@@ -373,7 +373,7 @@ class SharedUiConstants {
 | Dialog | `_dialog.dart` | `Dialog` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` |
 
-Ví dụ có sẵn trong `platform/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
+Ví dụ có sẵn trong `platform/ui/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
 
 Builder inline không thể tái sử dụng, không preview được, không test riêng được — và hầu như luôn kết thúc bằng chuỗi cứng và kích thước cứng.
 

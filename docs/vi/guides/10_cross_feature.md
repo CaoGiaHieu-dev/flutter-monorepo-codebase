@@ -82,7 +82,7 @@ BLoC. Không bên nào được import bên kia, và cũng không nên biết b�
 ### Bước 1 — interface trung lập ở `core_di`
 
 Code thật từ
-[`platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/di/lib/src/agnostic_streams/i_auth_status_stream.dart):
+[`platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart`](../../../platform/foundation/contracts/lib/src/agnostic_streams/i_auth_status_stream.dart):
 
 ```dart
 abstract class IAuthStatusStream {
@@ -103,7 +103,7 @@ Hai quyết định thiết kế đáng hiểu rõ:
 tên một kiểu thuộc package `domain_*` (`.agents/AGENTS.md` §8.4): import đó khiến mọi bên tiêu thụ
 phụ thuộc `domain_auth` ngay lúc biên dịch, và `getItOrNull` không gỡ được điều đó. Vì vậy `core_di`
 sở hữu một value type nhỏ,
-[`AuthPrincipal`](../../../platform/di/lib/src/agnostic_streams/auth_principal.dart), và feature
+[`AuthPrincipal`](../../../platform/foundation/contracts/lib/src/agnostic_streams/auth_principal.dart), và feature
 auth thu hẹp entity của mình về kiểu đó tại ranh giới (`toPrincipal` ở bước 2). Hợp đồng cố ý nhỏ
 hơn entity — bên tiêu thụ chỉ hỏi *ai đang đăng nhập* sẽ không bao giờ thấy phần còn lại.
 
@@ -223,7 +223,7 @@ ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  
 ```
 
 Interface — code thật từ
-[`platform/di/lib/src/theme/i_theme_storage.dart`](../../../platform/di/lib/src/theme/i_theme_storage.dart):
+[`platform/foundation/contracts/lib/src/theme/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/theme/i_theme_storage.dart):
 
 ```dart
 import 'package:material_ui/material_ui.dart';
@@ -242,7 +242,7 @@ abstract class IThemeStorage {
 `package:flutter/material.dart`. Tầng domain là Dart thuần và **không thể import Flutter**, nên đưa
 theme đi qua nó là bất khả thi về mặt cấu trúc — đây là ràng buộc cứng, không phải đường tắt.
 
-Implementation nằm ở app shell (`platform/app_shell/lib/di/theme_storage_impl.dart`) vì đó là nơi provider của
+Implementation nằm ở app shell (`platform/shell/app_shell/lib/di/theme_storage_impl.dart`) vì đó là nơi provider của
 `core_base_ui` và cơ chế của `core_storage` gặp nhau mà không tạo thành vòng phụ thuộc.
 
 
@@ -256,7 +256,7 @@ Implementation nằm ở app shell (`platform/app_shell/lib/di/theme_storage_imp
 Khai hợp đồng builder ở `core_di`:
 
 ```dart
-// platform/di/lib/src/builders/i_profile_card_builder.dart
+// platform/foundation/contracts/lib/src/builders/i_profile_card_builder.dart
 import 'package:flutter/widgets.dart';
 
 abstract class IProfileCardBuilder {
@@ -281,7 +281,7 @@ logout là ví dụ kinh điển.
 **Không dùng cho** điều hướng thuần (dùng Navigator interface) hay logic domain (dùng UseCase).
 
 Interface — code thật từ
-[`platform/di/lib/src/actions/i_auth_action_handler.dart`](../../../platform/di/lib/src/actions/i_auth_action_handler.dart):
+[`platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart`](../../../platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -324,7 +324,7 @@ Mọi bên tiêu thụ một hợp đồng cross-feature đều phải chịu đ
 App shell đã làm đúng như vậy cho routing:
 
 ```dart
-// platform/app_shell/lib/presentation/navigation/app_router.dart
+// platform/shell/app_shell/lib/presentation/navigation/app_router.dart
 List<RouteBase> get _featureRoutes {
   return [
     for (final module in getAllOrEmpty<IFeatureRouteModule>())
@@ -348,7 +348,7 @@ kiểu do feature sở hữu là một cú crash đang chờ tới ngày feature
 getItOrNull<IAuthActionHandler>()?.logout(context);
 
 // Tốt — lùi về chính widget của nhánh thay vì crash
-// (platform/app_shell/lib/presentation/navigation/app_router.dart)
+// (platform/shell/app_shell/lib/presentation/navigation/app_router.dart)
 builder: (context, state, navigationShell) {
   return getItOrNull<DashboardRouteModule>()?.builder(
         context,
@@ -366,7 +366,7 @@ sẽ mở app đó trên một màn hình trống.
 > [!NOTE]
 > Việc `apps/mobile/lib/di/injection.dart` gọi tên các package feature là tham chiếu cứng có chủ đích duy
 > nhất của composition root — nơi lắp ráp buộc phải biết nó lắp cái gì. Không file nào khác trong
-> app import module (R10), và shell dùng chung ở `platform/app_shell/` thì không thể (R1); tất cả phần còn lại chạm tới feature qua hợp đồng ở
+> app import module (R10), và shell dùng chung ở `platform/shell/app_shell/` thì không thể (R1); tất cả phần còn lại chạm tới feature qua hợp đồng ở
 > `core_di` cùng fallback `getAllOrEmpty` / `getItOrNull`. Các import `core_ui_kit` trong shell
 > không phải ngoại lệ — đó là package core, không phải feature gỡ được.
 >

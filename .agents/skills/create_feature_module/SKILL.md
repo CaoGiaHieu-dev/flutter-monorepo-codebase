@@ -24,14 +24,16 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 ### Step 1: Initialize Structure using the Automated Tool
 
 ```bash
-# Syntax: dart tools/module_generator/generate.dart <type> <module_name> [prefix] [sm] [route_contribution] [--apps <id,id>]
-# <type>: 1 (Feature), 2 (Domain), 3 (Data), 4 (Core → core_<name> at platform/<name>), 5 (Custom)
+# Syntax: dart tools/module_generator/generate.dart <type> <module_name> [prefix] [sm] [route_contribution] [--group <g>] [--apps <id,id>]
+# <type>: 1 (Feature), 2 (Domain), 3 (Data), 4 (Core → core_<name> at platform/<group>/<name>), 5 (Custom)
 # <module_name>: Business entity name (e.g., profile, payment, logging)
 # [prefix]: pass "" except for Custom — there it is the package-name PREFIX, not a directory:
-#           the package is <prefix>_<name>, always at platform/<name>. A layer word
+#           the package is <prefix>_<name>, always at platform/<group>/<name>. A layer word
 #           (feature, domain, data, core) is refused.
 # [sm]: (Feature only) 1 (Provider), 2 (BLoC), 3 (None)
 # [route_contribution]: (Feature only) 1 (IFeatureRouteModule), 2 (INavDestinationModule), 3 (none)
+# --group: (Core/Custom only) foundation|layers|infra|ui|state|shell — the platform/ group folder.
+#         Default: infra. See docs/en/architecture/02_core.md for what belongs where.
 # --apps: (optional, any type) compose into these apps only — app.id from apps/*/app_manifest.yaml.
 #         Default: EVERY app, admin included.
 ```
@@ -78,7 +80,7 @@ dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
 dart tools/module_generator/generate.dart 2 payment
 ```
 
-4. Custom platform package `acme_billing` (created at platform/billing):
+4. Custom platform package `acme_billing` (created at platform/infra/billing):
 ```bash
 dart tools/module_generator/generate.dart 5 billing acme
 ```

@@ -180,11 +180,12 @@ Bundle: `auth`, `home`, `settings`, `onboarding`, `cache`, `dashboard`, `splash`
 
 ### 🏗️ Module Generator (Tạo Module Mới)
 ```bash
-# Cú pháp: dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>]
+# Cú pháp: dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>] [--group <nhóm>] [--apps <id,id>]
 # <loại>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<tên>), 5=Custom
-# <prefix> (chỉ Custom): tiền tố tên package -> <prefix>_<tên> tại platform/<tên>; loại khác truyền ""
+# <prefix> (chỉ Custom): tiền tố tên package -> <prefix>_<tên> tại platform/<nhóm>/<tên>; loại khác truyền ""
 # <SM> (chỉ Feature): 1=Provider, 2=BLoC, 3=None
 # <route> (chỉ Feature): 1=IFeatureRouteModule, 2=INavDestinationModule (tab điều hướng chính), 3=none
+# --group (chỉ Core/Custom): foundation|layers|infra|ui|state|shell — thư mục nhóm trong platform/; mặc định infra
 # Chỉ chọn 2 khi feature là tab chính sau đăng nhập — xem docs/{en,vi}/guides/04_routing.md.
 
 # Feature 'profile' + Provider + stack routes (IFeatureRouteModule):
@@ -199,10 +200,13 @@ dart tools/module_generator/generate.dart 2 payment
 # Data micro-package 'payment':
 dart tools/module_generator/generate.dart 3 payment
 
-# Core package 'logging' (core_logging tại platform/logging):
+# Core package 'logging' (core_logging tại platform/infra/logging):
 dart tools/module_generator/generate.dart 4 logging
 
-# Custom package 'billing' với tiền tố 'acme' (acme_billing tại platform/billing):
+# Core package 'charts' trong nhóm ui (core_charts tại platform/ui/charts):
+dart tools/module_generator/generate.dart 4 charts --group ui
+
+# Custom package 'billing' với tiền tố 'acme' (acme_billing tại platform/infra/billing):
 dart tools/module_generator/generate.dart 5 billing acme
 
 # Interactive (không tham số, cần terminal):

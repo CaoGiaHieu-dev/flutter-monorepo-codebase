@@ -11,7 +11,7 @@
 `core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (§3), which the app shell implements.
 
 ```dart
-// platform/network/lib/src/api_client.dart
+// platform/infra/network/lib/src/api_client.dart
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
@@ -41,7 +41,7 @@ class ApiClient {
 `core_network` registers exactly one client — the default `Dio` every Retrofit data source receives:
 
 ```dart
-// platform/network/lib/di/register_module.dart
+// platform/infra/network/lib/di/register_module.dart
 @module
 abstract class RegisterModule {
   @lazySingleton
@@ -68,7 +68,7 @@ abstract class RegisterModule {
 }
 ```
 
-`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client; only a parameter annotated `@Named('public_api')` gets this one — see [§6](#6-declaring-an-api-service-with-retrofit). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/network/lib/di/register_module.dart` rather than declaring it twice.
+`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client; only a parameter annotated `@Named('public_api')` gets this one — see [§6](#6-declaring-an-api-service-with-retrofit). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/infra/network/lib/di/register_module.dart` rather than declaring it twice.
 
 ---
 
@@ -84,7 +84,7 @@ Dio runs interceptors in the order they were added — for `onRequest` **and** f
 ```
 
 ```dart
-// platform/network/lib/src/api_client.dart
+// platform/infra/network/lib/src/api_client.dart
 dio.interceptors.add(
   AuthInterceptor(
     getToken: _config.getToken,
@@ -127,7 +127,7 @@ Auth runs first so the token is attached before anything else; refresh sits ahea
 All three flags live in `RequestOptions.extra` and default to `true`:
 
 ```dart
-// platform/network/lib/src/utils/network_constants.dart
+// platform/infra/network/lib/src/utils/network_constants.dart
 /// Set `false` to stop [AuthInterceptor] attaching the bearer token.
 static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
@@ -146,7 +146,7 @@ static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
 Adds an upper-cased `language` header (falling back to the device locale, then to `vi`), and the bearer token when the request wants auth:
 
 ```dart
-// platform/network/lib/src/interceptors/auth_interceptor.dart
+// platform/infra/network/lib/src/interceptors/auth_interceptor.dart
 if (needAuthentication) {
   final token = getToken() ?? '';
   if (token.isNotEmpty) {
@@ -166,7 +166,7 @@ if (needAuthentication) {
 Only transport failures qualify — **not** HTTP status codes:
 
 ```dart
-// platform/network/lib/src/handlers/retry_handler.dart
+// platform/infra/network/lib/src/handlers/retry_handler.dart
 bool retryWhen(DioExceptionType type) {
   return type == DioExceptionType.receiveTimeout ||
       type == DioExceptionType.sendTimeout ||
@@ -182,7 +182,7 @@ Concurrent failures are collected into one queue — one entry per caller — an
 All three hooks are behind `kDebugMode`, and credential headers are masked even in debug:
 
 ```dart
-// platform/network/lib/src/interceptors/logging_interceptor.dart
+// platform/infra/network/lib/src/interceptors/logging_interceptor.dart
 Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
   const redactedKeys = {
     HttpHeaders.authorizationHeader,
@@ -207,7 +207,7 @@ Bodies are masked too, at any depth: a value under `password`, `token`, `access_
 ## 3. `NetworkConfig` — the app shell supplies the details
 
 ```dart
-// platform/network/lib/src/network_config.dart
+// platform/infra/network/lib/src/network_config.dart
 abstract class NetworkConfig implements SslPinningConfig {
   String? Function() get getToken;
   String? Function() get getLocale;
@@ -230,7 +230,7 @@ The two refresh getters default to `null`, so in an app with no refresh endpoint
 The implementation delegates each value to whoever actually owns it, rather than reading storage itself:
 
 ```dart
-// platform/app_shell/lib/di/network_config_impl.dart
+// platform/shell/app_shell/lib/di/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(this._languageStorage);
@@ -270,7 +270,7 @@ class NetworkConfigImpl implements NetworkConfig {
 `_refreshSession` hands the work to `IAuthSessionGateway`, which `data_auth` implements: the repository refreshes and persists the credentials, and the gateway re-reads the token from its owner. The config never persists anything itself:
 
 ```dart
-// platform/app_shell/lib/di/network_config_impl.dart
+// platform/shell/app_shell/lib/di/network_config_impl.dart
 Future<String?> _refreshSession() async => await _session?.refreshToken();
 
 // modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
@@ -320,7 +320,7 @@ A `401` that arrives *after* a refresh finished — a request sent with the old 
 `RefreshTokenHandler` serialises everything behind a `Completer`. The first 401 performs the refresh; the rest wait on the same future:
 
 ```dart
-// platform/network/lib/src/handlers/refresh_token_handler.dart
+// platform/infra/network/lib/src/handlers/refresh_token_handler.dart
 // If a refresh is already in progress, wait for it to complete.
 if (_completer != null) {
   final String? newToken = await _completer!.future;
@@ -348,7 +348,7 @@ return await _retryRequest(err, handler);
 ### Three guards against infinite recursion
 
 ```dart
-// platform/network/lib/src/interceptors/refresh_token_interceptor.dart
+// platform/infra/network/lib/src/interceptors/refresh_token_interceptor.dart
 /// Three guards keep the flow from looping:
 /// 1. Requests that opted out of auth
 ///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
@@ -383,7 +383,7 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 The initializer refuses to fail silently about it:
 
 ```dart
-// platform/common/lib/src/config/app_initializer.dart
+// platform/foundation/common/lib/src/config/app_initializer.dart
 if (hashes != null && hashes.isNotEmpty) {
   HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
 } else {
@@ -402,14 +402,14 @@ if (hashes != null && hashes.isNotEmpty) {
 
 ### When it is installed
 
-`_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls right after `configureDependencies()` and **before** `MainScope` builds the splash. Timing is the whole point: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there — auth restoring its session with a token refresh — can make the first request at once, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`. An override installed later, in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/app_shell/test/boot_order_test.dart` fails if the order regresses.
+`_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls right after `configureDependencies()` and **before** `MainScope` builds the splash. Timing is the whole point: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there — auth restoring its session with a token refresh — can make the first request at once, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`. An override installed later, in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
 
 ### The registration trap
 
 `NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. Without a second binding, `getItOrNull<SslPinningConfig>()` returns `null` and pinning is skipped on every flavour, production included. The binding that prevents it:
 
 ```dart
-// platform/app_shell/lib/di/network_binding_module.dart
+// platform/shell/app_shell/lib/di/network_binding_module.dart
 /// GetIt resolves by the exact type a binding was registered under — it does
 /// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
 /// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
@@ -477,7 +477,7 @@ abstract class AuthRemoteDataSource {
    ```yaml
    dependencies:
      core_network:
-       path: ../../../platform/network
+       path: ../../../platform/infra/network
      dio: "^5.11.0"
      retrofit: "^4.10.0"
      injectable: ^3.0.0
@@ -546,7 +546,7 @@ Endpoint constants live with the package that owns them, never in `core_common` 
 `BaseEntity<T>` wraps a standard server response:
 
 ```dart
-// platform/domain_core/lib/src/entities/base/base_entity.dart
+// platform/layers/domain/lib/src/entities/base/base_entity.dart
 const factory BaseEntity({
   @JsonKey(name: 'statusCode') @Default(200) int statusCode,
   @JsonKey(name: 'data') T? data,
@@ -560,7 +560,7 @@ bool get hasError => !isSuccess;
 `PaginatedEntity<T>` carries the page plus metadata:
 
 ```dart
-// platform/domain_core/lib/src/entities/base/paginate_entity.dart
+// platform/layers/domain/lib/src/entities/base/paginate_entity.dart
 typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
 
 const factory PaginatedEntity({
@@ -574,7 +574,7 @@ const factory PaginatedEntity({
 `BaseRequest<T>` is the paging request builder:
 
 ```dart
-// platform/data_core/lib/src/models/base_request.dart
+// platform/layers/data/lib/src/models/base_request.dart
 const factory BaseRequest({
   @JsonKey(name: 'page') @Default(1) int page,
   @JsonKey(name: 'pageSize') @Default(25) int pageSize,

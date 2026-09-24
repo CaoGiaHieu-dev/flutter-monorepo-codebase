@@ -30,7 +30,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
       @override
       void toLogin(BuildContext context) => const LoginRoute().go(context);
       ```
-    - **Safe Deep Link Initialization**: `DeeplinkProvider.initAppLink()` (a `@lazySingleton`, idempotent) is started by `NavigatorWrapperWidget._goToHome` in `platform/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart` — after the boot redirect or a sign-in, never before a frame exists.
+    - **Safe Deep Link Initialization**: `DeeplinkProvider.initAppLink()` (a `@lazySingleton`, idempotent) is started by `NavigatorWrapperWidget._goToHome` in `platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart` — after the boot redirect or a sign-in, never before a frame exists.
     - **Shell Error Page**: GoRouter `errorPageBuilder` MUST use `UndefineRouteWidget`.
     - **Cross-Feature UI Actions**: Prefer `I*ActionHandler` in `core_di` + `*ActionHandlerImpl` in the owning feature when Feature A must trigger Feature B UI logic without importing Feature B. Do not name implementations with an `I` prefix.
 6.  **App Initialization & main.dart Cleanup**:
@@ -71,7 +71,7 @@ Violating these rules results in an automatic **CRITICAL FAILURE** (Score < 5/10
 - **`core_ui_kit` widgets take already-scaled values**: a shared widget must not scale its own constructor parameters — the caller scales before passing in.
 
 ### 💅 Clean Code & Shared Assets
-- **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `platform/ui_kit`?
+- **Shared Widgets**: Is the developer re-creating a button or text field that already exists in `platform/ui/ui_kit`?
 - **Extensions**: Is the developer using `Theme.of(context)` instead of `context.themeExtension`?
 - **Logging**: Use `DynamicLogger` instead of `print()`.
 - **DI Ordering**: Is `CoreBaseUiPackageModule` registered in `externalPackageModulesAfter` (via `_uiModules`) so `ILanguageStorage` / `IThemeStorage` exist first?

@@ -23,13 +23,13 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Interface repository | `i_<name>_repository.dart` | tiền tố `I` | `modules/auth/domain/lib/src/repositories/i_auth_repository.dart` |
 | Impl repository | `_repository_impl.dart` | `RepositoryImpl` | `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart` |
 | Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `modules/cache/data/lib/src/models/cache_entry_model.dart` |
-| Request DTO | `_request.dart` | `Request` | `platform/data_core/lib/src/models/base_request.dart` |
+| Request DTO | `_request.dart` | `Request` | `platform/layers/data/lib/src/models/base_request.dart` |
 | Data source | `_data_source.dart` | `DataSource` | `modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart` |
-| Interface navigator | `<name>_navigator.dart` | `Navigator` | `platform/di/lib/src/navigators/auth_navigator.dart` |
+| Interface navigator | `<name>_navigator.dart` | `Navigator` | `platform/foundation/contracts/lib/src/navigators/auth_navigator.dart` |
 | Impl navigator | `_navigator_impl.dart` | `NavigatorImpl` | `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart` |
-| Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `platform/di/lib/src/actions/i_auth_action_handler.dart` |
+| Interface action handler | `i_<name>_action_handler.dart` | tiền tố `I` | `platform/foundation/contracts/lib/src/actions/i_auth_action_handler.dart` |
 | Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
-| Dialog | `_dialog.dart` | `Dialog` | `platform/ui_kit/lib/dialogs/error_dialog.dart` |
+| Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/dialogs/error_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
 | Định nghĩa route (`GoRouteData`) | `_route_module.dart` | `Route` | `modules/home/feature/lib/src/routing/home_route_module.dart` (khai `HomeRoute`) |
 | Đóng góp route stack (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` |
@@ -97,7 +97,7 @@ Private constructor chính là thứ ngăn `HomePath()` bị khởi tạo.
 
 | Tầng | Tiền tố | Đường dẫn | Ví dụ |
 |---|---|---|---|
-| Core | `core_` | `platform/<name>/` | `core_storage` |
+| Core | `core_` | `platform/<group>/<name>/` | `core_storage` |
 | Domain | `domain_` | `modules/<name>/domain/` | `domain_auth` |
 | Data | `data_` | `modules/<name>/data/` | `data_auth` |
 | Feature | `feature_` | `modules/<name>/feature/` | `feature_home` |

@@ -14,13 +14,13 @@ dependencies:
   flutter:
     sdk: flutter
   core_base_ui:
-    path: ../../../platform/base_ui
+    path: ../../../platform/ui/design_system
   core_di:
-    path: ../../../platform/di
+    path: ../../../platform/foundation/contracts
   get_it: ^9.2.1
   injectable: ^3.0.0
   core_responsive:
-    path: ../../../platform/responsive
+    path: ../../../platform/ui/responsive
   flutter_localizations:
     sdk: flutter
   intl: "^0.20.3"

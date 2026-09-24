@@ -55,7 +55,7 @@ Tool không nhận tham số nào khác: bất cứ thứ gì ngoài `--help` (m
 | R7 | Scale responsive phải qua `BuildContext` — cấm receiver trần `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm`, trong mọi file có nhắc tới `core_responsive` |
 | R8 | Contract của `core_di` được implement dưới `modules/` — ở bất kỳ tầng nào — thì bên ngoài module implement nó phải resolve bằng `getItOrNull` / `getAllOrEmpty`, cấm `getIt` / `getAll` (dạng ném lỗi) |
 | R9 | `platform_kernel` và mọi package `*_contracts` không import **và không khai** package kéo theo Flutter |
-| R10 | Không file nào trong một app (`apps/<id>/`) import module — chỉ `injection.dart`, điểm lắp ráp, được phép gọi tên một module. (`platform/app_shell` là core nên do R1 phủ) |
+| R10 | Không file nào trong một app (`apps/<id>/`) import module — chỉ `injection.dart`, điểm lắp ráp, được phép gọi tên một module. (`platform/shell/app_shell` là core nên do R1 phủ) |
 
 Ba ngoại lệ hướng lên được hardcode trong tool **và in ra mỗi lần chạy**, kèm lý do từng cái — để chúng không mục ruỗng âm thầm trong một dòng comment. Thêm cái thứ tư nghĩa là phải sửa danh sách cho phép trong `check.dart` — thiếu bước này build sẽ fail — và ghi cạnh đó vào `.agents/AGENTS.md` §2, file mà tool không đọc.
 
@@ -126,7 +126,7 @@ Hai loại tham chiếu được kiểm tra trong mọi file Markdown của repo
 
 | Loại | Ví dụ | Cách giải |
 |---|---|---|
-| Path trong backtick | `` `platform/kernel/lib/platform_kernel.dart` `` | Tính từ gốc repo, nhưng chỉ khi chuỗi bắt đầu bằng một thư mục top-level có thật |
+| Path trong backtick | `` `platform/foundation/kernel/lib/platform_kernel.dart` `` | Tính từ gốc repo, nhưng chỉ khi chuỗi bắt đầu bằng một thư mục top-level có thật |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Tương đối với **file chứa link**, không phải thư mục đang chạy lệnh |
 
 Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 900 tham chiếu thật (tại thời điểm viết) — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
@@ -192,7 +192,7 @@ Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot tr
 Dựng khung package và đăng ký nó khắp workspace.
 
 ```bash
-dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>] [--apps <id,id>]
+dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<sm>] [<route>] [--group <g>] [--apps <id,id>]
 dart tools/module_generator/generate.dart --help   # cú pháp
 ```
 
@@ -200,9 +200,10 @@ dart tools/module_generator/generate.dart --help   # cú pháp
 |---|---|
 | `<type>` | `1` feature · `2` domain · `3` data · `4` core · `5` custom |
 | `<name>` | tên thư mục trần (`profile`) — package sẽ thành `feature_profile`. Phải là tên package Dart hợp lệ: chữ thường, số và `_`, bắt đầu bằng chữ cái, không phải từ khoá Dart |
-| `<prefix>` | chỉ cho type `5` — tiền tố tên package: `<prefix>_<name>` tại `platform/<name>`, cùng quy tắc đặt tên như `<name>`. Từ chỉ tầng (`feature`, `domain`, `data`, `core`) bị từ chối; hãy dùng type 1–4. Với type 1–4 tham số này phải rỗng — truyền `""` |
+| `<prefix>` | chỉ cho type `5` — tiền tố tên package: `<prefix>_<name>` tại `platform/<group>/<name>`, cùng quy tắc đặt tên như `<name>`. Từ chỉ tầng (`feature`, `domain`, `data`, `core`) bị từ chối; hãy dùng type 1–4. Với type 1–4 tham số này phải rỗng — truyền `""` |
 | `<sm>` | chỉ feature — `1` Provider · `2` BLoC · `3` không dùng |
 | `<route>` | chỉ feature — `1` `IFeatureRouteModule` · `2` `INavDestinationModule` · `3` không |
+| `--group` | chỉ type `4`/`5` — thư mục nhóm trong `platform/`: `foundation` · `layers` · `infra` · `ui` · `state` · `shell` (`--group ui`, `--group=ui`). Mặc định `infra`. Nhóm nào chứa gì: [`02_core.md`](../architecture/02_core.md). Nhóm không hợp lệ, hoặc `--group` cho type 1–3, thoát mã 64 |
 | `--apps` | tuỳ chọn, mọi loại — chỉ compose module vào các app này: danh sách `app.id` cách nhau bằng dấu phẩy, lấy từ `apps/*/app_manifest.yaml` (`--apps mobile`, `--apps=mobile,admin`). Mặc định: mọi app |
 
 ```bash
@@ -210,11 +211,12 @@ dart tools/module_generator/generate.dart 1 profile "" 1 1   # feature + Provide
 dart tools/module_generator/generate.dart 1 chat    "" 2 2   # feature + BLoC + tab bottom-nav
 dart tools/module_generator/generate.dart 2 payment          # domain micro-package
 dart tools/module_generator/generate.dart 3 payment          # data micro-package
-dart tools/module_generator/generate.dart 5 billing acme     # acme_billing tại platform/billing
+dart tools/module_generator/generate.dart 4 charts --group ui # core_charts tại platform/ui/charts
+dart tools/module_generator/generate.dart 5 billing acme     # acme_billing tại platform/infra/billing
 dart tools/module_generator/generate.dart 1 chat    "" 2 2 --apps mobile   # chỉ mobile — admin không bị đụng
 ```
 
-**Tham số được kiểm tra trước khi ghi bất cứ thứ gì**, và mọi lần từ chối đều thoát với mã `64` kèm cú pháp: `<name>` hay `<prefix>` không hợp lệ (`Bad-Name`), `<sm>` / `<route>` khác `1`/`2`/`3`, `<prefix>` / `<sm>` / `<route>` truyền cho loại module không nhận nó, cờ lạ, nhiều hơn năm tham số, `--apps` không có giá trị, danh sách rỗng, truyền hai lần, hoặc chứa id mà không `app_manifest.yaml` nào khai báo (thông báo liệt kê các id có thật), hoặc **tên package đã có** trong một `pubspec.yaml` bất kỳ của repo. Pub resolve workspace theo tên, nên trùng tên trước đây chỉ lộ ra ở `pub get`, sau khi composer đã ghi lại các manifest — và thư mục mới không có nghĩa là tên mới: `5 shell platform_app` là `platform_app_shell` (đã có ở `platform/app_shell`), `2 core` / `3 core` là `domain_core` / `data_core`.
+**Tham số được kiểm tra trước khi ghi bất cứ thứ gì**, và mọi lần từ chối đều thoát với mã `64` kèm cú pháp: `<name>` hay `<prefix>` không hợp lệ (`Bad-Name`), `<sm>` / `<route>` khác `1`/`2`/`3`, `<prefix>` / `<sm>` / `<route>` truyền cho loại module không nhận nó, cờ lạ, nhiều hơn năm tham số, `--apps` không có giá trị, danh sách rỗng, truyền hai lần, hoặc chứa id mà không `app_manifest.yaml` nào khai báo (thông báo liệt kê các id có thật), hoặc **tên package đã có** trong một `pubspec.yaml` bất kỳ của repo. Pub resolve workspace theo tên, nên trùng tên trước đây chỉ lộ ra ở `pub get`, sau khi composer đã ghi lại các manifest — và thư mục mới không có nghĩa là tên mới: `5 shell platform_app` là `platform_app_shell` (đã có ở `platform/shell/app_shell`), `2 core` / `3 core` là `domain_core` / `data_core`.
 
 Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `<sm>` hoặc `<route>` thì hỏi phần còn thiếu (bỏ trống câu trả lời là chọn `1`). **Không có terminal** — CI, shell của agent, stdin đã hết — thì giá trị cần hỏi trở thành lỗi, exit `64`, không bao giờ lặng lẽ lấy mặc định: với feature hãy luôn truyền đủ năm tham số. Mọi output của tool đều bằng tiếng Anh.
 

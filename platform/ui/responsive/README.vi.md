@@ -25,10 +25,10 @@ Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước v
 
 ## 🚀 1. Khởi tạo
 
-Đã được wire sẵn ở `platform/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — `AppConfig.design` là artboard `375x812`, không phải mặc định `360x690` của package:
+Đã được wire sẵn ở `platform/shell/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — `AppConfig.design` là artboard `375x812`, không phải mặc định `360x690` của package:
 
 ```dart
-// platform/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
   // The phone artboard every window class starts from.
   designSize: AppConfig.design,
@@ -70,7 +70,7 @@ Hệ số scale là tỉ lệ cửa sổ / artboard, rồi bị kẹp bởi mộ
 | `ScaleBounds.fixed()` | 1 – 1 | Luôn đúng cỡ thiết kế |
 | `ScaleBounds.unbounded()` | 0 – ∞ | Tỉ lệ thô, hành vi cũ trước khi có bound |
 
-Vì vậy **đừng chờ kích thước to ra trên tablet**. Muốn một lớp cửa sổ to ra thì opt-in cho riêng lớp đó bằng một `ResponsiveProfile`; profile đặt ở một lớp cũng phủ mọi lớp rộng hơn chưa khai profile riêng. Chi tiết: [`docs/vi/guides/11_design_system.md`](../../docs/vi/guides/11_design_system.md) §6.
+Vì vậy **đừng chờ kích thước to ra trên tablet**. Muốn một lớp cửa sổ to ra thì opt-in cho riêng lớp đó bằng một `ResponsiveProfile`; profile đặt ở một lớp cũng phủ mọi lớp rộng hơn chưa khai profile riêng. Chi tiết: [`docs/vi/guides/11_design_system.md`](../../../docs/vi/guides/11_design_system.md) §6.
 
 ---
 
@@ -135,7 +135,7 @@ AdaptiveContent(child: form)
 > [!WARNING]
 > `AdaptiveSplitView` chỉ tôn trọng nếp gập khi nó trải hết cửa sổ theo phương của nếp gập (toạ độ nếp gập tính theo cửa sổ): rộng bằng cửa sổ với nếp gập dọc (`book`), cao bằng cửa sổ với nếp gập ngang (`tabletop`). Đặt cạnh `NavigationRail` thì nếp gập dọc bị bỏ qua; dưới app bar thì nếp gập ngang bị bỏ qua — khi đó quy tắc `splitAt` quyết định.
 
-**Chọn layout theo lớp cửa sổ, không bao giờ theo `Platform.isIOS`, đời máy hay phép kiểm `shortestSide` tự chế.** Mẫu tham chiếu: `modules/dashboard/feature/lib/src/pages/dashboard_page.dart` — bottom bar ở `compact`, `NavigationRail` từ `medium`, dạng mở rộng từ `large`. Chi tiết: [`docs/vi/guides/11_design_system.md`](../../docs/vi/guides/11_design_system.md) §7.
+**Chọn layout theo lớp cửa sổ, không bao giờ theo `Platform.isIOS`, đời máy hay phép kiểm `shortestSide` tự chế.** Mẫu tham chiếu: `modules/dashboard/feature/lib/src/pages/dashboard_page.dart` — bottom bar ở `compact`, `NavigationRail` từ `medium`, dạng mở rộng từ `large`. Chi tiết: [`docs/vi/guides/11_design_system.md`](../../../docs/vi/guides/11_design_system.md) §7.
 
 ---
 
@@ -172,4 +172,4 @@ Việc assert là chủ đích. Âm thầm fallback về giá trị chưa scale 
 
 `dart tools/arch_check/check.dart` — rule **R7**, Gate 1 của `pr_quality_check.yml` — quét mọi file có nhắc tới `core_responsive` (thực tế: import nó) trong `lib/` và **chặn merge** (exit 1) khi gặp bất kỳ bare sizing extension nào (`16.w`, `(x).sp`, …), in ra `file:line`. Rule này không phụ thuộc vào review.
 
-Test của package nằm ở `platform/responsive/test/`.
+Test của package nằm ở `platform/ui/responsive/test/`.

@@ -12,11 +12,11 @@ resolution: workspace
 dependencies:
   material_ui: ^1.1.1
   core_di:
-    path: ../../../platform/di
+    path: ../../../platform/foundation/contracts
   core_responsive:
-    path: ../../../platform/responsive
+    path: ../../../platform/ui/responsive
   platform_kernel:
-    path: ../../../platform/kernel
+    path: ../../../platform/foundation/kernel
   flutter:
     sdk: flutter
   get_it: ^9.2.1

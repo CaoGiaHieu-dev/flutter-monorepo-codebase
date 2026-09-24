@@ -52,7 +52,7 @@ dart tools/unused_checker/check_unused_packages.dart # advisory — declared but
 
 ```bash
 dart tools/arch_check/check.dart                            # R1 dependency direction, R5 undeclared imports
-grep -rn "package:feature_\|package:data_" platform/*/lib   # must be empty
+grep -rn "package:feature_\|package:data_" platform/*/*/lib   # must be empty
 dart tools/unused_checker/check_unused_packages.dart        # declared but unused
 ```
 
@@ -111,7 +111,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 
 ```bash
 grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart
-grep -rn -A4 "gh.singleton" platform/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
+grep -rn -A4 "gh.singleton" platform/*/*/lib/di/module.module.dart modules/*/*/lib/di/module.module.dart
 ```
 
 ---

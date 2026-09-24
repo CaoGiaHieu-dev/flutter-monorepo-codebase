@@ -65,7 +65,7 @@ Current packages:
 
 ## 3. `IBaseRepository` — why repositories have no `try/catch`
 
-`platform/data_core/lib/src/base/i_base_repository.dart` gives every repository two wrappers. A `RepositoryImpl` `extends IBaseRepository` and calls them instead of handling errors itself.
+`platform/layers/data/lib/src/base/i_base_repository.dart` gives every repository two wrappers. A `RepositoryImpl` `extends IBaseRepository` and calls them instead of handling errors itself.
 
 ### `execute<R, T>()` — asynchronous
 
@@ -120,7 +120,7 @@ Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `platfo
 
 ### What `ErrorHandler` actually recognises
 
-`platform/kernel/lib/src/error/error_handler.dart` branches on, in order: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → fallback.
+`platform/foundation/kernel/lib/src/error/error_handler.dart` branches on, in order: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → fallback.
 
 > [!WARNING]
 > **There is no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch.** The shipped `AuthRepositoryImpl` goes through Retrofit, so this does not bite the sample — but swap its transport for the Firebase SDK and every Firebase error — wrong password, user-not-found, network-request-failed — falls through to the generic tail:
@@ -145,7 +145,7 @@ A Model is the Data layer's own representation. It never escapes into Domain —
 ### Contract
 
 ```dart
-// platform/data_core/lib/src/models/base_model.dart
+// platform/layers/data/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
   E toEntity() {
     throw UnimplementedError();

@@ -64,7 +64,7 @@ class LoginProvider extends BaseProvider<UserEntity> {
 }
 ```
 
-Hành vi cần biết (`platform/provider_state_management/lib/src/management/operation_executor.dart`):
+Hành vi cần biết (`platform/state/provider/lib/src/management/operation_executor.dart`):
 
 - **Success** → `ViewState.success()` kèm data. Nếu kiểu kết quả `R` khác kiểu state `T` của provider, truyền `convert:` cho `executeOperation`.
 - **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))`, `message = failure.message`. Lần emit này được **ép** (force), nên hai lỗi giống hệt nhau liên tiếp (người dùng bấm Retry khi vẫn offline) vẫn tới được listener.

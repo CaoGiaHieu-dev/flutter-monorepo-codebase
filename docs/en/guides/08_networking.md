@@ -370,6 +370,10 @@ if (hashes != null && hashes.isNotEmpty) {
 }
 ```
 
+### When it is installed
+
+`_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls right after `configureDependencies()` and **before** `MainScope` builds the splash. Timing is the whole point: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there — auth restoring its session with a token refresh — can make the first request at once, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`. An override installed later, in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/app_shell/test/boot_order_test.dart` fails if the order regresses.
+
 ### The registration trap
 
 `NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. Without a second binding, `getItOrNull<SslPinningConfig>()` returns `null` and pinning is skipped on every flavour, production included. The binding that prevents it:

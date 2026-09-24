@@ -74,7 +74,7 @@ missing argument exits 64 rather than guessing. `--help` prints the usage.
 
 ## 3. Directory layout
 
-The generator produces this tree in full.
+The generator produces this tree (plus the generated `gen/`, `*.g.dart` and `module.module.dart` files). `widgets/` is the one folder it does not create — add it with your first sub-widget.
 
 ```
 modules/profile/feature/
@@ -87,7 +87,7 @@ modules/profile/feature/
 │   ├── feature_profile.dart  public barrel
 │   └── src/
 │       ├── pages/            *Page / *Screen widgets
-│       ├── widgets/          *Widget / *Card sub-widgets
+│       ├── widgets/          *Widget / *Card sub-widgets (create when needed)
 │       ├── provider/         controllers (Provider) — `bloc/` if you chose BLoC
 │       ├── routing/          route modules + navigator impl
 │       ├── extensions/       l10n extension
@@ -101,10 +101,10 @@ modules/profile/feature/
 > (as in `feature_home`). A plural `providers/` / `blocs/` folder is a naming violation; see
 > [`../reference/02_naming.md`](../reference/02_naming.md).
 
-Create your path constants first — everything else references them:
+The path constants are already there — the generator writes them to `lib/src/utils/<name>_path.dart`, and everything else references them. **Edit the generated file** to change or add a path; do not create a second one:
 
 ```dart
-// modules/profile/feature/lib/src/utils/profile_path.dart
+// modules/profile/feature/lib/src/utils/profile_path.dart — as generated
 class ProfilePath {
   ProfilePath._();
 
@@ -112,8 +112,7 @@ class ProfilePath {
 }
 ```
 
-This mirrors [`modules/home/feature/lib/src/utils/home_path.dart`](../../../modules/home/feature/lib/src/utils/home_path.dart)
-verbatim.
+It has the same shape as [`modules/home/feature/lib/src/utils/home_path.dart`](../../../modules/home/feature/lib/src/utils/home_path.dart).
 
 ---
 
@@ -262,7 +261,12 @@ Registering a screen controller as a singleton leaks it for the process lifetime
 
 Feature translations live in the feature. Nothing is added to the app shell.
 
-`modules/profile/feature/l10n.yaml` — copy the shape from
+**The generator already writes all four pieces below** — `l10n.yaml`, the two ARB files, the
+`context.l10n<Name>` extension and the `IFeatureLocalization` registration — and runs `gen-l10n`
+once. Your job is to **edit the generated files**, chiefly the ARBs; do not create them again.
+They are shown here so you know what each one does.
+
+`modules/profile/feature/l10n.yaml` — as generated, the same shape as
 [`modules/home/feature/l10n.yaml`](../../../modules/home/feature/l10n.yaml):
 
 ```yaml
@@ -275,17 +279,19 @@ untranslated-messages-file: untranslated-messages.txt
 output-dir: lib/src/gen/language
 ```
 
-`assets/language/en.arb` (and a matching `vi.arb`):
+`assets/language/en.arb` (and a matching `vi.arb`) — generated with one key, `title`, which the
+generated page (and, for a tab, the generated destination label) reads as
+`context.l10nProfile.title`. Add your keys next to it, in `lowerCamelCase`, and translate the `vi.arb`
+value — the generator writes the English word into both:
 
 ```json
 {
   "@@locale": "en",
-  "profile": "Profile",
-  "tabLabel": "Profile"
+  "title": "Profile"
 }
 ```
 
-Expose it through an extension — real code from
+The extension — the generated one follows this real code from
 [`l10n_home_extension.dart`](../../../modules/home/feature/lib/src/extensions/l10n_home_extension.dart):
 
 ```dart
@@ -300,7 +306,7 @@ extension ContextHomeExtension on BuildContext {
 }
 ```
 
-Register the delegate through DI — real code from
+The DI registration of the delegate — generated as `lib/di/localization.dart`, like this real code from
 [`modules/home/feature/lib/di/localization.dart`](../../../modules/home/feature/lib/di/localization.dart):
 
 ```dart
@@ -318,7 +324,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-The root app collects every registered `IFeatureLocalization`, so **do not edit `root_app.dart`**.
+The app shell's [`app_material_wrapper.dart`](../../../platform/app_shell/lib/presentation/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`, so **do not edit `root_app.dart`** (or the wrapper).
 
 Regenerate after editing any `.arb`:
 
@@ -427,7 +433,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 > |---|---|---|
 > | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<IAuthStatusStream>()` passed as a **factory param** | Home shows the signed-out state |
 > | `feature_settings` (`settings_page.dart:46`) | `getItOrNull<IAuthActionHandler>()` | The logout row is simply hidden |
-> | `feature_onboarding` (`onboarding_page.dart:31`) | `getItOrNull<AuthNavigator>()` | The button goes to Home instead (`HomeNavigator`) |
+> | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` | The button goes to Home instead (`HomeNavigator`); with neither composed it does nothing |
 >
 > The dry-run prints every coupling it knows — `breaks` and `safe_couplings` in
 > `tools/sample_manifest.yaml` — plus the `core_di` contracts that become dead code. Read it before

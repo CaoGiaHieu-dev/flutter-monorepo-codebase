@@ -410,7 +410,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
 - `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
-- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (không có thì path của destination đầu tiên, không có nữa thì `/_empty_dashboard`)
+- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` chỉ ở lần chạy đầu tiên (các lần sau, hoặc khi không đăng ký: path của destination đầu tiên, không có nữa thì `/_empty_dashboard`)
 - `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
 
 Chú ý dòng cuối: router phụ thuộc vào **contract ở `core_di`**, không phải `AuthProvider`. App shell

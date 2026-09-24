@@ -17,7 +17,9 @@ import '../navigation/app_router.dart';
 /// feature route and stays removable-safe.
 ///
 /// Started by `NavigatorWrapperWidget` once the user reaches home, whichever
-/// way they got there — links are not routed over onboarding or login.
+/// way they got there — links are not routed over onboarding or login. In a
+/// build with no auth module, where no sign-in ever leads home, it starts
+/// instead when the user first leaves the entry location (onboarding).
 ///
 /// The subscription outlives a sign-out, so every link is also checked
 /// against the session when it **arrives**: while an auth module reports

@@ -29,7 +29,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
 | Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`) |
 | Extension | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
-| Utils **và constants** | `src/utils/` | `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+| Utils **và constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
 **`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên, và `core_responsive`, dùng bởi các widget chuyển trang trong `src/routing/page_transitions/`.
 
@@ -50,7 +50,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 | Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
-Đúng một file constants nằm ở đáy ngăn xếp, vì nó thật sự toàn cục: `EnvConstants` (giá trị `String.fromEnvironment`), trong `src/utils/` của `platform_kernel`.
+Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — cả hai trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`) và `ErrorCodes` ([`error_codes.dart`](../../../platform/kernel/lib/src/utils/error_codes.dart) — mã lỗi mà `ErrorHandler` và `IBaseRepository` gán khi không có HTTP status, ví dụ `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, đều nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.
@@ -354,7 +354,7 @@ Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: hai nh�
 
 Kiểu state của BLoC là `BlocViewState<T>`, **không phải** `ViewState`. Cả hai package đều export từ barrel công khai, và nhánh Provider export một `ViewState` khác hẳn về ngữ nghĩa. Chính cái tên riêng biệt này cho phép một file import cả hai barrel mà không đụng tên lúc biên dịch.
 
-`OperationGlobalConfig` phơi getter chỉ-đọc; `setup()` **gộp** thay vì ghi đè, nên gọi hai lần vẫn giữ được cả hai bộ hook, và có `reset()` cho test.
+`OperationGlobalConfig` phơi getter chỉ-đọc, và `setup()` gộp theo từng hook: hook nào lần gọi thứ hai bỏ qua (hoặc truyền `null`) thì giữ giá trị cũ, còn hook nào được truyền thì **thay thế** giá trị cũ — mỗi hook giữ một callback, hai lần gọi không bao giờ nối chuỗi. Vì vậy `null` không xoá được hook; `reset()` xoá tất cả, và tồn tại cho test.
 
 Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`](../guides/03_state_management.md).
 

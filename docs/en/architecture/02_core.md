@@ -31,7 +31,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
 | Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`) |
 | Extensions | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
-| Utils **and constants** | `src/utils/` | `EnvConstants`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+| Utils **and constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
 **`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above, and `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`.
 
@@ -52,7 +52,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | REST endpoints (`/user/login`, `/user/refresh-token`) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Exactly one constants file lives at the bottom of the stack, because it is genuinely global: `EnvConstants` (`String.fromEnvironment` values), in `platform_kernel`'s `src/utils/`.
+Two constants files live at the bottom of the stack, because they are genuinely global — both in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` ([`error_codes.dart`](../../../platform/kernel/lib/src/utils/error_codes.dart) — the failure codes `ErrorHandler` and `IBaseRepository` assign when there is no HTTP status, e.g. `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, all outside the HTTP range so a 5xx is always a real one).
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.
@@ -356,7 +356,7 @@ The template supports Provider and BLoC. Be aware before choosing: the two are n
 
 The BLoC state type is `BlocViewState<T>`, **not** `ViewState`. Both packages export from public barrels, and the Provider branch exports a semantically different `ViewState`. The distinct name is what lets a file import both barrels without a compile-time collision.
 
-`OperationGlobalConfig` exposes read-only getters; `setup()` **merges** rather than overwriting, so calling it twice keeps both sets of hooks, and `reset()` exists for tests.
+`OperationGlobalConfig` exposes read-only getters, and `setup()` merges hook by hook: a hook the second call omits (or passes as `null`) keeps its earlier value, while one it passes **replaces** the earlier one — each hook holds one callback, and two calls never chain. `null` therefore cannot clear a hook; `reset()` clears them all, and exists for tests.
 
 Practical usage for both branches: [`../guides/03_state_management.md`](../guides/03_state_management.md).
 

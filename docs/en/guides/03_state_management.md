@@ -99,7 +99,7 @@ class OperationConfig<R, T> {
 `executeOperation` runs the whole flow: global `onStart` hook → optional loading state → `await operation()` → dispatch across the four `Result` branches → global `onFinish` hook.
 
 > [!CAUTION]
-> **`showLoading: true` does not always show loading.** In `operation_executor.dart:38` the guard is:
+> **`showLoading: true` does not always show loading.** In `OperationExecutor.execute` (`operation_executor.dart`, behind `executeOperation`) the guard is:
 >
 > ```dart
 > if (config.showLoading && _stateManager.data == null) {
@@ -161,14 +161,15 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 
 ### 2.5 Side effects with `ProviderStateListener`
 
-Use a listener for things that are **not** rendering — toasts, navigation, dialogs. It subscribes in `initState`, cancels in `dispose`, and only fires on real state transitions:
+Use a listener for things that are **not** rendering — toasts, navigation, dialogs. It subscribes in `initState`, cancels in `dispose`, and only fires on real state transitions — with one exception: a **repeated identical error** is passed through. The provider re-emits an equal error state only for a new failed operation (a second wrong password), and each of those must reach `onError`. A `listenWhen` that demands `previous.state != current.state` would filter that repeat straight back out, so let errors through explicitly:
 
 ```dart
 ProviderStateListener<AuthProvider, UserEntity>(
   // Both terminal states: filtering on `isSuccess` alone would mean
-  // `onError` never fires.
+  // `onError` never fires. `|| current.isError` keeps a repeated identical
+  // error — the listener passes it through for exactly this reason.
   listenWhen: (previous, current) =>
-      previous.state != current.state &&
+      (previous.state != current.state || current.isError) &&
       (current.isSuccess || current.isError),
   onError: (context, error, message) {
     if (error is AuthErrorState) {

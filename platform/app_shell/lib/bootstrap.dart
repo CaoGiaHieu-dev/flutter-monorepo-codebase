@@ -20,9 +20,11 @@ import 'presentation/presentation.dart';
 /// void main() => runShellApp(configureDependencies: configureDependencies);
 /// ```
 ///
-/// The boot sequence itself is identical across apps — DI, then the splash,
-/// then [AppInitializer], then the router — so it lives here rather than being
-/// copied into each `main.dart`, where the copies would drift.
+/// The boot sequence itself is identical across apps — DI, then
+/// [AppInitializer.initBeforeRunApp] (logger + certificate pinning), then the
+/// splash, then [AppInitializer.init], then the router — so it lives here
+/// rather than being copied into each `main.dart`, where the copies would
+/// drift.
 ///
 /// [onError] receives every error escaping the guarded zone before it is
 /// forwarded to [FlutterError.reportError]; wire a crash reporter there.
@@ -35,6 +37,13 @@ void runShellApp({
       WidgetsFlutterBinding.ensureInitialized();
       registerBaseUiLicenses();
       await configureDependencies();
+
+      // Before anything is built. The splash below is already wrapped in every
+      // feature's `IAppTreeWrapper`, and a controller created there may open
+      // a connection straight away (auth restores the session with a token
+      // refresh). Dio keeps the first `HttpClient` it creates, so pinning
+      // installed any later — in `initService` — would never reach it.
+      AppInitializer.initBeforeRunApp();
 
       // iOS keeps its native splash for the whole boot, so no Dart splash is
       // built there. `kIsWeb` is checked first because `Platform.isIOS` throws

@@ -99,7 +99,7 @@ class OperationConfig<R, T> {
 `executeOperation` chạy trọn luồng: hook toàn cục `onStart` → set loading (nếu đủ điều kiện) → `await operation()` → phân nhánh theo 4 nhánh của `Result` → hook toàn cục `onFinish`.
 
 > [!CAUTION]
-> **`showLoading: true` KHÔNG phải lúc nào cũng hiện loading.** Tại `operation_executor.dart:38` điều kiện là:
+> **`showLoading: true` KHÔNG phải lúc nào cũng hiện loading.** Trong `OperationExecutor.execute` (`operation_executor.dart`, nằm sau `executeOperation`) điều kiện là:
 >
 > ```dart
 > if (config.showLoading && _stateManager.data == null) {
@@ -161,14 +161,15 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 
 ### 2.5 Side effect với `ProviderStateListener`
 
-Dùng listener cho những việc **không phải render** — toast, điều hướng, dialog. Nó tự subscribe trong `initState`, huỷ trong `dispose`, và chỉ bắn khi trạng thái thật sự đổi:
+Dùng listener cho những việc **không phải render** — toast, điều hướng, dialog. Nó tự subscribe trong `initState`, huỷ trong `dispose`, và chỉ bắn khi trạng thái thật sự đổi — với một ngoại lệ: **một lỗi lặp lại y hệt** vẫn được cho qua. Provider chỉ phát lại một error state bằng nhau khi có một thao tác thất bại mới (nhập sai mật khẩu lần hai), và mỗi lần như vậy đều phải tới được `onError`. Một `listenWhen` đòi `previous.state != current.state` sẽ lọc lần lặp đó ra ngay, nên hãy cho lỗi đi qua một cách tường minh:
 
 ```dart
 ProviderStateListener<AuthProvider, UserEntity>(
   // Cả hai trạng thái kết thúc: chỉ lọc `isSuccess` thì
-  // `onError` sẽ không bao giờ được gọi.
+  // `onError` sẽ không bao giờ được gọi. `|| current.isError` giữ lại một
+  // lỗi lặp y hệt — listener cho nó qua chính vì lý do này.
   listenWhen: (previous, current) =>
-      previous.state != current.state &&
+      (previous.state != current.state || current.isError) &&
       (current.isSuccess || current.isError),
   onError: (context, error, message) {
     if (error is AuthErrorState) {

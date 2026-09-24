@@ -61,6 +61,11 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
       final isGoToOnboarding = _goToOnboarding();
       if (isGoToOnboarding) {
         _bootCompleted = true;
+        // With an auth module, leaving onboarding leads to a sign-in, and
+        // `_onSessionChanged` → `_goToHome` starts deep links. Without one no
+        // sign-in ever comes, so start them once the user leaves the entry
+        // location instead — still never over onboarding itself.
+        if (_session == null) _startDeepLinksOnLeavingEntry();
         return;
       }
 
@@ -79,7 +84,39 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   void dispose() {
     _sessionSubscription?.cancel();
     _failureSubscription?.cancel();
+    _stopWatchingEntryExit();
     super.dispose();
+  }
+
+  GoRouter? _watchedRouter;
+  VoidCallback? _entryExitListener;
+
+  /// Calls [DeeplinkProvider.initAppLink] the first time the router leaves
+  /// the location it is on now (the entry location).
+  void _startDeepLinksOnLeavingEntry() {
+    final router = GoRouter.of(context);
+    final entryPath = router.routerDelegate.currentConfiguration.uri.path;
+
+    void listener() {
+      if (router.routerDelegate.currentConfiguration.uri.path == entryPath) {
+        return;
+      }
+      _stopWatchingEntryExit();
+      deeplinkProvider.initAppLink();
+    }
+
+    _watchedRouter = router;
+    _entryExitListener = listener;
+    router.routerDelegate.addListener(listener);
+  }
+
+  void _stopWatchingEntryExit() {
+    final listener = _entryExitListener;
+    if (listener != null) {
+      _watchedRouter?.routerDelegate.removeListener(listener);
+    }
+    _watchedRouter = null;
+    _entryExitListener = null;
   }
 
   /// Returns `true` when first launch should stay on the entry location.

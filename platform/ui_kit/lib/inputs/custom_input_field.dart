@@ -46,7 +46,7 @@ class CustomInputField extends StatefulWidget {
   final EdgeInsetsGeometry? contentPadding;
   final FocusNode? focusNode;
   final TextInputAction? textInputAction;
-  final ValueChanged? onFieldSubmitted;
+  final ValueChanged<String>? onFieldSubmitted;
   final VoidCallback? onTap;
   final TextStyle? hintStyle;
   final double? paddingBottom;

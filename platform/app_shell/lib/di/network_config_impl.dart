@@ -85,7 +85,7 @@ class NetworkConfigImpl implements NetworkConfig {
     required VoidCallback onRetry,
     required VoidCallback onCancel,
   }) {
-    AppDialogController.show(
+    AppDialogController.show<void>(
       builder: (context) {
         // RetryDialog closes itself before calling back. A second close
         // through AppOverlay would target a different overlay system and

@@ -371,7 +371,7 @@ class CommonHelpers {
   }
 
   /// Parses [text] as a manifest; a malformed one is reported, not guessed at.
-  static Map _parseManifest(String text) {
+  static Map<Object?, Object?> _parseManifest(String text) {
     final doc = loadYaml(text);
     if (doc is! Map) {
       throw Exception('app_manifest.yaml is not a YAML map.');

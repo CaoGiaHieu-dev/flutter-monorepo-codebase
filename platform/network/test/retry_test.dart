@@ -308,7 +308,10 @@ void main() {
     dialogs.single.onRetry();
 
     final responses = await Future.wait([first, second]);
-    expect(responses.map((r) => r.data['path']), ['/first', '/second']);
+    expect(
+      responses.map((r) => (r.data as Map<String, dynamic>)['path']),
+      ['/first', '/second'],
+    );
     expect(adapter.requests, hasLength(4), reason: 'two failures, two replays');
   });
 }

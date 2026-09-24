@@ -215,7 +215,7 @@ class AppDialogController {
   }
 
   /// Safely completes a dialog request's completer.
-  void _completeRequestSafely(_DialogRequest request, dynamic result) {
+  void _completeRequestSafely(_DialogRequest<Object?> request, Object? result) {
     if (!request.completer.isCompleted) {
       try {
         request.completer.complete(result);
@@ -717,7 +717,7 @@ class _AppDialogOverlayEntry extends StatefulWidget {
   final bool useSafeArea;
   final Curve transitionCurve;
   final AnimationController animationController;
-  final Function(String internalId, dynamic result) onDismissRequested;
+  final void Function(String internalId, Object? result) onDismissRequested;
 
   const _AppDialogOverlayEntry({
     super.key,

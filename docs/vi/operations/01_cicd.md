@@ -174,7 +174,7 @@ Job `quality`, từng bước: checkout → Flutter từ `.fvmrc` → **`flutter
 | 0 | Composition khớp manifest của mọi app | `dart tools/composer/composer.dart verify` | có |
 | 1 | Luật kiến trúc | `dart tools/arch_check/check.dart` | có |
 | 1 | …và test riêng của các tool gate | `cd tools && dart test` | có |
-| 2 | Phân tích tĩnh | `flutter analyze` | có |
+| 2 | Phân tích tĩnh — bật strict mode, 0 issue kể cả info ([luật § 16](../reference/01_rules.md)) | `flutter analyze` | có |
 | 3 | Test theo từng package | `flutter test --coverage` trong mọi package có thư mục `test/`, trừ `tools/` | có |
 | — | Báo cáo coverage | `dart tools/coverage_report/report.dart` — line coverage từng package trong job summary | không (chỉ tham khảo) |
 | 4 | Lệch catalog version | `dart tools/dependency_sync.dart --check` | có |

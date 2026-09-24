@@ -99,12 +99,11 @@ void main() {
 
       // Verification of serialized JSON structure
       expect(json['state'], isNotNull);
-      expect((json['state'] as Map)['state'], equals('error'));
-      expect(
-        (json['state'] as Map)['error']['type'],
-        equals('custom_app_error'),
-      );
-      expect((json['state'] as Map)['error']['errorCode'], equals('ERR_401'));
+      final state = json['state'] as Map<String, dynamic>;
+      expect(state['state'], equals('error'));
+      final error = state['error'] as Map<String, dynamic>;
+      expect(error['type'], equals('custom_app_error'));
+      expect(error['errorCode'], equals('ERR_401'));
 
       final deserialized = ViewStateModel<String>.fromJson(
         json,

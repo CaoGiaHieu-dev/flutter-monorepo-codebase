@@ -13,7 +13,7 @@ class _CounterCubit extends BaseCubit<BlocViewState<int>> {
     emit(BlocViewState.success(value));
   }
 
-  void fail(AppFailure failure) => emit(BlocViewState.error(failure));
+  void fail(AppFailure<dynamic> failure) => emit(BlocViewState.error(failure));
 }
 
 void main() {

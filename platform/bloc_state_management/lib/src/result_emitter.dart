@@ -58,7 +58,7 @@ mixin BlocResultMixin<T> on BlocBase<BlocViewState<T>> {
     T Function(R data)? convert,
     bool showLoading = true,
     FutureOr<void> Function(T? data)? onSuccess,
-    FutureOr<void> Function(AppFailure failure)? onFailure,
+    FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure,
   }) => _settleResult<T, R>(
     current: state,
     emit: emit.call,
@@ -94,7 +94,7 @@ mixin CubitResultMixin<T> on Cubit<BlocViewState<T>> {
     T Function(R data)? convert,
     bool showLoading = true,
     FutureOr<void> Function(T? data)? onSuccess,
-    FutureOr<void> Function(AppFailure failure)? onFailure,
+    FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure,
   }) => _settleResult<T, R>(
     current: state,
     emit: emit,
@@ -117,7 +117,7 @@ Future<void> _settleResult<T, R>({
   required T Function(R data)? convert,
   required bool showLoading,
   required FutureOr<void> Function(T? data)? onSuccess,
-  required FutureOr<void> Function(AppFailure failure)? onFailure,
+  required FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure,
 }) async {
   if (isDone()) return;
 

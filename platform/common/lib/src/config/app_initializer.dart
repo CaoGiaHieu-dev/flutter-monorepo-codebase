@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:core_responsive/core_responsive.dart';
@@ -58,7 +59,9 @@ class AppInitializer {
   static bool get _isWeb => debugIsWebOverride ?? kIsWeb;
 
   /// Performs all required startup initializations.
-  static Future<void> init({RouteObserver<ModalRoute>? routeObserver}) async {
+  static Future<void> init({
+    RouteObserver<ModalRoute<void>>? routeObserver,
+  }) async {
     // Global setup for operations (e.g., error handling, logging)
     _setupOperationGlobalConfig();
 
@@ -69,8 +72,10 @@ class AppInitializer {
     // Enable URL reflection for imperative APIs in GoRouter
     GoRouter.optionURLReflectsImperativeAPIs = true;
 
-    // Initialize App Information Helper
-    AppInfoHelper.initialize();
+    // Initialize App Information Helper. Not awaited: until it lands the
+    // helper reports 'Unknown', and a failing platform channel here must not
+    // hold the app on its splash.
+    unawaited(AppInfoHelper.initialize());
 
     // Connect route observer to RouteAwareWidget if provided
     if (routeObserver != null) {

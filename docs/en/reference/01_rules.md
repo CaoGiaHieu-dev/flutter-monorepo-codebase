@@ -447,6 +447,22 @@ Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-
 | Re-run the barrel generator | after adding, renaming, or deleting any file under `lib/` |
 | Handle deprecations properly | research the migration; quick-fixes and ignores are forbidden |
 
+### Analyzer strictness
+
+The single root `analysis_options.yaml` applies to every package. On top of `flutter_lints` it turns on the three strict language modes and a handful of rules; its header explains each one and how to add a rule. `flutter analyze` must report **0 issues** — CI Gate 2 fails on infos too.
+
+| Setting | What it asks of your code |
+|---|---|
+| `strict-casts` | cast a `dynamic` value before using it as a typed one — `jsonDecode(body) as Map<String, dynamic>` |
+| `strict-inference` | give the type argument inference cannot find — `Future<void>.delayed(...)`, `catchError((Object e, StackTrace s) {...})` |
+| `strict-raw-types` | never drop a generic's arguments — `StreamSubscription<User>`, `AppFailure<dynamic>` (keep `<dynamic>` for `AppFailure`: its Freezed `==` compares `runtimeType`) |
+| `unawaited_futures` | in an async body, `await` a Future or wrap it in `unawaited(...)` from `dart:async` with a comment saying why |
+| `cancel_subscriptions` / `close_sinks` | a `StreamSubscription` field is cancelled, a `StreamController` field closed, in the class that owns it |
+| `avoid_dynamic_calls` | no method call or property access on `dynamic` — cast first |
+| `empty_catches` | an empty `catch` holds a comment saying why dropping the error is safe; prefer narrowing it (`on FileSystemException`) |
+
+`discarded_futures` is **not** enabled: in Flutter it mostly flags `subscription.cancel()` / `controller.close()` in a synchronous `dispose()` and dialogs opened from `void` callbacks. Adding a rule means fixing every hit it reports — never `// ignore:` — and regenerating a module (`generate.dart 1 smoke "" 2 2`) to prove the generator templates still pass.
+
 ---
 
 ## Rule → command cheat sheet

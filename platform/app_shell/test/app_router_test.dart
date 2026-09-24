@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,7 +131,8 @@ void main() {
       await _pump(tester, router);
       log.clear();
 
-      router.router.push('/b');
+      // push completes only when /b pops — pumping drives the navigation.
+      unawaited(router.router.push('/b'));
       await tester.pumpAndSettle();
       expect(log, containsAllInOrder(['a.didPushNext', 'b.didPush']));
 

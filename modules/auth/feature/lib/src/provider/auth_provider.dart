@@ -175,7 +175,7 @@ class AuthProvider extends BaseProvider<UserEntity>
   ///
   /// A 403 stays a server error with the backend's message: it means "not
   /// allowed" (a disabled or locked account), not "wrong password".
-  static ErrorState? mapAuthFailure(AppFailure failure) {
+  static ErrorState? mapAuthFailure(AppFailure<dynamic> failure) {
     return failure.whenOrNull(
       auth: (message, code, data) {
         if (code == 401) return const AuthErrorState.invalidCredentials();

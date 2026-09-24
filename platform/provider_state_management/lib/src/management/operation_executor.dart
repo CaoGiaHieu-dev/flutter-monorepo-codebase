@@ -97,7 +97,7 @@ class OperationExecutor<T> {
 
   /// Handle failure response
   Future<void> _handleFailure<R>(
-    AppFailure failure,
+    AppFailure<dynamic> failure,
     OperationConfig<R, T> config,
   ) async {
     if (_stateManager.isDisposed) return;

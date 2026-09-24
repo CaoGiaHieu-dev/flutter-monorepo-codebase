@@ -182,6 +182,7 @@ flutter analyze
 
 - [ ] Công cụ CLI dùng `stdout.writeln` / `stderr.writeln`, không bao giờ `print()`
 - [ ] Không thêm `// ignore_for_file:` hay bất kỳ cách tắt lint nào
+- [ ] `flutter analyze` sạch dưới các strict mode: không generic thô, không dùng `dynamic` chưa cast, Future chạy ngầm được bọc `unawaited(...)` kèm lý do, mọi `catch` rỗng đều có comment ([`01_rules.md` § 16](01_rules.md))
 - [ ] Không thêm script `.ps1`
 - [ ] Cảnh báo deprecation được xử lý bằng migrate thật, không phải bị bịt đi
 - [ ] Version được đổi trong `pubspec_dependencies.yaml` rồi sync — không hardcode ở từng package

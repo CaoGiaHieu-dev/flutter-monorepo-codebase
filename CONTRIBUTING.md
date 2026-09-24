@@ -77,6 +77,10 @@ generated file. The debug APK build is what catches a broken `.freezed.dart` or
   - Committed: barrel files. Re-run `dart tools/barrel_generator/generate.dart <package>/lib`
     after adding, renaming or deleting a file — **after** codegen — and commit the result. The
     generator deletes hand-written `export` lines; put deliberate re-exports in a normal source file.
+- **The analyzer is strict.** `strict-casts`, `strict-inference` and `strict-raw-types` are on,
+  with `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls` and
+  `empty_catches`; `flutter analyze` must report 0 issues, and `// ignore:` is not a fix. What
+  each asks of your code: [`docs/en/reference/01_rules.md` § 16](docs/en/reference/01_rules.md).
 - **Docs stay in parity.** Every page under `docs/en/` has a twin under `docs/vi/`, and
   `README.md` / `README.vi.md`, `tools/README*.md` and the package `README.vi.md` files likewise.
   Change both in the same PR. If you change a rule, update `docs/*/reference/01_rules.md`,

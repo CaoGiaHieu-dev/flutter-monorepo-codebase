@@ -5,7 +5,8 @@ import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-class LoadingMoreWidget<P extends LoadMoreMixin> extends StatelessWidget {
+class LoadingMoreWidget<P extends LoadMoreMixin<Object?>>
+    extends StatelessWidget {
   const LoadingMoreWidget({this.builder});
 
   final WidgetBuilder? builder;
@@ -28,7 +29,7 @@ class LoadingMoreWidget<P extends LoadMoreMixin> extends StatelessWidget {
   }
 }
 
-class LoadMoreListView<P extends LoadMoreMixin> extends BoxScrollView {
+class LoadMoreListView<P extends LoadMoreMixin<Object?>> extends BoxScrollView {
   const LoadMoreListView({
     super.key,
     required this.itemBuilder,

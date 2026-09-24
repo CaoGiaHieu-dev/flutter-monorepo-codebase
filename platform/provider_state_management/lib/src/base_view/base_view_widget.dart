@@ -36,7 +36,7 @@ class BaseViewWidget<P extends BaseProvider<T>, T extends Object>
 
   Widget _builder(
     BuildContext context,
-    ViewStateModel viewState,
+    ViewStateModel<T> viewState,
     Widget? child,
   ) {
     return viewState.data == null
@@ -104,8 +104,8 @@ class BaseViewWidget2<
 
   Widget _builder(
     BuildContext context,
-    ViewStateModel viewState1,
-    ViewStateModel viewState2,
+    ViewStateModel<T1> viewState1,
+    ViewStateModel<T2> viewState2,
     Widget? child,
   ) {
     return viewState1.data == null && viewState2.data == null
@@ -187,9 +187,9 @@ class BaseViewWidget3<
 
   Widget _builder(
     BuildContext context,
-    ViewStateModel viewState1,
-    ViewStateModel viewState2,
-    ViewStateModel viewState3,
+    ViewStateModel<T1> viewState1,
+    ViewStateModel<T2> viewState2,
+    ViewStateModel<T3> viewState3,
     Widget? child,
   ) {
     return viewState1.data == null &&
@@ -302,10 +302,10 @@ class BaseViewWidget4<
 
   Widget _builder(
     BuildContext context,
-    ViewStateModel viewState1,
-    ViewStateModel viewState2,
-    ViewStateModel viewState3,
-    ViewStateModel viewState4,
+    ViewStateModel<T1> viewState1,
+    ViewStateModel<T2> viewState2,
+    ViewStateModel<T3> viewState3,
+    ViewStateModel<T4> viewState4,
     Widget? child,
   ) {
     return viewState1.data == null &&
@@ -432,11 +432,11 @@ class BaseViewWidget5<
 
   Widget _builder(
     BuildContext context,
-    ViewStateModel viewState1,
-    ViewStateModel viewState2,
-    ViewStateModel viewState3,
-    ViewStateModel viewState4,
-    ViewStateModel viewState5,
+    ViewStateModel<T1> viewState1,
+    ViewStateModel<T2> viewState2,
+    ViewStateModel<T3> viewState3,
+    ViewStateModel<T4> viewState4,
+    ViewStateModel<T5> viewState5,
     Widget? child,
   ) {
     return viewState1.data == null &&
@@ -578,12 +578,12 @@ class BaseViewWidget6<
 
   Widget _builder(
     BuildContext context,
-    ViewStateModel viewState1,
-    ViewStateModel viewState2,
-    ViewStateModel viewState3,
-    ViewStateModel viewState4,
-    ViewStateModel viewState5,
-    ViewStateModel viewState6,
+    ViewStateModel<T1> viewState1,
+    ViewStateModel<T2> viewState2,
+    ViewStateModel<T3> viewState3,
+    ViewStateModel<T4> viewState4,
+    ViewStateModel<T5> viewState5,
+    ViewStateModel<T6> viewState6,
     Widget? child,
   ) {
     return viewState1.data == null &&

@@ -16,7 +16,7 @@ void main() {
       expect(executedCount, equals(0));
       expect(EasyDebounce.count(), equals(1));
 
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
       expect(executedCount, equals(1));
       expect(EasyDebounce.count(), equals(0));
     });
@@ -30,10 +30,10 @@ void main() {
         executedCount = 2;
       });
 
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(executedCount, equals(0));
 
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(executedCount, equals(2));
     });
 
@@ -57,7 +57,7 @@ void main() {
       EasyDebounce.cancel('test-tag');
       expect(EasyDebounce.count(), equals(0));
 
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
       expect(executedCount, equals(0));
     });
 

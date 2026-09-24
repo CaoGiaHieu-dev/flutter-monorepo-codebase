@@ -17,11 +17,11 @@ class _Analytics implements IAnalytics {
 /// `RouteAwareWidget` — what every `GoRouteDataCustom` page is wrapped in —
 /// reports a screen view whenever its route becomes the visible one.
 void main() {
-  late RouteObserver<ModalRoute> observer;
+  late RouteObserver<ModalRoute<void>> observer;
   final navigatorKey = GlobalKey<NavigatorState>();
 
   setUp(() {
-    observer = RouteObserver<ModalRoute>();
+    observer = RouteObserver<ModalRoute<void>>();
     RouteAwareWidget.observer = observer;
   });
 

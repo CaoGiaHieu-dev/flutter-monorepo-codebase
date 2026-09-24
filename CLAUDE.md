@@ -45,7 +45,7 @@ dart run build_runner build --workspace
 # Run the app (flavors: dev / staging / prod) — from apps/mobile, the root has no android/ or ios/
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 
-# Static analysis
+# Static analysis — strict-casts/-inference/-raw-types on; must report 0 issues (infos too)
 flutter analyze
 dart fix --apply
 ```
@@ -814,6 +814,7 @@ Contracts in `core_di` stay state-management agnostic — `IAppTreeWrapper.wrap(
 27. **Every package owns its own database** if it needs one; `core_database` is mechanism only. Never create a shared `AppDatabase`.
 28. **Any feature must be removable.** `injection.dart` is the shell's only intentional hard reference to modules; everything else goes through `core_di` contracts. A type-level import defeats `getItOrNull` — an unresolved import fails at compile time, before any lookup runs — so declare a contract instead. **Enforced by arch_check R10** in `apps/*` (only `injection.dart` may import a module) and **R1** in `platform_app_shell`. R10 was added after `network_config_impl.dart` — then an app file, now in `platform_app_shell` — was found importing `data_auth` and `domain_auth`, which made the auth module unremovable while every document said otherwise.
 
+29. **The analyzer is strict** (`analysis_options.yaml`, whose header explains every setting): `strict-casts`, `strict-inference`, `strict-raw-types`, plus `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls`, `empty_catches`. Cast `dynamic` before use (`jsonDecode(s) as Map<String, dynamic>`); give the type argument inference cannot find (`Future<void>.delayed`, `AppDialogController.show<void>`); never a raw generic — `AppFailure<dynamic>`, keeping `dynamic` because Freezed `==` compares `runtimeType`; `await` in an async body or `unawaited(...)` with a reason; cancel/close subscription and controller fields in their own class; an empty `catch` holds a comment saying why it is safe. `discarded_futures` is off on purpose (it floods synchronous `dispose()` with `cancel()`/`close()` hits). Table: `docs/en/reference/01_rules.md` § 16.
 ---
 
 ## PR Review Checklist (full version: `docs/en/reference/04_review_checklist.md`)

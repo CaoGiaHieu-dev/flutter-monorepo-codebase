@@ -130,17 +130,17 @@ $dependenciesContent
 
       if (jsonProcess.exitCode == 0) {
         try {
-          final Map<String, dynamic> data = jsonDecode(
-            jsonProcess.stdout as String,
-          );
+          final data =
+              jsonDecode(jsonProcess.stdout as String) as Map<String, dynamic>;
           final packages = data['packages'] as List<dynamic>? ?? [];
 
           String depsContent = dependenciesFile.readAsStringSync();
           final List<Map<String, dynamic>> outdatedList = [];
 
-          for (final pkg in packages) {
+          for (final pkg in packages.cast<Map<String, dynamic>>()) {
             final name = pkg['package'] as String?;
-            final latest = pkg['latest']?['version'] as String?;
+            final latest =
+                (pkg['latest'] as Map<String, dynamic>?)?['version'] as String?;
 
             if (name != null && latest != null) {
               final regex = RegExp(
@@ -317,7 +317,7 @@ $dependenciesContent
     try {
       if (sandboxDir.existsSync()) {
         // Pause briefly before deleting so Windows releases its file handles
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
         sandboxDir.deleteSync(recursive: true);
       }
     } catch (_) {

@@ -58,7 +58,10 @@ class ErrorHandler {
   /// too — and a caller awaiting a `Result` (a provider in its loading state)
   /// would never get one. Anything that goes wrong while classifying [error]
   /// therefore degrades to the generic unknown-error failure.
-  static AppFailure handleError(dynamic error, [StackTrace? stackTrace]) {
+  static AppFailure<dynamic> handleError(
+    dynamic error, [
+    StackTrace? stackTrace,
+  ]) {
     try {
       return _classify(error, stackTrace);
     } catch (_) {
@@ -104,7 +107,7 @@ class ErrorHandler {
 
   /// The classification behind [handleError]; may throw on a hostile
   /// [error] (a `toString` that throws, say), which [handleError] absorbs.
-  static AppFailure _classify(dynamic error, StackTrace? stackTrace) {
+  static AppFailure<dynamic> _classify(dynamic error, StackTrace? stackTrace) {
     // Handle custom application exceptions
     if (error is AppException) {
       return _handleAppException(error);
@@ -139,7 +142,7 @@ class ErrorHandler {
 
     // Handle generic exceptions. The failure is built first: a `toString`
     // that throws lands in [handleError]'s catch, which notifies once.
-    final failure = ServerFailure(
+    final failure = ServerFailure<dynamic>(
       message: _isDebug ? error.toString() : _unknownMessage,
       code: ErrorCodes.UNKNOWN,
     );
@@ -148,7 +151,7 @@ class ErrorHandler {
   }
 
   /// Transforms custom application exceptions to failures
-  static AppFailure _handleAppException(AppException exception) {
+  static AppFailure<dynamic> _handleAppException(AppException exception) {
     return exception.when(
       network: (message, code) => NetworkFailure(message: message, code: code),
       server: (message, code) => ServerFailure(message: message, code: code),
@@ -164,7 +167,7 @@ class ErrorHandler {
   }
 
   /// Creates appropriate failure based on HTTP status code.
-  static AppFailure _createFailureFromStatusCode(
+  static AppFailure<dynamic> _createFailureFromStatusCode(
     int? statusCode,
     String message,
   ) {
@@ -185,7 +188,7 @@ class ErrorHandler {
   }
 
   /// Transforms Dio HTTP exceptions to failures
-  static AppFailure _handleDioException(DioException exception) {
+  static AppFailure<dynamic> _handleDioException(DioException exception) {
     switch (exception.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -257,7 +260,7 @@ class ErrorHandler {
   }
 
   /// Creates a network failure for connection issues
-  static NetworkFailure networkFailure([String? message]) {
+  static NetworkFailure<dynamic> networkFailure([String? message]) {
     return NetworkFailure(
       message: message ?? 'Network connection failed',
       code: 1000,
@@ -283,7 +286,7 @@ class ErrorHandler {
   /// Coded [ErrorCodes.RESPONSE_REJECTED], never a 5xx: the server answered,
   /// so this is its verdict, not a transient fault. [message] is the
   /// envelope's own message when it carries one.
-  static ServerFailure responseRejectedFailure([String? message]) {
+  static ServerFailure<dynamic> responseRejectedFailure([String? message]) {
     final text = message?.trim();
     return ServerFailure(
       message: (text == null || text.isEmpty)
@@ -294,7 +297,7 @@ class ErrorHandler {
   }
 
   /// The failure for an empty response where a value was required.
-  static ServerFailure emptyResponseFailure([String? message]) {
+  static ServerFailure<dynamic> emptyResponseFailure([String? message]) {
     return ServerFailure(
       message: message ?? 'Response data is null',
       code: ErrorCodes.EMPTY_RESPONSE,
@@ -302,7 +305,7 @@ class ErrorHandler {
   }
 
   /// Creates an auth failure for authentication errors
-  static AuthFailure authFailure([String? message, int? code]) {
+  static AuthFailure<dynamic> authFailure([String? message, int? code]) {
     return AuthFailure(
       message: message ?? 'Authentication failed',
       code: code ?? 401,
@@ -310,7 +313,7 @@ class ErrorHandler {
   }
 
   /// Creates a validation failure for input validation errors
-  static ValidationFailure validationFailure(
+  static ValidationFailure<dynamic> validationFailure(
     String message, {
     String? field,
     int? code,
@@ -323,7 +326,7 @@ class ErrorHandler {
   }
 
   /// Creates a storage failure for local storage errors
-  static StorageFailure storageFailure([String? message, int? code]) {
+  static StorageFailure<dynamic> storageFailure([String? message, int? code]) {
     return StorageFailure(
       message: message ?? 'Storage operation failed',
       code: code ?? 2000,
@@ -331,7 +334,7 @@ class ErrorHandler {
   }
 
   /// Creates a parse failure for data parsing errors
-  static ParseFailure parseFailure([String? message, int? code]) {
+  static ParseFailure<dynamic> parseFailure([String? message, int? code]) {
     return ParseFailure(
       message: message ?? 'Data parsing failed',
       code: code ?? 4000,
@@ -339,7 +342,7 @@ class ErrorHandler {
   }
 
   /// Creates a cache failure for cache operation errors
-  static CacheFailure cacheFailure([String? message, int? code]) {
+  static CacheFailure<dynamic> cacheFailure([String? message, int? code]) {
     return CacheFailure(
       message: message ?? 'Cache operation failed',
       code: code ?? 5000,
@@ -347,7 +350,7 @@ class ErrorHandler {
   }
 
   /// Creates a service failure for external service errors
-  static ServiceFailure serviceFailure([String? message, int? code]) {
+  static ServiceFailure<dynamic> serviceFailure([String? message, int? code]) {
     return ServiceFailure(
       message: message ?? 'External service error',
       code: code ?? 6000,

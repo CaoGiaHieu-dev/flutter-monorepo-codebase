@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -32,7 +34,8 @@ Future<GoRouter> _pumpApp(WidgetTester tester) async {
   // The controller is created at the end of the first frame.
   await tester.pump();
 
-  router.push('/second');
+  // push completes only when /second pops — pumping drives the navigation.
+  unawaited(router.push('/second'));
   await tester.pumpAndSettle();
   expect(find.text('second'), findsOneWidget);
   return router;
@@ -43,7 +46,10 @@ void main() {
     testWidgets('a non-dismissible dialog swallows the back', (tester) async {
       await _pumpApp(tester);
 
-      AppDialogController.show<void>(builder: (_) => const Text('dialog'));
+      // show completes only when the dialog closes, which this test forbids.
+      unawaited(
+        AppDialogController.show<void>(builder: (_) => const Text('dialog')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('dialog'), findsOneWidget);
 
@@ -60,10 +66,13 @@ void main() {
       await _pumpApp(tester);
 
       var closed = false;
-      AppDialogController.show<void>(
-        barrierDismissible: true,
-        builder: (_) => const Text('dialog'),
-      ).then((_) => closed = true);
+      // Observed through `closed`; awaiting here would wait for the back.
+      unawaited(
+        AppDialogController.show<void>(
+          barrierDismissible: true,
+          builder: (_) => const Text('dialog'),
+        ).then((_) => closed = true),
+      );
       await tester.pumpAndSettle();
       expect(find.text('dialog'), findsOneWidget);
 

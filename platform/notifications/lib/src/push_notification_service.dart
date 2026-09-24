@@ -245,7 +245,7 @@ class PushNotificationService {
         );
         try {
           // The payload is a JSON string containing the message data, so we decode it.
-          final data = Map<String, dynamic>.from(jsonDecode(payload));
+          final data = Map<String, dynamic>.from(jsonDecode(payload) as Map);
           // Construct a RemoteMessage from the data payload.
           initialMessage = RemoteMessage(data: data);
         } catch (e, s) {
@@ -578,7 +578,10 @@ class PushNotificationService {
 
   /// Registers the FCM token.
   Future<void> registerToken() async {
-    _fcmToken = await _firebaseMessaging.getToken().catchError((e, s) {
+    _fcmToken = await _firebaseMessaging.getToken().catchError((
+      Object e,
+      StackTrace s,
+    ) {
       DynamicLogger.log(
         e,
         tag: 'PushNotificationService.registerToken',

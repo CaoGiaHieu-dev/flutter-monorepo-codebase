@@ -1,12 +1,78 @@
 # =============================================================================
-# FILE: analysis_options.yaml
-# MÔ TẢ: Cấu hình quy tắc kiểm tra mã nguồn (Linter) và chỉ số (Metrics)
-# CHI TIẾT: Xem hướng dẫn tại analysis_options_guide.md trong artifacts.
+# analysis_options.yaml — the one analyzer configuration for the whole
+# workspace. Every package (apps/, modules/, platform/, tools/) inherits it;
+# no package ships its own, so `flutter analyze` from the root judges all of
+# them by the same rules.
+#
+# BASELINE
+#   package:flutter_lints/flutter.yaml (Dart core + recommended + Flutter
+#   rules), plus the three strict language modes below and the rules under
+#   `linter: rules:`, where `true` adds a rule and `false` removes one the
+#   baseline would otherwise apply. CI (Gate 2 of pr_quality_check.yml) fails
+#   on any issue, warnings and infos included, so the target is always 0.
+#
+# STRICT MODES (analyzer: language:)
+#   strict-casts      No implicit downcast from `dynamic`. `jsonDecode(...)`,
+#                     `map['key']` and other dynamic values must be cast
+#                     (`as Map<String, dynamic>`) before use, so a wrong
+#                     shape fails where it is read, not three calls later.
+#   strict-inference  No silent fallback to `dynamic` when a type argument or
+#                     parameter type cannot be inferred: `Future.delayed`
+#                     becomes `Future<void>.delayed`, an untyped
+#                     `catchError((e, s) {...})` gets `(Object e, StackTrace s)`.
+#   strict-raw-types  No generic type without its arguments (`List`,
+#                     `StreamSubscription`, `AppFailure`). Write the argument,
+#                     even when it is `dynamic` — e.g. `AppFailure<dynamic>`,
+#                     whose Freezed equality compares `runtimeType`, so mixing
+#                     `<dynamic>` and `<Object?>` would make equal failures
+#                     unequal.
+#
+# KEY RULES ADDED ON TOP OF THE BASELINE
+#   unawaited_futures     A Future in an async body must be awaited, or
+#                         wrapped in `unawaited(...)` (dart:async) with a
+#                         comment saying why fire-and-forget is intended.
+#   cancel_subscriptions  A StreamSubscription field must be cancelled in its
+#   close_sinks           class; a StreamController/Sink field closed.
+#   avoid_dynamic_calls   No member call on a `dynamic` value — cast first.
+#   empty_catches         An empty catch needs a comment inside it that says
+#                         why dropping the error is safe (the comment is what
+#                         satisfies the rule). Prefer narrowing the catch.
+#
+#   `discarded_futures` is deliberately NOT enabled: it flags every Future
+#   started from a synchronous function, which in Flutter is mostly
+#   `subscription.cancel()` / `controller.close()` inside a synchronous
+#   `dispose()` and `showDialog(...)` from a `void` callback — about 40
+#   such hits across the repo, nearly all harmless. `unawaited_futures`
+#   covers the async bodies where a missing `await` is a real bug.
+#
+# GENERATED CODE
+#   Excluded below (*.freezed.dart, *.g.dart, *.config.dart, *.module.dart,
+#   lib/src/gen/**). Never hand-edit it to satisfy a rule — fix the source
+#   and rerun `dart run build_runner build --workspace`. Excluded files are
+#   still compiled, so a clean analyze does not prove the app builds; finish
+#   with `flutter build apk --flavor dev --debug`.
+#
+# ADDING A RULE
+#   1. Add `rule_name: true` under `linter: rules:` (or a mode under
+#      `analyzer: language:`) with a one-line comment saying why.
+#   2. Run `flutter analyze` from the root and fix every hit properly.
+#      `// ignore:` / `// ignore_for_file:` are not allowed (AGENTS.md: no
+#      lint suppressions) — if a rule cannot be satisfied honestly, leave it
+#      off and say why here.
+#   3. Prove the generator templates still pass: in a throwaway clone, run
+#      `dart tools/module_generator/generate.dart 1 smoke "" 2 2` and
+#      `flutter analyze` (CI's generator-smoke job does the same).
+#   4. Update "Analyzer strictness" in docs/en/reference/01_rules.md § 16
+#      and its docs/vi twin.
 # =============================================================================
 
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
   exclude:
     - "**.freezed.dart"
     - "**.g.dart"
@@ -23,192 +89,180 @@ analyzer:
     - macos/**
     - linux/**
   errors:
-    # Bỏ qua cảnh báo về annotation target không hợp lệ (thường dùng cho Freezed/JSON Serializable).
+    # Freezed / json_serializable put @JsonKey on constructor parameters.
     invalid_annotation_target: ignore
 
 linter:
   rules:
-    # Đơn giản hóa việc khai báo biến trong pattern.
+    # --- Async, streams and dynamic values (see header) ---------------------
+    unawaited_futures: true
+    cancel_subscriptions: true
+    close_sinks: true
+    avoid_dynamic_calls: true
+    # An empty catch must carry a comment saying why the error is dropped.
+    empty_catches: true
+
+    # --- Style and correctness ----------------------------------------------
     # Bad: Square(area: var area) | Good: Square(:var area)
     simplify_variable_pattern: true
 
-    # Sử dụng tham số khởi tạo trực tiếp (this.field).
     # Bad: Point(int x) : x = x; | Good: Point(this.x);
     prefer_initializing_formals: true
 
-    # Không import tương đối vào thư mục lib/.
-    # Bad: import '../../lib/src/utils.dart'; | Good: import 'package:package/utils.dart';
+    # Bad: import '../../lib/src/utils.dart';
     avoid_relative_lib_imports: true
 
-    # Cảnh báo HTML không mong muốn trong doc comments.
-    # Bad: /// Returns a List<String> | Good: /// Returns a `List<String>`
+    # Off: `List<String>` in a doc comment is common and harmless here.
     unintended_html_in_doc_comment: false
 
-    # Lược bỏ kiểu dữ liệu rõ ràng cho static/top-level variables.
-    # Bad: static const List<String> names = <String>[]; | Good: static const names = <String>[];
+    # Off: explicit types on static/top-level declarations are allowed.
     omit_obvious_property_types: false
 
-    # Cảnh báo các câu lệnh trống (dấu chấm phẩy thừa).
     # Bad: if (cond); { ... }
     empty_statements: true
 
-    # Ưu tiên dùng cú pháp inline khi khởi tạo collection.
     # Bad: list.add('a'); | Good: var list = ['a'];
     prefer_inlined_adds: true
 
-    # Đảm bảo chuỗi multiline bắt đầu bằng dòng mới.
+    # A multiline string starts on a new line.
     leading_newlines_in_multiline_strings: true
 
-    # Một dòng chỉ nên khai báo một biến.
     # Bad: var a, b;
     avoid_multiple_declarations_per_line: true
 
-    # Cho phép/Cảnh báo sử dụng thành phần bị deprecated trong cùng package.
+    # Flags use of a member deprecated in the same package.
     deprecated_member_use_from_same_package: true
 
-    # Bỏ các dấu gạch dưới không cần thiết.
+    # Bad: (__) => ... where a single `_` would do.
     unnecessary_underscores: true
 
-    # Tên file phải dùng snake_case.
     # Bad: MyFile.dart | Good: my_file.dart
     file_names: true
 
-    # Tên biến/hàm không hằng số dùng lowerCamelCase.
     # Bad: var MyVar; | Good: var myVar;
     non_constant_identifier_names: true
 
-    # Cảnh báo khi tear-off phương thức call() ngầm định.
+    # Flags an implicit tear-off of a `call()` method.
     implicit_call_tearoffs: true
 
-    # Yêu cầu kiểu dữ liệu tường minh cho top-level variables.
+    # Top-level variables need an inferable or explicit type.
     strict_top_level_inference: true
-    # Tên super parameters phải khớp với lớp cha.
+
     # Bad: Child({super.diffName}) // Parent(name) | Good: Child({super.name})
     matching_super_parameters: true
 
-    # Yêu cầu dấu phẩy ở cuối danh sách (tắt trong dự án này).
+    # Off: trailing commas are left to the formatter (`trailing_commas: preserve`).
     require_trailing_commas: false
 
-    # Không được sử dụng biến wildcard (_).
     # Bad: print(_);
     no_wildcard_variable_uses: true
 
-    # Không cần thiết đặt tên cho library.
+    # Off: a `library` name is allowed.
     unnecessary_library_name: false
 
-    # Tránh dùng print() trong code production.
-    # Good: dùng logger hoặc debugPrint.
+    # CLI tools use stdout/stderr.writeln, app code a logger — never print().
     avoid_print: true
 
-    # Ưu tiên nháy đơn cho String.
     # Bad: "Hello" | Good: 'Hello'
     prefer_single_quotes: true
 
-    # Tránh dùng function literals trong foreach (ưu tiên for-in).
-    # Bad: list.forEach((e) => print(e)) | Good: for (var e in list) print(e)
+    # Off: `list.forEach((e) => ...)` is allowed.
     avoid_function_literals_in_foreach_calls: false
 
-    # Luôn khai báo kiểu trả về cho hàm.
+    # Off: return types may be inferred.
     always_declare_return_types: false
 
-    # Bỏ từ khóa 'new' thừa.
+    # Bad: new Foo()
     unnecessary_new: true
 
-    # Tránh câu lệnh else trống.
+    # Bad: else ;
     avoid_empty_else: true
 
-    # Sắp xếp import theo thứ tự (dart, package, relative).
+    # dart:, then package:, then relative imports, each sorted.
     directives_ordering: true
 
-    # Tránh tham số constructor không dùng.
+    # Off: unused constructor parameters are allowed.
     avoid_unused_constructor_parameters: false
 
-    # Ưu tiên import tương đối trong cùng package.
-    # Good: import '../models/user.dart';
+    # Inside one package, import its own lib/ files relatively.
     prefer_relative_imports: true
 
-    # Yêu cầu ngoặc nhọn cho if/for/while.
+    # Off: a single-statement if/for/while may omit braces.
     curly_braces_in_flow_control_structures: false
 
-    # Quy tắc tên hằng số (đang tắt).
+    # Off: constants are UPPER_SNAKE_CASE in this repo (CLAUDE.md naming).
     constant_identifier_names: false
-    # Không để block catch trống.
-    empty_catches: false
 
-    # Chỉ dùng package đã khai báo trong pubspec.
+    # Off: arch_check R5 enforces declared dependencies instead.
     depend_on_referenced_packages: false
 
-    # Ưu tiên const constructor cho Widget (hiệu năng Flutter).
     # Good: const Text('Hi')
     prefer_const_constructors: true
 
-    # Yêu cầu tham số Key cho Widget constructor.
+    # Off: widget constructors need not take a `key`.
     use_key_in_widget_constructors: false
 
-    # NOTE: `unnecessary_await_in_return` đã bị deprecated (Dart 3.13 /
-    # Flutter 3.47) và được gỡ bỏ khỏi cấu hình. Rule này khuyến khích bỏ
-    # `await` ở câu lệnh return, nhưng bên trong khối try/finally việc đó làm
-    # thay đổi ngữ nghĩa (finally chạy trước khi Future hoàn tất). Diagnostic
-    # kế nhiệm là `unawaited_return_in_try_block`, đã được analyzer bật sẵn.
+    # NOTE: `unnecessary_await_in_return` was deprecated (Dart 3.13 /
+    # Flutter 3.47) and removed from this file. Dropping `await` from a
+    # return inside try/finally changes behaviour (finally runs before the
+    # Future completes); its successor, `unawaited_return_in_try_block`, is
+    # on by default in the analyzer.
 
-    # Bỏ '{}' thừa trong string interpolation.
     # Bad: '${name}' | Good: '$name'
     unnecessary_brace_in_string_interps: true
 
-    # Bỏ 'const' thừa khi đã có ở cấp cha.
+    # Bad: const [const Foo()]
     unnecessary_const: true
 
-    # Bỏ tên constructor mặc định (.new) nếu không cần.
+    # Bad: Foo.new() where Foo() would do.
     unnecessary_constructor_name: true
 
-    # Tránh getter/setter chỉ làm nhiệm vụ bọc field.
+    # Bad: a getter/setter pair that only wraps a field.
     unnecessary_getters_setters: true
 
-    # Ưu tiên tear-off thay vì lambda.
     # Bad: (x) => print(x) | Good: print
     unnecessary_lambdas: true
 
-    # Bỏ 'late' nếu biến được gán ngay.
+    # Bad: `late` on a variable initialized at its declaration.
     unnecessary_late: true
 
-    # Bỏ '??=' nếu không cần thiết.
+    # Bad: x ??= null
     unnecessary_null_aware_assignments: true
 
-    # Bỏ '!' thừa.
+    # Bad: a `!` the type already guarantees.
     unnecessary_null_checks: true
 
-    # Bỏ '?? null' thừa.
+    # Bad: x ?? null
     unnecessary_null_in_if_null_operators: true
 
-    # Bỏ kiểu nullable cho biến final nếu có giá trị non-null.
+    # Bad: final String? x = 'a';
     unnecessary_nullable_for_final_variable_declarations: true
 
-    # Bỏ override nếu chỉ gọi super.
+    # Bad: an override that only calls super.
     unnecessary_overrides: true
 
-    # Bỏ ngoặc đơn thừa.
+    # Bad: redundant parentheses.
     unnecessary_parenthesis: true
 
-    # Tránh dùng raw strings (r'') nếu không cần.
+    # Off: raw strings are allowed even without special characters.
     unnecessary_raw_strings: false
 
-    # Cảnh báo các câu lệnh không có tác dụng.
+    # Bad: a statement with no effect.
     unnecessary_statements: true
 
-    # Bỏ escape characters không cần thiết trong chuỗi.
+    # Bad: an escape the string does not need, e.g. 'a\"b'.
     unnecessary_string_escapes: true
 
-    # Bỏ string interpolation nếu chỉ có 1 biến chuỗi.
     # Bad: '${myString}' | Good: myString
     unnecessary_string_interpolations: true
 
-    # Không dùng 'this.' nếu không bị trùng tên.
+    # Bad: this.field where nothing shadows it.
     unnecessary_this: true
 
-    # Không cần '.toList()' khi dùng spread operator (...).
+    # Bad: [...list.toList()]
     unnecessary_to_list_in_spreads: true
 
-    # Không trùng lặp giá trị trong switch-case.
+    # Bad: two `case` clauses with the same value.
     no_duplicate_case_values: true
 
 formatter:

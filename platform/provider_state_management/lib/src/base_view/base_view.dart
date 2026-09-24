@@ -10,19 +10,19 @@ export 'default_state_widgets.dart';
 export 'paginated_view_widget.dart';
 
 /// A typedef for building a widget when state is initial.
-typedef InitialWidgetBuilder<T> = Widget Function(
+typedef InitialWidgetBuilder = Widget Function(
   BuildContext context,
   Widget? child,
 );
 
 /// A typedef for building a widget when state is empty.
-typedef EmptyWidgetBuilder<T> = Widget Function(
+typedef EmptyWidgetBuilder = Widget Function(
   BuildContext context,
   Widget? child,
 );
 
 /// A typedef for building a widget when state is loading.
-typedef LoadingWidgetBuilder<T> = Widget Function(
+typedef LoadingWidgetBuilder = Widget Function(
   BuildContext context,
   Widget? child,
 );

@@ -23,7 +23,7 @@ class AppDialog {
     required String title,
     required String message,
   }) {
-    AppDialogController.show(
+    AppDialogController.show<void>(
       identity: title + message,
       builder: (context) {
         return ErrorDialog(title: title, content: message);
@@ -36,7 +36,7 @@ class AppDialog {
     required String message,
     VoidCallback? onConfirm,
   }) {
-    AppDialogController.show(
+    AppDialogController.show<void>(
       identity: title + message,
       builder: (context) {
         return WarningDialog(
@@ -53,7 +53,7 @@ class AppDialog {
     required String message,
     VoidCallback? onConfirm,
   }) {
-    AppDialogController.show(
+    AppDialogController.show<void>(
       identity: title + message,
       builder: (context) {
         return WarningDialog(

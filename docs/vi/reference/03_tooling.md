@@ -194,7 +194,7 @@ Chỉ chạy tương tác; cần Firebase CLI đã cài và đã đăng nhập. 
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `./tools/android_compliance/16kb_ckeck.sh <apk\|apex\|dir>` | Kiểm tra tương thích 16 KB page-size của Android 15+ (căn lề zip và ELF) | `0` phân tích đã chạy — thư viện lệch căn được báo trong phần tóm tắt, không qua mã thoát · `1` thiếu tham số, sai loại file, APK không đọc được, hoặc thiếu công cụ SDK | — |
+| `./tools/android_compliance/16kb_ckeck.sh <apk\|apex\|dir>` | Kiểm tra tương thích 16 KB page-size của Android 15+ (căn lề zip và ELF) | `0` mọi thư viện native đều căn 16 KB (hoặc không có thư viện nào) · `1` có thư viện lệch căn, thiếu tham số, sai loại file, APK không đọc được, hoặc thiếu công cụ SDK | — |
 | `.\tools\android_compliance\16kb_ckeck.bat <apk>` | Như trên trên Windows, qua Git Bash | như trên | — |
 
 Hãy build APK release của một flavor trước. Lỗi chính tả trong tên file (`ckeck`) được giữ có chủ đích. Chi tiết: [`android_compliance`](../../../tools/README.vi.md#android_compliance).

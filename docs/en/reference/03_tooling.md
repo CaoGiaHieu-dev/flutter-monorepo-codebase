@@ -194,7 +194,7 @@ Interactive only; needs the Firebase CLI installed and logged in. `--app` is req
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `./tools/android_compliance/16kb_ckeck.sh <apk\|apex\|dir>` | Check Android 15+ 16 KB page-size compliance (zip and ELF alignment) | `0` the analysis ran — an unaligned library is reported in the summary, not through the exit code · `1` no argument, a wrong file type, an unreadable APK or a missing SDK tool | — |
+| `./tools/android_compliance/16kb_ckeck.sh <apk\|apex\|dir>` | Check Android 15+ 16 KB page-size compliance (zip and ELF alignment) | `0` every native library is 16 KB aligned (or there are none) · `1` an unaligned library, no argument, a wrong file type, an unreadable APK or a missing SDK tool | — |
 | `.\tools\android_compliance\16kb_ckeck.bat <apk>` | The same on Windows, through Git Bash | as above | — |
 
 Build a release APK of one flavor first. The filename typo (`ckeck`) is kept on purpose. Details: [`android_compliance`](../../../tools/README.md#android_compliance).

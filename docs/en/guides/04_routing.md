@@ -251,6 +251,12 @@ abstract class AuthNavigator {
 
 One method per route the feature owns — and only routes it owns.
 
+A **new** file in `core_di` is invisible to every consumer until the barrel exports it — `package:core_di/core_di.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it (never hand-add the `export`; the generator deletes hand-written lines):
+
+```bash
+dart tools/barrel_generator/generate.dart platform/di/lib
+```
+
 **2. Implement in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
@@ -363,7 +369,7 @@ Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real wid
 1. **Path constant** → `lib/src/utils/<feature>_path.dart`.
 2. **Route class** → `lib/src/routing/<feature>_route_module.dart` with `@TypedGoRoute` / `@TypedShellRoute`; create the controller in `build()`.
 3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
-4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`.
+4. **Cross-feature entry?** Add a method to that feature's Navigator interface in `core_di` and implement it in the feature's `*_navigator_impl.dart`. A feature with no Navigator yet gets a **new** file in `platform/di/lib/src/navigators/` — then run `dart tools/barrel_generator/generate.dart platform/di/lib` so `core_di`'s barrel exports it (§5).
 5. **Generate** → `dart run build_runner build --workspace`.
 6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 

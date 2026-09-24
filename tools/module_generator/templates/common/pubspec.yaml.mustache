@@ -58,4 +58,8 @@ dev_dependencies:
 {{#isFeature}}
 flutter:
   generate: true
+  # The templates use `Icons` (a nav destination's icon) and depend on
+  # core_base_ui, which sets it too — without it `flutter test` warns that the
+  # primary pubspec has `uses-material-design: false`.
+  uses-material-design: true
 {{/isFeature}}

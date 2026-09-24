@@ -55,14 +55,22 @@ Một dev thuộc team auth clone monorepo mà không lấy source của team kh
 ```bash
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # chỉ của họ
-dart tools/composer/composer.dart sync              # lắp ráp những gì đang có (mọi app)
+dart tools/composer/bootstrap.dart            # bỏ những gì không có trên đĩa để pub resolve được
+flutter pub get                               # composer cần workspace đã resolve
+dart tools/composer/composer.dart sync        # lắp ráp những gì đang có (mọi app)
 dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barrels
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
+**Vì sao cần bước `bootstrap`.** `composer.dart` import `package:path` và `package:yaml`, nên chỉ chạy được trong một workspace đã resolve — mà một bản checkout từng phần vừa clone thì không resolve được: danh sách `workspace:` ở root và path dependency của từng app (đều đã commit) vẫn nêu mọi module, một submodule chưa init là thư mục rỗng không có `pubspec.yaml`, và `flutter pub get` từ chối cả workspace vì nó (*"No workspace packages matching `modules/home/feature`"*). `tools/composer/bootstrap.dart` phá vòng lặp đó. Nó không import package nào, nên chạy được khi chưa hề có `.dart_tool/`, và nó chỉ **xoá bớt** — trong các vùng `composer:managed` của `pubspec.yaml` ở root và của từng `apps/<id>/pubspec.yaml` — mọi mục mà thư mục không có `pubspec.yaml`. Sau đó `sync` viết lại đúng các vùng đó, cùng `injection.dart` của từng app, từ manifest. Trên bản checkout đầy đủ, `bootstrap` không có gì để bỏ và không ghi gì, nên chạy lúc nào cũng an toàn. `--dry-run` cho xem nó sẽ bỏ những gì.
+
+`bootstrap` từ chối — không ghi gì, exit 1 — khi một module **đang có** khai path dependency viết tay tới một module không có (ví dụ `modules/auth/data` mà thiếu `modules/auth/domain`): không vùng managed nào bỏ được dòng đó, nên pub vẫn sẽ lỗi. Hãy init thêm submodule còn thiếu.
+
 Hãy chạy `sync` cho **mọi app** — đừng thu hẹp bằng `--app mobile`. Danh sách `workspace:` ở root luôn được dựng lại từ tất cả app và bỏ đi những gì không có trên đĩa, nhưng `--app mobile` để nguyên `apps/admin/pubspec.yaml`, vẫn khai path dependency tới các module đang thiếu (chẳng hạn `settings`) — và khi đó `flutter pub get` không resolve được workspace.
 
 App chạy. Nó không có màn hình home, không settings, không dashboard — và vẫn boot được, vì mọi lần shell tra cứu một hợp đồng do module sở hữu đều là `getItOrNull` hoặc `getAllOrEmpty` (`arch_check` R8), và không file nào của shell import một module (`arch_check` R10 trong app, R1 trong `platform_app_shell`).
+
+`dart tools/composer/composer.dart verify` **fail** trên bản checkout từng phần, và đúng là phải thế: nó ngầm bật `--strict`, nên một module được khai trong manifest mà không có trên đĩa là lỗi (*"N declared package(s) missing from disk"*). Đó là kiểm tra mà CI Gate 0 chạy, trên runner có đủ mọi submodule. Ở máy local, `flutter analyze` mới là kiểm tra có ý nghĩa.
 
 Code của team khác không chỉ là "không được build" — nó **không nằm trên đĩa**, và `modules/home` chỉ là một thư mục rỗng chứ không phải source: `.gitmodules` chỉ ghi path và URL của nó, còn commit được chốt là một mục gitlink trong cây của superproject.
 
@@ -70,7 +78,7 @@ Code của team khác không chỉ là "không được build" — nó **không 
 
 ## 4. Một cạm bẫy duy nhất, và thứ bắt được nó
 
-`composer sync` sửa những file **đã được commit**:
+`composer sync` — và `bootstrap` chạy trước nó — sửa những file **đã được commit**:
 
 - danh sách `workspace:` trong `pubspec.yaml` gốc
 - path dependency trong `apps/<id>/pubspec.yaml`, cho mỗi app được sync
@@ -98,6 +106,15 @@ Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thi
   Restore them before you commit:
     git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart pubspec.yaml
 ```
+
+Sau `bootstrap`, hai pubspec của app và `pubspec.yaml` ở root đã chứa sẵn các vùng đã được cắt bớt, nên `sync` không thấy gì cần đổi ở đó và chỉ gọi tên hai file `injection.dart`. `bootstrap` đã in dòng khôi phục riêng cho các pubspec; `git status` cho thấy đủ cả năm file. Trước khi commit, hãy khôi phục toàn bộ:
+
+```bash
+git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
+  apps/mobile/lib/di/injection.dart apps/admin/lib/di/injection.dart
+```
+
+`pubspec.lock` không nằm trong số đó: các member của workspace không được ghi vào nó, và bỏ một member chỉ làm nó đổi khi member đó là nơi cuối cùng dùng một package bên ngoài nào đó — hãy xem cả nó trong `git status`.
 
 Và nếu vẫn lỡ commit, **CI Gate 0 sẽ fail**. `composer verify` sinh lại từ manifest trên một runner có đầy đủ submodule, rồi so với các file đã commit. Một phép lắp ráp thiếu module thì không thể khớp, nên sai lầm dừng lại ở pull request thay vì đi vào bản phát hành.
 

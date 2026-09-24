@@ -101,6 +101,7 @@ Building, signing and shipping.
 | Add a database table | [`guides/07_database.md`](guides/07_database.md) | [`architecture/04_data.md`](architecture/04_data.md) |
 | Store a token or a flag | [`guides/06_storage.md`](guides/06_storage.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Add a translated string | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) | — |
+| Add a locale | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) § 5 | — |
 | Change theme, colours or spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
 | Lay out a screen for tablets, foldables or split screen | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Share state between two features | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |

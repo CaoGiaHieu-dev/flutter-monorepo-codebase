@@ -73,6 +73,7 @@ dart tools/composer/composer.dart list              # liệt kê app và thành 
 dart tools/composer/composer.dart list --app admin  # chỉ một app
 dart tools/composer/composer.dart sync --app mobile # sinh lại
 dart tools/composer/composer.dart verify            # gate 0 của CI — fail khi lệch
+dart tools/composer/bootstrap.dart                  # chỉ cho checkout từng phần — chạy trước `flutter pub get`
 ```
 
 `--app <id>` lọc như nhau cho `list`, `sync` và `verify`; danh sách `workspace:` ở root vẫn được tính từ mọi app. Cờ lạ, hoặc `--app` không kèm id, thoát với mã `64`. Một pubspec hay manifest không phải YAML hợp lệ — thường là do key trùng — bị từ chối kèm tên file, `file:dòng` và thông báo của parser, exit `1`, thay vì làm tool crash.
@@ -94,6 +95,17 @@ Cả `sync` lẫn `verify` còn **từ chối**, mã thoát `1`, khi một file 
 Cả hai còn **từ chối** một pubspec của app khai báo tay một package do composer quản lý ở ngoài vùng marker. Pub từ chối key trùng, nên chỉ một lỗi đó là cả workspace ngừng resolve — và đó chính là lỗi composer từng tự gây ra.
 
 Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`PARTIAL COMPOSITION`**: các file đã-commit mà lần chạy đó thực sự ghi lại — chỉ những file ấy; file vốn đã chứa đúng phép lắp ráp này không bị liệt kê (các ứng viên là `pubspec.yaml` gốc, cùng `pubspec.yaml` và `injection.dart` của mỗi app được sync) — cùng dòng `git checkout --` để khôi phục. Phép lắp ráp nó viết ra đúng ở local và sai khi commit, và CI Gate 0 bắt được trong mọi trường hợp, vì `verify` sinh lại từ manifest trên runner có đủ mọi module. Xem [`12_module_isolation.md`](../guides/12_module_isolation.md).
+
+### `bootstrap` — trước khi composer chạy được
+
+```bash
+dart tools/composer/bootstrap.dart            # bỏ khỏi các vùng managed mọi member không có trên đĩa
+dart tools/composer/bootstrap.dart --dry-run  # chỉ báo cáo
+```
+
+`composer.dart` import `package:path` và `package:yaml`, nên cần một workspace đã resolve — mà một bản checkout **từng phần** vừa clone (một submodule module chưa init, tức là thư mục rỗng) thì không resolve được: danh sách `workspace:` ở root và path dependency managed của từng app (đều đã commit) vẫn nêu tên nó, và `flutter pub get` từ chối cả workspace. `tools/composer/bootstrap.dart` **không import package nào** (chỉ `dart:io` và `OutputFormatter` vốn cũng chỉ dùng `dart:io`), nên chạy được trước khi pub từng resolve. Nó xoá, chỉ trong vùng `composer:managed:workspace` ở root và vùng `composer:managed:deps` của từng app, mọi mục mà thư mục không có `pubspec.yaml`, in ra những gì đã bỏ cùng dòng `git checkout --` để hoàn tác, rồi bảo bạn chạy `flutter pub get` → `composer.dart sync` → `workspace_setup/configure.dart`. Sau đó `sync` viết lại các vùng từ manifest.
+
+Exit `0` khi đã cắt bớt hoặc không có gì để cắt (checkout đầy đủ — nó không ghi gì); `1`, không ghi gì, khi không có vùng `composer:managed:workspace` (không chạy từ root) hoặc khi một package đang có khai path dependency **viết tay** tới một thư mục vắng mặt (`modules/auth/data` mà thiếu `modules/auth/domain`) — cắt bớt không sửa được, nên nó nêu dòng đó và bảo bạn init thêm submodule ấy; `64` khi gặp tham số lạ. Trình tự đầy đủ: [`12_module_isolation.md` § 3](../guides/12_module_isolation.md#3-làm-việc-trên-bản-checkout-từng-phần).
 
 ---
 

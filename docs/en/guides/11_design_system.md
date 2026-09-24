@@ -115,7 +115,10 @@ One slot exists only for a sample screen: `liquidOnboardingColors`, the splash g
 // via the extension in platform/base_ui/lib/src/extensions/context_extension.dart
 Container(
   color: context.colors.surface,
-  child: Text('Hi', style: TextStyle(color: context.colors.textPrimary)),
+  child: Text(
+    context.l10nHome.home, // a feature's localized getter — never a literal
+    style: TextStyle(color: context.colors.textPrimary),
+  ),
 )
 ```
 

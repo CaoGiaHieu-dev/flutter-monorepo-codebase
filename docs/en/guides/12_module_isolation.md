@@ -55,14 +55,22 @@ A developer on the auth team clones the monorepo without other teams' sources:
 ```bash
 git clone <monorepo-url> && cd <monorepo>
 git submodule update --init modules/auth      # only theirs
-dart tools/composer/composer.dart sync              # compose what is present (every app)
+dart tools/composer/bootstrap.dart            # prune what is not on disk, so pub can resolve
+flutter pub get                               # composer needs a resolved workspace
+dart tools/composer/composer.dart sync        # compose what is present (every app)
 dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barrels
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
+**Why the `bootstrap` step.** `composer.dart` imports `package:path` and `package:yaml`, so it only runs in a resolved workspace — and a fresh partial checkout does not resolve: the committed root `workspace:` list and each app's path dependencies still name every module, an uninitialised submodule is an empty directory with no `pubspec.yaml`, and `flutter pub get` refuses the whole workspace over it (*"No workspace packages matching `modules/home/feature`"*). `tools/composer/bootstrap.dart` breaks that cycle. It imports no package, so it runs with no `.dart_tool/` at all, and it only **removes** — from the `composer:managed` regions of the root `pubspec.yaml` and of each `apps/<id>/pubspec.yaml` — every entry whose directory has no `pubspec.yaml`. `sync` then rewrites those regions, and each app's `injection.dart`, properly from the manifests. On a full checkout `bootstrap` finds nothing to prune and writes nothing, so it is safe to run every time. `--dry-run` shows what it would prune.
+
+`bootstrap` refuses — writing nothing, exit 1 — when a module that **is** present declares a hand-written path dependency on one that is not (`modules/auth/data` without `modules/auth/domain`, say): no managed region can drop that line, so pub would still fail. Initialise the missing submodule as well.
+
 Run `sync` for **every app** — do not narrow it with `--app mobile`. The root `workspace:` list is always rebuilt from all apps and drops what is not on disk, but `--app mobile` leaves `apps/admin/pubspec.yaml` untouched, still declaring path dependencies on the missing modules (`settings`, say) — and `flutter pub get` then fails to resolve the workspace.
 
 The app runs. It has no home screen, no settings, no dashboard — and it boots, because every shell lookup for a module-owned contract is `getItOrNull` or `getAllOrEmpty` (`arch_check` R8), and no shell file imports a module (`arch_check` R10 in the app, R1 in `platform_app_shell`).
+
+`dart tools/composer/composer.dart verify` **fails** in a partial checkout, and should: it implies `--strict`, so a module declared in a manifest but absent from disk is an error (*"N declared package(s) missing from disk"*). That is the check CI Gate 0 runs, on a runner with every submodule. Locally, `flutter analyze` is the check that means something.
 
 Other teams' code is not merely unbuilt — it is **not on the disk**, and `modules/home` is an empty directory rather than source: `.gitmodules` records only its path and URL, and the pinned commit is a gitlink entry in the superproject's tree.
 
@@ -70,7 +78,7 @@ Other teams' code is not merely unbuilt — it is **not on the disk**, and `modu
 
 ## 4. The one hazard, and what catches it
 
-`composer sync` edits files that are **committed**:
+`composer sync` — and `bootstrap` before it — edits files that are **committed**:
 
 - the root `pubspec.yaml` `workspace:` list
 - `apps/<id>/pubspec.yaml` path dependencies, for each app it syncs
@@ -98,6 +106,15 @@ In a partial checkout it writes a partial composition into them. That is correct
   Restore them before you commit:
     git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart pubspec.yaml
 ```
+
+After `bootstrap`, the two pubspecs and the root `pubspec.yaml` already hold the pruned regions, so `sync` finds nothing to change there and names only the two `injection.dart` files. `bootstrap` printed its own restore line for the pubspecs; `git status` shows all five. Before you commit, restore every one of them:
+
+```bash
+git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
+  apps/mobile/lib/di/injection.dart apps/admin/lib/di/injection.dart
+```
+
+`pubspec.lock` is not among them: workspace members are not recorded in it, and pruning one changes it only when that member was the last user of some external package — check `git status` for it too.
 
 And if it is committed anyway, **CI Gate 0 fails**. `composer verify` regenerates from the manifest on a runner where every submodule *is* checked out, and diffs against the committed files. A composition missing modules cannot match, so the mistake stops at the pull request rather than in a release.
 

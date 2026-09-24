@@ -347,10 +347,21 @@ kiểu do feature sở hữu là một cú crash đang chờ tới ngày feature
 // Tốt — suy giảm êm ái
 getItOrNull<IAuthActionHandler>()?.logout(context);
 
-// Tốt — không render gì thay vì crash
-getItOrNull<DashboardRouteModule>()?.builder(context, state, shell)
-    ?? const SizedBox.shrink();
+// Tốt — lùi về chính widget của nhánh thay vì crash
+// (platform/app_shell/lib/presentation/navigation/app_router.dart)
+builder: (context, state, navigationShell) {
+  return getItOrNull<DashboardRouteModule>()?.builder(
+        context,
+        state,
+        navigationShell,
+      ) ??
+      navigationShell;
+},
 ```
+
+Bản thân `navigationShell` là widget hiển thị nhánh hiện tại, nên một app không compose
+`feature_dashboard` vẫn render các destination — chỉ là không có chrome. Một `SizedBox` rỗng ở đây
+sẽ mở app đó trên một màn hình trống.
 
 > [!NOTE]
 > Việc `apps/mobile/lib/di/injection.dart` gọi tên các package feature là tham chiếu cứng có chủ đích duy

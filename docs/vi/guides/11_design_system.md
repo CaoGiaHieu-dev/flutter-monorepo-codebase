@@ -115,7 +115,10 @@ Chỉ có một ô màu tồn tại vì màn hình mẫu: `liquidOnboardingColor
 // qua extension ở platform/base_ui/lib/src/extensions/context_extension.dart
 Container(
   color: context.colors.surface,
-  child: Text('Hi', style: TextStyle(color: context.colors.textPrimary)),
+  child: Text(
+    context.l10nHome.home, // getter đã dịch của feature — không bao giờ là chuỗi cứng
+    style: TextStyle(color: context.colors.textPrimary),
+  ),
 )
 ```
 

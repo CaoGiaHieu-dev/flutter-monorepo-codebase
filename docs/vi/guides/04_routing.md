@@ -251,6 +251,12 @@ abstract class AuthNavigator {
 
 Mỗi route mà feature sở hữu là một method — và chỉ những route nó sở hữu.
 
+Một file **mới** trong `core_di` sẽ vô hình với mọi nơi dùng cho tới khi barrel export nó — `package:core_di/core_di.dart` re-export `src/navigators/navigators.dart`, là file được sinh ra. Hãy sinh lại nó (đừng tự thêm dòng `export`; generator xoá các dòng viết tay):
+
+```bash
+dart tools/barrel_generator/generate.dart platform/di/lib
+```
+
 **2. Implement trong feature sở hữu** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
@@ -363,7 +369,7 @@ Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (
 1. **Hằng số path** → `lib/src/utils/<feature>_path.dart`.
 2. **Class route** → `lib/src/routing/<feature>_route_module.dart` với `@TypedGoRoute` / `@TypedShellRoute`; tạo controller trong `build()`.
 3. **Đăng ký contract** → `IFeatureRouteModule` cho route stack, hoặc `INavDestinationModule` cho tab, gắn `@LazySingleton(as: ...)`.
-4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`.
+4. **Cần vào từ feature khác?** Thêm method vào Navigator interface của feature đó ở `core_di` và implement trong `*_navigator_impl.dart`. Feature chưa có Navigator thì cần một file **mới** trong `platform/di/lib/src/navigators/` — rồi chạy `dart tools/barrel_generator/generate.dart platform/di/lib` để barrel của `core_di` export nó (§5).
 5. **Sinh code** → `dart run build_runner build --workspace`.
 6. **Barrel** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
 

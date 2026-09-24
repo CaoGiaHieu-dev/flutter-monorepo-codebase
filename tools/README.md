@@ -18,7 +18,8 @@ tools/
 ├── arch_check/                      # 🛡️ Enforces the layering rules (CI Gate 1)
 │   └── check.dart                   # R1-R10: dependency direction, pure-Dart domain, feature boundaries, scaling through context…
 ├── composer/                        # 🧩 Composes apps from app_manifest.yaml (CI Gate 0)
-│   └── composer.dart                # sync / verify / list — generates the workspace list, app dependencies, injection.dart
+│   ├── composer.dart                # sync / verify / list — generates the workspace list, app dependencies, injection.dart
+│   └── bootstrap.dart               # Partial checkout: prunes absent members so `pub get` resolves (no package imports)
 ├── docs_check/                      # 📚 Every path the docs name must exist (CI Gate 5)
 │   ├── check.dart
 │   └── allowlist.txt                # Deliberately absent paths, each with its reason
@@ -110,6 +111,21 @@ unknown layer, a duplicate id, an unknown key, …) is refused before any comman
 `apps/<id>/app_manifest.yaml: <key>: <problem>`, exit 1, nothing written. When a module declared in
 a manifest is not on disk, the PARTIAL COMPOSITION warning lists only the files that run actually
 rewrote.
+
+```bash
+# Partial checkout (a module submodule not initialised): composer needs a resolved workspace, and pub
+# refuses one that lists a member with no pubspec.yaml. This imports no package, so it runs first:
+dart tools/composer/bootstrap.dart            # --dry-run to report only
+flutter pub get
+dart tools/composer/composer.dart sync
+dart tools/workspace_setup/configure.dart
+```
+
+`bootstrap` only removes — from the root `composer:managed:workspace` region and each app's
+`composer:managed:deps` region — entries whose directory has no `pubspec.yaml`, and prints the
+`git checkout --` line that undoes it. A full checkout has nothing to prune (exit 0, nothing
+written). Exit 1, nothing written, when a present package has a hand-written path dependency on a
+missing one — initialise that submodule too. See `docs/en/guides/12_module_isolation.md` § 3.
 
 ### 📚 Docs Check (paths named in the docs)
 ```bash

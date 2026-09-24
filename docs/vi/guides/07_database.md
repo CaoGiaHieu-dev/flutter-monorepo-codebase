@@ -69,6 +69,30 @@ Cái giá đó là có chủ đích. Vượt bounded context là việc của t�
 
 Làm trọn vẹn theo đúng wiring thật của `data_cache`. Thay tên package của bạn vào.
 
+### Bước 0 — Khai dependency
+
+`pubspec.yaml` của package cần những gì `modules/cache/data/pubspec.yaml` thật khai cho database của nó:
+
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter              # `visibleForTesting` trong class database
+  core_database:
+    path: ../../../platform/database
+  drift: "^2.34.3"
+  get_it: ^9.2.1              # module DI thu thập migration qua GetIt
+  injectable: ^3.0.0
+
+dev_dependencies:
+  build_runner: "^2.16.0"
+  drift_dev: "^2.34.5"        # sinh `<name>_database.g.dart`
+  injectable_generator: "^3.1.3"
+  flutter_test:
+    sdk: flutter              # cho test database in-memory (§ 8)
+```
+
+Phần còn lại của một package data thì thêm như thường lệ (`domain_core`, `data_core`, `domain_*` của bạn, `freezed_annotation` / `freezed` cho model). `sqlite3` và `path_provider` là dependency riêng của `core_database` — đừng khai lại. Version lấy từ catalog `pubspec_dependencies.yaml`: dependency viết không kèm version (`drift:`) sẽ được `dart tools/dependency_sync.dart` điền vào, còn version lệch sẽ bị ghi đè. Sau đó `flutter pub get`.
+
 ### Bước 1 — Định nghĩa bảng
 
 Class kế thừa `Table` là độc lập: nó không tham chiếu database nào, nên nằm ở package của bạn được.
@@ -155,6 +179,17 @@ class CacheConstants {
 
 ```dart
 // modules/cache/data/lib/src/database/cache_database.dart
+import 'package:core_database/core_database.dart';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
+import '../utils/cache_constants.dart';
+import 'tables/cache_entries_table.dart';
+
+part 'cache_database.g.dart';
+part 'dao/cache_entries_dao.dart';
+
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
   CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
@@ -196,6 +231,8 @@ class CacheDatabase extends _$CacheDatabase {
       driftMigrationStrategy(database: this, migrations: _migrations);
 }
 ```
+
+Phần import quan trọng không kém class: **bảng** là một `import` bình thường (nó độc lập), còn **DAO** là một `part` — Drift bắt accessor phải nằm trong library của database — đặt cạnh `part '<name>_database.g.dart';` do `build_runner` sinh ra.
 
 Hai điểm cần copy nguyên xi:
 
@@ -348,6 +385,24 @@ abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   Future<void> downgrade(Migrator m);
 }
 ```
+
+Một thay đổi schema là **ba chỗ sửa đi cùng nhau** — thiếu một chỗ thì bản nâng cấp lặng lẽ không làm gì, hoặc bản cài mới và bản đã nâng cấp có schema khác nhau:
+
+1. **Thêm cột vào class bảng** — Drift sinh schema từ nó, và `Migrator.createAll()` dựng bản cài mới từ nó. Cột thêm vào bảng đã có phải `nullable()` hoặc có `withDefault(...)`: SQLite không thêm được cột `NOT NULL` không có default vào những row đã tồn tại.
+
+   ```dart
+   // tables/cache_entries_table.dart — bên trong `CacheEntries`
+   DateTimeColumn get expiresAt => dateTime().nullable()();
+   ```
+
+2. **Tăng `schemaVersion`** trong class database (`1` → `2`). Nó phải bằng `version` cao nhất trong các bước của bạn: Drift chỉ gọi `onUpgrade` khi `user_version` đang lưu nhỏ hơn `schemaVersion`, nên không tăng thì không bước nào chạy trên máy đã cài, và các query hỏng với *"no such column"*.
+
+   ```dart
+   @override
+   int get schemaVersion => 2;
+   ```
+
+3. **Đăng ký bước migration** — bên dưới. Rồi chạy `dart run build_runner build --workspace` (class bảng được sinh có thêm cột).
 
 Đăng ký như một route module, nhưng gắn kiểu với database mà nó thuộc về — GetIt định danh một đăng ký theo đúng kiểu của nó, nên `CacheDatabase` chỉ thu về `IDatabaseMigration<CacheDatabase>` và bước migration của package khác không bao giờ tới được nó. Khai báo trong chính package sở hữu, nó được thu thập vì hàm mở mang `@Order(1)` ([Bước 5](#bước-5--đăng-ký-trong-module-di-của-bạn)):
 

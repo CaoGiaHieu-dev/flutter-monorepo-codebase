@@ -38,7 +38,37 @@ class ApiClient {
 | `useDefaultInterceptors` | `false` skips the whole default chain — use for a public/unauthenticated client |
 | `options` | Replaces `_defaultOptions` wholesale (it is `copyWith`-ed, so shared state is not mutated) |
 
-A second client with its own rules is registered through a DI module, e.g. a public API client with `useDefaultInterceptors: false`.
+`core_network` registers exactly one client — the default `Dio` every Retrofit data source receives:
+
+```dart
+// platform/network/lib/di/register_module.dart
+@module
+abstract class RegisterModule {
+  @lazySingleton
+  Dio dio(ApiClient apiClient) => apiClient.createClient();
+}
+```
+
+A second client with its own rules is registered the same way, under a **name**, so it does not replace the default one. Nothing in the repo registers this — it is the shape to copy, e.g. a public API with no auth header, no refresh and no retry dialog:
+
+```dart
+// modules/<module>/data/lib/di/register_module.dart
+import 'package:core_network/core_network.dart';
+import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
+
+@module
+abstract class RegisterModule {
+  @Named('public_api')
+  @lazySingleton
+  Dio publicDio(ApiClient apiClient) => apiClient.createClient(
+    useDefaultInterceptors: false,
+    interceptors: [LoggingInterceptor(tag: 'PublicAPI')],
+  );
+}
+```
+
+`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client; only a parameter annotated `@Named('public_api')` gets this one — see [§6](#6-declaring-an-api-service-with-retrofit). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/network/lib/di/register_module.dart` rather than declaring it twice.
 
 ---
 
@@ -440,7 +470,57 @@ abstract class AuthRemoteDataSource {
 
 `@Extra` sets per-request flags the interceptors read (`NetworkConstants` in `core_network`): `EXTRA_CAN_REFRESH_TOKEN: false` keeps a `401` from starting a token refresh, `EXTRA_CAN_RETRY: false` keeps a timeout from raising the retry dialog. Both default to `true` when absent.
 
-Steps: declare the abstract class → `part 'x.g.dart';` → run `dart run build_runner build --workspace`.
+### Steps
+
+1. **Dependencies** — in the data package's `pubspec.yaml`, as `modules/auth/data/pubspec.yaml` does (versions come from the catalog `pubspec_dependencies.yaml`; after editing, `dart tools/dependency_sync.dart` aligns them):
+
+   ```yaml
+   dependencies:
+     core_network:
+       path: ../../../platform/network
+     dio: "^5.11.0"
+     retrofit: "^4.10.0"
+     injectable: ^3.0.0
+
+   dev_dependencies:
+     build_runner: "^2.16.0"
+     injectable_generator: "^3.1.3"
+     retrofit_generator: "^10.2.8"
+   ```
+
+   Add `json_annotation` / `json_serializable` (and `freezed_annotation` / `freezed`) when the models are generated too. Run `flutter pub get`.
+
+2. **Declare** the abstract class with `part '<file>.g.dart';`, as above.
+
+3. **Register it** — a Retrofit class is a factory constructor, not an `@injectable` class, so it goes through a `@module` in the package's `lib/di/register_module.dart`. The real one:
+
+   ```dart
+   // modules/auth/data/lib/di/register_module.dart
+   import 'package:dio/dio.dart';
+   import 'package:injectable/injectable.dart';
+
+   import '../src/data_sources/remote/auth_remote_data_source.dart';
+
+   @module
+   abstract class RegisterModule {
+     @lazySingleton
+     AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
+         AuthRemoteDataSource(dio);
+   }
+   ```
+
+   The `Dio` it receives is `core_network`'s default client, already carrying the whole interceptor chain. To use the named client from [§1](#1-apiclient--the-dio-factory) instead, name the parameter:
+
+   ```dart
+   @lazySingleton
+   CatalogRemoteDataSource catalogRemoteDataSource(
+     @Named('public_api') Dio dio,
+   ) => CatalogRemoteDataSource(dio);
+   ```
+
+   Without the `@lazySingleton` the repository that injects the data source fails at boot with *"… is not registered"* — `flutter analyze` cannot see it.
+
+4. **Generate** — `dart run build_runner build --workspace` (Retrofit's `.g.dart` and the package's `module.module.dart`), then `dart tools/barrel_generator/generate.dart modules/<module>/data/lib` so the barrel exports the new files.
 
 > [!IMPORTANT]
 > `AuthRemoteDataSource` **is** the live path: `AuthRepositoryImpl` calls it for login and token refresh, through `execute()`. Point `AuthApiConstants` at your real endpoints, or swap the transport (Firebase, GraphQL) inside the repository and keep the shape.

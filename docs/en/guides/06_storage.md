@@ -162,7 +162,24 @@ Future<String?> _readMasterKey() async {
 
 ## 4. How to add a new stored value (the main recipe)
 
-Three steps. The worked example is the auth token, which really exists in the repo.
+Three steps, framed by a dependency and a codegen run. The worked example is the auth token, which really exists in the repo.
+
+### Step 0 — depend on `core_storage`
+
+The owning package declares it in `dependencies` (an undeclared import still compiles in a Pub workspace, through the shared `package_config.json`; `arch_check` R5 is what flags it), plus injectable for the registration. As in `modules/auth/data/pubspec.yaml`:
+
+```yaml
+dependencies:
+  core_storage:
+    path: ../../../platform/storage
+  injectable: ^3.0.0
+
+dev_dependencies:
+  build_runner: "^2.16.0"
+  injectable_generator: "^3.1.3"
+```
+
+Adjust the `path:` to your package's depth. Versions come from the catalog `pubspec_dependencies.yaml` (`dart tools/dependency_sync.dart`). Then `flutter pub get`.
 
 ### Step 1 — declare the key in the **owning** package's `utils/`
 
@@ -224,6 +241,14 @@ The fields are `private` + `late final`: nobody outside the class can reach the 
 
 > [!CAUTION]
 > Register the owner as `@singleton` / `@lazySingleton` — **never `@injectable`**. `@injectable` is a factory: every injection point builds a *new* instance whose in-memory cache is empty, so synchronous getters return `null` even though the value is on disk. Pair it with `@PostConstruct(preResolve: true)` so DI awaits the disk read before the graph is handed to the app.
+
+### Step 4 — generate
+
+```bash
+dart run build_runner build --workspace
+```
+
+The registration — including the `await` of `initialize()` that `preResolve` asks for — lands in the package's generated `lib/di/module.module.dart`, and only there. Until it is regenerated the owner is simply not registered, and the first injection fails at boot with *"… is not registered"*, which `flutter analyze` cannot see. A new file also needs `dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib` afterwards.
 
 ---
 

@@ -1,0 +1,41 @@
+# Editor settings shared by every IDE. https://editorconfig.org
+# Line endings are also enforced by .gitattributes, which wins at checkout.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Dart, YAML, JSON, ARB, Ruby (Fastlane), Swift and shell scripts: 2 spaces,
+# matching `dart format` and the existing files.
+[*.{dart,yaml,yml,json,arb,rb,swift,sh}]
+indent_size = 2
+
+[{Gemfile,Fastfile,Pluginfile,Appfile}]
+indent_size = 2
+
+# Kotlin, Gradle (Groovy and Kotlin DSL), Java and Android XML: 4 spaces,
+# as Android Studio writes them.
+[*.{kt,kts,gradle,java,xml,pro}]
+indent_size = 4
+
+# Xcode project files and plists use tabs; schemes and workspace data use 3
+# spaces. Xcode writes all of them — match it rather than reformat.
+[*.{pbxproj,plist,entitlements}]
+indent_style = tab
+
+[*.{xcscheme,xcworkspacedata}]
+indent_size = 3
+
+# Two trailing spaces are a hard line break in Markdown.
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows batch files must keep CRLF.
+[*.bat]
+end_of_line = crlf
+indent_size = 4

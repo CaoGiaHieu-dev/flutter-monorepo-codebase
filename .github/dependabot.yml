@@ -1,0 +1,83 @@
+# Dependabot version updates. Security alerts/updates are enabled separately
+# under Settings → Code security.
+#
+# Every ecosystem runs weekly and groups minor + patch bumps into one PR, so
+# the queue stays reviewable; a major bump arrives on its own PR.
+version: 2
+
+updates:
+  # --- Dart / Flutter (Pub Workspaces) --------------------------------------
+  # Versions in this repo are NOT owned by the member pubspecs: the catalog
+  # pubspec_dependencies.yaml is the single source of truth and
+  # `dart tools/dependency_sync.dart` copies it into every member. A
+  # Dependabot PR that edits a member's pubspec.yaml therefore fails Gate 4
+  # (`dependency_sync --check`) until someone checks out the branch, applies
+  # the same version in pubspec_dependencies.yaml, runs
+  # `dart tools/dependency_sync.dart` (which also refreshes the committed
+  # pubspec.lock) and pushes. Treat these PRs as notifications that an update
+  # exists; `dart tools/check_outdated.dart` gives the same list on demand.
+  # Scanned from the workspace root only, so one PR covers the workspace
+  # instead of one per member package; the limit keeps the queue small.
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    labels: ["dependencies", "dart"]
+    groups:
+      pub-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # --- Android Gradle build of apps/mobile ----------------------------------
+  # AGP, Kotlin and the Google Services plugin are pinned in
+  # settings.gradle.kts. Check a bump against the Gradle/AGP range the pinned
+  # Flutter version (.fvmrc) supports before merging, and prove it with
+  # `flutter build apk --flavor dev --debug` (the PR gate's build job).
+  - package-ecosystem: "gradle"
+    directory: "/apps/mobile/android"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    labels: ["dependencies", "android"]
+    groups:
+      gradle-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # --- Ruby (fastlane, cocoapods) -------------------------------------------
+  # Two Gemfiles with an identical gem list: the root one (fastlane run from
+  # the repo root / CI) and apps/mobile's. Both are listed so they move
+  # together; keep them identical when merging.
+  - package-ecosystem: "bundler"
+    directories:
+      - "/"
+      - "/apps/mobile"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    labels: ["dependencies", "ruby"]
+    groups:
+      bundler-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # --- GitHub Actions used by .github/workflows -----------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+    labels: ["dependencies", "ci"]
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]

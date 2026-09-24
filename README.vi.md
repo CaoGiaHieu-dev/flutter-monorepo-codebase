@@ -173,7 +173,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── flutter_native_splash-{dev,staging,prod}.yaml  # Cấu hình splash theo flavor (theme_generator)
 ├── icons_launcher-{dev,staging,prod}.yaml         # Cấu hình icon app theo flavor (theme_generator)
 ├── Gemfile                        # Ruby gem cho Fastlane
-├── license                        # Giấy phép
+├── LICENSE                        # Giấy phép BSD 3-Clause
 ├── pubspec.yaml                   # File cấu hình Pub Workspace (workspace: [...])
 ├── pubspec.lock                   # File lock DUY NHẤT cho cả workspace — được commit
 ├── pubspec_dependencies.yaml      # Nguồn chân lý phiên bản thư viện (Version Catalog)
@@ -562,4 +562,16 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 > [`.agents/skills/`](.agents/skills/).
 
 ---
-*Bản quyền sở hữu trí tuệ thuộc về CaoGiaHieu-dev. Mọi quyền được bảo lưu.*
+
+## 🤝 Đóng Góp, Bảo Mật & Giấy Phép
+
+| Tệp | Nội dung |
+| :--- | :--- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Cài đặt, quy ước nhánh/commit, các bước kiểm tra trước khi mở PR (tiếng Anh) |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 và cách báo cáo vi phạm quy tắc ứng xử |
+| [SECURITY.md](SECURITY.md) | Phiên bản được hỗ trợ và cách báo cáo lỗ hổng bảo mật một cách riêng tư |
+| [CHANGELOG.md](CHANGELOG.md) | Thay đổi đáng chú ý theo từng bản phát hành (Keep a Changelog, tag SemVer `vX.Y.Z`) |
+| [LICENSE](LICENSE) | Giấy phép BSD 3-Clause |
+
+---
+*© CaoGiaHieu-dev. Phát hành theo [Giấy phép BSD 3-Clause](LICENSE).*

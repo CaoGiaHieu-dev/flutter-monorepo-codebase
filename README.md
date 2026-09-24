@@ -174,7 +174,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── flutter_native_splash-{dev,staging,prod}.yaml  # Splash config per flavor (theme_generator)
 ├── icons_launcher-{dev,staging,prod}.yaml         # App icon config per flavor (theme_generator)
 ├── Gemfile                        # Ruby gems for Fastlane
-├── license                        # License
+├── LICENSE                        # BSD 3-Clause License
 ├── pubspec.yaml                   # Pub Workspace configuration (workspace: [...])
 ├── pubspec.lock                   # The ONE lock file for the whole workspace — committed
 ├── pubspec_dependencies.yaml      # Single source of truth for library versions (Version Catalog)
@@ -564,4 +564,16 @@ The documentation is organised by **what you are trying to do**, not by layer.
 > [`.agents/skills/`](.agents/skills/).
 
 ---
-*Intellectual property rights belong to CaoGiaHieu-dev. All rights reserved.*
+
+## 🤝 Contributing, Security & License
+
+| File | What it covers |
+| :--- | :--- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, branch/commit conventions, the checks to run before a PR |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 and how to report a conduct issue |
+| [SECURITY.md](SECURITY.md) | Supported versions and how to report a vulnerability privately |
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes per release (Keep a Changelog, SemVer tags `vX.Y.Z`) |
+| [LICENSE](LICENSE) | BSD 3-Clause License |
+
+---
+*© CaoGiaHieu-dev. Released under the [BSD 3-Clause License](LICENSE).*

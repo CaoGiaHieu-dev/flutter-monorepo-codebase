@@ -24,6 +24,8 @@ dependencies:
   package_info_plus: "^10.2.1"
   core_responsive:
     path: ../responsive
+  core_di:
+    path: ../di
   device_info_plus: "^13.2.0"
   cupertino_ui: "^1.0.2"
 dev_dependencies:

@@ -29,11 +29,11 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
 | Config | `src/config/` | `SslPinningConfig` |
 | Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
-| Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`) |
-| Extensions | `src/extensions/` | `bool`, `DateTime`, `Enum`, `List`, `num`, `String` |
+| Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`). `ErrorHandler.onUnclassifiedError` is a plain callback for the exceptions it cannot classify — the app shell points it at the optional `IErrorReporter` ([`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting)) |
+| Extensions | `src/extensions/` | `bool`, `Enum`, `List`, `String` — no `DateTime` or `num` formatting: dates, times and currency are locale-dependent, so format them with `intl`'s `DateFormat` / `NumberFormat` and the current locale |
 | Utils **and constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
 
-**`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above, and `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`.
+**`core_common`** is the Flutter-bound half. It declares three workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above; `core_responsive`, used by the page-transition widgets in `src/routing/page_transitions/`; and `core_di`, for the optional `IAnalytics` that `RouteAwareWidget` reports screen views to.
 
 | Area | Path | Contents |
 |:--|:--|:--|
@@ -73,6 +73,7 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 | Agnostic streams | `src/agnostic_streams/` | `IAuthStatusStream` — state sharing between a Provider feature and a BLoC feature |
 | Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell |
 | Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
+| Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
 
 **`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/di/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
 
@@ -221,7 +222,8 @@ Degenerate input never collapses a layout. An empty window — Android reports 0
 | `context.spMin(n)` | `sp` capped at the design value — text may shrink, never grow; equal to `sp` under the default bounds |
 | `context.dg(n)` | both axes |
 | `context.dm(n)` | larger axis |
-| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` by `w`, `vertical` by `h`, `all` by `w` |
+| `context.edgeInsets({all, horizontal, vertical, left, top, right, bottom})` | `horizontal` by `w`, `vertical` by `h`, `all` by `w` — physical sides |
+| `context.edgeInsetsDirectional({all, horizontal, vertical, start, top, end, bottom})` | same axes; `start`/`end` flip with the text direction |
 | `context.borderRadius({all, topLeft, topRight, bottomLeft, bottomRight})` | `r` |
 | `context.verticalSpace(n)` / `context.horizontalSpace(n)` | a `SizedBox`, by `h` / `w` |
 | `context.windowSizeClass` / `context.windowHeightClass` | window classes — work without a `ResponsiveInit` |
@@ -373,7 +375,7 @@ Local (workspace) dependencies only — pub.dev packages omitted.
 | `core_di` | *(none)* |
 | `core_responsive` | *(none)* |
 | `platform_kernel` | `domain_core` *(approved exception — `ErrorHandler` produces `AppFailure`)* |
-| `core_common` | `platform_kernel`, `core_responsive` |
+| `core_common` | `platform_kernel`, `core_responsive`, `core_di` |
 | `core_network` | `platform_kernel` |
 | `core_notifications` | `platform_kernel` |
 | `core_storage` | `core_common` |

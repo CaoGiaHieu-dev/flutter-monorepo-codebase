@@ -97,6 +97,7 @@ Container(
 | `context.dm(x)` | The larger axis |
 | `context.edgeInsets(all:)` / `(horizontal:)` | `w` |
 | `context.edgeInsets(vertical:)` | `h` |
+| `context.edgeInsetsDirectional(start:)` / `(end:)` | `w` — `EdgeInsetsDirectional`, flips in RTL |
 | `context.borderRadius(all:)` | `r` |
 | `context.verticalSpace(x)` / `horizontalSpace(x)` | `h` / `w` |
 

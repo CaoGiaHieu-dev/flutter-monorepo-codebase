@@ -100,12 +100,15 @@ class _CustomInputFieldState extends State<CustomInputField> {
             required maxLength,
           }) {
             if (widget.showCounter) {
+              // The counter sits at the end of the field; nudge it back
+              // towards the start — leftwards in LTR, rightwards in RTL.
+              final isRtl = Directionality.of(context) == TextDirection.rtl;
               return Container(
                 padding: EdgeInsets.only(
                   bottom: widget.paddingBottom ?? context.h(10),
                 ),
                 transform: Matrix4.translationValues(
-                  -context.h(10),
+                  isRtl ? context.w(10) : -context.w(10),
                   -context.h(30),
                   0,
                 ),
@@ -164,10 +167,10 @@ class _CustomInputFieldState extends State<CustomInputField> {
         fillColor: context.colors.surface,
         filled: true,
         prefix: widget.prefixIcon == null
-            ? Padding(padding: EdgeInsetsDirectional.only(start: context.w(12)))
+            ? Padding(padding: context.edgeInsetsDirectional(start: 12))
             : null,
         suffix: widget.suffixIcon == null
-            ? Padding(padding: EdgeInsetsDirectional.only(end: context.w(12)))
+            ? Padding(padding: context.edgeInsetsDirectional(end: 12))
             : null,
         contentPadding:
             widget.contentPadding ?? context.edgeInsets(vertical: 11),

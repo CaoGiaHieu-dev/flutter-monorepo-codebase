@@ -60,12 +60,42 @@ class ErrorHandler {
   /// therefore degrades to the generic unknown-error failure.
   static AppFailure handleError(dynamic error, [StackTrace? stackTrace]) {
     try {
-      return _classify(error);
+      return _classify(error, stackTrace);
     } catch (_) {
+      _notifyUnclassified(error, stackTrace);
       return const ServerFailure(
         message: _unknownMessage,
         code: ErrorCodes.UNKNOWN,
       );
+    }
+  }
+
+  /// Called with every error [handleError] could not classify — the ones
+  /// that become the generic "Unknown error occurred" failure.
+  ///
+  /// A `SocketException` or a 401 is an expected failure; an exception of a
+  /// type nobody mapped (a `TypeError` in a `fromJson`, a plugin exception)
+  /// usually is a bug, and the user only ever sees "unknown error" for it.
+  /// This is the seam that lets such a failure be reported while it is still
+  /// handled: the app shell (`runShellApp`) points it at the optional
+  /// `IErrorReporter` as a non-fatal error. The kernel is pure Dart and
+  /// declares no `core_di` dependency, so it exposes a plain callback rather
+  /// than resolving the contract itself.
+  ///
+  /// [stackTrace] is the one passed to [handleError], or the current trace
+  /// when the caller passed none. The listener must not throw; if it does,
+  /// the error is swallowed — [handleError] never throws.
+  static void Function(Object error, StackTrace stackTrace)?
+  onUnclassifiedError;
+
+  static void _notifyUnclassified(Object? error, StackTrace? stackTrace) {
+    final listener = onUnclassifiedError;
+    if (listener == null || error == null) return;
+    try {
+      listener(error, stackTrace ?? StackTrace.current);
+    } catch (_) {
+      // Reporting is best-effort; a failing reporter must not turn a
+      // handled failure into an exception.
     }
   }
 
@@ -74,7 +104,7 @@ class ErrorHandler {
 
   /// The classification behind [handleError]; may throw on a hostile
   /// [error] (a `toString` that throws, say), which [handleError] absorbs.
-  static AppFailure _classify(dynamic error) {
+  static AppFailure _classify(dynamic error, StackTrace? stackTrace) {
     // Handle custom application exceptions
     if (error is AppException) {
       return _handleAppException(error);
@@ -107,11 +137,14 @@ class ErrorHandler {
       );
     }
 
-    // Handle generic exceptions
-    return ServerFailure(
+    // Handle generic exceptions. The failure is built first: a `toString`
+    // that throws lands in [handleError]'s catch, which notifies once.
+    final failure = ServerFailure(
       message: _isDebug ? error.toString() : _unknownMessage,
       code: ErrorCodes.UNKNOWN,
     );
+    _notifyUnclassified(error, stackTrace);
+    return failure;
   }
 
   /// Transforms custom application exceptions to failures

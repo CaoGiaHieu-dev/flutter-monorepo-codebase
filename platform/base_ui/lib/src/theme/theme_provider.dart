@@ -218,6 +218,15 @@ class ThemeProvider extends ChangeNotifier
         ),
       ),
 
+      /// Tooltips stay in the semantics tree — a screen reader reads an
+      /// icon-only button's `tooltip` as its label — but a long press or tap
+      /// no longer pops the bubble up on touch screens. A mouse hover still
+      /// shows it (trigger modes do not apply to mice). Delete this to get
+      /// Material's default long-press tooltip back.
+      tooltipTheme: const TooltipThemeData(
+        triggerMode: TooltipTriggerMode.manual,
+      ),
+
       /// Sets the page transitions theme for the theme.
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{

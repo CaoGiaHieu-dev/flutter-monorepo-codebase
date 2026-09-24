@@ -200,6 +200,10 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 > [!CAUTION]
 > Đừng thêm `.sp` ở nơi gọi. Text style **đã được scale** trước khi `AppTextStyles` trả về. Viết `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: context.sp(14))` là scale hai lần.
 
+### Cỡ chữ của người dùng là một hệ số thứ hai, tách biệt
+
+`context.sp` khớp thiết kế với **cửa sổ**; nó không bao giờ đọc `MediaQuery.textScaler`. Cỡ chữ hệ điều hành của **người dùng** được chính `Text` áp thêm lên trên, lúc layout, và app shell cho nó đi qua tối đa 2x (`AppShellUiConstants.MAX_TEXT_SCALE_FACTOR`, do `AppMaterialWrapper` áp bằng `MediaQuery.withClampedTextScaling`). Hai hệ số độc lập, mỗi cái áp đúng một lần — không phải scale hai lần. Đừng triệt tiêu nó bằng `MediaQuery.withNoTextScaling` hay `textScaler: TextScaler.noScaling` trên một style: như vậy là trượt tiêu chí phóng chữ 200% của WCAG. Thứ text scale *không* làm lớn lên là một hộp đặt kích thước bằng `context.h`/`context.w`, nên hãy cho khung chứa chữ padding hoặc `minHeight` thay vì chiều cao cố định. Chi tiết: [`06_app_shell.md`](../architecture/06_app_shell.md#cỡ-chữ-của-hệ-điều-hành-được-tôn-trọng-tối-đa-2x).
+
 ---
 
 ## 4. Đổi thang spacing và bo góc
@@ -249,8 +253,10 @@ Mặc định hãy dùng `w` cho spacing. Chỉ dùng `h` khi giá trị thực 
 context.edgeInsets(all: X)          // → EdgeInsets.all(w(X))
 context.edgeInsets(horizontal: X)   // → left/right = w(X)
 context.edgeInsets(vertical: X)     // → top/bottom = h(X)
-context.edgeInsets(left: X)         // → w(X)      (right cũng vậy)
+context.edgeInsets(left: X)         // → w(X)      (right cũng vậy) — cạnh vật lý
 context.edgeInsets(top: X)          // → h(X)      (bottom cũng vậy)
+context.edgeInsetsDirectional(start: X)  // → EdgeInsetsDirectional, start = w(X) (end cũng vậy)
+context.edgeInsetsDirectional(all: X / horizontal: X / vertical: X / top: X)  // cùng trục như edgeInsets
 context.borderRadius(all: X)        // → BorderRadius.circular(r(X))
 context.verticalSpace(X)            // → SizedBox(height: h(X))
 context.horizontalSpace(X)          // → SizedBox(width: w(X))
@@ -260,6 +266,9 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 > **`context.edgeInsets(all:)` scale bằng `w`**, nên nó là bản thay thế trực tiếp cho `EdgeInsets.all(context.w(16))`. Mỗi trục của `edgeInsets` được scale theo đúng trục nó thuộc về, nhờ vậy padding giữ được tỉ lệ thay vì bám theo một chiều duy nhất.
 >
 > `borderRadius` dùng `r` — bo góc mà scale theo một trục duy nhất sẽ biến hình tròn thành elip. Khi không chắc, hãy viết dạng tường minh, nó nói rõ trục nào đang được scale.
+
+> [!IMPORTANT]
+> **`left`/`right` là cạnh vật lý; `start`/`end` đi theo chiều văn bản.** `context.edgeInsets(left: 16)` vẫn nằm bên trái trong tiếng Ả Rập hay Do Thái. Khi cạnh đó mang nghĩa "nơi dòng chữ bắt đầu" — thụt lề trước một nhãn, khoảng cách sau icon đầu dòng — hãy dùng `context.edgeInsetsDirectional(start: 16)`, trả về một `EdgeInsetsDirectional` được resolve theo `Directionality` xung quanh. Tham số của một cạnh thắng tham số của trục, như `edgeInsets`: `edgeInsetsDirectional(horizontal: 16, start: 24)` là 24 ở đầu và 16 ở cuối. Giữ `edgeInsets(left:)` cho những cạnh thật sự mang tính vật lý (độ lệch bóng đổ, bản lề). Căn lề cũng vậy: ưu tiên `AlignmentDirectional.centerStart` hơn `Alignment.centerLeft`.
 
 ---
 

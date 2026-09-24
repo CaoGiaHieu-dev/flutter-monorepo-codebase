@@ -24,7 +24,7 @@ apps/mobile/                         điểm lắp ráp
 └── env.dev  env.stg                 giá trị theo flavor (env.prod bạn tự tạo)
 
 platform/app_shell/lib/              dùng chung cho mọi app
-├── bootstrap.dart                   runShellApp — error zone, DI, splash, init
+├── bootstrap.dart                   runShellApp — error hook, DI, splash, init
 ├── main_scope.dart                  splash → init → chuyển sang root
 ├── di/
 │   ├── module.dart                  @InjectableInit.microPackage — nhóm DI `shell`
@@ -39,6 +39,7 @@ platform/app_shell/lib/              dùng chung cho mọi app
     ├── app_material_wrapper.dart    cấu hình MaterialApp dùng chung
     ├── navigation/app_router.dart   lắp ráp GoRouter
     ├── providers/                   AppProvider, DeeplinkProvider
+    ├── utils/                       AppShellUiConstants (trần text scale)
     └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
 ```
 
@@ -90,12 +91,54 @@ sequenceDiagram
 
 Trình tự này nằm trong `runShellApp()` ([`platform/app_shell/lib/bootstrap.dart`](../../../platform/app_shell/lib/bootstrap.dart)); `main.dart` của app chỉ gọi nó với `configureDependencies` được sinh cho chính app đó.
 
-1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm. Mỗi lỗi đi qua callback `onError` (tuỳ chọn) của app — chỗ để gắn crash reporter — rồi tới `FlutterError.reportError`.
-2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin.
+1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm.
+2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin — rồi **`installShellErrorHooks`**, dồn mọi lỗi không bắt được về một chỗ (xem [Lỗi và crash reporting](#lỗi-và-crash-reporting) bên dưới). Nó chạy trước `configureDependencies`, nên lỗi DI cũng được báo cáo.
 3. **`await configureDependencies()`** chạy *trước* `MainScope`. Đến lúc widget đầu tiên build, cả container đã phân giải xong.
 4. **`AppInitializer.initBeforeRunApp()`** cấu hình logger và cài `HttpOverrides.global` — certificate pinning, hoặc bypass khi build debug + flavor `dev` — một cách đồng bộ, trước khi có bất kỳ widget nào. Không thể đợi tới `initService`: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó (`AuthProvider` của auth, khôi phục phiên bằng một lần refresh token) có thể mở kết nối đầu tiên khi `initService` còn đang chạy, và `IOHttpClientAdapter` của Dio giữ lại `HttpClient` nó tạo đầu tiên — một client không pin sẽ phục vụ cả phiên. Lời gọi này idempotent; `AppInitializer.init` gọi lại và lần thứ hai không cài gì. `platform/app_shell/test/boot_order_test.dart` giữ thứ tự này.
 5. **`MainScope`** được dựng với ba thứ: hiển thị splash widget nào (nếu có), widget gốc, và `initService` — ở đây là `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, lo phần còn lại: `OperationGlobalConfig`, URL reflection của GoRouter, `AppInfoHelper`, trao route observer cho `RouteAwareWidget`, hướng màn hình và system UI.
 6. **`mainScope.run()`** rẽ nhánh tuỳ theo có truyền splash widget Dart hay không.
+
+### Lỗi và crash reporting
+
+Có ba loại lỗi lọt qua mọi thứ khác, và shell móc vào cả ba:
+
+| Hook | Bắt được |
+|:--|:--|
+| handler của `runZonedGuarded` | lỗi bất đồng bộ thoát khỏi zone của app — một `Future` không được await mà throw |
+| `FlutterError.onError` | lỗi framework bắt được: build, layout, paint, giải mã ảnh, gesture |
+| `PlatformDispatcher.instance.onError` | lỗi thoát ra tới engine — callback của platform channel, timer nằm ngoài zone |
+
+Cả ba đổ về cùng một chỗ. Handler của zone và hook của dispatcher ném lại qua `FlutterError.reportError`; hook `FlutterError.onError` trước hết gọi handler đã có trước nó — mặc định là `FlutterError.presentError`, bản dump đỏ trên console ở debug — rồi báo lỗi **một lần**: tới callback `onError` (tuỳ chọn) của app, rồi tới `getItOrNull<IErrorReporter>()` với `fatal: true`. Hook của dispatcher trả về `true`: lỗi đã được xử lý, engine không log thêm lần nữa.
+
+`IErrorReporter` và `IAnalytics` là các contract tuỳ chọn trong `core_di` ([`src/observability/`](../../../platform/di/lib/src/observability/)). Template không implement cái nào, nên cả hai lookup trả `null` và không gửi gì đi. Reporter được resolve lúc lỗi xảy ra, không phải lúc boot, nên reporter do `configureDependencies` đăng ký vẫn được dùng, và lỗi do *chính* `configureDependencies` ném ra vẫn tới được `onError`. Reporter hay callback nào tự throw sẽ bị nuốt — không bao giờ bị báo cáo qua chính nó.
+
+Còn một đường thứ ba, non-fatal. `ErrorHandler` (`platform_kernel`) chuyển mọi exception của repository thành `AppFailure`; những cái nó không phân loại được — một `TypeError` trong `fromJson`, một exception của plugin — thành lỗi chung "Unknown error occurred" và thường là bug. Shell trỏ `ErrorHandler.onUnclassifiedError` tới reporter với `fatal: false`, nên những lỗi đó được ghi lại trong khi người dùng vẫn nhận một failure đã được xử lý. Failure đã phân loại (mất mạng, 401, timeout) không được báo cáo.
+
+**Gắn Crashlytics hay Sentry** chỉ là một lần đăng ký trong app — trong `lib/` của chính nó, cạnh `firebase/firebase_module.dart`, hoặc trong một package mà app ghép vào. Không phải sửa code shell:
+
+```dart
+// apps/mobile/lib/observability/crashlytics_error_reporter.dart
+@LazySingleton(as: IErrorReporter)
+class CrashlyticsErrorReporter implements IErrorReporter {
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stack, {
+    bool fatal = false,
+    String? reason,
+  }) => FirebaseCrashlytics.instance.recordError(
+    error,
+    stack,
+    fatal: fatal,
+    reason: reason,
+  );
+
+  @override
+  void log(String message) => FirebaseCrashlytics.instance.log(message);
+}
+```
+
+Với Sentry, `recordError` gọi `Sentry.captureException(error, stackTrace: stack)` và `log` thêm một breadcrumb; khởi tạo SDK trong app (`SentryFlutter.init` bọc `main`, trước `runShellApp`). **Đừng** tự gán `FlutterError.onError` nữa — hook của shell đã chuyển tiếp nó, và nối tiếp handler nào đã được cài trước `runShellApp`. `IAnalytics` hoạt động y như vậy: đăng ký một implementation là mọi trang `GoRouteDataCustom` báo màn hình của nó qua `setCurrentScreen` (`RouteAwareWidget`, khi push và khi route phía trên pop). `platform/app_shell/test/error_hooks_test.dart` giữ phần nối dây này.
 
 ### Hai đường splash
 
@@ -312,13 +355,14 @@ Cây provider mà nó cài đặt:
 MultiProvider(ThemeProvider, LanguageProvider)
 └── Consumer2<ThemeProvider, LanguageProvider>
     └── AnnotatedRegion<SystemUiOverlayStyle>
-        └── TooltipVisibility(visible: false)
-            └── MultiProvider(AppProvider, DeeplinkProvider)
-                └── every IAppTreeWrapper (e.g. feature_auth's AuthProvider)
-                    └── MaterialApp[.router]
+        └── MultiProvider(AppProvider, DeeplinkProvider)
+            └── every IAppTreeWrapper (e.g. feature_auth's AuthProvider)
+                └── MaterialApp[.router]
 ```
 
 Chính `Consumer2` ở lớp ngoài là thứ khiến thay đổi theme và ngôn ngữ lan ra toàn app.
+
+Trong cây không có `TooltipVisibility(visible: false)`. Trước đây có, để tooltip không bật lên khi nhấn giữ — nhưng nó cũng gỡ mọi tooltip khỏi cây semantics, mà screen reader đọc `tooltip` của một nút chỉ có icon làm nhãn của nút: nút ẩn/hiện mật khẩu bị đọc thành "button". Giờ theme làm việc đó thay: `ThemeProvider` đặt `tooltipTheme: TooltipThemeData(triggerMode: TooltipTriggerMode.manual)`, chặn popup khi nhấn giữ/chạm trên màn hình cảm ứng mà vẫn giữ nhãn (di chuột vẫn hiện bong bóng — trigger mode không áp dụng cho chuột). Xoá dòng đó nếu muốn lấy lại tooltip nhấn giữ mặc định của Material. `platform/app_shell/test/accessibility_test.dart` kiểm tra nhãn vẫn còn.
 
 Các delegate localization được gom từ DI bằng `getAllOrEmpty` — app không có feature nào đăng ký delegate vẫn resolve được bộ delegate toàn cục — nên feature không bao giờ phải sửa file này:
 
@@ -329,7 +373,20 @@ final delegates = [
 ];
 ```
 
-`RootApp` cấp bốn đối tượng router từ `getIt<AppRouter>().router` và bổ sung `builder` toàn cục: các overlay host, `AppDialogController`, một `GestureDetector` bỏ focus bàn phím khi chạm ra ngoài, và `MediaQuery.withNoTextScaling` để bố cục không bị xô lệch.
+`RootApp` cấp bốn đối tượng router từ `getIt<AppRouter>().router` và bổ sung `builder` toàn cục: các overlay host, `AppDialogController` và một `GestureDetector` bỏ focus bàn phím khi chạm ra ngoài. `AppMaterialWrapper` bọc mọi thứ một `builder` trả về — cho cả splash lẫn router — trong `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)`, nên trang, toast và dialog dùng chung một trần text scale.
+
+### Cỡ chữ của hệ điều hành được tôn trọng, tối đa 2x
+
+`builder` của `RootApp` trước đây kết thúc bằng `MediaQuery.withNoTextScaling`, ghim mọi chữ ở 100% bất kể người dùng đặt gì — một lỗi accessibility (WCAG 2.2 SC 1.4.4 yêu cầu chữ phóng được tới 200%), không phải một lựa chọn bố cục. Giờ nó kẹp (clamp) thay vì tắt: cài đặt của người dùng đi qua nguyên vẹn tới `MAX_TEXT_SCALE_FACTOR` (2.0, trong [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), kể cả scaler phi tuyến (Android 14+), và đầu dưới không bị kẹp.
+
+Điều này **không** scale chữ hai lần với `core_responsive`. Hai hệ số độc lập và được áp ở hai chỗ khác nhau:
+
+| Hệ số | Ai áp | Trả lời câu hỏi |
+|:--|:--|:--|
+| `context.sp(x)` (thang chữ của theme, `AppTextStyles`) | `core_responsive`, vào `TextStyle.fontSize` | "cỡ thiết kế này to bao nhiêu trong cửa sổ này?" — theo chiều rộng cửa sổ, kẹp bởi `textScaleBounds`. Nó không bao giờ đọc `MediaQuery.textScaler` |
+| `MediaQuery.textScaler` | `Text` / `RichText` của Flutter, lúc layout | "người dùng muốn chữ to hơn bao nhiêu?" |
+
+Một style body 16 đơn vị là 16 × (hệ số cửa sổ) logical pixel, rồi × tỉ lệ của người dùng khi vẽ — mỗi cái đúng một lần. Thứ **không** lớn theo text scale là bố cục đặt kích thước bằng `context.h` / `context.w`: một hộp cao cố định chứa chữ có thể tràn ở 2x. Hãy để khung chứa chữ tự co theo nội dung (padding, `minHeight`), đừng đặt chiều cao cố định. `modules/auth/feature/test/login_page_text_scale_test.dart` và `modules/dashboard/feature/test/dashboard_text_scale_test.dart` dựng màn hình đăng nhập trên ba cỡ điện thoại và phần chrome của dashboard từ điện thoại tới desktop ở 2x, và fail khi có bất kỳ overflow nào — hãy chép chúng cho màn hình mới.
 
 ---
 

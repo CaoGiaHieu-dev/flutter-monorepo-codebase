@@ -64,6 +64,10 @@ extension ResponsiveContext on BuildContext {
   /// width, vertical by height — so padding keeps its proportions instead of
   /// tracking a single dimension. `all` therefore also uses [w], which is what
   /// makes it a drop-in for `EdgeInsets.all(context.w(x))`.
+  ///
+  /// `left` and `right` are *physical* sides and do not flip in a
+  /// right-to-left locale. For a side that means start or end of the line,
+  /// use [edgeInsetsDirectional].
   EdgeInsets edgeInsets({
     num? all,
     num? horizontal,
@@ -80,6 +84,40 @@ extension ResponsiveContext on BuildContext {
     return EdgeInsets.only(
       left: w(left ?? horizontal ?? 0),
       right: w(right ?? horizontal ?? 0),
+      top: h(top ?? vertical ?? 0),
+      bottom: h(bottom ?? vertical ?? 0),
+    );
+  }
+
+  /// Scaled [EdgeInsetsDirectional] — [start] and [end] instead of left and
+  /// right, resolved against the ambient `Directionality` when laid out.
+  ///
+  /// Use it whenever a side means "where the line begins" or "where it ends"
+  /// rather than a physical edge: an indent before a label, the gap after a
+  /// leading icon. [edgeInsets]' `left:` stays on the left in a right-to-left
+  /// locale, which is the wrong side for all of those.
+  ///
+  /// The axes scale exactly as in [edgeInsets]: [start], [end] and
+  /// [horizontal] by [w]; [top], [bottom] and [vertical] by [h]; [all] by
+  /// [w]. A side argument wins over the axis one, so
+  /// `edgeInsetsDirectional(horizontal: 16, start: 24)` is 24 at the start
+  /// and 16 at the end.
+  EdgeInsetsDirectional edgeInsetsDirectional({
+    num? all,
+    num? horizontal,
+    num? vertical,
+    num? start,
+    num? top,
+    num? end,
+    num? bottom,
+  }) {
+    if (all != null) {
+      final v = w(all);
+      return EdgeInsetsDirectional.all(v);
+    }
+    return EdgeInsetsDirectional.only(
+      start: w(start ?? horizontal ?? 0),
+      end: w(end ?? horizontal ?? 0),
       top: h(top ?? vertical ?? 0),
       bottom: h(bottom ?? vertical ?? 0),
     );

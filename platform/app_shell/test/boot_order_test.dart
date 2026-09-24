@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
@@ -40,9 +41,11 @@ class _ProbeWrapper extends IAppTreeWrapper {
 /// widget — and any controller a widget creates — exists.
 void main() {
   late HttpOverrides? testBindingOverrides;
+  late bool Function(Object, StackTrace)? platformOnError;
 
   setUp(() {
     testBindingOverrides = HttpOverrides.current;
+    platformOnError = PlatformDispatcher.instance.onError;
     AppInitializer.debugResetBeforeRunApp();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -53,6 +56,10 @@ void main() {
 
   tearDown(() async {
     HttpOverrides.global = testBindingOverrides;
+    // `runShellApp` installs the shell's error hooks; the test binding puts
+    // `FlutterError.onError` back itself, these two are ours to restore.
+    PlatformDispatcher.instance.onError = platformOnError;
+    ErrorHandler.onUnclassifiedError = null;
     AppInitializer.debugResetBeforeRunApp();
     await getIt.reset();
   });

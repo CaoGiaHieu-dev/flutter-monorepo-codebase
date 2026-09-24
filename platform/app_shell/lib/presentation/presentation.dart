@@ -3,4 +3,5 @@ export 'app_material_wrapper.dart';
 export 'navigation/navigation.dart';
 export 'providers/providers.dart';
 export 'root_app.dart';
+export 'utils/utils.dart';
 export 'widgets/widgets.dart';

@@ -346,6 +346,7 @@ For a feature, **always pass all five arguments** (state management: `1` Provide
   | `context.edgeInsets(all: x)` | `w` |
   | `context.edgeInsets(horizontal: x)` | `w` |
   | `context.edgeInsets(vertical: x)` | `h` |
+  | `context.edgeInsetsDirectional(start: x)` / `(end: x)` | `w` — physical `left`/`right` do not flip in RTL; use this for start/end sides |
   | `context.borderRadius(all: x)` | `r` |
   | `context.verticalSpace(x)` | `h` |
   | `context.horizontalSpace(x)` | `w` |

@@ -16,11 +16,18 @@ abstract class DataCacheDiModule {
   /// tests.
   ///
   /// `@preResolve` opens the database — and therefore runs migrations — while
-  /// this module initialises. An [IDatabaseMigration] registered by a module
-  /// that initialises *later* would be invisible at that moment, so a package
-  /// contributing a step for this database must sit in an earlier DI group.
+  /// this module initialises, so every step must already be registered.
+  ///
+  /// `@Order(1)` makes that true inside this package: injectable registers a
+  /// module's entries in ascending order, so a migration declared here with
+  /// the default order (0) is registered before the open runs. Without it the
+  /// open came first and a step written exactly as the database guide shows
+  /// was never collected — the schema version moved and the schema did not.
+  /// A step contributed by *another* package must still sit in an earlier DI
+  /// group.
   ///
   /// Only an app that composes this module pays for opening the file.
+  @Order(1)
   @preResolve
   @lazySingleton
   Future<CacheDatabase> cacheDatabase() =>

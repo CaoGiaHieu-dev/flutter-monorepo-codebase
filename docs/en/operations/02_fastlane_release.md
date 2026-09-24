@@ -99,7 +99,13 @@ bundle install                         # from the repository root (or from apps/
 bundle exec fastlane android build …   # same from either directory
 ```
 
-**Commit the `Gemfile.lock` files** that the first `bundle install` writes (one next to each Gemfile: the root one and the one in `apps/mobile/`) — the root `.gitignore` ignores `*.lock` but makes an exception for them, as for `pubspec.lock`. Without them every machine and every CI run resolves whatever fastlane, CocoaPods and plugin versions are newest that day. Generate them on the machine that cuts releases, and add the other platforms that run the lanes, e.g. `bundle lock --add-platform arm64-darwin x86_64-linux`, so `bundler-cache` on a GitHub runner does not reject the lockfile.
+**The `Gemfile.lock` files are committed** — one next to each Gemfile, the root one and `apps/mobile/Gemfile.lock` (the root `.gitignore` ignores `*.lock` but makes an exception for them, as for `pubspec.lock`). They pin fastlane, CocoaPods and the plugin, so every machine and every CI run installs the same versions instead of whatever is newest that day. The two Gemfiles resolve the same gem list, so the two lockfiles are **identical**; keep them that way — after `bundle update` in one directory, run the same command in the other and check with `cmp Gemfile.lock apps/mobile/Gemfile.lock`. Both list the platforms that run the lanes (`bundle lock --add-platform x86_64-linux arm64-darwin x86_64-darwin`), so `bundler-cache` on a GitHub runner accepts them.
+
+They were written by **Bundler 4** (`BUNDLED WITH 4.0.9` at the end of each file); `ruby/setup-ruby` installs exactly that Bundler, which needs Ruby 3.2 or newer (`fastlane.yml` uses 3.3). With an older local Bundler, `gem install bundler` first.
+
+If `bundle exec fastlane` answers `bundler: command not found: fastlane` right after a successful `bundle install`, the directory gem executables are installed into is not on your `PATH` (common with rbenv without its shims): add it — `gem env | grep "EXECUTABLE DIRECTORY"` names it.
+
+The lanes do not depend on the locale: both Fastfiles set Ruby's default external encoding to UTF-8 before importing anything, because under a C/POSIX locale (a bare Linux container, some CI images) the modules and `pubspec.yaml` were read as US-ASCII and the first non-ASCII byte stopped the run with `invalid multibyte char (US-ASCII)`. fastlane itself still prints `WARNING: fastlane requires your locale to be set to UTF-8`; `export LANG=C.UTF-8` (or `en_US.UTF-8`) silences it.
 
 Do not run `fastlane add_plugin`: the plugin is already there, the command is interactive (it fails in CI), and it edits the Pluginfile of whichever fastlane folder it runs in. Add a new plugin by hand to `apps/mobile/fastlane/Pluginfile`; both Gemfiles load it — the root one through `fastlane/Pluginfile`, which fastlane requires in order to consider plugins set up.
 
@@ -108,6 +114,10 @@ Do not run `fastlane add_plugin`: the plugin is already there, the command is in
 ## 3. Lanes
 
 Every lane is interactive: any parameter you omit is prompted for. Passing it on the command line skips the prompt, which is what makes the lanes CI-friendly.
+
+Without a terminal — CI, a pipe, `< /dev/null` — fastlane cannot prompt. A parameter you omit then takes its default and the lane says so (`Non-interactive: version not passed, using "1.0.0". Pass version:<value> to choose.`): `flutter_version` → `flutter.default_version`, `version` → `default_app_version`, `build_number` → `auto`, `build_type` → `apk`, `track` → `internal`, `change_log` → empty, and **`distribute_store` / `distribute_firebase` → `false`**, so nothing is uploaded unless the command line asks for it (the interactive prompt still offers Firebase by default). `flavor` has no default: the lane stops and asks for `flavor:<value>`. Before, the first omitted parameter crashed the run with `Could not retrieve response as fastlane runs in non-interactive mode` and a Ruby backtrace.
+
+The command-line values are checked before any setup starts: `version` must be one to three dot-separated integers (`1.2.0`), `build_number` a positive integer or `auto`, `build_type` `apk` or `aab`, `flavor` one of `VALID_FLAVORS` — anything else stops the lane at once with the accepted values.
 
 ### Android — `apps/mobile/fastlane/modules/android_lanes.rb`
 
@@ -133,6 +143,8 @@ Every lane is interactive: any parameter you omit is prompted for. Passing it on
 | `store` | Same orchestration but prod/store defaults: `fastlane ios store` then `fastlane android store` | `version`, `build_number`, `track`, `flutter_version`, `change_log`, `skip_setup`, `flutter_upgrade` |
 
 Both cross-platform lanes run **iOS first and abort the whole run if it fails**, so Android is never built against a release iOS could not produce. The child processes run from `apps/mobile/` (under `bundle exec` they inherit the same bundle).
+
+**Every iOS lane — and therefore `flutter` and `store` — needs macOS with Xcode.** On any other host they stop before the first prompt with an error naming the lane and the host (`… needs macOS with Xcode (flutter build ipa, CocoaPods, xcrun altool); this machine is x86_64-linux`), instead of running the whole toolchain setup and then failing inside `pod` or `xcrun`. On Linux, build Android with `android build` / `android store`.
 
 ### Change log
 
@@ -185,6 +197,8 @@ bundle exec fastlane store version:1.2.0 build_number:auto track:internal
 
 `fastlane.yml` sends `build_number:auto` when its input is left empty.
 
+When `auto` needs a store or Firebase and the lookup fails (credential file missing, an example placeholder such as `YOUR_FIREBASE_APP_ID_ANDROID_DEV` still in `Config.yaml`), the lane stops before any setup with the cause and the way out — pass `build_number:<n>`. It never falls back to the pubspec number there: that number would collide with a release already uploaded. `android upload` / `ios upload` do not look a number up at all: the artifact already carries its version code.
+
 `versionCode` and `versionName` are **not** read from `apps/mobile/pubspec.yaml` during a Fastlane build. `apps/mobile/android/app/build.gradle.kts` binds them to Flutter:
 
 ```kotlin
@@ -225,6 +239,8 @@ Execution failed for task ':app:preProdReleaseBuild'.
 ```
 
 The guard sits at the bottom of `apps/mobile/android/app/build.gradle.kts`. It hangs off the `pre…ReleaseBuild` task that every release entry point runs — `flutter build apk|appbundle`, the Fastlane lanes, `./gradlew assemble…|bundle…` — so none of them can produce a release signed with the public key.
+
+The Android lanes check the same thing **before** anything else — before the change log, the build-number lookup and the toolchain setup — so a missing file stops `android build flavor:prod|staging` and `android store` in about two seconds with `Refusing to build the prod release: apps/mobile/android/key.properties is missing …`, instead of after setup and a minute of Gradle, buried in `flutter build --verbose` output. The staging escape hatch below is honoured there too (`ORG_GRADLE_PROJECT_allowDevKeystoreForStaging`, or `allowDevKeystoreForStaging=true` in `apps/mobile/android/gradle.properties` or `~/.gradle/gradle.properties`).
 
 > [!NOTE]
 > **Staging only** has an explicit escape hatch, for a pipeline that deliberately ships staging to testers with the dev key: the Gradle property `allowDevKeystoreForStaging=true`.

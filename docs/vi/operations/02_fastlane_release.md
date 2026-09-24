@@ -99,7 +99,13 @@ bundle install                         # từ thư mục gốc repo (hoặc từ
 bundle exec fastlane android build …   # như nhau từ cả hai thư mục
 ```
 
-**Hãy commit các file `Gemfile.lock`** mà lần `bundle install` đầu tiên sinh ra (mỗi Gemfile một file bên cạnh: file ở gốc và file trong `apps/mobile/`) — `.gitignore` ở gốc bỏ qua `*.lock` nhưng có ngoại lệ cho chúng, giống `pubspec.lock`. Thiếu chúng, mỗi máy và mỗi lần chạy CI sẽ resolve bản fastlane, CocoaPods và plugin mới nhất vào hôm đó. Hãy sinh chúng trên máy dùng để phát hành, rồi thêm các nền tảng khác có chạy lane, ví dụ `bundle lock --add-platform arm64-darwin x86_64-linux`, để `bundler-cache` trên runner GitHub không từ chối lockfile.
+**Các file `Gemfile.lock` đã được commit** — mỗi Gemfile một file bên cạnh, file ở gốc và `apps/mobile/Gemfile.lock` (`.gitignore` ở gốc bỏ qua `*.lock` nhưng có ngoại lệ cho chúng, giống `pubspec.lock`). Chúng ghim phiên bản fastlane, CocoaPods và plugin, nên mọi máy và mọi lần chạy CI đều cài cùng một bộ phiên bản thay vì bản mới nhất vào hôm đó. Hai Gemfile resolve cùng một danh sách gem nên hai lockfile **giống hệt nhau**; hãy giữ nguyên như vậy — sau khi chạy `bundle update` ở một thư mục, chạy đúng lệnh đó ở thư mục kia rồi kiểm tra bằng `cmp Gemfile.lock apps/mobile/Gemfile.lock`. Cả hai đều liệt kê các nền tảng có chạy lane (`bundle lock --add-platform x86_64-linux arm64-darwin x86_64-darwin`), nên `bundler-cache` trên runner GitHub chấp nhận chúng.
+
+Chúng được sinh bởi **Bundler 4** (`BUNDLED WITH 4.0.9` ở cuối mỗi file); `ruby/setup-ruby` cài đúng bản Bundler đó, bản này cần Ruby 3.2 trở lên (`fastlane.yml` dùng 3.3). Nếu Bundler trên máy bạn cũ hơn, chạy `gem install bundler` trước.
+
+Nếu `bundle exec fastlane` báo `bundler: command not found: fastlane` ngay sau một lần `bundle install` thành công, thì thư mục chứa file thực thi của gem chưa nằm trong `PATH` (hay gặp với rbenv khi không dùng shim): hãy thêm nó vào — `gem env | grep "EXECUTABLE DIRECTORY"` cho biết đó là thư mục nào.
+
+Các lane không phụ thuộc locale: cả hai Fastfile đặt encoding ngoài mặc định của Ruby thành UTF-8 trước khi import bất cứ thứ gì, vì với locale C/POSIX (một container Linux trần, một số image CI) các module và `pubspec.yaml` bị đọc như US-ASCII và byte không phải ASCII đầu tiên làm lần chạy dừng với `invalid multibyte char (US-ASCII)`. Bản thân fastlane vẫn in `WARNING: fastlane requires your locale to be set to UTF-8`; `export LANG=C.UTF-8` (hoặc `en_US.UTF-8`) sẽ tắt cảnh báo này.
 
 Đừng chạy `fastlane add_plugin`: plugin đã có sẵn, lệnh này cần tương tác (fail trên CI), và nó sửa Pluginfile của thư mục fastlane nơi nó được chạy. Muốn thêm plugin mới thì tự thêm vào `apps/mobile/fastlane/Pluginfile`; cả hai Gemfile đều nạp nó — Gemfile ở gốc nạp qua `fastlane/Pluginfile`, điều fastlane bắt buộc phải thấy mới coi là plugin đã được thiết lập.
 
@@ -108,6 +114,10 @@ bundle exec fastlane android build …   # như nhau từ cả hai thư mục
 ## 3. Danh sách lane
 
 Mọi lane đều tương tác: tham số nào bạn không truyền thì nó sẽ hỏi. Truyền sẵn trên dòng lệnh sẽ bỏ qua câu hỏi — đó là điều khiến các lane này dùng được trong CI.
+
+Khi không có terminal — CI, một pipe, `< /dev/null` — fastlane không thể hỏi. Tham số bạn bỏ qua khi đó nhận giá trị mặc định và lane in ra điều đó (`Non-interactive: version not passed, using "1.0.0". Pass version:<value> to choose.`): `flutter_version` → `flutter.default_version`, `version` → `default_app_version`, `build_number` → `auto`, `build_type` → `apk`, `track` → `internal`, `change_log` → rỗng, và **`distribute_store` / `distribute_firebase` → `false`**, nên không có gì được upload nếu dòng lệnh không yêu cầu (câu hỏi tương tác vẫn mặc định chọn Firebase). `flavor` không có mặc định: lane dừng và yêu cầu `flavor:<giá trị>`. Trước đây, tham số đầu tiên bị bỏ qua làm lần chạy crash với `Could not retrieve response as fastlane runs in non-interactive mode` kèm backtrace Ruby.
+
+Các giá trị trên dòng lệnh được kiểm tra trước khi bắt đầu setup: `version` phải gồm một đến ba số nguyên cách nhau bởi dấu chấm (`1.2.0`), `build_number` là số nguyên dương hoặc `auto`, `build_type` là `apk` hoặc `aab`, `flavor` thuộc `VALID_FLAVORS` — giá trị khác làm lane dừng ngay và liệt kê các giá trị hợp lệ.
 
 ### Android — `apps/mobile/fastlane/modules/android_lanes.rb`
 
@@ -133,6 +143,8 @@ Mọi lane đều tương tác: tham số nào bạn không truyền thì nó s�
 | `store` | Cùng cách điều phối nhưng mặc định prod/store: `fastlane ios store` rồi `fastlane android store` | `version`, `build_number`, `track`, `flutter_version`, `change_log`, `skip_setup`, `flutter_upgrade` |
 
 Cả hai lane cross-platform đều **chạy iOS trước và huỷ toàn bộ nếu iOS fail**, nên Android không bao giờ được build cho một bản release mà iOS không dựng nổi. Các tiến trình con chạy từ `apps/mobile/` (khi chạy dưới `bundle exec` chúng thừa hưởng cùng bundle).
+
+**Mọi lane iOS — và vì thế cả `flutter` lẫn `store` — cần macOS có Xcode.** Trên máy khác, chúng dừng trước câu hỏi đầu tiên với một lỗi nêu tên lane và máy (`… needs macOS with Xcode (flutter build ipa, CocoaPods, xcrun altool); this machine is x86_64-linux`), thay vì chạy hết phần setup toolchain rồi mới fail bên trong `pod` hoặc `xcrun`. Trên Linux, hãy build Android bằng `android build` / `android store`.
 
 ### Change log
 
@@ -185,6 +197,8 @@ bundle exec fastlane store version:1.2.0 build_number:auto track:internal
 
 `fastlane.yml` gửi `build_number:auto` khi input của nó để trống.
 
+Khi `auto` cần tới store hoặc Firebase mà việc tra cứu thất bại (thiếu file credential, `Config.yaml` vẫn còn placeholder mẫu như `YOUR_FIREBASE_APP_ID_ANDROID_DEV`), lane dừng trước mọi bước setup, nêu nguyên nhân và cách xử lý — truyền `build_number:<n>`. Ở đây nó không bao giờ lùi về số trong pubspec: số đó sẽ trùng với một bản release đã upload. `android upload` / `ios upload` hoàn toàn không tra số: artifact đã mang sẵn version code của nó.
+
 `versionCode` và `versionName` **không** lấy từ `apps/mobile/pubspec.yaml` khi build qua Fastlane. `apps/mobile/android/app/build.gradle.kts` gắn chúng vào Flutter:
 
 ```kotlin
@@ -225,6 +239,8 @@ Execution failed for task ':app:preProdReleaseBuild'.
 ```
 
 Phần chặn nằm ở cuối `apps/mobile/android/app/build.gradle.kts`. Nó gắn vào task `pre…ReleaseBuild` mà mọi đường build release đều chạy — `flutter build apk|appbundle`, các lane Fastlane, `./gradlew assemble…|bundle…` — nên không đường nào tạo ra được bản release ký bằng key công khai.
+
+Các lane Android kiểm tra đúng điều này **trước** mọi thứ khác — trước change log, việc tra build number và phần setup toolchain — nên khi thiếu file, `android build flavor:prod|staging` và `android store` dừng trong khoảng hai giây với `Refusing to build the prod release: apps/mobile/android/key.properties is missing …`, thay vì sau phần setup và một phút Gradle, chìm trong output của `flutter build --verbose`. Lối thoát cho staging bên dưới cũng được tôn trọng ở đây (`ORG_GRADLE_PROJECT_allowDevKeystoreForStaging`, hoặc `allowDevKeystoreForStaging=true` trong `apps/mobile/android/gradle.properties` hay `~/.gradle/gradle.properties`).
 
 > [!NOTE]
 > **Chỉ staging** có lối thoát tường minh, cho pipeline cố ý phát staging tới tester bằng key dev: Gradle property `allowDevKeystoreForStaging=true`.

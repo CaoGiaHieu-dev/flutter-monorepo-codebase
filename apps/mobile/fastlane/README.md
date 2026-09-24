@@ -17,7 +17,7 @@ Install the gems once, from the repository root or from `apps/mobile/` — both 
 bundle install
 ```
 
-Then copy `Config.example.yaml` to `Config.yaml` in this folder and fill it in. Every lane runs identically from the repository root and from `apps/mobile/`.
+Then copy `Config.example.yaml` to `Config.yaml` in this folder and fill it in. Every lane runs identically from the repository root and from `apps/mobile/`. Pass every parameter on the command line in CI: without a terminal an omitted one takes its default (distribution: off) and an omitted `flavor:` stops the lane.
 
 # Available Actions
 
@@ -27,7 +27,7 @@ Then copy `Config.example.yaml` to `Config.yaml` in this folder and fill it in. 
 bundle exec fastlane flutter
 ```
 
-Build both platforms (iOS, then Android) with one set of inputs.
+Build both platforms (iOS, then Android) with one set of inputs. Needs macOS.
 
 ### store
 
@@ -35,12 +35,14 @@ Build both platforms (iOS, then Android) with one set of inputs.
 bundle exec fastlane store
 ```
 
-Prod release of both platforms to TestFlight and Google Play.
+Prod release of both platforms to TestFlight and Google Play. Needs macOS.
 
 ----
 
 
 ## iOS
+
+Every iOS lane needs macOS with Xcode; elsewhere it stops at once with an error saying so.
 
 ### ios build
 

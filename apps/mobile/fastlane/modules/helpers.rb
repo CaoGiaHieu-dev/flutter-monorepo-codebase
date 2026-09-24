@@ -72,7 +72,12 @@ APP_STORE_TEAM_ID = CONFIG.dig('app_store_connect', 'team_id') || ""
 
 # Valid options
 VALID_FLAVORS = (CONFIG.dig('valid_flavors') || []) + ['none']
-VALID_TRACKS = ['production', 'internal', 'closed']
+# The Play Console's built-in tracks: internal testing, closed testing
+# (`alpha`), open testing (`beta`) and production. `closed` is not one of them —
+# the Play API rejects it. A custom closed-testing track created in the Play
+# Console is addressed by its own name: pass it as `track:<name>`, which the
+# lanes accept as is; only the interactive prompt is limited to this list.
+VALID_TRACKS = ['internal', 'alpha', 'beta', 'production']
 VALID_BUILD_TYPES = ['apk', 'aab']
 
 # --- Toolchain (FVM is optional) ---
@@ -218,19 +223,34 @@ def get_validated_input(prompt_text, valid_options, default_value)
   input_lower
 end
 
+# The value for a flavor in a per-flavor map of Config.yaml (`firebase.app_ids.
+# <platform>`, `firebase.credentials_map`): the flavor's own entry, else the
+# map's `default` entry — also when a flavor is set but has no entry of its own,
+# which is what .github/workflows/fastlane.yml does when it writes the
+# credential file. Returns [value, key used]; value is nil when neither exists.
+def flavor_config_value(map_path, flavor)
+  map = CONFIG.dig(*map_path)
+  map = {} unless map.is_a?(Hash)
+  key = (flavor && !flavor.empty?) ? flavor : 'default'
+  value = map[key]
+  if value.nil? && key != 'default' && !map['default'].nil?
+    UI.important("#{map_path.join('.')}.#{key} is not set in #{CONFIG_FILE}; using #{map_path.join('.')}.default.")
+    return [map['default'], 'default']
+  end
+  [value, key]
+end
+
 # Helper to get Firebase App ID based on platform and flavor
 def get_firebase_app_id(platform, flavor)
-  actual_flavor_key = (flavor && !flavor.empty?) ? flavor : 'default'
-  app_id = CONFIG.dig('firebase', 'app_ids', platform.to_s, actual_flavor_key)
-  UI.user_error!("Firebase App ID for platform '#{platform}' and flavor '#{actual_flavor_key}' not set in #{CONFIG_FILE}.") unless app_id
+  app_id, key = flavor_config_value(['firebase', 'app_ids', platform.to_s], flavor)
+  UI.user_error!("Firebase App ID for platform '#{platform}' and flavor '#{key}' (or 'default') not set in #{CONFIG_FILE}.") unless app_id
   app_id
 end
 
 # Helper to get the (absolute) Firebase credential file path based on flavor
 def get_firebase_credential_file(flavor)
-  actual_flavor_key = (flavor && !flavor.empty?) ? flavor : 'default'
-  credential_file = CONFIG.dig('firebase', 'credentials_map', actual_flavor_key)
-  UI.user_error!("Firebase credential file path for flavor '#{actual_flavor_key}' not set in #{CONFIG_FILE}.") unless credential_file
+  credential_file, key = flavor_config_value(['firebase', 'credentials_map'], flavor)
+  UI.user_error!("Firebase credential file path for flavor '#{key}' (or 'default') not set in #{CONFIG_FILE}.") unless credential_file
   resolve_app_path(credential_file)
 end
 
@@ -576,6 +596,13 @@ def run_flutter_build(platform:, flavor:, version:, build_number:, build_type: n
     sh build_command
   end
 
+  # --obfuscate makes this build's stack traces unreadable without these
+  # files, and they are not inside the artifact: keep them with the release.
+  UI.important(
+    "Obfuscation symbols for #{version}+#{build_number}: #{display_path(File.join(APP_DIR, 'obfuscate'))}/ " \
+    "— archive them with this release; `flutter symbolize` needs them to read its crash stack traces."
+  )
+
   # Retry xcodebuild export if flutter build ipa archived successfully but export failed
   if platform == :ios
     archive_path = File.join(APP_DIR, "build", "ios", "archive", "Runner.xcarchive")
@@ -583,6 +610,17 @@ def run_flutter_build(platform:, flavor:, version:, build_number:, build_type: n
 
     if found_ipas.empty? && File.directory?(archive_path)
       export_plist = export_options_plist_for(flavor)
+      # xcodebuild -exportArchive cannot run without an export options file.
+      # Retrying with a path that does not exist only fails three times more
+      # slowly, and hides the real cause.
+      unless File.exist?(export_plist)
+        UI.user_error!(
+          "flutter build ipa archived the app but produced no IPA, and there is no " \
+          "#{display_path(export_plist)} to retry the export with. Create it (method, " \
+          "teamID, provisioning profiles) — see docs/en/operations/02_fastlane_release.md " \
+          "section 9 (iOS status)."
+        )
+      end
       max_retries = 3
       max_retries.times do |attempt|
         UI.important("IPA not found but archive exists. Retrying export (attempt #{attempt + 1}/#{max_retries})...")
@@ -623,6 +661,34 @@ def run_flutter_build(platform:, flavor:, version:, build_number:, build_type: n
   artifact_path
 end
 
+# The directory `xcrun altool --apiKey <id>` should read the API key from.
+#
+# altool takes no key path: it looks for a file named exactly
+# `AuthKey_<api_key_id>.p8` in $API_PRIVATE_KEYS_DIR, else in ./private_keys,
+# ~/private_keys, ~/.private_keys and ~/.appstoreconnect/private_keys — never
+# where Config.yaml's `paths.app_store_connect_key_filepath` points. So the
+# spawned altool gets API_PRIVATE_KEYS_DIR = that file's directory, provided the
+# file carries the required name; otherwise a private temporary copy under that
+# name is used (with a warning to rename it). Returns [dir, temp dir to delete
+# afterwards or nil].
+def altool_private_keys_dir
+  key = APP_STORE_CONNECT_KEY_FILEPATH
+  key_id = APP_STORE_CONNECT_API_KEY_ID.to_s.strip
+  UI.user_error!("app_store_connect.api_key_id is not set in #{CONFIG_FILE}.") if key_id.empty?
+  UI.user_error!("paths.app_store_connect_key_filepath is not set in #{CONFIG_FILE}.") unless key
+  UI.user_error!("App Store Connect API key not found at #{display_path(key)} (paths.app_store_connect_key_filepath).") unless File.exist?(key)
+
+  expected = "AuthKey_#{key_id}.p8"
+  return [File.dirname(key), nil] if File.basename(key) == expected
+
+  UI.important("#{display_path(key)} is not named #{expected}, the only name altool looks for; uploading with a temporary copy under that name. Rename the file (and paths.app_store_connect_key_filepath) to #{expected}.")
+  temp_dir = Dir.mktmpdir("altool-private-keys-")
+  target = File.join(temp_dir, expected)
+  FileUtils.cp(key, target)
+  File.chmod(0o600, target)
+  [temp_dir, temp_dir]
+end
+
 # Distribute to App Store (TestFlight)
 def distribute_to_app_store(ipa_path, flavor)
   UI.header("Distributing to App Store (TestFlight)")
@@ -635,17 +701,24 @@ def distribute_to_app_store(ipa_path, flavor)
   apple_id = APP_STORE_CONNECT_APPLE_IDS[flavor || 'default']
   UI.user_error!("Unknown flavor for apple-id mapping: #{flavor}") unless apple_id
 
-  altool_cmd = "xcrun altool --upload-app --type ios " \
-    "-f #{ipa_path.shellescape} " \
-    "--apple-id #{apple_id} " \
-    "--apiKey #{APP_STORE_CONNECT_API_KEY_ID} " \
-    "--apiIssuer #{APP_STORE_CONNECT_ISSUER_ID}"
+  keys_dir, temp_keys_dir = altool_private_keys_dir
+  altool_argv = [
+    "xcrun", "altool", "--upload-app", "--type", "ios",
+    "-f", ipa_path,
+    "--apple-id", apple_id.to_s,
+    "--apiKey", APP_STORE_CONNECT_API_KEY_ID.to_s,
+    "--apiIssuer", APP_STORE_CONNECT_ISSUER_ID.to_s
+  ]
 
-  Dir.chdir(APP_DIR) do
-    UI.message("Uploading via altool...")
-    pid = Process.spawn(altool_cmd)
-    _, status = Process.wait2(pid)
-    UI.user_error!("altool exited with status #{status.exitstatus}") unless status.success?
+  begin
+    Dir.chdir(APP_DIR) do
+      UI.message("Uploading via altool (API_PRIVATE_KEYS_DIR=#{keys_dir})...")
+      pid = Process.spawn({ "API_PRIVATE_KEYS_DIR" => keys_dir }, *altool_argv)
+      _, status = Process.wait2(pid)
+      UI.user_error!("altool exited with status #{status.exitstatus}") unless status.success?
+    end
+  ensure
+    FileUtils.rm_rf(temp_keys_dir) if temp_keys_dir
   end
 
   UI.success("Successfully uploaded to App Store Connect via altool")

@@ -21,6 +21,11 @@ on:
         description: "Notes"
         required: false
         type: string
+      groups:
+        description: "Firebase App Distribution tester group aliases, comma-separated (empty = upload without inviting anyone)"
+        required: false
+        type: string
+        default: "test"
 jobs:
   build:
     name: Build & Release
@@ -31,20 +36,20 @@ jobs:
     steps:
       #1 Checkout Repository
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
         #2 Setup Java
       - name: Set Up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: "oracle"
           java-version: "17"
 
-        #3 Setup Flutter
+        #3 Setup Flutter — the version pinned in .fvmrc
       - name: Set Up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
 
@@ -180,14 +185,58 @@ jobs:
       #     cd build
       #     tar -czf ios_build.tar.gz ios
 
-      #8 Distribute Android
-      - name: Upload and Distribute App
-        uses: nickwph/firebase-app-distribution-action@v1
+      #8 Keep the obfuscation symbols
+      # --obfuscate makes every stack trace from this build unreadable without
+      # the symbol files --split-debug-info wrote to obfuscate/. They are not in
+      # the APK and the runner is thrown away, so upload them now — before the
+      # distribution step, which can fail — and keep them as long as the build
+      # is in testers' hands. Symbolize with
+      #   flutter symbolize -i <stack-trace-file> -d <artifact>/app.android-arm64.symbols
+      - name: Upload obfuscation symbols
+        uses: actions/upload-artifact@v7
         with:
-          credentials: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
-          app: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-          file: "apps/mobile/build/app/outputs/flutter-apk/app-${{ inputs.flavor}}-release.apk"
-          release-notes: |
-            Build version: ${{ inputs.version }}+${{ github.run_number }}
-            Flavor: ${{ inputs.flavor }}
-            Notes: ${{ inputs.notes }}
+          name: debug-symbols-${{ inputs.flavor }}-${{ inputs.version }}+${{ github.run_number }}
+          path: obfuscate/
+          if-no-files-found: error
+          retention-days: 90
+
+      #9 Distribute Android — the Firebase CLI, authenticated through
+      # GOOGLE_APPLICATION_CREDENTIALS with the service-account JSON from the
+      # FIREBASE_SERVICE_ACCOUNT_KEY secret (raw, not base64), written to a
+      # temp file that is deleted when the step ends. Inputs reach the script
+      # through env, never interpolated into it, and the release notes go
+      # through a file, so quotes and `$(…)` in them are passed verbatim.
+      - name: Set up Node.js (Firebase CLI)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install the Firebase CLI
+        run: npm install --global firebase-tools@15
+
+      - name: Upload and Distribute App
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          TESTER_GROUPS: ${{ inputs.groups }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          [ -n "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ] || { echo "::error title=Missing secret FIREBASE_SERVICE_ACCOUNT_KEY::Firebase distribution needs the service-account JSON (raw, not base64) - see docs/en/operations/01_cicd.md section 7."; exit 1; }
+          [ -n "${FIREBASE_APP_ID:-}" ] || { echo "::error title=Missing secret FIREBASE_ANDROID_APP_ID::Set it to the Firebase App ID of the flavor you build - see docs/en/operations/01_cicd.md section 7."; exit 1; }
+
+          sa="$RUNNER_TEMP/firebase-service-account.json"
+          notes="$RUNNER_TEMP/release-notes.txt"
+          trap 'rm -f "$sa" "$notes"' EXIT
+          ( umask 077; printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$sa" )
+          export GOOGLE_APPLICATION_CREDENTIALS="$sa"
+          printf 'Build version: %s+%s\nFlavor: %s\nNotes: %s\n' \
+            "$VERSION" "$GITHUB_RUN_NUMBER" "$FLAVOR" "$NOTES" > "$notes"
+
+          args=(--app "$FIREBASE_APP_ID" --release-notes-file "$notes")
+          if [ -n "$TESTER_GROUPS" ]; then args+=(--groups "$TESTER_GROUPS"); fi
+          firebase appdistribution:distribute \
+            "apps/mobile/build/app/outputs/flutter-apk/app-$FLAVOR-release.apk" \
+            "${args[@]}"

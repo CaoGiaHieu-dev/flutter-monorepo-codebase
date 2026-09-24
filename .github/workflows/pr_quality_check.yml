@@ -20,20 +20,44 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "oracle"
-          java-version: "17"
-
+      # The version comes from .fvmrc — the one place the repo pins it — so
+      # CI cannot drift from what `fvm` users build with.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version-file: .fvmrc
           channel: "stable"
           cache: true
+
+      # The workspace pubspec.lock is committed, and this is the step that
+      # holds a PR to it: --enforce-lockfile fails when the lockfile no longer
+      # matches the pubspecs instead of silently re-resolving it (which the
+      # plain `flutter pub get` inside configure.dart would do). It is also
+      # all Gates 0 and 1 need — `tools/` is a workspace member — so they run
+      # straight after it, before any codegen.
+      - name: Get dependencies from the committed lockfile
+        run: flutter pub get --enforce-lockfile
+
+      # Gate 0 — the composition matches its manifest.
+      # Runs before anything else and needs no codegen: if injection.dart, an
+      # app's dependencies and the root workspace list have drifted from
+      # app_manifest.yaml, every later gate is testing something nobody
+      # declared. `verify` implies `--strict`: it also fails when a manifest
+      # names a module that is not on disk, so a release can never quietly
+      # ship without one.
+      - name: Composition in sync with manifest
+        run: dart tools/composer/composer.dart verify
+
+      # Gate 1 — architecture rules.
+      # Needs no codegen of its own: it reads imports and pubspecs, so it
+      # runs straight after `pub get` and fails in seconds on a layering
+      # mistake instead of after the full setup + analyze + test cycle.
+      # `flutter analyze` cannot see these rules at all — nothing in
+      # analysis_options.yaml knows that core must not import a feature.
+      - name: Architecture rules
+        run: dart tools/arch_check/check.dart
 
       # Each app that uses Firebase owns `lib/firebase/firebase_module.dart`,
       # which imports three generated `firebase_options_*.dart` files that
@@ -72,32 +96,16 @@ jobs:
           done
           done
 
+      # flutter clean → pub get → gen-l10n → build_runner → barrels. Gates 2+
+      # need the generated code; Gates 0 and 1 above did not.
       - name: Install dependencies and run code generation
         run: dart tools/workspace_setup/configure.dart
-
-      # Gate 0 — the composition matches its manifest.
-      # Runs before anything else and needs no toolchain beyond Dart: if
-      # injection.dart, an app's dependencies and the root workspace list have
-      # drifted from app_manifest.yaml, every later gate is testing something
-      # nobody declared. `--strict` additionally fails when a manifest names a
-      # module that is not on disk, so a release can never quietly ship without
-      # one.
-      - name: Composition in sync with manifest
-        run: dart tools/composer/composer.dart verify
-
-      # Gate 1 — architecture rules.
-      # Needs no codegen of its own: it reads imports and pubspecs, so it
-      # runs straight after setup and fails in seconds on a layering mistake
-      # instead of after a full analyze+test cycle. `flutter analyze` cannot see these rules at
-      # all — nothing in analysis_options.yaml knows that core must not
-      # import a feature.
-      - name: Architecture rules
-        run: dart tools/arch_check/check.dart
 
       # Gate 2 — static analysis.
       # Note this cannot see generated code: analysis_options.yaml excludes
       # **.freezed.dart / **.g.dart / **.config.dart / **.module.dart, so a
-      # clean analyze does not prove the app builds. Gate 3 covers that.
+      # clean analyze does not prove the app builds. The `build` job below
+      # covers that — no gate here does.
       - name: Analyze
         run: flutter analyze
 
@@ -152,3 +160,107 @@ jobs:
       - name: Unused dependency audit (advisory)
         continue-on-error: true
         run: dart tools/unused_checker/check_unused_packages.dart
+
+  # Not a gate: the proof that the app actually builds. Gate 2 cannot give it
+  # (analysis_options.yaml excludes every generated file), and the release
+  # workflows run on demand only — without this job a PR that breaks a
+  # `.freezed.dart` / `injection.config.dart` or the Gradle build merges green.
+  # It runs after the gates so a layering or analyze failure never pays for a
+  # Gradle build.
+  build:
+    name: Build the dev APK (debug)
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # AGP 9 / Gradle 9 need JDK 17+; 17 matches sourceCompatibility,
+      # targetCompatibility and jvmTarget in apps/mobile/android/app/build.gradle.kts.
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: "oracle"
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+
+      - name: Get dependencies from the committed lockfile
+        run: flutter pub get --enforce-lockfile
+
+      # The same compile-only Firebase options stub as the quality job, plus
+      # the one extra file an Android build needs: the google-services.json
+      # for the flavor being built, without which the Google Services Gradle
+      # plugin fails `processDevDebugGoogleServices`. This is the stub from
+      # docs/en/getting-started/01_setup.md section 3.2; its package_name must
+      # equal the dev application ID (applicationId + ".dev"). Real files, if
+      # a workflow ever restores them, are kept.
+      - name: Stub Firebase config for the dev build (compile only)
+        run: |
+          set -euo pipefail
+          APP=apps/mobile
+          for env in dev staging prod; do
+            file="$APP/lib/firebase/firebase_options_$env.dart"
+            if [ -f "$file" ]; then echo "kept existing $file"; continue; fi
+            cat > "$file" <<'DART'
+          // CI-only stub. Not a real Firebase configuration: analysis and unit
+          // tests never initialise Firebase, they only need this to compile.
+          // Generate the real file with `flutterfire configure`.
+          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+
+          class DefaultFirebaseOptions {
+            static FirebaseOptions get currentPlatform => const FirebaseOptions(
+                  apiKey: 'ci-stub',
+                  appId: 'ci-stub',
+                  messagingSenderId: 'ci-stub',
+                  projectId: 'ci-stub',
+                );
+          }
+          DART
+            echo "stubbed $file"
+          done
+          json="$APP/android/app/src/dev/google-services.json"
+          if [ -f "$json" ]; then
+            echo "kept existing $json"
+          else
+            mkdir -p "$(dirname "$json")"
+            cat > "$json" <<'JSON'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "local-stub"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.example.codebase.dev"
+                  }
+                },
+                "api_key": [
+                  { "current_key": "local-stub" }
+                ]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSON
+            echo "stubbed $json"
+          fi
+
+      - name: Install dependencies and run code generation
+        run: dart tools/workspace_setup/configure.dart
+
+      # From apps/mobile — the workspace root has no android/. env.dev is
+      # committed. Debug needs no release keystore.
+      - name: Build APK (dev, debug)
+        working-directory: apps/mobile
+        run: flutter build apk --flavor dev --debug --dart-define-from-file=env.dev

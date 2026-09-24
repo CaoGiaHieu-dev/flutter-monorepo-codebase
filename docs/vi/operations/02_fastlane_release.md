@@ -78,15 +78,15 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `default_app_version` | Giá trị mặc định cho câu hỏi "app version" |
 | `valid_flavors` | Danh sách flavor hợp lệ. `none` luôn được chấp nhận thêm ngoài danh sách này |
 | `app_bundle_ids.ios` / `.android` | Bundle ID **gốc**, chưa có hậu tố flavor |
-| `firebase.app_ids.<platform>.<flavor>` | Firebase App ID theo nền tảng và flavor, kèm khoá `default` cho build không flavor |
-| `firebase.credentials_map.<flavor>` | Đường dẫn file JSON service-account của Firebase theo flavor |
+| `firebase.app_ids.<platform>.<flavor>` | Firebase App ID theo nền tảng và flavor, kèm khoá `default` cho build không flavor. Flavor không có mục riêng sẽ lùi về `default` kèm cảnh báo — tức là upload vào app mặc định, nên hãy cho mọi flavor bạn phân phối một mục riêng |
+| `firebase.credentials_map.<flavor>` | Đường dẫn file JSON service-account của Firebase theo flavor; flavor không có mục riêng sẽ lùi về `default` (đúng cách lùi mà `fastlane.yml` dùng khi ghi file này) |
 | `app_store_connect.api_key_id` / `.issuer_id` | Định danh API key của App Store Connect |
 | `app_store_connect.username` / `.team_id` | Apple ID và team, dùng dự phòng cho các action không nhận API key |
 | `app_store_connect.apple_ids.<flavor>` | Apple ID dạng số theo flavor — **bắt buộc**, bước upload TestFlight sẽ lỗi *"Unknown flavor for apple-id mapping"* nếu thiếu flavor tương ứng |
 | `google_play.account_id` | Chỉ dùng để dựng link tới console |
 | `paths.firebase_testers_file` | File text chứa email tester cho Firebase App Distribution |
 | `paths.google_play_key_prod` / `_dev` | File JSON service-account của Google Play |
-| `paths.app_store_connect_key_filepath` | File API key `.p8` |
+| `paths.app_store_connect_key_filepath` | File API key `.p8`. Tên file **bắt buộc là `AuthKey_<app_store_connect.api_key_id>.p8`** — đúng tên App Store Connect đặt cho file tải về. Bước upload TestFlight chạy `xcrun altool --apiKey <id>`, lệnh này không nhận đường dẫn key: nó chỉ tìm file có đúng tên đó, trong `$API_PRIVATE_KEYS_DIR` (lane đặt biến này thành thư mục chứa file) hoặc trong `./private_keys`, `~/private_keys`, `~/.private_keys`, `~/.appstoreconnect/private_keys`. Ở local, file đặt tên khác vẫn upload được, qua một bản sao tạm đã đổi tên kèm cảnh báo; `fastlane.yml` thì từ chối |
 
 Hai khoá cũ `paths.change_log_android` / `_ios` đã bị bỏ (xem [§3](#3-danh-sách-lane)); nếu `Config.yaml` của bạn còn giữ chúng thì chúng bị bỏ qua.
 
@@ -98,6 +98,8 @@ Plugin duy nhất, `fastlane-plugin-firebase_app_distribution`, đã có sẵn t
 bundle install                         # từ thư mục gốc repo (hoặc từ apps/mobile/)
 bundle exec fastlane android build …   # như nhau từ cả hai thư mục
 ```
+
+**Hãy commit các file `Gemfile.lock`** mà lần `bundle install` đầu tiên sinh ra (mỗi Gemfile một file bên cạnh: file ở gốc và file trong `apps/mobile/`) — `.gitignore` ở gốc bỏ qua `*.lock` nhưng có ngoại lệ cho chúng, giống `pubspec.lock`. Thiếu chúng, mỗi máy và mỗi lần chạy CI sẽ resolve bản fastlane, CocoaPods và plugin mới nhất vào hôm đó. Hãy sinh chúng trên máy dùng để phát hành, rồi thêm các nền tảng khác có chạy lane, ví dụ `bundle lock --add-platform arm64-darwin x86_64-linux`, để `bundler-cache` trên runner GitHub không từ chối lockfile.
 
 Đừng chạy `fastlane add_plugin`: plugin đã có sẵn, lệnh này cần tương tác (fail trên CI), và nó sửa Pluginfile của thư mục fastlane nơi nó được chạy. Muốn thêm plugin mới thì tự thêm vào `apps/mobile/fastlane/Pluginfile`; cả hai Gemfile đều nạp nó — Gemfile ở gốc nạp qua `fastlane/Pluginfile`, điều fastlane bắt buộc phải thấy mới coi là plugin đã được thiết lập.
 
@@ -144,7 +146,7 @@ Không có gì được đọc ngầm và cũng không có gì được ghi ngư
 
 Giá trị hợp lệ do `helpers.rb` kiểm soát:
 
-- `VALID_TRACKS` = `production`, `internal`, `closed`
+- `VALID_TRACKS` = `internal`, `alpha` (closed testing), `beta` (open testing), `production` — các track có sẵn của Play Console. `closed` không phải tên track mà Play API chấp nhận. Track closed testing tự tạo trong Play Console được gọi bằng đúng tên của nó: truyền `track:<tên>` trên dòng lệnh, lane nhận nguyên văn; chỉ câu hỏi tương tác mới bị giới hạn trong danh sách này
 - `VALID_BUILD_TYPES` = `apk`, `aab`
 - `VALID_FLAVORS` = danh sách trong `Config.yaml`, cộng thêm `none`
 
@@ -388,6 +390,7 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
    bundle exec fastlane store version:1.2.0 build_number:auto track:internal
    ```
 7. **Promote** từ `internal` lên `production` trong Play Console sau khi kiểm thử xong. Lane upload với `release_status: 'draft'`, nên không có gì lên live nếu bạn không chủ động promote.
+8. **Lưu trữ symbol obfuscation.** Mọi lane đều build với `--obfuscate --split-debug-info=apps/mobile/obfuscate` và in đường dẫn đó ra sau khi build. Các file symbol không nằm trong APK/AAB/IPA, và thiếu chúng thì `flutter symbolize` không đọc được một stack trace crash nào của bản phát hành này — hãy lưu chúng cùng bản phát hành (`fastlane.yml` upload chúng thành artifact của workflow). Lần build sau sẽ ghi đè lên chúng.
 
 ### Checklist trước khi phát hành
 
@@ -408,8 +411,8 @@ Các lane iOS là thật và khá hoàn chỉnh, không phải stub:
 
 - `run_flutter_build` xoá `Podfile.lock` và chạy `pod deintegrate && pod install --repo-update` trước mỗi lần build iOS, ép giải lại dependency từ đầu.
 - Nó chọn `ios/flavors/<flavor>/ExportOptions.plist` khi có flavor, `ios/ExportOptions.plist` khi không, và chỉ cảnh báo chứ không fail nếu thiếu cả hai.
-- Nếu `flutter build ipa` archive thành công nhưng export lỗi, nó thử lại `xcrun xcodebuild -exportArchive` tối đa ba lần.
-- `distribute_to_app_store` bỏ qua `upload_to_testflight` của Fastlane và gọi thẳng `xcrun altool --upload-app`, kèm comment giải thích wrapper altool của Fastlane không tương thích với Xcode 26.
+- Nếu `flutter build ipa` archive thành công nhưng export lỗi, nó thử lại `xcrun xcodebuild -exportArchive -exportOptionsPlist <file đó>` tối đa ba lần — **chỉ khi file đó tồn tại**. Không có nó thì chẳng có gì để thử lại, nên lane dừng với lỗi nêu rõ đường dẫn còn thiếu. Hãy tạo nó cạnh flavor (`ios/flavors/<flavor>/ExportOptions.plist`, hoặc `ios/ExportOptions.plist` cho build không flavor) với tối thiểu `method` (ví dụ `app-store-connect`), `teamID` và, nếu ký thủ công, `provisioningProfiles`; file `ExportOptions.plist` nằm trong một lần export *Distribute App* thành công của Xcode là điểm xuất phát dùng được.
+- `distribute_to_app_store` bỏ qua `upload_to_testflight` của Fastlane và gọi thẳng `xcrun altool --upload-app`, kèm comment giải thích wrapper altool của Fastlane không tương thích với Xcode 26. altool được chạy với `API_PRIVATE_KEYS_DIR` là thư mục chứa `paths.app_store_connect_key_filepath`, vì nó chỉ tìm key theo tên `AuthKey_<api_key_id>.p8` ([§2](#các-trường-cần-điền)).
 
 Những phần **chưa** được nối:
 

@@ -212,22 +212,45 @@ Thứ tự resolve trong file sinh ra `injection.config.dart`:
 
 | # | Đăng ký | Ghi chú |
 |:-:|:--|:--|
-| 1 | `_coreModules` | `core_common`, `core_network`, `core_storage`, `core_database`, `core_di` |
+| 1 | `_coreModules` | `core_common`, `core_network` (đăng ký `DioFailureClassifier` vào `ErrorHandler` tại đây), `core_storage`, `core_database`, `core_di` |
 | – | `lib/` của chính app | `FirebaseModule` — `FirebaseOptions` theo flavor ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
 | 2 | `_notificationsModules` | `core_notifications` — `PushNotificationService` (eager) inject chính các `FirebaseOptions` đó, nên phải đứng sau |
 | 3 | `_shellModules` | `platform_shell_adapters` — `ILanguageStorage`, `IThemeStorage`, `AppBootStorage`, `NetworkConfig`, `SslPinningConfig`; rồi `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider` |
 | 4 | `_uiModules` | `core_base_ui` |
-| 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
+| 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | `domain_core`, rồi package domain của từng module; `data_core`, rồi package data của từng module; package feature của từng module; provider / bloc state management |
 
-Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn gắn với một bundle ID nên không thể nằm trong `platform/`. Mọi thứ khác đều đến qua một nhóm.
+Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn gắn với một bundle ID nên không thể nằm trong `platform/`. Mọi thứ khác đều đến qua một nhóm. Injectable chạy phần đăng ký *của chính package* nằm giữa hai phase, và chỗ của app nằm ở đó. Có ba vị trí là cố ý và không được "dọn dẹp": `shell` trước `ui`, database sau các migration của nó, và `notifications` nằm ngoài `core` — mỗi cái có một mục con bên dưới.
+
+### Mỗi package một module
+
+Mỗi package sở hữu một DI module tại `lib/di/module.dart`:
+
+```dart
+import 'package:injectable/injectable.dart';
+
+@InjectableInit.microPackage()
+void initMicroPackage() {}
+```
+
+`build_runner` biến nó thành `lib/di/module.module.dart`, phơi ra ví dụ `CoreStoragePackageModule`. Mỗi app lắp tất cả lại trong `apps/<id>/lib/di/injection.dart` của nó.
+
+Bạn chỉ cần gắn annotation lên class, nó tự vào module của package đó — không bao giờ phải sửa file generated.
 
 ### Vì sao `shell` đứng trước `ui`
 
 Đây là luật ngầm quan trọng nhất trong phần DI, và manifest có ghi rõ trong một comment.
 
-`core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai provider này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực trong `platform_shell_adapters` (`theme_storage_impl.dart`, `language_storage_impl.dart`), không phải trong package core nào mà các provider có thể phụ thuộc trực tiếp. Vì vậy `shell` phải khởi tạo trước — và bên trong nhóm, `platform_shell_adapters` đứng trước `platform_app_shell`, để không gì shell đăng ký có thể phụ thuộc một adapter chưa có mặt. Đảo hai nhóm là app hỏng lúc khởi động với lỗi "IThemeStorage is not registered".
+`core_base_ui` đăng ký `ThemeProvider` và `LanguageProvider`, hai provider này inject `IThemeStorage` và `ILanguageStorage`. Hai interface đó được hiện thực trong `platform_shell_adapters` (`theme_storage_impl.dart`, `language_storage_impl.dart`), không phải trong package core nào mà các provider có thể phụ thuộc trực tiếp. Vì vậy `shell` phải khởi tạo trước — và bên trong nhóm, `platform_shell_adapters` đứng trước `platform_app_shell` (`packages: [platform_shell_adapters, platform_app_shell]`), để không gì shell đăng ký có thể phụ thuộc một adapter chưa có mặt. Đảo hai nhóm là app hỏng lúc khởi động với lỗi "IThemeStorage is not registered".
 
 Đây cũng đúng là vị trí mà các đăng ký này chiếm trước khi shell thành package. Trước đây chúng là đăng ký cục bộ của app, thứ mà injectable chạy *giữa* `…Before` và `…After`; giờ `shell` chạy sớm trong `…After` — đầu tiên ở `apps/admin`, ngay sau `notifications` ở `apps/mobile`. Thứ tự app khởi động không đổi — chỉ chỗ đặt code là đổi.
+
+### Database mở sau khi các migration của nó đã đăng ký
+
+Package mở database phải chạy sau mọi thứ đóng góp migration cho nó. Mở database là `@preResolve`, và chính việc mở là thứ chạy các bước `IDatabaseMigration` đã thu thập — nên mọi bước phải được đăng ký trước khi mở. Bên trong package sở hữu, `@Order(1)` trên hàm mở giải quyết việc đó (`modules/cache/data/lib/di/module.dart`): injectable đăng ký các mục của một package theo `@Order` tăng dần, nên các bước của chính package (order mặc định 0) được đăng ký trước. Nhưng `@Order` không vươn sang module khác. `data_cache` (module mẫu `cache`) mở `CacheDatabase` của nó khi nhóm `data` khởi tạo, nên một migration do package thuộc nhóm *sau* đóng góp — ví dụ một feature — đơn giản là chưa có mặt, và bị bỏ qua mà không báo lỗi. Database của riêng bạn cũng cần `@Order(1)` y như vậy trên hàm mở. Bản thân `core_database` không đăng ký gì (nó chỉ là cơ chế), nên nó nằm trong `core` được.
+
+### Vì sao `notifications` không nằm trong `core`
+
+`PushNotificationService` là `@singleton` eager inject `FirebaseOptions`, mà `FirebaseOptions` lại do chính app đăng ký, giữa hai phase — chúng gắn với một bundle ID, nên không package platform nào được sở hữu. Đặt ở `before` thì service sẽ resolve chúng trước khi chúng tồn tại và ném lỗi lúc khởi động. App nào không gửi push notification thì bỏ nhóm này, và cũng không cần `lib/firebase/`.
 
 ### Cái bẫy thứ tự với eager singleton
 
@@ -239,6 +262,21 @@ Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn g�
 Hoặc để test đọc giúp: `test/di_smoke_test.dart` của mỗi app chạy `configureDependencies()` được sinh ra cho từng flavor, với plugin được thay bằng test double (storage trong bộ nhớ, thư mục tạm cho `path_provider`, test API Firebase core của FlutterFire và channel messaging / local-notification giả trong `apps/mobile`), rồi dựng mọi lazy singleton và resolve từng contract `core_di` cùng `AppRouter.router`. Gate 3 của CI chạy nó như test của mọi package. Đảo `shell` và `ui` là test hỏng đúng với lỗi boot bên dưới.
 
 Ví dụ thật: `ThemeProvider` của `core_base_ui` inject `IThemeStorage`, do nhóm `shell` đăng ký (qua `platform_shell_adapters`). Smoke test còn đòi `AppBootStorage`, `NetworkConfig` và `SslPinningConfig`, và đòi `DioFailureClassifier` của `core_network` đã tự đăng ký vào `ErrorHandler` trong nhóm `core`. Đó là lý do `shell` được xếp trước `ui` trong `di_groups` của mọi app — đảo lại là app hỏng lúc boot. (`NetworkConfigImpl` từng là ví dụ ở đây, vì inject `AuthLocalDataSource` từ một module chạy sau. Giờ nó resolve `ISessionGateway` ngay lúc gọi, và không còn dependency constructor nào xuyên module.)
+
+Một ca thật theo chiều an toàn. `ThemeStorageImpl` là một `@Singleton(as: IThemeStorage)` eager trong nhóm `shell`. Dependency duy nhất trong constructor của nó là `StorageManager`, do `core_storage` đăng ký ở nhóm 1 — đúng chiều. Nếu nó inject thêm, chẳng hạn, `AuthLocalDataSource` từ `data_auth` (nhóm 6), app sẽ hỏng lúc boot ở mọi lần mở. Cách sửa chỉ là một từ — đổi thành `@LazySingleton` — hoặc tốt hơn, đừng phụ thuộc vào module nào cả.
+
+Đó chính là điều `NetworkConfigImpl` làm. Nó từng inject `AuthLocalDataSource` và `RefreshTokenUseCase`, và phải lazy đúng vì lý do này. Giờ nó chỉ nhận `ILanguageStorage` từ chính nhóm của mình và đọc phiên đăng nhập qua `ISessionGateway` ngay lúc gọi:
+
+```dart
+@LazySingleton(as: NetworkConfig)
+class NetworkConfigImpl implements NetworkConfig {
+  NetworkConfigImpl(this._languageStorage);
+
+  /// Null in a build that composes no auth module.
+  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
+  // ...
+}
+```
 
 ### `AppRouter` là eager, nhưng router của nó thì không
 
@@ -310,21 +348,68 @@ Mọi điểm gom đều lùi về phương án dự phòng khi không có đón
 
 | Thiếu | Dự phòng |
 |:--|:--|
-| `IFeatureRouteModule` | danh sách rỗng |
-| `INavDestinationModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()` |
-| `DashboardRouteModule` | chính `navigationShell` — các tab không có chrome |
-| `IAppEntryLocation` | `AppRouter.fallbackLocation`: path của tab dashboard đầu tiên (`order` nhỏ nhất), nếu không có thì placeholder `/_empty_dashboard` (không phải `/`) |
+| `IFeatureRouteModule` | danh sách rỗng — không có route stack; app vẫn dựng được |
+| `INavDestinationModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()`, giữ `StatefulShellRoute` hợp lệ |
+| `DashboardRouteModule` | chính `navigationShell` — các tab không có chrome. (Trước đây là `SizedBox.shrink()`: app có tab mà không có dashboard sẽ mở ra màn hình trắng) |
+| `IAppEntryLocation` | `AppRouter.fallbackLocation`: path của tab dashboard đầu tiên (`order` nhỏ nhất), nếu không có thì placeholder `/_empty_dashboard` (không phải `/`). Không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
+| `ISignInLocation` | Không redirect tới màn đăng nhập, lúc boot hay khi đăng xuất — đúng khi không có module sở hữu phiên |
+| `IPostSignInLocation` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
 
 `initialLocation` là `AppRouter.entryLocation`: `IAppEntryLocation` đã đăng ký **chỉ ở lần chạy đầu tiên**, `fallbackLocation` ở mọi lần sau. "Lần chạy đầu tiên" là cờ riêng của shell, `AppBootStorage.viewedOnboard`, được `NavigatorWrapperWidget` gán ở lần boot đầu tiên có entry location (§6); `AppRouter.resolveEntryLocation` là phần quyết định thuần. Vì vậy người dùng quay lại mở app ở tab đầu tiên trong lúc phiên đang khôi phục, không phải ở onboarding — và nếu đã đăng xuất thì redirect khởi động đưa họ tới màn đăng nhập.
 
 Nhờ vậy, xoá một feature package không thể làm sập shell.
 
 > [!CAUTION]
-> **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Hãy đăng ký `IFeatureRouteModule` hoặc `INavDestinationModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
+> **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Thêm `$myFeatureRoute` vào đó là buộc app shell dính chặt vào feature của bạn, phá vỡ cam kết "gỡ feature ra app vẫn chạy". Hãy đăng ký `IFeatureRouteModule` hoặc `INavDestinationModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
 
 `refreshListenable: getItOrNull<ISessionRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter phân giải lại vị trí hiện tại — chạy mọi `redirect` gắn trên nó — khi trạng thái đăng nhập đổi. **Hiện không có redirect nào**: không có `redirect:` cấp cao nhất và không route mẫu nào khai báo, nên tự nó không tạo ra thay đổi nào thấy được. Nó được giữ làm điểm móc cho module nào thêm guard vào `GoRouteData.redirect` của riêng mình. Việc *điều hướng* khi đăng nhập / đăng xuất do `NavigatorWrapperWidget` làm, bằng cách lắng nghe `ISessionState.sessionChanges` (§6). `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
 
 `observers: [routeObserver]` gắn `AppRouter.routeObserver` vào navigator gốc, và go_router chuyển tiếp các observer gốc tới mọi navigator của `ShellRoute` và `StatefulShellBranch` (`notifyRootObserver`, mặc định bật) — nên chính observer mà `AppInitializer.init` trao cho `RouteAwareWidget` thấy mọi lần push và pop, kể cả trong tab. `platform/shell/app_shell/test/app_router_test.dart` kiểm tra cả hai cấp.
+
+### Entry location và fallback location
+
+Mọi lần tra cứu trong `app_router.dart` đều chịu được việc thiếu đóng góp — đây chính là thứ khiến feature gỡ được:
+
+```dart
+String get fallbackLocation {
+  final tabs = _destinations;
+  if (tabs.isNotEmpty) return tabs.first.path;
+  return _emptyDestinationPath;
+}
+
+String get entryLocation {
+  final entry = getItOrNull<IAppEntryLocation>();
+  return resolveEntryLocation(
+    entryPath: entry?.path,
+    // The shell's own first-launch flag, set by NavigatorWrapperWidget.
+    entrySeen:
+        entry != null &&
+        (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
+    fallback: fallbackLocation,
+  );
+}
+```
+
+```dart
+builder: (context, state, navigationShell) {
+  return getItOrNull<DashboardRouteModule>()?.builder(
+        context,
+        state,
+        navigationShell,
+      ) ??
+      navigationShell;
+},
+```
+
+Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép, nhưng **chỉ ở lần chạy đầu tiên**: khi `NavigatorWrapperWidget` đã ghi nhận là đã xem (cờ `AppBootStorage.viewedOnboard` của shell), mọi lần khởi động nguội sau đó đáp xuống `fallbackLocation`, nên người dùng quay lại không phải thấy onboarding trong lúc phiên đang khôi phục. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `IPostSignInLocation`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
+
+Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
+
+### Vì sao `NavigatorKeys` nằm ở `core_di`
+
+Một `ShellRoute` và các route con của nó phải tham chiếu **cùng một** instance `GlobalKey`. Shell do app shell lắp ráp; route con lại khai bên trong feature package. Đặt key ở một trong hai phía đều phạm luật — shell (`platform_app_shell`) là core nên không được phụ thuộc feature (R1), còn feature thì không được phụ thuộc shell. `core_di`, thứ mà cả hai phía đều đã phụ thuộc, là nơi trung lập.
+
+DI Hub không khai key nào mang tên feature. `nested(id)` trả về đúng cùng một instance cho cùng một id, nên shell route và route con khớp nhau mà không cần khai báo tập trung — và bề mặt công khai của `core_di` không phình thêm từ vựng sản phẩm. Cách xin một key: [`../guides/04_routing.md` § 7](../guides/04_routing.md#7-cho-module-một-back-stack-riêng).
 
 ---
 
@@ -383,6 +468,48 @@ final delegates = [
 ```
 
 `RootApp` cấp bốn đối tượng router từ `getIt<AppRouter>().router` và bổ sung `builder` toàn cục: các overlay host, `AppDialogController` và một `GestureDetector` bỏ focus bàn phím khi chạm ra ngoài. `AppMaterialWrapper` bọc mọi thứ một `builder` trả về — cho cả splash lẫn router — trong `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)`, nên trang, toast và dialog dùng chung một trần text scale.
+
+### Bản dịch của feature tới `MaterialApp` thế nào
+
+Mỗi feature tự sở hữu bản dịch của mình. App shell không hề biết tên chúng.
+
+| Ở đâu | Chứa gì |
+|---|---|
+| `modules/<f>/feature/assets/language/*.arb` | File dịch của feature |
+| `modules/<f>/feature/l10n.yaml` | Cấu hình codegen cho feature đó |
+| `modules/<f>/feature/lib/src/gen/language/` | Delegate + class được sinh ra |
+| `modules/<f>/feature/lib/di/localization.dart` | Phần implement `IFeatureLocalization` |
+| `core_base_ui` | Chuỗi global / fallback dùng chung |
+
+> [!CAUTION]
+> Một feature **tuyệt đối không** được sửa `platform/shell/app_shell/lib/presentation/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI:
+
+```dart
+// platform/shell/app_shell/lib/presentation/app_material_wrapper.dart
+// `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
+// registers `IFeatureLocalization`. Every feature package is removable, so
+// an app built without any of them must still resolve its delegates —
+// falling back to the global `core_base_ui` ones.
+final delegates = [
+  ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
+  ...AppLocalizations.localizationsDelegates,
+];
+```
+
+Chính `getAllOrEmpty` là thứ khiến feature có thể gỡ bỏ được: xoá package đi thì danh sách chỉ đơn giản là ngắn lại.
+
+Hợp đồng, trong `core_di`:
+
+```dart
+// platform/foundation/contracts/lib/src/feature_localization.dart
+/// Interface for feature localization delegates.
+/// Enables safe registration and retrieval via getAllOrEmpty<IFeatureLocalization>() in the app shell.
+abstract class IFeatureLocalization {
+  LocalizationsDelegate get delegate;
+}
+```
+
+Cách thêm một chuỗi hay một ngôn ngữ: [`../guides/09_localization_theming.md`](../guides/09_localization_theming.md).
 
 ### Cỡ chữ của hệ điều hành được tôn trọng, tối đa 2x
 

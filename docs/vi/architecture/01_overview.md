@@ -84,7 +84,7 @@ Ngoài ba trường hợp trên, mọi package trong `platform/*` **không** ph�
 
 ## 3. Vì sao dùng Pub Workspace monorepo
 
-Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc — hiện có 28 thành viên (25 package, hai app, và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build` cho cả cây.
+Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc — hiện có 31 thành viên (28 package, hai app, và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build` cho cả cây.
 
 **Cái được:** biên dịch tăng dần nhanh, không lệch version giữa các package, refactor xuyên package gọn trong một commit, và ràng buộc phân tầng ở mức vật lý — một feature package *không thể* import `data_auth` nếu `pubspec.yaml` của nó không khai.
 
@@ -134,12 +134,49 @@ submodule trở nên khả thi.
 | **DI phi tập trung theo micro-package** | Một `injection.dart` khổng lồ liệt kê mọi đăng ký | Mỗi package tự giữ `lib/di/module.dart` với `@InjectableInit.microPackage()`. Thêm package chỉ là thêm một dòng vào `app_manifest.yaml` của app (rồi `composer sync`), không phải sửa file 500 dòng. Xoá package thì các đăng ký của nó biến mất theo. |
 | **Routing phi tập trung qua hợp đồng DI** | Hardcode mọi `GoRoute` trong `app_router.dart` | Feature đăng ký [`IFeatureRouteModule`](../../../platform/foundation/contracts/lib/src/routing/routing_interfaces.dart) / `INavDestinationModule`; `AppRouter` gom bằng `getAllOrEmpty<T>()`. Xoá một feature khỏi workspace không cần đụng app shell — router chỉ gom thiếu một đóng góp và tự lùi về phương án dự phòng. |
 | **Storage key do package sở hữu** | Một object "presets" dùng chung chứa mọi key | Object dùng chung trao cho *mọi* nơi inject quyền đọc/ghi dữ liệu của *mọi* feature khác. Mỗi package tự khai `StorageValue` với key của mình trong thư mục `utils/` của chính nó. Xem [hướng dẫn storage](../guides/06_storage.md). |
-| **Truy cập database do package sở hữu** | Một database dùng chung cho cả app, inject khắp nơi | Cùng lý do: một database dùng chung phơi mọi DAO ra cho mọi nơi inject, và ép package nào khai nó phải sở hữu toàn bộ bảng. Package phụ thuộc [`IDatabaseHandle`](../../../platform/infra/database/lib/src/access/i_database_handle.dart) và chỉ nhận đúng accessor mình cần. Xem [hướng dẫn database](../guides/07_database.md). |
+| **Truy cập database do package sở hữu** | Một database dùng chung cho cả app, inject khắp nơi | Cùng lý do: một database dùng chung phơi mọi DAO ra cho mọi nơi inject, và ép package nào khai báo nó phải sở hữu toàn bộ bảng. Package phụ thuộc [`IDatabaseHandle`](../../../platform/infra/database/lib/src/access/i_database_handle.dart) và chỉ nhận đúng accessor mình cần. Xem [hướng dẫn database](../guides/07_database.md). |
 | **Constants nằm trong `utils/` của từng package** | Một thư mục `constants/` tập trung ở `core_common` | File constants tập trung sẽ thành god object: endpoint auth, channel ID của chat và key theme cùng nằm ở nơi mọi package đọc được. Đáy ngăn xếp chỉ giữ giá trị thật sự toàn cục (`EnvConstants`, `ErrorCodes`, trong `platform_kernel`). |
 
 ---
 
-## 6. Đi tiếp từ đâu
+## 6. Cô lập module — vì sao nó hoạt động, và giới hạn của nó
+
+Một team có thể chỉ checkout đúng module của mình mà vẫn build được app; cách làm nằm ở [`../guides/12_module_isolation.md`](../guides/12_module_isolation.md). Mục này giải thích vì sao điều đó khả thi, và nó không cho bạn những gì.
+
+### Điều gì khiến chuyện này khả thi
+
+Không có gì trong repo này mã hoá vị trí của một package.
+
+`composer` phân giải package **theo tên**, tìm bằng cách quét `pubspec.yaml`. `arch_check` suy ra tầng của package từ tên. `MonorepoHelper` duyệt cây thư mục. Nên một module vắng mặt đơn giản là không được tìm thấy — không tool nào giữ một danh sách để rồi lạc hậu.
+
+Đó là toàn bộ cơ chế. `composer sync` viết ra một phép lắp ráp từ *những gì có trên đĩa*, và một bản build gồm năm module cũng hợp lệ như bản gồm sáu.
+
+Bố cục thư mục lo phần còn lại: `modules/<name>/` chứa mọi tầng của một bounded context, nên ranh giới submodule và ranh giới sở hữu là cùng một đường kẻ. (Xem [bảng quyền sở hữu](#4-ai-sở-hữu-cái-gì).)
+
+### Vì sao dùng submodule, không dùng private pub registry
+
+Private registry (`dart pub publish` lên server tự dựng) là cách còn lại để giấu source của team này khỏi team kia, và nó là câu trả lời đúng cho một package có **nhiều nơi tiêu thụ và nhịp phát hành chậm** — một design system, một SDK analytics.
+
+Nó là câu trả lời sai ở đây:
+
+| | Submodule | Private registry |
+|:--|:--|:--|
+| Thay đổi xuyên module | mỗi repository một PR, review bình thường | publish, chờ, bump version, publish lại |
+| Lặp nhanh ở local | sửa thẳng source đang có sẵn | `dependency_overrides` ở từng nơi tiêu thụ |
+| Lệch version | một commit hash, đã chốt | hai app dùng hai version của cùng một module |
+| Chi phí dựng | một lệnh `git submodule add` | một server, auth, credential cho CI |
+
+Các module sản phẩm thay đổi cùng nhau và ship cùng nhau. Submodule giữ cho điều đó rẻ.
+
+### Cô lập **không** mua cho bạn những gì
+
+- **Không phải ranh giới bảo mật.** Quyền truy cập submodule là quyền trên repository. Ai đã có bản checkout thì có source; cơ chế này chặn việc vô tình phụ thuộc lẫn nhau và việc đọc lướt qua, không chặn được người cố tình.
+- **Không miễn cho bạn khỏi hợp đồng.** Một module vẫn chỉ nói chuyện với module khác qua `core_di` và package API của module kia ([hướng dẫn § 4](../guides/12_module_isolation.md#4-tạo-package-api-cho-module)). Cái thay đổi là: phá vỡ một hợp đồng giờ hiện ra thành một PR xuyên repository thay vì một chỉnh sửa âm thầm.
+- **Không phải kỷ luật tuỳ chọn.** Mọi rào chắn khiến checkout từng phần khả thi — lookup tuỳ chọn của R8, lệnh cấm import của R10, phân giải theo tên — đều ngừng hoạt động ngay khi ai đó thêm một import trực tiếp. Chính vì thế mỗi rào chắn đều đánh hỏng build chứ không chỉ nằm trong một buổi review.
+
+---
+
+## 7. Đi tiếp từ đâu
 
 | Nếu bạn muốn… | Đọc |
 |:--|:--|

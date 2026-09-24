@@ -1,11 +1,13 @@
 # Guide: Create a Domain + Data Package
 
-This guide answers **"where does my business logic and my API/database code go?"**. We add a
-`payment` capability as the worked example: `domain_payment` (pure business rules) and
-`data_payment` (the implementation that talks to the outside world).
+## Goal
 
-By the end you will have a use case a feature can call, backed by a repository that converts
-every failure into a `Result` — with no `throw` escaping to the UI.
+You add a business capability — the worked example is `payment`. You get `domain_payment` (pure business rules) and `data_payment` (the implementation that talks to the outside world). At the end a feature can call a use case, backed by a repository that converts every failure into a `Result`. No `throw` escapes to the UI.
+
+## Prerequisites
+
+- A working setup — [`../getting-started/01_setup.md`](../getting-started/01_setup.md). The tutorial builds a small slice like this one, end to end: [`../getting-started/04_first_feature_tutorial.md`](../getting-started/04_first_feature_tutorial.md).
+- What the two layers are for, and what they may import — [`../architecture/03_domain.md`](../architecture/03_domain.md), [`../architecture/04_data.md`](../architecture/04_data.md).
 
 ---
 
@@ -34,12 +36,9 @@ modules/payment/domain/lib/src/     entities/  usecases/  repositories/
 modules/payment/data/lib/src/       models/    data_sources/  repositories_impl/
 ```
 
-Each also gets an empty `utils/` — every package owns its constants there
-([`../reference/01_rules.md`](../reference/01_rules.md)).
+Each also gets an empty `utils/`: every package owns its constants there (RULE-09).
 
----
-
-## 2. Build in this order
+## 2. Plan the build order
 
 Each step only depends on the ones above it, so nothing needs rework:
 
@@ -54,14 +53,9 @@ Each step only depends on the ones above it, so nothing needs rework:
 | 7 | Data | RepositoryImpl | `payment/data/lib/src/repositories_impl/` |
 
 > [!CAUTION]
-> The domain layer is **pure Dart**. Importing `package:flutter/...`, `package:dio/...` or
-> `package:retrofit/...` anywhere under `modules/*/domain/` is forbidden — and so is any `core_*`
-> package. Allowed: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`,
-> `injectable`, `get_it`.
+> The domain layer is **pure Dart** (RULE-03). Importing `package:flutter/...`, `package:dio/...` or `package:retrofit/...` anywhere under `modules/*/domain/` is forbidden — and so is any `core_*` package. Allowed: `dart:*`, `domain_core`, `freezed_annotation`, `json_annotation`, `injectable`, `get_it`.
 
----
-
-## 3. Entity
+## 3. Write the entity
 
 Freezed, immutable, with the `const Class._()` private constructor so you can add methods later.
 Real code from
@@ -96,7 +90,7 @@ abstract class UserEntity with _$UserEntity {
 
 Entities carry **business** fields only — no `statusCode`, no `message`, no transport concerns.
 
-## 4. Params
+## 4. Write the params
 
 Also Freezed. Real code from
 [`login_params.dart`](../../../modules/auth/domain/lib/src/params/auth_params/login_params.dart):
@@ -117,7 +111,7 @@ abstract class LoginParams with _$LoginParams {
 
 Use `NoParams` from `domain_core` when a use case takes no input.
 
-## 5. Repository interface
+## 5. Declare the repository interface
 
 Named `i_<name>_repository.dart`, class prefixed `I`. Every method returns `Result<T>`:
 
@@ -138,7 +132,7 @@ abstract class IPaymentRepository {
 The interface lives in **domain**; the implementation lives in **data**. That inversion is what
 keeps domain free of Dio, Firebase and Drift.
 
-## 6. UseCase
+## 6. Write the use case
 
 `@injectable`, extends `BaseUseCase<ReturnType, Params>`, returns `Result<T>`. Real code from
 [`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`](../../../modules/auth/domain/lib/src/usecases/auth/login_usecase.dart):
@@ -170,9 +164,7 @@ class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
 one use case, one operation. Dependencies come through the constructor; never call `getIt<T>()`
 inside a use case.
 
----
-
-## 7. Model
+## 7. Write the model
 
 Freezed + `json_serializable`, `implements BaseModel<Entity>`, with a `toEntity()` mapper. Real
 code from
@@ -231,7 +223,7 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 `@JsonKey` absorbs the server's naming so the entity never has to. `unknownEnumValue` keeps an
 unexpected server enum from throwing.
 
-## 8. DataSource
+## 8. Write the data source
 
 Directories are `data_sources/remote/` (Retrofit) and `data_sources/local/` (storage / DB) —
 **snake_case, plural, never `datasources/`**.
@@ -253,7 +245,7 @@ Directories are `data_sources/remote/` (Retrofit) and `data_sources/local/` (sto
 
 DataSources let exceptions bubble up — the repository is the only place that catches.
 
-### Owning storage keys
+### Own your storage keys
 
 If your package persists key-value data, it declares its **own** `StorageValue` from the injected
 `StorageManager`. `core_storage` provides the mechanism only; it defines no keys.
@@ -305,7 +297,7 @@ class AuthLocalDataSource {
 > fresh instance with an **empty in-memory cache** — synchronous getters then return `null` even
 > though the value is on disk. More in [`06_storage.md`](06_storage.md).
 
-## 9. RepositoryImpl
+## 9. Implement the repository
 
 Extends `IBaseRepository` from `data_core` and wraps every call in `execute()` (async) or
 `executeSync()` (sync). Real code from
@@ -337,7 +329,6 @@ class CacheEntryRepositoryImpl extends IBaseRepository
 Note the shape: the data source returns **models**, and `mapper` converts them to entities at
 this boundary. Nothing above this layer ever sees a `CacheEntryModel`.
 
-
 `execute<R, T>` takes the raw operation and an optional `mapper` to convert Model → Entity:
 
 ```dart
@@ -351,7 +342,6 @@ return execute<BaseEntity<UserModel>, UserEntity>(
 ```
 
 The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is the envelope and `mapper` unwraps it. `successCondition` turns a 200 with an error body (or no `data`) into a `Failure` before `mapper` runs — which is what makes the `!` safe.
-
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see the outer `catch (e)` of `execute` and of `executeSync` in
@@ -381,9 +371,7 @@ Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError
 > exceptions (`ErrorHandler.registerClassifier`, from your package's DI module — the way
 > `DioFailureClassifier` does) before relying on error codes in the UI.
 
----
-
-## 10. Wire it up
+## 10. Declare the dependencies and regenerate
 
 Declare dependencies explicitly in both `pubspec.yaml` files. The generator already wrote the
 starting set — for the data package, the three workspace packages below plus `injectable`,
@@ -436,21 +424,6 @@ dart tools/barrel_generator/generate.dart modules/payment/data/lib
 flutter analyze
 ```
 
-### Checklist
-
-- [ ] Domain imports no Flutter / Dio / Retrofit
-- [ ] Entity is Freezed with `const Class._()`
-- [ ] Repository interface in domain, implementation in data
-- [ ] UseCase is `@injectable`, returns `Result<T>`, dependencies via constructor
-- [ ] Model has `.toEntity()` and `implements BaseModel<E>`
-- [ ] DataSource returns Models, exposes no generated types, directory is `data_sources/`
-- [ ] RepositoryImpl extends `IBaseRepository`, uses `execute()` / `executeSync()`
-- [ ] Errors go through `ErrorHandler.handleError` — no `AppFailure.fromException()`, no escaping `throw`
-- [ ] Storage owner is a singleton with `@PostConstruct(preResolve: true)`, keys in `utils/`
-- [ ] Every dependency declared explicitly and in the right section
-
----
-
 ## 11. Consume it from a feature
 
 A feature reaches this capability through the **use case**, never through `data_payment` —
@@ -501,7 +474,7 @@ class PaymentProvider extends BaseProvider<PaymentEntity> {
 `executeOperation` unwraps the `Result` and drives the loading / error / success states. A BLoC
 takes the use case the same way (`PaymentBloc(this._chargeUseCase) : super(...)`) but unwraps the
 `Result` by hand in each handler — see
-[`03_state_management.md`](03_state_management.md) §3.5.
+[`03_state_management.md`](03_state_management.md) § 7.
 
 **4. Regenerate** — the controller's constructor changed, so its DI registration did too:
 
@@ -519,8 +492,45 @@ now builds the whole chain: provider ← use case ← `IPaymentRepository` ← d
 
 ---
 
+## Verify
+
+```bash
+flutter analyze                                       # No issues found!
+grep -rn "package:flutter" modules/payment/domain/lib # no output: the domain is pure Dart
+dart tools/arch_check/check.dart                      # ✅ … R2 (pure domain), R3 (no feature → data import), R5 (declared deps)
+dart tools/unused_checker/check_unused_packages.dart  # ✅ Success! No unused packages found …
+cd apps/mobile && flutter test test/di_smoke_test.dart   # IPaymentRepository and the use case resolve
+```
+
+Test the repository with a hand-written fake data source (RULE-61), as the tutorial's `notes_repository_impl_test.dart` does: one test that maps models to entities, one where the data source throws and the repository returns a `Failure`.
+
+Review checklist:
+
+- [ ] Domain imports no Flutter / Dio / Retrofit
+- [ ] Entity is Freezed with `const Class._()`
+- [ ] Repository interface in domain, implementation in data
+- [ ] UseCase is `@injectable`, returns `Result<T>`, dependencies via constructor
+- [ ] Model has `.toEntity()` and `implements BaseModel<E>`
+- [ ] DataSource returns Models, exposes no generated types, directory is `data_sources/`
+- [ ] RepositoryImpl extends `IBaseRepository`, uses `execute()` / `executeSync()`
+- [ ] Errors go through `ErrorHandler.handleError` — no `AppFailure.fromException()`, no escaping `throw`
+- [ ] Storage owner is a singleton with `@PostConstruct(preResolve: true)`, keys in `utils/`
+- [ ] Every dependency declared explicitly and in the right section
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `Undefined name 'PaymentEntity'` in the data or feature package | The domain barrel does not export the new file yet | Run the barrel generator for `modules/payment/domain/lib` after `build_runner` (step 10) |
+| `arch_check` R2 fails | A domain file imports Flutter, Dio, Retrofit or a `core_*` package | Move that code to the data or feature layer (step 2) |
+| `arch_check` R5 fails, or `check_unused_packages` reports an entry | A dependency is imported but not declared, or declared but unused | Declare it under `dependencies:`, or drop it (step 10) |
+| A `401` or network error crashes the screen | Something threw past the repository | Wrap the call in `execute()` (step 9) |
+| A release build shows *"Unknown error occurred"* for every Firebase error | `ErrorHandler` has no Firebase branch | Register an `ErrorClassifier` (step 9) |
+| `IPaymentRepository is not registered` at boot | `data_payment` is not composed into the app, or codegen is stale | Check the module's `layers:` in `app_manifest.yaml`, `composer sync`, then `build_runner` |
+
 ## Related
 
+- Rules: RULE-03 (pure domain), RULE-06 (declared dependencies), RULE-40 (`data_sources/`), RULE-41 (models, not entities), RULE-42 (`execute()`), RULE-43 (`ErrorHandler`), RULE-44 / RULE-45 (storage ownership), RULE-49 (entities and use cases) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`01_new_feature.md`](01_new_feature.md) — the feature side in full (routes, localisation, navigator)
 - [`06_storage.md`](06_storage.md) — key-value storage in depth
 - [`07_database.md`](07_database.md) — relational data with Drift

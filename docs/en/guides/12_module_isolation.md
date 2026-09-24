@@ -1,24 +1,18 @@
 # Module Isolation with Git Submodules
 
-**This file answers:** how does a team check out only its own module, build the whole app from it, and never see another team's source?
+## Goal
 
-**After reading you can:** split a module into its own repository, work in a partial checkout, and know exactly which mistake CI is protecting you from.
+A team checks out only its own module, builds the whole app from it, and never sees another team's source. You split a module into its own repository, work in a partial checkout, restore the composition before you commit, and give a module an API package other features can depend on.
 
----
+## Prerequisites
 
-## 1. What makes this possible
-
-Nothing in this repository encodes where a package lives.
-
-`composer` resolves packages **by name**, discovered by scanning for `pubspec.yaml`. `arch_check` derives a package's layer from its name. `MonorepoHelper` walks the tree. So a module that is absent is simply not found — no tool has a list to fall out of date.
-
-That is the whole mechanism. `composer sync` writes a composition from *what is on disk*, and a build composed of five modules is as valid as one composed of six.
-
-The directory layout does the rest: `modules/<name>/` holds every layer of one bounded context, so a submodule boundary and an ownership boundary are the same line. (See [the ownership table](../architecture/01_overview.md#4-who-owns-what).)
+- A full checkout that builds — [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+- **Why this works at all**, why submodules beat a private pub registry here, and what isolation does *not* buy you — [`../architecture/01_overview.md` § 6](../architecture/01_overview.md#6-module-isolation--why-it-works-and-its-limits).
+- Who owns what, module by module — [`../architecture/01_overview.md` § 4](../architecture/01_overview.md#4-who-owns-what).
 
 ---
 
-## 2. Extracting a module into its own repository
+## 1. Extract a module into its own repository
 
 Done once per module, by whoever owns the monorepo. The example is `auth`.
 
@@ -46,9 +40,7 @@ Nothing else changes. `app_manifest.yaml` still says `- { id: auth, layers: [api
 > [!IMPORTANT]
 > Do this **after** the module is stable. Moving a file between two modules stops being a rename and becomes a delete-plus-add across two repositories, with the review split in half.
 
----
-
-## 3. Working in a partial checkout
+## 2. Work in a partial checkout
 
 A developer on the auth team clones the monorepo without other teams' sources:
 
@@ -62,7 +54,13 @@ dart tools/workspace_setup/configure.dart     # pub get + l10n + codegen + barre
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
-**Why the `bootstrap` step.** `composer.dart` imports `package:path` and `package:yaml`, so it only runs in a resolved workspace — and a fresh partial checkout does not resolve: the committed root `workspace:` list and each app's path dependencies still name every module, an uninitialised submodule is an empty directory with no `pubspec.yaml`, and `flutter pub get` refuses the whole workspace over it (*"No workspace packages matching `modules/home/feature`"*). `tools/composer/bootstrap.dart` breaks that cycle. It imports no package, so it runs with no `.dart_tool/` at all, and it only **removes** — from the `composer:managed` regions of the root `pubspec.yaml` and of each `apps/<id>/pubspec.yaml` — every entry whose directory has no `pubspec.yaml`. `sync` then rewrites those regions, and each app's `injection.dart`, properly from the manifests. On a full checkout `bootstrap` finds nothing to prune and writes nothing, so it is safe to run every time. `--dry-run` shows what it would prune.
+**Why the `bootstrap` step.** `composer.dart` imports `package:path` and `package:yaml`, so it only runs in a resolved workspace. A fresh partial checkout does not resolve:
+
+- the committed root `workspace:` list and each app's path dependencies still name every module;
+- an uninitialised submodule is an empty directory with no `pubspec.yaml`;
+- so `flutter pub get` refuses the whole workspace (*"No workspace packages matching `modules/home/feature`"*).
+
+`tools/composer/bootstrap.dart` breaks that cycle. It imports no package, so it runs with no `.dart_tool/` at all. It only **removes** entries, and only from the `composer:managed` regions of the root `pubspec.yaml` and of each `apps/<id>/pubspec.yaml`: every entry whose directory has no `pubspec.yaml`. `sync` then rewrites those regions, and each app's `injection.dart`, properly from the manifests. On a full checkout `bootstrap` finds nothing to prune and writes nothing, so it is safe to run every time. `--dry-run` shows what it would prune.
 
 `bootstrap` refuses — writing nothing, exit 1 — when a module that **is** present declares a hand-written path dependency on one that is not (`modules/auth/data` without `modules/auth/domain`, say): no managed region can drop that line, so pub would still fail. Initialise the missing submodule as well.
 
@@ -74,9 +72,7 @@ The app runs. It has no home screen, no settings, no dashboard — and it boots,
 
 Other teams' code is not merely unbuilt — it is **not on the disk**, and `modules/home` is an empty directory rather than source: `.gitmodules` records only its path and URL, and the pinned commit is a gitlink entry in the superproject's tree.
 
----
-
-## 4. The one hazard, and what catches it
+## 3. Restore the composition before you commit
 
 `composer sync` — and `bootstrap` before it — edits files that are **committed**:
 
@@ -120,34 +116,7 @@ And if it is committed anyway, **CI Gate 0 fails**. `composer verify` regenerate
 
 That is the safety net worth understanding: the local state is allowed to be partial, the committed state is not, and a machine — not a reviewer — holds the difference.
 
----
-
-## 5. Why not a private pub registry
-
-A private registry (`dart pub publish` to a self-hosted server) is the other way to hide one team's source from another, and it is the right answer for a package with **many consumers and a slow release cadence** — a design system, an analytics SDK.
-
-It is the wrong answer here:
-
-| | Submodule | Private registry |
-|:--|:--|:--|
-| Cross-module change | one PR per repository, ordinary review | publish, wait, bump, publish again |
-| Local iteration | edit the source you already have | `dependency_overrides` in every consumer |
-| Version skew | a commit hash, resolved | two apps on two versions of the same module |
-| Setup cost | one `git submodule add` | a server, auth, CI credentials |
-
-Product modules change together and ship together. Submodules keep that cheap.
-
----
-
-## 6. What isolation does *not* buy you
-
-- **Not a security boundary.** Submodule access is repository permissions. Someone with a checkout has the source; this stops accidental coupling and casual reading, not a determined reader.
-- **Not freedom from contracts.** A module still talks to others only through `core_di` and the other module's API package (§ 7). What changes is that breaking a contract is now visible as a cross-repository PR rather than a silent edit.
-- **Not optional discipline.** Every guardrail that made partial checkouts possible — R8's optional lookups, R10's import ban, resolution by name — stops working the moment somebody adds a direct import. Which is why each one fails the build rather than a review.
-
----
-
-## 7. A module's API package
+## 4. Create a module API package
 
 `core_di` holds only contracts the platform itself needs, named for what it needs — a session (`ISessionState`), a location (`ISignInLocation`, `IPostSignInLocation`). A contract that exists so *one feature can reach another module* belongs to that module: its API package, `modules/<id>/api`, named `<id>_api`. The samples ship two — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) and `home_api` (`HomeNavigator`). No generator type builds one; it is three files.
 
@@ -170,12 +139,38 @@ What `arch_check` holds you to:
 - **R8** — a type declared in an API package and implemented only under `modules/` is resolved with `getItOrNull` outside its module.
 - **R1 / R10** — no platform package and no app file (bar `injection.dart`) imports it.
 
-The `api` layer needs no `di_groups` entry: `composer` makes it a workspace member, never an app dependency or an `injection.dart` line. In a partial checkout (§ 3) a module you import an API from must be checked out too — its API package lives inside it. `remove_sample <id>` keeps an API package that another package still imports, reports who, and leaves the manifest entry as `{ id: <id>, layers: [api] }`; run it again once nothing imports the package.
+The `api` layer needs no `di_groups` entry: `composer` makes it a workspace member, never an app dependency or an `injection.dart` line. In a partial checkout (step 2) a module you import an API from must be checked out too — its API package lives inside it. `remove_sample <id>` keeps an API package that another package still imports, reports who, and leaves the manifest entry as `{ id: <id>, layers: [api] }`; run it again once nothing imports the package.
 
 ---
 
+## Verify
+
+```bash
+# In a partial checkout
+flutter analyze                             # No issues found! — the check that means something locally
+cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev   # boots without the absent modules
+git status                                  # before committing: no composition file listed
+
+# On a full checkout (what CI runs)
+dart tools/composer/composer.dart verify    # ✅ Generated artifacts are up to date.
+dart tools/arch_check/check.dart            # R1, R3, R8, R10 hold
+```
+
+`composer verify` **fails** in a partial checkout by design (*"N declared package(s) missing from disk"*). Run it on a full checkout, or leave it to CI Gate 0.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | The committed composition names a module that is not on disk | `dart tools/composer/bootstrap.dart`, then `pub get` and `composer sync` (step 2) |
+| `bootstrap` exits 1 and writes nothing | A present module has a hand-written path dependency on an absent one | Initialise that submodule too (step 2) |
+| `pub get` still fails after `sync` | `sync` ran with `--app mobile`, leaving `apps/admin/pubspec.yaml` pointing at missing modules | Run `sync` for every app (step 2) |
+| CI Gate 0 fails on your PR | A partial composition was committed | Restore the five files and push again (step 3) |
+| `composer verify` fails locally | You are in a partial checkout | Expected; run it on a full checkout (*Verify*) |
+| A consumer cannot see a type from `<id>_api` | The API package's barrel does not export it, or the module is not checked out | Run the barrel generator; initialise the module (step 4) |
+
 ## Related
 
-- [Architecture overview — who owns what](../architecture/01_overview.md)
-- [Tooling reference — `composer`](../reference/03_tooling.md)
-- [Rules — feature removability](../reference/01_rules.md)
+- Rules: RULE-04 (reach a module only through its `<id>_api`), RULE-05 (every module is removable), RULE-12 (optional lookups), RULE-16 (composition via manifests) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/01_overview.md` § 6](../architecture/01_overview.md#6-module-isolation--why-it-works-and-its-limits) — why isolation works, and its limits
+- [`../reference/03_tooling.md`](../reference/03_tooling.md) — `composer` and `bootstrap`

@@ -1,46 +1,30 @@
 # State Management
 
-**This guide answers:** which state-management branch should I use for a screen, and how do I write a controller in it?
+## Goal
 
-**After reading you can:** pick Provider or BLoC deliberately, wire a controller through DI at route level, render its states, and react to side effects — without hitting the traps each branch has.
+You write a screen controller in either branch — Provider or BLoC. It is created at the route, runs a use case, renders every state and reacts to side effects. At the end you know which traps each branch has and how to avoid them.
+
+## Prerequisites
+
+- A feature package to put the controller in — [`01_new_feature.md`](01_new_feature.md).
+- A use case to call — [`02_new_domain_data.md`](02_new_domain_data.md).
+- **How the two branches differ**, row by row, and why they are not at parity: [`../architecture/02_core.md` § 10](../architecture/02_core.md#10-state-management--two-branches-not-at-parity). Read it once before you pick.
 
 ---
 
-## 1. The honest comparison
-
-This template ships **two** state-management branches. They now share the core of the job — run a use case, show loading, settle its `Result` — but they are **still not at parity**, and picking one without knowing where they differ is the most common source of frustration.
-
-| | `provider_state_management` | `bloc_state_management` |
-|---|---|---|
-| Base class | `BaseProvider<T>` | `BaseBloc<Event, State>` / `BaseCubit<State>` |
-| Lines of shared machinery | Full: `StateManager`, `OperationExecutor`, `LoadMoreMixin`, `ensureInitialized` | `BlocResultMixin` / `CubitResultMixin` (`emitResult`) — nothing else; the base classes add nothing over `Bloc` / `Cubit` |
-| `Result<T>` unwrapping | Automatic via `executeOperation` | Automatic via `emitResult` **for a `BlocViewState<T>` screen**; by hand for a custom state |
-| `AppFailure` → UI error mapping | `errorStateBuilder` hook | None — `error(AppFailure)` carries it as-is; map it in the view, or by hand into a custom state |
-| Loading state | Set automatically (skipped once data is loaded) | `emitResult` emits it (skipped while a `success` is on screen) |
-| An operation that **throws** | Propagates — the repository's `execute()` is what turns exceptions into `Result.failure` | `emitResult` catches it: `ErrorHandler.handleError` → `error(...)`, and the raw error goes to `addError` (`BlocObserver.onError`) |
-| Global hooks | `OperationGlobalConfig` (`onStart`/`onSuccess`/`onFailure`/`onFinish`) | None |
-| Pagination | `LoadMoreMixin` | None |
-| State type | `ViewStateModel<T>` wrapping `ViewState` | `BlocViewState<T>` (optional) or your own Freezed state |
-| Declarative side effects | `ProviderStateListener` / `MultiProviderStateListener` | `BlocListener` (from `flutter_bloc`) |
-
-> [!WARNING]
-> `BaseBloc` and `BaseCubit` are still **extension points only** — they add nothing over `Bloc` / `Cubit`. The `Result` unwrap / loading emit lives in a separate mixin, `BlocResultMixin<T>` (or `CubitResultMixin<T>`), and only for a screen whose state is `BlocViewState<T>` (§3.5). A Bloc with its own Freezed state writes that trio by hand in each handler, and neither branch-B mixin offers global hooks, an `errorStateBuilder` or pagination.
-
-### Choosing
+## 1. Choose a branch
 
 - **Pick Provider** when you want the automation: CRUD screens, forms, list + detail, anything where `executeOperation` removes real boilerplate.
-- **Pick BLoC** when event modelling itself is the value: complex flows with many discrete triggers, replayable/traceable event streams, or when the team already standardises on BLoC.
-- **Do not** pick BLoC expecting all of Provider's machinery. `emitResult` covers the load → settle path of a `BlocViewState<T>` screen; global hooks, `errorStateBuilder`, `LoadMoreMixin` and `ensureInitialized` have no BLoC counterpart.
+- **Pick BLoC** when event modelling itself is the value: complex flows with many discrete triggers, replayable or traceable event streams, or a team that already standardises on BLoC.
+- **Do not** pick BLoC expecting all of Provider's machinery. `emitResult` covers the load → settle path of a `BlocViewState<T>` screen. Global hooks, `errorStateBuilder`, `LoadMoreMixin` and `ensureInitialized` have no BLoC counterpart.
 
-Both branches are registered in DI and can coexist in the same app — `feature_auth` uses Provider, `feature_home` uses BLoC.
+Both branches are registered in DI and can coexist in the same app: `feature_auth` uses Provider, `feature_home` uses BLoC. Steps 2–5 are the Provider branch; steps 6–8 are the BLoC branch; step 9 applies to both.
 
 ---
 
-## 2. The Provider branch
+## 2. Write a Provider controller
 
-### 2.1 A real controller
-
-`modules/auth/feature/lib/src/provider/auth_provider.dart`:
+Extend `BaseProvider<T>` and run each use case through `executeOperation`. A real controller, `modules/auth/feature/lib/src/provider/auth_provider.dart`:
 
 ```dart
 @lazySingleton
@@ -74,9 +58,9 @@ class AuthProvider extends BaseProvider<UserEntity>
 }
 ```
 
-Note `AuthProvider` is `@lazySingleton` because it is a **global** controller (session state outlives any one screen). A screen-scoped controller must be `@injectable` — see §4.
+`AuthProvider` is `@lazySingleton` because it is a **global** controller: session state outlives any one screen. A screen-scoped controller is `@injectable` (step 9).
 
-### 2.2 `OperationConfig`
+### Configure the operation
 
 `platform/state/provider/lib/src/management/operation_config.dart`:
 
@@ -98,11 +82,17 @@ class OperationConfig<R, T> {
 }
 ```
 
-`executeOperation` runs the whole flow: global `onStart` hook → optional loading state → `await operation()` → dispatch across the four `Result` branches → global `onFinish` hook.
+`executeOperation` runs the whole flow, in this order:
 
-#### When the use case returns something else — `convert:`
+1. the global `onStart` hook;
+2. an optional loading state;
+3. `await operation()`;
+4. dispatch across the four `Result` branches;
+5. the global `onFinish` hook.
 
-`executeOperation` is generic in the operation's result type `R`; the provider holds `T`. When they differ — the use case returns a `UserEntity`, the provider shows a `ProfileViewData` — pass `convert`, a named argument of `executeOperation` itself (not of `OperationConfig`):
+### Convert a result of another type — `convert:`
+
+`executeOperation` is generic in the operation's result type `R`, while the provider holds `T`. They can differ: the use case returns a `UserEntity`, the provider shows a `ProfileViewData`. Then pass `convert`. It is a named argument of `executeOperation` itself, not of `OperationConfig`:
 
 ```dart
 // platform/state/provider/lib/src/base/base_provider.dart
@@ -143,11 +133,13 @@ How the success value becomes the provider's data (`OperationExecutor._handleSuc
 > }
 > ```
 >
-> Once the provider holds data, subsequent calls **skip** the loading state. That is deliberate for pull-to-refresh (you keep showing stale content instead of flashing a spinner), but there is **no flag to override it**. If a refresh must show a spinner, call `updateState(state: const ViewState.loading())` yourself first — which is exactly what `AuthProvider.login` does above.
+> Once the provider holds data, later calls **skip** the loading state. That is deliberate for pull-to-refresh: you keep showing stale content instead of flashing a spinner. There is **no flag to override it**. If a refresh must show a spinner, call `updateState(state: const ViewState.loading())` yourself first — exactly what `AuthProvider.login` does above.
 
-### 2.3 `ViewState` vs `ViewStateModel<T>`
+## 3. Render the Provider states
 
-Two distinct types in `platform/state/provider/lib/src/base/view_state_model.dart`:
+### Read the phase and the data
+
+Two distinct types live in `platform/state/provider/lib/src/base/view_state_model.dart`:
 
 ```dart
 @freezed
@@ -174,9 +166,11 @@ abstract class ViewStateModel<T> with _$ViewStateModel<T> {
 }
 ```
 
-So `provider.viewState.state` is the phase and `provider.viewState.data` is the payload. Convenience getters (`isLoading`, `isSuccess`, `isError`, `isInitial`) are exposed both on `ViewState` and, via extension, on `ViewStateModel<T>`.
+So `provider.viewState.state` is the phase and `provider.viewState.data` is the payload. The getters `isLoading`, `isSuccess`, `isError` and `isInitial` exist on `ViewState` and, through an extension, on `ViewStateModel<T>`.
 
-`ErrorState` is extensible: a feature declares its own Freezed union and maps into it through `errorStateBuilder`. The union must **extend `IErrorState`** — the `ErrorState.custom()` variant, which is what makes it an `ErrorState` at all — and, because it extends a class, needs the private `const X._()` constructor. The real one:
+### Map a failure to your own error state
+
+`ErrorState` is extensible. A feature declares its own Freezed union and maps into it through `errorStateBuilder`. The union must **extend `IErrorState`** — the `ErrorState.custom()` variant, which is what makes it an `ErrorState` at all. Because it extends a class, it needs the private `const X._()` constructor. The real one:
 
 ```dart
 // modules/auth/feature/lib/src/provider/auth_error_state.dart
@@ -200,9 +194,9 @@ abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
 }
 ```
 
-`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`: it turns an `AppFailure` into one of these, or `null` for a generic error.
+`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`. It turns an `AppFailure` into one of these, or `null` for a generic error.
 
-### 2.4 Rendering with `BaseViewWidget`
+### Render with `BaseViewWidget`
 
 `BaseViewWidget<P, T>` selects on the provider's `ViewStateModel<T>` and renders per phase. Variants exist up to `BaseViewWidget6` (six providers), plus `PaginatedViewWidget*` for `PaginatedEntity<T>`.
 
@@ -217,11 +211,13 @@ BaseViewWidget<ProfileProvider, UserEntity>(
 > [!WARNING]
 > **Omit `emptyWidget` and you get a blank screen.** The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()`.
 >
-> They are intentionally minimal: `provider_state_management` is a **core** package, and core must never depend on a feature package — so it cannot reach for the branded widgets in `core_ui_kit`. See `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
+> They are minimal on purpose. `provider_state_management` is a **core** package, and core never depends on a feature package, so it cannot reach the branded widgets in `core_ui_kit`. See `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
 
-### 2.5 Side effects with `ProviderStateListener`
+## 4. React to side effects with `ProviderStateListener`
 
-Use a listener for things that are **not** rendering — toasts, navigation, dialogs. It subscribes in `initState`, cancels in `dispose`, and only fires on real state transitions — with one exception: a **repeated identical error** is passed through. The provider re-emits an equal error state only for a new failed operation (a second wrong password), and each of those must reach `onError`. A `listenWhen` that demands `previous.state != current.state` would filter that repeat straight back out, so let errors through explicitly:
+Use a listener for anything that is **not** rendering: toasts, navigation, dialogs. It subscribes in `initState` and cancels in `dispose`. It fires only on real state transitions, with one exception: a **repeated identical error** is passed through.
+
+Why the exception: the provider re-emits an equal error state only for a new failed operation, such as a second wrong password. Each of those must reach `onError`. A `listenWhen` that demands `previous.state != current.state` would filter that repeat back out, so let errors through explicitly:
 
 ```dart
 ProviderStateListener<AuthProvider, UserEntity>(
@@ -251,13 +247,15 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-An illustrative listener, as a screen inside `feature_auth` would write it — note it navigates through **Navigator interfaces resolved with `getItOrNull`**, never by hardcoding a path. See [`04_routing.md`](04_routing.md). The app shell does the same job without this widget: [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`, so it subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation` — it uses no module navigator. (`AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages.)
+This is an illustrative listener, as a screen inside `feature_auth` would write it. It navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages.
+
+The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 
-### 2.6 Async init
+## 5. Run async setup before the screen trusts the provider
 
-Override `initialize()` for setup that must finish before the screen trusts the provider, then `await provider.ensureInitialized()`:
+Override `initialize()` for setup that must finish first, then `await provider.ensureInitialized()`:
 
 ```dart
 @override
@@ -273,11 +271,9 @@ Future<void> initialize() async {
 
 ---
 
-## 3. The BLoC branch
+## 6. Write a BLoC
 
-### 3.1 A real BLoC
-
-`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`:
+Extend `BaseBloc<Event, State>`. A real one, `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`:
 
 ```dart
 @injectable
@@ -314,9 +310,9 @@ class HomeProfileBloc
 }
 ```
 
-Note the `close()` override cancelling the subscription — with no base-class help, resource cleanup is entirely your responsibility.
+Note the `close()` override that cancels the subscription. The base class does not help here: resource cleanup is entirely yours.
 
-### 3.2 Freezed event rules
+### Declare the events as private Freezed subclasses
 
 `modules/home/feature/lib/src/bloc/home_profile_event.dart`:
 
@@ -332,10 +328,10 @@ abstract class HomeProfileEvent with _$HomeProfileEvent {
 }
 ```
 
-Three non-negotiable rules (RULE-51, RULE-52):
+Three rules apply (RULE-51, RULE-52):
 
 1. **Event subclasses are private** — `_HomeProfileStarted`, never `HomeProfileStarted`. They must not leak outside the package.
-2. **`part` / `part of` layout** so the BLoC can name those private subclasses:
+2. **Use the `part` / `part of` layout**, so the BLoC can name those private subclasses:
    ```dart
    part 'home_profile_event.dart';
    part 'home_profile_bloc.freezed.dart';
@@ -343,7 +339,7 @@ Three non-negotiable rules (RULE-51, RULE-52):
 3. **Handlers take `(event, emit)` and are `async`.**
 
 > [!CAUTION]
-> Never register a **synchronous** closure that kicks off async work:
+> Never register a **synchronous** closure that starts async work:
 >
 > ```dart
 > // WRONG — the handler returns immediately, then emit() fires too late
@@ -354,54 +350,11 @@ Three non-negotiable rules (RULE-51, RULE-52):
 >
 > The sync handler completes at once, so the later `emit` throws
 > `emit was called after an event handler completed normally`.
-> Register an `async` method reference instead, as in §3.1.
+> Register an `async` method reference instead, as in the BLoC above.
 
-### 3.3 `BlocViewState<T>`
+## 7. Settle a use case with `emitResult`
 
-`platform/state/bloc/lib/src/bloc_view_state.dart`:
-
-```dart
-@freezed
-abstract class BlocViewState<T> with _$BlocViewState<T> {
-  const BlocViewState._();
-  const factory BlocViewState.initial() = _Initial<T>;
-  const factory BlocViewState.loading() = _Loading<T>;
-  const factory BlocViewState.success(T data) = _Success<T>;
-  const factory BlocViewState.error(AppFailure error) = _Error<T>;
-
-  T? get data => mapOrNull(success: (s) => s.data);
-}
-```
-
-The name avoids a collision with the Provider branch's `ViewState`. Both barrels are public, so a file importing both packages must not meet two types with the same name. The two are genuinely different:
-
-| | Provider `ViewState` | `BlocViewState<T>` |
-|---|---|---|
-| Generic | No | Yes |
-| Variants | 5 (adds `loadingMore`) | 4 |
-| Carries data | No — data sits on `ViewStateModel<T>` | Yes — `success(T data)` |
-| Error payload | `error({ErrorState? error})`, nullable | `error(AppFailure error)`, required |
-
-`BlocViewState` is **optional**. A screen with richer needs should declare its own Freezed state and use `BaseBloc<Event, CustomState>`, keeping variants in `_state.dart` under the same `part` rules.
-
-### 3.4 Rendering
-
-```dart
-BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
-  builder: (context, state) => state.when(
-    initial: () => const SizedBox.shrink(),
-    loading: () => const Center(child: CircularProgressIndicator.adaptive()),
-    success: (user) => Text(user?.displayName ?? ''),
-    error: (failure) => Text(failure.message),
-  ),
-)
-```
-
-Dispatch events with `context.read<HomeProfileBloc>().add(const HomeProfileEvent.refreshed())`.
-
-### 3.5 Unwrapping `Result` — `emitResult`
-
-`platform/state/bloc/lib/src/result_emitter.dart` is the BLoC branch's `executeOperation`. Mix `BlocResultMixin<T>` into a Bloc whose state is `BlocViewState<T>` and hand each handler's `emit` to `emitResult`:
+`platform/state/bloc/lib/src/result_emitter.dart` is the BLoC branch's `executeOperation`. Mix `BlocResultMixin<T>` into a Bloc whose state is `BlocViewState<T>`, and hand each handler's `emit` to `emitResult`:
 
 ```dart
 @injectable
@@ -420,7 +373,7 @@ class OrdersBloc extends BaseBloc<OrdersEvent, BlocViewState<List<OrderEntity>>>
 }
 ```
 
-A Cubit mixes in `CubitResultMixin<T>` instead and calls `emitResult(() => ...)` — no emitter, it emits through its own `emit`.
+A Cubit mixes in `CubitResultMixin<T>` instead and calls `emitResult(() => ...)`. It takes no emitter: it emits through its own `emit`.
 
 What `emitResult` emits, row by row:
 
@@ -433,12 +386,14 @@ What `emitResult` emits, row by row:
 | `Result.none` / `Result.cancel` | the state from before the call, if `loading` was emitted — never left stuck on `loading`; otherwise nothing |
 | The operation throws | `error(ErrorHandler.handleError(e))`, and `addError(e)` so `BlocObserver.onError` sees the bug |
 
-`onSuccess:` / `onFailure:` run after that state was emitted — for follow-up work (another event, analytics), not for state. Once the handler is done — the bloc closed, or a `restartable()` transformer replaced it while the call was pending — nothing more is emitted and the callbacks are skipped.
+`onSuccess:` / `onFailure:` run after that state was emitted. Use them for follow-up work (another event, analytics), not for state. Once the handler is done, nothing more is emitted and the callbacks are skipped. "Done" means the bloc closed, or a `restartable()` transformer replaced the handler while the call was pending.
 
 > [!NOTE]
-> `emitResult` never emits a `const` state: inside a generic helper `const BlocViewState.loading()` is a `BlocViewState<Never>`, which `==` treats as different from the `BlocViewState<T>.loading()` a view or a test expects.
+> `emitResult` never emits a `const` state. Inside a generic helper, `const BlocViewState.loading()` is a `BlocViewState<Never>`. `==` treats that as different from the `BlocViewState<T>.loading()` a view or a test expects.
 
-**A custom Freezed state** (`BaseBloc<Event, CheckoutState>`) gets no helper — unwrap by hand, and make every branch end in a terminal state:
+### Unwrap by hand for a custom state
+
+A custom Freezed state (`BaseBloc<Event, CheckoutState>`) gets no helper. Unwrap by hand, and make every branch end in a terminal state:
 
 ```dart
 Future<void> _onSubmitted(
@@ -461,19 +416,52 @@ Future<void> _onSubmitted(
 }
 ```
 
+## 8. Render the BLoC state
+
+`BlocViewState<T>` is the optional shared state type, in `platform/state/bloc/lib/src/bloc_view_state.dart`:
+
+```dart
+@freezed
+abstract class BlocViewState<T> with _$BlocViewState<T> {
+  const BlocViewState._();
+  const factory BlocViewState.initial() = _Initial<T>;
+  const factory BlocViewState.loading() = _Loading<T>;
+  const factory BlocViewState.success(T data) = _Success<T>;
+  const factory BlocViewState.error(AppFailure error) = _Error<T>;
+
+  T? get data => mapOrNull(success: (s) => s.data);
+}
+```
+
+How it differs from Provider's `ViewState`, and why it has another name: [`../architecture/02_core.md` § 10](../architecture/02_core.md#blocviewstatet). A screen with richer needs declares its own Freezed state and uses `BaseBloc<Event, CustomState>`. Keep its variants in `_state.dart`, under the same `part` rules.
+
+Render it with `BlocBuilder`:
+
+```dart
+BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
+  builder: (context, state) => state.when(
+    initial: () => const SizedBox.shrink(),
+    loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+    success: (user) => Text(user?.displayName ?? ''),
+    error: (failure) => Text(failure.message),
+  ),
+)
+```
+
+Dispatch events with `context.read<HomeProfileBloc>().add(const HomeProfileEvent.refreshed())`.
+
 ---
 
-## 4. Lifecycle and DI — the rule that prevents leaks
+## 9. Register the controller and create it at the route
 
 | Controller kind | Annotation | Why |
 |---|---|---|
 | Screen-scoped VM / BLoC | `@injectable` (factory) | A fresh instance per screen; disposed when the route pops |
 | App-wide controller | `@lazySingleton` | Lives for the process (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider`) |
 
-> [!CAUTION]
-> **Never register a screen-scoped controller as `@singleton` / `@lazySingleton`.** GetIt would hold the instance forever, so popping the screen leaks it and the next visit shows stale state.
+A screen-scoped controller is never a singleton (RULE-10). GetIt would hold it forever: popping the screen leaks it, and the next visit shows stale state.
 
-Controllers are instantiated **at the route**, not inside the page. From `modules/home/feature/lib/src/routing/home_route_module.dart`:
+Create the controller **in the route**, not in the page (RULE-21). From `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
@@ -494,13 +482,24 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 ```
 
 > [!CAUTION]
-> **Do not double-wrap.** Because the route already provides the controller, the page must **not** wrap itself in another `BlocProvider` / `ChangeNotifierProvider`. Doing so creates a second instance — the page reads one while your events go to the other, producing state that silently never updates, plus a leak.
+> **Do not double-wrap.** The route already provides the controller, so the page must **not** wrap itself in another `BlocProvider` / `ChangeNotifierProvider`. That creates a second instance: the page reads one while your events go to the other. The state silently never updates, and the first instance leaks.
 
-Global controllers such as `AuthProvider` are the exception: routes do **not** wrap them, because they are provided once near the app root and read with `Consumer<AuthProvider>` / `context.watch`.
+Global controllers such as `AuthProvider` are the exception. Routes do **not** wrap them: they are provided once near the app root and read with `Consumer<AuthProvider>` / `context.watch`.
 
 ---
 
-## 5. Checklist
+## Verify
+
+```bash
+dart run build_runner build --workspace     # Freezed events/states and the DI registration
+flutter analyze                             # No issues found!
+cd modules/<name>/feature && flutter test   # All tests passed!
+cd apps/mobile && flutter test test/di_smoke_test.dart   # the controller resolves from the real graph
+```
+
+Model your tests on the real ones: `modules/auth/feature/test/auth_provider_test.dart` (a provider with hand-written fakes), `modules/home/feature/test/home_profile_bloc_test.dart` (a bloc), and `platform/state/bloc/test/result_emitter_test.dart` (`emitResult`).
+
+Review checklist:
 
 - [ ] Branch chosen deliberately, knowing what BLoC lacks (global hooks, `errorStateBuilder`, pagination)
 - [ ] A `BlocViewState<T>` Bloc settles use cases through `emitResult`, not a hand-written `result.when`
@@ -512,9 +511,22 @@ Global controllers such as `AuthProvider` are the exception: routes do **not** w
 - [ ] Side effects live in a listener, not in `build()`
 - [ ] Subscriptions cancelled (`close()` for BLoC, `dispose()` for Provider)
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `emit was called after an event handler completed normally` | A sync `on<Event>` closure starts async work | Register an `async (event, emit)` method reference (step 6) |
+| The screen is blank after loading | No `emptyWidget`, and the data is `null` | Pass `emptyWidget` to `BaseViewWidget` (step 3) |
+| A refresh shows no spinner | `executeOperation` skips loading once data exists | Call `updateState(state: const ViewState.loading())` first (step 2) |
+| State never updates on screen | The page wraps a second provider around itself | Remove the page's wrapper; the route provides it (step 9) |
+| Stale data when the screen is opened again | The screen controller is a singleton | Make it `@injectable` (step 9) |
+| A second identical error shows no toast | `listenWhen` filters equal states | Add `|| current.isError` (step 4) |
+| Release build shows an empty success state | The use case returns another type and no `convert:` was passed | Pass `convert:` to `executeOperation` (step 2) |
+| A test comparing `BlocViewState` fails although values look equal | A `const` state in generic code is `BlocViewState<Never>` | Write the type argument: `BlocViewState<T>.loading()` (step 7) |
+
 ## Related
 
+- Rules: RULE-10 (screen controllers are factories), RULE-11 (constructor injection), RULE-21 (created at the route), RULE-50 (base classes), RULE-51 (private Freezed events), RULE-52 (async handlers), RULE-53 (`emitResult`) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/02_core.md` § 10](../architecture/02_core.md#10-state-management--two-branches-not-at-parity) — the two branches compared
 - [`04_routing.md`](04_routing.md) — where controllers get instantiated
 - [`05_di.md`](05_di.md) — scopes, module order, and resolution helpers
-- [`../architecture/02_core.md`](../architecture/02_core.md) — both packages in context
-- [`../reference/01_rules.md`](../reference/01_rules.md) — the enforced rules

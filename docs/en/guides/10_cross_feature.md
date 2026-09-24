@@ -1,37 +1,17 @@
 # Guide: Cross-Feature Communication
 
-This guide answers **"feature A needs something from feature B — how, without importing it?"**.
-Feature packages may never import each other — no exception; shared widgets come from the core package `core_ui_kit` — so every
-interaction goes through a contract that a *neutral* package owns.
+## Goal
 
-By the end you will know which of the six models fits your case, and how to wire it so that
-deleting either feature leaves the app running.
+Feature A needs something from feature B, and may not import it (RULE-04). You pick the right one of the six sanctioned models (RULE-25) and wire it so that deleting either feature leaves the app running.
 
----
+## Prerequisites
 
-## The rule
-
-Registry: RULE-04, RULE-08, RULE-12, RULE-25, RULE-54.
-
-```
-feature_a  ──✗──>  feature_b        forbidden, always
-feature_a  ──✓──>  b_api            module B's contracts for other features live here
-feature_b  ──✓──>  b_api            B implements them and registers against them
-anyone     ──✓──>  core_di          product-neutral contracts (session, locations, routing)
-```
-
-A contract lives in one of two neutral places. **Module B's API package** (`modules/<b>/api`,
-`b_api`) holds what exists so *other features can reach B* — its navigator, its action
-handlers, a widget builder (`auth_api`, `home_api` in the samples); it depends on the
-foundation and Flutter only, and B's feature implements it. **`core_di`**, the DI Hub, holds
-only what is product-neutral — what the platform itself needs, named for that need (the
-session, the sign-in / post-sign-in locations, routing), never for the module that provides it.
-Either way both sides depend on the contract, neither on the other. That is what makes a
-feature removable; `arch_check` R3 holds the API rules.
+- **Why contracts live where they do** — in module B's API package or, when product-neutral, in `core_di` — and the anti-patterns to reject: [`../architecture/05_features.md` § 9](../architecture/05_features.md#9-cross-feature-communication--why-it-is-shaped-this-way).
+- Two features to connect — [`01_new_feature.md`](01_new_feature.md). A module with no API package yet needs one: [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package).
 
 ---
 
-## Decision table
+## 1. Pick a model
 
 | I need to… | Use | Model |
 | :-- | :-- | :-- |
@@ -43,12 +23,11 @@ feature removable; `arch_check` R3 holds the API rules.
 | Trigger a one-shot UI action another feature owns (logout…) | **Action handler** in the owner's `<id>_api` | 6 |
 | Just navigate to another feature's screen | **Navigator interface** in the owner's `<id>_api` — see [`04_routing.md`](04_routing.md) | — |
 
----
+Reach for model 1 first: it is the cheapest.
 
-## Model 1 — Shared Domain UseCase
+## 2. Share a business operation through a use case (model 1)
 
-**Use when** two features perform the same business operation.
-**Don't use when** the thing you need is UI state rather than business logic.
+**Use when** two features perform the same business operation. **Don't use when** the thing you need is UI state rather than business logic.
 
 Both features inject the same use case from the domain package. Neither knows the other exists:
 
@@ -61,38 +40,23 @@ class CheckoutProvider extends BaseProvider<PaymentEntity> {
 }
 ```
 
-The use case lives in `domain_auth`; both `feature_auth` and `feature_checkout` depend on
-`domain_auth`, never on each other. This is the cheapest model — reach for it first.
+The use case lives in `domain_auth`. Both `feature_auth` and `feature_checkout` depend on `domain_auth`, never on each other.
 
----
+## 3. Use a core service (model 2)
 
-## Model 2 — Core Service
+**Use when** the capability is infrastructure, not business logic. **Don't use when** the behaviour belongs to a specific feature.
 
-**Use when** the capability is infrastructure, not business logic.
-**Don't use when** the behaviour belongs to a specific feature.
+Inject `StorageManager`, `Dio`, `IDatabaseHandle<TDb>` and friends directly from the relevant `core_*` package. Nothing feature-specific is involved, so there is no coupling to break. See [`06_storage.md`](06_storage.md), [`08_networking.md`](08_networking.md), [`07_database.md`](07_database.md).
 
-Inject `StorageManager`, `Dio`, `IDatabaseHandle<TDb>` and friends directly from the relevant `core_*`
-package. Nothing feature-specific is involved, so there is no coupling to break.
+## 4. Share continuous state through an agnostic stream (model 3)
 
-See [`06_storage.md`](06_storage.md), [`08_networking.md`](08_networking.md),
-[`07_database.md`](07_database.md).
+**Use when** feature A must react *continuously* to state owned by feature B — and the two may use different state-management libraries. **Don't use when** you need a one-shot action (model 6) or a plain value read (model 4).
 
----
+This is the most important pattern in the codebase. `feature_auth` uses Provider; `feature_home` uses BLoC. Neither may import the other, and neither should learn the other's state-management tool (RULE-54).
 
-## Model 3 — Agnostic Stream (dual registration)
+### Declare a neutral interface in `core_di`
 
-**Use when** feature A must react *continuously* to state owned by feature B — and the two may use
-different state-management libraries.
-**Don't use when** you need a one-shot action (use model 6) or a plain value read (use model 4).
-
-This is the most important pattern in the codebase. `feature_auth` uses Provider;
-`feature_home` uses BLoC. Neither may import the other, and neither should learn the other's
-state-management tool.
-
-### Step 1 — neutral interface in `core_di`
-
-Real code from
-[`platform/foundation/contracts/lib/src/session/i_session_status_stream.dart`](../../../platform/foundation/contracts/lib/src/session/i_session_status_stream.dart):
+Real code from [`platform/foundation/contracts/lib/src/session/i_session_status_stream.dart`](../../../platform/foundation/contracts/lib/src/session/i_session_status_stream.dart):
 
 ```dart
 abstract class ISessionStatusStream {
@@ -107,25 +71,11 @@ abstract class ISessionStatusStream {
 }
 ```
 
-Two deliberate design decisions worth understanding:
+The contract carries [`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), a value type `core_di` owns, never a `domain_*` entity (RULE-08). `currentUser` exists because a broadcast stream does not replay its last value. Both decisions are explained in [`../architecture/05_features.md` § 9](../architecture/05_features.md#9-cross-feature-communication--why-it-is-shaped-this-way).
 
-**Why `SessionPrincipal` and not `UserEntity`.** A `core_di` contract may not name a type from a
-`domain_*` package (RULE-08): the import would make every consumer depend on
-`domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
-type,
-[`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), and the auth
-feature narrows its entity to it at the boundary (`toPrincipal` in step 2). The contract is
-deliberately smaller than the entity — a consumer that only asks *who is signed in* never sees the
-rest.
+### Implement it in the owning feature
 
-**Why `currentUser` exists alongside the stream.** `sessionStatusStream` is a *broadcast* stream: it
-does not replay its last value to new listeners. A consumer subscribing after login would sit blind
-until the next change, so it reads `currentUser` for the state at subscription time.
-
-### Step 2 — concrete implementation in the owning feature
-
-Real code from
-[`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
+Real code from [`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
 
 ```dart
 /// Implementation of [ISessionStatusStream] provided by `feature_auth`.
@@ -160,10 +110,9 @@ class AuthStatusStreamImpl implements ISessionStatusStream {
 }
 ```
 
-### Step 3 — bind the interface to that same instance
+### Bind the interface to that same instance
 
-Real code from
-[`modules/auth/feature/lib/di/module.dart`](../../../modules/auth/feature/lib/di/module.dart):
+Real code from [`modules/auth/feature/lib/di/module.dart`](../../../modules/auth/feature/lib/di/module.dart):
 
 ```dart
 @InjectableInit.microPackage()
@@ -176,15 +125,11 @@ abstract class AuthDiModule {
 }
 ```
 
-**Why register twice.** The concrete class is registered so `feature_auth` can inject
-`AuthStatusStreamImpl` directly and call the writer method `updateAuthStatus` — no `getIt` lookup,
-no `as` cast. The `@module` binding then exposes the *same instance* under the read-only interface
-for everyone else. Owner writes, consumers read.
+The owner injects `AuthStatusStreamImpl` and writes through `updateAuthStatus`. Everyone else reads the same instance through the read-only interface (RULE-14).
 
-### Step 4 — consume from another feature
+### Consume it from another feature
 
-Real code from
-[`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`](../../../modules/home/feature/lib/src/bloc/home_profile_bloc.dart):
+Real code from [`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`](../../../modules/home/feature/lib/src/bloc/home_profile_bloc.dart):
 
 ```dart
 @injectable
@@ -199,9 +144,9 @@ class HomeProfileBloc
   StreamSubscription<SessionPrincipal?>? _subscription;
 ```
 
-`feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either: the contract carries `SessionPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
+`feature_home` depends on `core_di` alone — not on `feature_auth`, and not on `domain_auth` either. The contract carries `SessionPrincipal`, a type `core_di` owns, so no domain package crosses the boundary.
 
-The stream is **optional** on purpose. `ISessionStatusStream` is registered by `feature_auth`, which an app may leave out, so the bloc takes it as an `@factoryParam` and the route supplies it — real code from [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
+The stream is **optional** on purpose. `ISessionStatusStream` is registered by `feature_auth`, which an app may leave out. So the bloc takes it as an `@factoryParam`, and the route supplies it — real code from [`modules/home/feature/lib/src/routing/home_route_module.dart`](../../../modules/home/feature/lib/src/routing/home_route_module.dart):
 
 ```dart
     return BlocProvider(
@@ -220,21 +165,17 @@ A required constructor parameter would compile just as well — and then DI coul
 > Always cancel the subscription in `close()` / `dispose()`. A broadcast stream will happily keep a
 > disposed controller alive.
 
----
+## 5. Persist a UI preference without Domain (model 4)
 
-## Model 4 — Bypass Domain for pure-UI state
+**Use when** the value is a UI preference that never leaves the device — theme mode, locale. **Don't use when** the value has business meaning or is sent to a server.
 
-**Use when** the value is a UI preference that never leaves the device — theme mode, locale.
-**Don't use when** the value has business meaning or is sent to a server.
-
-The chain skips the domain layer entirely:
+The chain skips the domain layer entirely, because Domain cannot import Flutter's `ThemeMode` (RULE-03):
 
 ```
 ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  →  StorageValue
 ```
 
-The interface — real code from
-[`platform/foundation/contracts/lib/src/theme/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/theme/i_theme_storage.dart):
+The interface — real code from [`platform/foundation/contracts/lib/src/theme/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/theme/i_theme_storage.dart):
 
 ```dart
 import 'package:material_ui/material_ui.dart';
@@ -249,23 +190,13 @@ abstract class IThemeStorage {
 }
 ```
 
-**Why bypass Domain here.** A use case would have to accept and return `ThemeMode`, which is a
-`package:flutter/material.dart` type. The domain layer is pure Dart and **cannot import Flutter**,
-so routing theme through it is impossible by construction — not a shortcut, a hard constraint.
+The implementation lives in the shell adapters, `platform/shell/adapters/lib/src/theme_storage_impl.dart`. How to write one like it: [`06_storage.md` § 9](06_storage.md#9-share-the-value-across-a-package-boundary).
 
-The implementation lives in the app shell (`platform/shell/adapters/lib/src/theme_storage_impl.dart`) because that is
-where `core_base_ui`'s provider and `core_storage`'s mechanism meet without creating a cycle.
+## 6. Embed a widget another feature builds (model 5)
 
+**Use when** feature A must render a widget whose content only feature B knows how to build. **Don't use when** the widget is generic UI — that belongs in `core_ui_kit`.
 
----
-
-## Model 5 — Widget Builder interface
-
-**Use when** feature A must render a widget whose content only feature B knows how to build.
-**Don't use when** the widget is generic UI — that belongs in `core_ui_kit`.
-
-Declare the builder contract in the owning module's API package (feature A adds `profile_api` to
-its `dependencies:`):
+Declare the builder contract in the owning module's API package (feature A adds `profile_api` to its `dependencies:`):
 
 ```dart
 // modules/profile/api/lib/src/builders/i_profile_card_builder.dart
@@ -276,25 +207,18 @@ abstract class IProfileCardBuilder {
 }
 ```
 
-Implement it in the owning feature and register with `@Injectable(as: IProfileCardBuilder)`.
-Consumers resolve it defensively so the app survives the feature being removed:
+Implement it in the owning feature and register it with `@Injectable(as: IProfileCardBuilder)`. Consumers resolve it defensively, so the app survives the feature being removed:
 
 ```dart
 final builder = getItOrNull<IProfileCardBuilder>();
 return builder?.build(context, userId: id) ?? const SizedBox.shrink();
 ```
 
----
+## 7. Trigger another feature's UI action (model 6)
 
-## Model 6 — Action Handler
+**Use when** feature A must trigger a one-shot, UI-bound action that feature B owns — logout is the canonical case. **Don't use for** plain navigation (use a Navigator interface) or for domain logic (use a UseCase).
 
-**Use when** feature A must trigger a one-shot, UI-bound action that feature B owns — logout being
-the canonical case.
-**Don't use for** plain navigation (use a Navigator interface) or for domain logic (use a UseCase).
-
-The interface — real code from the auth module's API package,
-[`modules/auth/api/lib/src/actions/i_auth_action_handler.dart`](../../../modules/auth/api/lib/src/actions/i_auth_action_handler.dart)
-(`feature_settings` depends on `auth_api`, never on `feature_auth`):
+The interface — real code from the auth module's API package, [`modules/auth/api/lib/src/actions/i_auth_action_handler.dart`](../../../modules/auth/api/lib/src/actions/i_auth_action_handler.dart) (`feature_settings` depends on `auth_api`, never on `feature_auth`):
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -304,8 +228,7 @@ abstract class IAuthActionHandler {
 }
 ```
 
-The implementation — real code from
-[`modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart`](../../../modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart):
+The implementation — real code from [`modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart`](../../../modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart):
 
 ```dart
 import 'package:auth_api/auth_api.dart';
@@ -324,18 +247,13 @@ class AuthActionHandlerImpl implements IAuthActionHandler {
 }
 ```
 
-`feature_settings` calls `getItOrNull<IAuthActionHandler>()?.logout(context)` — it never learns
-that logout is a Provider call, or that `AuthProvider` exists.
+`feature_settings` calls `getItOrNull<IAuthActionHandler>()?.logout(context)`. It never learns that logout is a Provider call, or that `AuthProvider` exists.
 
-Handler implementations live in the owning feature's `handlers/` directory and are named
-`*ActionHandlerImpl`.
+Handler implementations live in the owning feature's `handlers/` directory and are named `*ActionHandlerImpl` (RULE-78).
 
----
+## 8. Make every lookup survive the owner's removal
 
-## Safe fallback — the rule that makes features removable
-
-Every consumer of a cross-feature contract must tolerate the contract being **absent**. The app
-shell already does this for routing:
+Every consumer of a cross-feature contract must tolerate the contract being **absent** (RULE-12). The app shell already does this for routing:
 
 ```dart
 // platform/shell/app_shell/lib/presentation/navigation/app_router.dart
@@ -354,8 +272,7 @@ Apply the same discipline everywhere:
 | Zero or more implementations | `getAllOrEmpty<T>()` | `getIt.getAll<T>()` |
 | Optional single implementation | `getItOrNull<T>()` + fallback | `getIt<T>()` |
 
-`getIt<T>()` **throws** when nothing is registered. Every bare `getIt<T>()` pointing at a
-feature-owned type is a crash waiting for the day that feature is deleted.
+`getIt<T>()` **throws** when nothing is registered. Every bare `getIt<T>()` pointing at a feature-owned type is a crash waiting for the day that feature is deleted.
 
 ```dart
 // Good — degrades quietly
@@ -373,9 +290,7 @@ builder: (context, state, navigationShell) {
 },
 ```
 
-`navigationShell` is itself the widget showing the current branch, so an app composed without
-`feature_dashboard` still renders its destinations — just without chrome. An empty `SizedBox` here
-would open that app on a blank screen.
+`navigationShell` is itself the widget showing the current branch. So an app composed without `feature_dashboard` still renders its destinations — just without chrome. An empty `SizedBox` here would open that app on a blank screen.
 
 > [!NOTE]
 > `apps/mobile/lib/di/injection.dart` naming feature packages is the composition root's one intentional
@@ -383,30 +298,44 @@ would open that app on a blank screen.
 > shared shell in `platform/shell/app_shell/` cannot (R1); everything else reaches features through `core_di` contracts with
 > `getAllOrEmpty` / `getItOrNull` fallbacks. The `core_ui_kit` imports in the shell are not
 > exceptions — that is a core package, not a removable feature.
->
-> Verify with `grep -rn "package:feature_" apps/mobile/lib --include="*.dart"` — every hit should be in
-> `injection.dart` or the generated `injection.config.dart`.
 
 ---
 
-## Anti-patterns
+## Verify
 
-| Don't | Why | Instead |
-| :-- | :-- | :-- |
-| `import 'package:feature_b/...'` from feature A | Hard couples two features; neither is removable | A contract in `b_api` (or a product-neutral one in `core_di`) |
-| A module-specific contract (`AuthNavigator`) in `core_di` | The platform then names a product module, and keeps a dead contract when it is removed | The owning module's `<id>_api` |
-| Expose a `Bloc` or `ChangeNotifier` across features | Forces the other feature to adopt your state library | Model 3 — neutral stream |
-| `getIt<FeatureOwnedType>()` | Throws when that feature is gone | `getItOrNull<T>()` + fallback |
-| Action Handler for navigation | Wrong tool; loses type-safe routes | Navigator interface |
-| Put shared business logic in `core_ui_kit` | It is a UI package | A domain UseCase |
-| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts RULE-08 | A contract-owned value type (`SessionPrincipal`) |
+```bash
+dart tools/arch_check/check.dart     # ✅ … R3 (feature/API imports), R8 (optional lookups), R10 (app imports)
+grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # hits only in injection.dart / injection.config.dart
+cd apps/mobile && flutter test test/di_smoke_test.dart            # contracts resolve from the real graph
+```
 
----
+Then prove the removal works: drop the owning module from a manifest with `dart tools/sample_cleanup/remove_sample.dart <bundle>` (a dry run, for a sample) or by editing the manifest in a scratch branch, and run `flutter analyze` plus the smoke test. The consumer must still compile and boot.
+
+Review checklist:
+
+- [ ] No `import 'package:feature_*'` from another feature
+- [ ] The contract lives in the owner's `<id>_api` (or, if product-neutral, in `core_di`), never naming a `domain_*` entity
+- [ ] Owner-written, consumer-read state is exposed as a neutral stream, not as a Bloc or `ChangeNotifier`
+- [ ] Every consumer resolves with `getItOrNull` / `getAllOrEmpty` and has a fallback
+- [ ] Subscriptions are cancelled in `close()` / `dispose()`
+- [ ] Action handlers live in `handlers/` as `*ActionHandlerImpl`; navigation uses a navigator, not a handler
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `arch_check` R3 fails on a feature import | Feature A imports feature B or `data_*` | Depend on `b_api` (or a `core_di` contract) instead (step 1) |
+| `arch_check` R8 fails | A module-owned contract is resolved with `getIt` / `getAll` outside its module | Use `getItOrNull` / `getAllOrEmpty` with a fallback (step 8) |
+| The app crashes at boot after a feature was removed | A bare `getIt<T>()` or a required constructor parameter needs the removed type | Resolve it optionally, at the route, as a factory param (step 4) |
+| A consumer sees no state until the next change | It subscribed to a broadcast stream after the last event | Read `currentUser` first, then listen (step 4) |
+| Every consumer now depends on `domain_auth` | The `core_di` contract names a domain entity | Give the contract its own value type, like `SessionPrincipal` (step 4) |
+| A disposed screen keeps reacting | The subscription was never cancelled | Cancel it in `close()` / `dispose()` (step 4) |
 
 ## Related
 
+- Rules: RULE-04 (no feature → feature import), RULE-08 (`core_di` is product-neutral), RULE-12 (optional lookups), RULE-25 (the six models), RULE-54 (state through neutral streams) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/05_features.md` § 9](../architecture/05_features.md#9-cross-feature-communication--why-it-is-shaped-this-way) — why the contracts look this way, and the anti-patterns
 - [`04_routing.md`](04_routing.md) — Navigator interfaces and route contracts
 - [`05_di.md`](05_di.md) — registration scopes, `@module` bindings, ordering
 - [`03_state_management.md`](03_state_management.md) — Provider and BLoC
-- [`../architecture/05_features.md`](../architecture/05_features.md) — feature boundary rules
 - [`../architecture/02_core.md`](../architecture/02_core.md) — what `core_di` is for

@@ -1,14 +1,18 @@
 # Guide: Configuring the design system
 
-**This page answers:** where every colour, font, spacing step and corner radius is defined, exactly which file to edit to make the template look like *your* product instead of the sample, and how the UI scales and adapts from a phone to a tablet, a foldable or a desktop window.
+## Goal
 
-**After reading you can:** swap the brand palette, change the typeface, retune the spacing and radius scales, move the design canvas size, decide how far each window class may scale, lay a screen out for tablets, foldables and split screen, and add a brand-new token that reaches widgets through `context`.
+You make the template look like *your* product: swap the brand palette, change the typeface, retune the spacing and radius scales, move the design canvas, and decide how far each window class may scale. You also lay screens out for tablets, foldables and split screen, and add a brand-new token that reaches widgets through `context`.
 
-This is the **configuration** guide. For the rules about *using* tokens in day-to-day widget code — no hard-coded colours, reusable widgets take raw values — see [`09_localization_theming.md`](09_localization_theming.md).
+## Prerequisites
+
+- A working setup — [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+- This is the **configuration** guide. The rules about *using* tokens in day-to-day widget code — no hard-coded colours, reusable widgets take already-scaled values — are in [`09_localization_theming.md`](09_localization_theming.md).
+- What `core_base_ui` and `core_responsive` contain, and why tokens stay in `styles/`: [`../architecture/02_core.md` § 3](../architecture/02_core.md#3-core_base_ui--design-system) and [§ 5](../architecture/02_core.md#5-core_responsive--responsive-sizing-and-adaptive-layout).
 
 ---
 
-## 1. The map: tokens vs theme
+## 1. Find the file to edit
 
 Two different things live in `core_base_ui`, and mixing them up is the most common source of confusion.
 
@@ -34,13 +38,28 @@ Two different things live in `core_base_ui`, and mixing them up is the most comm
 > [!NOTE]
 > **Tokens are the approved exception to the "constants live in `utils/`" rule.** They stay in `styles/` because they are the design system's *public API*, imported directly by every feature, and because `styles/` describes them far better than the catch-all `utils/`. Do not "fix" this in a future cleanup — see [`../reference/01_rules.md`](../reference/01_rules.md).
 
----
+### Quick lookup
+
+| I want to change… | Edit |
+|---|---|
+| A brand colour | `theme/theme_system_extensions.dart` → `light` **and** `dark` |
+| Add a colour slot | `theme/theme_system_interface.dart`, then both palettes + `lerp` |
+| The typeface | `pubspec.yaml` → `flutter: fonts:` + `theme/theme_provider.dart` → `applyFont` |
+| A font size in the ramp | `theme/theme_provider.dart` → the `copyWith` block |
+| A spacing step | `styles/app_spacing.dart` → the `raw*` constant |
+| A corner radius | `styles/app_radius.dart` → the `raw*` constant |
+| A gradient | the colour list in `theme/theme_system_extensions.dart` |
+| A shadow | `styles/app_shadows.dart` |
+| The design canvas | `platform/foundation/common/lib/src/config/app_config.dart` → `design` |
+| How far a window class may scale (bounds, profiles, breakpoints) | `platform/shell/app_shell/lib/main_scope.dart` → `ResponsiveInit` (§6) |
+| The layout on a tablet, foldable or split screen | the page — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
+| Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
 ## 2. Change the brand palette
 
 Colours are delivered as a Flutter [`ThemeExtension`](https://api.flutter.dev/flutter/material/ThemeExtension-class.html), which is why they flip with light/dark automatically and animate between them.
 
-### Step 1 — decide whether you need a new slot
+### Decide whether you need a new slot
 
 Open [`theme/theme_system_interface.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_interface.dart). It declares every colour slot the app can ask for:
 
@@ -68,7 +87,7 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
 }
 ```
 
-**Only re-colouring?** Skip to Step 2 — the slots already exist.
+**Only re-colouring?** Skip to *Edit the values* — the slots already exist.
 
 **Adding a slot** (say `brandAccent`)? You must touch three places, in this order:
 
@@ -79,7 +98,7 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
 > [!WARNING]
 > Forgetting the `lerp` entry compiles fine but breaks theme *animation* — the new colour will snap instead of fading when the user toggles light/dark.
 
-### Step 2 — edit the values
+### Edit the values
 
 Both palettes are plain static fields in [`theme/theme_system_extensions.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart):
 
@@ -109,7 +128,7 @@ Change the hex values, save, hot-restart. **Always edit both** — a light-only 
 
 One slot exists only for a sample screen: `liquidOnboardingColors`, the splash gradient (`AppGradients.liquidOnboarding`). Delete the splash sample and remove that slot from the interface, both palettes and `AppGradients` rather than leaving a dead colour behind.
 
-### Step 3 — read them in a widget
+### Read the colours in a widget
 
 ```dart
 // via the extension in platform/ui/design_system/lib/src/extensions/context_extension.dart
@@ -124,8 +143,6 @@ Container(
 
 > [!NOTE]
 > `context.colors` and `context.primary` are **not** the same thing. `context.colors.*` reads your `ThemeSystemExtension`; the bare getters (`context.primary`, `context.surface`, …) read Material's own `ColorScheme`. Only two of those are wired to your palette — `ThemeProvider` copies `primary` and `surface` into the `ColorScheme`. Prefer `context.colors.*` for brand colours.
-
----
 
 ## 3. Change the typeface
 
@@ -185,7 +202,7 @@ The sizes come from `Typography.material2021().englishLike` — the Material 3 t
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
-`sp`, so type follows the app's `textScaleBounds` ([§6](#6-scale-policy-down-by-default-up-on-opt-in-per-window-class)). With the default, `ScaleBounds.downOnly()`, text shrinks on a window narrower than the 375-wide design and never grows past the design size; a window class whose `ResponsiveProfile` opts into growth gets bigger type too. With this app's configuration, text is the design size on every window 375 wide or more — phone, tablet or desktop.
+`sp`, so type follows the app's `textScaleBounds` ([§6](#6-set-the-scale-policy-per-window-class)). With the default, `ScaleBounds.downOnly()`, text shrinks on a window narrower than the 375-wide design and never grows past the design size; a window class whose `ResponsiveProfile` opts into growth gets bigger type too. With this app's configuration, text is the design size on every window 375 wide or more — phone, tablet or desktop.
 
 That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`, which has one.
 
@@ -203,8 +220,6 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 ### The user's font size is a second, separate factor
 
 `context.sp` fits the design to the **window**; it never reads `MediaQuery.textScaler`. The **user's** OS font size is applied on top by `Text` itself, at layout, and the app shell passes it through up to 2x (`AppShellUiConstants.MAX_TEXT_SCALE_FACTOR`, applied by `AppMaterialWrapper` with `MediaQuery.withClampedTextScaling`). Two independent factors, each applied once — not a double scale. Do not cancel it with `MediaQuery.withNoTextScaling` or a `textScaler: TextScaler.noScaling` on a style: that fails WCAG's 200% text resize. What the text scale does *not* grow is a box sized with `context.h`/`context.w`, so give text containers padding or a `minHeight` rather than a fixed height. Details: [`06_app_shell.md`](../architecture/06_app_shell.md#the-os-font-size-is-honoured-up-to-2x).
-
----
 
 ## 4. Change the spacing and radius scales
 
@@ -231,7 +246,7 @@ static const double rawMd = 8;
 
 **Naming convention.** `xxs → xs → sm → md → lg → xl → xxl → xxxl → huge` for spacing; `xs → … → xxl` plus `circular` for radius. `AppSpacing` additionally exposes an `H` variant of every step (`lgH`, `xlH`, …) that scales on the **height** axis.
 
-### Which axis: `w`, `h` or `r`?
+### Pick the axis: `w`, `h` or `r`
 
 | Extension | Scales against | Use for |
 |---|---|---|
@@ -245,7 +260,7 @@ static const double rawMd = 8;
 
 Default to `w` for spacing. Reach for `h` only when the value is genuinely vertical *and* should shrink on short screens; overusing `h` makes layouts feel cramped in landscape.
 
-### The convenience helpers — and one trap
+### Use the convenience helpers — and avoid one trap
 
 `core_responsive` ships shorthands on the same `BuildContext` extension. Verified against `platform/ui/responsive/lib/src/context_extension.dart`, they map to these axes:
 
@@ -270,8 +285,6 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 > [!IMPORTANT]
 > **`left`/`right` are physical; `start`/`end` follow the text direction.** `context.edgeInsets(left: 16)` stays on the left in Arabic or Hebrew. When the side means "where the line begins" — an indent before a label, the gap after a leading icon — use `context.edgeInsetsDirectional(start: 16)`, which returns an `EdgeInsetsDirectional` resolved against the ambient `Directionality`. A side argument wins over its axis, as in `edgeInsets`: `edgeInsetsDirectional(horizontal: 16, start: 24)` is 24 at the start and 16 at the end. Keep `edgeInsets(left:)` for sides that really are physical (a shadow offset, a hinge). The same goes for alignment: prefer `AlignmentDirectional.centerStart` to `Alignment.centerLeft`.
 
----
-
 ## 5. Change the design canvas size
 
 Everything above scales *relative to a reference canvas*: the screen size your designer worked at.
@@ -290,9 +303,7 @@ It is handed to `ResponsiveInit` once, at the very root of the tree — `_Respon
 
 Both sides of `designSize` — and of every profile's `designSize` — must be positive: a zero side divides by zero. `ResponsiveInit` asserts it for every profile on build, and `ResponsiveMetrics` again when it scales. A window with no area yet (Android reports 0×0 for the first frame) is read as the artboard itself, factor 1, not as 0 — so that frame is not laid out with every value collapsed to nothing. `ScaleBounds.clamp` reads a NaN factor as 1 as well, then clamps it.
 
----
-
-## 6. Scale policy: down by default, up on opt-in, per window class
+## 6. Set the scale policy per window class
 
 A scale factor is the window-to-artboard ratio on one axis. Left alone it grows without limit: a 1280-wide desktop window against the 375-wide artboard is 3.4×, so 20 px text renders at 68 px and a title clips. `core_responsive` therefore clamps every factor with a `ScaleBounds`:
 
@@ -378,9 +389,7 @@ Check two things when you do. A class that grows meets its neighbour in a **visi
 > [!TIP]
 > `ResponsiveScope.of(context)` asserts when no `ResponsiveInit` is above it, rather than silently returning unscaled values. A widget test that scales must wrap its subject in `ResponsiveInit`.
 
----
-
-## 7. Adaptive layouts: tablets, foldables, split screen
+## 7. Lay out for tablets, foldables and split screen
 
 §6 decides how big to draw; this section decides **what** to draw with the room a larger window gives — more columns, a side rail, a second pane. Everything here lives in `core_responsive` (`platform/ui/responsive/lib/src/adaptive/`) and classifies the **window**, not the device: an iPad in Split View, a desktop window dragged narrow and a foldable's cover screen each get the class of the space the app actually has. Unlike `context.w`, none of it needs a `ResponsiveInit` — without one, the window is classified with the Material 3 defaults.
 
@@ -439,7 +448,8 @@ It splits by the first rule that applies:
 
 1. **A vertical fold or hinge** (`FoldPosture.book`) — side by side, divided exactly at it, nothing drawn under it. Wins even below `splitAt`: a half-opened foldable has two physical halves.
 2. **A horizontal fold** (`FoldPosture.tabletop`) while `tabletopSplit` is `true` (the default) — `primary` above, `secondary` below. Turn it off for content that must not be cut in half, such as a form.
-3. **A window of `splitAt` or wider** (default `WindowSizeClass.expanded`) — side by side, `primary` taking `primaryWidth` or `primaryFraction` (0.4) of the width, with an optional `divider` laid out `dividerExtent` wide (default 1). `primary` is capped so the divider and `secondary` still fit; a `primaryWidth` that leaves `secondary` nothing falls through to rule 4 instead of drawing a zero-width pane, so `isSplit` never reports a pane that is not there.
+3. **A window of `splitAt` or wider** (default `WindowSizeClass.expanded`) — side by side, `primary` taking `primaryWidth` or `primaryFraction` (0.4) of the width, with an optional `divider` laid out `dividerExtent` wide (default 1).
+   - `primary` is capped so the divider and `secondary` still fit. A `primaryWidth` that leaves `secondary` nothing falls through to rule 4 instead of drawing a zero-width pane, so `isSplit` never reports a pane that is not there.
 4. **Otherwise** — `primary` alone. `secondary` is not built, so the app pushes the item's route instead; `AdaptiveSplitView.isSplit(context)` is how the list item knows which to do. Its `context` must be *below* the view — inside a pane, or through a `Builder`.
 
 `primary` sits at the start edge (the right, under RTL). Both panes keep their place in the tree whichever rule applies, so the list's scroll offset and any typed text survive a rotation or the device being unfolded. The view needs a bounded box — not directly inside a scroll view or an unconstrained `Row` / `Column`.
@@ -507,8 +517,6 @@ return Scaffold(
 
 The whole page, and what the dashboard must not own: [`../architecture/05_features.md`](../architecture/05_features.md#4-feature_dashboard-is-chrome-only).
 
----
-
 ## 8. Add a new token class
 
 Say you want `AppElevation`. Follow the shape the existing classes use — private constructor, `raw*` constants, context-taking accessors.
@@ -546,9 +554,7 @@ dart tools/barrel_generator/generate.dart platform/ui/design_system/lib
 Material(elevation: AppElevation.raised(context), child: …)
 ```
 
----
-
-## 9. Gradients and shadows
+## 9. Change gradients and shadows
 
 `AppGradients` reads live theme colours, so gradients recolour with the palette automatically:
 
@@ -580,52 +586,50 @@ static List<BoxShadow> get sm => [
 ```
 
 > [!NOTE]
-> On a dark palette, a black shadow is nearly invisible. If your product leans on elevation in dark mode, promote the shadow colour into `ThemeSystemInterface` (§2, Step 1) and make these getters take a `BuildContext` like the other token classes. The template leaves it simple on purpose.
+> On a dark palette, a black shadow is nearly invisible. If your product leans on elevation in dark mode, promote the shadow colour into `ThemeSystemInterface` (step 2) and make these getters take a `BuildContext` like the other token classes. The template leaves it simple on purpose.
 
 ---
 
-## 10. The rules that stay
+## Verify
 
-Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of these a machine holds is stated per rule, because it changes how much you can rely on review catching it.
+```bash
+dart run build_runner build --workspace                 # after a font change: FontFamily gains the new constant
+dart tools/barrel_generator/generate.dart platform/ui/design_system/lib   # after adding a token file
+flutter analyze                                         # No issues found!
+dart tools/arch_check/check.dart                        # R7: no bare sizing extension
+cd platform/ui/design_system && flutter test
+cd platform/ui/responsive && flutter test
+```
 
-- **RULE-33** · **Never hard-code** a `Color`, `fontSize`, spacing number or `BorderRadius` in a widget. Missing a token? Add it to `core_base_ui` — do not inline the value. *Review-held.* See the note below for why.
-- **RULE-30** · **Every dimension scales.** A bare `SizedBox(height: 24)` is a bug; write `SizedBox(height: context.h(24))` or `context.verticalSpace(24)`. *`arch_check` R7 holds the bare-extension half (`24.h`); the raw-double half is review-held.*
-- **RULE-31** · **A widget scales its own constants, never its parameters.** A `core_ui_kit` widget receives already-scaled values — the caller scaled them — so using a parameter raw is correct and `context.w(widget.width)` is a double-scale bug. Its *own* padding and radii it must scale, or it is not responsive. `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`. *Review-held.*
-- **RULE-31** · **Do not scale an already-scaled value.** `AppSpacing.lg(context)` is final; `context.w(AppSpacing.lg(context))` is a double-scale bug. Likewise `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` already scaled every step, so overriding the size discards the scale and pins a number the design system cannot change. Reach for a different step instead. *Review-held.*
-- **RULE-33** · **Edit `raw*`, not the accessor**, when retuning a scale.
-- **RULE-30** · **Do not expect sizes to grow on a tablet.** Every factor stops at 1:1 by default; spend the extra room on layout (§7). Growth is an opt-in per window class, with a cap (§6). *Held by `ResponsiveInit`'s defaults.*
-- **RULE-32** · **Choose a layout by window size class** — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — never by device model, `Platform.isIOS` or an ad-hoc `shortestSide` check. One device shows many windows: Split View, a cover screen, a resized desktop window. *Review-held.*
+Then look at the app: hot-restart, toggle light and dark, and resize. Check a small phone, a tall phone, a tablet in both orientations and a split-screen pane. A change to `designSize` or a scale bound moves every screen at once.
 
-> [!NOTE]
-> **Why the colour and font-size rules are not machine-checked.**
->
-> They were considered and deliberately left to review. A check for `Colors.<name>` would have to allow the places a literal colour is *correct* — `AppShadows`, which is the token file, and every modal scrim, where Flutter's own `ModalBarrier` is a fixed black and a theme-aware value would *lighten* the screen in dark mode. On this tree that is seven approved uses against two real ones, and a rule whose exception list outweighs its findings teaches people to skim it.
->
-> The repo also forbids suppression comments, so there is no honest escape hatch for the legitimate cases. Review it is — which is exactly why three dark-mode bugs survived in `core_ui_kit` until they were audited for, and worth knowing when you copy a widget out of it.
+Review checklist — which rules a machine holds is stated per item, because it changes how much you can rely on review catching it:
 
----
+- [ ] **RULE-33** · No hard-coded `Color`, `fontSize`, spacing number or `BorderRadius` in a widget. Missing a token? Add it to `core_base_ui` instead of inlining the value. *Review-held* — [why](../architecture/02_core.md#why-the-colour-and-font-size-rules-are-review-held).
+- [ ] **RULE-30** · Every dimension scales. A bare `SizedBox(height: 24)` is a bug; write `SizedBox(height: context.h(24))` or `context.verticalSpace(24)`. *`arch_check` R7 holds the bare-extension half (`24.h`); the raw-double half is review-held.*
+- [ ] **RULE-31** · A widget scales its own constants, never its parameters. A `core_ui_kit` widget receives values the caller already scaled, so `context.w(widget.width)` is a double-scale bug. Its *own* padding and radii it must scale. `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`. *Review-held.*
+- [ ] **RULE-31** · No already-scaled value is scaled again. `context.w(AppSpacing.lg(context))` scales twice. So does `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)`: `ThemeProvider` already scaled every step, so the override discards the scale and pins a number. Reach for a different step instead. *Review-held.*
+- [ ] **RULE-33** · A scale is retuned by editing its `raw*` constant, not the accessor.
+- [ ] **RULE-30** · Nothing expects sizes to grow on a tablet. Every factor stops at 1:1 by default; the extra room goes to layout (step 7). Growth is an opt-in per window class, with a cap (step 6). *Held by `ResponsiveInit`'s defaults.*
+- [ ] **RULE-32** · Layouts are chosen by window size class — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — never by device model, `Platform.isIOS` or an ad-hoc `shortestSide` check. One device shows many windows: Split View, a cover screen, a resized desktop window. *Review-held.*
 
-## 11. Quick lookup
+## Troubleshooting
 
-| I want to change… | Edit |
-|---|---|
-| A brand colour | `theme/theme_system_extensions.dart` → `light` **and** `dark` |
-| Add a colour slot | `theme/theme_system_interface.dart`, then both palettes + `lerp` |
-| The typeface | `pubspec.yaml` → `flutter: fonts:` + `theme/theme_provider.dart` → `applyFont` |
-| A font size in the ramp | `theme/theme_provider.dart` → the `copyWith` block |
-| A spacing step | `styles/app_spacing.dart` → the `raw*` constant |
-| A corner radius | `styles/app_radius.dart` → the `raw*` constant |
-| A gradient | the colour list in `theme/theme_system_extensions.dart` |
-| A shadow | `styles/app_shadows.dart` |
-| The design canvas | `platform/foundation/common/lib/src/config/app_config.dart` → `design` |
-| How far a window class may scale (bounds, profiles, breakpoints) | `platform/shell/app_shell/lib/main_scope.dart` → `ResponsiveInit` (§6) |
-| The layout on a tablet, foldable or split screen | the page — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
-| Add a whole new token class | new file in `styles/`, then run the barrel generator |
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| A new colour snaps instead of fading on a theme toggle | No `lerp` entry for the new slot | Add it to `lerp` (step 2) |
+| Dark mode still shows the sample palette | Only `light` was edited | Edit `dark` too (step 2) |
+| Bold text looks smeared | The font's bold weight is not bundled, so the engine synthesises it | Ship a file per weight under one family (step 3) |
+| `FontFamily.<name>` does not exist | `build_runner` has not run since the `pubspec.yaml` font change | `dart run build_runner build --workspace` (step 3) |
+| Text is scaled twice | `context.sp` applied to a style from `AppTextStyles` | Use the style as returned (step 3) |
+| Everything shrank on a 375-wide phone | `designSize` was changed | Revert it, or accept that every value now resolves against the new artboard (step 5) |
+| A layout jumps between 839 and 840 px wide | Neighbouring window classes have different scale profiles | Expected with growth on one class; check both sides of the boundary (step 6) |
+| A foldable's hinge is ignored by `AdaptiveSplitView` | The view does not span the window along the fold | Make the view the route's full body (step 7) |
+| A new token class is not visible to features | The barrel was not regenerated | Run the barrel generator for `platform/ui/design_system/lib` (step 8) |
+| A black shadow is invisible in dark mode | `AppShadows` is not theme-aware | Promote the shadow colour into the palette (step 9) |
 
----
+## Related
 
-## See also
-
+- Rules: RULE-30, RULE-31, RULE-32, RULE-33, RULE-38 (text follows the OS font size) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`09_localization_theming.md`](09_localization_theming.md) — using tokens in widget code, and per-feature translations
 - [`../architecture/02_core.md`](../architecture/02_core.md) — where `core_base_ui` sits, and why it ships zero widgets; the `core_responsive` public API
-- [`../reference/01_rules.md`](../reference/01_rules.md) — the enforced rules, with the commands that verify them

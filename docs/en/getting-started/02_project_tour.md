@@ -64,7 +64,7 @@ flutter-monorepo-codebase/
 ├── .claude/skills/         # Task recipes for AI agents
 ├── CLAUDE.md               # Agent brief for Claude Code — cites the rule registry
 │
-├── pubspec.yaml            # Workspace root — lists all 28 members
+├── pubspec.yaml            # Workspace root — lists all 31 members
 ├── pubspec_dependencies.yaml  # Version catalog — the single source of truth
 ├── pubspec.lock            # ONE lock file for the whole workspace — committed
 └── analysis_options.yaml

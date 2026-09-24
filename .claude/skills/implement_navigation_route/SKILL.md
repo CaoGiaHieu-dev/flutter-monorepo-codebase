@@ -16,7 +16,7 @@ RULE-21, RULE-22, RULE-23, RULE-24, RULE-75, RULE-78.
 ## 📋 Detailed Steps
 
 ### Step 1: Declare the Navigator Interface in the module's API package
-Navigation across features must not be performed directly via path strings. Declare a Navigator interface in the **owning module's API package**, `modules/<id>/api/lib/src/navigators/` (package `<id>_api`; create the package first if the module has none — `docs/en/guides/12_module_isolation.md` § 7). `core_di` holds no module navigator — only product-neutral contracts such as `ISignInLocation` / `IPostSignInLocation`, which the app shell uses instead:
+Navigation across features must not be performed directly via path strings. Declare a Navigator interface in the **owning module's API package**, `modules/<id>/api/lib/src/navigators/` (package `<id>_api`; create the package first if the module has none — `docs/en/guides/12_module_isolation.md` § 4). `core_di` holds no module navigator — only product-neutral contracts such as `ISignInLocation` / `IPostSignInLocation`, which the app shell uses instead:
 ```dart
 import 'package:flutter/widgets.dart';
 

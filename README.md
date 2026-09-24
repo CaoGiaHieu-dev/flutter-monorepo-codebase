@@ -521,6 +521,7 @@ The documentation is organised by **what you are trying to do**, not by layer.
 | [01. Setup](docs/en/getting-started/01_setup.md) | What do I install, and how do I get the app running? |
 | [02. Project Tour](docs/en/getting-started/02_project_tour.md) | What is every package for, and where do I change X? |
 | [03. Daily Workflow](docs/en/getting-started/03_daily_workflow.md) | Which commands do I run, and when? |
+| [04. First Feature Tutorial](docs/en/getting-started/04_first_feature_tutorial.md) | Build, test and remove a small module end to end, in 30 minutes |
 
 ### 🏛️ Architecture — *understand the system*
 | Doc | Covers |

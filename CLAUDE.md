@@ -140,7 +140,7 @@ smoke test (`cd apps/mobile && flutter test test/di_smoke_test.dart`), not by re
 | Translated string, new locale, theme | — | `09_localization_theming`, `11_design_system` |
 | Tablet / foldable / split-screen layout | — | `11_design_system` § 7 |
 | Crash reporting, analytics | — | `../architecture/06_app_shell` § 2 |
-| Work in a partial checkout (one module) | — | `12_module_isolation` § 3 |
+| Work in a partial checkout (one module) | — | `12_module_isolation` § 2 |
 
 ## Contracts the shell resolves from modules
 
@@ -168,6 +168,7 @@ A module's contracts *for other features* (its navigator, action handlers) live 
 | How to do X (feature, DI, routing, storage, database, networking, l10n, design system, cross-feature, module isolation) | [`docs/en/guides/`](docs/en/guides/) |
 | Names, tools, PR checklist | [`02_naming`](docs/en/reference/02_naming.md) · [`03_tooling`](docs/en/reference/03_tooling.md) · [`04_review_checklist`](docs/en/reference/04_review_checklist.md) |
 | First run, project tour, daily loop | [`docs/en/getting-started/`](docs/en/getting-started/01_setup.md) |
+| A first module end to end (generate, code, test, gates, remove) — verified | [`04_first_feature_tutorial`](docs/en/getting-started/04_first_feature_tutorial.md) |
 | CI/CD, Fastlane, release, secrets | [`docs/en/operations/`](docs/en/operations/01_cicd.md) |
 | Task recipes for agents | [`.claude/skills/`](.claude/skills/) — create module, DI, BLoC/Provider UI, navigation, action handler, domain/data flow, storage, database, repo tooling |
 | Docs contract, commits, PR process | [`CONTRIBUTING.md`](CONTRIBUTING.md) |

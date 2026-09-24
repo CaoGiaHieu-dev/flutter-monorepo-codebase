@@ -150,10 +150,10 @@ dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some — CI Gate 3 discovers them the same way. It stops at the first failing package and names it; add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail) — `flutter_test` in a Flutter package, `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` is step 2b. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
+Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them. So it keeps working when you add a package with tests or remove a sample that had some. CI Gate 3 discovers them the same way. It stops at the first failing package and names it. Add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail). Use `flutter_test` in a Flutter package and `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` is step 2b. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
 
 > [!CAUTION]
-> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The loop above already catches it — each app's `test/di_smoke_test.dart` boots the real graph for every flavor (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 4 shows how to read the generated files to find the culprit.
+> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The loop above already catches it — each app's `test/di_smoke_test.dart` boots the real graph for every flavor (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 8 shows how to read the generated files to find the culprit.
 
 ### Optional: prove the app still builds
 

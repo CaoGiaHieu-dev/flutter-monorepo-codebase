@@ -160,9 +160,9 @@ Widget build(BuildContext context) {
 }
 ```
 
-Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả.
+Trong các package của workspace, `feature_dashboard` chỉ phụ thuộc `core_di`, `core_responsive` và `platform_kernel` — nó **về mặt vật lý không thể** import feature khác. Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả.
 
-Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — tablet ở cả hai hướng, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. (Màn hình cỡ điện thoại bị `AppInitializer` khoá dọc lúc khởi động, nên luôn hiện bottom bar; bỏ khoá đó thì điện thoại xoay ngang sẽ nhận rail theo đúng quy tắc này.) Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-layout-thích-ứng-tablet-máy-gập-chia-đôi-màn-hình).
+Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — tablet ở cả hai hướng, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. (Màn hình cỡ điện thoại bị `AppInitializer` khoá dọc lúc khởi động, nên luôn hiện bottom bar; bỏ khoá đó thì điện thoại xoay ngang sẽ nhận rail theo đúng quy tắc này.) Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
 
 ### Dashboard KHÔNG được phép
 
@@ -334,6 +334,74 @@ Checklist:
 - [ ] Mọi kích thước đều scale qua `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
 - [ ] Layout đổi theo cửa sổ thì chọn theo lớp kích thước cửa sổ (`context.adaptive`, `AdaptiveLayout`) — không bao giờ theo thiết bị hay nền tảng
 - [ ] Asset riêng của feature nằm trong feature package, không nhét vào `core_base_ui`
+
+---
+
+## 9. Giao tiếp giữa các feature — vì sao có hình dạng này
+
+Các feature không bao giờ import lẫn nhau. Phần hướng dẫn — chọn mô hình nào trong sáu mô hình và nối dây ra sao — nằm ở [`../guides/10_cross_feature.md`](../guides/10_cross_feature.md). Mục này giải thích vì sao nó có hình dạng như vậy.
+
+Bảng đăng ký: RULE-04, RULE-08, RULE-12, RULE-25, RULE-54.
+
+```
+feature_a  ──✗──>  feature_b        cấm tuyệt đối
+feature_a  ──✓──>  b_api            hợp đồng module B dành cho feature khác nằm ở đây
+feature_b  ──✓──>  b_api            B implement và đăng ký theo chúng
+ai cũng    ──✓──>  core_di          hợp đồng trung lập với sản phẩm (session, location, routing)
+```
+
+Một hợp đồng nằm ở một trong hai chỗ trung lập. **Package API của module B** (`modules/<b>/api`,
+`b_api`) chứa những gì tồn tại để *feature khác chạm tới B* — navigator, action handler, một
+widget builder (`auth_api`, `home_api` trong các sample); nó chỉ phụ thuộc foundation và
+Flutter, và feature của B implement nó. **`core_di`**, DI Hub, chỉ chứa thứ trung lập với sản
+phẩm — thứ mà chính platform cần, đặt tên theo nhu cầu đó (phiên đăng nhập, vị trí đăng nhập /
+sau đăng nhập, routing), không bao giờ theo module cung cấp nó. Dù ở đâu, cả hai phía đều phụ
+thuộc hợp đồng, không phía nào phụ thuộc phía kia. Chính điều đó làm cho feature có thể gỡ ra
+được; `arch_check` R3 giữ các luật của package API.
+
+### Vì sao là `SessionPrincipal` chứ không phải `UserEntity`
+
+Hợp đồng ở `core_di` không được gọi
+tên một kiểu thuộc package `domain_*` (RULE-08): import đó khiến mọi bên tiêu thụ
+phụ thuộc `domain_auth` ngay lúc biên dịch, và `getItOrNull` không gỡ được điều đó. Vì vậy `core_di`
+sở hữu một value type nhỏ,
+[`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), và feature
+auth thu hẹp entity của mình về kiểu đó tại ranh giới (`AuthStatusStreamImpl.toPrincipal`). Hợp đồng cố ý nhỏ
+hơn entity — bên tiêu thụ chỉ hỏi *ai đang đăng nhập* sẽ không bao giờ thấy phần còn lại.
+
+### Vì sao có `currentUser` bên cạnh stream
+
+`sessionStatusStream` là stream *broadcast*: nó không
+phát lại giá trị cuối cho listener mới. Một bên đăng ký sau khi đã đăng nhập sẽ "mù" cho tới lần
+thay đổi kế tiếp, nên nó đọc `currentUser` để lấy state tại thời điểm đăng ký.
+
+### Vì sao stream được đăng ký hai lần
+
+Class cụ thể được đăng ký để `feature_auth` inject thẳng
+`AuthStatusStreamImpl` và gọi method ghi `updateAuthStatus` — không cần tra `getIt`, không cần ép
+kiểu `as`. Phần bind `@module` sau đó lộ *cùng một instance* dưới dạng interface chỉ-đọc cho mọi
+bên khác. Bên sở hữu ghi, bên tiêu thụ đọc.
+
+### Vì sao theme và locale bỏ qua Domain
+
+Một use case sẽ phải nhận và trả `ThemeMode`, vốn là kiểu của
+`package:flutter/material.dart`. Tầng domain là Dart thuần và **không thể import Flutter**, nên đưa
+theme đi qua nó là bất khả thi về mặt cấu trúc — đây là ràng buộc cứng, không phải đường tắt.
+
+Implementation nằm ở app shell (`platform/shell/adapters/lib/src/theme_storage_impl.dart`) vì đó là nơi provider của
+`core_base_ui` và cơ chế của `core_storage` gặp nhau mà không tạo thành vòng phụ thuộc.
+
+### Anti-pattern
+
+| Đừng | Vì sao | Thay bằng |
+| :-- | :-- | :-- |
+| `import 'package:feature_b/...'` từ feature A | Trói cứng hai feature; không feature nào gỡ được | Hợp đồng trong `b_api` (hoặc hợp đồng trung lập ở `core_di`) |
+| Hợp đồng riêng của một module (`AuthNavigator`) đặt trong `core_di` | Platform khi đó gọi tên một module sản phẩm, và giữ một hợp đồng chết khi module bị gỡ | `<id>_api` của module sở hữu |
+| Lộ `Bloc` hay `ChangeNotifier` ra ngoài feature | Ép feature kia phải theo thư viện state của bạn | Mô hình 3 — neutral stream |
+| `getIt<KiểuDoFeatureSởHữu>()` | Ném lỗi khi feature đó bị gỡ | `getItOrNull<T>()` + fallback |
+| Dùng Action Handler để điều hướng | Sai công cụ; mất type-safe route | Navigator interface |
+| Đặt logic nghiệp vụ dùng chung vào `core_ui_kit` | Đó là package UI | Một UseCase ở domain |
+| Hợp đồng `core_di` gọi tên entity của `domain_*` | Mọi bên tiêu thụ phải phụ thuộc package domain đó; trái RULE-08 | Value type do hợp đồng sở hữu (`SessionPrincipal`) |
 
 ---
 

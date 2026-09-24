@@ -38,7 +38,7 @@ These are deliberate and documented, so they are **not** vulnerabilities in them
 - **SSL pinning is off until you configure it.** `sslPinningHashes` in
   `platform/shell/adapters/lib/src/network_config_impl.dart` returns an empty list, so staging/prod use
   normal certificate validation only. Fill in at least two SPKI hashes (leaf + backup) before
-  relying on pinning — see [`docs/en/guides/08_networking.md` § 5](docs/en/guides/08_networking.md).
+  relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning).
 - **Certificate validation is bypassed only in a debug build that explicitly declared
   `--flavor dev`.** A missing or unknown flavor is treated as prod. A bypass reachable any other
   way *is* a vulnerability — please report it.

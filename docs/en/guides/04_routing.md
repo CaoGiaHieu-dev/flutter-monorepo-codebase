@@ -1,47 +1,20 @@
 # Routing & Navigation
 
-**This guide answers:** how do I add a screen, and how do I navigate to a screen owned by another feature?
+## Goal
 
-**After reading you can:** register routes from inside a feature package without touching the app shell, build type-safe routes with `go_router_builder`, and navigate across features through interfaces instead of hardcoded paths.
+You add a screen from inside a feature package, without touching the app shell. You build it as a type-safe route with `go_router_builder`, register it through DI, and let other features navigate to it through an interface instead of a hardcoded path. Optionally, you make it reachable from a deep link.
 
----
+## Prerequisites
 
-## 1. The core idea: routing is decentralised
-
-`platform/shell/app_shell/lib/presentation/navigation/app_router.dart` is **assembly only**. It never names a feature's routes — it collects whatever features registered through DI:
-
-```dart
-List<INavDestinationModule> get _destinations {
-  return getAllOrEmpty<INavDestinationModule>().toList()
-    ..sort((a, b) => a.order.compareTo(b.order));
-}
-
-List<RouteBase> get _featureRoutes {
-  return [
-    for (final module in getAllOrEmpty<IFeatureRouteModule>())
-      ...module.routes,
-  ];
-}
-```
-
-> [!CAUTION]
-> **Never edit `app_router.dart` to add a route.** Adding `$myFeatureRoute` there couples the shell to your feature and breaks the "remove a feature and the app still runs" guarantee. Register a contract in your feature's DI module instead.
-
-The shell tree it builds:
-
-```
-GoRouter (navigatorKey: NavigatorKeys.rootKey)
-└── ShellRoute (navigatorKey: appKey)  →  NavigatorWrapperWidget
-    ├── ...IFeatureRouteModule routes        ← auth, onboarding, …
-    └── StatefulShellRoute.indexedStack      →  DashboardRouteModule.builder
-        └── one StatefulShellBranch per INavDestinationModule (sorted by order)
-```
+- A feature package — [`01_new_feature.md`](01_new_feature.md).
+- **How the router is assembled** from DI contributions, the shell tree it builds, and how it degrades when a module is missing: [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#5-router-assembly). The short version: `app_router.dart` is assembly only and never names a feature's routes (RULE-20).
+- What the dashboard may and may not own: [`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-is-chrome-only).
 
 ---
 
-## 2. The four routing contracts
+## 1. Pick the routing contract
 
-All live in `platform/foundation/contracts/lib/src/routing/`.
+All contracts live in `platform/foundation/contracts/lib/src/routing/`.
 
 | Contract | Use for | Ordered? | Implemented by |
 |---|---|---|---|
@@ -52,7 +25,95 @@ All live in `platform/foundation/contracts/lib/src/routing/`.
 | `IPostSignInLocation` | Where the shell sends a signed-in user (boot, sign-in); else `fallbackLocation` | n/a | the landing module — `feature_home` |
 | `DashboardRouteModule` | Dashboard chrome (scaffold + bottom bar / rail host) | n/a | **only** `feature_dashboard` |
 
-### 2.1 `IFeatureRouteModule`
+Use `INavDestinationModule` **only** for a real bottom-nav destination that needs its own persistent back stack. A screen you merely push onto the stack belongs in `IFeatureRouteModule` (RULE-24).
+
+## 2. Add the path constant
+
+Path constants live in the feature's `src/utils/` folder, not in `routing/` (RULE-09). `modules/auth/feature/lib/src/utils/auth_path.dart`:
+
+```dart
+class AuthPath {
+  AuthPath._();
+  static const String LOGIN = '/auth/login';
+}
+```
+
+## 3. Declare the typed route
+
+Routes are declared with annotations and generated into `*_route_module.g.dart`. `modules/auth/feature/lib/src/routing/auth_route_module.dart`:
+
+```dart
+@TypedShellRoute<AuthShellRoute>(
+  routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
+)
+class AuthShellRoute extends ShellRouteData {
+  const AuthShellRoute();
+
+  static final $navigatorKey = NavigatorKeys.nested('auth');
+  static final $parentNavigatorKey = NavigatorKeys.appKey;
+
+  @override
+  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
+    return navigator;
+  }
+}
+
+class LoginRoute extends GoRouteDataCustom with $LoginRoute {
+  const LoginRoute();
+  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
+  @override
+  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
+}
+```
+
+Add sibling routes as further `TypedGoRoute` entries in `routes:`. They share the shell's nested Navigator, so they share one back stack. The generated `$authShellRoute` is what the feature hands back from `IFeatureRouteModule.routes` (step 5).
+
+## 4. Create the controller in the route
+
+The route's `build()` is where a screen controller is created and bound to the tree (RULE-21).
+
+**BLoC** — `modules/home/feature/lib/src/routing/home_route_module.dart`:
+
+```dart
+class HomeRoute extends GoRouteDataCustom with $HomeRoute {
+  const HomeRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return BlocProvider(
+      // Auth is optional: an app composed without `feature_auth` registers
+      // no ISessionStatusStream, and Home then shows the signed-out state.
+      create: (_) => getIt<HomeProfileBloc>(
+        param1: getItOrNull<ISessionStatusStream>(),
+      ),
+      child: const HomePage(),
+    );
+  }
+}
+```
+
+**Provider** — same shape:
+
+```dart
+@override
+Widget build(BuildContext context, GoRouterState state) {
+  return ChangeNotifierProvider(
+    create: (context) => getIt<ProfileProvider>(),
+    child: const ProfilePage(),
+  );
+}
+```
+
+> [!CAUTION]
+> The page itself must **not** wrap in a second provider. See [`03_state_management.md`](03_state_management.md) § 9.
+
+A screen backed by a **global** controller (e.g. `LoginPage` with the `@lazySingleton` `AuthProvider`) builds the page directly, with no wrapper.
+
+## 5. Register the route contract
+
+Register it in the feature's own DI module, annotated `@LazySingleton(as: ...)`. Never add the route to `app_router.dart` (RULE-20).
+
+### A stack route — `IFeatureRouteModule`
 
 ```dart
 abstract class IFeatureRouteModule {
@@ -76,9 +137,9 @@ class OnboardingAppEntryLocation implements IAppEntryLocation {
 }
 ```
 
-Use unique paths and avoid overlapping catch-alls — sibling order between modules is not guaranteed.
+Use unique paths and avoid overlapping catch-alls: sibling order between modules is not guaranteed.
 
-### 2.2 `INavDestinationModule`
+### A primary tab — `INavDestinationModule`
 
 ```dart
 abstract class INavDestinationModule {
@@ -117,131 +178,11 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-> [!NOTE]
-> Use `INavDestinationModule` **only** for real bottom-nav destinations that need their own persistent back stack. A screen you merely push onto the stack belongs in `IFeatureRouteModule`.
+`order` is an ascending sort key, not an index, and must be unique across tabs. `destination` returns a neutral `NavDestination`, so the same contribution renders as a bottom-bar item or a rail item. `feature_dashboard` builds that chrome from every registered tab and drops it when fewer than two are registered ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-is-chrome-only)). Why the chrome switches on window size class: [`11_design_system.md` § 7](11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
 
-### 2.3 Dashboard is chrome only
+## 6. Let other features navigate to your screen
 
-Among workspace packages `feature_dashboard` depends on just `core_di`, `core_responsive` and `platform_kernel` — it physically **cannot** import another feature. Its page builds the navigation from DI (`modules/dashboard/feature/lib/src/pages/dashboard_page.dart`): a bottom bar on a `compact` window, a `NavigationRail` from `medium` up.
-
-```dart
-final tabs = getAllOrEmpty<INavDestinationModule>().toList()
-  ..sort((a, b) => a.order.compareTo(b.order));
-if (tabs.length < 2) return Scaffold(body: navigationShell);
-// …
-final sizeClass = context.windowSizeClass;
-if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
-  return Scaffold(
-    body: navigationShell,
-    bottomNavigationBar: BottomNavigationBar(
-      // …
-    ),
-  );
-}
-// … otherwise a NavigationRail beside the navigationShell
-```
-
-The dashboard **must not**:
-- import `feature_home` / `feature_settings` or embed their pages
-- own tab pages or business BLoCs
-- hardcode a destination list instead of reading DI
-- register `INavDestinationModule` itself for a "fake" tab
-
-Note `tabs.length < 2` drops the bar (or rail) entirely when fewer than two tabs are registered — part of the graceful-degradation story in §7. A tab's `destination` is a neutral `NavDestination`, so the same contribution renders as a bar item or a rail item; why the chrome switches on window size class is in [`11_design_system.md`](11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
-
----
-
-## 3. Type-safe routes with `go_router_builder`
-
-Routes are declared with annotations and generated into `*_route_module.g.dart`. **Run `dart run build_runner build --workspace` after any change.**
-
-Path constants live in the feature's `src/utils/` folder, not in `routing/` — every package keeps its constants under `utils/`:
-
-`modules/auth/feature/lib/src/utils/auth_path.dart`:
-
-```dart
-class AuthPath {
-  AuthPath._();
-  static const String LOGIN = '/auth/login';
-}
-```
-
-`modules/auth/feature/lib/src/routing/auth_route_module.dart`:
-
-```dart
-@TypedShellRoute<AuthShellRoute>(
-  routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
-)
-class AuthShellRoute extends ShellRouteData {
-  const AuthShellRoute();
-
-  static final $navigatorKey = NavigatorKeys.nested('auth');
-  static final $parentNavigatorKey = NavigatorKeys.appKey;
-
-  @override
-  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
-    return navigator;
-  }
-}
-
-class LoginRoute extends GoRouteDataCustom with $LoginRoute {
-  const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
-  @override
-  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
-}
-```
-
-Add sibling routes as further `TypedGoRoute` entries in `routes:` — they share the shell's nested Navigator, so they share one back stack. The generated `$authShellRoute` is what the feature hands back from `IFeatureRouteModule.routes`.
-
----
-
-## 4. Instantiate controllers at the route
-
-The route's `build()` is where a screen controller is created and bound to the tree.
-
-**BLoC** — `modules/home/feature/lib/src/routing/home_route_module.dart`:
-
-```dart
-class HomeRoute extends GoRouteDataCustom with $HomeRoute {
-  const HomeRoute();
-
-  @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return BlocProvider(
-      // Auth is optional: an app composed without `feature_auth` registers
-      // no ISessionStatusStream, and Home then shows the signed-out state.
-      create: (_) => getIt<HomeProfileBloc>(
-        param1: getItOrNull<ISessionStatusStream>(),
-      ),
-      child: const HomePage(),
-    );
-  }
-}
-```
-
-**Provider** — same shape:
-
-```dart
-@override
-Widget build(BuildContext context, GoRouterState state) {
-  return ChangeNotifierProvider(
-    create: (context) => getIt<ProfileProvider>(),
-    child: const ProfilePage(),
-  );
-}
-```
-
-> [!CAUTION]
-> The page itself must **not** wrap in a second provider. See [`03_state_management.md`](03_state_management.md) §4.
-
-Routes for screens backed by a **global** controller (e.g. `LoginPage` with the `@lazySingleton` `AuthProvider`) build the page directly, with no wrapper.
-
----
-
-## 5. Cross-feature navigation
-
-Feature A must never import Feature B. Navigation crosses the boundary through an interface in **module B's API package** — `modules/<id>/api`, named `<id>_api` — which feature A depends on instead of feature B (`arch_check` R3). `core_di` holds no module's navigator.
+Feature A never imports feature B (RULE-04). Navigation crosses the boundary through an interface in **module B's API package** — `modules/<id>/api`, named `<id>_api`. Feature A depends on that instead of feature B (`arch_check` R3). `core_di` holds no module's navigator (RULE-22).
 
 **1. Declare** — `modules/auth/api/lib/src/navigators/auth_navigator.dart` (package `auth_api`):
 
@@ -253,13 +194,13 @@ abstract class AuthNavigator {
 
 One method per route the feature owns — and only routes it owns.
 
-A **new** file in the API package is invisible to every consumer until the barrel exports it — `package:auth_api/auth_api.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it (never hand-add the `export`; the generator deletes hand-written lines). A module with no API package yet gets one first: `docs/en/guides/12_module_isolation.md` § 7.
+A **new** file in the API package is invisible to every consumer until the barrel exports it. `package:auth_api/auth_api.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it; never hand-add the `export`, because the generator deletes hand-written lines (RULE-75). A module with no API package yet gets one first: [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package).
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/auth/api/lib
 ```
 
-**2. Implement in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
+**2. Implement it in the owning feature** — `modules/auth/feature/lib/src/routing/auth_navigator_impl.dart`:
 
 ```dart
 @Singleton(as: AuthNavigator)
@@ -269,7 +210,7 @@ class AuthNavigatorImpl implements AuthNavigator {
 }
 ```
 
-**3. Consume from any feature that lists `auth_api` in its `dependencies:`:**
+**3. Call it from any feature that lists `auth_api` in its `dependencies:`:**
 
 ```dart
 // From any package other than the owner — the owner is removable:
@@ -279,17 +220,14 @@ getItOrNull<AuthNavigator>()?.toLogin(context);
 getIt<AuthNavigator>().toLogin(context);
 ```
 
-### Rules
+Rules that apply at the call site:
 
-- **RULE-22** · A Navigator interface exposes **only** routes its own feature owns.
-- **RULE-22** · **Never** hardcode a path string or call `GoRouter.of(context).go('/auth/login')` to reach another feature.
-- **RULE-23** · **`BuildContext` must be passed in directly from the calling widget.** Do not reach for `NavigatorKeys.*.currentContext` or `appRouter.currentContext` — those bypass the widget lifecycle and produce "used after dispose" bugs.
-- **RULE-12** · Use `getItOrNull` at call sites that must survive the target feature being removed.
-- **RULE-22** · **The app shell uses no module navigator.** A signed-out user goes to `ISignInLocation.path`, a signed-in one to `IPostSignInLocation.path` — product-neutral `core_di` contracts the session owner and the landing module contribute (`AuthSignInLocation`, `HomePostSignInLocation`); `NavigatorWrapperWidget` calls `context.go(path)` itself.
+- **RULE-22** · Never hardcode a path string or call `GoRouter.of(context).go('/auth/login')` to reach another feature.
+- **RULE-23** · Pass `BuildContext` straight from the calling widget. Do not use `NavigatorKeys.*.currentContext` or `appRouter.currentContext`: those bypass the widget lifecycle and cause "used after dispose" bugs.
+- **RULE-12** · Use `getItOrNull` wherever the call must survive the target feature being removed.
+- **RULE-22** · The app shell uses no module navigator. A signed-out user goes to `ISignInLocation.path`, a signed-in one to `IPostSignInLocation.path`. The session owner and the landing module contribute those (`AuthSignInLocation`, `HomePostSignInLocation`), and `NavigatorWrapperWidget` calls `context.go(path)` itself.
 
----
-
-## 6. `NavigatorKeys` — why they live in the DI Hub
+## 7. Give a module its own back stack
 
 `platform/foundation/contracts/lib/src/routing/navigator_keys.dart`:
 
@@ -310,76 +248,18 @@ class NavigatorKeys {
 }
 ```
 
-A `ShellRoute` and its child routes must reference the **same** `GlobalKey` instance. The shell is assembled by the app shell; the child routes are declared inside feature packages. Putting the keys on either side breaks a rule — the shell (`platform_app_shell`) is core and may not depend on a feature (R1), and a feature may not depend on the shell. `core_di`, which both sides already depend on, is the neutral home.
+Ask for a key with `NavigatorKeys.nested('<id>')` **only** when a module genuinely needs its own nested navigator — its own back stack. The shell route and its child routes must use the same id, as `AuthShellRoute` and `LoginRoute` do in step 3. Destinations inside `StatefulShellRoute` get a branch navigator from GoRouter and need none. Why the keys live in `core_di`: [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#why-navigatorkeys-live-in-core_di).
 
-The DI Hub declares no feature-named key. `nested(id)` hands back the same instance for the same id, so a shell route and its children agree without anything central being declared — and `core_di`'s public surface never grows a product vocabulary.
+## 8. Generate the routes and export the files
 
-Ask for a key **only** when a module genuinely needs its own nested navigator — its own back stack. Destinations inside `StatefulShellRoute` get a branch navigator from GoRouter and need none.
-
----
-
-## 7. Graceful degradation
-
-Every lookup in `app_router.dart` tolerates a missing contribution — this is what makes a feature removable:
-
-```dart
-String get fallbackLocation {
-  final tabs = _destinations;
-  if (tabs.isNotEmpty) return tabs.first.path;
-  return _emptyDestinationPath;
-}
-
-String get entryLocation {
-  final entry = getItOrNull<IAppEntryLocation>();
-  return resolveEntryLocation(
-    entryPath: entry?.path,
-    // The shell's own first-launch flag, set by NavigatorWrapperWidget.
-    entrySeen:
-        entry != null &&
-        (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
-    fallback: fallbackLocation,
-  );
-}
+```bash
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/<name>/feature/lib
 ```
 
-```dart
-builder: (context, state, navigationShell) {
-  return getItOrNull<DashboardRouteModule>()?.builder(
-        context,
-        state,
-        navigationShell,
-      ) ??
-      navigationShell;
-},
-```
+Run `build_runner` after **any** change to a route annotation. Then run the barrel generator for every package you added a file to — including `modules/<id>/api/lib` when you added a navigator (step 6).
 
-| Missing | Result |
-|---|---|
-| All `IFeatureRouteModule` | No stack routes; app still builds |
-| All `INavDestinationModule` | A placeholder `/_empty_dashboard` branch keeps `StatefulShellRoute` valid |
-| `DashboardRouteModule` | The destinations render without chrome — `navigationShell` shows the current branch. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
-| `IAppEntryLocation` | Boot starts on `fallbackLocation` — the first tab, else the placeholder branch. With no entry location there is no onboarding to show, so boot goes on to the login check |
-| `ISignInLocation` | No redirect to a sign-in screen, at boot or on sign-out — correct with no session owner |
-| `IPostSignInLocation` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
-
-There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `IPostSignInLocation` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
-
-Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
-
----
-
-## 8. Add a screen — end to end
-
-1. **Path constant** → `lib/src/utils/<feature>_path.dart`.
-2. **Route class** → `lib/src/routing/<feature>_route_module.dart` with `@TypedGoRoute` / `@TypedShellRoute`; create the controller in `build()`.
-3. **Register the contract** → `IFeatureRouteModule` for a stack route, or `INavDestinationModule` for a tab, annotated `@LazySingleton(as: ...)`.
-4. **Cross-feature entry?** Add a method to that module's Navigator interface in its API package (`modules/<id>/api`) and implement it in the feature's `*_navigator_impl.dart`. A module with no Navigator yet gets a **new** file in `modules/<id>/api/lib/src/navigators/` — then run `dart tools/barrel_generator/generate.dart modules/<id>/api/lib` so the API barrel exports it (§5).
-5. **Generate** → `dart run build_runner build --workspace`.
-6. **Barrels** → `dart tools/barrel_generator/generate.dart modules/<name>/feature/lib`.
-
----
-
-## 9. Deep links: platform setup
+## 9. Set up deep links
 
 Two link shapes reach the app, and both land on the same router location:
 
@@ -388,18 +268,18 @@ Two link shapes reach the app, and both land on the same router location:
 | `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
 | `<scheme>://settings?tab=2` (custom scheme — the first segment sits in the host position) | `/settings?tab=2` |
 
-The platform delivers the URI to `app_links`, and `DeeplinkProvider` (`platform/shell/app_shell/lib/presentation/providers/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it — but only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it (never over onboarding or login). A path no module registered lands on `UndefineRouteWidget`, like any unknown location.
+The platform delivers the URI to `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/presentation/providers/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it. It does so only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it — never over onboarding or login. A path no module registered lands on `UndefineRouteWidget`, like any unknown location.
 
-### Why Flutter's own deep linking is off
+### Keep Flutter's own deep linking off
 
-Since Flutter 3.27 the engine also handles deep links by default: it pushes the URI straight into `GoRouter`, skipping `DeeplinkProvider` and its session check — a signed-out user could open a signed-in screen, and each link would be routed twice. Both platforms therefore switch it off:
+Since Flutter 3.27 the engine also handles deep links by default. It pushes the URI straight into `GoRouter`, skipping `DeeplinkProvider` and its session check: a signed-out user could open a signed-in screen, and each link would be routed twice. Both platforms therefore switch it off:
 
 - Android — inside `<activity>` in `apps/mobile/android/app/src/main/AndroidManifest.xml`: `<meta-data android:name="flutter_deeplinking_enabled" android:value="false" />`
 - iOS — `apps/mobile/ios/Runner/Info.plist`: `FlutterDeepLinkingEnabled` = `false`
 
 Do not remove either while `DeeplinkProvider` is the router's only way in.
 
-### Per-flavor values
+### Set the per-flavor values
 
 | Flavor | Custom scheme | Android application id | iOS bundle id |
 |:---|:---|:---|:---|
@@ -407,11 +287,16 @@ Do not remove either while `DeeplinkProvider` is the router's only way in.
 | `staging` | `codebase-stg` | `com.example.codebase.stg` | `com.example.codebase.staging` |
 | `prod` | `codebase` | `com.example.codebase` | `com.example.codebase` |
 
-One scheme per flavor, so dev, staging and prod installed side by side never compete for a link. The scheme is declared twice and the two must agree: `resValue("string", "DEEP_LINK_SCHEME", …)` in each `productFlavors` entry of `apps/mobile/android/app/build.gradle.kts`, and the `DEEP_LINK_SCHEME` build setting of each Runner configuration in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*). Rename all six together when you rename the app.
+One scheme per flavor, so dev, staging and prod installed side by side never compete for a link. The scheme is declared twice, and the two must agree:
+
+- `resValue("string", "DEEP_LINK_SCHEME", …)` in each `productFlavors` entry of `apps/mobile/android/app/build.gradle.kts`;
+- the `DEEP_LINK_SCHEME` build setting of each Runner configuration in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*).
+
+Rename all six together when you rename the app.
 
 `WEB_DOMAIN` comes from the flavor's env file (`apps/mobile/env.dev`, …). The committed env files leave it empty.
 
-### Android
+### Configure Android
 
 `AndroidManifest.xml` declares two `VIEW` intent-filters on `MainActivity`:
 
@@ -431,7 +316,7 @@ One scheme per flavor, so dev, staging and prod installed side by side never com
 </intent-filter>
 ```
 
-`@string/WEB_DOMAIN` is a `resValue` that `build.gradle.kts` decodes from the dart-defines. When the env file leaves `WEB_DOMAIN` empty it becomes `example.invalid` — a reserved domain that never resolves — because an empty host would make the filter claim every https link.
+`@string/WEB_DOMAIN` is a `resValue` that `build.gradle.kts` decodes from the dart-defines. When the env file leaves `WEB_DOMAIN` empty it becomes `example.invalid`, a reserved domain that never resolves. An empty host would make the filter claim every https link.
 
 **App Links verification.** `autoVerify` makes Android fetch `https://<WEB_DOMAIN>/.well-known/assetlinks.json` at install time. Serve it over https, with no redirect, as `application/json`, listing every flavor that uses that domain:
 
@@ -448,7 +333,12 @@ One scheme per flavor, so dev, staging and prod installed side by side never com
 ]
 ```
 
-The fingerprint is that of the key the **installed** APK is signed with: `keytool -list -v -keystore <release.jks> -alias <alias>` for a key you sign with yourself; for a Play build under Play App Signing, copy the *App signing key certificate* SHA-256 from Play Console → *Test and release → App integrity* — not your upload key's. Check the result on a device:
+The fingerprint is that of the key the **installed** APK is signed with:
+
+- for a key you sign with yourself: `keytool -list -v -keystore <release.jks> -alias <alias>`;
+- for a Play build under Play App Signing: the *App signing key certificate* SHA-256 from Play Console → *Test and release → App integrity* — not your upload key's.
+
+Check the result on a device:
 
 ```bash
 adb shell pm get-app-links com.example.codebase            # "verified" per domain
@@ -457,14 +347,16 @@ adb shell am start -a android.intent.action.VIEW -d "codebase-dev://settings?tab
 adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settings?tab=2"
 ```
 
-### iOS
+### Configure iOS
 
 **Custom scheme.** `Info.plist` registers it under `CFBundleURLTypes`, with `CFBundleURLSchemes` = `$(DEEP_LINK_SCHEME)` and `CFBundleURLName` = `$(PRODUCT_BUNDLE_IDENTIFIER)`. Nothing else is needed: `xcrun simctl openurl booted "codebase-dev://settings?tab=2"` opens the dev build.
 
 **Universal links** stay off until you own the domain, because the entitlement makes provisioning fail for an App ID without the capability. To turn them on:
 
 1. Enable **Associated Domains** on each App ID in the Apple Developer portal (or *Signing & Capabilities → + Capability* in Xcode) and regenerate the provisioning profiles.
-2. Uncomment the `com.apple.developer.associated-domains` block in `apps/mobile/ios/Runner/Runner.entitlements`. Its value, `applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)`, is expanded from `Flutter/Environment.xcconfig`, which each flavor scheme's build pre-action writes from the dart-defines — so build through a flavor scheme (`--flavor`). Leave `APP_LINK_MODE` empty in production; `?mode=developer` bypasses Apple's CDN cache on a device with *Associated Domains Development* enabled.
+2. Uncomment the `com.apple.developer.associated-domains` block in `apps/mobile/ios/Runner/Runner.entitlements`.
+   - Its value, `applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)`, is expanded from `Flutter/Environment.xcconfig`. Each flavor scheme's build pre-action writes that file from the dart-defines, so build through a flavor scheme (`--flavor`).
+   - Leave `APP_LINK_MODE` empty in production; `?mode=developer` bypasses Apple's CDN cache on a device with *Associated Domains Development* enabled.
 3. Serve `https://<WEB_DOMAIN>/.well-known/apple-app-site-association` — no file extension, `application/json`, no redirect:
 
 ```json
@@ -480,9 +372,22 @@ adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settin
 }
 ```
 
-`ABCDE12345` is your Team ID; add one `appIDs` entry per bundle id served from that domain. Apple fetches the file through its CDN when the app is installed, so a change can take a while to reach devices — that is what `?mode=developer` is for.
+`ABCDE12345` is your Team ID; add one `appIDs` entry per bundle id served from that domain. Apple fetches the file through its CDN when the app is installed, so a change can take a while to reach devices. That is what `?mode=developer` is for.
 
-## Checklist
+---
+
+## Verify
+
+```bash
+dart run build_runner build --workspace   # the *.g.dart route files and DI registrations
+flutter analyze                           # No issues found!
+dart tools/arch_check/check.dart          # ✅ All architecture rules hold … (R3, R8, R10)
+cd apps/mobile && flutter test test/di_smoke_test.dart   # every route module resolves
+```
+
+`platform/shell/app_shell/test/app_router_test.dart` shows how to test routing against a real `AppRouter`. For deep links, use the `adb` and `xcrun` commands of step 9.
+
+Review checklist:
 
 - [ ] `app_router.dart` untouched
 - [ ] Path constants under `src/utils/`, not `routing/`
@@ -491,11 +396,25 @@ adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settin
 - [ ] Cross-feature navigation goes through the target module's `<id>_api` Navigator interface
 - [ ] `BuildContext` passed from the UI, never taken from `NavigatorKeys`
 - [ ] `build_runner` re-run after touching route annotations
-- [ ] Deep links still reach the router only through `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` stay `false` (§9)
+- [ ] Deep links still reach the router only through `DeeplinkProvider` — `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` stay `false` (step 9)
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `Undefined name '$myRoute'` or a missing `*.g.dart` | `build_runner` has not run since the annotation changed | `dart run build_runner build --workspace` (step 8) |
+| The new screen is unreachable; GoRouter shows `UndefineRouteWidget` | The route contract is not registered, or the app was hot-reloaded | Check the `@LazySingleton(as: IFeatureRouteModule)` annotation, re-run `build_runner`, then **full restart** |
+| `Undefined name 'MyNavigator'` in a consumer | The API package's barrel does not export the new file | Run the barrel generator for `modules/<id>/api/lib` (step 6) |
+| Tabs appear in the wrong order, or one replaces another | Two `INavDestinationModule`s share an `order` | Give each tab a unique `order` (step 5) |
+| No bottom bar or rail | Fewer than two tabs are registered | Expected: the dashboard drops the chrome below two tabs |
+| A deep link opens a screen while signed out, or routes twice | Flutter's own deep linking was turned back on | Restore `flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled` = `false` (step 9) |
+| `pm get-app-links` does not report `verified` | `assetlinks.json` is missing, redirected, or lists the wrong fingerprint | Serve it as in step 9, with the installed APK's signing key |
+| Provisioning fails after enabling universal links | The App ID lacks the Associated Domains capability | Enable it and regenerate the profiles (step 9) |
 
 ## Related
 
+- Rules: RULE-04 (no feature → feature import), RULE-12 (optional lookups), RULE-20 (never edit `app_router.dart`), RULE-21 (controller at the route), RULE-22 (navigators in `<id>_api`), RULE-23 (`BuildContext` from the caller), RULE-24 (tabs vs pushed screens) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#5-router-assembly) — router assembly, entry vs fallback location, graceful degradation
 - [`03_state_management.md`](03_state_management.md) — controller lifecycle
 - [`05_di.md`](05_di.md) — how contracts get registered and collected
 - [`10_cross_feature.md`](10_cross_feature.md) — the other cross-feature models
-- [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) — router assembly

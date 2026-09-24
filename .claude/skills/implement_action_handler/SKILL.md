@@ -30,7 +30,7 @@ RULE-75, RULE-78.
 ## 📋 Detailed Steps
 
 ### Step 1: Declare the Interface in the owning module's API package
-Create `modules/<owner>/api/lib/src/actions/i_<feature>_action_handler.dart` (package `<owner>_api`, foundation + Flutter dependencies only — `arch_check` R3; create the package first if the module has none: `docs/en/guides/12_module_isolation.md` § 7). `core_di` is for product-neutral contracts only:
+Create `modules/<owner>/api/lib/src/actions/i_<feature>_action_handler.dart` (package `<owner>_api`, foundation + Flutter dependencies only — `arch_check` R3; create the package first if the module has none: `docs/en/guides/12_module_isolation.md` § 4). `core_di` is for product-neutral contracts only:
 ```dart
 import 'package:flutter/widgets.dart';
 

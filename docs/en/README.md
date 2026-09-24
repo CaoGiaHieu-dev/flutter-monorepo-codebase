@@ -16,7 +16,7 @@ Everything you need to work in this Flutter monorepo, organised by **what you ar
 | 📖 **Need a quick answer** — naming, a rule, a command | [`reference/`](reference/01_rules.md) |
 | 🚢 **Need to build, sign or ship** | [`operations/`](operations/01_cicd.md) |
 
-New to the project? Read in this order: **`getting-started/01` → `02` → `architecture/01` → the guide for whatever you are building.**
+New to the project? Read in this order: **`getting-started/01` → `04` (the tutorial: your first feature, end to end) → `02` → `architecture/01` → the guide for whatever you are building.**
 
 ---
 
@@ -29,6 +29,7 @@ Zero to a running app, and the daily rhythm afterwards.
 | [`01_setup.md`](getting-started/01_setup.md) | What do I need installed, and what exact commands take me from `git clone` to a running app? |
 | [`02_project_tour.md`](getting-started/02_project_tour.md) | What is every folder for, which package owns what, and where do I go to change a given thing? |
 | [`03_daily_workflow.md`](getting-started/03_daily_workflow.md) | Which command do I run, and when? What breaks if I skip it? |
+| [`04_first_feature_tutorial.md`](getting-started/04_first_feature_tutorial.md) | How do I build, test and remove a small module end to end — in 30 minutes, every command verified? |
 
 ---
 
@@ -49,7 +50,7 @@ How the system is laid out and why. Read these to place a new file correctly, or
 
 ## 🔨 Guides
 
-Practical, step-by-step, with working code. This is the "how to use" section.
+Practical, step-by-step, with working code. This is the "how to use" section. Every guide has the same shape: **Goal → Prerequisites → numbered steps → Verify → Troubleshooting → Related**. The *why* behind each lives in `architecture/`.
 
 | Page | Answers |
 |---|---|
@@ -60,7 +61,7 @@ Practical, step-by-step, with working code. This is the "how to use" section.
 | [`05_di.md`](guides/05_di.md) | Which annotation do I use, where does my module get registered, and why does the app throw "not registered" at startup? |
 | [`06_storage.md`](guides/06_storage.md) | How do I persist a value so it survives restarts — without letting another package read or overwrite it? |
 | [`07_database.md`](guides/07_database.md) | How do I store relational data so that deleting my package deletes its database with it? |
-| [`08_networking.md`](guides/08_networking.md) | How does an HTTP request leave this app, how is an expired session renewed, and what protects the connection? |
+| [`08_networking.md`](guides/08_networking.md) | How do I call a new endpoint, opt a request out of auth or retry, plug in token refresh and turn on SSL pinning? |
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | How does a feature ship its own translations, and how do colours, fonts and dimensions stay consistent? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A needs something from feature B — how, without importing it? |
 | [`11_design_system.md`](guides/11_design_system.md) | Where is every colour, font, spacing step and radius defined — which file do I edit to rebrand the app, and how does the UI scale and adapt on tablets, foldables and split screen? |
@@ -101,7 +102,7 @@ Building, signing and shipping.
 | Add a database table | [`guides/07_database.md`](guides/07_database.md) | [`architecture/04_data.md`](architecture/04_data.md) |
 | Store a token or a flag | [`guides/06_storage.md`](guides/06_storage.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Add a translated string | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) | — |
-| Add a locale | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) § 5 | — |
+| Add a locale | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) § 2 | — |
 | Change theme, colours or spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
 | Lay out a screen for tablets, foldables or split screen | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Share state between two features | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |

@@ -149,6 +149,12 @@ Package này **không** chứa `StatelessWidget`, `StatefulWidget`, `State<…>`
 
 Các magic value *không phải* token thì nằm ở `src/utils/base_ui_constants.dart`. Ranh giới phân biệt: nếu một designer nhìn vào mà nhận ra, đó là token và ở lại `styles/`.
 
+### Vì sao luật về màu và font size do review giữ
+
+Đã cân nhắc và cố ý để cho review. Một phép kiểm `Colors.<name>` sẽ phải cho qua những chỗ mà màu literal là *đúng* — `AppShadows`, vốn là file token, và mọi lớp phủ modal, nơi `ModalBarrier` của chính Flutter là màu đen cố định và một giá trị theo theme sẽ *làm sáng* màn hình ở chế độ tối. Trên cây code này là bảy chỗ được duyệt so với hai vi phạm thật, và một luật mà danh sách ngoại lệ dài hơn số phát hiện sẽ dạy người ta thói quen đọc lướt.
+
+Repo cũng cấm comment suppression, nên không có lối thoát trung thực nào cho các trường hợp hợp lệ. Vậy nên: review. Và đó chính là lý do ba bug dark-mode sống sót trong `core_ui_kit` cho tới khi có người đi soát — điều đáng nhớ khi bạn copy một widget ra khỏi đó.
+
 ### `ThemeProvider` phản ứng khi OS đổi theme
 
 `ThemeProvider` là `@lazySingleton` có mixin `WidgetsBindingObserver`. Ở chế độ `ThemeMode.system`, độ sáng của OS có thể đổi khi app đang chạy, nên nó override `didChangePlatformBrightness()` và rebuild — nhưng chỉ khi chế độ thực sự *là* `system`, để lựa chọn light/dark cứng không gây rebuild thừa.
@@ -156,6 +162,38 @@ Các magic value *không phải* token thì nằm ở `src/utils/base_ui_constan
 `WidgetsBindingObserver` được chọn thay vì gán `platformDispatcher.onPlatformBrightnessChanged`: trường đó là một **slot đơn**, ai gán sau sẽ âm thầm thắng. Với một singleton toàn cục phải cạnh tranh cùng framework và plugin, đó là rủi ro thật.
 
 Observer được gỡ trong `dispose()`, và hàm này gắn `@disposeMethod` để GetIt gọi khi reset container — thiếu nó thì mỗi lần `resetDependencies()` trong test sẽ để lại một observer cũ còn đăng ký.
+
+Phần override, trong `platform/ui/design_system/lib/src/theme/theme_provider.dart`:
+
+```dart
+// platform/ui/design_system/lib/src/theme/theme_provider.dart
+/// Called by the framework when the OS switches between Light and Dark.
+///
+/// Only [ThemeMode.system] derives its appearance from the platform, so an
+/// explicit light/dark choice is left untouched — no wasted rebuild.
+@override
+void didChangePlatformBrightness() {
+  super.didChangePlatformBrightness();
+  if (_themeMode != ThemeMode.system) return;
+
+  // Refresh the status/navigation bar styling for the new brightness…
+  setSystemTheme();
+  // …and rebuild consumers, because `currentTheme` now resolves differently.
+  notifyListeners();
+}
+```
+
+Việc dọn dẹp được nối vào DI:
+
+```dart
+@disposeMethod
+@override
+void dispose() {
+  if (_isObservingPlatform) {
+    WidgetsBinding.instance.removeObserver(this);
+```
+
+Giá trị đã lưu được đọc qua `IThemeStorage` — xem [`../guides/06_storage.md`](../guides/06_storage.md#9-chia-sẻ-giá-trị-qua-ranh-giới-package).
 
 ---
 
@@ -295,7 +333,334 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 > [!CAUTION]
 > **SSL pinning chỉ tốt bằng danh sách hash của nó.** `sslPinningHashes` hiện trả `const []`, tức pinning đang tắt. `AppInitializer` ghi log mức `ERROR` mỗi khi danh sách rỗng hoặc config chưa đăng ký trên bất kỳ bản build nào không bỏ qua kiểm tra certificate — tức mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor (được coi như `prod` về TLS), nên lỗ hổng này hiện rõ chứ không im lặng — nhưng nó vẫn là lỗ hổng cho tới khi bạn điền hash vào. Xem [hướng dẫn networking](../guides/08_networking.md).
 
-Chi tiết đầy đủ về chuỗi interceptor, các lớp chống đệ quy khi refresh token và việc che header nằm ở [`../guides/08_networking.md`](../guides/08_networking.md).
+Cách khai một service, cho request bỏ qua một bước, thêm client thứ hai hay bật pinning: [`../guides/08_networking.md`](../guides/08_networking.md). Phần dưới đây mô tả những gì diễn ra bên trong client.
+
+### Cấu hình mặc định của `ApiClient`
+
+`core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (xem bên dưới), do app shell implement.
+
+```dart
+// platform/infra/network/lib/src/api_client.dart
+@lazySingleton
+class ApiClient {
+  final NetworkConfig _config;
+
+  ApiClient(this._config);
+
+  /// Default base options for Dio.
+  BaseOptions get _defaultOptions => BaseOptions(
+    baseUrl: EnvConstants.BASE_URL,
+    connectTimeout: NetworkConstants.CONNECT_TIMEOUT,
+    receiveTimeout: NetworkConstants.RECEIVE_TIMEOUT,
+    sendTimeout: NetworkConstants.SEND_TIMEOUT,
+    followRedirects: false,
+    headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
+  );
+```
+
+### Chuỗi interceptor
+
+Dio chạy interceptor theo **đúng thứ tự được thêm vào** — cho cả `onRequest` lẫn `onError`. Thứ tự thật trong `createClient()` là:
+
+```
+1. AuthInterceptor            → gắn header Authorization + language
+2. RefreshTokenInterceptor    → bắt 401, làm mới phiên, replay   (chỉ khi có cấu hình)
+3. RetryInterceptor           → bắt lỗi timeout / mất kết nối
+4. LoggingInterceptor         → log có cấu trúc (chỉ bản debug)
+```
+
+```dart
+// platform/infra/network/lib/src/api_client.dart
+dio.interceptors.add(
+  AuthInterceptor(
+    getToken: _config.getToken,
+    getLocale: _config.getLocale,
+  ),
+);
+
+// Renewing an expired session must happen before the retry pass,
+// otherwise a 401 would be replayed with the same stale token.
+// Only wired when the app supplies a refresh callback; without one a
+// 401 surfaces to the caller unchanged.
+final onRefreshToken = _config.onRefreshToken;
+if (onRefreshToken != null) {
+  final onRefreshFailed = _config.onRefreshFailed;
+  dio.interceptors.add(
+    RefreshTokenInterceptor(
+      RefreshTokenHandler(
+        dio: dio,
+        currentToken: _config.getToken,
+        onRefreshToken: onRefreshToken,
+        onRefreshFailed: onRefreshFailed ?? () async {},
+      ),
+    ),
+  );
+}
+
+dio.interceptors.addAll([
+  RetryInterceptor(
+    handleRetry: retryHandler.handleRetry,
+    retryWhen: retryHandler.retryWhen,
+  ),
+  LoggingInterceptor(tag: NetworkConstants.CLIENT_LOG_TAG),
+]);
+```
+
+Auth chạy trước để token được gắn trước mọi thứ; refresh đứng trước retry để một lỗi 401 được **làm mới** chứ không bị replay với đúng cái token đã chết.
+
+#### `AuthInterceptor`
+
+Gắn header `language` viết hoa (fallback về locale thiết bị, rồi về `vi`), và bearer token khi request cần auth:
+
+```dart
+// platform/infra/network/lib/src/interceptors/auth_interceptor.dart
+if (needAuthentication) {
+  final token = getToken() ?? '';
+  if (token.isNotEmpty) {
+    options.headers.addAll({
+      HttpHeaders.authorizationHeader:
+          '${NetworkConstants.BEARER_PREFIX} $token',
+    });
+  }
+}
+```
+
+> [!NOTE]
+> Tên header ngôn ngữ là `'language'` (không chuẩn), **không phải** `Accept-Language`. Phía server phải khớp đúng tên này.
+
+#### `RetryInterceptor`
+
+Chỉ lỗi tầng vận chuyển mới được retry — **không** retry theo HTTP status code:
+
+```dart
+// platform/infra/network/lib/src/handlers/retry_handler.dart
+bool retryWhen(DioExceptionType type) {
+  return type == DioExceptionType.receiveTimeout ||
+      type == DioExceptionType.sendTimeout ||
+      type == DioExceptionType.connectionError ||
+      type == DioExceptionType.connectionTimeout;
+}
+```
+
+Nhiều request lỗi đồng thời được gom vào một hàng đợi và chỉ hiện **một** dialog retry duy nhất qua `NetworkConfig.onRetryCallback`. Nếu không truyền callback, mọi request trong hàng đợi sẽ bị huỷ thay vì treo. "Retry" lấy mọi request ra khỏi hàng đợi (mỗi bên gọi một mục) và gửi lại qua chính `Dio` đó với `canRetry: false`: interceptor auth và refresh chạy lại (token mới, 401 được refresh), timeout thì đưa bên gọi trở lại hàng đợi cho dialog kế tiếp, còn lỗi khác tới tay bên gọi đúng là lỗi *đó* chứ không phải timeout ban đầu.
+
+#### `LoggingInterceptor`
+
+Cả ba hook đều nằm sau `kDebugMode`, và header chứa thông tin đăng nhập bị che **ngay cả ở bản debug**:
+
+```dart
+// platform/infra/network/lib/src/interceptors/logging_interceptor.dart
+Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
+  const redactedKeys = {
+    HttpHeaders.authorizationHeader,
+    HttpHeaders.cookieHeader,
+    HttpHeaders.setCookieHeader,
+    HttpHeaders.proxyAuthorizationHeader,
+  };
+
+  return {
+    for (final entry in headers.entries)
+      entry.key: redactedKeys.contains(entry.key.toLowerCase())
+          ? '***REDACTED***'
+          : entry.value,
+  };
+}
+```
+
+Body cũng được che, ở mọi độ sâu: giá trị dưới `password`, `token`, `access_token` / `accessToken`, `refresh_token`, `id_token`, `secret` hoặc `client_secret` được in thành `***REDACTED***` — request login mang password trong body, còn response trả token trong body.
+
+### App cung cấp `NetworkConfig` thế nào
+
+```dart
+// platform/infra/network/lib/src/network_config.dart
+abstract class NetworkConfig implements SslPinningConfig {
+  String? Function() get getToken;
+  String? Function() get getLocale;
+
+  void onRetryCallback({
+    required VoidCallback onRetry,
+    required VoidCallback onCancel,
+  });
+
+  Future<String?> Function()? get onRefreshToken => null;
+  Future<void> Function()? get onRefreshFailed => null;
+
+  @override
+  List<String> get sslPinningHashes;
+}
+```
+
+Hai getter refresh mặc định `null`, nên trong một app không có endpoint refresh thì `401` đi thẳng tới caller, nguyên vẹn.
+
+Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, thay vì tự đọc storage:
+
+```dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
+@LazySingleton(as: NetworkConfig)
+class NetworkConfigImpl implements NetworkConfig {
+  NetworkConfigImpl(this._languageStorage);
+
+  final ILanguageStorage _languageStorage;
+
+  /// Null in a build that composes no auth module.
+  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
+
+  @override
+  String? Function() get getToken => () => _session?.readToken();
+
+  @override
+  String? Function() get getLocale =>
+      () => _languageStorage.getLanguage().languageCode;
+
+  /// Whether an auth module is composed — without resolving it: resolving
+  /// the gateway while `Dio` is being built closes a dependency cycle.
+  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
+
+  @override
+  Future<String?> Function()? get onRefreshToken =>
+      _hasSession ? _refreshSession : null;
+
+  @override
+  Future<void> Function()? get onRefreshFailed =>
+      _hasSession ? _clearSession : null;
+```
+
+> [!IMPORTANT]
+> `NetworkConfigImpl` không import module nào. Nó đọc token qua `ISessionGateway`, được resolve bằng `getItOrNull` ngay lúc gọi thay vì inject, nên nó dựng được dù build có module auth hay không, và không thứ tự DI nào làm hỏng được nó. Khi không có gateway nào được đăng ký, `onRefreshToken` trả về null — và `ApiClient` chỉ gắn `RefreshTokenInterceptor` **khi** giá trị đó khác null, nên một build không có auth sẽ không có interceptor refresh, thay vì có một cái không bao giờ thành công. `arch_check` R1 giữ điều đó: nó nằm trong `platform_shell_adapters`, và package `platform/` không được import module. Xem [`../guides/05_di.md`](../guides/05_di.md).
+
+### Luồng refresh token
+
+`_refreshSession` giao việc cho `ISessionGateway`, do `data_auth` hiện thực: repository refresh và lưu thông tin đăng nhập, còn gateway đọc lại token từ chủ sở hữu. Bản thân config không lưu gì cả:
+
+```dart
+// platform/shell/adapters/lib/src/network_config_impl.dart
+Future<String?> _refreshSession() async => await _session?.refreshToken();
+
+// modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
+@override
+Future<String?> refreshToken() async {
+  final result = await _repository.refreshToken();
+  if (result.isSuccess) return _local.getUserToken();
+  final failure = result.errorOrNull;
+  if (isTransient(failure)) {
+    throw StateError(
+      'Session renewal did not reach the server: '
+      '${failure?.message}',
+    );
+  }
+  return null;
+}
+
+/// Whether [failure] says nothing about the session's validity — the
+/// renewal never got an answer — so the session must be kept.
+///
+/// Exposed for tests: this predicate decides whether a user is signed out.
+static bool isTransient(AppFailure? failure) {
+  if (failure is NetworkFailure) return true;
+  if (failure is! ServerFailure) return false;
+  final code = failure.code;
+  if (code == null) return false;
+  return (code >= 500 && code < 600) || code == ErrorCodes.REQUEST_CANCELLED;
+}
+```
+
+#### Bị từ chối hay không tới được server
+
+Câu trả lời của gateway quyết định số phận của phiên đăng nhập:
+
+| `refreshToken()` | Nghĩa là | `RefreshTokenHandler` |
+| :-- | :-- | :-- |
+| một token | đã gia hạn | gửi lại request và mọi request đang chờ nó |
+| `null` | server **từ chối** (401/403, mọi 4xx, hoặc một 200 mà envelope báo lỗi — `ErrorCodes.RESPONSE_REJECTED`) | gọi `onRefreshFailed` một lần, reject tất cả |
+| ném lỗi | không nhận được câu trả lời (mất mạng, HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
+
+`onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `ISessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token.
+
+Một `401` tới *sau* khi refresh đã xong — request được gửi bằng token cũ — không khởi động refresh mới: `RefreshTokenHandler` so header `Authorization` của request với `NetworkConfig.getToken` và, nếu khác nhau, chỉ gửi lại request. Với refresh token xoay vòng, một lần refresh thừa có thể làm mất hiệu lực chính phiên vừa được gia hạn.
+
+#### N request 401 đồng thời → chỉ một lần refresh
+
+`RefreshTokenHandler` xếp hàng mọi thứ sau một `Completer`. Request 401 đầu tiên thực hiện refresh; những cái còn lại chờ trên cùng future đó:
+
+```dart
+// platform/infra/network/lib/src/handlers/refresh_token_handler.dart
+// If a refresh is already in progress, wait for it to complete.
+if (_completer != null) {
+  final String? newToken = await _completer!.future;
+  if (newToken != null) {
+    // The token was successfully refreshed, retry the original request.
+    return _retryRequest(err, handler);
+  } else {
+    // The token refresh failed, reject the original request.
+    return handler.reject(err);
+  }
+}
+```
+
+Việc `await` lần retry là **cố ý**:
+
+```dart
+// `await` keeps the refresh lock (`_completer`) held until the retry
+// finishes; releasing it earlier would let a concurrent 401 start a
+// second, redundant refresh.
+return await _retryRequest(err, handler);
+```
+
+Body dạng `FormData` được dựng lại trước khi replay, vì stream của form chỉ đọc được một lần.
+
+#### Ba lớp chống đệ quy vô hạn
+
+```dart
+// platform/infra/network/lib/src/interceptors/refresh_token_interceptor.dart
+/// Three guards keep the flow from looping:
+/// 1. Requests that opted out of auth
+///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
+///    refresh ([NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] `= false`) are
+///    ignored, so the login and refresh calls never trigger a refresh.
+/// 2. A request already replayed after a refresh is marked with
+///    [NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] and is not refreshed a
+///    second time.
+/// 3. [RefreshTokenHandler] serialises concurrent `401`s behind a single
+///    `Completer`, so N failing requests cause exactly one refresh.
+```
+
+Lớp 2 tinh tế — cờ được set **trước khi** giao việc, vì bản replay quay lại chính interceptor này:
+
+```dart
+// Mark the options *before* handing over: `RefreshTokenHandler` replays
+// this same RequestOptions through `dio.fetch`, which re-enters this
+// interceptor. The flag makes that second pass fall through to `super`.
+err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
+```
+
+> [!NOTE]
+> Refresh của sample **chính là** một HTTP call qua chính client này (`AuthRemoteDataSource.refreshToken`), nên nó và `login` mang `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (lớp 1); lời gọi refresh còn đặt thêm `EXTRA_CAN_RETRY: false`, vì nó chạy lúc boot và bên trong 401 của request khác nên phải fail nhanh thay vì chờ dialog retry. Khi không có token đã lưu, `AuthRepositoryImpl.refreshToken` trả lời luôn mà không gọi mạng. Thiếu cờ này, một `401` từ chính lời gọi refresh sẽ đi vào `RefreshTokenHandler` trong lúc lần refresh của handler vẫn đang chạy, và chờ chính nó mãi mãi. Endpoint nào của bạn mà `401` mang nghĩa khác "hết phiên" cũng cần cờ này.
+
+### Pinning được cài lúc nào, và khi nào bị bỏ qua
+
+Khi danh sách hash rỗng, initializer **không im lặng bỏ qua**:
+
+```dart
+// platform/foundation/common/lib/src/config/app_initializer.dart
+if (hashes != null && hashes.isNotEmpty) {
+  HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
+} else {
+  // Never fail silently here: without pinning the app still talks to the
+  // server over plain TLS, so a proxy with a trusted root can read every
+  // request. Surfacing it keeps a misconfiguration from shipping unnoticed.
+  DynamicLogger.log(
+    config == null
+        ? 'SSL pinning skipped: no SslPinningConfig registered in GetIt. ...'
+        : 'SSL pinning skipped: sslPinningHashes is empty. ...',
+    tag: 'Security',
+    level: LogLevel.ERROR,
+  );
+}
+```
+
+`_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi ngay sau `configureDependencies()` và **trước** khi `MainScope` dựng splash. Thời điểm là mấu chốt: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó — auth khôi phục phiên bằng một lần refresh token — có thể gửi request đầu tiên ngay lập tức, và `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`. Override cài muộn hơn, trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
+
+Kiểm tra certificate chỉ bị bỏ qua (phục vụ server tự ký cục bộ) **trong bản debug đã khai báo tường minh flavor `dev`** — `AppConfig.bypassesCertificateValidation`. Mọi trường hợp khác đi qua đường pinning: `staging`, `prod`, bản profile hay release của `dev`, và bản build **thiếu hoặc sai** flavor — được coi như `prod` và ghi log mức ERROR. Đây là cố ý fail closed: trước đây `AppConfig.appFlavor` lùi về `dev`, nên một bản build không có `--flavor` — kể cả release — chấp nhận mọi certificate. Bản thân `appFlavor` (môi trường DI) giờ lùi về `dev` ở bản debug và về `prod` ở các bản còn lại.
 
 ---
 
@@ -305,12 +670,133 @@ Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa pres
 
 | Thành phần export | Mục đích |
 |:--|:--|
-| `StorageInterface` | Hợp đồng cho backend |
+| `StorageInterface` | Hợp đồng cho backend; đồng thời chứa các hàm AES và phần chặn key dành riêng |
 | `StorageManager` | `@singleton`; phân giải backend theo `StorageType`, khởi tạo backend secure trước rồi tới các backend khác qua `@PostConstruct(preResolve: true)` — secure đi trước vì lần mở đầu tiên nó xoá sạch namespace keystore, nơi cũng chứa master key của backend pref |
 | `StorageValue<T>` | Bọc phản ứng quanh một key — `ChangeNotifier` + `Stream` broadcast, cache trong RAM, tự ghi xuống đĩa khi set. Notify sau `dispose` là no-op (`isDisposed`). Phụ thuộc workspace duy nhất của package là `platform_kernel` (`TypeHelper`) |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (có phần cứng hỗ trợ) |
 | `ObfuscatedString` / `ObfuscatedBytes` | Che dữ liệu trong RAM |
 | `PrefStorageImpl` / `SecureStorageImpl` | Nội bộ, phân giải qua `@Named('Pref')` / `@Named('Secure')` |
+
+`core_storage` cố ý khai báo **zero key**. Nó chỉ cấp bộ máy; mỗi package tự khai giá trị của mình.
+
+```dart
+// platform/infra/storage/lib/core_storage.dart
+/// Core Storage — encrypted key-value persistence layer.
+///
+/// Provides only the storage MECHANISM — no package/feature-specific keys
+/// or presets are defined here. Each consumer (data layer, app shell, ...)
+/// must declare its own [StorageValue] instances with its own keys via
+/// [StorageManager], so no other feature can see or touch its data.
+```
+
+> [!NOTE]
+> Không có object preset dùng chung và không có sổ đăng ký key tập trung — không `StorageValuePresets`, không `StorageKeyConstants`. Một object gom key của mọi domain sẽ cho phép bất kỳ ai inject nó đọc và ghi dữ liệu của feature khác, nên cơ chế cố ý không cung cấp thứ đó để bạn với tay tới.
+
+### Hai lớp mã hoá, cộng thêm che RAM
+
+**Lớp 1 — AES-256-CBC phần mềm, IV ngẫu nhiên mỗi lần ghi.** Cài đặt một lần trên `StorageInterface` nên cả hai backend đều thừa hưởng:
+
+```dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
+/// Encrypt [data] using AES-CBC with a random IV.
+///
+/// Returns `"iv_base64:ciphertext_base64"`.
+String encryptData(String data) {
+  final rawBytes = _obfuscatedMasterKey!.reveal();
+  final key = encrypter.Key(rawBytes);
+  final aes = encrypter.AES(key, mode: encrypter.AESMode.cbc);
+  final enc = encrypter.Encrypter(aes);
+
+  final iv = encrypter.IV.fromSecureRandom(16);
+  final encrypted = enc.encrypt(data, iv: iv);
+
+  // Zero out key buffers immediately
+  rawBytes.fillRange(0, rawBytes.length, 0);
+  key.bytes.fillRange(0, key.bytes.length, 0);
+
+  return '${iv.base64}:${encrypted.base64}';
+}
+```
+
+IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần vẫn ra ciphertext khác nhau — người quan sát không thể biết giá trị có đổi hay không.
+
+**Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới key `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
+
+```dart
+// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
+if (masterKey == null) {
+  // Generate a new 32-byte (256-bit) random key for AES
+  final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
+  await _storage.write(key: _MASTER_KEY_ID, value: newKey); // lỗi thì ném lại
+  masterKey = newKey;
+}
+```
+
+**Lớp 3 (ít nơi nhắc tới) — che trong RAM.** Cả master key lẫn giá trị đã cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Chúng bị XOR với mask ngẫu nhiên, và chỉ lộ ra đúng khoảnh khắc được dùng:
+
+```dart
+// platform/infra/storage/lib/src/contracts/storage_interface.dart
+/// Container that obfuscates bytes in RAM using dynamic XOR masking.
+class ObfuscatedBytes {
+  ObfuscatedBytes(Uint8List originalBytes)
+    : _mask = _generateRandomMask(originalBytes.length),
+      _maskedBytes = Uint8List(originalBytes.length) {
+    for (int i = 0; i < originalBytes.length; i++) {
+      _maskedBytes[i] = originalBytes[i] ^ _mask[i];
+    }
+  }
+```
+
+`ObfuscatedString` (trong `storage_value.dart`) làm điều tương tự cho giá trị đã cache. Việc này nâng độ khó của tấn công memory-dump; nó **không** thay thế được hai lớp trên.
+
+#### Khi Keychain trục trặc — thử lại, không bao giờ xoá sạch
+
+Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Trước đây `SecureStorageImpl` coi *mọi* lỗi như vậy là hỏng dữ liệu và gọi `deleteAll()` — xoá sạch mọi giá trị bảo mật, kể cả master key của `PrefStorageImpl` vốn nằm trong cùng kho. Giờ thì:
+
+```dart
+// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
+Future<String?> _readMasterKey() async {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      return await _storage.read(key: _MASTER_KEY_ID);
+    } catch (e) {
+      final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
+      // … ghi log: WARNING khi thử lại, ERROR ở lần cuối …
+      if (lastAttempt) rethrow; // không xoá gì, không sinh key mới
+      await Future<void>.delayed(_retryDelay * attempt);
+    }
+  }
+}
+```
+
+| Lỗi | Điều xảy ra |
+| :-- | :-- |
+| Lỗi platform khi đọc master key | thử lại (3 lần); nếu vẫn lỗi, `init` **ném lại lỗi** và kho giữ nguyên — sinh key mới sẽ bỏ rơi mọi giá trị đã mã hoá bằng key không đọc được |
+| Master key có nhưng không dùng được (không phải key base64 256-bit) | chỉ thay key đó; các giá trị mã hoá bằng nó sẽ giải mã lỗi và bị `read()` xoá từng cái một |
+| Hỏng dữ liệu trong chính storage của plugin | xử lý ở tầng native: trên Android `AndroidOptions.resetOnError` (bật mặc định) reset phần không giải mã được trước khi trả kết quả |
+| Lỗi platform trong `read(key)` | trả `null` **và giữ nguyên giá trị** — lần đọc sau vẫn còn |
+| Giá trị giải mã hoặc decode lỗi trong `read(key)` | chỉ xoá đúng key đó và trả `null`, để một dòng hỏng không làm chết mọi lần mở app |
+
+#### Master key của backend pref — cùng một quy tắc
+
+`PrefStorageImpl` mã hoá giá trị SharedPreferences bằng master key riêng, `_internal_pref_master_key`, cất trong cùng kho bảo mật. Trước đây gặp *bất kỳ* lỗi đọc nào nó cũng lùi về một key hoàn toàn mới trong SharedPreferences — chỉ sau một lỗi Keychain nhất thời, mọi preference đã lưu (theme, ngôn ngữ, cờ onboarding) giải mã lỗi và bị xoá ở lần đọc kế tiếp, còn lần khởi động bình thường sau đó lại bỏ rơi những gì phiên lỗi kia đã ghi. Giờ nó không bao giờ thay một key có thể vẫn còn tốt:
+
+| Tình huống | `PrefStorageImpl.init` làm gì |
+| :-- | :-- |
+| Lỗi platform khi đọc key | thử lại (3 lần) trước khi quyết định bất cứ điều gì |
+| Vẫn lỗi, chưa có preference nào được lưu | giữ một key mới trong SharedPreferences — không có gì để bỏ rơi |
+| Vẫn lỗi, và key trong SharedPreferences mở được các preference đã lưu | dùng key đó (thiết bị không có kho bảo mật dùng được) |
+| Vẫn lỗi, và các preference đã lưu phụ thuộc vào key không đọc được | **ném lại lỗi**, không ghi hay xoá gì — các giá trị mở lại được khi platform hồi phục |
+| Đọc được lại trong khi vẫn còn key trong SharedPreferences | key nào giải mã được các giá trị đã lưu thì thắng; nếu key trong SharedPreferences thắng, nó được chuyển vào kho bảo mật và xoá khỏi SharedPreferences |
+| Key không có hoặc không dùng được (không phải key base64 256-bit) | sinh key mới — trong kho bảo mật, hoặc trong SharedPreferences nếu kho bảo mật từ chối ghi; giá trị mã hoá bằng key đã mất sẽ bị `read()` xoá từng cái một |
+
+`StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/infra/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
+
+#### Tuỳ chọn cipher của plugin được ghim cố định
+
+Cả hai backend mở `flutter_secure_storage` (11.x) với cùng một cặp Android tường minh — `KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding` và `StorageCipherAlgorithm.AES_GCM_NoPadding` — và `KeychainAccessibility.first_unlock` trên iOS. Trên Android, plugin ghi lại cặp nó đã dùng để ghi và, khi cặp được cấu hình khác đi, sẽ mã hoá lại toàn bộ store (`migrateOnAlgorithmChange`, mặc định bật) hoặc, nếu không được, reset nó (`resetOnError`, cũng bật). Đừng đổi hai tuỳ chọn này trừ khi bạn thật sự muốn migrate dữ liệu bảo mật của mọi người dùng.
+
+Cặp này là thứ template đã ghi từ bản phát hành đầu tiên (10.x) và vẫn là mặc định của 11.x, nên nâng cấp 10 → 11 đọc được giá trị cũ nguyên vẹn: cùng alias KeyStore, cùng khoá đã bọc, không có bước migrate. Cái 11.x bỏ đi là các cipher trước 10 (RSA-PKCS1, AES-CBC, EncryptedSharedPreferences). App nào từng phát hành `flutter_secure_storage` 9.x trở xuống phải phát hành một bản 10.x trước — thiết bị nhảy thẳng từ 9 lên 11 sẽ mất giá trị bảo mật, gồm cả token và master key của `PrefStorageImpl`. Trên Android, `FlutterSecureStorage.checkUpgradeStatus()` (11.1+), gọi trước lần đọc đầu tiên, báo cho bạn biết điều đó có xảy ra hay không.
 
 ### Che RAM là bảo vệ thật, không phải nhãn dán
 
@@ -329,7 +815,7 @@ Mỗi package tiêu thụ tự khai `StorageValue` của mình qua `StorageManag
 | `LanguageStorageImpl` | `platform_shell_adapters` | `locale` | pref |
 | `AppBootStorage` | `platform_shell_adapters` | `viewed_onboard` | pref |
 
-Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước cụ thể.
+Các class key của app shell nằm trong `platform/shell/adapters/lib/src/utils/`. Xem [`../guides/06_storage.md`](../guides/06_storage.md) để có các bước cụ thể.
 
 ---
 
@@ -363,7 +849,203 @@ ProfileLocalDataSource(IDatabaseHandle<ProfileDatabase> handle)
 > [!NOTE]
 > Trong phạm vi **một** database, đây là **cô lập ở mức bề mặt API, không phải cô lập cưỡng chế**: callback factory vẫn nhận được object database, nên một bên gọi cố tình vẫn với tới được mọi DAO trên đó. Giá trị nằm ở chỗ vượt qua ranh giới trở thành hành động cố ý và nhìn thấy được khi review, chứ không phải một tham số constructor bình thường. Cô lập *giữa các package* mới là rào chắn thật, và nó do đồ thị package cưỡng chế — package nào không khai `data_cache` thì thậm chí không gọi được tên `CacheDatabase`.
 
-Phần gia cố kết nối (`foreign_keys = ON`, chế độ WAL, busy timeout) và chiến lược cách ly file hỏng nằm ở [`../guides/07_database.md`](../guides/07_database.md).
+Cách tạo database riêng cho một package, đóng góp migration và test nó: [`../guides/07_database.md`](../guides/07_database.md). Thiết kế đứng sau được trình bày dưới đây.
+
+### Luật: `core_database` không sở hữu database nào
+
+`core_database` chỉ cấp **cơ chế**. Nó không khai database, không khai bảng, không khai DAO — module DI của nó đăng ký đúng nghĩa là rỗng:
+
+```dart
+// platform/infra/database/lib/di/module.dart
+/// `core_database` registers nothing on its own.
+///
+/// It provides the persistence MECHANISM — [DriftDatabaseOpener],
+/// [driftMigrationStrategy], [IDatabaseMigration], [IDatabaseHandle] — and
+/// deliberately owns no database, no table and no DAO. Registering a database
+/// here would mean this package had to name the tables of whichever package
+/// owns them.
+@InjectableInit.microPackage()
+void initMicroPackage() {}
+```
+
+**Mỗi package sở hữu dữ liệu lưu trữ sẽ tự khai database của riêng nó**, đặt cạnh bảng, DAO và data source của chính nó. `CacheDatabase` của module mẫu `cache` (package `data_cache`, trong `modules/cache/data`) là bản wiring tham chiếu.
+
+### Vì sao — đây là ràng buộc của Drift, không phải sở thích
+
+Hai sự thật về Drift quyết định toàn bộ thiết kế:
+
+1. `@DriftDatabase(tables: [...])` được phân giải ở **compile time**. Không có đăng ký bảng lúc runtime.
+2. DAO buộc phải là **`part of`** thư viện database của nó — Drift sinh `_$XDaoMixin` và `$XTable` vào đúng thư viện đó.
+
+Ghép lại: package nào khai database thì package đó buộc phải gọi tên mọi bảng trên database ấy, và mọi DAO phải nằm cùng thư viện. Một `AppDatabase` dùng chung vì thế sẽ buộc một package phải biết bảng của tất cả package còn lại — đúng kiểu "một object biết mọi thứ" mà các luật sở hữu về storage và constants sinh ra để ngăn chặn.
+
+> [!NOTE]
+> Dời `AppDatabase` dùng chung lên `apps/mobile/` cũng **không** giải quyết được — nó chỉ di chuyển god object, và package sở hữu dữ liệu vẫn không thể giữ một DAO dùng được. Cho mỗi package một database riêng mới thực sự cắt được sự phụ thuộc này.
+
+### Được gì, trả giá gì
+
+| | |
+|---|---|
+| **Được** | Xoá package là xoá luôn database của nó. Không package nào tham chiếu tới, nên không gì khác vỡ. |
+| **Được** | Không package nào chạm được bản ghi của package khác — không có object dùng chung để mà chạm. |
+| **Trả giá** | **SQL không JOIN xuyên ranh giới package.** |
+
+Cái giá đó là có chủ đích. Vượt bounded context là việc của tầng repository — ghép hai repository trong một use case — chứ không phải nhét vào một truy vấn.
+
+### `core_database` export những gì
+
+| Export | Loại | Làm gì |
+|---|---|---|
+| `DriftDatabaseOpener` | `abstract final class` | Mở bất kỳ `GeneratedDatabase` nào trên isolate nền, **verify** kết nối, cách ly file hỏng |
+| `DatabaseConnectionFactory` | `abstract final class` | Phân giải đường dẫn file trong app documents, dựng executor nền, cách ly file |
+| `IDatabaseMigration` | abstract class | Hợp đồng để một package đóng góp **một** bước schema |
+| `DatabaseMigrationRunner` | class | Sắp xếp, kiểm tra và replay các bước đó |
+| `driftMigrationStrategy(...)` | function | `MigrationStrategy` dùng chung: dispatch migration + các `PRAGMA` theo kết nối |
+| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | Cách một data source chạm tới database mà không cầm toàn bộ DAO |
+| `DatabaseConstants` | class | Kích thước read pool, busy timeout, marker lỗi hỏng/môi trường, hậu tố `.corrupt` |
+
+Để ý: mọi thứ ở trên đều generic theo `GeneratedDatabase`. `core_database` không bao giờ gọi tên một class database cụ thể — đó chính là điểm mấu chốt.
+
+### Runner migration replay thế nào
+
+```dart
+// platform/infra/database/lib/src/migration/database_migration_runner.dart
+Future<void> run(Migrator m, int from, int to) async {
+  if (from == to) return;
+
+  if (to > from) {
+    for (final migration in _migrations) {
+      if (migration.version > from && migration.version <= to) {
+        await migration.upgrade(m);
+      }
+    }
+    return;
+  }
+
+  // A downgrade from a schema this build has no step for is refused.
+  final newestKnown = _migrations.isEmpty ? null : _migrations.last.version;
+  if (newestKnown == null || newestKnown < from) {
+    throw UnsupportedError('Cannot downgrade the schema from version $from …');
+  }
+
+  for (final migration in _migrations.reversed) {
+    if (migration.version > to && migration.version <= from) {
+      await migration.downgrade(m);
+    }
+  }
+}
+```
+
+Ba tính chất đáng gọi tên:
+
+1. **Dùng `if` thuần, không phải `else if`.** Thiết bị bỏ lỡ vài bản phát hành sẽ replay *mọi* bước trung gian thay vì nhảy thẳng tới hình dạng mới nhất.
+2. **Upgrade chạy tăng dần, downgrade chạy giảm dần.** Thứ tự quan trọng ở cả hai chiều.
+3. **Khoảng trống version là hợp lệ.** Một bản phát hành có thể không đổi schema, để trống số version đó.
+4. **Downgrade cần bước tường minh.** Đi từ `from` xuống `to` sẽ ném `UnsupportedError` trừ khi có một bước đăng ký cho version `from` trở lên — runner phải biết schema mà nó đang rời bỏ. Thiếu kiểm tra này, runner không làm gì cả và drift đóng dấu `user_version` thấp hơn lên các bảng vẫn mang hình dạng mới; cài lại bản mới hơn sau đó sẽ replay các bước upgrade trên chúng (trùng cột) và lỗi ở mọi lần khởi động. Lỗi ném ra giữ nguyên file và version của nó, và `DriftDatabaseOpener` báo nó như lỗi khởi động thay vì cách ly file. Trên thực tế một bản cũ chỉ có các bước đó nếu chúng được phát hành trước thay đổi mà chúng đảo ngược — ngoài ra, cài bản cũ đè lên schema mới hơn là không được hỗ trợ.
+
+Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải giữa chừng migration. Phát hiện lỗi wiring khi đã chạy được nửa đường sẽ để lại schema migrate dở.
+
+> [!WARNING]
+> **Drift 2.x KHÔNG có `onDowngrade`** (lockfile đang resolve 2.35.0). `MigrationStrategy` chỉ expose `onCreate`, `onUpgrade` và `beforeOpen`; chính tài liệu Drift ghi rằng "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` là thật và có test, nhưng nó đi nhờ trên đúng một entry point đó thông qua so sánh `from`/`to`. Hãy implement khi thay đổi có thể đảo ngược; **ném lỗi có mô tả rõ ràng khi không thể**, để thất bại là tường minh thay vì để lại một schema không còn khớp với code đang chạy.
+
+### Các `PRAGMA`, và vì sao chúng được tập trung hoá
+
+`PRAGMA` là thiết lập **theo từng kết nối và không được lưu trong file**, nên phải áp lại mỗi lần mở. Đó là lý do chúng nằm trong `beforeOpen`:
+
+```dart
+// platform/infra/database/lib/src/migration/drift_migration_strategy.dart
+beforeOpen: (OpeningDetails details) async {
+  // SQLite ships with foreign key enforcement OFF. Without this any
+  // `references()` declared on a table is silently ignored, so broken
+  // relations are only discovered as corrupt data much later.
+  await database.customStatement('PRAGMA foreign_keys = ON');
+
+  // Write-Ahead Logging lets readers run concurrently with a writer,
+  // which a read pool (readPool > 0) requires, and avoids "database is locked"
+  // under contention.
+  await database.customStatement('PRAGMA journal_mode = WAL');
+
+  // Wait for a held lock instead of failing instantly with SQLITE_BUSY.
+  await database.customStatement('PRAGMA busy_timeout = $busyTimeoutMs');
+},
+```
+
+| Pragma | Vì sao quan trọng |
+|---|---|
+| `foreign_keys = ON` | **SQLite mặc định TẮT cái này.** Mọi `references()` bạn khai đều bị bỏ qua âm thầm nếu thiếu nó — một cái bẫy im lặng, chỉ lộ ra rất lâu sau dưới dạng quan hệ hỏng. |
+| `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi có read pool (`readPool > 0`; mặc định là `1`); tránh lỗi "database is locked" khi tranh chấp. |
+| `busy_timeout = 5000` | Chờ khoá được nhả thay vì fail ngay với `SQLITE_BUSY`. Mặc định là `0`. |
+
+`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/infra/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
+
+WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_cache` phải chạy trên **file thật**.
+
+Tập trung hoá vì đúng một lý do: một package tự viết `MigrationStrategy` riêng mà quên `foreign_keys = ON` sẽ mất toàn vẹn tham chiếu mà không có lỗi nào báo.
+
+### Phục hồi khi hỏng: cách ly, không bao giờ xoá
+
+Việc mở database được đăng ký với `@preResolve`, nên bất cứ thứ gì ném ra ở đó đều làm hỏng `configureDependencies()` và app không khởi động được. Một file hỏng đồng nghĩa vòng lặp crash vĩnh viễn.
+
+`DriftDatabaseOpener.open` xử lý việc này — và thiết kế nghiêng hẳn về phía *không* đụng vào dữ liệu người dùng:
+
+```dart
+// platform/infra/database/lib/src/opening/drift_database_opener.dart
+static Future<T> open<T extends GeneratedDatabase>(
+  DriftDatabaseBuilder<T> build, {
+  required String fileName,
+  int readPool = DatabaseConstants.DEFAULT_READ_POOL,
+}) async {
+  try {
+    return await _openVerified(build, fileName: fileName, readPool: readPool);
+  } catch (error, stackTrace) {
+    if (!isCorruptionError(error)) rethrow;
+    // ... quarantine, then reopen empty
+  }
+}
+```
+
+Ba quyết định có chủ đích:
+
+**Kết nối được verify, không phải giả định.** `createBackgroundExecutor` là lazy — nó không chạm vào file cho tới statement đầu tiên. `_openVerified` chạy một truy vấn thăm dò `SELECT 1` để database hỏng lộ ra *ngay tại đây* thay vì ở một call site vô can nào đó sau này.
+
+**File được đổi tên, không bao giờ bị xoá.**
+
+```dart
+// platform/infra/database/lib/src/connection/database_connection_factory.dart
+/// The file is **renamed, never deleted** — if the corruption check ever
+/// misfires the user's bytes are still recoverable from
+/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;
+/// an older one is replaced so repeated failures cannot fill the disk.
+```
+
+Các sidecar `-wal` / `-shm` được chuyển theo, thành `<fileName>.corrupt-wal` / `.corrupt-shm`: chúng thuộc về database đã bị cách ly và không được áp vào database mới, còn WAL chứa các transaction đã commit mà chưa checkpoint — xoá nó là mất đúng phần dữ liệu mới nhất.
+
+**Marker môi trường phủ quyết kết luận "hỏng file".**
+
+```dart
+@visibleForTesting
+static bool isCorruptionError(Object error) {
+  final message = error.toString().toLowerCase();
+
+  final looksLikeEnvironment = DatabaseConstants.ENVIRONMENT_ERROR_MARKERS
+      .any(message.contains);
+  if (looksLikeEnvironment) return false;
+
+  return DatabaseConstants.CORRUPTION_ERROR_MARKERS.any(message.contains);
+}
+```
+
+| Coi là hỏng file → cách ly | Coi là lỗi môi trường → ném lại, không đụng |
+|---|---|
+| `database disk image is malformed` | `unable to open database file` |
+| `file is not a database` | `disk i/o error` |
+| `file is encrypted or is not a database` | `database or disk is full` |
+| `malformed database schema` | `attempt to write a readonly database` |
+| | `access denied` / `permission denied` / `operation not permitted` |
+
+Predicate khớp theo chuỗi thông báo thay vì bắt `SqliteException` có kiểu. `sqlite3` *có* là dependency được khai báo của `core_database` (connection factory import nó), nên kiểu này dùng được — nhưng nó không phải thứ tới được opener. Kết nối chạy trên một background isolate (`NativeDatabase.createInBackground`), và drift trả lỗi phát sinh ở đó về dưới dạng `DriftRemoteException`, với lỗi gốc nằm trong `remoteCause`; `on SqliteException` sẽ không bao giờ khớp. `DriftRemoteException.toString()` trả về thông báo của lỗi gốc, nên khớp theo thông báo bao được lỗi từ cả hai phía ranh giới isolate. Kiểm tra theo kiểu vẫn làm được — gỡ `remoteCause` rồi kiểm tra `SqliteException` và `extendedResultCode` của nó — nhưng vẫn cần khớp chuỗi làm dự phòng cho mọi trường hợp khác. Vì khớp chuỗi vốn mong manh, predicate được thiết kế **thiên về không phục hồi**: nếu xuất hiện marker môi trường thì database được để yên, kể cả khi marker hỏng file cũng khớp.
+
+Mất dữ liệu người dùng tệ hơn là báo lỗi lúc khởi động.
 
 ---
 
@@ -379,22 +1061,38 @@ Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự
 
 ## 10. State management — hai nhánh, **chưa ngang bằng nhau**
 
-Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: giờ cả hai đều tự động hoá đường tải → chốt kết quả, nhưng nhánh Provider vẫn có nhiều thứ đi kèm hơn hẳn.
+Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: giờ cả hai đều tự động hoá đường tải → chốt kết quả, nhưng nhánh Provider vẫn có nhiều thứ đi kèm hơn hẳn. Chọn mà không biết chúng khác nhau ở đâu là nguyên nhân bực bội phổ biến nhất.
 
 | | `provider_state_management` | `bloc_state_management` |
 |:--|:--|:--|
-| Lớp nền | `BaseProvider<T>` — hiện thực đầy đủ | `BaseBloc` / `BaseCubit` — *chỉ là điểm mở rộng, không thêm gì* |
-| Trợ giúp bất đồng bộ | `executeOperation(OperationConfig(...))` tự lo loading/success/failure | `emitResult` từ `BlocResultMixin<T>` / `CubitResultMixin<T>` — tương tự, nhưng chỉ cho state `BlocViewState<T>`; nó còn bắt cả thao tác ném exception |
-| Kiểu state | `ViewStateModel<T>` + `ViewState` (5 nhánh, có `loadingMore`, data nằm ở model) | `BlocViewState<T>` (4 nhánh, tự mang payload) |
+| Lớp nền | `BaseProvider<T>` — hiện thực đầy đủ | `BaseBloc<Event, State>` / `BaseCubit<State>` — *chỉ là điểm mở rộng, không thêm gì so với `Bloc` / `Cubit`* |
+| Máy móc dùng chung | Đầy đủ: `StateManager`, `OperationExecutor`, `LoadMoreMixin`, `ensureInitialized` | `BlocResultMixin` / `CubitResultMixin` (`emitResult`) — ngoài ra không có gì |
+| Trợ giúp bất đồng bộ / bóc `Result<T>` | `executeOperation(OperationConfig(...))` tự lo loading/success/failure | `emitResult` từ `BlocResultMixin<T>` / `CubitResultMixin<T>` — tương tự, **nhưng chỉ cho state `BlocViewState<T>`**; tự viết với state tuỳ biến |
+| Map `AppFailure` → lỗi UI | Hook `errorStateBuilder` | Không có — `error(AppFailure)` giữ nguyên failure; map trong view, hoặc tự map vào state tuỳ biến |
+| Trạng thái loading | Tự động set (bỏ qua khi đã có dữ liệu) | `emitResult` tự emit (bỏ qua khi đang hiển thị `success`) |
+| Thao tác **ném exception** | Lan ra ngoài — chính `execute()` của repository mới đổi exception thành `Result.failure` | `emitResult` bắt lại: `ErrorHandler.handleError` → `error(...)`, lỗi gốc đi vào `addError` (`BlocObserver.onError`) |
+| Hook toàn cục | `OperationGlobalConfig` (`onStart`/`onSuccess`/`onFailure`/`onFinish`) | Không có |
+| Phân trang | `LoadMoreMixin` | Không có |
+| Kiểu state | `ViewStateModel<T>` bọc `ViewState` (5 nhánh, có `loadingMore`, data nằm ở model) | `BlocViewState<T>` (tuỳ chọn; 4 nhánh, tự mang payload) hoặc state Freezed tự định nghĩa |
 | Dạng lỗi | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — bắt buộc |
-| Thành phần thêm | `StateManager`, `OperationExecutor`, `OperationGlobalConfig`, `LoadMoreMixin`, `ProviderStateListener`, `BaseViewWidget` | — |
+| Render | `BaseViewWidget` … `BaseViewWidget6`, `PaginatedViewWidget*` | `BlocBuilder` (của `flutter_bloc`) |
+| Side effect khai báo | `ProviderStateListener` / `MultiProviderStateListener` | `BlocListener` (của `flutter_bloc`) |
 
 > [!WARNING]
 > `emitResult` (`platform/state/bloc/lib/src/result_emitter.dart`) lo cho Bloc hoặc Cubit có state là `BlocViewState<T>`: loading, bóc `Result`, `none`/`cancel` hoàn tác loading của chính nó, exception đi qua `ErrorHandler`. Bloc dùng **state Freezed riêng** vẫn tự bóc `Result<T>` và tự emit loading/kết thúc trong từng handler, và nhánh BLoC không có bản tương ứng cho `OperationGlobalConfig`, `errorStateBuilder` hay `LoadMoreMixin`. `bloc_state_management` phụ thuộc `platform_kernel` để dùng `ErrorHandler` — một cạnh platform → platform, không phải một trong các ngoại lệ `→ domain_core`.
 
 ### `BlocViewState<T>`
 
-Kiểu state của BLoC là `BlocViewState<T>`, **không phải** `ViewState`. Cả hai package đều export từ barrel công khai, và nhánh Provider export một `ViewState` khác hẳn về ngữ nghĩa. Chính cái tên riêng biệt này cho phép một file import cả hai barrel mà không đụng tên lúc biên dịch.
+Kiểu state của BLoC là `BlocViewState<T>`, **không phải** `ViewState`. Cả hai package đều export từ barrel công khai, và nhánh Provider export một `ViewState` khác hẳn về ngữ nghĩa. Chính cái tên riêng biệt này cho phép một file import cả hai barrel mà không đụng tên lúc biên dịch. Hai kiểu này thực sự khác nhau:
+
+| | `ViewState` (Provider) | `BlocViewState<T>` |
+|---|---|---|
+| Generic | Không | Có |
+| Số variant | 5 (thêm `loadingMore`) | 4 |
+| Mang data | Không — data nằm ở `ViewStateModel<T>` | Có — `success(T data)` |
+| Kiểu lỗi | `error({ErrorState? error})`, nullable | `error(AppFailure error)`, bắt buộc |
+
+`BlocViewState` là **tuỳ chọn**. Màn hình có nhu cầu phức tạp hơn thì tự khai state Freezed riêng và dùng `BaseBloc<Event, CustomState>`.
 
 `OperationGlobalConfig` phơi getter chỉ-đọc, và `setup()` gộp theo từng hook: hook nào lần gọi thứ hai bỏ qua (hoặc truyền `null`) thì giữ giá trị cũ, còn hook nào được truyền thì **thay thế** giá trị cũ — mỗi hook giữ một callback, hai lần gọi không bao giờ nối chuỗi. Vì vậy `null` không xoá được hook; `reset()` xoá tất cả, và tồn tại cho test.
 

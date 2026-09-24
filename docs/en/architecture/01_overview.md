@@ -84,7 +84,7 @@ Everything else in `platform/*` has **zero** local-package dependencies beyond o
 
 ## 3. Why a Pub Workspace monorepo
 
-Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 28 members today (25 packages, two apps, and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
+Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 31 members today (28 packages, two apps, and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
 
 **What you gain:** fast incremental compilation, no version drift between packages, refactors that cross package boundaries in a single commit, and physical enforcement of layering — a feature package *cannot* import `data_auth` if its `pubspec.yaml` does not declare it.
 
@@ -140,7 +140,44 @@ submodule per module possible.
 
 ---
 
-## 6. Where to go next
+## 6. Module isolation — why it works, and its limits
+
+A team can check out only its own module and still build the app; how to do it is [`../guides/12_module_isolation.md`](../guides/12_module_isolation.md). This section explains why that works, and what it does not give you.
+
+### What makes it possible
+
+Nothing in this repository encodes where a package lives.
+
+`composer` resolves packages **by name**, discovered by scanning for `pubspec.yaml`. `arch_check` derives a package's layer from its name. `MonorepoHelper` walks the tree. So a module that is absent is simply not found — no tool has a list to fall out of date.
+
+That is the whole mechanism. `composer sync` writes a composition from *what is on disk*, and a build composed of five modules is as valid as one composed of six.
+
+The directory layout does the rest: `modules/<name>/` holds every layer of one bounded context, so a submodule boundary and an ownership boundary are the same line. (See [the ownership table](#4-who-owns-what).)
+
+### Why submodules, not a private pub registry
+
+A private registry (`dart pub publish` to a self-hosted server) is the other way to hide one team's source from another, and it is the right answer for a package with **many consumers and a slow release cadence** — a design system, an analytics SDK.
+
+It is the wrong answer here:
+
+| | Submodule | Private registry |
+|:--|:--|:--|
+| Cross-module change | one PR per repository, ordinary review | publish, wait, bump, publish again |
+| Local iteration | edit the source you already have | `dependency_overrides` in every consumer |
+| Version skew | a commit hash, resolved | two apps on two versions of the same module |
+| Setup cost | one `git submodule add` | a server, auth, CI credentials |
+
+Product modules change together and ship together. Submodules keep that cheap.
+
+### What isolation does *not* buy you
+
+- **Not a security boundary.** Submodule access is repository permissions. Someone with a checkout has the source; this stops accidental coupling and casual reading, not a determined reader.
+- **Not freedom from contracts.** A module still talks to others only through `core_di` and the other module's API package ([guide § 4](../guides/12_module_isolation.md#4-create-a-module-api-package)). What changes is that breaking a contract is now visible as a cross-repository PR rather than a silent edit.
+- **Not optional discipline.** Every guardrail that made partial checkouts possible — R8's optional lookups, R10's import ban, resolution by name — stops working the moment somebody adds a direct import. Which is why each one fails the build rather than a review.
+
+---
+
+## 7. Where to go next
 
 | If you want to… | Read |
 |:--|:--|

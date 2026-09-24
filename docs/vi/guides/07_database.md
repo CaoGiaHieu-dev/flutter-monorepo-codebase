@@ -1,75 +1,34 @@
 # Hướng dẫn: Cơ sở dữ liệu quan hệ (Drift + SQLite)
 
-**File này trả lời:** làm sao lưu dữ liệu quan hệ — bản ghi, quan hệ, truy vấn, migration — và làm sao để xoá package của bạn là xoá luôn database của nó, mà không làm vỡ package nào khác.
+## Mục tiêu
 
-**Đọc xong bạn làm được:** tạo database riêng cho một package từ đầu, đóng góp một bước migration mà không phải sửa file của package khác, và giải thích được vì sao dự án này không có một `AppDatabase` dùng chung.
+Bạn cho một package database quan hệ của riêng nó: bảng, DAO, một data source trả về model, và migration có phiên bản. Xoá package là xoá luôn database của nó, mà không làm vỡ package nào khác. Ví dụ xuyên suốt là phần nối dây thật của `data_cache`; hãy thay tên package của bạn vào mọi chỗ.
 
----
+## Điều kiện cần
 
-## 1. Luật: `core_database` không sở hữu database nào
-
-`core_database` chỉ cấp **cơ chế**. Nó không khai database, không khai bảng, không khai DAO — module DI của nó đăng ký đúng nghĩa là rỗng:
-
-```dart
-// platform/infra/database/lib/di/module.dart
-/// `core_database` registers nothing on its own.
-///
-/// It provides the persistence MECHANISM — [DriftDatabaseOpener],
-/// [driftMigrationStrategy], [IDatabaseMigration], [IDatabaseHandle] — and
-/// deliberately owns no database, no table and no DAO. Registering a database
-/// here would mean this package had to name the tables of whichever package
-/// owns them.
-@InjectableInit.microPackage()
-void initMicroPackage() {}
-```
-
-**Mỗi package sở hữu dữ liệu lưu trữ sẽ tự khai database của riêng nó**, đặt cạnh bảng, DAO và data source của chính nó. `CacheDatabase` của module mẫu `cache` (package `data_cache`, trong `modules/cache/data`) là bản wiring tham chiếu.
-
-### Vì sao — đây là ràng buộc của Drift, không phải sở thích
-
-Hai sự thật về Drift quyết định toàn bộ thiết kế:
-
-1. `@DriftDatabase(tables: [...])` được phân giải ở **compile time**. Không có đăng ký bảng lúc runtime.
-2. DAO buộc phải là **`part of`** thư viện database của nó — Drift sinh `_$XDaoMixin` và `$XTable` vào đúng thư viện đó.
-
-Ghép lại: package nào khai database thì package đó buộc phải gọi tên mọi bảng trên database ấy, và mọi DAO phải nằm cùng thư viện. Một `AppDatabase` dùng chung vì thế sẽ buộc một package phải biết bảng của tất cả package còn lại — đúng kiểu "một object biết mọi thứ" mà các luật sở hữu về storage và constants sinh ra để ngăn chặn.
+- Một package data — [`02_new_domain_data.md`](02_new_domain_data.md).
+- **Vì sao không có `AppDatabase` dùng chung**, `core_database` export những gì, runner migration replay thế nào, các `PRAGMA` nó áp dụng và file hỏng được cách ly ra sao — [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--lưu-trữ-quan-hệ-drift--sqlite). Các luật: RULE-46, RULE-47.
 
 > [!NOTE]
-> Dời `AppDatabase` dùng chung lên `apps/mobile/` cũng **không** giải quyết được — nó chỉ di chuyển god object, và package sở hữu dữ liệu vẫn không thể giữ một DAO dùng được. Cho mỗi package một database riêng mới thực sự cắt được sự phụ thuộc này.
-
-### Được gì, trả giá gì
-
-| | |
-|---|---|
-| **Được** | Xoá package là xoá luôn database của nó. Không package nào tham chiếu tới, nên không gì khác vỡ. |
-| **Được** | Không package nào chạm được bản ghi của package khác — không có object dùng chung để mà chạm. |
-| **Trả giá** | **SQL không JOIN xuyên ranh giới package.** |
-
-Cái giá đó là có chủ đích. Vượt bounded context là việc của tầng repository — ghép hai repository trong một use case — chứ không phải nhét vào một truy vấn.
+> Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire trọn vẹn, nhưng **không feature nào trong template này tiêu thụ nó**. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
+>
+> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Các test database đi theo nó; chúng kiểm tra `DatabaseHandle` và `driftMigrationStrategy` của `core_database` qua fixture này, nên muốn giữ phần kiểm tra đó thì hãy cho chúng một fixture khác trước khi xoá.
 
 ---
 
-## 2. `core_database` thực sự cho bạn những gì
+## 1. Chọn: lưu trữ key-value hay database
 
-| Export | Loại | Làm gì |
+| Bạn cần | Dùng | Vì sao |
 |---|---|---|
-| `DriftDatabaseOpener` | `abstract final class` | Mở bất kỳ `GeneratedDatabase` nào trên isolate nền, **verify** kết nối, cách ly file hỏng |
-| `DatabaseConnectionFactory` | `abstract final class` | Phân giải đường dẫn file trong app documents, dựng executor nền, cách ly file |
-| `IDatabaseMigration` | abstract class | Hợp đồng để một package đóng góp **một** bước schema |
-| `DatabaseMigrationRunner` | class | Sắp xếp, kiểm tra và replay các bước đó |
-| `driftMigrationStrategy(...)` | function | `MigrationStrategy` dùng chung: dispatch migration + các `PRAGMA` theo kết nối |
-| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | Cách một data source chạm tới database mà không cầm toàn bộ DAO |
-| `DatabaseConstants` | class | Kích thước read pool, busy timeout, marker lỗi hỏng/môi trường, hậu tố `.corrupt` |
+| Một token, một cờ, theme mode, locale | [`core_storage`](06_storage.md) | Một giá trị cho một key; có mã hoá; reactive qua `ChangeNotifier` / `Stream` |
+| Một danh sách bản ghi cần truy vấn, lọc, sắp xếp | `core_database` | SQL, index, ordering |
+| Quan hệ giữa các bản ghi | `core_database` | Khoá ngoại (được ràng buộc vì mọi kết nối đều chạy `PRAGMA foreign_keys = ON`) |
+| Dữ liệu mà hình dạng sẽ đổi qua các bản phát hành | `core_database` | Migration có version |
+| Thứ nhỏ, đọc mỗi khung hình | `core_storage` | Cache trong RAM; không có vòng async |
 
-Để ý: mọi thứ ở trên đều generic theo `GeneratedDatabase`. `core_database` không bao giờ gọi tên một class database cụ thể — đó chính là điểm mấu chốt.
+Quy tắc ngón tay cái: nếu bạn định viết `WHERE`, `ORDER BY` hay `JOIN`, bạn cần database.
 
----
-
-## 3. Cách làm: tạo database riêng cho package của bạn
-
-Làm trọn vẹn theo đúng wiring thật của `data_cache`. Thay tên package của bạn vào.
-
-### Bước 0 — Khai dependency
+## 2. Khai dependency
 
 `pubspec.yaml` của package cần những gì `modules/cache/data/pubspec.yaml` thật khai cho database của nó:
 
@@ -88,12 +47,12 @@ dev_dependencies:
   drift_dev: "^2.34.5"        # sinh `<name>_database.g.dart`
   injectable_generator: "^3.1.3"
   flutter_test:
-    sdk: flutter              # cho test database in-memory (§ 8)
+    sdk: flutter              # cho test database in-memory (bước 12)
 ```
 
 Phần còn lại của một package data thì thêm như thường lệ (`domain_core`, `data_core`, `domain_*` của bạn, `freezed_annotation` / `freezed` cho model). `sqlite3` và `path_provider` là dependency riêng của `core_database` — đừng khai lại. Version lấy từ catalog `pubspec_dependencies.yaml`: dependency viết không kèm version (`drift:`) sẽ được `dart tools/dependency_sync.dart` điền vào, còn version lệch sẽ bị ghi đè. Sau đó `flutter pub get`.
 
-### Bước 1 — Định nghĩa bảng
+## 3. Định nghĩa bảng
 
 Class kế thừa `Table` là độc lập: nó không tham chiếu database nào, nên nằm ở package của bạn được.
 
@@ -119,7 +78,7 @@ class CacheEntries extends Table {
 }
 ```
 
-### Bước 2 — Định nghĩa DAO dưới dạng `part of` database
+## 4. Định nghĩa DAO dưới dạng `part of` database của bạn
 
 ```dart
 // modules/cache/data/lib/src/database/dao/cache_entries_dao.dart
@@ -153,7 +112,7 @@ class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
 
 Dòng `part of` là bắt buộc — đó là yêu cầu của Drift, và là lý do DAO không thể nằm ở package khác.
 
-### Bước 3 — Đặt tên file trong `utils/` của chính package
+## 5. Đặt tên file database trong `utils/` của chính package
 
 Theo luật chung của repo, constants nằm ở `utils/` của package sở hữu:
 
@@ -175,7 +134,7 @@ class CacheConstants {
 > [!CAUTION]
 > Đặt tên file theo **package sở hữu**, không theo tên app. Nhiều database cùng tồn tại trong thư mục documents; một cái tên chung chung kiểu `app_database.sqlite` sẽ đụng nhau. Đổi chuỗi này sau khi đã phát hành sẽ khiến dữ liệu cũ trên máy người dùng không còn truy cập được.
 
-### Bước 4 — Khai class database
+## 6. Khai class database
 
 ```dart
 // modules/cache/data/lib/src/database/cache_database.dart
@@ -239,7 +198,7 @@ Hai điểm cần copy nguyên xi:
 - **Migration được truyền vào, không bao giờ tra cứu bên trong class.** Nhờ vậy database không dính service-locator và dựng trực tiếp được trong test.
 - **`migration` uỷ quyền cho `driftMigrationStrategy`.** Tự viết `MigrationStrategy` riêng nghĩa là phải tự suy ra lại các `PRAGMA` — và một package quên `foreign_keys = ON` sẽ âm thầm mất toàn vẹn tham chiếu.
 
-### Bước 5 — Đăng ký trong module DI của bạn
+## 7. Đăng ký database trong module DI của bạn
 
 ```dart
 // modules/cache/data/lib/di/module.dart
@@ -274,12 +233,13 @@ Cái guard `isRegistered` rất quan trọng: `getAll<T>()` **ném lỗi** khi c
 > [!WARNING]
 > **Thứ tự đăng ký.** `@preResolve` mở database — tức là chạy migration — đúng lúc injectable tới lượt đăng ký đó, nên mọi bước migration phải được đăng ký trước thời điểm ấy. Bước nào chưa có thì bị bỏ qua mà không báo lỗi: `schemaVersion` tăng nhưng schema thì không đổi.
 >
-> - **Bước nằm trong chính package sở hữu** (ở đây là `data_cache`) được thu thập **miễn là hàm mở vẫn giữ `@Order(1)`**. Injectable đăng ký các mục của một package theo `@Order` tăng dần, còn migration khai báo `@LazySingleton(as: IDatabaseMigration<CacheDatabase>)` mang order mặc định 0 — nên nó được đăng ký trước hàm mở. Bỏ `@Order(1)` đi thì hàm mở có thể được đăng ký trước; đó chính là lỗi mà `@Order(1)` được thêm vào để sửa.
+> - **Bước nằm trong chính package sở hữu** (ở đây là `data_cache`) được thu thập **miễn là hàm mở vẫn giữ `@Order(1)`**. Injectable đăng ký các mục của một package theo `@Order` tăng dần, còn migration khai báo `@LazySingleton(as: IDatabaseMigration<CacheDatabase>)` mang order mặc định 0 — nên nó được đăng ký trước hàm mở.
+> - Bỏ `@Order(1)` đi thì hàm mở có thể được đăng ký trước; đó chính là lỗi mà `@Order(1)` được thêm vào để sửa.
 > - **Bước đến từ package khác** phải nằm ở **nhóm DI sớm hơn** package sở hữu trong `app_manifest.yaml` của app. `@Order` chỉ sắp xếp bên trong module của một package; nó không thể đẩy một đăng ký sang trước module khác. Hiện template chưa có trường hợp này, nhưng nó sẽ cắn ngay khi feature đầu tiên thêm migration cho database của package khác.
 >
-> **Sao chép pattern này cho database của riêng bạn? Hãy đặt `@Order(1)` lên hàm mở `@preResolve` của bạn** — thiếu nó, một bước migration viết y hệt §4 sẽ không bao giờ được thu thập. Xem [`05_di.md`](05_di.md) về thứ tự module.
+> **Sao chép pattern này cho database của riêng bạn? Hãy đặt `@Order(1)` lên hàm mở `@preResolve` của bạn** — thiếu nó, một bước migration viết y hệt bước 11 sẽ không bao giờ được thu thập. Xem [`05_di.md`](05_di.md) về thứ tự module.
 
-### Bước 6 — Dùng qua `IDatabaseHandle`, không dùng thẳng database
+## 8. Dùng qua `IDatabaseHandle`, không dùng thẳng database
 
 ```dart
 // modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
@@ -313,7 +273,7 @@ await _handle.transaction(() async {
 > [!NOTE]
 > Đây là **thu hẹp bề mặt API, không phải cô lập cưỡng chế** — `DatabaseAccessor` của Drift cần database, nên callback factory vẫn nhận được nó và một người cố tình vẫn có thể giữ lại. Cô lập thật đến từ tầng trên: mỗi package một database riêng. Doc comment trong `i_database_handle.dart` nói thẳng điều này thay vì hứa quá lời.
 
-### Bước 7 — Trả về Model, không bao giờ trả row của Drift
+## 9. Trả về model, không bao giờ trả row của Drift
 
 ```dart
 // modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
@@ -358,16 +318,14 @@ abstract class CacheEntryModel
 
 Nó cố ý **không** dùng `json_serializable`: dữ liệu đến từ SQLite chứ không phải payload API, nên không có hợp đồng JSON nào để tuân theo.
 
-### Bước 8 — Chạy codegen và barrel
+## 10. Sinh code và barrel
 
 ```bash
 dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart modules/cache/data/lib
 ```
 
----
-
-## 4. Migration phi tập trung
+## 11. Thêm một migration schema
 
 Bạn không bao giờ sửa file database của package khác để đổi schema của mình. Bạn implement một hợp đồng và đăng ký nó.
 
@@ -404,7 +362,7 @@ Một thay đổi schema là **ba chỗ sửa đi cùng nhau** — thiếu một
 
 3. **Đăng ký bước migration** — bên dưới. Rồi chạy `dart run build_runner build --workspace` (class bảng được sinh có thêm cột).
 
-Đăng ký như một route module, nhưng gắn kiểu với database mà nó thuộc về — GetIt định danh một đăng ký theo đúng kiểu của nó, nên `CacheDatabase` chỉ thu về `IDatabaseMigration<CacheDatabase>` và bước migration của package khác không bao giờ tới được nó. Khai báo trong chính package sở hữu, nó được thu thập vì hàm mở mang `@Order(1)` ([Bước 5](#bước-5--đăng-ký-trong-module-di-của-bạn)):
+Đăng ký như một route module, nhưng gắn kiểu với database mà nó thuộc về — GetIt định danh một đăng ký theo đúng kiểu của nó, nên `CacheDatabase` chỉ thu về `IDatabaseMigration<CacheDatabase>` và bước migration của package khác không bao giờ tới được nó. Khai báo trong chính package sở hữu, nó được thu thập vì hàm mở mang `@Order(1)` ([bước 7](#7-đăng-ký-database-trong-module-di-của-bạn)):
 
 ```dart
 @LazySingleton(as: IDatabaseMigration<CacheDatabase>)
@@ -429,174 +387,13 @@ class AddExpiresAtToCacheEntries
 }
 ```
 
-### Hợp đồng
+### Tuân thủ hợp đồng
 
 - **`version` là version mà bước này *tạo ra*.** `version == 2` nghĩa là "lấy database ở version 1 và đưa nó lên version 2". Do đó `upgrade` phải chạy được trên `version - 1`, và `downgrade` phải đưa nó về đúng hình dạng đó.
 - **Version 1 không migrate được** — đó là thứ `Migrator.createAll()` tạo ra. Runner từ chối `version < 2` ngay lúc khởi tạo.
 - **Trùng version bị từ chối**, không âm thầm chọn đại một cái.
 
-### Runner replay thế nào
-
-```dart
-// platform/infra/database/lib/src/migration/database_migration_runner.dart
-Future<void> run(Migrator m, int from, int to) async {
-  if (from == to) return;
-
-  if (to > from) {
-    for (final migration in _migrations) {
-      if (migration.version > from && migration.version <= to) {
-        await migration.upgrade(m);
-      }
-    }
-    return;
-  }
-
-  // A downgrade from a schema this build has no step for is refused.
-  final newestKnown = _migrations.isEmpty ? null : _migrations.last.version;
-  if (newestKnown == null || newestKnown < from) {
-    throw UnsupportedError('Cannot downgrade the schema from version $from …');
-  }
-
-  for (final migration in _migrations.reversed) {
-    if (migration.version > to && migration.version <= from) {
-      await migration.downgrade(m);
-    }
-  }
-}
-```
-
-Ba tính chất đáng gọi tên:
-
-1. **Dùng `if` thuần, không phải `else if`.** Thiết bị bỏ lỡ vài bản phát hành sẽ replay *mọi* bước trung gian thay vì nhảy thẳng tới hình dạng mới nhất.
-2. **Upgrade chạy tăng dần, downgrade chạy giảm dần.** Thứ tự quan trọng ở cả hai chiều.
-3. **Khoảng trống version là hợp lệ.** Một bản phát hành có thể không đổi schema, để trống số version đó.
-4. **Downgrade cần bước tường minh.** Đi từ `from` xuống `to` sẽ ném `UnsupportedError` trừ khi có một bước đăng ký cho version `from` trở lên — runner phải biết schema mà nó đang rời bỏ. Thiếu kiểm tra này, runner không làm gì cả và drift đóng dấu `user_version` thấp hơn lên các bảng vẫn mang hình dạng mới; cài lại bản mới hơn sau đó sẽ replay các bước upgrade trên chúng (trùng cột) và lỗi ở mọi lần khởi động. Lỗi ném ra giữ nguyên file và version của nó, và `DriftDatabaseOpener` báo nó như lỗi khởi động thay vì cách ly file. Trên thực tế một bản cũ chỉ có các bước đó nếu chúng được phát hành trước thay đổi mà chúng đảo ngược — ngoài ra, cài bản cũ đè lên schema mới hơn là không được hỗ trợ.
-
-Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải giữa chừng migration. Phát hiện lỗi wiring khi đã chạy được nửa đường sẽ để lại schema migrate dở.
-
-> [!WARNING]
-> **Drift 2.x KHÔNG có `onDowngrade`** (lockfile đang resolve 2.35.0). `MigrationStrategy` chỉ expose `onCreate`, `onUpgrade` và `beforeOpen`; chính tài liệu Drift ghi rằng "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` là thật và có test, nhưng nó đi nhờ trên đúng một entry point đó thông qua so sánh `from`/`to`. Hãy implement khi thay đổi có thể đảo ngược; **ném lỗi có mô tả rõ ràng khi không thể**, để thất bại là tường minh thay vì để lại một schema không còn khớp với code đang chạy.
-
----
-
-## 5. Các `PRAGMA`, và vì sao chúng được tập trung hoá
-
-`PRAGMA` là thiết lập **theo từng kết nối và không được lưu trong file**, nên phải áp lại mỗi lần mở. Đó là lý do chúng nằm trong `beforeOpen`:
-
-```dart
-// platform/infra/database/lib/src/migration/drift_migration_strategy.dart
-beforeOpen: (OpeningDetails details) async {
-  // SQLite ships with foreign key enforcement OFF. Without this any
-  // `references()` declared on a table is silently ignored, so broken
-  // relations are only discovered as corrupt data much later.
-  await database.customStatement('PRAGMA foreign_keys = ON');
-
-  // Write-Ahead Logging lets readers run concurrently with a writer,
-  // which a read pool (readPool > 0) requires, and avoids "database is locked"
-  // under contention.
-  await database.customStatement('PRAGMA journal_mode = WAL');
-
-  // Wait for a held lock instead of failing instantly with SQLITE_BUSY.
-  await database.customStatement('PRAGMA busy_timeout = $busyTimeoutMs');
-},
-```
-
-| Pragma | Vì sao quan trọng |
-|---|---|
-| `foreign_keys = ON` | **SQLite mặc định TẮT cái này.** Mọi `references()` bạn khai đều bị bỏ qua âm thầm nếu thiếu nó — một cái bẫy im lặng, chỉ lộ ra rất lâu sau dưới dạng quan hệ hỏng. |
-| `journal_mode = WAL` | Cho phép reader chạy đồng thời với writer. Bắt buộc khi có read pool (`readPool > 0`; mặc định là `1`); tránh lỗi "database is locked" khi tranh chấp. |
-| `busy_timeout = 5000` | Chờ khoá được nhả thay vì fail ngay với `SQLITE_BUSY`. Mặc định là `0`. |
-
-`beforeOpen` chỉ chạy trên connection **writer**. Read pool — mỗi reader là một connection riêng trên isolate riêng — không bao giờ thấy nó, nên `DatabaseConnectionFactory` còn truyền cho drift một callback `setup` đặt `busy_timeout` trên mọi connection mà drift mở (`platform/infra/database/test/database_connection_factory_test.dart` đọc lại giá trị qua một reader). `journal_mode` không cần vậy: WAL được lưu trong file. `foreign_keys` chỉ được kiểm khi ghi, mà thao tác ghi không bao giờ tới reader.
-
-WAL sinh thêm file sidecar `-wal` và `-shm` cạnh database. SQLite tự chuyển đổi file có sẵn, an toàn và đảo ngược được. Database in-memory (trong test) bỏ qua thiết lập này và ở nguyên journal mode `memory` — chính vì vậy test WAL trong `data_cache` phải chạy trên **file thật**.
-
-Tập trung hoá vì đúng một lý do: một package tự viết `MigrationStrategy` riêng mà quên `foreign_keys = ON` sẽ mất toàn vẹn tham chiếu mà không có lỗi nào báo.
-
----
-
-## 6. Phục hồi khi hỏng: cách ly, không bao giờ xoá
-
-Việc mở database được đăng ký với `@preResolve`, nên bất cứ thứ gì ném ra ở đó đều làm hỏng `configureDependencies()` và app không khởi động được. Một file hỏng đồng nghĩa vòng lặp crash vĩnh viễn.
-
-`DriftDatabaseOpener.open` xử lý việc này — và thiết kế nghiêng hẳn về phía *không* đụng vào dữ liệu người dùng:
-
-```dart
-// platform/infra/database/lib/src/opening/drift_database_opener.dart
-static Future<T> open<T extends GeneratedDatabase>(
-  DriftDatabaseBuilder<T> build, {
-  required String fileName,
-  int readPool = DatabaseConstants.DEFAULT_READ_POOL,
-}) async {
-  try {
-    return await _openVerified(build, fileName: fileName, readPool: readPool);
-  } catch (error, stackTrace) {
-    if (!isCorruptionError(error)) rethrow;
-    // ... quarantine, then reopen empty
-  }
-}
-```
-
-Ba quyết định có chủ đích:
-
-**Kết nối được verify, không phải giả định.** `createBackgroundExecutor` là lazy — nó không chạm vào file cho tới statement đầu tiên. `_openVerified` chạy một truy vấn thăm dò `SELECT 1` để database hỏng lộ ra *ngay tại đây* thay vì ở một call site vô can nào đó sau này.
-
-**File được đổi tên, không bao giờ bị xoá.**
-
-```dart
-// platform/infra/database/lib/src/connection/database_connection_factory.dart
-/// The file is **renamed, never deleted** — if the corruption check ever
-/// misfires the user's bytes are still recoverable from
-/// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;
-/// an older one is replaced so repeated failures cannot fill the disk.
-```
-
-Các sidecar `-wal` / `-shm` được chuyển theo, thành `<fileName>.corrupt-wal` / `.corrupt-shm`: chúng thuộc về database đã bị cách ly và không được áp vào database mới, còn WAL chứa các transaction đã commit mà chưa checkpoint — xoá nó là mất đúng phần dữ liệu mới nhất.
-
-**Marker môi trường phủ quyết kết luận "hỏng file".**
-
-```dart
-@visibleForTesting
-static bool isCorruptionError(Object error) {
-  final message = error.toString().toLowerCase();
-
-  final looksLikeEnvironment = DatabaseConstants.ENVIRONMENT_ERROR_MARKERS
-      .any(message.contains);
-  if (looksLikeEnvironment) return false;
-
-  return DatabaseConstants.CORRUPTION_ERROR_MARKERS.any(message.contains);
-}
-```
-
-| Coi là hỏng file → cách ly | Coi là lỗi môi trường → ném lại, không đụng |
-|---|---|
-| `database disk image is malformed` | `unable to open database file` |
-| `file is not a database` | `disk i/o error` |
-| `file is encrypted or is not a database` | `database or disk is full` |
-| `malformed database schema` | `attempt to write a readonly database` |
-| | `access denied` / `permission denied` / `operation not permitted` |
-
-Predicate khớp theo chuỗi thông báo thay vì bắt `SqliteException` có kiểu. `sqlite3` *có* là dependency được khai báo của `core_database` (connection factory import nó), nên kiểu này dùng được — nhưng nó không phải thứ tới được opener. Kết nối chạy trên một background isolate (`NativeDatabase.createInBackground`), và drift trả lỗi phát sinh ở đó về dưới dạng `DriftRemoteException`, với lỗi gốc nằm trong `remoteCause`; `on SqliteException` sẽ không bao giờ khớp. `DriftRemoteException.toString()` trả về thông báo của lỗi gốc, nên khớp theo thông báo bao được lỗi từ cả hai phía ranh giới isolate. Kiểm tra theo kiểu vẫn làm được — gỡ `remoteCause` rồi kiểm tra `SqliteException` và `extendedResultCode` của nó — nhưng vẫn cần khớp chuỗi làm dự phòng cho mọi trường hợp khác. Vì khớp chuỗi vốn mong manh, predicate được thiết kế **thiên về không phục hồi**: nếu xuất hiện marker môi trường thì database được để yên, kể cả khi marker hỏng file cũng khớp.
-
-Mất dữ liệu người dùng tệ hơn là báo lỗi lúc khởi động.
-
----
-
-## 7. Dùng `core_storage` hay `core_database`?
-
-| Bạn cần | Dùng | Vì sao |
-|---|---|---|
-| Một token, một cờ, theme mode, locale | [`core_storage`](06_storage.md) | Một giá trị cho một key; có mã hoá; reactive qua `ChangeNotifier` / `Stream` |
-| Một danh sách bản ghi cần truy vấn, lọc, sắp xếp | `core_database` | SQL, index, ordering |
-| Quan hệ giữa các bản ghi | `core_database` | Khoá ngoại (nhớ: được bật bởi `PRAGMA` ở trên) |
-| Dữ liệu mà hình dạng sẽ đổi qua các bản phát hành | `core_database` | Migration có version |
-| Thứ nhỏ, đọc mỗi khung hình | `core_storage` | Cache trong RAM; không có vòng async |
-
-Quy tắc ngón tay cái: nếu bạn định viết `WHERE`, `ORDER BY` hay `JOIN`, bạn cần database.
-
----
-
-## 8. Testing
+## 12. Test database
 
 `CacheDatabase.forTesting()` cho bạn database in-memory chạy trên isolate hiện tại — không cần `path_provider`, không isolate, không file:
 
@@ -620,33 +417,48 @@ Hai thói quen đáng học:
 
 ---
 
-## 9. Module cache là code mẫu
+## Kiểm tra
 
-> [!NOTE]
-> Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire trọn vẹn, nhưng **không feature nào trong template này tiêu thụ nó**. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
->
-> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Các test database đi theo nó; chúng kiểm tra `DatabaseHandle` và `driftMigrationStrategy` của `core_database` qua fixture này, nên muốn giữ phần kiểm tra đó thì hãy cho chúng một fixture khác trước khi xoá.
+```bash
+dart run build_runner build --workspace   # <name>_database.g.dart, mixin của DAO, module.module.dart
+flutter analyze                           # No issues found!
+cd modules/cache/data && flutter test     # test tham chiếu: DAO, migration, WAL trên file thật
+cd platform/infra/database && flutter test
+cd apps/mobile && flutter test test/di_smoke_test.dart   # lệnh mở @preResolve thành công trong graph thật
+```
 
----
+Chạy test của package bạn theo cùng cách. Một migration mới cần một test mở schema cũ, chạy bước migration và đọc lại cột mới.
 
-## 10. Checklist
+Checklist review:
 
-- [ ] Bảng, DAO, class database và data source đều nằm ở **package sở hữu**
+- [ ] Bảng, DAO, class database và data source đều nằm trong **package sở hữu**
 - [ ] Tên file database là hằng số trong `utils/` của package đó, đặt theo tên package
 - [ ] `migration` uỷ quyền cho `driftMigrationStrategy` (đừng tự viết `MigrationStrategy`)
-- [ ] Migration được **truyền vào** database, không tra cứu bên trong
-- [ ] `_registeredMigrations()` có guard `isRegistered` trước khi gọi `getAll`
-- [ ] Hàm mở `@preResolve` mang `@Order(1)`, để migration của chính package được đăng ký trước nó; bước migration từ package khác nằm ở nhóm DI sớm hơn
+- [ ] Migration được **truyền vào** database, không bao giờ tự tra bên trong
+- [ ] `_registeredMigrations()` kiểm tra `isRegistered` trước khi `getAll`
+- [ ] Lệnh mở `@preResolve` mang `@Order(1)`, để migration của chính package đăng ký trước nó; bước migration từ package khác nằm ở một nhóm DI sớm hơn
 - [ ] Data source nhận `IDatabaseHandle<TDb>`, không nhận database
-- [ ] Chữ ký trả về **Model**; không có class row của Drift trong API công khai
-- [ ] Bước schema mới = một `IDatabaseMigration` mới với `version >= 2`, đăng ký bằng `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` được bump cho khớp
-- [ ] `downgrade` đã implement, hoặc ném lỗi có mô tả khi không đảo ngược được
-- [ ] Đã chạy lại barrel và `build_runner`
+- [ ] Chữ ký hàm trả **Model**; không có class row của Drift trong API công khai
+- [ ] Bước schema mới = một `IDatabaseMigration` mới với `version >= 2`, đăng ký qua `@LazySingleton(as: IDatabaseMigration<YourDatabase>)`; `schemaVersion` được tăng cho khớp
+- [ ] Đã hiện thực `downgrade`, hoặc ném lỗi mô tả rõ khi không đảo ngược được
+- [ ] Đã sinh lại barrel và chạy `build_runner`
 
-## Xem thêm
+## Xử lý sự cố
 
-- [`06_storage.md`](06_storage.md) — lưu trữ key-value, và khi nào nên chọn nó
+| Triệu chứng | Nguyên nhân | Cách sửa |
+|:--|:--|:--|
+| `no such column` sau khi nâng cấp | Chưa tăng `schemaVersion`, hoặc bước migration chưa từng được thu thập | Tăng `schemaVersion` và đăng ký bước migration gắn kiểu với database của bạn (bước 11) |
+| Bước migration có đó nhưng không bao giờ chạy | Lệnh mở thiếu `@Order(1)`, bước được đăng ký dạng `IDatabaseMigration` không kiểu, hoặc nằm ở nhóm DI muộn hơn | Thêm `@Order(1)` (bước 7); đăng ký `as: IDatabaseMigration<YourDatabase>` (bước 11) |
+| Boot sập trong `configureDependencies()` khi không có migration nào | `getAll<T>()` ném lỗi khi không có gì được đăng ký | Giữ phần kiểm tra `isRegistered` (bước 7) |
+| `UnsupportedError: Cannot downgrade the schema…` lúc khởi động | Một bản build cũ được cài đè lên schema mới hơn | Phát hành bước downgrade trước, hoặc cài lại bản mới hơn |
+| Quan hệ không được ràng buộc | Một `MigrationStrategy` viết tay đã bỏ `foreign_keys = ON` | Uỷ quyền cho `driftMigrationStrategy` (bước 6) |
+| File bị đổi tên thành `<name>.corrupt` | Lệnh mở phát hiện database hỏng và cách ly nó | Dữ liệu vẫn được giữ để phục hồi; xem [`../architecture/02_core.md` § 8](../architecture/02_core.md#phục-hồi-khi-hỏng-cách-ly-không-bao-giờ-xoá) |
+| Test không chứng minh được WAL đang bật | Database in-memory báo `journal_mode = memory` | Test pragma trên một file thật (bước 12) |
+
+## Liên quan
+
+- Luật: RULE-41 (trả model, không trả row), RULE-46 (mỗi package sở hữu database của nó), RULE-47 (migration gắn kiểu với database của nó) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--lưu-trữ-quan-hệ-drift--sqlite) — thiết kế đứng sau cơ chế
+- [`06_storage.md`](06_storage.md) — lưu trữ key-value, và khi nào nên dùng nó
 - [`02_new_domain_data.md`](02_new_domain_data.md) — tầng repository và model phía trên DAO
-- [`05_di.md`](05_di.md) — `@preResolve`, thứ tự module, `getAll` vs `getAllOrEmpty`
-- [`../architecture/02_core.md`](../architecture/02_core.md) — vị trí của `core_database`
-- [`../reference/01_rules.md`](../reference/01_rules.md) — toàn bộ luật sở hữu
+- [`05_di.md`](05_di.md) — `@preResolve`, thứ tự module, `getAll` so với `getAllOrEmpty`

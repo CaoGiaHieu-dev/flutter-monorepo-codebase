@@ -171,7 +171,7 @@ Only these three exist. Adding a fourth requires updating this page (RULE-01, bo
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries `AppFailure` directly, so the base state type needs it. |
 
 > [!NOTE]
-> These three are the only `platform → domain_core` edges, and every other platform edge follows the group direction (`docs/en/architecture/02_core.md` § 0): `ui` never depends on `state`, `infra` never on another infra package, and the foundation never on `ui` or a transport. `core_ui_kit` declares no state-management package — `LoadMoreListView` lives in `provider_state_management` (`state → ui` is the allowed direction) — and `provider_state_management` still ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`. The kernel names no Dio type: `core_network` contributes `DioFailureClassifier` through `ErrorHandler.registerClassifier`.
+> These three are the only `platform → domain_core` edges. Every other platform edge follows the group direction (`docs/en/architecture/02_core.md` § 0): `ui` never depends on `state`, `infra` never on another infra package, and the foundation never on `ui` or a transport. `core_ui_kit` declares no state-management package — `LoadMoreListView` lives in `provider_state_management` (`state → ui` is the allowed direction) — and `provider_state_management` still ships its own `DefaultLoadingWidget` / `DefaultEmptyWidget` in `lib/src/base_view/default_state_widgets.dart` instead of borrowing from `core_ui_kit`. The kernel names no Dio type: `core_network` contributes `DioFailureClassifier` through `ErrorHandler.registerClassifier`.
 
 ### Platform group direction (R11)
 
@@ -278,7 +278,7 @@ Constants evicted from `core_common`, recorded so nobody re-adds them:
 | `NotificationConstants` | `platform/infra/notifications/lib/src/utils/` | belongs to the notifications package |
 | `AnalyticsConstants`, `SocketConstants`, `FirebaseRemoteConfigConstants` | deleted | zero references; dead scaffolding |
 
-The bottom of the stack keeps only genuinely global values — currently `EnvConstants` (`String.fromEnvironment` wiring) and `ErrorCodes` (the failure codes `ErrorHandler` assigns when there is no HTTP status), under `platform_kernel`'s `lib/src/utils/` and re-exported by `core_common`.
+The bottom of the stack keeps only genuinely global values. Today that is `EnvConstants` (`String.fromEnvironment` wiring) and `ErrorCodes` (the failure codes `ErrorHandler` assigns when there is no HTTP status). Both live under `platform_kernel`'s `lib/src/utils/` and are re-exported by `core_common`.
 
 ---
 
@@ -364,7 +364,7 @@ Registry: RULE-04 · RULE-05 · RULE-12 · RULE-24.
 
 **Why.** A template whose features cannot be deleted is not a template. Removability is also the practical proof that the boundaries are real.
 
-**Enforced by machine.** `arch_check` **R3** blocks a feature importing another feature (or any data package), **R8** blocks a throwing `getIt` / `getAll` on a contract only a module implements, and **R10** blocks a module *import* — its API package included — anywhere in an app except `injection.dart`. R10 exists because R8 alone was not enough: `getItOrNull` guards a lookup, while an unresolved import fails at compile time, before any lookup runs. `network_config_impl.dart` imported `data_auth` and `domain_auth` for exactly that reason, and made the auth module unremovable while this section said otherwise.
+**Enforced by machine.** `arch_check` **R3** blocks a feature importing another feature (or any data package). **R8** blocks a throwing `getIt` / `getAll` on a contract only a module implements. **R10** blocks a module *import* — its API package included — anywhere in an app except `injection.dart`. R10 exists because R8 alone was not enough: `getItOrNull` guards a lookup, while an unresolved import fails at compile time, before any lookup runs. `network_config_impl.dart` imported `data_auth` and `domain_auth` for exactly that reason, and made the auth module unremovable while this section said otherwise.
 
 Everything the shell consumes at runtime resolves through a `core_di` contract with a fallback:
 
@@ -377,7 +377,7 @@ Everything the shell consumes at runtime resolves through a `core_di` contract w
 > [!WARNING]
 > `getAll<T>()` and `getAllOrEmpty<T>()` differ exactly here. `getAll` throws on an unregistered type, so a bare `getAll<IFeatureLocalization>()` crashes during `MaterialApp` construction in any build where no feature contributes one.
 
-**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract implemented by a package under `modules/` — any layer: `ISessionGateway` in `data_auth` counts as much as a feature's navigator — keyed by the implementing module, then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
+**Enforced by machine.** `arch_check` rule **R8** derives every `core_di` contract implemented by a package under `modules/`, keyed by the implementing module. Any layer counts: `ISessionGateway` in `data_auth` counts as much as a feature's navigator. R8 then blocks a throwing `getIt<T>()` / `getAll<T>()` against one:
 
 ```bash
 dart tools/arch_check/check.dart      # rule R8 — Gate 1 of pr_quality_check.yml
@@ -404,7 +404,7 @@ A contract that exists so one feature can reach **another module** — its navig
 | A type declared in an API package and implemented only under `modules/` is resolved with `getItOrNull` / `getAllOrEmpty` outside its module | `arch_check` R8 |
 | No platform package and no app file (bar `injection.dart`) imports an API package | `arch_check` R1, R10 |
 
-An API package is composed as the `api` layer (`- { id: auth, layers: [api, domain, data, feature] }`): a workspace member, never an app dependency or an `injection.dart` entry. `remove_sample <id>` removes it with its module — unless a package outside the bundle still imports it; then it is **kept**, the importers are named, and the manifests keep `{ id: <id>, layers: [api] }`, so the build still compiles and the consumers' lookups return null.
+An API package is composed as the `api` layer (`- { id: auth, layers: [api, domain, data, feature] }`): a workspace member, never an app dependency or an `injection.dart` entry. `remove_sample <id>` removes it with its module — unless a package outside the bundle still imports it. Then it is **kept**, the importers are named, and the manifests keep `{ id: <id>, layers: [api] }`. The build still compiles, and the consumers' lookups return null.
 
 **Verify**
 
@@ -512,7 +512,7 @@ Registry: RULE-30 · RULE-31 · RULE-32.
 
 **Rule.** Every dimension — width, height, padding, margin, font size, border radius — is scaled **through `BuildContext`**, using `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (also `context.spMin`, `context.dg`, `context.dm`). Raw doubles in layout are forbidden, and so is the bare receiver form `16.h`.
 
-**Why the bare form is not even available.** `core_responsive` ships **no `num` extension**, so `16.h` does not compile. That is deliberate: a number carries no context, so such an extension could only read a global singleton, and a widget reading a global never learns the metrics changed. `context.h(16)` instead registers an **InheritedWidget dependency** on `ResponsiveScope`, so it rebuilds when screen metrics change: rotation, split-screen, a resized desktop window. Requiring the context makes the correct thing the only writable thing — and `arch_check` rule R7 rejects the bare form in any file importing `core_responsive`, so an extension declared elsewhere cannot smuggle it back in.
+**Why the bare form is not even available.** `core_responsive` ships **no `num` extension**, so `16.h` does not compile. That is deliberate: a number carries no context, so such an extension could only read a global singleton, and a widget reading a global never learns the metrics changed. `context.h(16)` instead registers an **InheritedWidget dependency** on `ResponsiveScope`, so it rebuilds when screen metrics change: rotation, split-screen, a resized desktop window. Requiring the context makes the correct thing the only writable thing. And `arch_check` rule R7 rejects the bare form in any file importing `core_responsive`, so an extension declared elsewhere cannot smuggle it back in.
 
 ❌ **Wrong** — does not compile, and would go stale if it did:
 ```dart
@@ -563,9 +563,9 @@ double? get leadingWidth => context.w(64);   // overrides super.leadingWidth for
 
 ✅ **Right** — accept the constructor parameter, let the caller scale it.
 
-**Sizes do not grow on a tablet.** Every factor is clamped by a `ScaleBounds`, and the default, `ScaleBounds.downOnly()`, stops at 1:1: a window smaller than the artboard shrinks the design, a larger one draws it at design size. Do not tune a screen expecting `context.w(16)` to come out bigger on an iPad — spend the extra room on layout. Where a window class genuinely should grow, opt in for that class with a capped bound (`ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))` in `_ResponsiveWrapper`'s `profiles`). See [design system §6](../guides/11_design_system.md#6-scale-policy-down-by-default-up-on-opt-in-per-window-class).
+**Sizes do not grow on a tablet.** Every factor is clamped by a `ScaleBounds`. The default, `ScaleBounds.downOnly()`, stops at 1:1: a window smaller than the artboard shrinks the design, and a larger one draws it at design size. Do not tune a screen expecting `context.w(16)` to come out bigger on an iPad — spend the extra room on layout. Where a window class genuinely should grow, opt in for that class with a capped bound (`ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))` in `_ResponsiveWrapper`'s `profiles`). See [design system §6](../guides/11_design_system.md#6-set-the-scale-policy-per-window-class).
 
-**Choose a layout by window size class, never by device.** Use `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` or `AdaptiveSplitView` — never a device model, `Platform.isIOS`, or an ad-hoc `shortestSide` check. One device shows many windows — an iPad in Split View, a foldable's cover screen, a desktop window dragged narrow — and only the window class sees them. The dashboard's bottom bar / rail switch is the reference; see [design system §7](../guides/11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
+**Choose a layout by window size class, never by device.** Use `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` or `AdaptiveSplitView` — never a device model, `Platform.isIOS`, or an ad-hoc `shortestSide` check. One device shows many windows — an iPad in Split View, a foldable's cover screen, a desktop window dragged narrow — and only the window class sees them. The dashboard's bottom bar / rail switch is the reference; see [design system §7](../guides/11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
 
 ❌ **Wrong** — an ad-hoc tablet test: its own threshold, blind to the app's breakpoints, and it asks "is this a tablet?" instead of "is this window wide enough for two panes?":
 ```dart
@@ -644,7 +644,7 @@ This lets the owner inject the concrete type through its constructor while every
 
 Do not use Action Handlers for plain navigation (use a Navigator) or for Domain-only logic (use a UseCase).
 
-**`core_di` contracts stay neutral** (RULE-08). A contract never names a `domain_*` type — it declares a smaller, contract-owned value type (`SessionPrincipal`), which the owner maps to at its boundary (`AuthStatusStreamImpl.toPrincipal`). It returns plain Flutter types (`IAppTreeWrapper.wrap()` returns a `Widget`) so neither state library is forced on the other, and it prefers a Dart 3 `sealed class` to Freezed (`SessionFailure`): `core_di` runs only injectable's codegen, and a `part` file on a contract would make every consumer wait on `build_runner`. Global UI state (theme, language, deep links) uses one neutral utility — `ChangeNotifier` / `ValueNotifier` or a plain `Stream` — so no feature is forced to import a state library it does not use.
+**`core_di` contracts stay neutral** (RULE-08). A contract never names a `domain_*` type — it declares a smaller, contract-owned value type (`SessionPrincipal`), which the owner maps to at its boundary (`AuthStatusStreamImpl.toPrincipal`). It returns plain Flutter types (`IAppTreeWrapper.wrap()` returns a `Widget`), so neither state library is forced on the other. It prefers a Dart 3 `sealed class` to Freezed (`SessionFailure`): `core_di` runs only injectable's codegen, and a `part` file on a contract would make every consumer wait on `build_runner`. Global UI state (theme, language, deep links) uses one neutral utility: `ChangeNotifier` / `ValueNotifier` or a plain `Stream`. So no feature is forced to import a state library it does not use.
 
 ---
 
@@ -719,7 +719,7 @@ Registry: RULE-43 · RULE-65 · RULE-66 · RULE-67.
 
 **Rule.** Runtime diagnostics go through `dynamic_logger` (`DynamicLogger.log`), never `print` — the analyzer's `avoid_print` rejects it. CLI tools under `tools/` write with `stdout.writeln` / `stderr.writeln`. Nothing secret is logged or committed.
 
-**Why.** `print` output reaches release device logs and cannot be filtered by level or tag. The network stack shows the redaction standard: `LoggingInterceptor` is `kDebugMode`-gated on all three hooks, including `onError`, and redacts `Authorization` / `Cookie` headers and credential body fields (`password`, `token`, `access_token`, …) — see [`../guides/08_networking.md`](../guides/08_networking.md) § 2. Production env files, keystores, `key.properties` and API keys (`tools/code_review/.gemini_api_key`, `apps/mobile/fastlane/Config.yaml`) are gitignored; CI materialises them from secrets ([`../operations/01_cicd.md`](../operations/01_cicd.md) § 7).
+**Why.** `print` output reaches release device logs and cannot be filtered by level or tag. The network stack shows the redaction standard. `LoggingInterceptor` is `kDebugMode`-gated on all three hooks, including `onError`, and redacts `Authorization` / `Cookie` headers and credential body fields (`password`, `token`, `access_token`, …) — see [`../architecture/02_core.md`](../architecture/02_core.md#the-interceptor-chain) § 6. Production env files, keystores, `key.properties` and API keys (`tools/code_review/.gemini_api_key`, `apps/mobile/fastlane/Config.yaml`) are gitignored; CI materialises them from secrets ([`../operations/01_cicd.md`](../operations/01_cicd.md) § 7).
 
 **Error reporting.** `runShellApp` installs one hook behind the zone handler, `FlutterError.onError` and `PlatformDispatcher.instance.onError`. It keeps the previous handler, calls the app's optional `onError`, then `getItOrNull<IErrorReporter>()` with `fatal: true`; `ErrorHandler.onUnclassifiedError` sends exceptions `ErrorHandler` could not classify to the same reporter with `fatal: false`. To plug in Crashlytics or Sentry, register an `IErrorReporter` implementation in the app (`@LazySingleton(as: IErrorReporter)` in its own `lib/`); `IAnalytics` likewise, and every `GoRouteDataCustom` page reports its screen through it. Setting `FlutterError.onError` yourself replaces the chain instead of joining it. Details: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § "Errors and crash reporting".
 
@@ -739,7 +739,7 @@ Registry: RULE-38 · RULE-39 · RULE-30 (directional insets).
 - **Tap targets are at least 48 × 48 dp** (`kMinInteractiveDimension`) — shrink the visual, not the hit area.
 - **Right-to-left.** A padding that means start/end of the line uses `context.edgeInsetsDirectional(start:, end:)`, which flips in RTL; `edgeInsets(left:/right:)` is physical.
 
-**Why.** Each of these was a real defect here: `RootApp` once ended in `withNoTextScaling`, pinning every text at 100 % whatever the user chose, and a global `TooltipVisibility(visible: false)` silenced every icon button for screen readers. Details: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § 7.
+**Why.** Each of these was a real defect here. `RootApp` once ended in `withNoTextScaling`, pinning every text at 100 % whatever the user chose. And a global `TooltipVisibility(visible: false)` silenced every icon button for screen readers. Details: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § 7.
 
 **Verify**
 

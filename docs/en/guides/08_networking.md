@@ -1,446 +1,54 @@
 # Guide: Networking
 
-**What this answers:** how an HTTP request leaves this app — which interceptors touch it, how an expired session is renewed, and what is (and is not) protecting the connection.
+## Goal
 
-**After reading you can:** declare a new API service, opt a request out of auth or retry, wire the refresh-token flow, and turn on certificate pinning correctly.
+You call a new HTTP endpoint from a data package. You declare the service with Retrofit, register it, and unwrap its responses into a `Result`. You also learn to opt a single request out of auth, refresh or retry, to add a second client with its own rules, to plug in token refresh, and to turn on certificate pinning.
 
----
+## Prerequisites
 
-## 1. `ApiClient` — the Dio factory
-
-`core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (§3), which the app shell implements.
-
-```dart
-// platform/infra/network/lib/src/api_client.dart
-@lazySingleton
-class ApiClient {
-  final NetworkConfig _config;
-
-  ApiClient(this._config);
-
-  /// Default base options for Dio.
-  BaseOptions get _defaultOptions => BaseOptions(
-    baseUrl: EnvConstants.BASE_URL,
-    connectTimeout: NetworkConstants.CONNECT_TIMEOUT,
-    receiveTimeout: NetworkConstants.RECEIVE_TIMEOUT,
-    sendTimeout: NetworkConstants.SEND_TIMEOUT,
-    followRedirects: false,
-    headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
-  );
-```
-
-`createClient()` parameters:
-
-| Parameter | Effect |
-|---|---|
-| `baseUrl` | Overrides `EnvConstants.BASE_URL` for this client |
-| `interceptors` | Extra interceptors appended **after** the defaults |
-| `useDefaultInterceptors` | `false` skips the whole default chain — use for a public/unauthenticated client |
-| `options` | Replaces `_defaultOptions` wholesale (it is `copyWith`-ed, so shared state is not mutated) |
-
-`core_network` registers exactly one client — the default `Dio` every Retrofit data source receives:
-
-```dart
-// platform/infra/network/lib/di/register_module.dart
-@module
-abstract class RegisterModule {
-  @lazySingleton
-  Dio dio(ApiClient apiClient) => apiClient.createClient();
-}
-```
-
-A second client with its own rules is registered the same way, under a **name**, so it does not replace the default one. Nothing in the repo registers this — it is the shape to copy, e.g. a public API with no auth header, no refresh and no retry dialog:
-
-```dart
-// modules/<module>/data/lib/di/register_module.dart
-import 'package:core_network/core_network.dart';
-import 'package:dio/dio.dart';
-import 'package:injectable/injectable.dart';
-
-@module
-abstract class RegisterModule {
-  @Named('public_api')
-  @lazySingleton
-  Dio publicDio(ApiClient apiClient) => apiClient.createClient(
-    useDefaultInterceptors: false,
-    interceptors: [LoggingInterceptor(tag: 'PublicAPI')],
-  );
-}
-```
-
-`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client; only a parameter annotated `@Named('public_api')` gets this one — see [§6](#6-declaring-an-api-service-with-retrofit). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/infra/network/lib/di/register_module.dart` rather than declaring it twice.
+- A data package — [`02_new_domain_data.md`](02_new_domain_data.md).
+- **What happens inside the client**: the interceptor chain and its order, how `NetworkConfig` is supplied, the refresh-token flow and its recursion guards, and when pinning is installed — [`../architecture/02_core.md` § 6](../architecture/02_core.md#6-core_network--http-client).
+- The endpoint's base URL in the flavor's env file (`BASE_URL` in `apps/mobile/env.dev`, …) — [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 
 ---
 
-## 2. The interceptor chain
+## 1. Add the network dependencies
 
-Dio runs interceptors in the order they were added — for `onRequest` **and** for `onError`. The real order in `createClient()` is:
+Declare them in the data package's `pubspec.yaml`, as `modules/auth/data/pubspec.yaml` does. Versions come from the catalog `pubspec_dependencies.yaml`; after editing, `dart tools/dependency_sync.dart` aligns them (RULE-74):
 
-```
-1. AuthInterceptor            → attaches Authorization + language headers
-2. RefreshTokenInterceptor    → catches 401, renews the session, replays  (only if configured)
-3. RetryInterceptor           → catches timeout / connection errors
-4. LoggingInterceptor         → structured logs (debug builds only)
-```
+   ```yaml
+   dependencies:
+     core_network:
+       path: ../../../platform/infra/network
+     dio: "^5.11.0"
+     retrofit: "^4.10.0"
+     injectable: ^3.0.0
 
-```dart
-// platform/infra/network/lib/src/api_client.dart
-dio.interceptors.add(
-  AuthInterceptor(
-    getToken: _config.getToken,
-    getLocale: _config.getLocale,
-  ),
-);
+   dev_dependencies:
+     build_runner: "^2.16.0"
+     injectable_generator: "^3.1.3"
+     retrofit_generator: "^10.2.8"
+   ```
 
-// Renewing an expired session must happen before the retry pass,
-// otherwise a 401 would be replayed with the same stale token.
-// Only wired when the app supplies a refresh callback; without one a
-// 401 surfaces to the caller unchanged.
-final onRefreshToken = _config.onRefreshToken;
-if (onRefreshToken != null) {
-  final onRefreshFailed = _config.onRefreshFailed;
-  dio.interceptors.add(
-    RefreshTokenInterceptor(
-      RefreshTokenHandler(
-        dio: dio,
-        currentToken: _config.getToken,
-        onRefreshToken: onRefreshToken,
-        onRefreshFailed: onRefreshFailed ?? () async {},
-      ),
-    ),
-  );
-}
+Add `json_annotation` / `json_serializable` (and `freezed_annotation` / `freezed`) when the models are generated too. Run `flutter pub get`.
 
-dio.interceptors.addAll([
-  RetryInterceptor(
-    handleRetry: retryHandler.handleRetry,
-    retryWhen: retryHandler.retryWhen,
-  ),
-  LoggingInterceptor(tag: NetworkConstants.CLIENT_LOG_TAG),
-]);
-```
-
-Auth runs first so the token is attached before anything else; refresh sits ahead of retry so a 401 is *renewed* rather than replayed with the same dead token.
-
-### Per-request opt-outs
-
-All three flags live in `RequestOptions.extra` and default to `true`:
+## 2. Put the endpoints in the owning package
 
 ```dart
-// platform/infra/network/lib/src/utils/network_constants.dart
-/// Set `false` to stop [AuthInterceptor] attaching the bearer token.
-static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
+// modules/auth/data/lib/src/utils/auth_api_constants.dart
+class AuthApiConstants {
+  AuthApiConstants._();
 
-/// Set `false` to opt a request out of [RetryInterceptor].
-static const String EXTRA_CAN_RETRY = 'canRetry';
-
-/// Set `false` on a request whose `401` must never start a token refresh —
-/// the login and refresh calls themselves. The bearer token is still
-/// attached; only the refresh reaction is skipped. Without it a `401` from
-/// the refresh call waits on the refresh that is waiting on it.
-static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
-```
-
-### `AuthInterceptor`
-
-Adds an upper-cased `language` header (falling back to the device locale, then to `vi`), and the bearer token when the request wants auth:
-
-```dart
-// platform/infra/network/lib/src/interceptors/auth_interceptor.dart
-if (needAuthentication) {
-  final token = getToken() ?? '';
-  if (token.isNotEmpty) {
-    options.headers.addAll({
-      HttpHeaders.authorizationHeader:
-          '${NetworkConstants.BEARER_PREFIX} $token',
-    });
-  }
+  static const String LOGIN = '/user/login';
+  static const String REFRESH_TOKEN = '/user/refresh-token';
 }
 ```
 
-> [!NOTE]
-> The language header key is the non-standard `'language'`, not `Accept-Language`. Match it on the server side.
+Endpoint constants live with the package that owns them, never in `core_common` — the same ownership rule as storage keys (RULE-09). A shared endpoint file would let every layer read, and mistype, another package's routes.
 
-### `RetryInterceptor`
+## 3. Declare the Retrofit service
 
-Only transport failures qualify — **not** HTTP status codes:
-
-```dart
-// platform/infra/network/lib/src/handlers/retry_handler.dart
-bool retryWhen(DioExceptionType type) {
-  return type == DioExceptionType.receiveTimeout ||
-      type == DioExceptionType.sendTimeout ||
-      type == DioExceptionType.connectionError ||
-      type == DioExceptionType.connectionTimeout;
-}
-```
-
-Concurrent failures are collected into one queue — one entry per caller — and a **single** retry dialog is raised through `NetworkConfig.onRetryCallback`. If no callback is supplied, every queued request is cancelled instead of hanging. "Retry" takes every queued request out of the queue and replays it through the same `Dio`, marked `canRetry: false`: the auth and refresh interceptors run again (fresh token, a 401 is refreshed), a timeout re-queues the caller for the next dialog, and any other failure reaches the caller as *that* error, not the original timeout.
-
-### `LoggingInterceptor`
-
-All three hooks are behind `kDebugMode`, and credential headers are masked even in debug:
-
-```dart
-// platform/infra/network/lib/src/interceptors/logging_interceptor.dart
-Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
-  const redactedKeys = {
-    HttpHeaders.authorizationHeader,
-    HttpHeaders.cookieHeader,
-    HttpHeaders.setCookieHeader,
-    HttpHeaders.proxyAuthorizationHeader,
-  };
-
-  return {
-    for (final entry in headers.entries)
-      entry.key: redactedKeys.contains(entry.key.toLowerCase())
-          ? '***REDACTED***'
-          : entry.value,
-  };
-}
-```
-
-Bodies are masked too, at any depth: a value under `password`, `token`, `access_token` / `accessToken`, `refresh_token`, `id_token`, `secret` or `client_secret` prints as `***REDACTED***` — a login request carries the password in its body and the response returns the token in its body.
-
----
-
-## 3. `NetworkConfig` — the app shell supplies the details
-
-```dart
-// platform/infra/network/lib/src/network_config.dart
-abstract class NetworkConfig implements SslPinningConfig {
-  String? Function() get getToken;
-  String? Function() get getLocale;
-
-  void onRetryCallback({
-    required VoidCallback onRetry,
-    required VoidCallback onCancel,
-  });
-
-  Future<String?> Function()? get onRefreshToken => null;
-  Future<void> Function()? get onRefreshFailed => null;
-
-  @override
-  List<String> get sslPinningHashes;
-}
-```
-
-The two refresh getters default to `null`, so in an app with no refresh endpoint a `401` reaches the caller untouched.
-
-The implementation delegates each value to whoever actually owns it, rather than reading storage itself:
-
-```dart
-// platform/shell/adapters/lib/src/network_config_impl.dart
-@LazySingleton(as: NetworkConfig)
-class NetworkConfigImpl implements NetworkConfig {
-  NetworkConfigImpl(this._languageStorage);
-
-  final ILanguageStorage _languageStorage;
-
-  /// Null in a build that composes no auth module.
-  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
-
-  @override
-  String? Function() get getToken => () => _session?.readToken();
-
-  @override
-  String? Function() get getLocale =>
-      () => _languageStorage.getLanguage().languageCode;
-
-  /// Whether an auth module is composed — without resolving it: resolving
-  /// the gateway while `Dio` is being built closes a dependency cycle.
-  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
-
-  @override
-  Future<String?> Function()? get onRefreshToken =>
-      _hasSession ? _refreshSession : null;
-
-  @override
-  Future<void> Function()? get onRefreshFailed =>
-      _hasSession ? _clearSession : null;
-```
-
-> [!IMPORTANT]
-> `NetworkConfigImpl` imports no module. It reads the token through `ISessionGateway`, resolved with `getItOrNull` at call time rather than injected, so it constructs whether or not an auth module is in the build and no DI ordering can break it. With no gateway registered, `onRefreshToken` returns null — and `ApiClient` installs `RefreshTokenInterceptor` **only** when that is non-null, so a build without auth gets no refresh interceptor rather than one that can never succeed. `arch_check` R1 keeps it that way: it lives in `platform_shell_adapters`, and a `platform/` package may not import a module. See [`05_di.md`](05_di.md).
-
----
-
-## 4. Refresh-token flow
-
-`_refreshSession` hands the work to `ISessionGateway`, which `data_auth` implements: the repository refreshes and persists the credentials, and the gateway re-reads the token from its owner. The config never persists anything itself:
-
-```dart
-// platform/shell/adapters/lib/src/network_config_impl.dart
-Future<String?> _refreshSession() async => await _session?.refreshToken();
-
-// modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
-@override
-Future<String?> refreshToken() async {
-  final result = await _repository.refreshToken();
-  if (result.isSuccess) return _local.getUserToken();
-  final failure = result.errorOrNull;
-  if (isTransient(failure)) {
-    throw StateError(
-      'Session renewal did not reach the server: '
-      '${failure?.message}',
-    );
-  }
-  return null;
-}
-
-/// Whether [failure] says nothing about the session's validity — the
-/// renewal never got an answer — so the session must be kept.
-///
-/// Exposed for tests: this predicate decides whether a user is signed out.
-static bool isTransient(AppFailure? failure) {
-  if (failure is NetworkFailure) return true;
-  if (failure is! ServerFailure) return false;
-  final code = failure.code;
-  if (code == null) return false;
-  return (code >= 500 && code < 600) || code == ErrorCodes.REQUEST_CANCELLED;
-}
-```
-
-### Rejected vs. unreachable
-
-The gateway's answer decides what happens to the session:
-
-| `refreshToken()` | Meaning | `RefreshTokenHandler` |
-| :-- | :-- | :-- |
-| a token | renewed | replays the request and every one waiting on it |
-| `null` | the server **refused** (401/403, any 4xx, or a 200 whose envelope reports an error — `ErrorCodes.RESPONSE_REJECTED`) | calls `onRefreshFailed` once, rejects them all |
-| throws | never got an answer (no network, a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
-
-`onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `ISessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
-
-A `401` that arrives *after* a refresh finished — a request sent with the old token — does not start another one: `RefreshTokenHandler` compares the request's `Authorization` header with `NetworkConfig.getToken` and, when they differ, just replays it. With rotating refresh tokens a redundant refresh could otherwise invalidate the session it just renewed.
-
-### One refresh for N concurrent 401s
-
-`RefreshTokenHandler` serialises everything behind a `Completer`. The first 401 performs the refresh; the rest wait on the same future:
-
-```dart
-// platform/infra/network/lib/src/handlers/refresh_token_handler.dart
-// If a refresh is already in progress, wait for it to complete.
-if (_completer != null) {
-  final String? newToken = await _completer!.future;
-  if (newToken != null) {
-    // The token was successfully refreshed, retry the original request.
-    return _retryRequest(err, handler);
-  } else {
-    // The token refresh failed, reject the original request.
-    return handler.reject(err);
-  }
-}
-```
-
-The retry is `await`-ed deliberately:
-
-```dart
-// `await` keeps the refresh lock (`_completer`) held until the retry
-// finishes; releasing it earlier would let a concurrent 401 start a
-// second, redundant refresh.
-return await _retryRequest(err, handler);
-```
-
-`FormData` bodies are rebuilt before replay, because a form stream can only be consumed once.
-
-### Three guards against infinite recursion
-
-```dart
-// platform/infra/network/lib/src/interceptors/refresh_token_interceptor.dart
-/// Three guards keep the flow from looping:
-/// 1. Requests that opted out of auth
-///    ([NetworkConstants.EXTRA_NEED_AUTHENTICATION] `= false`) or out of
-///    refresh ([NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] `= false`) are
-///    ignored, so the login and refresh calls never trigger a refresh.
-/// 2. A request already replayed after a refresh is marked with
-///    [NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] and is not refreshed a
-///    second time.
-/// 3. [RefreshTokenHandler] serialises concurrent `401`s behind a single
-///    `Completer`, so N failing requests cause exactly one refresh.
-```
-
-Guard 2 is subtle — the flag is set **before** handing over, because the replay goes back through this same interceptor:
-
-```dart
-// Mark the options *before* handing over: `RefreshTokenHandler` replays
-// this same RequestOptions through `dio.fetch`, which re-enters this
-// interceptor. The flag makes that second pass fall through to `super`.
-err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
-```
-
-> [!NOTE]
-> The sample's refresh *is* an HTTP call through this same client (`AuthRemoteDataSource.refreshToken`), so it and `login` carry `@Extra({NetworkConstants.EXTRA_CAN_REFRESH_TOKEN: false})` (guard 1); the refresh call also sets `EXTRA_CAN_RETRY: false`, because it runs at boot and inside another request's 401 and must fail fast rather than wait on a retry dialog. With no stored token `AuthRepositoryImpl.refreshToken` answers without a network call at all. Without it, a `401` from the refresh call enters `RefreshTokenHandler` while that handler's own refresh is still in flight, and waits on itself forever. Any endpoint of yours whose `401` means something other than "session expired" needs the same flag.
-
----
-
-## 5. SSL pinning
-
-> [!WARNING]
-> **Pinning is currently OFF.** `sslPinningHashes` returns `const []`, and an empty list disables pinning entirely. Until you fill it in, the app accepts any certificate the device trusts — including one injected by an intercepting proxy.
-
-The initializer refuses to fail silently about it:
-
-```dart
-// platform/foundation/common/lib/src/config/app_initializer.dart
-if (hashes != null && hashes.isNotEmpty) {
-  HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
-} else {
-  // Never fail silently here: without pinning the app still talks to the
-  // server over plain TLS, so a proxy with a trusted root can read every
-  // request. Surfacing it keeps a misconfiguration from shipping unnoticed.
-  DynamicLogger.log(
-    config == null
-        ? 'SSL pinning skipped: no SslPinningConfig registered in GetIt. ...'
-        : 'SSL pinning skipped: sslPinningHashes is empty. ...',
-    tag: 'Security',
-    level: LogLevel.ERROR,
-  );
-}
-```
-
-### When it is installed
-
-`_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls right after `configureDependencies()` and **before** `MainScope` builds the splash. Timing is the whole point: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there — auth restoring its session with a token refresh — can make the first request at once, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`. An override installed later, in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
-
-### The registration trap
-
-`NetworkConfig implements SslPinningConfig`, but registering the impl `as: NetworkConfig` does **not** make it resolvable as `SslPinningConfig` — GetIt matches the exact registered type. Without a second binding, `getItOrNull<SslPinningConfig>()` returns `null` and pinning is skipped on every flavour, production included. The binding that prevents it:
-
-```dart
-// platform/shell/adapters/lib/di/network_binding_module.dart
-/// GetIt resolves by the exact type a binding was registered under — it does
-/// **not** walk the supertype chain. `NetworkConfigImpl` is registered as
-/// `NetworkConfig`, so without this module `getItOrNull<SslPinningConfig>()`
-/// (called by `AppInitializer._setupHttpOverrides`) resolves to `null` and
-/// certificate pinning is silently skipped on staging and production.
-@module
-abstract class NetworkBindingModule {
-  @lazySingleton
-  SslPinningConfig bindSslPinningConfig(NetworkConfig config) => config;
-}
-```
-
-The parameter is typed `NetworkConfig`, so the upcast is compiler-checked — no `as` cast.
-
-### Getting a pin
-
-```sh
-openssl s_client -servername <host> -connect <host>:443 </dev/null \
-  | openssl x509 -pubkey -noout \
-  | openssl pkey -pubin -outform der \
-  | openssl dgst -sha256 -binary \
-  | openssl enc -base64
-```
-
-Pin **at least two** keys — the leaf plus a backup — so certificate rotation does not lock every installed client out of the API.
-
-Certificate validation is bypassed (for local self-signed servers) **only in a debug build that explicitly declared the `dev` flavor** — `AppConfig.bypassesCertificateValidation`. Everything else goes through the pinning path: `staging`, `prod`, a `dev` profile or release build, and a build with a **missing or unknown** flavor, which is treated as `prod` and logged as an ERROR. This fails closed on purpose: `AppConfig.appFlavor` used to fall back to `dev`, so a build made without `--flavor` — release included — accepted every certificate. `appFlavor` itself (the DI environment) now falls back to `dev` in a debug build and to `prod` otherwise.
-
----
-
-## 6. Declaring an API service with Retrofit
+Declare the abstract class with `part '<file>.g.dart';`:
 
 ```dart
 // modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart
@@ -468,31 +76,14 @@ abstract class AuthRemoteDataSource {
 }
 ```
 
-`@Extra` sets per-request flags the interceptors read (`NetworkConstants` in `core_network`): `EXTRA_CAN_REFRESH_TOKEN: false` keeps a `401` from starting a token refresh, `EXTRA_CAN_RETRY: false` keeps a timeout from raising the retry dialog. Both default to `true` when absent.
+`@Extra` sets per-request flags the interceptors read (`NetworkConstants` in `core_network`). `EXTRA_CAN_REFRESH_TOKEN: false` keeps a `401` from starting a token refresh; `EXTRA_CAN_RETRY: false` keeps a timeout from raising the retry dialog. Both default to `true` when absent (step 6).
 
-### Steps
+> [!IMPORTANT]
+> `AuthRemoteDataSource` **is** the live path: `AuthRepositoryImpl` calls it for login and token refresh, through `execute()`. Point `AuthApiConstants` at your real endpoints, or swap the transport (Firebase, GraphQL) inside the repository and keep the shape.
 
-1. **Dependencies** — in the data package's `pubspec.yaml`, as `modules/auth/data/pubspec.yaml` does (versions come from the catalog `pubspec_dependencies.yaml`; after editing, `dart tools/dependency_sync.dart` aligns them):
+## 4. Register the service through a `@module`
 
-   ```yaml
-   dependencies:
-     core_network:
-       path: ../../../platform/infra/network
-     dio: "^5.11.0"
-     retrofit: "^4.10.0"
-     injectable: ^3.0.0
-
-   dev_dependencies:
-     build_runner: "^2.16.0"
-     injectable_generator: "^3.1.3"
-     retrofit_generator: "^10.2.8"
-   ```
-
-   Add `json_annotation` / `json_serializable` (and `freezed_annotation` / `freezed`) when the models are generated too. Run `flutter pub get`.
-
-2. **Declare** the abstract class with `part '<file>.g.dart';`, as above.
-
-3. **Register it** — a Retrofit class is a factory constructor, not an `@injectable` class, so it goes through a `@module` in the package's `lib/di/register_module.dart`. The real one:
+A Retrofit class is a factory constructor, not an `@injectable` class, so it goes through a `@module` in the package's `lib/di/register_module.dart`. The real one:
 
    ```dart
    // modules/auth/data/lib/di/register_module.dart
@@ -509,7 +100,7 @@ abstract class AuthRemoteDataSource {
    }
    ```
 
-   The `Dio` it receives is `core_network`'s default client, already carrying the whole interceptor chain. To use the named client from [§1](#1-apiclient--the-dio-factory) instead, name the parameter:
+The `Dio` it receives is `core_network`'s default client, already carrying the whole interceptor chain. To use a named client (step 7) instead, name the parameter:
 
    ```dart
    @lazySingleton
@@ -518,30 +109,88 @@ abstract class AuthRemoteDataSource {
    ) => CatalogRemoteDataSource(dio);
    ```
 
-   Without the `@lazySingleton` the repository that injects the data source fails at boot with *"… is not registered"* — `flutter analyze` cannot see it.
+Without the `@lazySingleton`, the repository that injects the data source fails at boot with *"… is not registered"*. `flutter analyze` cannot see that (RULE-77).
 
-4. **Generate** — `dart run build_runner build --workspace` (Retrofit's `.g.dart` and the package's `module.module.dart`), then `dart tools/barrel_generator/generate.dart modules/<module>/data/lib` so the barrel exports the new files.
+## 5. Generate the code
 
-> [!IMPORTANT]
-> `AuthRemoteDataSource` **is** the live path: `AuthRepositoryImpl` calls it for login and token refresh, through `execute()`. Point `AuthApiConstants` at your real endpoints, or swap the transport (Firebase, GraphQL) inside the repository and keep the shape.
+```bash
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/<module>/data/lib
+```
 
-### Endpoints belong to the owning package
+`build_runner` writes Retrofit's `.g.dart` and the package's `module.module.dart`. The barrel generator then exports the new files (RULE-75).
+
+## 6. Opt a single request out of auth, refresh or retry
+
+All three flags live in `RequestOptions.extra` and default to `true`:
 
 ```dart
-// modules/auth/data/lib/src/utils/auth_api_constants.dart
-class AuthApiConstants {
-  AuthApiConstants._();
+// platform/infra/network/lib/src/utils/network_constants.dart
+/// Set `false` to stop [AuthInterceptor] attaching the bearer token.
+static const String EXTRA_NEED_AUTHENTICATION = 'needAuthentication';
 
-  static const String LOGIN = '/user/login';
-  static const String REFRESH_TOKEN = '/user/refresh-token';
+/// Set `false` to opt a request out of [RetryInterceptor].
+static const String EXTRA_CAN_RETRY = 'canRetry';
+
+/// Set `false` on a request whose `401` must never start a token refresh —
+/// the login and refresh calls themselves. The bearer token is still
+/// attached; only the refresh reaction is skipped. Without it a `401` from
+/// the refresh call waits on the refresh that is waiting on it.
+static const String EXTRA_CAN_REFRESH_TOKEN = 'canRefreshToken';
+```
+
+| Set to `false` on… | Flag |
+|:--|:--|
+| A request that must not carry a token | `EXTRA_NEED_AUTHENTICATION` |
+| Login, refresh, and any call whose `401` is not "session expired" | `EXTRA_CAN_REFRESH_TOKEN` |
+| A call that must fail fast rather than wait on the retry dialog | `EXTRA_CAN_RETRY` |
+
+With Retrofit, set them with `@Extra({...})`, as step 3 shows. Why login and refresh need `EXTRA_CAN_REFRESH_TOKEN: false`: without it, a `401` from the refresh call waits on the refresh that is waiting on it ([`../architecture/02_core.md` § 6](../architecture/02_core.md#three-guards-against-infinite-recursion)).
+
+## 7. Add a second client with its own rules
+
+`core_network` registers exactly one client — the default `Dio` every Retrofit data source receives:
+
+```dart
+// platform/infra/network/lib/di/register_module.dart
+@module
+abstract class RegisterModule {
+  @lazySingleton
+  Dio dio(ApiClient apiClient) => apiClient.createClient();
 }
 ```
 
-Endpoint constants live with the package that owns them, never in `core_common` — the same ownership rule as storage keys. A shared endpoint file would let every layer read, and mistype, another package's routes.
+`createClient()` takes these parameters:
 
----
+| Parameter | Effect |
+|---|---|
+| `baseUrl` | Overrides `EnvConstants.BASE_URL` for this client |
+| `interceptors` | Extra interceptors appended **after** the defaults |
+| `useDefaultInterceptors` | `false` skips the whole default chain — use for a public/unauthenticated client |
+| `options` | Replaces `_defaultOptions` wholesale (it is `copyWith`-ed, so shared state is not mutated) |
 
-## 7. Response envelopes
+A second client with its own rules is registered the same way, under a **name**, so it does not replace the default one. Nothing in the repo registers this. It is the shape to copy — for example, a public API with no auth header, no refresh and no retry dialog:
+
+```dart
+// modules/<module>/data/lib/di/register_module.dart
+import 'package:core_network/core_network.dart';
+import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
+
+@module
+abstract class RegisterModule {
+  @Named('public_api')
+  @lazySingleton
+  Dio publicDio(ApiClient apiClient) => apiClient.createClient(
+    useDefaultInterceptors: false,
+    interceptors: [LoggingInterceptor(tag: 'PublicAPI')],
+  );
+}
+```
+
+`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client. Only a parameter annotated `@Named('public_api')` gets this one (step 4). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/infra/network/lib/di/register_module.dart` rather than declaring it twice.
+
+## 8. Unwrap the response envelopes
 
 `BaseEntity<T>` wraps a standard server response:
 
@@ -582,11 +231,55 @@ const factory BaseRequest({
 }) = _BaseRequest<T>;
 ```
 
-Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_domain_data.md`](02_new_domain_data.md).
+Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_domain_data.md`](02_new_domain_data.md) § 9.
+
+## 9. Plug in token refresh
+
+You do not wire the refresh interceptor yourself. `NetworkConfigImpl` installs it as soon as some module registers an `ISessionGateway` (in the sample, `data_auth`'s `AuthSessionGatewayImpl`, `modules/auth/data/lib/src/services/auth_session_gateway_impl.dart`). With none registered, a `401` reaches the caller unchanged.
+
+To use your own backend, implement `ISessionGateway` (`platform/foundation/contracts/lib/src/session/i_session_gateway.dart`) in your auth data package. Its `refreshToken()` must answer in one of three ways, because the answer decides what happens to the session:
+
+| `refreshToken()` | Meaning | `RefreshTokenHandler` |
+| :-- | :-- | :-- |
+| a token | renewed | replays the request and every one waiting on it |
+| `null` | the server **refused** (401/403, any 4xx, or a 200 whose envelope reports an error — `ErrorCodes.RESPONSE_REJECTED`) | calls `onRefreshFailed` once, rejects them all |
+| throws | never got an answer (no network, a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
+
+Then mark the login and refresh calls `EXTRA_CAN_REFRESH_TOKEN: false` (step 6). What happens after your answer — one refresh for N concurrent `401`s, and the three recursion guards — is in [`../architecture/02_core.md` § 6](../architecture/02_core.md#the-refresh-token-flow).
+
+## 10. Turn on SSL pinning
+
+> [!WARNING]
+> **Pinning is currently OFF.** `sslPinningHashes` returns `const []`, and an empty list disables pinning entirely. Until you fill it in, the app accepts any certificate the device trusts — including one injected by an intercepting proxy.
+
+Get the SPKI SHA-256 hash of each key:
+
+```sh
+openssl s_client -servername <host> -connect <host>:443 </dev/null \
+  | openssl x509 -pubkey -noout \
+  | openssl pkey -pubin -outform der \
+  | openssl dgst -sha256 -binary \
+  | openssl enc -base64
+```
+
+Pin **at least two** keys — the leaf plus a backup — so certificate rotation does not lock every installed client out of the API. Return them from `sslPinningHashes` in `platform/shell/adapters/lib/src/network_config_impl.dart` (RULE-48).
+
+Pinning also needs `SslPinningConfig` bound in its own right, which `platform/shell/adapters/lib/di/network_binding_module.dart` already does (RULE-14). Keep that binding: without it pinning is skipped on every flavor, production included ([`../architecture/06_app_shell.md` § 4](../architecture/06_app_shell.md#why-sslpinningconfig-needs-a-separate-binding)). When pinning is installed, and which builds bypass it: [`../architecture/02_core.md` § 6](../architecture/02_core.md#when-pinning-is-installed-and-when-it-is-skipped).
 
 ---
 
-## 8. Checklist
+## Verify
+
+```bash
+dart run build_runner build --workspace                  # Retrofit .g.dart + module.module.dart
+flutter analyze                                          # No issues found!
+cd platform/infra/network && flutter test                # the interceptor tests
+cd apps/mobile && flutter test test/di_smoke_test.dart   # your data source resolves; DioFailureClassifier is registered
+```
+
+Test a repository against a fake data source, as `modules/auth/data/test/` does, rather than against a live server. On a device, a debug build logs every request and response through `LoggingInterceptor` (tag `NetworkConstants.CLIENT_LOG_TAG`), with credentials redacted. When pinning is off or unregistered, the log shows an `ERROR` tagged `Security`.
+
+Review checklist:
 
 - [ ] Endpoint constants live in the owning data package's `utils/`, never in `core_common`
 - [ ] Retrofit service declared, `part` added, `build_runner` run
@@ -597,9 +290,23 @@ Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_doma
 - [ ] `SslPinningConfig` bound explicitly in a `@module` — check `platform_shell_adapters`' generated `lib/di/module.module.dart`
 - [ ] No credential ever logged verbatim
 
-## See also
+## Troubleshooting
 
-- [`../architecture/02_core.md`](../architecture/02_core.md) — `core_network` in context
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| `… is not registered` for the data source at boot | The Retrofit class has no `@module` registration, or codegen is stale | Register it (step 4), then `build_runner` (step 5) |
+| Every request fails at once with a connection error | `BASE_URL` is empty in the flavor's env file | Set `BASE_URL` in `apps/mobile/env.<flavor>` |
+| The app hangs after a `401` on login or refresh | The call lacks `EXTRA_CAN_REFRESH_TOKEN: false`, so the refresh waits on itself | Add the `@Extra` (steps 3 and 6) |
+| A `401` reaches the UI although the backend supports refresh | No `ISessionGateway` is registered, so no refresh interceptor is installed | Implement and register one (step 9) |
+| The user is signed out after a network blip | `refreshToken()` returned `null` for a transient error | Throw for "no answer" and return `null` only for a refusal (step 9) |
+| The server ignores the locale | It reads `Accept-Language`; the client sends the non-standard `language` header | Read `language` on the server |
+| `ERROR` log: `SSL pinning skipped` | `sslPinningHashes` is empty, or `SslPinningConfig` is not bound | Fill the hashes and keep the binding (step 10) |
+| Two packages register the same named client and boot throws | A name can be registered once per container | Move the registration into `platform/infra/network/lib/di/register_module.dart` (step 7) |
+
+## Related
+
+- Rules: RULE-09 (endpoints in `utils/`), RULE-14 (second interface via `@module`), RULE-41 (data sources return models), RULE-42 (`execute()` and no throw to UI), RULE-43 (`ErrorHandler`), RULE-48 (pinning), RULE-66 (never log secrets) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/02_core.md` § 6](../architecture/02_core.md#6-core_network--http-client) — the client's internals
+- [`02_new_domain_data.md`](02_new_domain_data.md) — repository and `Result<T>` mapping
 - [`05_di.md`](05_di.md) — registration order and the eager-singleton trap
 - [`06_storage.md`](06_storage.md) — where the token is persisted
-- [`02_new_domain_data.md`](02_new_domain_data.md) — repository and `Result<T>` mapping

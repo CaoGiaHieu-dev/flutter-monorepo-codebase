@@ -519,6 +519,7 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 | [01. Cài đặt](docs/vi/getting-started/01_setup.md) | Cần cài gì, và làm sao chạy được app? |
 | [02. Dạo quanh dự án](docs/vi/getting-started/02_project_tour.md) | Mỗi package làm gì, muốn sửa X thì vào đâu? |
 | [03. Quy trình hàng ngày](docs/vi/getting-started/03_daily_workflow.md) | Gõ lệnh nào, khi nào? |
+| [04. Tutorial feature đầu tiên](docs/vi/getting-started/04_first_feature_tutorial.md) | Dựng, test và gỡ một module nhỏ từ đầu tới cuối, trong 30 phút |
 
 ### 🏛️ Kiến Trúc — *hiểu hệ thống*
 | Tài liệu | Nội dung |

@@ -160,9 +160,9 @@ Widget build(BuildContext context) {
 }
 ```
 
-Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab and the app still starts. With fewer than two tabs there is no bar or rail at all.
+Among workspace packages `feature_dashboard` depends on just `core_di`, `core_responsive` and `platform_kernel` — it physically **cannot** import another feature. Because it reads `getAllOrEmpty`, deleting `feature_home` removes the Home tab and the app still starts. With fewer than two tabs there is no bar or rail at all.
 
-The chrome is chosen by **window size class**, not by device — a tablet in either orientation, an iPad in Split View and a desktop window each get the chrome their window has room for. (A phone-sized display is locked to portrait at launch by `AppInitializer`, so it always shows the bottom bar; remove that lock and a phone in landscape gets the rail by the same rule.) It is the template's reference for adaptive layout; the widgets and rules are in [design system §7](../guides/11_design_system.md#7-adaptive-layouts-tablets-foldables-split-screen).
+The chrome is chosen by **window size class**, not by device — a tablet in either orientation, an iPad in Split View and a desktop window each get the chrome their window has room for. (A phone-sized display is locked to portrait at launch by `AppInitializer`, so it always shows the bottom bar; remove that lock and a phone in landscape gets the rail by the same rule.) It is the template's reference for adaptive layout; the widgets and rules are in [design system §7](../guides/11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
 
 ### The dashboard must not
 
@@ -334,6 +334,75 @@ Checklist:
 - [ ] All sizing scaled through `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
 - [ ] A layout that changes with the window chooses by window size class (`context.adaptive`, `AdaptiveLayout`) — never by device or platform
 - [ ] Feature-specific assets inside the feature package, not in `core_base_ui`
+
+---
+
+## 9. Cross-feature communication — why it is shaped this way
+
+Features never import each other. The how-to — which of the six models to pick and how to wire it — is [`../guides/10_cross_feature.md`](../guides/10_cross_feature.md). This section explains the shape.
+
+Registry: RULE-04, RULE-08, RULE-12, RULE-25, RULE-54.
+
+```
+feature_a  ──✗──>  feature_b        forbidden, always
+feature_a  ──✓──>  b_api            module B's contracts for other features live here
+feature_b  ──✓──>  b_api            B implements them and registers against them
+anyone     ──✓──>  core_di          product-neutral contracts (session, locations, routing)
+```
+
+A contract lives in one of two neutral places. **Module B's API package** (`modules/<b>/api`,
+`b_api`) holds what exists so *other features can reach B* — its navigator, its action
+handlers, a widget builder (`auth_api`, `home_api` in the samples); it depends on the
+foundation and Flutter only, and B's feature implements it. **`core_di`**, the DI Hub, holds
+only what is product-neutral — what the platform itself needs, named for that need (the
+session, the sign-in / post-sign-in locations, routing), never for the module that provides it.
+Either way both sides depend on the contract, neither on the other. That is what makes a
+feature removable; `arch_check` R3 holds the API rules.
+
+### Why `SessionPrincipal` and not `UserEntity`
+
+A `core_di` contract may not name a type from a
+`domain_*` package (RULE-08): the import would make every consumer depend on
+`domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
+type,
+[`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), and the auth
+feature narrows its entity to it at the boundary (`AuthStatusStreamImpl.toPrincipal`). The contract is
+deliberately smaller than the entity — a consumer that only asks *who is signed in* never sees the
+rest.
+
+### Why `currentUser` exists alongside the stream
+
+`sessionStatusStream` is a *broadcast* stream: it
+does not replay its last value to new listeners. A consumer subscribing after login would sit blind
+until the next change, so it reads `currentUser` for the state at subscription time.
+
+### Why the stream is registered twice
+
+The concrete class is registered so `feature_auth` can inject
+`AuthStatusStreamImpl` directly and call the writer method `updateAuthStatus` — no `getIt` lookup,
+no `as` cast. The `@module` binding then exposes the *same instance* under the read-only interface
+for everyone else. Owner writes, consumers read.
+
+### Why theme and locale bypass Domain
+
+A use case would have to accept and return `ThemeMode`, which is a
+`package:flutter/material.dart` type. The domain layer is pure Dart and **cannot import Flutter**,
+so routing theme through it is impossible by construction — not a shortcut, a hard constraint.
+
+The implementation lives in the app shell (`platform/shell/adapters/lib/src/theme_storage_impl.dart`) because that is
+where `core_base_ui`'s provider and `core_storage`'s mechanism meet without creating a cycle.
+
+### Anti-patterns
+
+| Don't | Why | Instead |
+| :-- | :-- | :-- |
+| `import 'package:feature_b/...'` from feature A | Hard couples two features; neither is removable | A contract in `b_api` (or a product-neutral one in `core_di`) |
+| A module-specific contract (`AuthNavigator`) in `core_di` | The platform then names a product module, and keeps a dead contract when it is removed | The owning module's `<id>_api` |
+| Expose a `Bloc` or `ChangeNotifier` across features | Forces the other feature to adopt your state library | Model 3 — neutral stream |
+| `getIt<FeatureOwnedType>()` | Throws when that feature is gone | `getItOrNull<T>()` + fallback |
+| Action Handler for navigation | Wrong tool; loses type-safe routes | Navigator interface |
+| Put shared business logic in `core_ui_kit` | It is a UI package | A domain UseCase |
+| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts RULE-08 | A contract-owned value type (`SessionPrincipal`) |
 
 ---
 

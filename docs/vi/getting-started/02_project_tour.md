@@ -64,7 +64,7 @@ flutter-monorepo-codebase/
 ├── .claude/skills/         # Công thức tác vụ cho AI agent
 ├── CLAUDE.md               # Bản tóm lược cho Claude Code — trích bảng đăng ký luật
 │
-├── pubspec.yaml            # Gốc workspace — liệt kê đủ 28 thành viên
+├── pubspec.yaml            # Gốc workspace — liệt kê đủ 31 thành viên
 ├── pubspec_dependencies.yaml  # Catalog version — nguồn chân lý duy nhất
 ├── pubspec.lock            # MỘT file lock cho cả workspace — được commit
 └── analysis_options.yaml

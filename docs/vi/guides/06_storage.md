@@ -1,41 +1,18 @@
 # Hướng dẫn: Lưu trữ Key-Value
 
-**File này trả lời:** làm sao lưu một giá trị (token, cờ, tuỳ chọn) để nó sống sót qua các lần khởi động lại — và làm sao để không package nào khác đọc hay ghi đè được nó.
+## Mục tiêu
 
-**Đọc xong bạn làm được:** thêm một giá trị lưu trữ mới từ đầu đến cuối, chọn đúng backend, chia sẻ nó qua ranh giới package, và giải thích được vì sao nó được mã hoá hai lớp.
+Bạn lưu một giá trị — token, cờ, tuỳ chọn — sao cho nó sống sót qua các lần khởi động lại, và không package nào khác đọc hay ghi đè được nó. Bạn thêm giá trị đó từ đầu tới cuối, chọn backend cho nó, và phơi nó qua ranh giới package khi một package khác cần.
 
----
+## Điều kiện cần
 
-## 1. `core_storage` cấp cơ chế, không phải chỗ đổ key
-
-`core_storage` cố ý khai báo **zero key**. Nó chỉ cấp bộ máy; mỗi package tự khai giá trị của mình.
-
-```dart
-// platform/infra/storage/lib/core_storage.dart
-/// Core Storage — encrypted key-value persistence layer.
-///
-/// Provides only the storage MECHANISM — no package/feature-specific keys
-/// or presets are defined here. Each consumer (data layer, app shell, ...)
-/// must declare its own [StorageValue] instances with its own keys via
-/// [StorageManager], so no other feature can see or touch its data.
-```
-
-| Thành phần export | Loại | Dùng để làm gì |
-|---|---|---|
-| `StorageInterface` | abstract class | Hợp đồng cho mọi backend; đồng thời chứa helper AES và bộ chặn key dành riêng |
-| `StorageManager` | `@singleton` | Phân giải backend theo `StorageType`; khởi tạo mọi backend một lần lúc boot |
-| `StorageValue<T>` | class | Bọc **một** key: cache RAM + ghi đĩa + `ChangeNotifier` + `Stream` |
-| `StorageType` | enum | `pref` \| `secure` |
-| `ObfuscatedBytes` / `ObfuscatedString` | class | Che dữ liệu trong RAM bằng XOR (xem §3) |
-| `PrefStorageImpl` | `@Named('Pref')` | Backend SharedPreferences — nội bộ, DI phân giải |
-| `SecureStorageImpl` | `@Named('Secure')` | Backend FlutterSecureStorage — nội bộ, DI phân giải |
-
-> [!NOTE]
-> Không có object preset dùng chung và không có sổ đăng ký key tập trung — không `StorageValuePresets`, không `StorageKeyConstants`. Một object gom key của mọi domain sẽ cho phép bất kỳ ai inject nó đọc và ghi dữ liệu của feature khác, nên cơ chế cố ý không cung cấp thứ đó để bạn với tay tới.
+- Một package sẽ sở hữu giá trị (tầng data, hoặc app shell với tuỳ chọn UI).
+- **`core_storage` hoạt động thế nào**: nó chỉ cấp cơ chế và không có key nào, nó mã hoá hai lần, nó che giá trị trong RAM, và nó không bao giờ xoá sạch kho khi gặp lỗi platform — [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--lưu-trữ-keyvalue-có-mã-hoá). Luật đứng sau: RULE-44.
+- Cần bản ghi, truy vấn hay quan hệ thay vì một giá trị cho mỗi key? Hãy dùng database — [`07_database.md`](07_database.md).
 
 ---
 
-## 2. Chọn backend nào?
+## 1. Chọn backend
 
 ```dart
 // platform/infra/storage/lib/src/contracts/storage_type.dart
@@ -50,129 +27,15 @@ enum StorageType {
 
 | Dùng `StorageType.secure` cho | Dùng `StorageType.pref` cho |
 |---|---|
-| Token đăng nhập, refresh token | Theme mode, ngôn ngữ |
-| Hồ sơ người dùng đã cache / PII | Cờ "đã xem onboarding" |
-| Bất cứ thứ gì kẻ cầm được máy sẽ muốn lấy | Tuỳ chọn UI không nhạy cảm |
+| Auth token, refresh token | Theme mode, locale |
+| Profile người dùng được cache / dữ liệu cá nhân | Cờ "đã xem onboarding" |
+| Mọi thứ kẻ tấn công cầm máy sẽ muốn lấy | Tuỳ chọn UI không nhạy cảm |
 
-`secure` dựa trên Keychain (iOS) / KeyStore (Android), chậm hơn. `pref` dựa trên SharedPreferences. **Cả hai** đều đi qua lớp AES phần mềm mô tả bên dưới — `pref` không hề là plaintext trên đĩa.
+`secure` dựa trên Keychain (iOS) / KeyStore (Android), chậm hơn. `pref` dựa trên SharedPreferences. **Cả hai** đều áp lớp mã hoá AES bằng phần mềm, nên `pref` không phải plaintext trên đĩa.
 
----
+## 2. Phụ thuộc vào `core_storage`
 
-## 3. Hai lớp mã hoá, cộng thêm che RAM
-
-**Lớp 1 — AES-256-CBC phần mềm, IV ngẫu nhiên mỗi lần ghi.** Cài đặt một lần trên `StorageInterface` nên cả hai backend đều thừa hưởng:
-
-```dart
-// platform/infra/storage/lib/src/contracts/storage_interface.dart
-/// Encrypt [data] using AES-CBC with a random IV.
-///
-/// Returns `"iv_base64:ciphertext_base64"`.
-String encryptData(String data) {
-  final rawBytes = _obfuscatedMasterKey!.reveal();
-  final key = encrypter.Key(rawBytes);
-  final aes = encrypter.AES(key, mode: encrypter.AESMode.cbc);
-  final enc = encrypter.Encrypter(aes);
-
-  final iv = encrypter.IV.fromSecureRandom(16);
-  final encrypted = enc.encrypt(data, iv: iv);
-
-  // Zero out key buffers immediately
-  rawBytes.fillRange(0, rawBytes.length, 0);
-  key.bytes.fillRange(0, key.bytes.length, 0);
-
-  return '${iv.base64}:${encrypted.base64}';
-}
-```
-
-IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần vẫn ra ciphertext khác nhau — người quan sát không thể biết giá trị có đổi hay không.
-
-**Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới key `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
-
-```dart
-// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
-if (masterKey == null) {
-  // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
-  await _storage.write(key: _MASTER_KEY_ID, value: newKey); // lỗi thì ném lại
-  masterKey = newKey;
-}
-```
-
-**Lớp 3 (ít nơi nhắc tới) — che trong RAM.** Cả master key lẫn giá trị đã cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Chúng bị XOR với mask ngẫu nhiên, và chỉ lộ ra đúng khoảnh khắc được dùng:
-
-```dart
-// platform/infra/storage/lib/src/contracts/storage_interface.dart
-/// Container that obfuscates bytes in RAM using dynamic XOR masking.
-class ObfuscatedBytes {
-  ObfuscatedBytes(Uint8List originalBytes)
-    : _mask = _generateRandomMask(originalBytes.length),
-      _maskedBytes = Uint8List(originalBytes.length) {
-    for (int i = 0; i < originalBytes.length; i++) {
-      _maskedBytes[i] = originalBytes[i] ^ _mask[i];
-    }
-  }
-```
-
-`ObfuscatedString` (trong `storage_value.dart`) làm điều tương tự cho giá trị đã cache. Việc này nâng độ khó của tấn công memory-dump; nó **không** thay thế được hai lớp trên.
-
-### Khi Keychain trục trặc — thử lại, không bao giờ xoá sạch
-
-Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Trước đây `SecureStorageImpl` coi *mọi* lỗi như vậy là hỏng dữ liệu và gọi `deleteAll()` — xoá sạch mọi giá trị bảo mật, kể cả master key của `PrefStorageImpl` vốn nằm trong cùng kho. Giờ thì:
-
-```dart
-// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
-Future<String?> _readMasterKey() async {
-  for (var attempt = 1; ; attempt++) {
-    try {
-      return await _storage.read(key: _MASTER_KEY_ID);
-    } catch (e) {
-      final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
-      // … ghi log: WARNING khi thử lại, ERROR ở lần cuối …
-      if (lastAttempt) rethrow; // không xoá gì, không sinh key mới
-      await Future<void>.delayed(_retryDelay * attempt);
-    }
-  }
-}
-```
-
-| Lỗi | Điều xảy ra |
-| :-- | :-- |
-| Lỗi platform khi đọc master key | thử lại (3 lần); nếu vẫn lỗi, `init` **ném lại lỗi** và kho giữ nguyên — sinh key mới sẽ bỏ rơi mọi giá trị đã mã hoá bằng key không đọc được |
-| Master key có nhưng không dùng được (không phải key base64 256-bit) | chỉ thay key đó; các giá trị mã hoá bằng nó sẽ giải mã lỗi và bị `read()` xoá từng cái một |
-| Hỏng dữ liệu trong chính storage của plugin | xử lý ở tầng native: trên Android `AndroidOptions.resetOnError` (bật mặc định) reset phần không giải mã được trước khi trả kết quả |
-| Lỗi platform trong `read(key)` | trả `null` **và giữ nguyên giá trị** — lần đọc sau vẫn còn |
-| Giá trị giải mã hoặc decode lỗi trong `read(key)` | chỉ xoá đúng key đó và trả `null`, để một dòng hỏng không làm chết mọi lần mở app |
-
-### Master key của backend pref — cùng một quy tắc
-
-`PrefStorageImpl` mã hoá giá trị SharedPreferences bằng master key riêng, `_internal_pref_master_key`, cất trong cùng kho bảo mật. Trước đây gặp *bất kỳ* lỗi đọc nào nó cũng lùi về một key hoàn toàn mới trong SharedPreferences — chỉ sau một lỗi Keychain nhất thời, mọi preference đã lưu (theme, ngôn ngữ, cờ onboarding) giải mã lỗi và bị xoá ở lần đọc kế tiếp, còn lần khởi động bình thường sau đó lại bỏ rơi những gì phiên lỗi kia đã ghi. Giờ nó không bao giờ thay một key có thể vẫn còn tốt:
-
-| Tình huống | `PrefStorageImpl.init` làm gì |
-| :-- | :-- |
-| Lỗi platform khi đọc key | thử lại (3 lần) trước khi quyết định bất cứ điều gì |
-| Vẫn lỗi, chưa có preference nào được lưu | giữ một key mới trong SharedPreferences — không có gì để bỏ rơi |
-| Vẫn lỗi, và key trong SharedPreferences mở được các preference đã lưu | dùng key đó (thiết bị không có kho bảo mật dùng được) |
-| Vẫn lỗi, và các preference đã lưu phụ thuộc vào key không đọc được | **ném lại lỗi**, không ghi hay xoá gì — các giá trị mở lại được khi platform hồi phục |
-| Đọc được lại trong khi vẫn còn key trong SharedPreferences | key nào giải mã được các giá trị đã lưu thì thắng; nếu key trong SharedPreferences thắng, nó được chuyển vào kho bảo mật và xoá khỏi SharedPreferences |
-| Key không có hoặc không dùng được (không phải key base64 256-bit) | sinh key mới — trong kho bảo mật, hoặc trong SharedPreferences nếu kho bảo mật từ chối ghi; giá trị mã hoá bằng key đã mất sẽ bị `read()` xoá từng cái một |
-
-`StorageManager.initialize` chạy backend secure trước, nên một lỗi Keychain kéo dài thường lộ ra ở đó trước khi tới lượt backend pref. Test (`platform/infra/storage/test/storage_test.dart`) chạy cả hai backend qua một bản giả `FlutterSecureStorage` chập chờn.
-
-### Tuỳ chọn cipher của plugin được ghim cố định
-
-Cả hai backend mở `flutter_secure_storage` (11.x) với cùng một cặp Android tường minh — `KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding` và `StorageCipherAlgorithm.AES_GCM_NoPadding` — và `KeychainAccessibility.first_unlock` trên iOS. Trên Android, plugin ghi lại cặp nó đã dùng để ghi và, khi cặp được cấu hình khác đi, sẽ mã hoá lại toàn bộ store (`migrateOnAlgorithmChange`, mặc định bật) hoặc, nếu không được, reset nó (`resetOnError`, cũng bật). Đừng đổi hai tuỳ chọn này trừ khi bạn thật sự muốn migrate dữ liệu bảo mật của mọi người dùng.
-
-Cặp này là thứ template đã ghi từ bản phát hành đầu tiên (10.x) và vẫn là mặc định của 11.x, nên nâng cấp 10 → 11 đọc được giá trị cũ nguyên vẹn: cùng alias KeyStore, cùng khoá đã bọc, không có bước migrate. Cái 11.x bỏ đi là các cipher trước 10 (RSA-PKCS1, AES-CBC, EncryptedSharedPreferences). App nào từng phát hành `flutter_secure_storage` 9.x trở xuống phải phát hành một bản 10.x trước — thiết bị nhảy thẳng từ 9 lên 11 sẽ mất giá trị bảo mật, gồm cả token và master key của `PrefStorageImpl`. Trên Android, `FlutterSecureStorage.checkUpgradeStatus()` (11.1+), gọi trước lần đọc đầu tiên, báo cho bạn biết điều đó có xảy ra hay không.
-
----
-
-## 4. Cách thêm một giá trị lưu trữ mới (công thức chính)
-
-Ba bước, mở đầu bằng khai dependency và kết thúc bằng chạy codegen. Ví dụ minh hoạ là auth token — có thật trong repo.
-
-### Bước 0 — phụ thuộc vào `core_storage`
-
-Package sở hữu khai nó trong `dependencies` (trong Pub workspace, một import không khai báo vẫn compile được nhờ `package_config.json` dùng chung; `arch_check` R5 mới là thứ bắt được nó), kèm injectable cho phần đăng ký. Như trong `modules/auth/data/pubspec.yaml`:
+Package sở hữu khai báo nó trong `dependencies` (trong Pub workspace, một import không khai báo vẫn compile được nhờ `package_config.json` dùng chung; `arch_check` R5 mới là thứ bắt được nó), kèm injectable cho phần đăng ký. Như trong `modules/auth/data/pubspec.yaml`:
 
 ```yaml
 dependencies:
@@ -187,9 +50,9 @@ dev_dependencies:
 
 Chỉnh `path:` theo độ sâu của package bạn. Version lấy từ catalog `pubspec_dependencies.yaml` (`dart tools/dependency_sync.dart`). Sau đó `flutter pub get`.
 
-### Bước 1 — khai key trong `utils/` của package **SỞ HỮU**
+## 3. Khai key trong `utils/` của package sở hữu
 
-Không bao giờ đặt ở `core_common`, không bao giờ ở `core_storage`.
+Không bao giờ đặt ở `core_common`, không bao giờ ở `core_storage` (RULE-09, RULE-44). Ví dụ xuyên suốt là auth token, thứ thật sự có trong repo:
 
 ```dart
 // modules/auth/data/lib/src/utils/auth_storage_keys.dart
@@ -209,7 +72,7 @@ class AuthStorageKeys {
 
 Quy ước: private constructor, `UPPER_SNAKE_CASE`, mỗi package sở hữu một class.
 
-### Bước 2 — khai `StorageValue` bên trong class owner
+## 4. Khai `StorageValue` bên trong class sở hữu
 
 Inject `StorageManager`, chọn backend, trỏ vào key của bạn:
 
@@ -234,7 +97,7 @@ class AuthLocalDataSource {
 
 Các field là `private` + `late final`: bên ngoài class không chạm được `StorageValue` thô, chỉ dùng được các method bạn chủ động phơi ra.
 
-### Bước 3 — đăng ký singleton và hydrate
+## 5. Đăng ký owner là singleton và nạp dữ liệu cho nó
 
 ```dart
   /// Hydrates the in-memory cache from disk at startup so synchronous
@@ -246,9 +109,9 @@ Các field là `private` + `late final`: bên ngoài class không chạm đượ
 ```
 
 > [!CAUTION]
-> Đăng ký owner là `@singleton` / `@lazySingleton` — **tuyệt đối không `@injectable`**. `@injectable` là factory: mỗi chỗ inject sẽ dựng một instance *mới* với cache RAM **rỗng**, nên getter đồng bộ trả `null` dù giá trị vẫn nằm trên đĩa. Đi kèm `@PostConstruct(preResolve: true)` để DI **chờ** đọc đĩa xong rồi mới trao đồ thị phụ thuộc cho app.
+> Đăng ký owner là `@singleton` / `@lazySingleton` — **tuyệt đối không `@injectable`** (RULE-45). `@injectable` là factory: mỗi điểm inject dựng một instance *mới* với cache RAM rỗng. Khi đó getter đồng bộ trả `null` dù giá trị vẫn nằm trên đĩa. Hãy đi kèm `@PostConstruct(preResolve: true)`, để DI chờ đọc đĩa xong rồi mới giao đồ thị cho app.
 
-### Bước 4 — sinh code
+## 6. Sinh phần đăng ký
 
 ```bash
 dart run build_runner build --workspace
@@ -256,23 +119,28 @@ dart run build_runner build --workspace
 
 Phần đăng ký — kể cả việc `await` `initialize()` mà `preResolve` yêu cầu — nằm trong `lib/di/module.module.dart` được sinh ra của package, và chỉ ở đó. Chưa sinh lại thì owner đơn giản là chưa được đăng ký, và lần inject đầu tiên hỏng lúc boot với *"… is not registered"* — `flutter analyze` không thấy được. File mới còn cần chạy `dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib` sau đó.
 
----
+## 7. Đọc và ghi giá trị
 
-## 5. Ai đang sở hữu cái gì
+| Thành phần | Hành vi |
+|---|---|
+| `value` (get) | Đọc cache trong RAM. Đồng bộ. Trả `null` trước khi hydrate |
+| `value = x` (set) | Cập nhật cache, đẩy vào stream, ghi xuống đĩa, `notifyListeners()` |
+| `save(x)` | Bí danh của setter |
+| `delete()` | Xoá cache và xoá key khỏi đĩa |
+| `readFromStorage()` | Nạp cache từ đĩa. `await` nó trong `@PostConstruct` |
+| `addListener(cb)` | `ChangeNotifier` — dùng với `Provider` / `ListenableBuilder` |
+| `listen(cb)` | `Stream<T?>` broadcast — dùng trong BLoC hoặc Dart thuần |
 
-| Owner | Package | Key | Backend |
-|---|---|---|---|
-| `AuthLocalDataSource` | `data_auth` | `token`, `auth_user` | `secure` |
-| `ThemeStorageImpl` | app shell (`platform/shell/adapters/lib/src/`) | `themeMode` | `pref` |
-| `LanguageStorageImpl` | app shell (`platform/shell/adapters/lib/src/`) | `locale` | `pref` |
-| `AppBootStorage` | app shell (`platform/shell/adapters/lib/src/`) | `viewed_onboard` | `pref` |
+```dart
+_token.value = 'abc123';          // ghi: mã hoá, lưu đĩa, báo listener
+final t = _token.value;           // đọc: tức thì, từ RAM
+await _token.readFromStorage();   // hydrate lại từ đĩa
+_token.delete();                  // xoá
+```
 
-Class key của app shell nằm ở `platform/shell/adapters/lib/src/utils/`.
+Ghi xuống đĩa là fire-and-forget. Cache RAM cập nhật đồng bộ, nên đọc ngay sau khi ghi vẫn ra giá trị mới.
 
-
----
-
-## 6. Kiểu phức tạp cần `reviver`
+## 8. Lưu một enum hay một kiểu tuỳ biến
 
 `StorageValue<T>` đọc lại trực tiếp `num`, `String`, `bool`, `Map<String, dynamic>` và list của các kiểu đó — `List<String>` được cast từng phần tử, không cần reviver. **Enum** được lưu bằng `name`, nên cần `reviver` để đổi tên về lại giá trị. **Mọi kiểu khác** được lưu qua `toJson()` và cần `reviver` để dựng lại; thiếu nó constructor ném `ArgumentError`. Mọi đường đọc/ghi dùng chung `StorageCodec` (`platform/infra/storage/lib/src/contracts/storage_codec.dart`), nên giá trị đọc ra đúng như lúc ghi.
 
@@ -306,32 +174,7 @@ late final viewedOnboard = StorageValue<bool>(
 
 `reviver` được gọi **một lần**, với giá trị gốc đã decode, và không bao giờ nhận `null` — giá trị không tồn tại được đọc thành `null` trước khi reviver chạy. Nhánh `value == null` ở trên chỉ là phòng thủ, không bắt buộc.
 
----
-
-## 7. API của `StorageValue`
-
-| Thành phần | Hành vi |
-|---|---|
-| `value` (get) | Đọc cache RAM. Đồng bộ. Trả `null` khi chưa hydrate |
-| `value = x` (set) | Cập nhật cache, đẩy vào stream, ghi đĩa, `notifyListeners()` |
-| `save(x)` | Tương đương setter |
-| `delete()` | Xoá cache và xoá key khỏi đĩa |
-| `readFromStorage()` | Hydrate cache từ đĩa. Phải `await` trong `@PostConstruct` |
-| `addListener(cb)` | `ChangeNotifier` — dùng với `Provider` / `ListenableBuilder` |
-| `listen(cb)` | Broadcast `Stream<T?>` — dùng trong BLoC hoặc Dart thuần |
-
-```dart
-_token.value = 'abc123';          // ghi: mã hoá, lưu đĩa, báo listener
-final t = _token.value;           // đọc: tức thì, từ RAM
-await _token.readFromStorage();   // hydrate lại từ đĩa
-_token.delete();                  // xoá
-```
-
-Ghi xuống đĩa là fire-and-forget; cache RAM cập nhật đồng bộ, nên đọc ngay sau khi ghi vẫn ra giá trị mới.
-
----
-
-## 8. Vượt ranh giới package
+## 9. Chia sẻ giá trị qua ranh giới package
 
 Một package không được phụ thuộc package khác chỉ để đọc giá trị lưu trữ của nó. Hãy khai một interface ở `core_di` và implement ở nơi dữ liệu thuộc về — đúng pattern đang dùng cho theme và ngôn ngữ:
 
@@ -366,11 +209,9 @@ class ThemeStorageImpl implements IThemeStorage {
 Bên tiêu thụ (ở đây là `ThemeProvider` trong `core_base_ui`) chỉ phụ thuộc `IThemeStorage`. Nó không thấy key, không thấy backend, không thấy `StorageValue`.
 
 > [!WARNING]
-> Đăng ký impl `as: IThemeStorage` khiến nó **chỉ** phân giải được dưới kiểu `IThemeStorage`. GetIt **không** đi ngược chuỗi supertype, nên nếu cần một interface thứ hai trỏ về cùng instance thì phải bind tường minh bằng `@module`. Bỏ sót bước này thì SSL pinning âm thầm không hoạt động; xem [`08_networking.md`](08_networking.md#5-ssl-pinning).
+> Đăng ký impl `as: IThemeStorage` khiến nó **chỉ** phân giải được dưới kiểu `IThemeStorage`. GetIt **không** đi ngược chuỗi supertype, nên nếu cần một interface thứ hai trỏ về cùng instance thì phải bind tường minh bằng `@module`. Bỏ sót bước này thì SSL pinning âm thầm không hoạt động; xem [`08_networking.md`](08_networking.md#10-bật-ssl-pinning).
 
----
-
-## 9. Key dành riêng
+## 10. Chọn key không nằm trong danh sách dành riêng
 
 `StorageInterface` từ chối những key mà tầng storage dùng cho chính nó:
 
@@ -394,20 +235,42 @@ Mọi key bắt đầu bằng `_internal_` đều bị từ chối. Constructor 
 
 ---
 
-## 10. Checklist
+## Kiểm tra
+
+```bash
+dart run build_runner build --workspace                  # phần đăng ký owner, kèm initialize() được await
+flutter analyze                                          # No issues found!
+cd platform/infra/storage && flutter test                # test của chính cơ chế storage
+cd apps/mobile && flutter test test/di_smoke_test.dart   # owner resolve được và được nạp (storage trong bộ nhớ)
+```
+
+Trên thiết bị, hãy ghi giá trị, tắt hẳn app, rồi mở lại: giá trị phải đọc ra được một cách đồng bộ ngay ở frame đầu tiên. `grep -rn "_storageManager.getStorage" modules platform` liệt kê mọi owner, để bạn kiểm tra không có package thứ hai nào khai key của bạn.
+
+Checklist review:
 
 - [ ] Class key nằm trong `utils/` của package sở hữu, private constructor, `UPPER_SNAKE_CASE`
 - [ ] Field `StorageValue` là private và `late final` bên trong owner
-- [ ] Backend được chọn có cân nhắc (`secure` cho mọi thứ nhạy cảm)
+- [ ] Backend được chọn có chủ đích (`secure` cho mọi thứ nhạy cảm)
 - [ ] Owner là **singleton**, không phải `@injectable`
-- [ ] `@PostConstruct(preResolve: true)` có `await readFromStorage()`
+- [ ] `@PostConstruct(preResolve: true)` có `await` `readFromStorage()`
 - [ ] Có `reviver` cho enum hoặc kiểu tuỳ biến (kiểu nguyên thuỷ, `Map<String, dynamic>` và list có kiểu thì không cần)
-- [ ] Truy cập xuyên package đi qua interface ở `core_di`, không phụ thuộc trực tiếp
+- [ ] Truy cập xuyên package đi qua interface ở `core_di`, không bao giờ phụ thuộc trực tiếp
 - [ ] Key không bắt đầu bằng `_internal_`
 
-## Xem thêm
+## Xử lý sự cố
 
-- [`../architecture/02_core.md`](../architecture/02_core.md) — vị trí của `core_storage`
-- [`05_di.md`](05_di.md) — singleton vs factory, `@PostConstruct`, thứ tự module
-- [`07_database.md`](07_database.md) — khi nào cần bảng quan hệ thay vì key-value
-- [`../reference/01_rules.md`](../reference/01_rules.md) — luật sở hữu đầy đủ
+| Triệu chứng | Nguyên nhân | Cách sửa |
+|:--|:--|:--|
+| Getter trả `null` dù giá trị có trên đĩa | Owner là `@injectable`, hoặc `readFromStorage()` không được await trong `@PostConstruct(preResolve: true)` | Đổi thành singleton và nạp dữ liệu cho nó (bước 5) |
+| `ArgumentError: Access to reserved key "…" is forbidden.` | Key nằm trong danh sách dành riêng hoặc bắt đầu bằng `_internal_` | Đổi tên key (bước 10) |
+| `ArgumentError` khi dựng `StorageValue` cho một kiểu tuỳ biến | Không có `reviver` | Thêm một `reviver` (bước 8) |
+| `… is not registered` cho owner lúc boot | Chưa chạy codegen từ khi thêm annotation | `dart run build_runner build --workspace` (bước 6) |
+| Một package khác import package data của bạn để đọc giá trị | Không có hợp đồng ở ranh giới | Khai một interface ở `core_di` và implement nó trong owner (bước 9) |
+| Mọi giá trị đã lưu biến mất sau khi nâng cấp từ `flutter_secure_storage` 9.x trở xuống | 11.x đã bỏ các cipher trước bản 10 | Phát hành một bản 10.x trước ([`../architecture/02_core.md` § 7](../architecture/02_core.md#tuỳ-chọn-cipher-của-plugin-được-ghim-cố-định)) |
+
+## Liên quan
+
+- Luật: RULE-09 (key trong `utils/`), RULE-44 (không có key dùng chung), RULE-45 (owner là singleton, được nạp sẵn), RULE-14 (interface thứ hai qua `@module`) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--lưu-trữ-keyvalue-có-mã-hoá) — mã hoá, che RAM, xử lý lỗi, các owner hiện tại
+- [`05_di.md`](05_di.md) — singleton hay factory, `@PostConstruct`, thứ tự module
+- [`07_database.md`](07_database.md) — khi nào bảng quan hệ tốt hơn cặp key-value

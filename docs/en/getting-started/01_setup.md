@@ -48,7 +48,7 @@ flutter --version      # must be >= 3.47.4
 
 ## 2. Clone and set up the workspace
 
-This is a **Pub Workspace**. There is exactly one dependency resolution for all 28 workspace members (25 packages, the two apps, and `tools`), and one setup script that prepares every one of them:
+This is a **Pub Workspace**. All 31 workspace members (28 packages, the two apps, and `tools`) share exactly one dependency resolution. One setup script prepares every one of them:
 
 ```bash
 git clone <repo-url>
@@ -69,7 +69,7 @@ dart tools/workspace_setup/configure.dart
 It uses `fvm` automatically when your machine is set up for it. There is no `configure.sh` or `configure.bat` wrapper — a Dart script runs identically on every platform.
 
 > [!IMPORTANT]
-> **`flutter pub get` + `build_runner` alone is not a working setup.** The `lib/src/src.dart` of `core_base_ui` and of every feature with translations exports `gen/gen.dart`, and that barrel (plus `gen/language/language.dart`) is gitignored and written only by step 6. Stop after step 5 and `flutter analyze` reports around 17 errors of this shape:
+> **`flutter pub get` + `build_runner` alone is not a working setup.** The `lib/src/src.dart` of `core_base_ui`, and of every feature with translations, exports `gen/gen.dart`. That barrel (plus `gen/language/language.dart`) is gitignored, and only step 6 writes it. Stop after step 5 and `flutter analyze` reports around 17 errors of this shape:
 >
 > ```
 > error • Target of URI doesn't exist: 'gen/gen.dart' • platform/ui/design_system/lib/src/src.dart:3:8 • uri_does_not_exist
@@ -79,7 +79,7 @@ It uses `fvm` automatically when your machine is set up for it. There is no `con
 >
 > The fix is to run `dart tools/workspace_setup/configure.dart`.
 
-If you want to run the steps by hand, all of them are required, in this order — the barrel pass must come **after** gen-l10n and build_runner, because it exports the files they write (bash shown):
+To run the steps by hand, run all of them, in this order. The barrel pass must come **after** gen-l10n and build_runner, because it exports the files they write (bash shown):
 
 ```bash
 flutter pub get
@@ -173,7 +173,7 @@ All three Dart files must exist even if you only intend to run `dev`. `firebase_
 
 To get the app compiling and an APK building without a Firebase account, create stand-in files by hand. The app **builds**, but everything Firebase-backed (push notifications, FCM token) will not work, and Firebase calls at runtime may log errors. Replace the stubs with real config (§3.1) before you rely on any of it.
 
-Or let the setup script write them: `dart tools/workspace_setup/configure.dart --stub-firebase` writes every file below — the Dart options for each flavor and a `google-services.json` for each Android flavor, with the package name read from `build.gradle.kts` — only where the file does not exist yet, and lists what it stubbed.
+Or let the setup script write them: `dart tools/workspace_setup/configure.dart --stub-firebase` writes every file below. That is the Dart options for each flavor, and a `google-services.json` for each Android flavor with the package name read from `build.gradle.kts`. It writes only files that do not exist yet, and lists what it stubbed.
 
 **1. Three Dart files.** Create them in `apps/mobile/lib/firebase/`, named `firebase_options_dev.dart`, `firebase_options_staging.dart` and `firebase_options_prod.dart`, each with this content. It is the exact stub `tools/workspace_setup/firebase_stubs.dart` writes (what `configure.dart --stub-firebase` and CI use):
 
@@ -274,7 +274,7 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-deep-links-platform-setup). Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
+> `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
 
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.
@@ -323,11 +323,10 @@ The artifact lands at `apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.a
 
 Flutter is migrating plugins off the Kotlin Gradle Plugin (KGP) and onto the
 Kotlin support built into the Flutter Gradle plugin. A plugin that has already
-migrated — `google_sign_in_android` was the one that surfaced it here, before the
-auth sample stopped depending on it — compiles its Java sources against
-classes generated from its own Kotlin sources. With the flag off, those Kotlin
-sources are never compiled, and the build dies on symbols that look like they
-should exist:
+migrated compiles its Java sources against classes generated from its own Kotlin
+sources. Here it was `google_sign_in_android` that surfaced this, before the auth
+sample stopped depending on it. With the flag off, those Kotlin sources are never
+compiled, and the build dies on symbols that look like they should exist:
 
 ```
 GoogleSignInPlugin.java:218: error: cannot find symbol
@@ -346,9 +345,9 @@ WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KG
 Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
 ```
 
-That warning is a real deadline, not noise. When a future Flutter release turns
-it into an error, the fix is to upgrade whichever plugins the warning names to
-versions that support Built-in Kotlin — there is nothing to change in this repo.
+That warning is a real deadline, not noise. If a future Flutter release turns it
+into an error, upgrade the plugins the warning names to versions that support
+Built-in Kotlin. There is nothing to change in this repo.
 Trust the warning's list over this page's: it is computed from what you actually
 depend on.
 
@@ -358,7 +357,7 @@ depend on.
 
 The reason is `core_storage`'s secure layer. `flutter_secure_storage` keeps its ciphertext in a SharedPreferences file, but the key that decrypts it lives in the Android Keystore, which is never backed up. A restore onto a new phone would bring back values the app can no longer decrypt — a signed-out user at best, a read error at worst.
 
-The trade-off: a reinstall or a new phone starts from a clean app — no preferences, theme or onboarding flag. To keep plain preferences, turn backup back on and exclude only the secure-storage file, in both `<cloud-backup>` and `<device-transfer>` of `apps/mobile/android/app/src/main/res/xml/data_extraction_rules.xml`, plus a matching `fullBackupContent` file for Android 11 and lower:
+The trade-off: a reinstall or a new phone starts from a clean app — no preferences, theme or onboarding flag. To keep plain preferences, turn backup back on and exclude only the secure-storage file. Do it in both `<cloud-backup>` and `<device-transfer>` of `apps/mobile/android/app/src/main/res/xml/data_extraction_rules.xml`, plus a matching `fullBackupContent` file for Android 11 and lower:
 
 ```xml
 <exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
@@ -396,4 +395,5 @@ If `flutter analyze` is not clean:
 | Understand what each package does | [02_project_tour.md](02_project_tour.md) |
 | Know which command to run when | [03_daily_workflow.md](03_daily_workflow.md) |
 | Understand the architecture | [../architecture/01_overview.md](../architecture/01_overview.md) |
-| Build your first feature | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
+| **Next step:** build, test and remove your first feature, end to end | [04_first_feature_tutorial.md](04_first_feature_tutorial.md) |
+| Build a real feature | [../guides/01_new_feature.md](../guides/01_new_feature.md) |

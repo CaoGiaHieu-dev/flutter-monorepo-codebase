@@ -42,6 +42,16 @@ platform/ui/design_system/lib/src/styles/app_elevation.dart
 # `01_new_feature.md` builds `profile` end to end as the worked example.
 modules/profile/feature
 modules/profile/feature/l10n.yaml
+# ... and its navigator in a `profile_api` package the reader creates.
+modules/profile/api/lib
+modules/profile/api/lib/src
+# `02_new_domain_data.md` builds `payment` the same way.
+modules/payment/domain/lib
+# `getting-started/04_first_feature_tutorial.md` has the reader generate and
+# then remove a `notes` module; it exists only while they follow it.
+modules/notes
+modules/notes/domain/lib
+modules/notes/feature/pubspec.yaml
 # `x` is the stand-in for the reader's module name in the barrel skill.
 modules/x/domain/lib
 modules/x/data/lib

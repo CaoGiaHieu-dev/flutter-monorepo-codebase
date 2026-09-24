@@ -48,7 +48,7 @@ flutter --version      # phải >= 3.47.4
 
 ## 2. Clone và dựng workspace
 
-Đây là **Pub Workspace**. Toàn bộ 28 thành viên workspace (25 package, hai app, và `tools`) chỉ có **một** lần resolve dependency duy nhất, và một script setup chuẩn bị cho tất cả:
+Đây là **Pub Workspace**. Toàn bộ 31 thành viên workspace (28 package, hai app, và `tools`) dùng chung **một** lần resolve dependency duy nhất. Một script setup chuẩn bị cho tất cả:
 
 ```bash
 git clone <repo-url>
@@ -274,7 +274,7 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-deep-link-thiết-lập-nền-tảng). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
+> `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
 
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
@@ -395,4 +395,5 @@ Nếu `flutter analyze` chưa sạch:
 | Hiểu từng package làm gì | [02_project_tour.md](02_project_tour.md) |
 | Biết khi nào chạy lệnh nào | [03_daily_workflow.md](03_daily_workflow.md) |
 | Hiểu kiến trúc tổng thể | [../architecture/01_overview.md](../architecture/01_overview.md) |
-| Bắt tay viết feature đầu tiên | [../guides/01_new_feature.md](../guides/01_new_feature.md) |
+| **Bước tiếp theo:** dựng, test rồi gỡ feature đầu tiên của bạn, từ đầu tới cuối | [04_first_feature_tutorial.md](04_first_feature_tutorial.md) |
+| Viết một feature thật | [../guides/01_new_feature.md](../guides/01_new_feature.md) |

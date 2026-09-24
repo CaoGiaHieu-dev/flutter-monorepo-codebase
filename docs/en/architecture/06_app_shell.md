@@ -210,22 +210,45 @@ Resolution order in the generated `injection.config.dart`:
 
 | # | Registered | Notes |
 |:-:|:--|:--|
-| 1 | `_coreModules` | `core_common`, `core_network`, `core_storage`, `core_database`, `core_di` |
+| 1 | `_coreModules` | `core_common`, `core_network` (registers `DioFailureClassifier` into `ErrorHandler` here), `core_storage`, `core_database`, `core_di` |
 | – | the app's own `lib/` | `FirebaseModule` — per-flavour `FirebaseOptions` ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
 | 2 | `_notificationsModules` | `core_notifications` — its eager `PushNotificationService` injects those `FirebaseOptions`, so it must come after them |
 | 3 | `_shellModules` | `platform_shell_adapters` — `ILanguageStorage`, `IThemeStorage`, `AppBootStorage`, `NetworkConfig`, `SslPinningConfig`; then `platform_app_shell` — `AppRouter`, `AppProvider`, `DeeplinkProvider` |
 | 4 | `_uiModules` | `core_base_ui` |
-| 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | |
+| 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | `domain_core`, then each module's domain package; `data_core`, then each module's data package; each module's feature package; provider / bloc state management |
 
-The app package registers only what identifies it: its Firebase options, which name one bundle ID and so cannot live in `platform/`. Everything else arrives through a group.
+The app package registers only what identifies it: its Firebase options, which name one bundle ID and so cannot live in `platform/`. Everything else arrives through a group. Injectable runs a package's *own* registrations between the two phases, which is where the app's slot sits. Three placements are deliberate and must not be "tidied up": `shell` before `ui`, a database after its migrations, and `notifications` outside `core` — each has a subsection below.
+
+### One module per package
+
+Every package owns a DI module at `lib/di/module.dart`:
+
+```dart
+import 'package:injectable/injectable.dart';
+
+@InjectableInit.microPackage()
+void initMicroPackage() {}
+```
+
+`build_runner` turns that into `lib/di/module.module.dart`, exposing e.g. `CoreStoragePackageModule`. Each app composes all of them in its `apps/<id>/lib/di/injection.dart`.
+
+Annotate a class and it lands in its own package's module automatically — you never edit generated files.
 
 ### Why `shell` comes before `ui`
 
 This is the single most important implicit rule in the DI setup, and the manifest says so in a comment.
 
-`core_base_ui` registers `ThemeProvider` and `LanguageProvider`, which inject `IThemeStorage` and `ILanguageStorage`. Those two interfaces are implemented in `platform_shell_adapters` (`theme_storage_impl.dart`, `language_storage_impl.dart`), not in any core package the providers could depend on directly. So `shell` must initialise first — and inside it, `platform_shell_adapters` is listed before `platform_app_shell`, so nothing the shell registers can depend on an adapter that is not there yet. Swap the two groups and startup fails with "IThemeStorage is not registered".
+`core_base_ui` registers `ThemeProvider` and `LanguageProvider`, which inject `IThemeStorage` and `ILanguageStorage`. Those two interfaces are implemented in `platform_shell_adapters` (`theme_storage_impl.dart`, `language_storage_impl.dart`), not in any core package the providers could depend on directly. So `shell` must initialise first — and inside it, `platform_shell_adapters` is listed before `platform_app_shell` (`packages: [platform_shell_adapters, platform_app_shell]`), so nothing the shell registers can depend on an adapter that is not there yet. Swap the two groups and startup fails with "IThemeStorage is not registered".
 
 It is also the same slot these registrations occupied before the shell became a package. They used to be app-local, which injectable runs *between* `…Before` and `…After`; `shell` now runs early in `…After` — first in `apps/admin`, right after `notifications` in `apps/mobile`. The order the app boots in did not change — only where the code lives.
+
+### A database opens after its migrations register
+
+A package that opens a database runs after everything that contributes a migration to it. Opening a database is `@preResolve`, and opening it is what runs the collected `IDatabaseMigration` steps — so every step must be registered before the open. Inside the owning package, `@Order(1)` on the open settles that (`modules/cache/data/lib/di/module.dart`): injectable registers a package's entries in ascending `@Order`, so the package's own steps (default order 0) come first. `@Order` does not reach across modules, though. `data_cache` (the `cache` sample module) opens its `CacheDatabase` while the `data` group initialises, so a migration contributed by a package in a *later* group — a feature, say — would simply not be there yet, and would be skipped without an error. A database of your own needs the same `@Order(1)` on its open. `core_database` itself registers nothing (it is mechanism only), which is why it can sit in `core`.
+
+### Why `notifications` is not in `core`
+
+`PushNotificationService` is an eager `@singleton` that injects `FirebaseOptions`, and those are registered by the app itself, between the phases — they identify one bundle ID, so no platform package may own them. From `before` the service would resolve them before they exist and throw at boot. An app that sends no push notifications drops the group, and needs no `lib/firebase/` either.
 
 ### The eager-singleton ordering trap
 
@@ -237,6 +260,21 @@ It is also the same slot these registrations occupied before the shell became a 
 Or let a test read them: each app's `test/di_smoke_test.dart` runs its generated `configureDependencies()` for every flavor, with the plugins replaced by test doubles (storage in memory, a temp directory for `path_provider`, FlutterFire's Firebase core test API and stubbed messaging / local-notification channels in `apps/mobile`), then builds every lazy singleton and resolves each `core_di` contract and `AppRouter.router`. CI's Gate 3 runs it like any package test. Swapping `shell` and `ui` makes it fail with exactly the boot error below.
 
 Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers (through `platform_shell_adapters`). The smoke test also requires `AppBootStorage`, `NetworkConfig` and `SslPinningConfig`, and that `core_network`'s `DioFailureClassifier` registered itself with `ErrorHandler` during the `core` group. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `ISessionGateway` at call time instead, and has no cross-module constructor dependency.)
+
+A worked example of the direction that is safe. `ThemeStorageImpl` is an eager `@Singleton(as: IThemeStorage)` in the `shell` group. Its only constructor dependency is `StorageManager`, which `core_storage` registered in group 1 — the correct direction. If it also injected, say, `AuthLocalDataSource` from `data_auth` (group 6), boot would throw on every launch. The fix is one word — make it `@LazySingleton` — or, better, not to depend on a module at all.
+
+That is what `NetworkConfigImpl` does. It used to inject `AuthLocalDataSource` and `RefreshTokenUseCase` and had to be lazy for exactly this reason. It now takes only `ILanguageStorage` from its own group and reads the session through `ISessionGateway` at call time:
+
+```dart
+@LazySingleton(as: NetworkConfig)
+class NetworkConfigImpl implements NetworkConfig {
+  NetworkConfigImpl(this._languageStorage);
+
+  /// Null in a build that composes no auth module.
+  ISessionGateway? get _session => getItOrNull<ISessionGateway>();
+  // ...
+}
+```
 
 ### `AppRouter` is eager, but its router is not
 
@@ -308,21 +346,68 @@ Every collection point degrades gracefully when nothing is registered:
 
 | Missing | Fallback |
 |:--|:--|
-| `IFeatureRouteModule` | empty list |
-| `INavDestinationModule` | one placeholder branch at `/_empty_dashboard` rendering `SizedBox.shrink()` |
-| `DashboardRouteModule` | the bare `navigationShell` — destinations without chrome |
-| `IAppEntryLocation` | `AppRouter.fallbackLocation`: the first dashboard tab's path (lowest `order`), else the `/_empty_dashboard` placeholder (not `/`) |
+| `IFeatureRouteModule` | empty list — no stack routes; the app still builds |
+| `INavDestinationModule` | one placeholder branch at `/_empty_dashboard` rendering `SizedBox.shrink()`, which keeps `StatefulShellRoute` valid |
+| `DashboardRouteModule` | the bare `navigationShell` — destinations without chrome. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
+| `IAppEntryLocation` | `AppRouter.fallbackLocation`: the first dashboard tab's path (lowest `order`), else the `/_empty_dashboard` placeholder (not `/`). With no entry location there is no onboarding to show, so boot goes on to the login check |
+| `ISignInLocation` | No redirect to a sign-in screen, at boot or on sign-out — correct with no session owner |
+| `IPostSignInLocation` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
 
 `initialLocation` is `AppRouter.entryLocation`: the registered `IAppEntryLocation` **on the first launch only**, `fallbackLocation` on every later one. "First launch" is the shell's own `AppBootStorage.viewedOnboard`, which `NavigatorWrapperWidget` sets the first time boot runs with an entry location (§6); `AppRouter.resolveEntryLocation` is the pure decision. A returning user therefore opens on the first tab while the session restores, not on onboarding — and a signed-out one is then sent to login by the boot redirect.
 
 Deleting a feature package therefore cannot crash the shell.
 
 > [!CAUTION]
-> **Never hardcode a feature route in `app_router.dart`.** Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
+> **Never hardcode a feature route in `app_router.dart`.** Adding `$myFeatureRoute` there couples the shell to your feature and breaks the "remove a feature and the app still runs" guarantee. Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
 
 `refreshListenable: getItOrNull<ISessionRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `ISessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
 
 `observers: [routeObserver]` attaches `AppRouter.routeObserver` to the root navigator, and go_router forwards the root observers to every `ShellRoute` and `StatefulShellBranch` navigator (`notifyRootObserver`, on by default) — so the one observer `AppInitializer.init` hands to `RouteAwareWidget` sees pushes and pops everywhere, tabs included. `platform/shell/app_shell/test/app_router_test.dart` checks both levels.
+
+### Entry location vs fallback location
+
+Every lookup in `app_router.dart` tolerates a missing contribution — this is what makes a feature removable:
+
+```dart
+String get fallbackLocation {
+  final tabs = _destinations;
+  if (tabs.isNotEmpty) return tabs.first.path;
+  return _emptyDestinationPath;
+}
+
+String get entryLocation {
+  final entry = getItOrNull<IAppEntryLocation>();
+  return resolveEntryLocation(
+    entryPath: entry?.path,
+    // The shell's own first-launch flag, set by NavigatorWrapperWidget.
+    entrySeen:
+        entry != null &&
+        (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
+    fallback: fallbackLocation,
+  );
+}
+```
+
+```dart
+builder: (context, state, navigationShell) {
+  return getItOrNull<DashboardRouteModule>()?.builder(
+        context,
+        state,
+        navigationShell,
+      ) ??
+      navigationShell;
+},
+```
+
+There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `IPostSignInLocation` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
+
+Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
+
+### Why `NavigatorKeys` live in `core_di`
+
+A `ShellRoute` and its child routes must reference the **same** `GlobalKey` instance. The shell is assembled by the app shell; the child routes are declared inside feature packages. Putting the keys on either side breaks a rule — the shell (`platform_app_shell`) is core and may not depend on a feature (R1), and a feature may not depend on the shell. `core_di`, which both sides already depend on, is the neutral home.
+
+The DI Hub declares no feature-named key. `nested(id)` hands back the same instance for the same id, so a shell route and its children agree without anything central being declared — and `core_di`'s public surface never grows a product vocabulary. How to ask for one: [`../guides/04_routing.md` § 7](../guides/04_routing.md#7-give-a-module-its-own-back-stack).
 
 ---
 
@@ -381,6 +466,48 @@ final delegates = [
 ```
 
 `RootApp` supplies the four router objects from `getIt<AppRouter>().router` and adds the global `builder`: overlay hosts, `AppDialogController` and a `GestureDetector` that unfocuses the keyboard on outside taps. `AppMaterialWrapper` wraps whatever a `builder` returns — for the splash and the router alike — in `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)`, so pages, toasts and dialogs share one text-scale cap.
+
+### How feature translations reach `MaterialApp`
+
+Each feature owns its translations. The app shell never learns their names.
+
+| Where | What lives there |
+|---|---|
+| `modules/<f>/feature/assets/language/*.arb` | The feature's translation files |
+| `modules/<f>/feature/l10n.yaml` | Codegen config for that feature |
+| `modules/<f>/feature/lib/src/gen/language/` | Generated delegate + classes |
+| `modules/<f>/feature/lib/di/localization.dart` | `IFeatureLocalization` implementation |
+| `core_base_ui` | Global / fallback strings shared by everyone |
+
+> [!CAUTION]
+> A feature must **never** edit `platform/shell/app_shell/lib/presentation/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI:
+
+```dart
+// platform/shell/app_shell/lib/presentation/app_material_wrapper.dart
+// `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
+// registers `IFeatureLocalization`. Every feature package is removable, so
+// an app built without any of them must still resolve its delegates —
+// falling back to the global `core_base_ui` ones.
+final delegates = [
+  ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
+  ...AppLocalizations.localizationsDelegates,
+];
+```
+
+`getAllOrEmpty` is what makes a feature removable: delete the package and the list simply gets shorter.
+
+The contract, in `core_di`:
+
+```dart
+// platform/foundation/contracts/lib/src/feature_localization.dart
+/// Interface for feature localization delegates.
+/// Enables safe registration and retrieval via getAllOrEmpty<IFeatureLocalization>() in the app shell.
+abstract class IFeatureLocalization {
+  LocalizationsDelegate get delegate;
+}
+```
+
+How to add a string or a locale: [`../guides/09_localization_theming.md`](../guides/09_localization_theming.md).
 
 ### The OS font size is honoured, up to 2x
 

@@ -178,10 +178,10 @@ Hoặc `flutter gen-l10n` trong `platform/ui/design_system` và trong từng fea
 
 ## 6. Quy tắc
 
-- **Không hard-code chuỗi hiển thị cho người dùng.** Không ngoại lệ. Toast, dialog, thông báo lỗi, nhãn nút — tất cả đều đi qua delegate.
-- Chuỗi riêng của feature → `.arb` của feature đó.
-- Chuỗi thật sự dùng chung → `core_base_ui`.
-- `core_ui_kit` **không** định nghĩa `.arb` riêng. Nó là thư viện widget mà mọi feature dùng; chuỗi của nó lấy từ `core_base_ui`.
+- **RULE-34** · **Không hard-code chuỗi hiển thị cho người dùng.** Không ngoại lệ. Toast, dialog, thông báo lỗi, nhãn nút — tất cả đều đi qua delegate.
+- **RULE-34** · Chuỗi riêng của feature → `.arb` của feature đó.
+- **RULE-34** · Chuỗi thật sự dùng chung → `core_base_ui`.
+- **RULE-34** · `core_ui_kit` **không** định nghĩa `.arb` riêng. Nó là thư viện widget mà mọi feature dùng; chuỗi của nó lấy từ `core_base_ui`.
 
 ---
 

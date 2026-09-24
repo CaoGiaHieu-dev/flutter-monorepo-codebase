@@ -38,7 +38,8 @@ import 'injection.config.dart';
 /// Group order is load-bearing and is declared in the manifest's `di_groups`:
 /// `configureDependencies()` initialises modules in exactly that sequence, and
 /// an eager `@Singleton` may only depend on a type registered by an earlier
-/// group (AGENTS.md §18).
+/// group (RULE-13 in docs/en/reference/01_rules.md; test/di_smoke_test.dart
+/// proves it).
 
 // composer:managed:modules — generated from app_manifest.yaml
 const _coreModules = [

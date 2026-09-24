@@ -588,13 +588,13 @@ static List<BoxShadow> get sm => [
 
 Danh sách đầy đủ trong [`../reference/01_rules.md`](../reference/01_rules.md). Luật nào do máy giữ đều được ghi rõ, vì điều đó quyết định bạn tin được bao nhiêu vào việc review bắt lỗi.
 
-- **Tuyệt đối không hard-code** `Color`, `fontSize`, con số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` — đừng nhét thẳng giá trị. *Do review giữ.* Xem ghi chú bên dưới để biết vì sao.
-- **Mọi kích thước đều phải scale.** `SizedBox(height: 24)` trần là bug; hãy viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`. *`arch_check` R7 giữ phần extension trần (`24.h`); phần số double thô do review giữ.*
-- **Widget scale hằng số của chính nó, không bao giờ scale tham số.** Một widget `core_ui_kit` nhận vào giá trị đã được scale sẵn — người gọi đã scale — nên dùng tham số ở dạng thô là đúng, còn `context.w(widget.width)` là bug scale hai lần. Nhưng padding và radius *của chính nó* thì bắt buộc phải scale, nếu không nó không responsive. `custom_input_field.dart` thể hiện cả hai trong một dòng: `widget.paddingBottom ?? context.h(10)`. *Do review giữ.*
-- **Đừng scale một giá trị đã scale.** `AppSpacing.lg(context)` là giá trị cuối; `context.w(AppSpacing.lg(context))` là bug scale hai lần. Tương tự `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` đã scale mọi bậc rồi, nên ghi đè size là vứt bỏ thang đo và ghim cứng một con số mà design system không đổi được. Hãy chọn một bậc khác. *Do review giữ.*
-- **Sửa `raw*`, không sửa accessor**, khi chỉnh lại một thang đo.
-- **Đừng chờ kích thước to ra trên tablet.** Mặc định mọi hệ số dừng ở 1:1; hãy dùng chỗ dư cho layout (§7). Phóng to là opt-in theo từng lớp cửa sổ, có chặn (§6). *Do mặc định của `ResponsiveInit` giữ.*
-- **Chọn layout theo lớp kích thước cửa sổ** — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — đừng bao giờ theo đời máy, `Platform.isIOS` hay một phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ: Split View, màn hình ngoài, cửa sổ desktop bị resize. *Do review giữ.*
+- **RULE-33** · **Tuyệt đối không hard-code** `Color`, `fontSize`, con số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` — đừng nhét thẳng giá trị. *Do review giữ.* Xem ghi chú bên dưới để biết vì sao.
+- **RULE-30** · **Mọi kích thước đều phải scale.** `SizedBox(height: 24)` trần là bug; hãy viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`. *`arch_check` R7 giữ phần extension trần (`24.h`); phần số double thô do review giữ.*
+- **RULE-31** · **Widget scale hằng số của chính nó, không bao giờ scale tham số.** Một widget `core_ui_kit` nhận vào giá trị đã được scale sẵn — người gọi đã scale — nên dùng tham số ở dạng thô là đúng, còn `context.w(widget.width)` là bug scale hai lần. Nhưng padding và radius *của chính nó* thì bắt buộc phải scale, nếu không nó không responsive. `custom_input_field.dart` thể hiện cả hai trong một dòng: `widget.paddingBottom ?? context.h(10)`. *Do review giữ.*
+- **RULE-31** · **Đừng scale một giá trị đã scale.** `AppSpacing.lg(context)` là giá trị cuối; `context.w(AppSpacing.lg(context))` là bug scale hai lần. Tương tự `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` đã scale mọi bậc rồi, nên ghi đè size là vứt bỏ thang đo và ghim cứng một con số mà design system không đổi được. Hãy chọn một bậc khác. *Do review giữ.*
+- **RULE-33** · **Sửa `raw*`, không sửa accessor**, khi chỉnh lại một thang đo.
+- **RULE-30** · **Đừng chờ kích thước to ra trên tablet.** Mặc định mọi hệ số dừng ở 1:1; hãy dùng chỗ dư cho layout (§7). Phóng to là opt-in theo từng lớp cửa sổ, có chặn (§6). *Do mặc định của `ResponsiveInit` giữ.*
+- **RULE-32** · **Chọn layout theo lớp kích thước cửa sổ** — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — đừng bao giờ theo đời máy, `Platform.isIOS` hay một phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ: Split View, màn hình ngoài, cửa sổ desktop bị resize. *Do review giữ.*
 
 > [!NOTE]
 > **Vì sao luật về màu và font size không được máy kiểm.**

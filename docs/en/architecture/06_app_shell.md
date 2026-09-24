@@ -232,7 +232,7 @@ It is also the same slot these registrations occupied before the shell became a 
 > [!CAUTION]
 > An eager `@Singleton` is constructed **at registration time**. If it depends on a type registered by a module that runs *later*, startup throws `… is not registered`.
 >
-> `flutter analyze` cannot detect this — it is a runtime ordering fault. Verify by reading the generated files: `apps/mobile/lib/di/injection.config.dart` gives the module order, and each package's `lib/di/module.module.dart` its per-type registrations — every `gh<Dep>()` an eager singleton makes must be registered *above* it, or by a module that initialises earlier.
+> `flutter analyze` cannot detect this (RULE-13) — it is a runtime ordering fault, and the DI smoke test below is what catches it. To diagnose one, read the generated files: `apps/mobile/lib/di/injection.config.dart` gives the module order, and each package's `lib/di/module.module.dart` its per-type registrations — every `gh<Dep>()` an eager singleton makes must be registered *above* it, or by a module that initialises earlier.
 
 Or let a test read them: each app's `test/di_smoke_test.dart` runs its generated `configureDependencies()` for every flavor, with the plugins replaced by test doubles (storage in memory, a temp directory for `path_provider`, FlutterFire's Firebase core test API and stubbed messaging / local-notification channels in `apps/mobile`), then builds every lazy singleton and resolves each `core_di` contract and `AppRouter.router`. CI's Gate 3 runs it like any package test. Swapping `shell` and `ui` makes it fail with exactly the boot error below.
 

@@ -332,7 +332,7 @@ abstract class HomeProfileEvent with _$HomeProfileEvent {
 }
 ```
 
-Three non-negotiable rules:
+Three non-negotiable rules (RULE-51, RULE-52):
 
 1. **Event subclasses are private** — `_HomeProfileStarted`, never `HomeProfileStarted`. They must not leak outside the package.
 2. **`part` / `part of` layout** so the BLoC can name those private subclasses:

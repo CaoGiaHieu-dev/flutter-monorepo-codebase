@@ -177,10 +177,10 @@ Or `flutter gen-l10n` in `platform/ui/design_system` and in each feature. Check 
 
 ## 6. Rules
 
-- **No hard-coded user-facing strings.** Ever. Toasts, dialogs, error messages and button labels all go through a delegate.
-- Feature-specific strings → that feature's `.arb`.
-- Genuinely global strings → `core_base_ui`.
-- `core_ui_kit` does **not** define its own `.arb` files. It is a widget library used by every feature; its strings come from `core_base_ui`.
+- **RULE-34** · **No hard-coded user-facing strings.** Ever. Toasts, dialogs, error messages and button labels all go through a delegate.
+- **RULE-34** · Feature-specific strings → that feature's `.arb`.
+- **RULE-34** · Genuinely global strings → `core_base_ui`.
+- **RULE-34** · `core_ui_kit` does **not** define its own `.arb` files. It is a widget library used by every feature; its strings come from `core_base_ui`.
 
 ---
 

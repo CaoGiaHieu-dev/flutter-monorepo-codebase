@@ -1,6 +1,6 @@
 ---
 name: implement_package_storage
-description: Add a package-owned persisted value — declare its key in the owning package's utils/ folder and its StorageValue in the class that owns it, hydrated at startup.
+description: Use when a value must survive app restarts as a key-value entry — "save a setting", "persist the login token", "remember a flag across launches", "add a storage key". Declares the key in the owning package's utils/, a StorageValue<T> inside the owning singleton hydrated at startup by @PostConstruct(preResolve), and a core_di interface when another package needs it.
 ---
 
 # 💾 Skill: Implement a Package-Owned Storage Value
@@ -8,10 +8,11 @@ description: Add a package-owned persisted value — declare its key in the owni
 Use this skill when requested to: "save new config settings", "persist login tokens", "create a new cache storage", "remember a flag across launches", etc.
 
 > [!IMPORTANT]
-> **There is no `StorageValuePresets` and no `StorageKeyConstants`.** Both were deleted.
-> A single shared object holding every domain's keys let any injector read and write another
-> feature's data. `core_storage` now ships the **mechanism only** (`StorageManager`,
-> `StorageValue<T>`, `StorageType`) — **you** declare the value in the class that owns it.
+> **There is no `StorageValuePresets` and no `StorageKeyConstants`.** `core_storage` ships the
+> mechanism only (`StorageManager`, `StorageValue<T>`, `StorageType`) — **you** declare the value in
+> the class that owns it (RULE-44), registered as a singleton (RULE-45).
+> **Guide:** [`docs/en/guides/06_storage.md`](../../../docs/en/guides/06_storage.md).
+> **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-09, RULE-44, RULE-45, RULE-75.
 
 ---
 
@@ -53,7 +54,7 @@ class AuthStorageKeys {
 }
 ```
 
-Constants are `UPPER_SNAKE_CASE` with a private constructor (AGENTS.md § 16).
+Constants are `UPPER_SNAKE_CASE` with a private constructor (RULE-09).
 
 ### Step 2: Declare the `StorageValue<T>` inside the owner
 
@@ -104,9 +105,8 @@ Add the new value to the owner's `@PostConstruct(preResolve: true)` method so it
 ```
 
 > [!CAUTION]
-> The owner **MUST** be registered as a singleton — `@singleton`, `@lazySingleton`, or
-> `@Singleton(as: IFoo)`. **Never `@injectable` (factory):** each injection would build a fresh
-> instance with an empty cache, so synchronous getters would silently return `null`.
+> Singleton, never `@injectable` (RULE-45): a factory builds a fresh instance with an empty cache,
+> and synchronous getters silently return `null`.
 
 ### Step 4: Run Build Runner
 
@@ -206,5 +206,5 @@ class ThemeStorageImpl implements IThemeStorage {
 
 - `docs/{en,vi}/guides/06_storage.md` — the full storage guide (backends, AES-256 + RAM
   obfuscation, `reviver` recipes)
-- `docs/{en,vi}/reference/01_rules.md` — the `utils/` mandate and the core-never-depends-on-feature rule
+- [`docs/en/reference/01_rules.md`](../../../docs/en/reference/01_rules.md) — RULE-09, RULE-44, RULE-45
 - `implement_dependency_injection` — singleton scopes and `@PostConstruct(preResolve: true)`

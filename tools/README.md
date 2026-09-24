@@ -16,7 +16,7 @@ Full reference (arguments, exit codes, failure modes of each tool): [`docs/en/re
 tools/
 ├── pubspec.yaml                     # The core_tools package (a workspace member)
 ├── arch_check/                      # 🛡️ Enforces the layering rules (CI Gate 1)
-│   └── check.dart                   # R1-R11: dependency direction, pure-Dart domain, feature boundaries, scaling through context…
+│   └── check.dart                   # R1-R15: dependency direction, pure-Dart domain, feature boundaries, scaling through context…
 ├── composer/                        # 🧩 Composes apps from app_manifest.yaml (CI Gate 0)
 │   ├── composer.dart                # sync / verify / list — generates the workspace list, app dependencies, injection.dart
 │   └── bootstrap.dart               # Partial checkout: prunes absent members so `pub get` resolves (no package imports)
@@ -78,7 +78,7 @@ tools/
 
 ### 🛡️ Architecture Check (layering rules)
 ```bash
-# Check the 11 architecture rules (R1–R11) — exits 1 on a violation (CI-ready):
+# Check the 15 architecture rules (R1–R15) — exits 1 on a violation (CI-ready):
 dart tools/arch_check/check.dart
 
 # Full description of each rule:
@@ -172,7 +172,7 @@ dart tools/sample_cleanup/remove_sample.dart auth --verbose
 The dry-run also prints which other samples would break and where — information the manual
 feature-removal guide cannot give you.
 
-Both the dry-run and `--apply` count the documentation references (`docs/`, `.agents/`, every
+Both the dry-run and `--apply` count the documentation references (`docs/`, `.claude/`, every
 `*.md`) to paths about to be deleted. They are informational: after the removal,
 `dart tools/docs_check/check.dart` (CI Gate 5) recognises them as pointing into a removed sample
 bundle (every package of the bundle absent, per `tools/sample_manifest.yaml` — the removal tool

@@ -11,6 +11,8 @@ thì app vẫn chạy.
 
 ## Luật gốc
 
+Bảng đăng ký: RULE-04, RULE-08, RULE-12, RULE-25, RULE-54.
+
 ```
 feature_a  ──✗──>  feature_b        cấm tuyệt đối
 feature_a  ──✓──>  b_api            hợp đồng module B dành cho feature khác nằm ở đây
@@ -107,7 +109,7 @@ abstract class ISessionStatusStream {
 Hai quyết định thiết kế đáng hiểu rõ:
 
 **Vì sao là `SessionPrincipal` chứ không phải `UserEntity`.** Hợp đồng ở `core_di` không được gọi
-tên một kiểu thuộc package `domain_*` (`.agents/AGENTS.md` §8.4): import đó khiến mọi bên tiêu thụ
+tên một kiểu thuộc package `domain_*` (RULE-08): import đó khiến mọi bên tiêu thụ
 phụ thuộc `domain_auth` ngay lúc biên dịch, và `getItOrNull` không gỡ được điều đó. Vì vậy `core_di`
 sở hữu một value type nhỏ,
 [`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), và feature
@@ -394,7 +396,7 @@ sẽ mở app đó trên một màn hình trống.
 | `getIt<KiểuDoFeatureSởHữu>()` | Ném lỗi khi feature đó bị gỡ | `getItOrNull<T>()` + fallback |
 | Dùng Action Handler để điều hướng | Sai công cụ; mất type-safe route | Navigator interface |
 | Đặt logic nghiệp vụ dùng chung vào `core_ui_kit` | Đó là package UI | Một UseCase ở domain |
-| Hợp đồng `core_di` gọi tên entity của `domain_*` | Mọi bên tiêu thụ phải phụ thuộc package domain đó; trái AGENTS.md §8.4 | Value type do hợp đồng sở hữu (`SessionPrincipal`) |
+| Hợp đồng `core_di` gọi tên entity của `domain_*` | Mọi bên tiêu thụ phải phụ thuộc package domain đó; trái RULE-08 | Value type do hợp đồng sở hữu (`SessionPrincipal`) |
 
 ---
 

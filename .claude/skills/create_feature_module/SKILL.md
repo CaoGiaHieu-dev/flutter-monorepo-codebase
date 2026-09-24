@@ -1,11 +1,17 @@
 ---
 name: create_feature_module
-description: Automatically initialize a new feature, domain, data, or core package adhering to the codebase's Monorepo architecture.
+description: Use when the user asks to create, scaffold or add a new package or module — a feature (feature_<name>), domain_<name>, data_<name>, core_<name> or custom platform package. Runs tools/module_generator/generate.dart with every argument, picks the state management and route contribution, and chooses which apps compose it.
 ---
 
 # 🛠️ Skill: Create New Module (Create Module)
 
 Use this skill when the developer requests to create a new package/module in the monorepo (e.g., `feature_profile`, `domain_payment`, `data_payment`, `core_logging`, etc.).
+
+**Guide:** [`docs/en/guides/01_new_feature.md`](../../../docs/en/guides/01_new_feature.md) ·
+[`02_new_domain_data.md`](../../../docs/en/guides/02_new_domain_data.md) · generator reference:
+[`03_tooling.md` § module_generator](../../../docs/en/reference/03_tooling.md).
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-04, RULE-05, RULE-09, RULE-16,
+RULE-20, RULE-24, RULE-34, RULE-75 — cite them, do not restate them.
 
 ---
 
@@ -104,14 +110,9 @@ dart tools/module_generator/generate.dart 5 billing acme
 ### Step 2: Implement Boilerplate & Route Definition (for Feature)
 The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_nav_destination.dart` according to `[route_contribution]`.
 
-**Clean Architecture / feature boundary (mandatory):**
-- One feature package = one bounded UI concern (e.g. `feature_home`, `feature_settings`, `feature_auth`).
-- Do **not** put unrelated shell tabs in the same package (Home + Settings = two packages).
-- **`feature_dashboard` is chrome only** (`DashboardRouteModule`). It does **not** own tab pages. Tabs register `INavDestinationModule`; `AppRouter` assembles branches.
-- Cross-feature UI actions use Action Handlers / Navigators in `core_di` — never import another feature package.
-- **core packages must never depend on your feature.** The only approved inward exceptions are
-  `platform_kernel → domain_core`, `provider_state_management → domain_core` and
-  `bloc_state_management → domain_core`. Three, and nothing else.
+**Boundaries:** one bounded UI concern per package and a chrome-only dashboard (RULE-24); reach
+another module through its `<id>_api` navigator or action handler, never its feature (RULE-04,
+RULE-22, RULE-25); no platform package may depend on yours (RULE-01).
 
 For Features, complete the TypedGoRoute file (e.g. `lib/src/routing/*_route_module.dart`) and fill the DI contribution stub:
 
@@ -154,9 +155,10 @@ Then **hot restart** the app (new DI registrations are not applied by hot reload
 The app must still build after any feature package is deleted. Before finishing, confirm:
 
 - Nothing outside the feature imports `package:feature_<name>/...` except each composing app's
-  `apps/<id>/lib/di/injection.dart` (the composition root — an intentional, generated hard reference).
-- Anything the shell or another feature consumes from you is published as a **contract in
-  `core_di`**, resolved with `getItOrNull` / `getAllOrEmpty` and a fallback.
+  generated `apps/<id>/lib/di/injection.dart` (RULE-05, arch_check R10).
+- What another feature consumes from you is a contract in your module's `<id>_api` package; what
+  the shell consumes is a product-neutral `core_di` contract (RULE-08). Consumers resolve either with
+  `getItOrNull` / `getAllOrEmpty` and a fallback (RULE-12, arch_check R8).
 - Removal procedure: drop its line from `modules:` in every `apps/<id>/app_manifest.yaml` →
   `dart tools/composer/composer.dart sync` (regenerates `injection.dart`, the app pubspecs and the
   root `workspace:` list) → `flutter pub get` + `build_runner`. For a shipped sample only, run
@@ -169,4 +171,4 @@ The app must still build after any feature package is deleted. Before finishing,
 
 - `docs/{en,vi}/guides/01_new_feature.md` — the long-form walkthrough
 - `docs/{en,vi}/guides/02_new_domain_data.md` — domain + data packages
-- `implement_navigation_route`, `implement_dependency_injection`
+- `implement_navigation_route`, `implement_dependency_injection`, `run_repo_tooling`

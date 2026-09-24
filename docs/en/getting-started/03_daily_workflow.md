@@ -153,7 +153,7 @@ dart tools/unused_checker/check_unused_packages.dart
 Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some — CI Gate 3 discovers them the same way. It stops at the first failing package and names it; add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail) — `flutter_test` in a Flutter package, `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` is step 2b. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
 
 > [!CAUTION]
-> `flutter analyze` **cannot** catch DI ordering faults. An eager `@Singleton` that depends on a type registered by a *later* module compiles fine and then throws `not registered` at boot. After changing DI registration, check the module order in the generated `apps/mobile/lib/di/injection.config.dart`, and your type's registration and its `gh<Dep>()` calls in the package's generated `lib/di/module.module.dart`. See [../guides/05_di.md](../guides/05_di.md).
+> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The loop above already catches it — each app's `test/di_smoke_test.dart` boots the real graph for every flavor (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 4 shows how to read the generated files to find the culprit.
 
 ### Optional: prove the app still builds
 
@@ -177,7 +177,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Ran `flutter build apk` from the repo root | `Target file "lib\main.dart" not found` | `cd apps/mobile` first |
 | Hardcoded a version in a package pubspec | `dependency_sync --check` fails | Move it to `pubspec_dependencies.yaml`, re-sync |
 | Imported a package without declaring it | Compiles locally (workspace shares `package_config.json`), breaks when extracted | Declare it in that package's `pubspec.yaml` (`dependencies:`, not `dev_dependencies:`); verify with `dart tools/arch_check/check.dart` (R5). The unused checker covers the reverse — declared but never imported |
-| Registered a screen controller as a singleton | State leaks between screen visits | Feature controllers are `@injectable` (factory) — see [../guides/05_di.md](../guides/05_di.md) |
+| Registered a screen controller as a singleton | State leaks between screen visits | Feature controllers are `@injectable` (RULE-10) — see [../guides/05_di.md](../guides/05_di.md) |
 
 ---
 

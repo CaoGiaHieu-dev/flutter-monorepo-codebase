@@ -8,7 +8,7 @@ Core packages are **infrastructure**. They provide mechanisms; they never encode
 
 ## 0. The rules that govern every core package
 
-Three rules apply to everything on this page.
+Three rules apply to everything on this page — RULE-01, RULE-44 / RULE-46 (mechanism, not policy) and RULE-09 in the [registry](../reference/01_rules.md#rule-registry).
 
 **Core must not depend on features or data.** Three approved exceptions exist, listed in [the overview](01_overview.md#the-approved-exceptions). `tools/arch_check/check.dart` enforces the list on every PR.
 
@@ -414,7 +414,7 @@ Measured with `flutter build web` on `apps/admin` after scaffolding `web/` (`flu
 What makes the shared boot path web-safe:
 
 - `dart:io` **compiles** on the web; only *calling* most of it fails. The shell never calls it there: `runShellApp` checks `kIsWeb` before `Platform.isIOS`, `GoRouteDataCustom.buildPage` returns before its `Platform.isIOS` branch, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
-- `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates. The browser owns TLS, so neither pinning nor the dev-flavor bypass can apply; installing one anyway was harmless but suggested otherwise, and the "not pinned" `ERROR` it logged described a misconfiguration the web cannot fix.
+- `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates. The browser owns TLS, so neither pinning nor the dev-flavor bypass can apply; installing one anyway was harmless but suggested otherwise, and the "not pinned" `ERROR` it logged described a misconfiguration the web cannot fix. Tests stand in for `kIsWeb` with `AppInitializer.debugIsWebOverride`.
 
 Known gaps, none fixed here:
 

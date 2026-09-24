@@ -588,13 +588,13 @@ static List<BoxShadow> get sm => [
 
 Full list in [`../reference/01_rules.md`](../reference/01_rules.md). Which of these a machine holds is stated per rule, because it changes how much you can rely on review catching it.
 
-- **Never hard-code** a `Color`, `fontSize`, spacing number or `BorderRadius` in a widget. Missing a token? Add it to `core_base_ui` — do not inline the value. *Review-held.* See the note below for why.
-- **Every dimension scales.** A bare `SizedBox(height: 24)` is a bug; write `SizedBox(height: context.h(24))` or `context.verticalSpace(24)`. *`arch_check` R7 holds the bare-extension half (`24.h`); the raw-double half is review-held.*
-- **A widget scales its own constants, never its parameters.** A `core_ui_kit` widget receives already-scaled values — the caller scaled them — so using a parameter raw is correct and `context.w(widget.width)` is a double-scale bug. Its *own* padding and radii it must scale, or it is not responsive. `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`. *Review-held.*
-- **Do not scale an already-scaled value.** `AppSpacing.lg(context)` is final; `context.w(AppSpacing.lg(context))` is a double-scale bug. Likewise `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` already scaled every step, so overriding the size discards the scale and pins a number the design system cannot change. Reach for a different step instead. *Review-held.*
-- **Edit `raw*`, not the accessor**, when retuning a scale.
-- **Do not expect sizes to grow on a tablet.** Every factor stops at 1:1 by default; spend the extra room on layout (§7). Growth is an opt-in per window class, with a cap (§6). *Held by `ResponsiveInit`'s defaults.*
-- **Choose a layout by window size class** — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — never by device model, `Platform.isIOS` or an ad-hoc `shortestSide` check. One device shows many windows: Split View, a cover screen, a resized desktop window. *Review-held.*
+- **RULE-33** · **Never hard-code** a `Color`, `fontSize`, spacing number or `BorderRadius` in a widget. Missing a token? Add it to `core_base_ui` — do not inline the value. *Review-held.* See the note below for why.
+- **RULE-30** · **Every dimension scales.** A bare `SizedBox(height: 24)` is a bug; write `SizedBox(height: context.h(24))` or `context.verticalSpace(24)`. *`arch_check` R7 holds the bare-extension half (`24.h`); the raw-double half is review-held.*
+- **RULE-31** · **A widget scales its own constants, never its parameters.** A `core_ui_kit` widget receives already-scaled values — the caller scaled them — so using a parameter raw is correct and `context.w(widget.width)` is a double-scale bug. Its *own* padding and radii it must scale, or it is not responsive. `custom_input_field.dart` shows both in one line: `widget.paddingBottom ?? context.h(10)`. *Review-held.*
+- **RULE-31** · **Do not scale an already-scaled value.** `AppSpacing.lg(context)` is final; `context.w(AppSpacing.lg(context))` is a double-scale bug. Likewise `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` — `ThemeProvider` already scaled every step, so overriding the size discards the scale and pins a number the design system cannot change. Reach for a different step instead. *Review-held.*
+- **RULE-33** · **Edit `raw*`, not the accessor**, when retuning a scale.
+- **RULE-30** · **Do not expect sizes to grow on a tablet.** Every factor stops at 1:1 by default; spend the extra room on layout (§7). Growth is an opt-in per window class, with a cap (§6). *Held by `ResponsiveInit`'s defaults.*
+- **RULE-32** · **Choose a layout by window size class** — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — never by device model, `Platform.isIOS` or an ad-hoc `shortestSide` check. One device shows many windows: Split View, a cover screen, a resized desktop window. *Review-held.*
 
 > [!NOTE]
 > **Why the colour and font-size rules are not machine-checked.**

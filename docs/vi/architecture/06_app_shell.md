@@ -234,7 +234,7 @@ Package app chỉ đăng ký thứ định danh nó: Firebase options, vốn g�
 > [!CAUTION]
 > Một `@Singleton` eager được dựng **ngay lúc đăng ký**. Nếu nó phụ thuộc một kiểu do module chạy *sau* đăng ký, khởi động sẽ ném `… is not registered`.
 >
-> `flutter analyze` không thể phát hiện lỗi này — đây là lỗi thứ tự lúc chạy. Hãy kiểm chứng bằng cách đọc các file sinh ra: `apps/mobile/lib/di/injection.config.dart` cho thứ tự module, còn `lib/di/module.module.dart` của từng package cho đăng ký theo type — mọi `gh<Dep>()` mà một singleton eager gọi phải được đăng ký *phía trên* nó, hoặc bởi một module khởi tạo sớm hơn.
+> `flutter analyze` không thể phát hiện lỗi này (RULE-13) — đây là lỗi thứ tự lúc chạy, và smoke test DI bên dưới là thứ bắt được nó. Để chẩn đoán, đọc các file sinh ra: `apps/mobile/lib/di/injection.config.dart` cho thứ tự module, còn `lib/di/module.module.dart` của từng package cho đăng ký theo type — mọi `gh<Dep>()` mà một singleton eager gọi phải được đăng ký *phía trên* nó, hoặc bởi một module khởi tạo sớm hơn.
 
 Hoặc để test đọc giúp: `test/di_smoke_test.dart` của mỗi app chạy `configureDependencies()` được sinh ra cho từng flavor, với plugin được thay bằng test double (storage trong bộ nhớ, thư mục tạm cho `path_provider`, test API Firebase core của FlutterFire và channel messaging / local-notification giả trong `apps/mobile`), rồi dựng mọi lazy singleton và resolve từng contract `core_di` cùng `AppRouter.router`. Gate 3 của CI chạy nó như test của mọi package. Đảo `shell` và `ui` là test hỏng đúng với lỗi boot bên dưới.
 

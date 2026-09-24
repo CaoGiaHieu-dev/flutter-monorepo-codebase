@@ -11,6 +11,8 @@ deleting either feature leaves the app running.
 
 ## The rule
 
+Registry: RULE-04, RULE-08, RULE-12, RULE-25, RULE-54.
+
 ```
 feature_a  ──✗──>  feature_b        forbidden, always
 feature_a  ──✓──>  b_api            module B's contracts for other features live here
@@ -108,7 +110,7 @@ abstract class ISessionStatusStream {
 Two deliberate design decisions worth understanding:
 
 **Why `SessionPrincipal` and not `UserEntity`.** A `core_di` contract may not name a type from a
-`domain_*` package (`.agents/AGENTS.md` §8.4): the import would make every consumer depend on
+`domain_*` package (RULE-08): the import would make every consumer depend on
 `domain_auth` at compile time, which `getItOrNull` cannot soften. So `core_di` owns a small value
 type,
 [`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), and the auth
@@ -397,7 +399,7 @@ would open that app on a blank screen.
 | `getIt<FeatureOwnedType>()` | Throws when that feature is gone | `getItOrNull<T>()` + fallback |
 | Action Handler for navigation | Wrong tool; loses type-safe routes | Navigator interface |
 | Put shared business logic in `core_ui_kit` | It is a UI package | A domain UseCase |
-| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts AGENTS.md §8.4 | A contract-owned value type (`SessionPrincipal`) |
+| A `core_di` contract naming a `domain_*` entity | Every consumer then depends on that domain package; contradicts RULE-08 | A contract-owned value type (`SessionPrincipal`) |
 
 ---
 

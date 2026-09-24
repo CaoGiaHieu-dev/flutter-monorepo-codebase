@@ -162,7 +162,7 @@ jobs:
       # Advisory: declared-but-unused package dependencies (an undeclared
       # import is Gate 1's rule R5). Not a hard gate
       # because the checker cannot see intentional scaffolding — see
-      # .agents/skills/run_unused_checker/SKILL.md for what is deliberately
+      # .claude/skills/run_repo_tooling/SKILL.md for what is deliberately
       # unused and must not be deleted on the tool's word.
       - name: Unused dependency audit (advisory)
         continue-on-error: true

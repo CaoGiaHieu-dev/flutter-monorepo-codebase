@@ -15,7 +15,7 @@
 # --- (1) Generated ---------------------------------------------------------
 # Written by `dart run build_runner build --workspace`. The docs cite it
 # constantly because it is the only place an eager-singleton ordering bug
-# (AGENTS.md §18) is visible.
+# (RULE-13) is diagnosed.
 apps/mobile/lib/di/injection.config.dart
 # Flutter build output.
 apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.apk
@@ -47,7 +47,7 @@ modules/x/domain/lib
 modules/x/data/lib
 
 # --- (3) Target layout, not current layout ---------------------------------
-# `.agents/RESTRUCTURE.md` is the migration plan: these are the directories a
+# `docs/history/restructure-log.md` is the migration plan: these are the directories a
 # later step creates. They are removed from this list as each step lands, which
 # is what stops the plan from quietly describing a tree nobody built —
 # `apps/mobile` came off this list the moment step 6b created it, and
@@ -61,13 +61,13 @@ modules/x/data/lib
 
 # (1) Generated: release build output, named per flavor.
 apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
-# History: RESTRUCTURE.md's own record of the layout the relayout replaced.
+# History: the restructure log's own record of the layout the relayout replaced.
 # The plan has to be able to name what it moved away from.
 packages/core/*
 packages/{domain,data,features}/<x>
 packages/**/l10n.yaml
 packages/*/*
-# History: build output RESTRUCTURE.md records untracking. Gitignored now, so
+# History: build output the restructure log records untracking. Gitignored now, so
 # it exists only on a machine that has built — present locally, absent in CI.
 apps/mobile/android/app/build
 apps/mobile/ios/build

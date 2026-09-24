@@ -28,7 +28,7 @@ The barrel `package:bloc_state_management/bloc_state_management.dart` re-exports
 **`BlocViewState<T>` is not mandatory** for BLoC. It is a ready-made agnostic state (like Provider's) for simple CRUD / load-success-error screens.
 
 - **Use `BlocViewState<T>`** when the UI only needs `initial` / `loading` / `success` / `error` around a payload `T`.
-- **You may (and are encouraged to) define your own Freezed state** when the feature needs richer state (many fields, a wizard, a dirty form, pagination combined with filters, etc.). `BaseBloc<Event, YourCustomState>` is then perfectly valid — just keep the Freezed events private per AGENTS §13.
+- **You may (and are encouraged to) define your own Freezed state** when the feature needs richer state (many fields, a wizard, a dirty form, pagination combined with filters, etc.). `BaseBloc<Event, YourCustomState>` is then perfectly valid — just keep the Freezed events private per RULE-51 ([`docs/en/reference/01_rules.md`](../../../docs/en/reference/01_rules.md)).
 
 Combine it with pattern matching (`when` / `maybeWhen`) on the Freezed state for a type-safe UI. `BlocViewState`'s variants are private, so use `when` / `maybeWhen` / `whenOrNull` on it rather than a `switch`.
 

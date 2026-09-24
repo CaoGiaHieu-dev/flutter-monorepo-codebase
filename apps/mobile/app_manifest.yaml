@@ -27,7 +27,7 @@ app:
 # `configureDependencies()` initialises modules in exactly this sequence. An
 # eager `@Singleton` may only depend on a type registered by an earlier group;
 # depending on a later one throws "<Type> is not registered" at boot, which
-# `flutter analyze` cannot see. See AGENTS.md §18.
+# `flutter analyze` cannot see — RULE-13; test/di_smoke_test.dart catches it.
 #
 # `phase: before` maps to `externalPackageModulesBefore`, `after` to
 # `externalPackageModulesAfter`.

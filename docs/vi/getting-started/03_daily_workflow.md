@@ -153,7 +153,7 @@ dart tools/unused_checker/check_unused_packages.dart
 Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Vòng lặp tự tìm chứ không liệt kê cứng, nên vẫn đúng khi bạn thêm một package có test hay gỡ một sample từng có test — CI Gate 3 cũng tìm theo cách đó. Nó dừng ở package fail đầu tiên và in tên package; hãy viết test của bạn ngay cạnh code bạn viết, với fake tự viết (repo không dùng mockito/mocktail) — `flutter_test` trong package Flutter, `package:test` trong package Dart thuần. Vòng lặp phủ `apps/`, `modules/` và `platform/`; `tools/` là bước 2b. Trên Windows, chạy nó trong Git Bash (đi kèm Git for Windows) — PowerShell và `cmd` không có `find`/`dirname` kiểu này.
 
 > [!CAUTION]
-> `flutter analyze` **không** bắt được lỗi thứ tự DI. Một `@Singleton` eager phụ thuộc type được đăng ký ở module chạy *sau* vẫn compile bình thường rồi ném `not registered` lúc khởi động. Sau khi đổi đăng ký DI, hãy kiểm tra thứ tự module trong file sinh ra `apps/mobile/lib/di/injection.config.dart`, cùng đăng ký của type và các lệnh `gh<Dep>()` của nó trong file sinh ra `lib/di/module.module.dart` của package. Xem [../guides/05_di.md](../guides/05_di.md).
+> `flutter analyze` **không** bắt được lỗi thứ tự DI (RULE-13): một `@Singleton` eager phụ thuộc type do module chạy *sau* đăng ký vẫn compile bình thường rồi ném `not registered` lúc khởi động. Vòng lặp ở trên đã bắt được nó — `test/di_smoke_test.dart` của mỗi app boot đồ thị thật cho mọi flavor (RULE-63). Khi nó fail, [../guides/05_di.md](../guides/05_di.md) § 4 chỉ cách đọc các file sinh ra để tìm thủ phạm.
 
 ### Tuỳ chọn: chứng minh app vẫn build được
 

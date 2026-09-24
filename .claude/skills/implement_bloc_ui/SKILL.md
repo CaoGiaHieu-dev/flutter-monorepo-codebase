@@ -1,15 +1,19 @@
 ---
 name: implement_bloc_ui
-description: Guide for UI state management using BLoC (BaseBloc first, optional BlocViewState or custom Freezed state, Freezed events, BlocListener). Use Cubit only when events are unnecessary.
+description: Use when a screen's logic is written with BLoC — "create a bloc", "implement UI logic using BLoC", "listen to bloc state to show a dialog". Covers BaseBloc with private Freezed events, BlocViewState<T> with emitResult or a custom Freezed state, BlocBuilder/BlocListener, and route-level BlocProvider. Cubit only when events are unnecessary.
 ---
 
 # 🧠 Skill: UI State Management with BLoC (Implement BLoC UI)
 
 Use this skill when requested to: "implement UI logic using BLoC", "create a bloc", "listen to bloc state changes to display warnings/dialogs", etc.
 
+**Guide:** [`docs/en/guides/03_state_management.md`](../../../docs/en/guides/03_state_management.md).
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-10, RULE-21, RULE-34, RULE-36,
+RULE-50, RULE-51, RULE-52, RULE-53.
+
 ## Default choice
 
-- **Default: `BaseBloc` + Freezed `Event`** (event-driven). Follow AGENTS §13 (private event subclasses, `part` / `part of`, async `on<_Event>` handlers).
+- **Default: `BaseBloc` + Freezed `Event`** (event-driven) — private event subclasses via `part` / `part of` (RULE-51), `async (event, emit)` handlers (RULE-52).
 - **`BaseCubit` only when truly necessary** — e.g. a tiny local UI toggle with no meaningful events, no stream fan-in, and no multi-step workflows. Do **not** default new feature controllers to Cubit.
 
 Reference sample in the template: `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`.
@@ -145,8 +149,10 @@ abstract class HomeProfileEvent with _$HomeProfileEvent {
 
 ### 3. Unwrapping a `Result<T>` by hand
 
-There is no helper — this is the shape you write in every handler that calls a use case
-(the same example as the doc comment in `platform/state/bloc/lib/src/base_bloc.dart`):
+With `BlocViewState<T>`, prefer `BlocResultMixin<T>` and `=> emitResult(emit, () => _useCase(params))`
+(RULE-53). Without the mixin — or with a custom state — this is the shape you write in every
+handler that calls a use case (the same example as the doc comment in
+`platform/state/bloc/lib/src/base_bloc.dart`):
 
 ```dart
 Future<void> _onStarted(
@@ -227,8 +233,7 @@ Widget build(BuildContext context, GoRouterState state) {
 ```
 
 > [!CAUTION]
-> The `Page` widget must **not** wrap itself in another `BlocProvider`. Double-wrapping
-> creates two controller instances — desynchronised state and a leak.
+> The `Page` widget must **not** wrap itself in another `BlocProvider` (RULE-21).
 
 ### 7. When Cubit is acceptable
 

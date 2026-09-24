@@ -59,8 +59,10 @@ flutter-monorepo-codebase/
 │   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí của lần mở đầu tiên
 │   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── tools/                  # CLI viết bằng Dart (generator, checker, sync)
-├── docs/                   # Chính bộ tài liệu này (en/ + vi/)
-├── .agents/                # Luật AGENTS.md + skills cho AI agent
+├── docs/                   # Chính bộ tài liệu này (en/ + vi/), kèm history/
+├── .agents/                # AGENTS.md — điểm vào cho công cụ AI khác Claude Code
+├── .claude/skills/         # Công thức tác vụ cho AI agent
+├── CLAUDE.md               # Bản tóm lược cho Claude Code — trích bảng đăng ký luật
 │
 ├── pubspec.yaml            # Gốc workspace — liệt kê đủ 28 thành viên
 ├── pubspec_dependencies.yaml  # Catalog version — nguồn chân lý duy nhất

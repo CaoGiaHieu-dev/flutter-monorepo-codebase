@@ -101,7 +101,8 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 
 ```text
 / (Workspace Root)
-├── .agents/                       # AI-agent rules: AGENTS.md, skills/, RESTRUCTURE.md (migration plan)
+├── .agents/                       # AGENTS.md — entry point for AI tools other than Claude Code
+├── .claude/                       # skills/ — agent task recipes (Claude Code discovers them here)
 ├── .github/                       # CODEOWNERS, SETUP_GUIDE.md and CI workflows
 │   └── workflows/
 │       ├── pr_quality_check.yml   # PR gates 0–5: composer, arch_check, analyze, tests, catalog, docs_check
@@ -157,7 +158,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, app providers
 ├── tools/                         # Command-line toolset (a workspace member) — see tools/README.md
 │   ├── android_compliance/        # 16KB page size compatibility check (Android 15+)
-│   ├── arch_check/                # Layering rules R1–R11 — PR Gate 1
+│   ├── arch_check/                # Layering and hygiene rules R1–R15 — PR Gate 1
 │   ├── barrel_generator/          # Regenerates barrel files for a package's lib/
 │   ├── code_review/               # Gemini AI source code review
 │   ├── composer/                  # sync/verify apps against app_manifest.yaml — PR Gate 0
@@ -176,7 +177,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── analysis_options.yaml          # Lints for the whole workspace
 ├── azure-ci-cd.yml                # Azure DevOps pipeline
 ├── build.yaml                     # build_runner options (injectable, retrofit, json_serializable…)
-├── CLAUDE.md                      # Summary of the rules for Claude Code — full rules in .agents/AGENTS.md
+├── CLAUDE.md                      # Agent brief for Claude Code — rules live in docs/en/reference/01_rules.md
 ├── devtools_options.yaml          # Flutter DevTools settings
 ├── flutter_native_splash-{dev,staging,prod}.yaml  # Splash config per flavor (theme_generator)
 ├── icons_launcher-{dev,staging,prod}.yaml         # App icon config per flavor (theme_generator)
@@ -251,30 +252,23 @@ All tools can be run from the root directory.
 ## 🏛️ 4. The Golden Rules of Clean Architecture & SOLID
 
 ### Separation of Concerns
-1. **Domain Layer (`modules/*/domain`)**:
-   - **Pure Dart, enforced by the package graph** — not merely by convention. `domain_core` has
-     **zero** workspace dependencies and no domain package declares the Flutter SDK.
-   - Do not import `flutter/material.dart`, `dio`, `retrofit`, or any UI/Network library.
-   - Defines `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` and `AppFailure`.
-2. **Data Layer (`modules/*/data`)**:
-   - Implements contracts from the `domain`.
-   - Uses `core_network` (API), `core_storage` (key-value) and `core_database` (SQL) as *mechanisms*
-     — each data package declares its own storage keys and its own database.
-   - DataSources return **Models**, never Entities, and never expose Drift-generated row classes.
-   - Transforms Models → Entities via the `.toEntity()` function.
-3. **Presentation Layer (`modules/*/feature`)**:
-   - Renders UI and manages state (Provider or BLoC).
-   - **Only communicates with Domain through UseCases**, absolutely no direct API calls.
-   - **FORBIDDEN to depend on the `data` layer** or on any other feature package — no exception; shared widgets come from the core package `core_ui_kit`.
-4. **Core Layer (`platform/*`)**:
-   - Supplies mechanism only. **FORBIDDEN to depend on any `feature_*` or `data_*` package.**
-   - May depend on `domain_*` (Domain is the centre): `platform_kernel → domain_core`,
-     `provider_state_management → domain_core`, `bloc_state_management → domain_core`.
+Every rule below is stated once, with its reason and its enforcement, in the
+[rule registry](docs/en/reference/01_rules.md#rule-registry); this is the map, not the law.
+
+1. **Domain Layer (`modules/*/domain`)** — pure Dart, enforced by the package graph (RULE-03):
+   `Entities`, `UseCases`, `Repository Interfaces`, `Result<T>` and `AppFailure`.
+2. **Data Layer (`modules/*/data`)** — implements the domain's contracts over `core_network` (API),
+   `core_storage` (key-value) and `core_database` (SQL) as *mechanisms*; each data package owns its
+   keys and its database (RULE-44, RULE-46). DataSources return **Models**, mapped with `.toEntity()`
+   (RULE-41).
+3. **Presentation Layer (`modules/*/feature`)** — UI and state (Provider or BLoC), talking to Domain
+   through UseCases only; never a `data` package or another feature (RULE-04).
+4. **Core Layer (`platform/*`)** — mechanism only; never depends on a module, bar the three approved
+   `→ domain_core` edges (RULE-01) and the group direction (RULE-02).
 
 > [!IMPORTANT]
-> **Any feature can be deleted and the app still boots.** Everything the shell consumes at runtime
-> resolves through a `core_di` contract behind `getItOrNull` / `getAllOrEmpty` with a safe fallback.
-> `getAll<T>()` **throws** when nothing is registered — always prefer `getAllOrEmpty<T>()`.
+> **Any feature can be deleted and the app still boots** (RULE-05): the shell consumes modules only
+> through `core_di` contracts behind `getItOrNull` / `getAllOrEmpty` with a safe fallback (RULE-12).
 
 ### Dependency Inversion Principle (DIP)
 Features communicate across each other entirely through intermediate interfaces — in the owning module's API package (`modules/<id>/api`, `<id>_api`) for a module-specific contract, in `core_di` for a product-neutral one (the session, the sign-in / post-sign-in locations the app shell uses):
@@ -394,13 +388,12 @@ Future<void> configureDependencies({String? environment}) async {
 ### Two ordering rules that bite
 
 > [!CAUTION]
-> **An eager `@Singleton` must not depend on a type registered by a later module** — it throws
-> *"not registered"* at boot. `flutter analyze` cannot catch this; verify against the generated
-> `apps/mobile/lib/di/injection.config.dart`. Use `@LazySingleton` when the dependency lands later.
+> **RULE-13** — an eager `@Singleton` must not depend on a type a later module registers; it throws
+> *"not registered"* at boot, invisible to `flutter analyze`. Each app's `test/di_smoke_test.dart`
+> boots the real graph in CI (Gate 3) and catches it.
 >
-> **GetIt does not resolve supertypes.** Registering `Impl as InterfaceA` leaves
-> `getIt<InterfaceB>()` unresolvable even when `InterfaceA implements InterfaceB` — bind the second
-> interface explicitly through an `@module` (see `platform/shell/adapters/lib/di/network_binding_module.dart`).
+> **RULE-14** — GetIt does not resolve supertypes: bind a second interface through an `@module`
+> (see `platform/shell/adapters/lib/di/network_binding_module.dart`).
 
 ---
 
@@ -452,8 +445,8 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 
 ## 🛠️ 8. DevTools CLI Policy
 
-1. **Forbidden to Use `print` Command**: All CLI Tools in `tools/` must use `stdout.writeln(...)` and `stderr.writeln(...)`.
-2. **Forbidden to Disable Linter Warnings**: Do not use `// ignore_for_file: avoid_print`.
+1. **No `print`** — CLI tools write with `stdout.writeln(...)` / `stderr.writeln(...)` (RULE-65).
+2. **No lint suppressions, no `.ps1`, no hardcoded `fvm`** — RULE-71, RULE-72, RULE-73.
 
 ---
 
@@ -569,8 +562,9 @@ The documentation is organised by **what you are trying to do**, not by layer.
 | [01. CI/CD](docs/en/operations/01_cicd.md) | GitHub Actions & Azure pipelines, required secrets |
 | [02. Fastlane & Release](docs/en/operations/02_fastlane_release.md) | Lanes, signing, store distribution |
 
-> AI-agent rules live separately in [`.agents/AGENTS.md`](.agents/AGENTS.md) and
-> [`.agents/skills/`](.agents/skills/).
+> AI agents start from [`CLAUDE.md`](CLAUDE.md) (Claude Code) or [`.agents/AGENTS.md`](.agents/AGENTS.md)
+> (other tools); task recipes live in [`.claude/skills/`](.claude/skills/). Both cite the
+> [rule registry](docs/en/reference/01_rules.md) rather than restating it.
 
 ---
 

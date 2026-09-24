@@ -1,5 +1,12 @@
 # Restructure Runbook — multi-app, multi-team platform
 
+> [!NOTE]
+> **Historical record, not current guidance.** This runbook lived at .agents/RESTRUCTURE.md while
+> the restructure was in flight. Its rule statements and § 4 "Documentation contract" are superseded:
+> rules now live once in the registry, [`docs/en/reference/01_rules.md`](../en/reference/01_rules.md),
+> and the documentation contract in [`CONTRIBUTING.md` § 5](../../CONTRIBUTING.md#5-documentation-contract).
+> `AGENTS.md` § numbers cited below refer to the pre-registry `.agents/AGENTS.md`.
+
 Working plan for turning this template from a **single-app, single-team** monorepo into a
 **multi-app, multi-team platform** where a feature team sees only its own module.
 
@@ -362,7 +369,7 @@ app. `sync` now prints a `PARTIAL COMPOSITION` block naming the three files and 
 `git checkout --` line to undo it, and CI Gate 0 catches it regardless, because `verify`
 regenerates from the manifest on a runner where every submodule is present.
 
-[`docs/{en,vi}/guides/12_module_isolation.md`](../docs/en/guides/12_module_isolation.md) covers
+[`docs/{en,vi}/guides/12_module_isolation.md`](../en/guides/12_module_isolation.md) covers
 extraction with `git filter-repo`, the partial-checkout workflow, that hazard and its net, why a
 private pub registry is the wrong trade here, and the three things isolation explicitly does not
 buy (it is not a security boundary, it does not remove the contract discipline, and every

@@ -88,8 +88,12 @@ Pick **one** contribution type:
 1. Implement the chosen contract with `@LazySingleton(as: …)` (or `@Singleton` for chrome).
 2. Compose the package: list its module in each `apps/<id>/app_manifest.yaml` (the generator does this) and run `dart tools/composer/composer.dart sync` — never hand-edit an app's `pubspec.yaml` or `injection.dart`.
 3. **Never** append `$fooRoute` into `app_router.dart` manually — host already uses `getAllOrEmpty` / `getItOrNull`.
-4. Codegen, then barrels (after `build_runner` — they export generated files too), then **hot restart**:
+4. Export the new navigator from `core_di` first (Step 1 added a file there; without this the
+   impl reports `Undefined name 'ProfileNavigator'`), then codegen, then the feature's barrels
+   (after `build_runner` — they export generated files too), then a **full restart** (hot reload
+   does not pick up new DI registrations):
    ```bash
+   dart tools/barrel_generator/generate.dart platform/di/lib
    dart run build_runner build --workspace
    dart tools/barrel_generator/generate.dart modules/profile/feature/lib
    ```

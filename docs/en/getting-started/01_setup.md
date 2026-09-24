@@ -283,6 +283,15 @@ class EnvConstants {
 
 Both `flutter run` and `flutter build` must be invoked **from `apps/mobile/`**. The workspace root has no `android/` or `ios/` project, so a `-t apps/mobile/lib/main.dart` run from the root cannot work.
 
+> [!NOTE]
+> **`apps/mobile` is Android + iOS only.** It commits no `linux/`, `macos/`, `windows/` or `web/`
+> runner, so `flutter run -d linux` or `flutter build linux` there stops with *No Linux desktop
+> project configured*. For a desktop build, use the second app: [`apps/admin/README.md`](../../../apps/admin/README.md)
+> generates its desktop runners and runs it. To give an app a platform it lacks, run
+> `flutter create --platforms=linux .` (or `macos`, `windows`) **inside that app's directory** —
+> never at the workspace root — and delete the `test/widget_test.dart` and `analysis_options.yaml`
+> it writes, as that README explains. This repo configures `--flavor` for Android and iOS only; drop the flag on desktop.
+
 ### From the CLI
 
 ```bash

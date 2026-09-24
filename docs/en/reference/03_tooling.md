@@ -15,7 +15,7 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 | **Check the layering rules hold** | `dart tools/arch_check/check.dart` |
 | **Check the docs still describe this tree** | `dart tools/docs_check/check.dart` |
 | **Which packages are sample code I can delete?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
-| **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <name> --apply` (omit `--apply` to preview) |
+| **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` (omit `--apply` to preview) — `<bundle>` is one of `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` |
 | Create a new feature / domain / data / core package | `dart tools/module_generator/generate.dart …` |
 | Added, renamed or deleted a file under `lib/` | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Changed a dependency version | `dart tools/dependency_sync.dart` |
@@ -99,11 +99,11 @@ A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block
 
 ## `docs_check`
 
-**Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names, collects every one that is not there, prints them grouped by file, then exits 1.
+**Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names, collects every one that is not there, prints them grouped by file, then exits 1. References into a sample bundle you removed with `remove_sample` are the one exception — summarised as INFO, never a failure (below).
 
 ```bash
 dart tools/docs_check/check.dart            # exits 1 on any dead reference
-dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block
+dart tools/docs_check/check.dart --verbose  # plus a copy-paste allowlist block and every removed-sample reference
 dart tools/docs_check/check.dart --help     # usage; any other argument exits 64
 ```
 
@@ -116,7 +116,15 @@ Two kinds of reference are checked in every Markdown file in the repository — 
 
 The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves about 1 900 genuine references (at the time of writing) — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
 
-Spans containing a space are skipped: they are shell lines. Spans containing a `*`, a `{` or a `<` are globs or placeholders, each describing a *set* rather than one file — they are checked as globs (`<name>` matches like `*`) and pass when at least one path fits. The top-level list also keeps `packages/` and a bare `app/`, where nothing lives any more, so a document still pointing there fails instead of being skipped.
+Spans containing a space are skipped: they are shell lines. Spans containing a `*` or a `{` are globs, each describing a *set* rather than one file — they pass when at least one path fits. A span with a `<placeholder>` segment (`modules/<owner>/feature/lib/src/handlers`) is a **template** for the reader's own module, not a reference: only the literal part before the first placeholder must exist (`modules`), so a placeholder path never fails because no current module happens to have that folder. A placeholder path under the long-gone packages/domain directory still fails, because that literal part does not exist. The top-level list also keeps `packages/` and a bare `app/`, where nothing lives any more, so a document still pointing there fails instead of being skipped.
+
+**Removed samples do not fail the gate.** `remove_sample.dart <bundle> --apply` deletes a bundle's packages but never edits `tools/sample_manifest.yaml`, and `docs_check` reads the bundle definitions there: a bundle whose packages are **all** absent from disk is "removed", and a dead reference inside it — a package path, the emptied `modules/<id>` directory, one of its `orphaned_contracts` — is reported as one summary line per bundle instead of a failure:
+
+```text
+INFO: 118 reference(s) in 32 document(s) point to removed sample bundle "auth" — expected after remove_sample; update the docs at your leisure.
+```
+
+`--verbose` lists them. A bundle with even one package still on disk is not "removed" — a half-deleted sample is drift and fails as usual — and a dead path outside every removed bundle still exits 1. Once the docs no longer mention a removed sample, you may delete its bundle entry from the manifest.
 
 Paths that are correctly absent live in `tools/docs_check/allowlist.txt`, one per line, each with the reason it is not on disk. Exactly three reasons qualify:
 
@@ -146,9 +154,11 @@ Its source of truth is [`tools/sample_manifest.yaml`](../../../tools/sample_mani
 
 The dry-run output is the part worth reading. Removing `auth` is not just three directories: it prints the exact lines to strip from the root `pubspec.yaml` and from every app's manifest, pubspec and `injection.dart`, the `core_di` contracts that become dead, **and which other samples break and how** (the `breaks` list in `tools/sample_manifest.yaml` — empty for every sample today) — as well as the couplings that degrade safely, such as `feature_settings` hiding its logout row when `getItOrNull<IAuthActionHandler>()` is null, or `feature_home` showing the signed-out state when the route's `getItOrNull<IAuthStatusStream>()` is null.
 
-Both the dry-run and `--apply` also count the **Markdown references** to the paths the removal deletes — backticked paths and relative links in every `*.md` (`docs/`, `.agents/`, READMEs), matched the way `docs_check` matches them. That count is what `dart tools/docs_check/check.dart` (CI Gate 5) will report once the package is gone, and Gate 5 stays red until those references are fixed. The first 15 are printed; `--verbose` lists them all.
+Both the dry-run and `--apply` also count the **Markdown references** to the paths the removal deletes — backticked paths and relative links in every `*.md` (`docs/`, `.agents/`, READMEs), matched the way `docs_check` matches them. They are informational: `dart tools/docs_check/check.dart` (CI Gate 5) recognises them as pointing into a removed sample bundle, prints one INFO summary for the bundle and still passes — update those docs at your leisure. That is also why the tool never edits `tools/sample_manifest.yaml`: the bundle definition staying there is how `docs_check` knows. The first 15 are printed; `--verbose` lists them all.
 
-Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back. Arguments are checked first: an unknown flag (`--aply`), a missing bundle name, or more than one bundle exits `64` — a misspelt flag is never silently a dry run, nor ignored next to `--apply`.
+Bundles: `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` (`--list` prints them with the classification).
+
+Writes are opt-in via `--apply`, and shared files are snapshotted first so a mid-run failure rolls back. Arguments are checked first: an unknown flag (`--aply`), a missing or unknown bundle name, or more than one bundle exits `64` — a misspelt flag is never silently a dry run, nor ignored next to `--apply`.
 
 ---
 
@@ -179,7 +189,7 @@ dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at p
 
 **Arguments are validated before anything is written**, and every refusal exits `64` with the usage: an invalid `<name>` or `<prefix>` (`Bad-Name`), a `<sm>` / `<route>` other than `1`/`2`/`3`, a `<prefix>` / `<sm>` / `<route>` passed to a type that does not take it, an unknown flag, more than five arguments, or a **package name already taken** by any `pubspec.yaml` in the repository. Pub resolves a workspace by name, so a duplicate used to surface only at `pub get`, after composer had rewritten the manifests — and a new directory does not mean a new name: `5 shell platform_app` is `platform_app_shell` (already at `platform/app_shell`), `2 core` / `3 core` are `domain_core` / `data_core`.
 
-With no arguments on a terminal it prompts for everything. A feature missing `<sm>` or `<route>` prompts for what is missing (an empty answer takes `1`). **Without a terminal** — CI, an agent's shell, stdin at end of input — a value that would be prompted for is an error, exit `64`, never a silent default: always pass all five arguments for a feature. The prompts and many progress and error messages are in Vietnamese, as is the output of `barrel_generator` and `sample_cleanup`.
+With no arguments on a terminal it prompts for everything. A feature missing `<sm>` or `<route>` prompts for what is missing (an empty answer takes `1`). **Without a terminal** — CI, an agent's shell, stdin at end of input — a value that would be prompted for is an error, exit `64`, never a silent default: always pass all five arguments for a feature. All tool output is in English.
 
 **What it does:** creates the directory tree (including `lib/src/utils/`, for every layer), renders templates (the new pubspec copies the root `pubspec.yaml`'s `environment:`), adds the module to every `app_manifest.yaml`, runs `composer sync` (which regenerates the root `workspace:` list and each app's `pubspec.yaml` and `lib/di/injection.dart`), then dependency sync, `pub get`, `gen-l10n`, the barrel generator, `build_runner`, the barrel generator **again**, and `dart fix --apply` on the new package. Barrels run twice because the templates import sibling barrels, which must exist before `build_runner` reads the package, while the barrels also export generated files (`module.module.dart`, `lib/src/gen/**`) — so the last run has to follow codegen.
 
@@ -194,7 +204,7 @@ With no arguments on a terminal it prompts for everything. A feature missing `<s
 - **Registration is verified.** Whether a manifest already lists the package is decided by parsing it as YAML, not by substring — a line test once took `core_net` for registered because `core_network` contains it, and the package silently joined no app with exit `0`. Each edit is re-parsed; if the module could not be added to a manifest (no `modules:` list, or no `core` DI group, in the expected shape), the run rolls back and exits `1`.
 - **FVM is auto-detected** — by every tool that shells out, through `tools/shared/toolchain.dart` — requiring *both* a config file (`.fvmrc` or `.fvm/fvm_config.json`) *and* a working `fvm --version`. Either signal alone gives a wrong answer: this repo pins a version in `.fvmrc` while a given machine may not have `fvm` installed at all.
 
-**What a new package declares.** Only the workspace packages its templates import, so it passes `check_unused_packages` from the first run — add `core_network`, `core_storage`, `core_responsive` and the rest when the code needs them. A domain package gets `domain_core` and a repository contract `I<Name>Repository` (in `repositories/`, one placeholder `ping()` returning `Result<void>`). A data package gets `data_core` and a `<Name>RepositoryImpl extends IBaseRepository` (in `repositories_impl/`); when `domain_<name>` already exists it also declares `domain_core` + `domain_<name>`, implements that contract and registers as it (`@LazySingleton(as: I<Name>Repository)`) — so generate the domain first. Core and custom packages start with no workspace dependency.
+**What a new package declares.** Only the packages its templates import, so it passes `check_unused_packages` from the first run — add `core_network`, `core_storage` and the rest when the code needs them. A feature declares `core_di`, `core_common`, `core_base_ui` and `core_responsive` (every generated page lays out through `AdaptiveContent`, with `AppSpacing` / `AppTextStyles` sizing through context), plus `provider_state_management` + `domain_core` for Provider, or `bloc_state_management` + `core_ui_kit` for BLoC (its loading state is the kit's `LoadingWidget`); only a feature gets `flutter_localizations` and `intl`, which its generated `gen-l10n` output imports. A domain package gets `domain_core` and a repository contract `I<Name>Repository` (in `repositories/`, one placeholder `ping()` returning `Result<void>`). A data package gets `data_core` and a `<Name>RepositoryImpl extends IBaseRepository` (in `repositories_impl/`); when `domain_<name>` already exists it also declares `domain_core` + `domain_<name>`, implements that contract and registers as it (`@LazySingleton(as: I<Name>Repository)`) — so generate the domain first. Core and custom packages start with no workspace dependency.
 
 **Nav destination order.** A `<route>` `2` feature's `INavDestinationModule.order` is 10 above the highest `order` any existing destination under `modules/*/feature` returns (10 when there is none), so generated tabs never tie. Renumber freely; only the relative order matters.
 
@@ -212,7 +222,7 @@ dart tools/barrel_generator/generate.dart --help   # usage
 
 Regenerates `*.dart` barrels for every directory under the given path, then runs `dart format` on it through the repo's toolchain (FVM when set up). Run it after **any** file add / rename / delete under `lib/` — and after `build_runner` / `gen-l10n`, because generated files present on disk are exported too (`core_ui_kit` reaches `core_base_ui`'s generated `Assets` that way).
 
-Exit codes: `2` when the path does not exist (it prompts for another path only when run with no argument on a terminal); `1` when `dart format` fails — the barrels are written but unformatted; `64` for a flag or a second path. A flag is never taken for a path (`--help` used to be read as a directory name), and `<pkg>/lib/` is the same as `<pkg>/lib` (a trailing separator used to produce `lib/.dart`).
+Exit codes: `64` when the path does not exist (it prompts for another path only when run with no argument on a terminal), for a flag, or for a second path; `1` when `dart format` fails — the barrels are written but unformatted. A flag is never taken for a path (`--help` used to be read as a directory name), and `<pkg>/lib/` is the same as `<pkg>/lib` (a trailing separator used to produce `lib/.dart`).
 
 Skipped directories: hidden ones, `lib/gen`, and the platform / build folders (`android`, `ios`, `web`, `build`, …) **outside** `lib/` only — matched as path segments relative to the package root, so `lib/src/widgets/web/` is exported like any other directory. `lib/src/gen` is walked as always.
 

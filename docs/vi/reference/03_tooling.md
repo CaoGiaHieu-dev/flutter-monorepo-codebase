@@ -15,7 +15,7 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | **Kiểm tra luật phân tầng còn đúng không** | `dart tools/arch_check/check.dart` |
 | **Kiểm tra docs còn mô tả đúng cây thư mục hiện tại** | `dart tools/docs_check/check.dart` |
 | **Package nào là code mẫu có thể xoá?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
-| **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <tên> --apply` (bỏ `--apply` để xem trước) |
+| **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` (bỏ `--apply` để xem trước) — `<bundle>` là một trong `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` |
 | Tạo package feature / domain / data / core mới | `dart tools/module_generator/generate.dart …` |
 | Vừa thêm, đổi tên hoặc xoá file trong `lib/` | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Vừa đổi version dependency | `dart tools/dependency_sync.dart` |
@@ -99,11 +99,11 @@ Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`P
 
 ## `docs_check`
 
-**Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, gom tất cả những path không tồn tại, in ra theo từng file, rồi thoát với mã 1.
+**Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, gom tất cả những path không tồn tại, in ra theo từng file, rồi thoát với mã 1. Ngoại lệ duy nhất là tham chiếu vào một sample bundle bạn đã gỡ bằng `remove_sample` — được tóm tắt dạng INFO, không bao giờ làm fail (xem bên dưới).
 
 ```bash
 dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết
-dart tools/docs_check/check.dart --verbose  # kèm block allowlist để copy-paste
+dart tools/docs_check/check.dart --verbose  # kèm block allowlist để copy-paste và mọi tham chiếu tới sample đã gỡ
 dart tools/docs_check/check.dart --help     # cú pháp; mọi tham số khác thoát mã 64
 ```
 
@@ -116,7 +116,15 @@ Hai loại tham chiếu được kiểm tra trong mọi file Markdown của repo
 
 Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 900 tham chiếu thật (tại thời điểm viết) — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
 
-Chuỗi có khoảng trắng bị bỏ qua: đó là lệnh shell. Chuỗi có `*`, `{` hoặc `<` là glob hoặc placeholder, mỗi thứ mô tả một *tập hợp* chứ không phải một file — chúng được kiểm như glob (`<name>` khớp như `*`) và đạt khi có ít nhất một đường dẫn khớp. Danh sách thư mục gốc vẫn giữ `packages/` và `app/` trần, nơi không còn gì, để tài liệu còn trỏ tới đó sẽ fail thay vì bị bỏ qua.
+Chuỗi có khoảng trắng bị bỏ qua: đó là lệnh shell. Chuỗi có `*` hoặc `{` là glob, mô tả một *tập hợp* chứ không phải một file — đạt khi có ít nhất một đường dẫn khớp. Chuỗi có một đoạn `<placeholder>` (`modules/<owner>/feature/lib/src/handlers`) là **khuôn mẫu** cho module của chính người đọc, không phải tham chiếu: chỉ phần cố định trước placeholder đầu tiên phải tồn tại (`modules`), nên một path placeholder không bao giờ fail chỉ vì hiện chưa module nào có thư mục đó. Một path placeholder nằm dưới thư mục packages/domain đã bị xoá từ lâu vẫn fail, vì phần cố định đó không tồn tại. Danh sách thư mục gốc vẫn giữ `packages/` và `app/` trần, nơi không còn gì, để tài liệu còn trỏ tới đó sẽ fail thay vì bị bỏ qua.
+
+**Sample đã gỡ không làm fail gate.** `remove_sample.dart <bundle> --apply` xoá các package của bundle nhưng không bao giờ sửa `tools/sample_manifest.yaml`, và `docs_check` đọc định nghĩa bundle ở đó: bundle có **mọi** package vắng mặt trên đĩa được coi là "đã gỡ", và tham chiếu chết nằm trong nó — path của package, thư mục `modules/<id>` đã trống, một mục trong `orphaned_contracts` — được báo thành một dòng tóm tắt cho mỗi bundle thay vì một lỗi:
+
+```text
+INFO: 118 reference(s) in 32 document(s) point to removed sample bundle "auth" — expected after remove_sample; update the docs at your leisure.
+```
+
+`--verbose` liệt kê chúng. Bundle còn dù chỉ một package trên đĩa thì không phải "đã gỡ" — sample bị xoá dở là drift và fail như thường — và một path chết nằm ngoài mọi bundle đã gỡ vẫn thoát mã 1. Khi tài liệu không còn nhắc tới sample đã gỡ, bạn có thể xoá mục bundle của nó khỏi manifest.
 
 Những path vắng mặt một cách chính đáng nằm trong `tools/docs_check/allowlist.txt`, mỗi dòng một path kèm lý do. Chỉ đúng ba lý do được chấp nhận:
 
@@ -146,9 +154,11 @@ Nguồn chân lý của nó là [`tools/sample_manifest.yaml`](../../../tools/sa
 
 Phần đáng đọc nhất là output của dry-run. Xoá `auth` không chỉ là ba thư mục: nó in ra chính xác những dòng cần gỡ khỏi `pubspec.yaml` gốc và khỏi manifest, pubspec, `injection.dart` của mọi app, các contract trong `core_di` trở thành code chết, **và sample nào sẽ vỡ, vỡ như thế nào** (danh sách `breaks` trong `tools/sample_manifest.yaml` — hiện trống với mọi sample) — cùng các liên kết xuống cấp an toàn, như `feature_settings` ẩn dòng logout khi `getItOrNull<IAuthActionHandler>()` trả về null, hay `feature_home` hiển thị trạng thái chưa đăng nhập khi `getItOrNull<IAuthStatusStream>()` ở route trả về null.
 
-Cả dry-run lẫn `--apply` đều đếm các **tham chiếu Markdown** tới những đường dẫn sắp bị xoá — đường dẫn trong backtick và link tương đối trong mọi `*.md` (`docs/`, `.agents/`, các README), so khớp đúng như cách `docs_check` làm. Con số đó chính là thứ `dart tools/docs_check/check.dart` (CI Gate 5) sẽ báo sau khi gỡ package, và Gate 5 vẫn đỏ cho tới khi các tham chiếu đó được sửa. Tool in 15 dòng đầu; `--verbose` liệt kê đủ.
+Cả dry-run lẫn `--apply` đều đếm các **tham chiếu Markdown** tới những đường dẫn sắp bị xoá — đường dẫn trong backtick và link tương đối trong mọi `*.md` (`docs/`, `.agents/`, các README), so khớp đúng như cách `docs_check` làm. Chúng chỉ mang tính thông tin: `dart tools/docs_check/check.dart` (CI Gate 5) nhận ra chúng trỏ vào một sample bundle đã gỡ, in một dòng INFO cho bundle đó và vẫn đạt — sửa các tài liệu đó lúc nào tiện. Đó cũng là lý do tool không bao giờ sửa `tools/sample_manifest.yaml`: định nghĩa bundle còn nằm đó là cách `docs_check` biết. Tool in 15 dòng đầu; `--verbose` liệt kê đủ.
 
-Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được. Tham số được kiểm tra trước: cờ lạ (`--aply`), thiếu tên bundle, hoặc nhiều hơn một bundle đều thoát với mã `64` — gõ sai cờ không bao giờ lặng lẽ biến thành dry-run, cũng không bị bỏ qua khi đứng cạnh `--apply`.
+Các bundle: `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache` (`--list` in chúng kèm bảng phân loại).
+
+Chỉ ghi khi truyền `--apply`, và các file dùng chung được snapshot trước để fail giữa chừng thì rollback được. Tham số được kiểm tra trước: cờ lạ (`--aply`), thiếu hoặc sai tên bundle, hoặc nhiều hơn một bundle đều thoát với mã `64` — gõ sai cờ không bao giờ lặng lẽ biến thành dry-run, cũng không bị bỏ qua khi đứng cạnh `--apply`.
 
 ---
 
@@ -179,7 +189,7 @@ dart tools/module_generator/generate.dart 5 billing acme     # acme_billing tạ
 
 **Tham số được kiểm tra trước khi ghi bất cứ thứ gì**, và mọi lần từ chối đều thoát với mã `64` kèm cú pháp: `<name>` hay `<prefix>` không hợp lệ (`Bad-Name`), `<sm>` / `<route>` khác `1`/`2`/`3`, `<prefix>` / `<sm>` / `<route>` truyền cho loại module không nhận nó, cờ lạ, nhiều hơn năm tham số, hoặc **tên package đã có** trong một `pubspec.yaml` bất kỳ của repo. Pub resolve workspace theo tên, nên trùng tên trước đây chỉ lộ ra ở `pub get`, sau khi composer đã ghi lại các manifest — và thư mục mới không có nghĩa là tên mới: `5 shell platform_app` là `platform_app_shell` (đã có ở `platform/app_shell`), `2 core` / `3 core` là `domain_core` / `data_core`.
 
-Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `<sm>` hoặc `<route>` thì hỏi phần còn thiếu (bỏ trống câu trả lời là chọn `1`). **Không có terminal** — CI, shell của agent, stdin đã hết — thì giá trị cần hỏi trở thành lỗi, exit `64`, không bao giờ lặng lẽ lấy mặc định: với feature hãy luôn truyền đủ năm tham số. Câu hỏi và phần lớn thông báo tiến trình, thông báo lỗi đều bằng tiếng Việt, output của `barrel_generator` và `sample_cleanup` cũng vậy.
+Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `<sm>` hoặc `<route>` thì hỏi phần còn thiếu (bỏ trống câu trả lời là chọn `1`). **Không có terminal** — CI, shell của agent, stdin đã hết — thì giá trị cần hỏi trở thành lỗi, exit `64`, không bao giờ lặng lẽ lấy mặc định: với feature hãy luôn truyền đủ năm tham số. Mọi output của tool đều bằng tiếng Anh.
 
 **Nó làm gì:** tạo cây thư mục (bao gồm `lib/src/utils/`, cho mọi tầng), render template (pubspec mới chép `environment:` từ `pubspec.yaml` gốc), thêm module vào mọi `app_manifest.yaml`, chạy `composer sync` (sinh lại danh sách `workspace:` ở root cùng `pubspec.yaml` và `lib/di/injection.dart` của từng app), rồi dependency sync, `pub get`, `gen-l10n`, barrel generator, `build_runner`, barrel generator **lần nữa**, và `dart fix --apply` trên package mới. Barrel chạy hai lần vì template import các barrel anh em, nên chúng phải có trước khi `build_runner` đọc package, trong khi barrel cũng export file sinh ra (`module.module.dart`, `lib/src/gen/**`) — nên lần chạy cuối phải đứng sau codegen.
 
@@ -194,7 +204,7 @@ Không tham số và có terminal thì tool hỏi mọi thứ. Feature thiếu `
 - **Việc đăng ký được kiểm chứng.** Manifest đã liệt kê package hay chưa được quyết định bằng cách parse YAML, không so chuỗi con — trước đây một phép thử theo dòng từng coi `core_net` là đã đăng ký vì `core_network` chứa nó, và package lặng lẽ không vào app nào mà vẫn exit `0`. Mỗi lần sửa đều được parse lại; nếu không thêm được module vào một manifest (không có danh sách `modules:`, hoặc nhóm DI `core`, đúng định dạng mong đợi) thì cả lần chạy rollback và thoát với mã `1`.
 - **Tự phát hiện FVM** — mọi tool có gọi lệnh ngoài đều dùng chung `tools/shared/toolchain.dart` — yêu cầu *cả hai*: có file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) *và* `fvm --version` chạy được. Chỉ một tín hiệu thôi là cho kết quả sai: repo này pin version trong `.fvmrc` trong khi một máy cụ thể có thể không hề cài `fvm`.
 
-**Package mới khai báo gì.** Chỉ những package workspace mà template của nó import, nên nó qua `check_unused_packages` ngay lần chạy đầu — thêm `core_network`, `core_storage`, `core_responsive`… khi code cần. Package domain nhận `domain_core` và một contract repository `I<Name>Repository` (trong `repositories/`, một method giữ chỗ `ping()` trả `Result<void>`). Package data nhận `data_core` và `<Name>RepositoryImpl extends IBaseRepository` (trong `repositories_impl/`); khi `domain_<name>` đã tồn tại, nó khai thêm `domain_core` + `domain_<name>`, implements contract đó và đăng ký dưới contract (`@LazySingleton(as: I<Name>Repository)`) — vì vậy hãy sinh domain trước. Package core và custom khởi đầu không có dependency workspace nào.
+**Package mới khai báo gì.** Chỉ những package mà template của nó import, nên nó qua `check_unused_packages` ngay lần chạy đầu — thêm `core_network`, `core_storage`… khi code cần. Feature khai `core_di`, `core_common`, `core_base_ui` và `core_responsive` (mọi page được sinh đều bố cục qua `AdaptiveContent`, với `AppSpacing` / `AppTextStyles` scale qua context), cộng `provider_state_management` + `domain_core` cho Provider, hoặc `bloc_state_management` + `core_ui_kit` cho BLoC (trạng thái loading là `LoadingWidget` của kit); chỉ feature mới nhận `flutter_localizations` và `intl`, thứ mà output `gen-l10n` của nó import. Package domain nhận `domain_core` và một contract repository `I<Name>Repository` (trong `repositories/`, một method giữ chỗ `ping()` trả `Result<void>`). Package data nhận `data_core` và `<Name>RepositoryImpl extends IBaseRepository` (trong `repositories_impl/`); khi `domain_<name>` đã tồn tại, nó khai thêm `domain_core` + `domain_<name>`, implements contract đó và đăng ký dưới contract (`@LazySingleton(as: I<Name>Repository)`) — vì vậy hãy sinh domain trước. Package core và custom khởi đầu không có dependency workspace nào.
 
 **Thứ tự nav destination.** `INavDestinationModule.order` của feature `<route>` `2` bằng `order` cao nhất trong các destination hiện có dưới `modules/*/feature` cộng 10 (10 nếu chưa có cái nào), nên các tab được sinh ra không bao giờ trùng thứ tự. Đánh số lại tuỳ ý; chỉ thứ tự tương đối là quan trọng.
 
@@ -212,7 +222,7 @@ dart tools/barrel_generator/generate.dart --help   # cú pháp
 
 Sinh lại barrel `*.dart` cho mọi thư mục dưới đường dẫn đã cho, rồi chạy `dart format` trên đó qua toolchain của repo (FVM nếu đã cài đặt). Chạy nó sau **bất kỳ** thao tác thêm / đổi tên / xoá file nào trong `lib/` — và sau `build_runner` / `gen-l10n`, vì file sinh ra đang có trên đĩa cũng được export (`core_ui_kit` lấy `Assets` sinh ra của `core_base_ui` theo cách đó).
 
-Mã thoát: `2` khi đường dẫn không tồn tại (nó chỉ hỏi lại đường dẫn khi chạy không tham số trên terminal); `1` khi `dart format` thất bại — barrel đã được ghi nhưng chưa format; `64` khi gặp một cờ hoặc đường dẫn thứ hai. Cờ không bao giờ bị hiểu thành đường dẫn (trước đây `--help` từng bị đọc như tên thư mục), và `<pkg>/lib/` giống hệt `<pkg>/lib` (dấu phân cách ở cuối từng sinh ra `lib/.dart`).
+Mã thoát: `64` khi đường dẫn không tồn tại (nó chỉ hỏi lại đường dẫn khi chạy không tham số trên terminal), khi gặp một cờ hoặc đường dẫn thứ hai; `1` khi `dart format` thất bại — barrel đã được ghi nhưng chưa format. Cờ không bao giờ bị hiểu thành đường dẫn (trước đây `--help` từng bị đọc như tên thư mục), và `<pkg>/lib/` giống hệt `<pkg>/lib` (dấu phân cách ở cuối từng sinh ra `lib/.dart`).
 
 Thư mục bị bỏ qua: thư mục ẩn, `lib/gen`, và các thư mục nền tảng / build (`android`, `ios`, `web`, `build`, …) **chỉ khi nằm ngoài** `lib/` — so theo từng đoạn đường dẫn tính từ gốc package, nên `lib/src/widgets/web/` vẫn được export như mọi thư mục khác. `lib/src/gen` vẫn được duyệt như trước.
 

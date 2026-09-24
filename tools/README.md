@@ -118,10 +118,12 @@ Dry-run in ra cả những sample khác sẽ vỡ và vỡ ở đâu — thông 
 gỡ feature thủ công không có.
 
 Cả dry-run lẫn `--apply` đều đếm các tham chiếu trong tài liệu (`docs/`, `.agents/`,
-mọi `*.md`) tới đường dẫn sắp bị xoá — đúng con số mà `dart tools/docs_check/check.dart`
-(CI Gate 5) sẽ báo sau khi gỡ (gỡ `home` hiện để lại ~60 tham chiếu). Gate 5 fail cho tới
-khi các tham chiếu đó được sửa. Cờ lạ (ví dụ `--aply`) bị từ chối với exit 64 thay vì bị
-bỏ qua.
+mọi `*.md`) tới đường dẫn sắp bị xoá. Chúng chỉ mang tính thông tin: sau khi gỡ,
+`dart tools/docs_check/check.dart` (CI Gate 5) nhận ra chúng trỏ vào một sample bundle đã gỡ
+(mọi package của bundle vắng mặt, theo `tools/sample_manifest.yaml` — tool gỡ không bao giờ sửa
+file này), in một dòng INFO cho mỗi bundle và vẫn đạt. Sửa các tài liệu đó lúc nào tiện.
+Cờ lạ (ví dụ `--aply`) hay tên bundle sai bị từ chối với exit 64 thay vì bị bỏ qua.
+Bundle: `auth`, `home`, `settings`, `onboarding`, `dashboard`, `splash`, `cache`.
 
 
 ### 🏗️ Module Generator (Tạo Module Mới)

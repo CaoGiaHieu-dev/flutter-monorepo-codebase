@@ -1,7 +1,7 @@
 {{#isProvider}}
 import 'package:core_common/core_common.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 import '../pages/pages.dart';
@@ -27,8 +27,8 @@ class {{pascalNameInput}}Route extends GoRouteDataCustom
 {{#isBloc}}
 import 'package:bloc_state_management/bloc_state_management.dart';
 import 'package:core_common/core_common.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../bloc/bloc.dart';
 import '../pages/pages.dart';
@@ -53,8 +53,8 @@ class {{pascalNameInput}}Route extends GoRouteDataCustom
 {{/isBloc}}
 {{#isNone}}
 import 'package:core_common/core_common.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../pages/pages.dart';
 import '../utils/{{snakeNameInput}}_path.dart';

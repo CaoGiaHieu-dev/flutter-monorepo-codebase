@@ -21,9 +21,9 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 > package một stub**: `IPaymentRepository` trong `domain/lib/src/repositories/` và
 > `PaymentRepositoryImpl extends IBaseRepository` trong `data/lib/src/repositories_impl/`, cả hai
 > có một method giữ chỗ `ping()`. Hãy sinh domain **trước**: package data khi đó phụ thuộc
-> `domain_payment` và đăng ký `@LazySingleton(as: IPaymentRepository)`. Thay `ping()` bằng bước
-> 3 và 7 bên dưới — mọi class khác bạn viết tay. Xem
-> the `ModuleType.domain` / `ModuleType.data` branches in
+> `domain_payment` và đăng ký `@LazySingleton(as: IPaymentRepository)`. Thay `ping()` bằng các
+> thao tác thật ở §5 (interface repository) và §9 (RepositoryImpl) bên dưới — mọi class khác bạn
+> viết tay. Xem nhánh `ModuleType.domain` / `ModuleType.data` trong
 > [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart).
 
 Nó tạo ra:
@@ -383,20 +383,38 @@ khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
 
 ## 10. Nối dây
 
-Khai báo dependency tường minh ở cả hai `pubspec.yaml`:
+Khai báo dependency tường minh ở cả hai `pubspec.yaml`. Generator đã ghi sẵn bộ khởi đầu — với
+package data là ba package workspace dưới đây cùng `injectable`, `freezed_annotation` và
+`json_annotation`. Thêm phần còn lại **khi code của bạn bắt đầu import chúng**, không sớm hơn:
+`check_unused_packages` fail khi một dependency được khai mà không import, còn `arch_check` R5
+fail khi một package được import mà không khai.
 
 ```yaml
 # modules/payment/data/pubspec.yaml
 dependencies:
-  platform_kernel:
-    path: ../../../platform/kernel
   data_core:
     path: ../../../platform/data_core
   domain_core:
     path: ../../../platform/domain_core
   domain_payment:
     path: ../domain
+
+  # Add when you write the §8 storage owner (StorageManager, StorageValue):
+  # core_storage:
+  #   path: ../../../platform/storage
+  # Add when you write a Retrofit data source (ApiClient, Dio) — plus `dio:`
+  # and `retrofit:` with an empty value, then run dependency_sync:
+  # core_network:
+  #   path: ../../../platform/network
 ```
+
+Danh sách không có `platform_kernel`: `execute()` / `executeSync()` đã đưa mọi lỗi qua
+`ErrorHandler`, nên một repository chỉ dùng chúng thì không bao giờ import kernel. Chỉ khai nó khi
+chính code của bạn gọi trực tiếp `ErrorHandler`, `getIt` hay một symbol khác của kernel.
+
+Package workspace là dependency `path:` và không có version. Package bên ngoài (`dio`,
+`retrofit`) được ghi với giá trị rỗng — version của nó nằm trong `pubspec_dependencies.yaml`, và
+`dart tools/dependency_sync.dart` sẽ ghi vào.
 
 > [!WARNING]
 > Pub Workspaces dùng chung một `package_config.json`, nên dependency **không khai** vẫn compile
@@ -431,9 +449,75 @@ flutter analyze
 
 ---
 
+## 11. Dùng nó từ một feature
+
+Feature chạm tới nghiệp vụ này qua **use case**, không bao giờ qua `data_payment` — `arch_check`
+R3 cấm feature import package `data_*`. Package data vẫn được đóng gói vào app: mỗi lần chạy
+`generate.dart` đã thêm tầng của nó vào mục của module trong mọi `app_manifest.yaml`
+(`- { id: payment, layers: [domain, data, feature] }` khi đủ cả ba tầng), và DI đăng ký
+`PaymentRepositoryImpl` dưới dạng `IPaymentRepository` từ đó.
+
+**1. Sinh feature** cho cùng module. [`01_new_feature.md`](01_new_feature.md) đi qua một feature
+với tên `profile`; mọi thứ ở đó áp dụng y nguyên khi thay bằng `payment`:
+
+```bash
+dart tools/module_generator/generate.dart 1 payment "" 1 1   # Provider + stack route; "" 2 1 for BLoC
+```
+
+**2. Khai domain** trong `pubspec.yaml` của feature, cạnh những gì generator đã ghi (template
+Provider đã khai `domain_core`, cho `Result`), rồi chạy `flutter pub get`:
+
+```yaml
+# modules/payment/feature/pubspec.yaml
+dependencies:
+  domain_payment:
+    path: ../domain
+```
+
+**3. Inject use case** qua constructor của controller. Injectable phân giải được vì DI module của
+`domain_payment` đăng ký mọi use case `@injectable` — controller không gọi `getIt`:
+
+```dart
+// modules/payment/feature/lib/src/provider/payment_provider.dart
+import 'package:domain_payment/domain_payment.dart';
+import 'package:injectable/injectable.dart';
+import 'package:provider_state_management/provider_state_management.dart';
+
+@injectable
+class PaymentProvider extends BaseProvider<PaymentEntity> {
+  PaymentProvider(this._chargeUseCase);
+
+  final ChargeUseCase _chargeUseCase;
+
+  Future<void> charge(ChargeParams params) => executeOperation(
+    OperationConfig(operation: () => _chargeUseCase(params)),
+  );
+}
+```
+
+`executeOperation` bóc `Result` và điều khiển các trạng thái loading / error / success. BLoC nhận
+use case theo đúng cách đó (`PaymentBloc(this._chargeUseCase) : super(...)`) nhưng phải tự bóc
+`Result` trong từng handler — xem [`03_state_management.md`](03_state_management.md) §3.5.
+
+**4. Sinh lại** — constructor của controller đổi thì phần đăng ký DI của nó cũng đổi:
+
+```bash
+dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/payment/feature/lib
+flutter analyze
+dart tools/arch_check/check.dart
+dart tools/unused_checker/check_unused_packages.dart
+```
+
+Route vẫn tạo controller đúng như [`01_new_feature.md`](01_new_feature.md) §5 —
+`getIt<PaymentProvider>()` ở tầng route, giờ dựng cả chuỗi: provider ← use case ←
+`IPaymentRepository` ← data source.
+
+---
+
 ## Liên quan
 
-- [`01_new_feature.md`](01_new_feature.md) — gọi use case này từ một feature
+- [`01_new_feature.md`](01_new_feature.md) — toàn bộ phía feature (route, đa ngôn ngữ, navigator)
 - [`06_storage.md`](06_storage.md) — lưu trữ key-value chi tiết
 - [`07_database.md`](07_database.md) — dữ liệu quan hệ với Drift
 - [`08_networking.md`](08_networking.md) — Dio, Retrofit, interceptor

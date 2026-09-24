@@ -76,19 +76,19 @@ class InputActions {
   }
 
   Never _noAnswer(String question) => _usageError(
-    'Thiếu tham số và không có ai trả lời "${question.trim()}" '
-    '(stdin không phải terminal hoặc đã hết). Truyền đủ tham số trên dòng lệnh.',
+    'Missing argument, and nobody to answer "${question.trim()}" '
+    '(stdin is not a terminal, or it ended). Pass every argument on the command line.',
   );
 
   void _validateName(String value, String what) {
     if (!_packageNamePattern.hasMatch(value)) {
       _usageError(
-        '$what "$value" không hợp lệ: chỉ dùng chữ thường, số và "_", '
-        'bắt đầu bằng chữ cái (ví dụ: user_profile).',
+        '$what "$value" is invalid: use lowercase letters, digits and "_", '
+        'starting with a letter (e.g. user_profile).',
       );
     }
     if (_reservedWords.contains(value)) {
-      _usageError('$what "$value" là từ khoá Dart — pub không chấp nhận.');
+      _usageError('$what "$value" is a Dart keyword — pub refuses it.');
     }
   }
 
@@ -102,9 +102,9 @@ class InputActions {
     if (existing == null) return;
     final where = p.posix.relative(existing.rootPath, from: root);
     _usageError(
-      'Package "$packageName" đã tồn tại tại "$where" — pub không cho hai '
-      'package trùng tên trong một workspace. Chọn tên khác '
-      '(sẽ tạo "$modulePath"). Không có gì được ghi.',
+      'Package "$packageName" already exists at "$where" — pub does not allow '
+      'two packages with the same name in one workspace. Choose another name '
+      '(this would have created "$modulePath"). Nothing was written.',
     );
   }
 
@@ -114,12 +114,12 @@ class InputActions {
       exit(0);
     }
     final flag = args.where((a) => a.startsWith('-')).firstOrNull;
-    if (flag != null) _usageError('Cờ không hợp lệ: $flag');
+    if (flag != null) _usageError('Unknown flag: $flag');
     if (args.length > 5) {
-      _usageError('Quá nhiều tham số (${args.length}, tối đa 5).');
+      _usageError('Too many arguments (${args.length}, at most 5).');
     }
     if (args.length == 1) {
-      _usageError('Thiếu <name>.');
+      _usageError('Missing <name>.');
     }
 
     String? typeInput;
@@ -133,13 +133,15 @@ class InputActions {
         typeDirInput = args[2];
       }
     } else {
-      stdout.writeln('\nChọn loại module muốn tạo:');
+      stdout.writeln('\nChoose the module type to create:');
       stdout.writeln('1. Feature Package (modules/<name>/feature/)');
       stdout.writeln('2. Domain Micro-Package (modules/<name>/domain/)');
       stdout.writeln('3. Data Micro-Package (modules/<name>/data/)');
       stdout.writeln('4. Core Package (platform/)');
-      stdout.writeln('5. Custom Package (platform/<name>, tiền tố tự chọn)');
-      typeInput = _prompt('Nhập lựa chọn: ');
+      stdout.writeln(
+        '5. Custom Package (platform/<name>, prefix of your choice)',
+      );
+      typeInput = _prompt('Your choice: ');
     }
 
     ModuleType type;
@@ -168,21 +170,21 @@ class InputActions {
         typeDir = 'platform';
         typeName = '';
       default:
-        _usageError('<type> không hợp lệ: "$typeInput" (1-5).');
+        _usageError('Invalid <type>: "$typeInput" (1-5).');
     }
 
     if (type != ModuleType.feature && args.length > 3) {
-      _usageError('<SM> và <route> chỉ dùng cho loại 1 (Feature).');
+      _usageError('<SM> and <route> apply to type 1 (Feature) only.');
     }
 
     if (type == ModuleType.custom) {
       if (args.length < 3) {
         typeDirInput = _prompt(
-          '\nNhập tiền tố tên package (ví dụ: analytics, payments): ',
+          '\nPackage-name prefix (e.g. analytics, payments): ',
         );
       }
       if (typeDirInput == null || typeDirInput.isEmpty) {
-        _usageError('<prefix> không được để trống với loại 5.');
+        _usageError('<prefix> must not be empty for type 5.');
       }
       // A layer prefix would make arch_check classify a platform package as
       // that layer, and a module layer belongs at modules/<name>/<layer> —
@@ -190,28 +192,28 @@ class InputActions {
       const reserved = {'feature', 'features', 'domain', 'data', 'core'};
       if (reserved.contains(typeDirInput)) {
         _usageError(
-          '"$typeDirInput" là tiền tố của một tầng — dùng loại 1-4.',
+          '"$typeDirInput" is a layer prefix — use types 1-4.',
         );
       }
-      _validateName(typeDirInput, 'Tiền tố');
+      _validateName(typeDirInput, 'Prefix');
       // A custom package is a platform package with its own name prefix:
       // `<prefix>_<name>` at `platform/<name>`.
       typeName = typeDirInput;
     } else if (typeDirInput != null && typeDirInput.isNotEmpty) {
       _usageError(
-        '<prefix> chỉ dùng cho loại 5 — truyền "" cho loại $typeInput.',
+        '<prefix> applies to type 5 only — pass "" for type $typeInput.',
       );
     }
 
     if (args.length < 2) {
       nameInput = _prompt(
-        '\nNhập tên module con (ví dụ: profile, analytics, core): ',
+        '\nModule name (e.g. profile, analytics, core): ',
       );
     }
     if (nameInput == null || nameInput.isEmpty) {
-      _usageError('Tên module không được để trống.');
+      _usageError('Module name must not be empty.');
     }
-    _validateName(nameInput, 'Tên module');
+    _validateName(nameInput, 'Module name');
 
     StateManagementType smType = StateManagementType.none;
     FeatureRouteContribution routeContribution =
@@ -221,11 +223,11 @@ class InputActions {
       if (args.length >= 4) {
         smInput = args[3];
       } else {
-        stdout.writeln('\nChọn State Management cho module:');
+        stdout.writeln('\nChoose the state management for the module:');
         stdout.writeln('1. Provider');
         stdout.writeln('2. BLoC');
-        stdout.writeln('3. Không sử dụng');
-        final input = _prompt('Nhập lựa chọn (Mặc định 1): ');
+        stdout.writeln('3. None');
+        final input = _prompt('Your choice (default 1): ');
         smInput = input.isEmpty ? '1' : input;
       }
 
@@ -233,22 +235,24 @@ class InputActions {
         '1' => StateManagementType.provider,
         '2' => StateManagementType.bloc,
         '3' => StateManagementType.none,
-        _ => _usageError('<SM> không hợp lệ: "$smInput" (1, 2 hoặc 3).'),
+        _ => _usageError('Invalid <SM>: "$smInput" (1, 2 or 3).'),
       };
 
       String? routeInput;
       if (args.length >= 5) {
         routeInput = args[4];
       } else {
-        stdout.writeln('\nCách gắn route vào App Shell (DI động):');
         stdout.writeln(
-          '1. IFeatureRouteModule — màn stack độc lập (auth, onboarding, detail…)',
+          '\nHow the feature contributes routes to the app shell (dynamic DI):',
         );
         stdout.writeln(
-          '2. INavDestinationModule — điểm đến chính (CHỈ khi là destination chính của app)',
+          '1. IFeatureRouteModule — stack screens pushed on the app (auth, onboarding, detail…)',
         );
-        stdout.writeln('3. Không scaffold stub route DI');
-        final input = _prompt('Nhập lựa chọn (Mặc định 1): ');
+        stdout.writeln(
+          '2. INavDestinationModule — a primary navigation destination (ONLY for a real top-level tab)',
+        );
+        stdout.writeln('3. No route stub');
+        final input = _prompt('Your choice (default 1): ');
         routeInput = input.isEmpty ? '1' : input;
       }
 
@@ -256,12 +260,12 @@ class InputActions {
         '1' => FeatureRouteContribution.featureRoute,
         '2' => FeatureRouteContribution.dashboardTab,
         '3' => FeatureRouteContribution.none,
-        _ => _usageError('<route> không hợp lệ: "$routeInput" (1, 2 hoặc 3).'),
+        _ => _usageError('Invalid <route>: "$routeInput" (1, 2 or 3).'),
       };
     }
 
     final moduleName = typeName.isEmpty ? nameInput : '${typeName}_$nameInput';
-    _validateName(moduleName, 'Tên package');
+    _validateName(moduleName, 'Package name');
     // A module's layers sit side by side under the module:
     // `modules/<name>/{domain,data,feature}`. Core and custom packages live
     // at `platform/<name>`.
@@ -287,8 +291,8 @@ class InputActions {
     // the rollback snapshot, so nothing could restore it.
     if (moduleDir.existsSync()) {
       stderr.writeln(
-        '[ERROR] Thư mục "$modulePath" đã tồn tại. '
-        'Xoá nó hoặc chọn tên module khác trước khi chạy lại.',
+        '[ERROR] Directory "$modulePath" already exists. '
+        'Remove it or choose another module name, then run again.',
       );
       exit(1);
     }

@@ -98,7 +98,7 @@ Tool cũng tự sửa các mục `path:` bị gãy của package trong workspace
 
 | Tool | Lệnh | Dùng khi |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>]` | Dựng khung package Feature / Domain / Data / Core / Custom mới. Nó thêm module vào **mọi** `app_manifest.yaml`, cả `apps/mobile` lẫn `apps/admin`, rồi chạy `composer sync` để đăng ký package vào workspace và vào mọi app. `apps/admin` chỉ ghép auth + settings. Nếu module mới không thuộc về đó, hãy xoá mục của nó khỏi `apps/admin/app_manifest.yaml` rồi chạy `dart tools/composer/composer.dart sync`. Chạy không tham số trên terminal để vào chế độ tương tác. Feature thiếu `<SM>` hoặc `<route>` thì tool hỏi trên terminal, còn không có terminal thì thoát với mã `64`, nên hãy luôn truyền đủ cả hai; tên không hợp lệ (phải là tên package Dart) hay giá trị sai bị từ chối ngay, trước khi ghi bất cứ thứ gì. `--help` in cú pháp. Câu hỏi và thông báo tiến trình một phần bằng tiếng Việt. |
+| **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>]` | Dựng khung package Feature / Domain / Data / Core / Custom mới. Nó thêm module vào **mọi** `app_manifest.yaml`, cả `apps/mobile` lẫn `apps/admin`, rồi chạy `composer sync` để đăng ký package vào workspace và vào mọi app. `apps/admin` chỉ ghép auth + settings. Nếu module mới không thuộc về đó, hãy xoá mục của nó khỏi `apps/admin/app_manifest.yaml` rồi chạy `dart tools/composer/composer.dart sync`. Chạy không tham số trên terminal để vào chế độ tương tác. Feature thiếu `<SM>` hoặc `<route>` thì tool hỏi trên terminal, còn không có terminal thì thoát với mã `64`, nên hãy luôn truyền đủ cả hai; tên không hợp lệ (phải là tên package Dart) hay giá trị sai bị từ chối ngay, trước khi ghi bất cứ thứ gì. `--help` in cú pháp. |
 | **Unused checker** | `dart tools/unused_checker/check_script.dart` | Dọn dẹp định kỳ. Có lệnh con riêng cho asset, file, package, translation. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Trước một đợt nâng version. Tool liệt kê thứ pub.dev đã có bản mới. Trên terminal, nó hiện tiếp một checklist tương tác: `a` ghi các version đã chọn vào catalog rồi chạy `dependency_sync` + `pub get`, còn `q` để thoát. Không có TTY (CI, pipe) thì nó chỉ báo cáo. Thoát với mã `1` nếu bước resolve, `pub outdated` hay áp dụng cập nhật thất bại. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Rà soát tuỳ chọn trước khi mở PR. Cần Gemini API key (`GEMINI_API_KEY`, `--api-key`, hoặc lưu khi tool hỏi). Hỗ trợ thêm `--all`, `--file <đường_dẫn>`, `--focus architecture,security`, và `--language <mã>` chỉ cho lần chạy đó. File sinh tự động, file test và file bị git ignore luôn bị loại. Không có key và không có terminal thì thoát với mã `1`. |
@@ -129,22 +129,13 @@ dart tools/module_generator/generate.dart 3 payment
 # 1. Phân tích tĩnh — phải sạch trên toàn workspace
 flutter analyze
 
-# 2. Test — test nằm theo từng package, nên chạy theo từng package
-cd platform/app_shell               && flutter test && cd -
-cd platform/base_ui                 && flutter test && cd -
-cd platform/common                  && flutter test && cd -
-cd platform/data_core               && flutter test && cd -
-cd platform/database                && flutter test && cd -
-cd platform/network                 && flutter test && cd -
-cd platform/notifications           && flutter test && cd -
-cd platform/provider_state_management && flutter test && cd -
-cd platform/responsive              && flutter test && cd -
-cd platform/storage                 && flutter test && cd -
-cd platform/ui_kit                  && flutter test && cd -
-cd modules/auth/data                && flutter test && cd -
-cd modules/auth/feature             && flutter test && cd -
-cd modules/cache/data               && flutter test && cd -
-cd modules/dashboard/feature        && flutter test && cd -
+# 2. Test — test nằm theo từng package, nên chạy mọi package có thư mục test/
+#    (cùng cách CI Gate 3 tìm; bash — Git Bash trên Windows)
+for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort); do
+  dir=$(dirname "$pubspec")
+  [ -d "$dir/test" ] || continue
+  (cd "$dir" && flutter test) || { echo "FAILED: $dir"; break; }
+done
 
 # 3. Catalog version đang đồng bộ
 dart tools/dependency_sync.dart --check
@@ -155,7 +146,7 @@ dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Hiện chỉ mười lăm package trên có test (CI Gate 3 tự tìm mọi thư mục `test/`); hãy viết test của bạn ngay cạnh code bạn viết.
+Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Vòng lặp tự tìm chứ không liệt kê cứng, nên vẫn đúng khi bạn thêm một package có test hay gỡ một sample từng có test — CI Gate 3 cũng tìm theo cách đó. Nó dừng ở package fail đầu tiên và in tên package; hãy viết test của bạn ngay cạnh code bạn viết. Trên Windows, chạy nó trong Git Bash (đi kèm Git for Windows) — PowerShell và `cmd` không có `find`/`dirname` kiểu này.
 
 > [!CAUTION]
 > `flutter analyze` **không** bắt được lỗi thứ tự DI. Một `@Singleton` eager phụ thuộc type được đăng ký ở module chạy *sau* vẫn compile bình thường rồi ném `not registered` lúc khởi động. Sau khi đổi đăng ký DI, hãy kiểm tra thứ tự module trong file sinh ra `apps/mobile/lib/di/injection.config.dart`, cùng đăng ký của type và các lệnh `gh<Dep>()` của nó trong file sinh ra `lib/di/module.module.dart` của package. Xem [../guides/05_di.md](../guides/05_di.md).

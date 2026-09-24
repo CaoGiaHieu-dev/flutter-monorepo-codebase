@@ -52,18 +52,18 @@ void main(List<String> args) async {
   );
 
   try {
-    // 1. Khởi tạo Sandbox
+    // 1. Create the sandbox
     stdout.writeln('⏳ Preparing temporary sandbox...');
     if (sandboxDir.existsSync()) {
       sandboxDir.deleteSync(recursive: true);
     }
     sandboxDir.createSync(recursive: true);
 
-    // 2. Tái tạo Pubspec
+    // 2. Rebuild a pubspec from the catalog
     final pubspecFile = File(p.join(sandboxDir.path, 'pubspec.yaml'));
     final dependenciesContent = dependenciesFile.readAsStringSync();
 
-    // Gắn thêm meta data tối thiểu để thành file pubspec hợp lệ
+    // Add the minimum metadata that makes it a valid pubspec
     final dummyPubspecContent =
         '''
 name: outdated_check
@@ -87,7 +87,7 @@ $dependenciesContent
 
     stdout.writeln('⏳ Resolving dependencies (this might take a moment)...\n');
 
-    // 3. Chạy pub get (ẩn log trừ khi lỗi)
+    // 3. Run pub get (output hidden unless it fails)
     final getResult = await Process.run(
       executable,
       getArgs,
@@ -104,7 +104,7 @@ $dependenciesContent
       return;
     }
 
-    // 4. Chạy pub outdated (truyền thẳng stdout để giữ màu)
+    // 4. Run pub outdated (stdout passed through to keep its colours)
     final outdatedProcess = await Process.start(
       executable,
       outdatedArgs,
@@ -313,10 +313,10 @@ $dependenciesContent
     stderr.writeln(stackTrace);
     exitCode = 1;
   } finally {
-    // 5. Dọn dẹp
+    // 5. Clean up
     try {
       if (sandboxDir.existsSync()) {
-        // Nghỉ một chút trước khi xoá để nhả handle trên Windows
+        // Pause briefly before deleting so Windows releases its file handles
         await Future.delayed(const Duration(milliseconds: 200));
         sandboxDir.deleteSync(recursive: true);
       }

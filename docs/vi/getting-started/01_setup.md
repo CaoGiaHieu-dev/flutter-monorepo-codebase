@@ -283,6 +283,16 @@ class EnvConstants {
 
 Cả `flutter run` lẫn `flutter build` đều phải gọi **từ `apps/mobile/`**. Thư mục gốc workspace không có project `android/` hay `ios/`, nên chạy `-t apps/mobile/lib/main.dart` từ root không thể chạy được.
 
+> [!NOTE]
+> **`apps/mobile` chỉ dành cho Android + iOS.** Nó không commit runner `linux/`, `macos/`,
+> `windows/` hay `web/`, nên `flutter run -d linux` hoặc `flutter build linux` ở đó dừng với
+> *No Linux desktop project configured*. Muốn build desktop, hãy dùng app thứ hai:
+> [`apps/admin/README.md`](../../../apps/admin/README.md) sinh runner desktop cho nó và chạy nó.
+> Muốn thêm một nền tảng còn thiếu cho một app, chạy `flutter create --platforms=linux .` (hoặc
+> `macos`, `windows`) **bên trong thư mục của app đó** — không bao giờ ở gốc workspace — rồi xoá
+> `test/widget_test.dart` và `analysis_options.yaml` mà lệnh này sinh ra, như README đó giải thích.
+> Repo này chỉ cấu hình `--flavor` cho Android và iOS; bỏ cờ này khi chạy desktop.
+
 ### Từ dòng lệnh
 
 ```bash

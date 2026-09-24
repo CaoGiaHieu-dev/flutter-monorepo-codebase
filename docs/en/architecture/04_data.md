@@ -82,7 +82,11 @@ Future<Result<T>> execute<R, T>(
     }
     await onFailure?.call(response);
     return Failure(
-      ErrorHandler.serverFailure('Request failed based on success condition', null),
+      // Coded ErrorCodes.RESPONSE_REJECTED — never a 5xx — with the envelope's
+      // message when a BaseEntity reports an error.
+      ErrorHandler.responseRejectedFailure(
+        response is BaseEntity && response.hasError ? response.message : null,
+      ),
     );
   } catch (e) {
     return Failure(ErrorHandler.handleError(e));
@@ -123,7 +127,7 @@ Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `platfo
 > );
 > ```
 >
-> In a release build the user sees **"Unknown error occurred"** for every failed sign-in. Worse, any UI that maps failures by code — such as `AuthProvider._mapAuthFailure`, which switches on `401` / `404` — can never match, because the code is always `9999`.
+> In a release build the user sees **"Unknown error occurred"** for every failed sign-in. Worse, any UI that maps failures by code — such as `AuthProvider.mapAuthFailure`, which matches an `AuthFailure` with `401` and a `ServerFailure` with `404` — can never match, because the code is always `9999`.
 >
 > If you add a Firebase-backed repository, add the matching branch to `ErrorHandler` first.
 
@@ -368,7 +372,7 @@ Three details carry the weight:
 
 | Detail | Why it matters |
 |:---|:---|
-| `successCondition` | Without it, `execute` treats **any** response that did not throw as a success. An API that reports failure inside a 200 body would log the user in |
+| `successCondition` | Without it, `execute` treats **any** response that did not throw as a success. An API that reports failure inside a 200 body would log the user in. A rejected response fails with `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)` — not `500` — so the session gateway treats it as the server's refusal, not an outage |
 | `onSuccess` saves the token | `NetworkConfig.getToken()` reads it back through `IAuthSessionGateway`, which `data_auth` implements over `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger |
 | `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward — there is a test asserting exactly that |
 

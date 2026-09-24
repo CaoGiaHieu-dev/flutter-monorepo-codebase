@@ -65,7 +65,7 @@ class AuthProvider extends BaseProvider<UserEntity>
         onSuccess: (user) async {
           DynamicLogger.log('Login successful for user: ${user?.name}');
         },
-        errorStateBuilder: _mapAuthFailure,
+        errorStateBuilder: mapAuthFailure,
       ),
     );
   }

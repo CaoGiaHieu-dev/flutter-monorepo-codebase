@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../utils/error_codes.dart';
 import 'exceptions.dart';
 import 'failures.dart';
 
@@ -51,7 +52,29 @@ class ErrorHandler {
   /// - [stackTrace]: Optional stack trace for debugging
   ///
   /// Returns an [AppFailure] that represents the error in domain terms
+  ///
+  /// **Never throws.** Every repository funnels its `catch` through here, so
+  /// an exception escaping this method would escape `IBaseRepository.execute`
+  /// too — and a caller awaiting a `Result` (a provider in its loading state)
+  /// would never get one. Anything that goes wrong while classifying [error]
+  /// therefore degrades to the generic unknown-error failure.
   static AppFailure handleError(dynamic error, [StackTrace? stackTrace]) {
+    try {
+      return _classify(error);
+    } catch (_) {
+      return const ServerFailure(
+        message: _unknownMessage,
+        code: ErrorCodes.UNKNOWN,
+      );
+    }
+  }
+
+  /// Message of the generic failure shown in release builds.
+  static const String _unknownMessage = 'Unknown error occurred';
+
+  /// The classification behind [handleError]; may throw on a hostile
+  /// [error] (a `toString` that throws, say), which [handleError] absorbs.
+  static AppFailure _classify(dynamic error) {
     // Handle custom application exceptions
     if (error is AppException) {
       return _handleAppException(error);
@@ -86,8 +109,8 @@ class ErrorHandler {
 
     // Handle generic exceptions
     return ServerFailure(
-      message: _isDebug ? error.toString() : 'Unknown error occurred',
-      code: 9999,
+      message: _isDebug ? error.toString() : _unknownMessage,
+      code: ErrorCodes.UNKNOWN,
     );
   }
 
@@ -137,23 +160,16 @@ class ErrorHandler {
         return const NetworkFailure(message: 'Connection timeout', code: 1003);
 
       case DioExceptionType.badResponse:
-        final statusCode = exception.response?.statusCode;
-        String message = 'Server error';
-        if (exception.response?.data is Map?) {
-          message =
-              exception.response?.data?['message'] ??
-              exception.response?.statusMessage ??
-              'Server error';
-        } else {
-          message = exception.response?.statusMessage ?? 'Server error';
-        }
-
-        return _createFailureFromStatusCode(statusCode, message);
+        final response = exception.response;
+        return _createFailureFromStatusCode(
+          response?.statusCode,
+          _messageOf(response),
+        );
 
       case DioExceptionType.cancel:
         return const ServerFailure(
           message: 'Request was cancelled',
-          code: 1004,
+          code: ErrorCodes.REQUEST_CANCELLED,
         );
 
       case DioExceptionType.connectionError:
@@ -176,6 +192,37 @@ class ErrorHandler {
     }
   }
 
+  /// The user-facing message of an error response.
+  ///
+  /// Backends disagree on the shape of `message`: a plain string, a list of
+  /// validation messages (NestJS's `{"message": ["email must be an
+  /// email"]}`), an object, a number. Reading it as a `String` threw a
+  /// `TypeError` for every shape but the first. Falls back to the HTTP
+  /// status message, then to a generic one, when the body carries nothing
+  /// usable — a non-map body included.
+  static String _messageOf(Response<dynamic>? response) {
+    final data = response?.data;
+    final fromBody = data is Map ? _textOf(data['message']) : null;
+    return fromBody ?? _textOf(response?.statusMessage) ?? 'Server error';
+  }
+
+  /// [value] as display text, or `null` when it holds none.
+  ///
+  /// A list is joined one entry per line, skipping entries with no text;
+  /// anything else that is not a string goes through `toString`.
+  static String? _textOf(Object? value) {
+    if (value == null) return null;
+    if (value is String) {
+      final text = value.trim();
+      return text.isEmpty ? null : text;
+    }
+    if (value is Iterable) {
+      final lines = value.map(_textOf).whereType<String>();
+      return lines.isEmpty ? null : lines.join('\n');
+    }
+    return _textOf(value.toString());
+  }
+
   /// Creates a network failure for connection issues
   static NetworkFailure networkFailure([String? message]) {
     return NetworkFailure(
@@ -194,6 +241,30 @@ class ErrorHandler {
       message: message ?? 'Server error occurred',
       code: code ?? 500,
       data: data,
+    );
+  }
+
+  /// The failure for a response the server sent but the caller's success
+  /// condition rejected — a 200 whose envelope reports an error.
+  ///
+  /// Coded [ErrorCodes.RESPONSE_REJECTED], never a 5xx: the server answered,
+  /// so this is its verdict, not a transient fault. [message] is the
+  /// envelope's own message when it carries one.
+  static ServerFailure responseRejectedFailure([String? message]) {
+    final text = message?.trim();
+    return ServerFailure(
+      message: (text == null || text.isEmpty)
+          ? 'Request failed based on success condition'
+          : text,
+      code: ErrorCodes.RESPONSE_REJECTED,
+    );
+  }
+
+  /// The failure for an empty response where a value was required.
+  static ServerFailure emptyResponseFailure([String? message]) {
+    return ServerFailure(
+      message: message ?? 'Response data is null',
+      code: ErrorCodes.EMPTY_RESPONSE,
     );
   }
 

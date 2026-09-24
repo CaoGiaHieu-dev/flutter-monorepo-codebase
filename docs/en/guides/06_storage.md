@@ -115,29 +115,33 @@ class ObfuscatedBytes {
 
 `ObfuscatedString` (in `storage_value.dart`) does the same for cached values. This raises the bar for a memory-dump attack; it is not a substitute for the layers above.
 
-### Self-healing when the Keychain breaks
+### When the Keychain misbehaves — retry, never wipe
 
-A corrupted KeyStore/Keychain would otherwise brick the app on every launch. `SecureStorageImpl` detects it and resets rather than looping:
+Reading the master key can fail for reasons that pass: the Keychain before the first unlock after a reboot (a background launch), a busy KeyStore. `SecureStorageImpl` used to treat *any* such failure as corruption and call `deleteAll()` — which destroyed every secure value, including `PrefStorageImpl`'s master key, which lives in the same store. Now:
 
 ```dart
 // platform/storage/lib/src/impl/secure/secure_storage_impl.dart
-try {
-  masterKey = await _storage.read(key: masterKeyId);
-} catch (e) {
-  // KeyStore corruption detected! Self-heal by clearing secure storage.
-  DynamicLogger.log(
-    'KeyStore/Keychain corruption detected during init. Resetting storage. Error: ${e.runtimeType}',
-    tag: 'SecureStorageImpl',
-    level: LogLevel.WARNING,
-  );
-  try {
-    await _storage.deleteAll();
-  } catch (_) {}
-  masterKey = null;
+Future<String?> _readMasterKey() async {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      return await _storage.read(key: _MASTER_KEY_ID);
+    } catch (e) {
+      final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
+      // … logged: WARNING while retrying, ERROR on the last attempt …
+      if (lastAttempt) rethrow; // nothing deleted, no new key generated
+      await Future<void>.delayed(_retryDelay * attempt);
+    }
+  }
 }
 ```
 
-`read()` applies the same idea per key: an undecryptable key is deleted and `null` returned, so one bad row cannot fail every launch.
+| Failure | What happens |
+| :-- | :-- |
+| Platform error reading the master key | retried (3 attempts); if it persists, `init` **rethrows** with the store untouched — generating a fresh key would orphan every value sealed with the unreadable one |
+| Master key present but unusable (not a 256-bit base64 key) | only that key is replaced; values sealed with it fail to decrypt and are dropped one by one by `read()` |
+| Corruption of the plugin's own storage | handled natively: on Android `AndroidOptions.resetOnError` (on by default) resets what it cannot decrypt before the call returns |
+| Platform error in `read(key)` | returns `null` **and keeps the value** — it is still there for the next read |
+| A value that fails to decrypt or decode in `read(key)` | that one key is deleted and `null` returned, so one bad row cannot fail every launch |
 
 ---
 

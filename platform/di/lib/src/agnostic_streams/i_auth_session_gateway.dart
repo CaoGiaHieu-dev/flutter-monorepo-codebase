@@ -27,11 +27,20 @@ abstract class IAuthSessionGateway {
 
   /// Renews the session after a 401 and returns the fresh token.
   ///
-  /// Returns null when the server **rejected** renewal — the session is over,
-  /// and the transport clears it. Throws when renewal could not be attempted
-  /// (no network, a 5xx): the session may still be valid, so it is kept and
-  /// only the waiting requests fail. The implementation is responsible for
-  /// persisting the new credentials before returning.
+  /// Three outcomes:
+  ///
+  /// - **a token** — renewed; the implementation has already persisted the
+  ///   new credentials.
+  /// - **null** — the server **answered and refused**: a 401/403, another
+  ///   4xx, or a 200 whose envelope reports an error. The session is over and
+  ///   the transport clears it.
+  /// - **throws** — renewal got no verdict: no network, a real HTTP 5xx, a
+  ///   cancelled request. The session may still be valid, so it is kept and
+  ///   only the waiting requests fail.
+  ///
+  /// Only the throw keeps the session, so an implementation must throw for
+  /// nothing but those transient cases. A refusal misread as transient keeps
+  /// a dead session forever: every later 401 retries the same renewal.
   Future<String?> refreshToken();
 
   /// Drops the stored credentials after the server rejected renewal.

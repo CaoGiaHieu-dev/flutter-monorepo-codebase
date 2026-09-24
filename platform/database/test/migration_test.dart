@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:core_database/core_database.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart' as drift;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/test_database.dart';
 
@@ -157,6 +161,55 @@ void main() {
       );
     });
 
+    test('a downgrade with no registered steps throws', () async {
+      final runner = DatabaseMigrationRunner(const []);
+
+      await expectLater(
+        runner.run(migrator, 2, 1),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
+
+    test('a downgrade from a version newer than any step throws', () async {
+      final log = <String>[];
+      final runner = DatabaseMigrationRunner([
+        _RecordingMigration(2, log),
+        _RecordingMigration(3, log),
+      ]);
+
+      await expectLater(
+        runner.run(migrator, 5, 1),
+        throwsA(isA<UnsupportedError>()),
+      );
+      // Nothing ran: a partial downgrade would be worse than none.
+      expect(log, isEmpty);
+    });
+
+    test('the downgrade error is never mistaken for corruption', () async {
+      final runner = DatabaseMigrationRunner(const []);
+      Object? error;
+      try {
+        await runner.run(migrator, 3, 1);
+      } catch (e) {
+        error = e;
+      }
+      expect(error, isNotNull);
+      expect(DriftDatabaseOpener.isCorruptionError(error!), isFalse);
+    });
+
+    test('a downgrade tolerates gaps below the newest step', () async {
+      final log = <String>[];
+      final runner = DatabaseMigrationRunner([
+        _RecordingMigration(2, log),
+        // no migration for version 3
+        _RecordingMigration(4, log),
+      ]);
+
+      await runner.run(migrator, 4, 1);
+
+      expect(log, orderedEquals(['down:4', 'down:2']));
+    });
+
     test('runs nothing when no migration is registered', () async {
       final runner = DatabaseMigrationRunner(const []);
 
@@ -167,4 +220,60 @@ void main() {
       expect(runner.migrations, isEmpty);
     });
   });
+
+  group('downgrade against a real file', () {
+    late Directory tempDir;
+    late File file;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('core_database_down');
+      file = File(p.join(tempDir.path, 'down.sqlite'));
+    });
+
+    tearDown(() async {
+      if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+    });
+
+    Future<void> open(
+      int schemaVersion, [
+      List<IDatabaseMigration> migrations = const [],
+    ]) async {
+      final database = _VersionedDatabase(
+        drift.NativeDatabase(file),
+        schemaVersion,
+        migrations,
+      );
+      try {
+        await database.customSelect('SELECT 1').get();
+      } finally {
+        await database.close();
+      }
+    }
+
+    test('an unsupported downgrade leaves the stored version alone', () async {
+      await open(3);
+
+      // An older build with no downgrade steps refuses to open…
+      await expectLater(open(1), throwsA(anything));
+
+      // …and the newer build still finds its own version: no upgrade runs.
+      final log = <String>[];
+      await open(3, [_RecordingMigration(2, log), _RecordingMigration(3, log)]);
+      expect(log, isEmpty);
+    });
+  });
+}
+
+/// A table-less database whose schema version and steps a test chooses.
+class _VersionedDatabase extends TestDatabase {
+  _VersionedDatabase(super.executor, this.schemaVersion, this._migrations);
+
+  @override
+  final int schemaVersion;
+
+  final List<IDatabaseMigration> _migrations;
+
+  @override
+  drift.MigrationStrategy get migration =>
+      driftMigrationStrategy(database: this, migrations: _migrations);
 }

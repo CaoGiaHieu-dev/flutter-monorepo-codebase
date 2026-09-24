@@ -265,8 +265,8 @@ The gateway's answer decides what happens to the session:
 | `refreshToken()` | Meaning | `RefreshTokenHandler` |
 | :-- | :-- | :-- |
 | a token | renewed | replays the request and every one waiting on it |
-| `null` | the server **refused** (401/403, any 4xx) | calls `onRefreshFailed` once, rejects them all |
-| throws | never got an answer (no network, 5xx, cancelled) | rejects them all, **keeps the session** |
+| `null` | the server **refused** (401/403, any 4xx, or a 200 whose envelope reports an error — `ErrorCodes.RESPONSE_REJECTED`) | calls `onRefreshFailed` once, rejects them all |
+| throws | never got an answer (no network, a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
 
 `onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `IAuthSessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
 
@@ -389,7 +389,7 @@ openssl s_client -servername <host> -connect <host>:443 </dev/null \
 
 Pin **at least two** keys — the leaf plus a backup — so certificate rotation does not lock every installed client out of the API.
 
-`dev` bypasses certificate validation entirely (for local self-signed servers); `staging` and `prod` go through the pinning path.
+Certificate validation is bypassed (for local self-signed servers) **only in a debug build that explicitly declared the `dev` flavor** — `AppConfig.bypassesCertificateValidation`. Everything else goes through the pinning path: `staging`, `prod`, a `dev` profile or release build, and a build with a **missing or unknown** flavor, which is treated as `prod` and logged as an ERROR. This fails closed on purpose: `AppConfig.appFlavor` used to fall back to `dev`, so a build made without `--flavor` — release included — accepted every certificate. `appFlavor` itself (the DI environment) now falls back to `dev` in a debug build and to `prod` otherwise.
 
 ---
 

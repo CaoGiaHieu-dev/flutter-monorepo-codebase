@@ -115,10 +115,11 @@ Widget build(BuildContext context) {
   // the same modules feed both forms below, unchanged.
   final destinations = [for (final tab in tabs) tab.destination(context)];
 
-  // A phone in portrait keeps the bottom bar. From a medium window up — a
-  // tablet, an unfolded foldable, a desktop, and a phone in landscape —
-  // the tabs move to a side rail, which costs width the window has to
-  // spare instead of height it has not.
+  // A phone keeps the bottom bar (the shell locks phone-sized displays to
+  // portrait). From a medium window up — a tablet in either orientation,
+  // an unfolded foldable, a desktop window — the tabs move to a side
+  // rail, which costs width the window has to spare instead of height it
+  // has not.
   final sizeClass = context.windowSizeClass;
   if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
     return Scaffold(
@@ -132,11 +133,16 @@ Widget build(BuildContext context) {
   }
 
   final extended = sizeClass.isAtLeast(WindowSizeClass.large);
+  // The rail sits at the start edge: the left in LTR, the right in RTL
+  // (a `Row` follows the text direction). It pads for the insets on its
+  // outer side only; the side facing the content is the content's to pad.
+  final isRtl = Directionality.of(context) == TextDirection.rtl;
   return Scaffold(
     body: Row(
       children: [
         SafeArea(
-          right: false,
+          left: !isRtl,
+          right: isRtl,
           child: NavigationRail(
             selectedIndex: selected,
             onDestinationSelected: onSelect,
@@ -156,7 +162,7 @@ Widget build(BuildContext context) {
 
 Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả.
 
-Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — điện thoại xoay ngang, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-layout-thích-ứng-tablet-máy-gập-chia-đôi-màn-hình).
+Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — tablet ở cả hai hướng, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. (Màn hình cỡ điện thoại bị `AppInitializer` khoá dọc lúc khởi động, nên luôn hiện bottom bar; bỏ khoá đó thì điện thoại xoay ngang sẽ nhận rail theo đúng quy tắc này.) Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-layout-thích-ứng-tablet-máy-gập-chia-đôi-màn-hình).
 
 ### Dashboard KHÔNG được phép
 

@@ -11,6 +11,8 @@ abstract class IBaseRepository {
   /// - [onSuccess]: Optional side effect callback executed only when the operation succeeds.
   /// - [onFailure]: Optional side effect callback executed only when the operation fails.
   /// - [successCondition]: Custom condition to evaluate if the response should be considered a success. If omitted, defaults to true (assuming no exception was thrown).
+  ///   A rejected response fails with `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)`,
+  ///   carrying the envelope's `message` when the response is a [BaseEntity] reporting an error.
   Future<Result<T>> execute<R, T>(
     Future<R> Function() request, {
     T Function(R data)? mapper,
@@ -40,18 +42,19 @@ abstract class IBaseRepository {
           try {
             return Success(response as T);
           } catch (_) {
-            return Failure(
-              ErrorHandler.serverFailure('Response data is null', null),
-            );
+            return Failure(ErrorHandler.emptyResponseFailure());
           }
         }
       }
 
       await onFailure?.call(response);
+      // The server answered; the success condition rejected what it said.
+      // Coded apart from HTTP 5xx so a caller can tell this verdict from a
+      // transient fault — it used to be `serverFailure(…, null)`, i.e. code
+      // 500, which the auth gateway read as "server down, keep the session".
       return Failure(
-        ErrorHandler.serverFailure(
-          'Request failed based on success condition',
-          null,
+        ErrorHandler.responseRejectedFailure(
+          response is BaseEntity && response.hasError ? response.message : null,
         ),
       );
     } catch (e) {
@@ -88,7 +91,7 @@ abstract class IBaseRepository {
           return Success(result as T);
         } catch (_) {
           return Failure(
-            ErrorHandler.serverFailure('Operation returned null', null),
+            ErrorHandler.emptyResponseFailure('Operation returned null'),
           );
         }
       }

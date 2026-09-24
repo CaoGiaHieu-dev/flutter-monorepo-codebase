@@ -82,7 +82,11 @@ Future<Result<T>> execute<R, T>(
     }
     await onFailure?.call(response);
     return Failure(
-      ErrorHandler.serverFailure('Request failed based on success condition', null),
+      // Coded ErrorCodes.RESPONSE_REJECTED — never a 5xx — with the envelope's
+      // message when a BaseEntity reports an error.
+      ErrorHandler.responseRejectedFailure(
+        response is BaseEntity && response.hasError ? response.message : null,
+      ),
     );
   } catch (e) {
     return Failure(ErrorHandler.handleError(e));
@@ -123,7 +127,7 @@ Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` 
 > );
 > ```
 >
-> Ở bản release, người dùng thấy **"Unknown error occurred"** cho mọi lần đăng nhập thất bại. Tệ hơn, mọi UI phân loại lỗi theo code — chẳng hạn `AuthProvider._mapAuthFailure` đang switch theo `401` / `404` — sẽ **không bao giờ khớp**, vì code luôn là `9999`.
+> Ở bản release, người dùng thấy **"Unknown error occurred"** cho mọi lần đăng nhập thất bại. Tệ hơn, mọi UI phân loại lỗi theo code — chẳng hạn `AuthProvider.mapAuthFailure` đang khớp `AuthFailure` mang `401` và `ServerFailure` mang `404` — sẽ **không bao giờ khớp**, vì code luôn là `9999`.
 >
 > Nếu bạn thêm repository chạy trên Firebase, hãy bổ sung nhánh tương ứng vào `ErrorHandler` trước.
 
@@ -368,7 +372,7 @@ Ba chi tiết gánh toàn bộ sức nặng:
 
 | Chi tiết | Vì sao quan trọng |
 |:---|:---|
-| `successCondition` | Thiếu nó, `execute` coi **mọi** response không ném exception là thành công. Một API báo lỗi trong body 200 sẽ cho người dùng đăng nhập được |
+| `successCondition` | Thiếu nó, `execute` coi **mọi** response không ném exception là thành công. Một API báo lỗi trong body 200 sẽ cho người dùng đăng nhập được. Response bị từ chối trả về `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)` — không phải `500` — nên session gateway coi đó là server từ chối, không phải sự cố |
 | `onSuccess` lưu token | `NetworkConfig.getToken()` đọc lại token qua `IAuthSessionGateway`, do `data_auth` hiện thực trên nền `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt |
 | `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên — có hẳn một test khẳng định điều đó |
 

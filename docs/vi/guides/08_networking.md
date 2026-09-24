@@ -265,8 +265,8 @@ Câu trả lời của gateway quyết định số phận của phiên đăng n
 | `refreshToken()` | Nghĩa là | `RefreshTokenHandler` |
 | :-- | :-- | :-- |
 | một token | đã gia hạn | gửi lại request và mọi request đang chờ nó |
-| `null` | server **từ chối** (401/403, mọi 4xx) | gọi `onRefreshFailed` một lần, reject tất cả |
-| ném lỗi | không nhận được câu trả lời (mất mạng, 5xx, bị huỷ) | reject tất cả, **giữ nguyên phiên** |
+| `null` | server **từ chối** (401/403, mọi 4xx, hoặc một 200 mà envelope báo lỗi — `ErrorCodes.RESPONSE_REJECTED`) | gọi `onRefreshFailed` một lần, reject tất cả |
+| ném lỗi | không nhận được câu trả lời (mất mạng, HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
 
 `onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `IAuthSessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token.
 
@@ -389,7 +389,7 @@ openssl s_client -servername <host> -connect <host>:443 </dev/null \
 
 Pin **ít nhất hai** key — leaf cộng một key dự phòng — để khi xoay vòng certificate không khoá chết toàn bộ client đã cài trên máy người dùng.
 
-Flavor `dev` bỏ qua kiểm tra certificate hoàn toàn (phục vụ server tự ký cục bộ); `staging` và `prod` đi qua đường pinning.
+Kiểm tra certificate chỉ bị bỏ qua (phục vụ server tự ký cục bộ) **trong bản debug đã khai báo tường minh flavor `dev`** — `AppConfig.bypassesCertificateValidation`. Mọi trường hợp khác đi qua đường pinning: `staging`, `prod`, bản profile hay release của `dev`, và bản build **thiếu hoặc sai** flavor — được coi như `prod` và ghi log mức ERROR. Đây là cố ý fail closed: trước đây `AppConfig.appFlavor` lùi về `dev`, nên một bản build không có `--flavor` — kể cả release — chấp nhận mọi certificate. Bản thân `appFlavor` (môi trường DI) giờ lùi về `dev` ở bản debug và về `prod` ở các bản còn lại.
 
 ---
 

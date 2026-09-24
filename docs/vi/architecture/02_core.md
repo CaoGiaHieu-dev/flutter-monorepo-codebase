@@ -35,7 +35,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình, system UI) |
+| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình — chỉ khoá dọc trên màn hình cỡ điện thoại, system UI) |
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget`, page transition |
 | Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
@@ -212,7 +212,7 @@ Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa pres
 
 Ngoài mã hoá dữ liệu lúc nghỉ (AES-256-CBC với IV ngẫu nhiên mỗi lần ghi), `StorageValue` còn giữ giá trị **trong bộ nhớ** ở dạng XOR mask ngẫu nhiên, chỉ lộ ra đúng khoảnh khắc cần đọc. Master key cũng được xử lý y hệt. Điều này nâng rào chắn trước tấn công đọc memory dump — một lớp mà phần lớn template bỏ qua hoàn toàn.
 
-`SecureStorageImpl` còn tự phục hồi: nếu mục trong Keychain/KeyStore không đọc được nữa, nó xoá và sinh lại master key thay vì để app kẹt vĩnh viễn không khởi động được.
+`SecureStorageImpl` không bao giờ xoá sạch kho khi gặp lỗi platform: việc đọc master key thất bại (Keychain bị khoá trước lần mở khoá đầu tiên, KeyStore đang bận) được thử lại rồi ném lại lỗi mà không xoá gì; chỉ master key có nhưng không dùng được mới bị thay, và chỉ giá trị không giải mã được mới bị xoá. Xem [hướng dẫn storage](../guides/06_storage.md).
 
 ### Quyền sở hữu
 

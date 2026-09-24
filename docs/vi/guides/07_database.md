@@ -382,6 +382,12 @@ Future<void> run(Migrator m, int from, int to) async {
     return;
   }
 
+  // A downgrade from a schema this build has no step for is refused.
+  final newestKnown = _migrations.isEmpty ? null : _migrations.last.version;
+  if (newestKnown == null || newestKnown < from) {
+    throw UnsupportedError('Cannot downgrade the schema from version $from …');
+  }
+
   for (final migration in _migrations.reversed) {
     if (migration.version > to && migration.version <= from) {
       await migration.downgrade(m);
@@ -395,6 +401,7 @@ Ba tính chất đáng gọi tên:
 1. **Dùng `if` thuần, không phải `else if`.** Thiết bị bỏ lỡ vài bản phát hành sẽ replay *mọi* bước trung gian thay vì nhảy thẳng tới hình dạng mới nhất.
 2. **Upgrade chạy tăng dần, downgrade chạy giảm dần.** Thứ tự quan trọng ở cả hai chiều.
 3. **Khoảng trống version là hợp lệ.** Một bản phát hành có thể không đổi schema, để trống số version đó.
+4. **Downgrade cần bước tường minh.** Đi từ `from` xuống `to` sẽ ném `UnsupportedError` trừ khi có một bước đăng ký cho version `from` trở lên — runner phải biết schema mà nó đang rời bỏ. Thiếu kiểm tra này, runner không làm gì cả và drift đóng dấu `user_version` thấp hơn lên các bảng vẫn mang hình dạng mới; cài lại bản mới hơn sau đó sẽ replay các bước upgrade trên chúng (trùng cột) và lỗi ở mọi lần khởi động. Lỗi ném ra giữ nguyên file và version của nó, và `DriftDatabaseOpener` báo nó như lỗi khởi động thay vì cách ly file. Trên thực tế một bản cũ chỉ có các bước đó nếu chúng được phát hành trước thay đổi mà chúng đảo ngược — ngoài ra, cài bản cũ đè lên schema mới hơn là không được hỗ trợ.
 
 Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải giữa chừng migration. Phát hiện lỗi wiring khi đã chạy được nửa đường sẽ để lại schema migrate dở.
 
@@ -532,7 +539,7 @@ Bộ test hiện có được chia theo đúng vị trí code:
 
 | Package | File | Bao phủ |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, registry rỗng |
+| `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng |
 | `core_database` | `drift_database_opener_test.dart` | Trực tiếp predicate phát hiện hỏng — gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
 | `data_cache` | `cache_database_test.dart` | Round-trip DAO, wiring migration, và hành vi trên **file thật** (WAL, khoá ngoại, dữ liệu sống sót qua close/reopen) |
 | `data_cache` | `database_handle_test.dart` | Accessor đọc/ghi, chung một kết nối, transaction commit / rollback / giá trị trả về |

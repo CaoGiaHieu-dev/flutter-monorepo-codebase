@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:core_storage/core_storage.dart';
 import 'package:encrypt/encrypt.dart' as encrypter;
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -105,6 +105,99 @@ void main() {
       await secureStorage.delete('secure_key');
       final value = await secureStorage.read<String>('secure_key');
       expect(value, isNull);
+    });
+  });
+
+  group('SecureStorageImpl — platform errors never wipe the store', () {
+    // Not the first launch, so init's first-run cleanup stays out of the way.
+    const notFirstLaunch = <String, Object>{'firstTimeOpenApp': false};
+    late Map<String, String> store;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues(notFirstLaunch);
+      store = {
+        '_internal_master_key': testMasterKey,
+        // PrefStorageImpl's key lives in the same store.
+        '_internal_pref_master_key': 'pref-key',
+      };
+      FlutterSecureStorage.setMockInitialValues(store);
+    });
+
+    test('a transient master-key read failure is retried', () async {
+      final storage = _FlakyStorage(failuresBeforeSuccess: 2);
+      final secure = SecureStorageImpl.withStorage(storage);
+
+      await secure.init();
+
+      expect(storage.readCalls, 3);
+      expect(storage.deleteAllCalls, 0);
+      expect(store['_internal_master_key'], testMasterKey);
+      expect(store['_internal_pref_master_key'], 'pref-key');
+    });
+
+    test('a persistent failure rethrows and deletes nothing', () async {
+      final storage = _FlakyStorage(failuresBeforeSuccess: 100);
+      final secure = SecureStorageImpl.withStorage(storage);
+
+      await expectLater(secure.init(), throwsA(isA<PlatformException>()));
+
+      expect(storage.deleteAllCalls, 0);
+      expect(store['_internal_master_key'], testMasterKey);
+      expect(store['_internal_pref_master_key'], 'pref-key');
+    });
+
+    test('keeps values written before the transient failure', () async {
+      final first = SecureStorageImpl.withStorage(const FlutterSecureStorage());
+      await first.init();
+      await first.write('token', 'abc');
+
+      final flaky = _FlakyStorage(failuresBeforeSuccess: 1);
+      final second = SecureStorageImpl.withStorage(flaky);
+      await second.init();
+
+      expect(await second.read<String>('token'), 'abc');
+    });
+
+    test(
+      'a corrupt master key is replaced without touching other keys',
+      () async {
+        store['_internal_master_key'] = 'not-a-key';
+        final storage = _FlakyStorage(failuresBeforeSuccess: 0);
+        final secure = SecureStorageImpl.withStorage(storage);
+
+        await secure.init();
+
+        expect(storage.deleteAllCalls, 0);
+        expect(store['_internal_master_key'], isNot('not-a-key'));
+        expect(store['_internal_pref_master_key'], 'pref-key');
+        await secure.write('k', 'v');
+        expect(await secure.read<String>('k'), 'v');
+      },
+    );
+
+    test('a platform error on read keeps the stored value', () async {
+      final storage = _FlakyStorage(failuresBeforeSuccess: 0);
+      final secure = SecureStorageImpl.withStorage(storage);
+      await secure.init();
+      await secure.write('token', 'abc');
+
+      storage.failuresBeforeSuccess = 1;
+      expect(await secure.read<String>('token'), isNull);
+      expect(store.containsKey('token'), isTrue);
+
+      // The next read, once the platform recovers, still finds it.
+      expect(await secure.read<String>('token'), 'abc');
+    });
+
+    test('an undecryptable value is dropped', () async {
+      final secure = SecureStorageImpl.withStorage(
+        const FlutterSecureStorage(),
+      );
+      await secure.init();
+      store['token'] = 'garbage-without-iv';
+
+      expect(await secure.read<String>('token'), isNull);
+      expect(store.containsKey('token'), isFalse);
     });
   });
 
@@ -459,4 +552,48 @@ class _Point {
 
   @override
   int get hashCode => Object.hash(x, y);
+}
+
+/// Delegates to the mock platform, but throws a [PlatformException] — what a
+/// locked Keychain produces — for the next [failuresBeforeSuccess] reads.
+class _FlakyStorage extends FlutterSecureStorage {
+  _FlakyStorage({required this.failuresBeforeSuccess});
+
+  int failuresBeforeSuccess;
+  int readCalls = 0;
+  int deleteAllCalls = 0;
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    readCalls++;
+    if (failuresBeforeSuccess > 0) {
+      failuresBeforeSuccess--;
+      throw PlatformException(
+        code: 'Unexpected security result code',
+        message: 'errSecInteractionNotAllowed',
+      );
+    }
+    return super.read(key: key);
+  }
+
+  @override
+  Future<void> deleteAll({
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    deleteAllCalls++;
+    return super.deleteAll();
+  }
 }

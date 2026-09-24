@@ -276,6 +276,8 @@ Giá trị này được truyền cho `ResponsiveInit` đúng một lần, ở n
 > [!CAUTION]
 > **Đổi `designSize` là scale lại toàn bộ app cùng lúc.** Mọi lời gọi `context.w/h/r/sp` đều quy chiếu về nó, và cửa sổ nào hẹp hơn hoặc thấp hơn khung sẽ thu nhỏ thiết kế theo đúng tỉ lệ đó — đổi từ 375×812 sang 390×844 là mọi thứ trên điện thoại rộng 375 đều nhỏ đi. Chỉ đổi khi nguồn thiết kế gốc thực sự thay đổi, rồi rà lại app trên máy nhỏ, máy cao và tablet.
 
+Cả hai cạnh của `designSize` — và của `designSize` trong mọi profile — phải dương: một cạnh bằng 0 là chia cho 0. `ResponsiveInit` assert điều đó cho mọi profile khi build, và `ResponsiveMetrics` kiểm lại khi scale. Một cửa sổ chưa có diện tích (Android báo 0×0 ở frame đầu tiên) được coi như chính khung thiết kế, hệ số 1, chứ không phải 0 — để frame đó không bị layout với mọi giá trị co về không. `ScaleBounds.clamp` cũng coi hệ số NaN là 1, rồi mới clamp.
+
 ---
 
 ## 6. Chính sách scale: mặc định thu nhỏ, phóng to khi opt-in, theo từng lớp cửa sổ
@@ -307,9 +309,10 @@ return ResponsiveInit(
   // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
   // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
   profiles: const {
-    // Tablets in landscape, unfolded foldables, desktop windows — and
-    // most phones in landscape, which are 840 or wider — are laid out
-    // in real logical pixels. Without this, a laptop window
+    // Tablets in landscape, unfolded foldables and desktop windows are
+    // laid out in real logical pixels. (Phones never get here: the
+    // shell locks phone-sized displays to portrait — see
+    // `AppInitializer.preferredOrientationsFor`.) Without this, a laptop window
     // shorter than the 812-tall phone artboard would still shrink every
     // vertical gap and radius.
     WindowSizeClass.expanded: ResponsiveProfile(
@@ -379,7 +382,7 @@ Khi làm vậy, hãy kiểm tra hai điều. Lớp được phóng to gặp lớ
 | `large` | 1200 – 1599 | Tablet lớn nằm ngang; cửa sổ desktop |
 | `extraLarge` | ≥ 1600 | Cửa sổ desktop lớn |
 
-Điện thoại xoay ngang thuộc `medium` hoặc `expanded` theo chiều rộng. `context.windowHeightClass` phân biệt được nó: `WindowHeightClass.compact` dưới 480, `medium` 480–899, `expanded` từ 900.
+Điện thoại xoay ngang thuộc `medium` hoặc `expanded` theo chiều rộng — dù app này không bao giờ hiện trường hợp đó: `AppInitializer` khoá dọc màn hình cỡ điện thoại (cạnh ngắn dưới 600) và để màn hình lớn hơn xoay tự do (`AppInitializer.preferredOrientationsFor`). Nếu bỏ khoá đó, `context.windowHeightClass` phân biệt được điện thoại xoay ngang: `WindowHeightClass.compact` dưới 480, `medium` 480–899, `expanded` từ 900.
 
 Các ranh giới là một `ResponsiveBreakpoints` — mặc định `const ResponsiveBreakpoints.material3()`, giá trị nằm ở `ResponsiveConstants.BREAKPOINT_*`. Truyền bộ khác vào `ResponsiveInit(breakpoints:)` thì profile scale, `context.windowSizeClass` và mọi widget bên dưới cùng dịch theo. So sánh lớp bằng `isAtLeast` / `isSmallerThan`, đừng so với chiều rộng thô.
 
@@ -424,7 +427,7 @@ Nó chia theo quy tắc đầu tiên khớp:
 
 1. **Nếp gập hoặc bản lề dọc** (`FoldPosture.book`) — hai ô cạnh nhau, chia đúng tại đó, không vẽ gì bên dưới nó. Thắng cả khi dưới `splitAt`: máy gập mở hờ có hai nửa vật lý.
 2. **Nếp gập ngang** (`FoldPosture.tabletop`) khi `tabletopSplit` là `true` (mặc định) — `primary` ở trên, `secondary` ở dưới. Tắt nó cho nội dung không được cắt đôi, như một form.
-3. **Cửa sổ từ `splitAt` trở lên** (mặc định `WindowSizeClass.expanded`) — hai ô cạnh nhau, `primary` chiếm `primaryWidth` hoặc `primaryFraction` (0,4) chiều rộng, kèm `divider` tuỳ chọn.
+3. **Cửa sổ từ `splitAt` trở lên** (mặc định `WindowSizeClass.expanded`) — hai ô cạnh nhau, `primary` chiếm `primaryWidth` hoặc `primaryFraction` (0,4) chiều rộng, kèm `divider` tuỳ chọn được layout rộng đúng `dividerExtent` (mặc định 1). `primary` bị giới hạn để divider và `secondary` vẫn vừa; một `primaryWidth` không chừa gì cho `secondary` sẽ rơi xuống quy tắc 4 thay vì vẽ một ô rộng 0, nên `isSplit` không bao giờ báo một ô không có thật.
 4. **Còn lại** — chỉ `primary`. `secondary` không được dựng, nên app push route của mục đó; `AdaptiveSplitView.isSplit(context)` là cách phần tử danh sách biết nên làm gì. `context` của nó phải nằm *dưới* view — bên trong một ô, hoặc qua một `Builder`.
 
 `primary` nằm ở cạnh bắt đầu (bên phải khi RTL). Cả hai ô giữ nguyên vị trí trong cây dù quy tắc nào áp dụng, nên vị trí cuộn của danh sách và chữ đang gõ sống sót qua xoay máy hay khi mở máy gập. View cần một hộp có giới hạn — đừng đặt trực tiếp trong scroll view hay `Row` / `Column` không bị ràng buộc.
@@ -469,11 +472,15 @@ if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
 }
 
 final extended = sizeClass.isAtLeast(WindowSizeClass.large);
+// The rail sits at the start edge — the right in RTL — so only its outer
+// side pads for the insets.
+final isRtl = Directionality.of(context) == TextDirection.rtl;
 return Scaffold(
   body: Row(
     children: [
       SafeArea(
-        right: false,
+        left: !isRtl,
+        right: isRtl,
         child: NavigationRail(
           // …
           extended: extended,

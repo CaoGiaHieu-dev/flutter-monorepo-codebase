@@ -136,7 +136,7 @@ class AuthProvider extends BaseProvider<UserEntity>
         onSuccess: (user) async {
           DynamicLogger.log('Login successful for user: ${user?.name}');
         },
-        errorStateBuilder: _mapAuthFailure,
+        errorStateBuilder: mapAuthFailure,
       ),
     );
   }
@@ -164,22 +164,29 @@ class AuthProvider extends BaseProvider<UserEntity>
     super.dispose();
   }
 
-  ErrorState? _mapAuthFailure(AppFailure failure) {
+  /// Classifies a failed sign-in into this feature's error state.
+  ///
+  /// Matches what `ErrorHandler` actually produces: an HTTP 401/403 arrives
+  /// as an [AuthFailure] carrying that status, and every other 4xx/5xx — 404
+  /// included — as a [ServerFailure] carrying its status. This used to match
+  /// `network` failures with codes 401 and 404, which `ErrorHandler` never
+  /// produces (a network failure has no HTTP status), so a wrong password
+  /// and an unknown user both fell through to a generic server error.
+  ///
+  /// A 403 stays a server error with the backend's message: it means "not
+  /// allowed" (a disabled or locked account), not "wrong password".
+  static ErrorState? mapAuthFailure(AppFailure failure) {
     return failure.whenOrNull(
+      auth: (message, code, data) {
+        if (code == 401) return const AuthErrorState.invalidCredentials();
+        return AuthErrorState.serverError(message: message, code: code);
+      },
       server: (message, code, data) {
+        if (code == 404) return const AuthErrorState.userNotFound();
         return AuthErrorState.serverError(message: message, code: code);
       },
-      network: (message, code, data) {
-        if (code == 404) {
-          return const AuthErrorState.userNotFound();
-        }
-
-        if (code == 401) {
-          return const AuthErrorState.invalidCredentials();
-        }
-
-        return AuthErrorState.serverError(message: message, code: code);
-      },
+      network: (message, code, data) =>
+          AuthErrorState.serverError(message: message, code: code),
     );
   }
 }

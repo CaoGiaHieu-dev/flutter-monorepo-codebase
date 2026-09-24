@@ -349,7 +349,7 @@ Widget build(BuildContext context, GoRouterState state) {
 3. `MainScope.run()`:
    - Removes native splash (`FlutterNativeSplash.remove()`)
    - Shows the splash from `getItOrNull<IAppSplashScreen>()` via `AppMaterialWrapper(home: splashScreen)` (no router); none registered, or iOS → native splash kept
-   - Calls `AppInitializer.init()` (HttpOverrides, Logger, ScreenOrientation, SystemUIOverlay)
+   - Calls `AppInitializer.init()` (HttpOverrides, Logger, ScreenOrientation — portrait lock only when the display's shortest side is < 600, SystemUIOverlay)
    - Updates widget to `RootApp` with `AppMaterialWrapper.router(...)` and GoRouter
 4. `AppMaterialWrapper` wraps tree in `MultiProvider` with global singletons, `Consumer2<ThemeProvider, LanguageProvider>` for reactive theme/locale
 
@@ -593,7 +593,7 @@ await _token.readFromStorage();        // Hydrate cache from disk
 
 **Accepted trade-off:** SQL cannot join across package boundaries — deliberate; crossing a bounded context belongs at the repository layer.
 
-**Drift limits:** no `onDowngrade` callback (downgrade rides `onUpgrade` via `from`/`to`); no runtime table registration (a package cannot add a table to another package's database).
+**Drift limits:** no `onDowngrade` callback (downgrade rides `onUpgrade` via `from`/`to`) — and a downgrade with no registered step for the version being left **throws** rather than silently stamping a lower `user_version`; no runtime table registration (a package cannot add a table to another package's database).
 
 ### When to Use What
 
@@ -653,7 +653,7 @@ Registration order in `ApiClient.createClient()` (`platform/network/lib/src/api_
 ### SSL Certificate Pinning
 
 - **Global:** `HttpOverrides.global` with `HttpSecurityPinningClient` (SPKI SHA-256), installed by `AppInitializer._setupHttpOverrides`
-- **Dev:** SSL bypass enabled for self-signed certs
+- **Dev:** SSL bypass for self-signed certs — **only in a debug build that explicitly declared `--flavor dev`** (`AppConfig.bypassesCertificateValidation`). A missing/unknown flavor is treated as prod (validation on, ERROR logged); `appFlavor` falls back to `dev` in debug, `prod` otherwise
 - **Staging/Prod:** strict SPKI hash matching
 - > [!CAUTION]
   > Pinning needs **two** things or it silently no-ops (the initializer logs an ERROR in each case):

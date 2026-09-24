@@ -25,7 +25,7 @@ Five pipelines ship with the template — four on GitHub Actions, one on Azure D
 
 ## 2. `flutter_build.yml` — Build and Distribute
 
-The main Android release pipeline. It is manual-only: **Actions → Build and Release → Run workflow**.
+The main Android release pipeline. It is manual-only: **Actions → Build and Distribute → Run workflow**.
 
 ### Inputs
 
@@ -50,7 +50,7 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
 
    A missing secret fails this step with an error naming it — before any codegen or Gradle time is spent. It runs **before** code generation because `build_runner` must be able to resolve `firebase_module.dart`'s imports.
 5. **Get dependencies from the committed lockfile** — `flutter pub get --enforce-lockfile`. The workspace `pubspec.lock` is committed; a lockfile that no longer matches the pubspecs fails here instead of being silently re-resolved.
-6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation and `build_runner` for the whole workspace.
+6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. This single Dart script does pub get, l10n generation, `build_runner` and the barrel pass for the whole workspace.
 7. **Build APK** — note the `cd apps/mobile` on its own line first:
    ```bash
    cd apps/mobile
@@ -134,7 +134,7 @@ Manual dispatch that hands the whole build over to Fastlane, run **from the repo
 2. **Ruby 3.3 + `bundle install`** at the repository root (`ruby/setup-ruby` with `bundler-cache` on GitHub-hosted runners, a plain `bundle install` on `self-hosted`). The root `Gemfile` lists `fastlane` and `cocoapods` and loads the plugins from `apps/mobile/fastlane/Pluginfile` through `fastlane/Pluginfile`, so there is no `fastlane add_plugin` step — that command is interactive and fails on a runner.
 3. **Flutter** at `flutter_version`.
 4. **Restore gitignored build inputs from secrets** — `apps/mobile/fastlane/Config.yaml`, the flavor's Firebase options (other flavors stubbed), `google-services.json` (Android), `GoogleService-Info.plist` (iOS, optional), `env.prod` and the release keystore (prod), and the credential files `Config.yaml` points at — only those the chosen distribution needs. Every missing secret is reported by name, then the step fails.
-5. **Build and distribute** — `bundle exec fastlane <lane> …`. Inputs reach the script through `env:`, never interpolated into it, so a change log containing quotes or `$(…)` is passed verbatim. The lane does its own toolchain setup: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`.
+5. **Build and distribute** — `bundle exec fastlane <lane> …`. Inputs reach the script through `env:`, never interpolated into it, so a change log containing quotes or `$(…)` is passed verbatim. The lane does its own toolchain setup: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`, then the barrel pass (`tools/barrel_generator/generate.dart` per package) — the `lib/src/gen/gen.dart` barrels are gitignored, so a clean runner compiles nothing without it.
 
 > [!NOTE]
 > iOS **code signing** (certificates, provisioning profiles) is not set up by any workflow. `platform: both` / `ios` needs a runner whose keychain already has them — in practice a `self-hosted` Mac.

@@ -128,7 +128,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │   ├── cache/                     # Mẫu: database Drift do package tự sở hữu (domain + data, không UI)
 │   ├── home/feature/              # Mẫu: BLoC, Freezed event private, một nav destination
 │   ├── settings/feature/          # Mẫu: tiêu thụ hợp đồng của module khác
-│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (host của bottom bar)
+│   ├── dashboard/feature/         # Mẫu: chỉ là khung vỏ (bottom bar ở compact, NavigationRail từ medium, dạng mở rộng từ large)
 │   ├── onboarding/feature/        # Mẫu: IAppEntryLocation, vị trí khởi động nguội
 │   └── splash/feature/            # Mẫu: IAppSplashScreen, hiện trước khi router tồn tại
 ├── platform/                      # Phần đất của team infra — mọi module đều được phép phụ thuộc
@@ -182,8 +182,8 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ```
 
 > [!NOTE]
-> **Mọi package đều có thư mục `utils/`** chứa hằng số của **chính nó** — storage key, route path,
-> timeout. Không có gì mang tính domain được phép nằm ở `core_common`. Ngoại lệ duy nhất được duyệt
+> **Hằng số của một package nằm trong thư mục `utils/` của chính nó** — storage key, route path,
+> timeout; package không có hằng số nào thì không cần `utils/`. Không có gì mang tính domain được phép nằm ở `core_common`. Ngoại lệ duy nhất được duyệt
 > là bộ design token trong `core_base_ui/src/styles/`, giữ nguyên vị trí vì đó là bề mặt công khai
 > của design system.
 
@@ -410,7 +410,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
 - `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
-- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (không có thì tab đầu / `/`)
+- `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` (không có thì path của destination đầu tiên, không có nữa thì `/_empty_dashboard`)
 - `getItOrNull<IAuthRefreshListenable>()` → `refreshListenable`
 
 Chú ý dòng cuối: router phụ thuộc vào **contract ở `core_di`**, không phải `AuthProvider`. App shell

@@ -147,7 +147,9 @@ cd modules/dashboard/feature        && flutter test && cd -
 # 3. Version catalog is in sync
 dart tools/dependency_sync.dart --check
 
-# 4. No undeclared / unused package dependencies
+# 4. No undeclared dependency (arch_check R5: an import missing from
+#    `dependencies:`) and no unused one (declared but never imported)
+dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
@@ -177,7 +179,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Ran `pub get` inside a sub-package | Stray `pubspec.lock` files | Delete them, run `flutter pub get` at the root |
 | Ran `flutter build apk` from the repo root | `Target file "lib\main.dart" not found` | `cd apps/mobile` first |
 | Hardcoded a version in a package pubspec | `dependency_sync --check` fails | Move it to `pubspec_dependencies.yaml`, re-sync |
-| Imported a package without declaring it | Compiles locally (workspace shares `package_config.json`), breaks when extracted | Declare it in that package's `pubspec.yaml`; verify with the unused checker |
+| Imported a package without declaring it | Compiles locally (workspace shares `package_config.json`), breaks when extracted | Declare it in that package's `pubspec.yaml` (`dependencies:`, not `dev_dependencies:`); verify with `dart tools/arch_check/check.dart` (R5). The unused checker covers the reverse — declared but never imported |
 | Registered a screen controller as a singleton | State leaks between screen visits | Feature controllers are `@injectable` (factory) — see [../guides/05_di.md](../guides/05_di.md) |
 
 ---

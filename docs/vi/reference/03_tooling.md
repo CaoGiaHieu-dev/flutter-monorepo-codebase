@@ -15,7 +15,7 @@ Tất cả công cụ nằm trong `tools/`, đều là Dart thuần — chạy t
 | **Kiểm tra luật phân tầng còn đúng không** | `dart tools/arch_check/check.dart` |
 | **Kiểm tra docs còn mô tả đúng cây thư mục hiện tại** | `dart tools/docs_check/check.dart` |
 | **Package nào là code mẫu có thể xoá?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
-| **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <tên>` |
+| **Xoá một package mẫu một cách an toàn** | `dart tools/sample_cleanup/remove_sample.dart <tên> --apply` (bỏ `--apply` để xem trước) |
 | Tạo package feature / domain / data / core mới | `dart tools/module_generator/generate.dart …` |
 | Vừa thêm, đổi tên hoặc xoá file trong `lib/` | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Vừa đổi version dependency | `dart tools/dependency_sync.dart` |
@@ -97,7 +97,7 @@ Một lần sync không strict mà có bỏ qua thứ gì sẽ in ra khối **`P
 
 ## `docs_check`
 
-**Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, và fail ngay ở cái đầu tiên không tồn tại.
+**Gate 5 của `pr_quality_check.yml`.** Giải đường dẫn cho mọi path trong repo mà tài liệu nhắc tới, gom tất cả những path không tồn tại, in ra theo từng file, rồi thoát với mã 1.
 
 ```bash
 dart tools/docs_check/check.dart            # thoát 1 nếu có tham chiếu chết
@@ -111,7 +111,7 @@ Hai loại tham chiếu được kiểm tra trong mọi file Markdown của repo
 | Path trong backtick | `` `platform/kernel/lib/platform_kernel.dart` `` | Tính từ gốc repo, nhưng chỉ khi chuỗi bắt đầu bằng một thư mục top-level có thật |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Tương đối với **file chứa link**, không phải thư mục đang chạy lệnh |
 
-Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 300 tham chiếu thật — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
+Phép thử "thư mục top-level" chính là thứ làm cho check này dùng được. Repo đầy những chuỗi backtick trông như path nhưng không phải: `utils/` và `routing/` là quy ước tồn tại trong cả chục package, `ViewState` là một type, `flutter pub get` là một lệnh. Coi chúng là path sinh ra 817 "lỗi" ở lần chạy đầu và sẽ dạy cả team thói quen phớt lờ gate này. Neo vào `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` còn lại khoảng 1 900 tham chiếu thật (tại thời điểm viết) — và những chuỗi bị bỏ qua đúng là loại reviewer nhìn mắt thường cũng xác minh được.
 
 Chuỗi có khoảng trắng bị bỏ qua: đó là lệnh shell. Chuỗi có `*`, `{` hoặc `<` là glob hoặc placeholder, mỗi thứ mô tả một *tập hợp* chứ không phải một file — chúng được kiểm như glob (`<name>` khớp như `*`) và đạt khi có ít nhất một đường dẫn khớp. Danh sách thư mục gốc vẫn giữ `packages/` và `app/` trần, nơi không còn gì, để tài liệu còn trỏ tới đó sẽ fail thay vì bị bỏ qua.
 

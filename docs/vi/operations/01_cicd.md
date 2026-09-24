@@ -25,7 +25,7 @@ Template có **năm** pipeline — bốn trên GitHub Actions, một trên Azure
 
 ## 2. `flutter_build.yml` — Build and Distribute
 
-Pipeline release Android chính. Chỉ chạy tay: **Actions → Build and Release → Run workflow**.
+Pipeline release Android chính. Chỉ chạy tay: **Actions → Build and Distribute → Run workflow**.
 
 ### Tham số đầu vào
 
@@ -50,7 +50,7 @@ Build number không phải tham số — nó dùng `${{ github.run_number }}`, n
 
    Thiếu secret nào thì bước này fail kèm lỗi nêu đúng tên secret đó — trước khi tốn thời gian cho codegen hay Gradle. Nó chạy **trước** bước sinh code vì `build_runner` phải phân giải được các import của `firebase_module.dart`.
 5. **Get dependencies from the committed lockfile** — `flutter pub get --enforce-lockfile`. `pubspec.lock` của workspace đã được commit; lockfile nào không còn khớp các pubspec sẽ fail ngay tại đây thay vì bị resolve lại âm thầm.
-6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. Script Dart này làm trọn gói: pub get, sinh l10n, và `build_runner` cho cả workspace.
+6. **Install Dependencies** — `dart tools/workspace_setup/configure.dart`. Script Dart này làm trọn gói: pub get, sinh l10n, `build_runner` và lượt sinh barrel cho cả workspace.
 7. **Build APK** — chú ý dòng `cd apps/mobile` đứng riêng phía trước:
    ```bash
    cd apps/mobile
@@ -134,7 +134,7 @@ Chạy tay, giao toàn bộ việc build cho Fastlane, chạy **từ thư mục 
 2. **Ruby 3.3 + `bundle install`** ở thư mục gốc repo (`ruby/setup-ruby` với `bundler-cache` trên runner GitHub-hosted, `bundle install` thường trên `self-hosted`). `Gemfile` ở gốc khai `fastlane` và `cocoapods`, rồi nạp plugin từ `apps/mobile/fastlane/Pluginfile` qua `fastlane/Pluginfile`, nên không còn bước `fastlane add_plugin` — lệnh đó cần tương tác và fail trên runner.
 3. **Flutter** đúng phiên bản `flutter_version`.
 4. **Restore gitignored build inputs from secrets** — `apps/mobile/fastlane/Config.yaml`, Firebase options của flavor (các flavor khác nhận stub), `google-services.json` (Android), `GoogleService-Info.plist` (iOS, không bắt buộc), `env.prod` và keystore release (prod), cùng các file credential mà `Config.yaml` trỏ tới — chỉ những file mà kiểu phân phối đã chọn cần đến. Mọi secret thiếu đều được báo đúng tên, rồi bước này fail.
-5. **Build and distribute** — `bundle exec fastlane <lane> …`. Tham số đi vào script qua `env:`, không bao giờ được nội suy thẳng vào script, nên một change log chứa dấu nháy hay `$(…)` vẫn được truyền nguyên văn. Lane tự lo phần thiết lập toolchain: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`.
+5. **Build and distribute** — `bundle exec fastlane <lane> …`. Tham số đi vào script qua `env:`, không bao giờ được nội suy thẳng vào script, nên một change log chứa dấu nháy hay `$(…)` vẫn được truyền nguyên văn. Lane tự lo phần thiết lập toolchain: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`, rồi lượt sinh barrel (`tools/barrel_generator/generate.dart` cho từng package) — các barrel `lib/src/gen/gen.dart` nằm trong gitignore, nên trên một runner sạch không thiếu bước này thì không gì compile được.
 
 > [!NOTE]
 > **Ký mã iOS** (chứng chỉ, provisioning profile) không được workflow nào thiết lập. `platform: both` / `ios` cần một runner mà keychain đã có sẵn chúng — trên thực tế là một máy Mac `self-hosted`.

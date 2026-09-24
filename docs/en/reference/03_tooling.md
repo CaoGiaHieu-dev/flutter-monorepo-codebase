@@ -15,7 +15,7 @@ All tools live in `tools/` and are plain Dart — run them from the **repository
 | **Check the layering rules hold** | `dart tools/arch_check/check.dart` |
 | **Check the docs still describe this tree** | `dart tools/docs_check/check.dart` |
 | **Which packages are sample code I can delete?** | `dart tools/sample_cleanup/remove_sample.dart --list` |
-| **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <name>` |
+| **Delete a sample package safely** | `dart tools/sample_cleanup/remove_sample.dart <name> --apply` (omit `--apply` to preview) |
 | Create a new feature / domain / data / core package | `dart tools/module_generator/generate.dart …` |
 | Added, renamed or deleted a file under `lib/` | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Changed a dependency version | `dart tools/dependency_sync.dart` |
@@ -97,7 +97,7 @@ A non-strict sync that skipped anything prints a **`PARTIAL COMPOSITION`** block
 
 ## `docs_check`
 
-**Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names and fails on the first one that is not there.
+**Gate 5 of `pr_quality_check.yml`.** Resolves every repository path the documentation names, collects every one that is not there, prints them grouped by file, then exits 1.
 
 ```bash
 dart tools/docs_check/check.dart            # exits 1 on any dead reference
@@ -111,7 +111,7 @@ Two kinds of reference are checked in every Markdown file in the repository — 
 | Backticked path | `` `platform/kernel/lib/platform_kernel.dart` `` | Repo-rooted, but only when the span starts with a real top-level directory |
 | Markdown link | `[…](../../../tools/arch_check/check.dart)` | Relative to the **file containing the link**, not the working directory |
 
-The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves roughly 1 300 genuine references — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
+The top-level-directory test is what makes the check usable. A repository is full of backticked spans that look like paths and are not: `utils/` and `routing/` are conventions that exist in a dozen packages at once, `ViewState` is a type, `flutter pub get` is a command. Treating those as paths produced 817 "failures" on the first run and would have taught everyone to ignore the gate. Anchoring to `platform/`, `modules/`, `apps/`, `tools/`, `docs/`, `.agents/`, `.github/` leaves about 1 900 genuine references (at the time of writing) — and the spans that get skipped are exactly the ones a reviewer can verify by eye anyway.
 
 Spans containing a space are skipped: they are shell lines. Spans containing a `*`, a `{` or a `<` are globs or placeholders, each describing a *set* rather than one file — they are checked as globs (`<name>` matches like `*`) and pass when at least one path fits. The top-level list also keeps `packages/` and a bare `app/`, where nothing lives any more, so a document still pointing there fails instead of being skipped.
 

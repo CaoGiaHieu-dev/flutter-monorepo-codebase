@@ -116,33 +116,80 @@ Widget build(BuildContext context) {
 
 ## 🔒 3. Quản Lý Lỗi Nghiệp Vụ Chuyên Biệt (Custom Error State)
 
-Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa Custom Error State cho feature của mình:
+Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. `AppFailure` là một `sealed class` (Freezed) trong `domain_core` (`platform/domain_core/lib/src/failures/failures.dart`), nên feature **không thể** `extends` / `implements` nó để thêm lỗi riêng — một `AuthErrorState extends AppFailure` sẽ không compile. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa **Freezed state riêng** cho feature, mang một giá trị lỗi của chính feature, dùng `BaseBloc<Event, CustomState>`, rồi map các biến thể của `AppFailure` sang giá trị đó trong handler:
 
 ```dart
-import 'package:core_common/core_common.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
+// login_state.dart
+part of 'login_bloc.dart';
 
-part 'auth_error_state.freezed.dart';
+/// Lỗi nghiệp vụ của màn login — giá trị của feature, không phải một AppFailure.
+enum LoginError { invalidCredentials, network, unknown }
 
 @freezed
-abstract class AuthErrorState extends AppFailure with _$AuthErrorState {
-  const AuthErrorState._();
-
-  const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
-  const factory AuthErrorState.userNotFound() = _UserNotFound;
+sealed class LoginState with _$LoginState {
+  const factory LoginState.initial() = LoginInitial;
+  const factory LoginState.loading() = LoginLoading;
+  const factory LoginState.success(UserEntity user) = LoginSuccess;
+  const factory LoginState.error(LoginError error) = LoginErrorState;
 }
 ```
 
 Sau đó trong Bloc:
 ```dart
-      failure: (appFailure) {
-        // Map từ Domain Failure sang AuthErrorState
-        final customError = appFailure.whenOrNull(
-          network: (...) => const AuthErrorState.userNotFound(),
-        ) ?? const AuthErrorState.invalidCredentials();
-        
-        emit(BlocViewState.error(customError));
-      },
+import 'package:bloc_state_management/bloc_state_management.dart';
+import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
+import 'package:domain_core/domain_core.dart'; // Result, AppFailure và các biến thể
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:injectable/injectable.dart';
+
+part 'login_event.dart';
+part 'login_state.dart';
+part 'login_bloc.freezed.dart';
+
+@injectable
+class LoginBloc extends BaseBloc<LoginEvent, LoginState> {
+  LoginBloc(this._loginUseCase) : super(const LoginState.initial()) {
+    on<_LoginSubmitted>(_onSubmitted);
+  }
+
+  final LoginUseCase _loginUseCase;
+
+  Future<void> _onSubmitted(
+    _LoginSubmitted event,
+    Emitter<LoginState> emit,
+  ) async {
+    emit(const LoginState.loading());
+    final result = await _loginUseCase(
+      LoginParams(email: event.email, password: event.password),
+    );
+    result.when(
+      success: (user) => emit(LoginState.success(user!)),
+      failure: (failure) => emit(LoginState.error(_toLoginError(failure))),
+      none: () {},
+      cancel: () {},
+    );
+  }
+
+  /// Map từ biến thể của Domain Failure sang lỗi của feature.
+  static LoginError _toLoginError(AppFailure failure) => switch (failure) {
+    AuthFailure() || ValidationFailure() => LoginError.invalidCredentials,
+    NetworkFailure() => LoginError.network,
+    _ => LoginError.unknown,
+  };
+}
+```
+
+Vẽ giao diện — `LoginState` là `sealed`, nên `switch` được kiểm tra đủ trường hợp lúc compile:
+```dart
+BlocBuilder<LoginBloc, LoginState>(
+  builder: (context, state) => switch (state) {
+    LoginInitial() => const MyLoginForm(),
+    LoginLoading() => const CircularProgressIndicator(),
+    LoginSuccess(:final user) => WelcomeWidget(user: user),
+    // LoginErrorWidget map mỗi LoginError sang chuỗi đã dịch của feature.
+    LoginErrorState(:final error) => LoginErrorWidget(error: error),
+  },
+)
 ```
 
 ---

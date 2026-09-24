@@ -47,7 +47,7 @@ flutter-monorepo-codebase/
 │   ├── cache/                     # Sample: a package-owned Drift database (domain + data, no UI)
 │   ├── home/feature/              # Sample: BLoC, private Freezed events, a nav destination
 │   ├── settings/feature/          # Sample: consuming another module's contract
-│   ├── dashboard/feature/         # Sample: shell chrome only (bottom-bar host)
+│   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the cold-start location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
 ├── tools/                  # Dart CLI tooling (generators, checkers, sync)
@@ -116,7 +116,7 @@ One bounded UI concern per package. A feature may depend on `domain_*`, `core_di
 | `feature_home` | `modules/home/feature` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination` |
 | `feature_settings` | `modules/settings/feature` | Settings tab, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Onboarding flow, `IAppEntryLocation` implementation |
-| `feature_dashboard` | `modules/dashboard/feature` | **Shell chrome only** — the `Scaffold` + bottom navigation bar. Builds tabs from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
+| `feature_dashboard` | `modules/dashboard/feature` | **Shell chrome only** — the `Scaffold` + primary navigation: a bottom bar on a `compact` window, a `NavigationRail` from `medium` up (extended from `large`). Builds destinations from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
 | `feature_splash` | `modules/splash/feature` | Splash page shown by `MainScope` before the router exists |
 
 > [!NOTE]
@@ -175,7 +175,7 @@ Verify at any time:
 
 ```bash
 grep -rl "package:feature_" platform/*/lib    # must print nothing
-dart tools/unused_checker/check_unused_packages.dart
+dart tools/arch_check/check.dart              # R1: no platform/* → feature_/data_/domain_ edge outside the three above
 ```
 
 ---

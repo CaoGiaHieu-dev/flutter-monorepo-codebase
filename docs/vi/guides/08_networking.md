@@ -73,6 +73,7 @@ if (onRefreshToken != null) {
     RefreshTokenInterceptor(
       RefreshTokenHandler(
         dio: dio,
+        currentToken: _config.getToken,
         onRefreshToken: onRefreshToken,
         onRefreshFailed: onRefreshFailed ?? () async {},
       ),
@@ -248,13 +249,25 @@ Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();
   if (result.isSuccess) return _local.getUserToken();
   final failure = result.errorOrNull;
-  final transient = failure is NetworkFailure ||
-      (failure is ServerFailure && (failure.code ?? 500) >= 500);
-  if (transient) {
-    throw StateError('Session renewal did not reach the server: '
-        '${failure?.message}');
+  if (isTransient(failure)) {
+    throw StateError(
+      'Session renewal did not reach the server: '
+      '${failure?.message}',
+    );
   }
   return null;
+}
+
+/// Whether [failure] says nothing about the session's validity — the
+/// renewal never got an answer — so the session must be kept.
+///
+/// Exposed for tests: this predicate decides whether a user is signed out.
+static bool isTransient(AppFailure? failure) {
+  if (failure is NetworkFailure) return true;
+  if (failure is! ServerFailure) return false;
+  final code = failure.code;
+  if (code == null) return false;
+  return (code >= 500 && code < 600) || code == ErrorCodes.REQUEST_CANCELLED;
 }
 ```
 

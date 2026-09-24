@@ -272,7 +272,7 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
+> `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-deep-link-thiết-lập-nền-tảng). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
 
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
@@ -348,6 +348,20 @@ Cảnh báo này là một deadline thật, không phải nhiễu. Khi một b�
 biến nó thành lỗi, cách xử lý là nâng các plugin mà cảnh báo nêu tên lên version có
 hỗ trợ Built-in Kotlin — không cần sửa gì trong repo này. Hãy tin danh sách trong cảnh
 báo hơn danh sách ở trang này: nó được tính từ những gì bạn thực sự phụ thuộc.
+
+### Android: sao lưu ứng dụng đang tắt
+
+`apps/mobile/android/app/src/main/AndroidManifest.xml` đặt `android:allowBackup="false"`, `android:fullBackupContent="false"` và `android:dataExtractionRules="@xml/data_extraction_rules"`, với các rule loại mọi domain khỏi cả sao lưu đám mây **lẫn** chuyển dữ liệu giữa hai thiết bị (Android 12+ bỏ qua `allowBackup` cho trường hợp sau).
+
+Lý do là tầng bảo mật của `core_storage`. `flutter_secure_storage` giữ bản mã hoá trong một file SharedPreferences, còn khoá giải mã nằm trong Android Keystore, thứ không bao giờ được sao lưu. Khôi phục sang máy mới sẽ mang về những giá trị app không còn giải mã được — nhẹ thì người dùng bị đăng xuất, nặng thì lỗi đọc.
+
+Đánh đổi: cài lại hoặc đổi máy là app bắt đầu sạch — không còn preference, theme hay cờ onboarding. Muốn giữ preference thường, hãy bật lại backup và chỉ loại file của secure storage, ở cả `<cloud-backup>` và `<device-transfer>` trong `apps/mobile/android/app/src/main/res/xml/data_extraction_rules.xml`, kèm một file `fullBackupContent` tương ứng cho Android 11 trở xuống:
+
+```xml
+<exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+```
+
+Hãy xác nhận tên file trên thiết bị trước (`adb shell run-as <applicationId> ls shared_prefs`) — nó phụ thuộc phiên bản và tuỳ chọn của `flutter_secure_storage`.
 
 ### Từ VS Code
 

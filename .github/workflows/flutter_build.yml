@@ -131,9 +131,9 @@ jobs:
           # Required by the com.google.gms.google-services Gradle plugin.
           restore "GOOGLE_SERVICES_${KEY}_JSON_B64" "$APP/android/app/src/${FLAVOR}/google-services.json"
 
-          # Prod signing. Without key.properties Gradle silently signs prod with
-          # the committed DEV keystore, so the secrets are required for prod.
-          # dev/staging are signed with the committed dev keystore.
+          # Prod signing: Gradle refuses a prod release without key.properties,
+          # so the secrets are required. dev uses the committed dev keystore;
+          # staging opts in to it below.
           if [ "$FLAVOR" = prod ]; then
             restore KEYSTORE_BASE64 "$APP/android/keystore.jks"
             for v in KEYSTORE_PASSWORD KEY_PASSWORD KEY_ALIAS; do
@@ -145,6 +145,13 @@ jobs:
               echo "keyAlias=${KEY_ALIAS:-}"
               echo "storeFile=../keystore.jks"
             } > "$APP/android/key.properties"
+          elif [ "$FLAVOR" = staging ]; then
+            # Staging has no secrets of its own: it is signed with the committed
+            # dev keystore, which Gradle refuses for a release unless asked
+            # explicitly (docs/en/operations/02_fastlane_release.md section 4).
+            # Add key-stg.properties secrets here to sign staging properly.
+            echo "::warning::Signing the staging release with the public dev keystore."
+            echo "ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true" >> "$GITHUB_ENV"
           fi
 
           [ "$missing" -eq 0 ] || exit 1

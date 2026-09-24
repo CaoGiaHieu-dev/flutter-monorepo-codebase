@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources the release resource shrinker (isShrinkResources) must keep
+     although no compiled code references them: they are looked up by name
+     at runtime from Dart. ic_notification is the small icon
+     core_notifications passes to flutter_local_notifications
+     (NotificationConstants.ANDROID_DEFAULT_ICON). Add any other drawable,
+     raw sound, etc. that Dart names by string. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification" />

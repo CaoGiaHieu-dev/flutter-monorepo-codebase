@@ -4,10 +4,22 @@ platform :ios, '15.0'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+# Every configuration in Runner.xcodeproj, flavored ones included. CocoaPods
+# treats a configuration it is not told about as :release, which would build
+# the pods of a Debug-<flavor> run without debug settings.
 project 'Runner', {
   'Debug' => :debug,
+  'Debug-dev' => :debug,
+  'Debug-staging' => :debug,
+  'Debug-prod' => :debug,
   'Profile' => :release,
+  'Profile-dev' => :release,
+  'Profile-staging' => :release,
+  'Profile-prod' => :release,
   'Release' => :release,
+  'Release-dev' => :release,
+  'Release-staging' => :release,
+  'Release-prod' => :release,
 }
 
 def flutter_root

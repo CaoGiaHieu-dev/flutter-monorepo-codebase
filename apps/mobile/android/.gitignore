@@ -13,15 +13,17 @@ GeneratedPluginRegistrant.java
 # still a keystore, and one accidental `git add -A` is all it takes.
 #
 # The ONE exception is deliberate: `keystore-dev.jks` + `key-dev.properties`
-# are tracked (force-added past these patterns) so a fresh clone can build the
-# dev flavor. That key is public — anyone can sign with it — and Gradle falls
-# back to it for staging/prod when `key-stg.properties` / `key.properties` is
-# absent. Never ship a store release with it; see
-# docs/en/operations/02_fastlane_release.md §4.
+# are tracked (un-ignored at the end of this block) so a fresh clone can build the
+# dev flavor. That key is public — anyone can sign with it. Gradle still uses
+# it for debug/profile builds of staging/prod when `key-stg.properties` /
+# `key.properties` is absent, but refuses a staging/prod *release* build
+# without its own key; see docs/en/operations/02_fastlane_release.md §4.
 *.jks
 *.keystore
 key.properties
 key-*.properties
+!keystore-dev.jks
+!key-dev.properties
 
 .cxx
 .kotlin

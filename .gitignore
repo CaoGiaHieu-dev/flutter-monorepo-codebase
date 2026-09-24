@@ -44,6 +44,19 @@ Environment.xcconfig
 env/
 *.env
 
+# Signing material and Firebase client configs, at any depth. The nested
+# apps/mobile/android/.gitignore and ios/.gitignore say the same; these
+# repeat it so a new app, or a keystore dropped anywhere else, is covered too.
+*.jks
+*.keystore
+key*.properties
+**/google-services.json
+**/GoogleService-Info.plist
+# The one deliberate exception: the public dev key, tracked so a fresh clone
+# builds the dev flavor (docs/en/operations/02_fastlane_release.md section 4).
+!apps/mobile/android/keystore-dev.jks
+!apps/mobile/android/key-dev.properties
+
 # Lock files — except the workspace's own. A Pub workspace has exactly one
 # pubspec.lock, at the root, and for an app it belongs in git: without it
 # every clone and every CI run resolves whatever versions are newest that day.

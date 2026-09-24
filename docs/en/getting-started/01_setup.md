@@ -272,7 +272,7 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
+> `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-deep-links-platform-setup). Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
 
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.
@@ -349,6 +349,20 @@ it into an error, the fix is to upgrade whichever plugins the warning names to
 versions that support Built-in Kotlin — there is nothing to change in this repo.
 Trust the warning's list over this page's: it is computed from what you actually
 depend on.
+
+### Android: app backup is off
+
+`apps/mobile/android/app/src/main/AndroidManifest.xml` sets `android:allowBackup="false"`, `android:fullBackupContent="false"` and `android:dataExtractionRules="@xml/data_extraction_rules"`, whose rules exclude every domain from cloud backup **and** device-to-device transfer (Android 12+ ignores `allowBackup` for the latter).
+
+The reason is `core_storage`'s secure layer. `flutter_secure_storage` keeps its ciphertext in a SharedPreferences file, but the key that decrypts it lives in the Android Keystore, which is never backed up. A restore onto a new phone would bring back values the app can no longer decrypt — a signed-out user at best, a read error at worst.
+
+The trade-off: a reinstall or a new phone starts from a clean app — no preferences, theme or onboarding flag. To keep plain preferences, turn backup back on and exclude only the secure-storage file, in both `<cloud-backup>` and `<device-transfer>` of `apps/mobile/android/app/src/main/res/xml/data_extraction_rules.xml`, plus a matching `fullBackupContent` file for Android 11 and lower:
+
+```xml
+<exclude domain="sharedpref" path="FlutterSecureStorage.xml" />
+```
+
+Confirm the file name on a device first (`adb shell run-as <applicationId> ls shared_prefs`) — it depends on the `flutter_secure_storage` version and options.
 
 ### From VS Code
 

@@ -81,7 +81,6 @@ void main() {
             ..registerSingleton<LanguageProvider>(
               LanguageProvider(FakeLanguageStorage()),
             )
-            ..registerSingleton<AppProvider>(AppProvider())
             ..registerSingleton<AppRouter>(AppRouter())
             ..registerSingleton<DeeplinkProvider>(
               FakeDeeplinkProvider(getIt<AppRouter>()),
@@ -107,9 +106,9 @@ void main() {
     );
     expect(errors, isEmpty);
 
-    // Let MainScope finish (2 s minimum splash) so no timer outlives the test.
+    // Let MainScope finish initialising so nothing outlives the test.
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 2200)),
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
     );
     await tester.pump();
     await tester.pumpWidget(const SizedBox.shrink());

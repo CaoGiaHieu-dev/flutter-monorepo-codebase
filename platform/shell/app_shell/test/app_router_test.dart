@@ -100,7 +100,7 @@ void main() {
       expect(_location(router), '/onboarding');
       expect(find.text('onboarding'), findsOneWidget);
       // Boot records the entry location as seen for the next cold start.
-      expect(getIt<AppBootStorage>().viewedOnboard.value, isTrue);
+      expect(getIt<AppBootStorage>().viewedOnboard, isTrue);
     });
 
     testWidgets('a returning user starts on the first destination', (
@@ -122,6 +122,41 @@ void main() {
 
       expect(_location(router), '/home');
       expect(find.text('onboarding'), findsNothing);
+    });
+  });
+
+  group('AppRouter.destinations', () {
+    testWidgets('are sorted once and handed to the dashboard as built', (
+      tester,
+    ) async {
+      final router = _registerShell(postSignIn: '/first');
+      final dashboard = _RecordingDashboard();
+      getIt
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(
+            path: '/second',
+            order: 2,
+            routes: [
+              GoRoute(path: '/second', builder: (_, _) => const Text('2')),
+            ],
+          ),
+        )
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(
+            path: '/first',
+            order: 1,
+            routes: [
+              GoRoute(path: '/first', builder: (_, _) => const Text('1')),
+            ],
+          ),
+        )
+        ..registerSingleton<IDashboardRouteModule>(dashboard);
+
+      await _pump(tester, router);
+
+      expect(router.destinations.map((d) => d.path), ['/first', '/second']);
+      expect(router.fallbackLocation, '/first');
+      expect(dashboard.received, same(router.destinations));
     });
   });
 
@@ -188,4 +223,20 @@ void main() {
       expect(log, contains('tab.didPopNext'));
     });
   });
+}
+
+/// Records the destinations the router hands the dashboard chrome.
+class _RecordingDashboard implements IDashboardRouteModule {
+  List<INavDestinationModule>? received;
+
+  @override
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  ) {
+    received = destinations;
+    return navigationShell;
+  }
 }

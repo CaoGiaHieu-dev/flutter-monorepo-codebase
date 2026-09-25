@@ -35,7 +35,7 @@ class FakeDeeplinkProvider extends DeeplinkProvider {
 }
 
 /// A key-value backend held in memory.
-class MemoryStorage extends StorageInterface {
+class MemoryStorage implements StorageInterface {
   final _values = <String, Object?>{};
 
   @override
@@ -55,13 +55,17 @@ class MemoryStorage extends StorageInterface {
 
   @override
   Future<void> delete(String key) async => _values.remove(key);
+
+  @override
+  bool isValidKey(String key) => true;
 }
 
 /// The shell's real [AppBootStorage] over [MemoryStorage].
 AppBootStorage memoryBootStorage({bool viewedOnboard = false}) {
   final storage = MemoryStorage();
   final boot = AppBootStorage(StorageManager(storage, storage));
-  if (viewedOnboard) boot.viewedOnboard.value = true;
+  // Synchronous in memory: the flag reads true as soon as this returns.
+  if (viewedOnboard) boot.markOnboardViewed();
   return boot;
 }
 

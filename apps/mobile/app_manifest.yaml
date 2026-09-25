@@ -60,7 +60,7 @@ di_groups:
   # slot. Order inside the group is load-bearing too:
   #   1. platform_shell_adapters — storage adapters, AppBootStorage,
   #      NetworkConfig (+ SslPinningConfig). Needs StorageManager (`core`).
-  #   2. platform_app_shell — router, AppProvider, DeeplinkProvider.
+  #   2. platform_app_shell — router, DeeplinkProvider.
   # `ui` depends on it: ThemeProvider / LanguageProvider inject the storage
   # adapters registered here.
   - name: shell

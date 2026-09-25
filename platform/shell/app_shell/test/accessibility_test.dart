@@ -17,16 +17,13 @@ void _registerProviders(AppRouter router) {
     ..registerSingleton<LanguageProvider>(
       LanguageProvider(FakeLanguageStorage()),
     )
-    ..registerSingleton<AppProvider>(AppProvider())
     ..registerSingleton<AppRouter>(router)
     ..registerSingleton<DeeplinkProvider>(FakeDeeplinkProvider(router));
 }
 
-/// `AppProvider` starts watching connectivity in its constructor, and the
-/// connectivity checker's timer must not outlive the test.
+/// Unmounts the app, so no timer or listener outlives the test.
 Future<void> _unmount(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
-  getIt<AppProvider>().dispose();
   await tester.pump();
 }
 
@@ -41,7 +38,7 @@ void main() {
       _registerProviders(AppRouter());
       await tester.pumpWidget(
         ResponsiveInit(
-                    child: AppMaterialWrapper(
+          child: AppMaterialWrapper(
             home: Scaffold(
               body: Center(
                 child: IconButton(
@@ -141,7 +138,7 @@ void main() {
       late TextScaler seen;
       await tester.pumpWidget(
         ResponsiveInit(
-                    child: AppMaterialWrapper(
+          child: AppMaterialWrapper(
             home: Builder(
               builder: (context) {
                 seen = MediaQuery.textScalerOf(context);

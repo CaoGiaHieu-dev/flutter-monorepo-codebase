@@ -13,7 +13,7 @@ import '../navigation/app_router.dart';
 ///
 /// `https://<WEB_DOMAIN>/settings?tab=2` and `<scheme>://settings?tab=2` both
 /// go to `/settings?tab=2`. A path no module registered lands on
-/// `UndefineRouteWidget`, like any unknown location, so this class names no
+/// `UndefinedRouteWidget`, like any unknown location, so this class names no
 /// feature route and stays removable-safe.
 ///
 /// Started by `NavigatorWrapperWidget` once the user reaches the post-sign-in

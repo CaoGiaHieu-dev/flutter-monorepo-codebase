@@ -5,10 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'presentation/app_material_wrapper.dart';
-
-/// Minimum delay time for splash screen to avoid flicker
-const _minimumDelay = Duration(seconds: 2);
+import 'app_material_wrapper.dart';
 
 /// MainScope is responsible for initializing the app, displaying a splash screen,
 /// and transitioning to the main application once initialization is complete.
@@ -44,11 +41,9 @@ class MainScope {
       // Preserve the splash screen until initialization is complete.
       FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-      // Perform initialization tasks and delay for 2 seconds.
-      await Future.wait([
-        initService.call(),
-        Future<void>.delayed(_minimumDelay),
-      ]);
+      // The splash stays exactly as long as initialization takes — no
+      // artificial minimum on top of it.
+      await initService();
 
       // Remove the splash screen after initialization.
       _removeNativeSplash();
@@ -88,11 +83,8 @@ class MainScope {
     // Wait for the end of the current frame.
     await WidgetsBinding.instance.endOfFrame;
 
-    // Perform initialization tasks and delay for 2 seconds.
-    await Future.wait([
-      initService.call(),
-      Future<void>.delayed(_minimumDelay),
-    ]);
+    // The splash stays exactly as long as initialization takes.
+    await initService();
 
     // Update the widget to the root widget after initialization.
     widget.value = root;

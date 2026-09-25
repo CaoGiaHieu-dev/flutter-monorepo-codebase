@@ -15,15 +15,14 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'bootstrap.dart';
 export 'di/module.dart';
 export 'di/module.module.dart';
-export 'main_scope.dart';
-export 'presentation/app_material_wrapper.dart';
-export 'presentation/navigation/app_router.dart';
-export 'presentation/providers/app_provider.dart';
-export 'presentation/providers/deeplink_provider.dart';
-export 'presentation/root_app.dart';
-export 'presentation/utils/app_shell_ui_constants.dart';
-export 'presentation/widgets/navigator_wrapper_widget.dart';
-export 'presentation/widgets/undefine_route_widget.dart';
+export 'src/app_material_wrapper.dart';
+export 'src/bootstrap.dart';
+export 'src/main_scope.dart';
+export 'src/navigation/app_router.dart';
+export 'src/provider/deeplink_provider.dart';
+export 'src/root_app.dart';
+export 'src/utils/app_shell_ui_constants.dart';
+export 'src/widgets/navigator_wrapper_widget.dart';
+export 'src/widgets/undefined_route_widget.dart';

@@ -1,4 +1,3 @@
-import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:material_ui/material_ui.dart';
@@ -21,7 +20,7 @@ import 'navigation/app_router.dart';
 /// the underlying app infrastructure.
 ///
 /// Key responsibilities:
-/// - Initialize global providers (AppProvider, ThemeProvider, DeeplinkProvider)
+/// - Initialize global providers (ThemeProvider, LanguageProvider, DeeplinkProvider)
 /// - Configure MaterialApp with routing, theming, and localization
 /// - Set up global gesture handling and UI overlays
 /// - Provide consistent app-wide behavior and styling
@@ -44,8 +43,6 @@ class RootApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppMaterialWrapper.router(
-      supportedLocales: AppLocalizations.supportedLocales,
-
       // Navigation configuration using GoRouter
       routeInformationProvider:
           getIt<AppRouter>().router.routeInformationProvider,

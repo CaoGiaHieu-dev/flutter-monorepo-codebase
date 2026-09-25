@@ -4,7 +4,6 @@ import 'package:feature_dashboard/feature_dashboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:platform_kernel/platform_kernel.dart';
 
 /// The app honours the OS font size up to 2x (`RootApp` clamps it with
 /// `MediaQuery.withClampedTextScaling`). The dashboard chrome — bottom bar
@@ -37,18 +36,11 @@ class _Tab extends INavDestinationModule {
 const _tabs = {'/home': 'Home', '/settings': 'Settings', '/inbox': 'Messages'};
 
 void main() {
-  setUp(() async {
-    await getIt.reset();
-    getIt.enableRegisteringMultipleInstancesOfOneType();
-    var order = 0;
-    for (final MapEntry(key: path, value: label) in _tabs.entries) {
-      getIt.registerSingleton<INavDestinationModule>(
-        _Tab(order += 10, path, label),
-      );
-    }
-  });
-
-  tearDown(getIt.reset);
+  var order = 0;
+  final tabs = [
+    for (final MapEntry(key: path, value: label) in _tabs.entries)
+      _Tab(order += 10, path, label),
+  ];
 
   Future<void> pumpDashboard(WidgetTester tester, Size window) async {
     tester.view
@@ -63,7 +55,7 @@ void main() {
       routes: [
         StatefulShellRoute.indexedStack(
           builder: (context, state, shell) =>
-              DashboardPage(navigationShell: shell),
+              DashboardPage(navigationShell: shell, destinations: tabs),
           branches: [
             for (final path in _tabs.keys)
               StatefulShellBranch(

@@ -5,15 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import 'providers/app_provider.dart';
-import 'providers/deeplink_provider.dart';
+import 'provider/deeplink_provider.dart';
 import 'utils/app_shell_ui_constants.dart';
 
 /// A wrapper around [MaterialApp] and [MaterialApp.router] to avoid code duplication
 /// of common configurations like title, debugShowCheckedModeBanner, and showPerformanceOverlay.
 ///
 /// If [useGlobalProviders] is enabled, it automatically injects the app-shell
-/// providers (ThemeProvider, LanguageProvider, AppProvider, DeeplinkProvider)
+/// providers (ThemeProvider, LanguageProvider, DeeplinkProvider)
 /// and listens to theme/language changes to update the MaterialApp context
 /// dynamically.
 ///
@@ -25,11 +24,6 @@ class AppMaterialWrapper extends StatelessWidget {
   const AppMaterialWrapper({
     super.key,
     required this.home,
-    this.themeMode,
-    this.theme,
-    this.darkTheme,
-    this.locale,
-    this.supportedLocales,
     this.builder,
   }) : isRouter = false,
        routeInformationProvider = null,
@@ -40,11 +34,6 @@ class AppMaterialWrapper extends StatelessWidget {
   /// Creates a [MaterialApp.router] wrapper (typically used for RootApp).
   const AppMaterialWrapper.router({
     super.key,
-    this.themeMode,
-    this.theme,
-    this.darkTheme,
-    this.locale,
-    this.supportedLocales,
     this.builder,
     required this.routeInformationProvider,
     required this.routeInformationParser,
@@ -58,21 +47,6 @@ class AppMaterialWrapper extends StatelessWidget {
 
   /// The widget to be displayed as the home screen (for standard [MaterialApp]).
   final Widget? home;
-
-  /// The theme mode preference.
-  final ThemeMode? themeMode;
-
-  /// The light theme.
-  final ThemeData? theme;
-
-  /// The dark theme.
-  final ThemeData? darkTheme;
-
-  /// The locale preference.
-  final Locale? locale;
-
-  /// The supported locales.
-  final Iterable<Locale>? supportedLocales;
 
   /// The builder function for wrapping the navigator widget.
   ///
@@ -132,11 +106,8 @@ class AppMaterialWrapper extends StatelessWidget {
           // the long-press popup instead and keeps the label.
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: themeProvider.systemUiOverlayStyle,
-            child: MultiProvider(
-              providers: [
-                ChangeNotifierProvider.value(value: getIt<AppProvider>()),
-                ChangeNotifierProvider.value(value: getIt<DeeplinkProvider>()),
-              ],
+            child: ChangeNotifierProvider.value(
+              value: getIt<DeeplinkProvider>(),
               child: _wrapWithFeatureTrees(
                 context,
                 _buildMaterialApp(
@@ -154,10 +125,10 @@ class AppMaterialWrapper extends StatelessWidget {
   }
 
   Widget _buildMaterialApp({
-    ThemeMode? themeMode,
-    ThemeData? theme,
-    ThemeData? darkTheme,
-    Locale? locale,
+    required ThemeMode themeMode,
+    required ThemeData theme,
+    required ThemeData darkTheme,
+    required Locale locale,
   }) {
     final title = AppConfig.title;
     const debugShowCheckedModeBanner = false;
@@ -171,33 +142,25 @@ class AppMaterialWrapper extends StatelessWidget {
       ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
       ...AppLocalizations.localizationsDelegates,
     ];
+    final supportedLocales = AppLanguages.supported;
 
     if (isRouter) {
       return MaterialApp.router(
         title: title,
         debugShowCheckedModeBanner: debugShowCheckedModeBanner,
         showPerformanceOverlay: showPerformanceOverlay,
-        themeMode: themeMode ?? this.themeMode,
-        theme: theme ?? this.theme,
-        darkTheme: darkTheme ?? this.darkTheme,
-        locale: locale ?? this.locale,
+        themeMode: themeMode,
+        theme: theme,
+        darkTheme: darkTheme,
+        locale: locale,
         localizationsDelegates: delegates,
-        supportedLocales: supportedLocales ?? AppLocalizations.supportedLocales,
+        supportedLocales: supportedLocales,
         builder: _textScaleBuilder,
         routeInformationProvider: routeInformationProvider,
         routeInformationParser: routeInformationParser,
         routerDelegate: routerDelegate,
         backButtonDispatcher: backButtonDispatcher,
-        localeResolutionCallback: (deviceLocale, supportedLocales) {
-          // Loop through supported locales to find a match
-          for (var supportedLocale in supportedLocales) {
-            if (supportedLocale.languageCode == deviceLocale?.languageCode) {
-              return supportedLocale;
-            }
-          }
-          // Force English (or your first supported locale) if no match is found
-          return supportedLocales.first;
-        },
+        localeResolutionCallback: _resolveLocale,
       );
     }
 
@@ -206,23 +169,19 @@ class AppMaterialWrapper extends StatelessWidget {
       debugShowCheckedModeBanner: debugShowCheckedModeBanner,
       showPerformanceOverlay: showPerformanceOverlay,
       home: home,
-      themeMode: themeMode ?? this.themeMode,
-      theme: theme ?? this.theme,
-      darkTheme: darkTheme ?? this.darkTheme,
-      locale: locale ?? this.locale,
+      themeMode: themeMode,
+      theme: theme,
+      darkTheme: darkTheme,
+      locale: locale,
       localizationsDelegates: delegates,
-      supportedLocales: supportedLocales ?? AppLocalizations.supportedLocales,
+      supportedLocales: supportedLocales,
       builder: _textScaleBuilder,
-      localeResolutionCallback: (deviceLocale, supportedLocales) {
-        // Loop through supported locales to find a match
-        for (var supportedLocale in supportedLocales) {
-          if (supportedLocale.languageCode == deviceLocale?.languageCode) {
-            return supportedLocale;
-          }
-        }
-        // Force English (or your first supported locale) if no match is found
-        return supportedLocales.first;
-      },
+      localeResolutionCallback: _resolveLocale,
     );
   }
+
+  /// A device locale matched by language code, else [AppLanguages.fallback]
+  /// — the same rule `LanguageProvider` applies to a stored locale.
+  static Locale _resolveLocale(Locale? deviceLocale, Iterable<Locale> _) =>
+      AppLanguages.resolve(deviceLocale);
 }

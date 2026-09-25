@@ -8,8 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'main_scope.dart';
-import 'presentation/navigation/app_router.dart';
-import 'presentation/root_app.dart';
+import 'navigation/app_router.dart';
+import 'root_app.dart';
 
 /// Boots an app built on this shell.
 ///

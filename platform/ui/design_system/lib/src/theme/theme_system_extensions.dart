@@ -67,7 +67,9 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
 
   // Elevation & overlays
 
-  /// Base colour of `AppShadows`; each shadow applies its own alpha.
+  /// Base colour of `AppShadows`; each shadow applies its own alpha. The
+  /// same in both palettes — `AppShadows` is context-free and reads the
+  /// light one.
   final Color shadow;
 
   /// The dim layer behind a modal — dialog barrier, loading overlay.

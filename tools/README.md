@@ -184,7 +184,7 @@ than ignored. Bundles: `auth`, `home`, `settings`, `onboarding`, `cache`, `dashb
 ### 🏗️ Module Generator (new modules)
 ```bash
 # Syntax: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--group <g>] [--apps <id,id>]
-# <type>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<name>), 5=Custom
+# <type>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<name>), 5=Custom, 6=API (<name>_api at modules/<name>/api)
 # <prefix> (Custom only): package-name prefix -> <prefix>_<name> at platform/<group>/<name>; pass "" for other types
 # <SM> (Feature only): 1=Provider, 2=BLoC, 3=None
 # <route> (Feature only): 1=IFeatureRouteModule, 2=INavDestinationModule (primary nav tab), 3=none
@@ -212,6 +212,9 @@ dart tools/module_generator/generate.dart 4 charts --group ui
 # Custom package 'billing' with prefix 'acme' (acme_billing at platform/infra/billing):
 dart tools/module_generator/generate.dart 5 billing acme
 
+# The 'chat' module's API package (chat_api: a ChatNavigator stub; feature_chat, if it exists, implements it):
+dart tools/module_generator/generate.dart 6 chat
+
 # Interactive (no arguments, needs a terminal):
 dart tools/module_generator/generate.dart
 
@@ -222,7 +225,7 @@ dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
 dart tools/module_generator/generate.dart --help
 ```
 
-The CLI adds the module to every `app_manifest.yaml` (or only those `--apps` names) (Feature/Domain/Data to the `modules:` list,
+The CLI adds the module to every `app_manifest.yaml` (or only those `--apps` names) (Feature/Domain/Data/API to the `modules:` list,
 Core/Custom to the `core` DI group), scaffolds the route DI stub, then **runs by itself**
 `dart tools/composer/composer.dart sync` (regenerating the workspace list, the apps' dependencies
 and `injection.dart`), `dependency_sync`, `flutter pub get`, `gen-l10n` (Feature only), the barrel

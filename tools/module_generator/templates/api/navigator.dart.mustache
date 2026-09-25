@@ -1,0 +1,14 @@
+import 'package:flutter/widgets.dart';
+
+/// Routes owned by the `{{snakeNameInput}}` module, for *other features* to
+/// reach.
+///
+/// Part of `{{snakeNameInput}}_api`, the module's public surface: a feature
+/// that sends the user here depends on this package — never on
+/// `feature_{{snakeNameInput}}`. `feature_{{snakeNameInput}}` implements it
+/// (`{{pascalNameInput}}NavigatorImpl`, in its `routing/`). Resolve it with
+/// `getItOrNull<{{pascalNameInput}}Navigator>()`: the implementation is
+/// removable with its module (arch_check R8, RULE-22).
+abstract class {{pascalNameInput}}Navigator {
+  void to{{pascalNameInput}}(BuildContext context);
+}

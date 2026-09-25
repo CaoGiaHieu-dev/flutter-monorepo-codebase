@@ -7,6 +7,7 @@ import 'package:yaml/yaml.dart';
 import '../../shared/app_locator.dart';
 import '../../shared/toolchain.dart' as toolchain;
 import 'module_type.dart';
+import 'pubspec_generator.dart';
 
 class CommonHelpers {
   static void createDir(String path) {
@@ -137,16 +138,21 @@ class CommonHelpers {
     '--workspace',
   ];
 
-  /// Snapshots every shared file before the first mutation.
+  /// Snapshots every shared file before the first mutation — plus
+  /// [extraFiles], files of *another* package this run edits or creates
+  /// (an API package wires its existing feature).
   ///
   /// A `null` value records "did not exist", so restore deletes rather than
   /// resurrecting a file generation created.
-  static void snapshotSharedFiles(String modulePath) {
+  static void snapshotSharedFiles(
+    String modulePath, {
+    List<String> extraFiles = const [],
+  }) {
     _createdModulePath = modulePath;
     _workspaceResolved = false;
     _codegenStarted = false;
     _sharedFileSnapshots.clear();
-    for (final path in sharedMutatedFiles) {
+    for (final path in [...sharedMutatedFiles, ...extraFiles]) {
       final file = File(path);
       _sharedFileSnapshots[path] = file.existsSync()
           ? file.readAsStringSync()
@@ -324,6 +330,7 @@ class CommonHelpers {
       ModuleType.feature => 'feature',
       ModuleType.domain => 'domain',
       ModuleType.data => 'data',
+      ModuleType.api => 'api',
       ModuleType.core || ModuleType.custom => null,
     };
 
@@ -653,11 +660,88 @@ class CommonHelpers {
       '${config.modulePath}/lib/src/routing/${snakeNameInput}_route_module.dart',
     ).writeAsStringSync(routeModuleTpl.renderString(values));
 
+    if (PubspecGenerator.hasApiPackage(config)) {
+      writeNavigatorImpl(config.modulePath, config.nameInput);
+    }
+
     createFeatureTests(config, values);
 
     stdout.writeln(
       '  -> Created the ${config.smType.name.toUpperCase()}, route and page templates',
     );
+  }
+
+  /// `lib/src/routing/<name>_navigator_impl.dart` in the feature at
+  /// [featurePath]: implements `<Name>Navigator` from `<name>_api` with the
+  /// feature's own `<Name>Route`.
+  static String navigatorImplPath(String featurePath, String nameInput) =>
+      '$featurePath/lib/src/routing/${nameInput}_navigator_impl.dart';
+
+  static void writeNavigatorImpl(String featurePath, String nameInput) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/feature/routing/navigator_impl.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(navigatorImplPath(featurePath, nameInput)).writeAsStringSync(
+      tpl.renderString({
+        'moduleName': 'feature_$nameInput',
+        'snakeNameInput': nameInput,
+        'pascalNameInput': toPascalCase(nameInput),
+      }),
+    );
+    stdout.writeln(
+      '  -> Implemented ${toPascalCase(nameInput)}Navigator in '
+      '${navigatorImplPath(featurePath, nameInput)}',
+    );
+  }
+
+  /// API scaffold: the navigator contract other features reach this module
+  /// through. The barrel is written by the barrel generator afterwards.
+  static void createApiTemplates(ModuleConfig config) {
+    final tpl = Template(
+      File(
+        'tools/module_generator/templates/api/navigator.dart.mustache',
+      ).readAsStringSync(),
+    );
+    File(
+      '${config.modulePath}/lib/src/navigators/${config.nameInput}_navigator.dart',
+    ).writeAsStringSync(tpl.renderString(_layerValues(config)));
+  }
+
+  /// The feature of the module an API package is generated for, when it
+  /// exists and still has the route its generator wrote — the one an
+  /// API's navigator can be implemented with, without guessing.
+  static String? featureToWire(String nameInput) {
+    final feature = 'modules/$nameInput/feature';
+    final route = File(
+      '$feature/lib/src/routing/${nameInput}_route_module.dart',
+    );
+    if (!File('$feature/pubspec.yaml').existsSync() || !route.existsSync()) {
+      return null;
+    }
+    final declaresRoute = RegExp(
+      'class\\s+${toPascalCase(nameInput)}Route\\b',
+    ).hasMatch(route.readAsStringSync());
+    return declaresRoute ? feature : null;
+  }
+
+  /// Makes the existing feature at [featurePath] declare `<name>_api` (a
+  /// path dependency, first under `dependencies:`) and implement its
+  /// navigator.
+  static void wireFeatureToApi(String featurePath, String nameInput) {
+    final pubspec = File('$featurePath/pubspec.yaml');
+    final lines = pubspec.readAsLinesSync();
+    final at = lines.indexWhere((l) => l.trimRight() == 'dependencies:');
+    if (at == -1) {
+      throw Exception('$featurePath/pubspec.yaml has no `dependencies:`.');
+    }
+    if (!lines.any((l) => l.trimRight() == '  ${nameInput}_api:')) {
+      lines.insertAll(at + 1, ['  ${nameInput}_api:', '    path: ../api']);
+      pubspec.writeAsStringSync('${lines.join('\n')}\n');
+      stdout.writeln('  -> $featurePath now depends on ${nameInput}_api');
+    }
+    writeNavigatorImpl(featurePath, nameInput);
   }
 
   /// The tests a feature starts with, so `flutter test` has something to run

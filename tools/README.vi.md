@@ -181,7 +181,7 @@ Bundle: `auth`, `home`, `settings`, `onboarding`, `cache`, `dashboard`, `splash`
 ### 🏗️ Module Generator (Tạo Module Mới)
 ```bash
 # Cú pháp: dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>] [--group <nhóm>] [--apps <id,id>]
-# <loại>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<tên>), 5=Custom
+# <loại>: 1=Feature, 2=Domain, 3=Data, 4=Core (core_<tên>), 5=Custom, 6=API (<tên>_api tại modules/<tên>/api)
 # <prefix> (chỉ Custom): tiền tố tên package -> <prefix>_<tên> tại platform/<nhóm>/<tên>; loại khác truyền ""
 # <SM> (chỉ Feature): 1=Provider, 2=BLoC, 3=None
 # <route> (chỉ Feature): 1=IFeatureRouteModule, 2=INavDestinationModule (tab điều hướng chính), 3=none
@@ -209,6 +209,9 @@ dart tools/module_generator/generate.dart 4 charts --group ui
 # Custom package 'billing' với tiền tố 'acme' (acme_billing tại platform/infra/billing):
 dart tools/module_generator/generate.dart 5 billing acme
 
+# Package API của module 'chat' (chat_api: stub ChatNavigator; feature_chat, nếu đã có, sẽ implement nó):
+dart tools/module_generator/generate.dart 6 chat
+
 # Interactive (không tham số, cần terminal):
 dart tools/module_generator/generate.dart
 
@@ -219,7 +222,7 @@ dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
 dart tools/module_generator/generate.dart --help
 ```
 
-CLI thêm module vào mọi `app_manifest.yaml` (hoặc chỉ các app mà `--apps` nêu tên) (Feature/Domain/Data vào danh sách `modules:`,
+CLI thêm module vào mọi `app_manifest.yaml` (hoặc chỉ các app mà `--apps` nêu tên) (Feature/Domain/Data/API vào danh sách `modules:`,
 Core/Custom vào nhóm DI `core`), scaffold stub DI route, rồi **tự chạy**
 `dart tools/composer/composer.dart sync` (sinh lại workspace list, dependency của app và
 `injection.dart`), `dependency_sync`, `flutter pub get`, `gen-l10n` (chỉ với Feature), barrel

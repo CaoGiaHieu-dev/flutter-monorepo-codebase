@@ -43,15 +43,33 @@ void main(List<String> args) async {
     '\n[!] Creating module ${config.moduleName} at ${config.modulePath}...',
   );
 
+  // An API package is implemented by its module's feature: when that exists
+  // (with the route the generator wrote), this run wires it too.
+  final isApi = config.type == ModuleType.api;
+  final featureToWire = isApi
+      ? CommonHelpers.featureToWire(config.nameInput)
+      : null;
+
   // Snapshot the shared files so any later failure can be undone.
-  CommonHelpers.snapshotSharedFiles(config.modulePath);
+  CommonHelpers.snapshotSharedFiles(
+    config.modulePath,
+    extraFiles: [
+      if (featureToWire != null) ...[
+        '$featureToWire/pubspec.yaml',
+        CommonHelpers.navigatorImplPath(featureToWire, config.nameInput),
+      ],
+    ],
+  );
 
   try {
     // 3. Create Directory Structure
-    CommonHelpers.createDir('${config.modulePath}/lib/di');
     CommonHelpers.createDir('${config.modulePath}/lib/src');
-    // Every package owns its constants in `utils/`, whatever the layer.
-    CommonHelpers.createDir('${config.modulePath}/lib/src/utils');
+    if (!isApi) {
+      // An API package has no DI module and owns no constants.
+      CommonHelpers.createDir('${config.modulePath}/lib/di');
+      // Every other package owns its constants in `utils/`.
+      CommonHelpers.createDir('${config.modulePath}/lib/src/utils');
+    }
 
     switch (config.type) {
       case ModuleType.feature:
@@ -133,6 +151,13 @@ void main(List<String> args) async {
           hasDomain: PubspecGenerator.hasDomainPackage(config),
         );
         break;
+      case ModuleType.api:
+        CommonHelpers.createDir('${config.modulePath}/lib/src/navigators');
+        CommonHelpers.createApiTemplates(config);
+        if (featureToWire != null) {
+          CommonHelpers.wireFeatureToApi(featureToWire, config.nameInput);
+        }
+        break;
       case ModuleType.core:
       case ModuleType.custom:
         break;
@@ -146,14 +171,16 @@ void main(List<String> args) async {
     // No per-package .gitignore: the root one covers build output and
     // generated code at any depth.
 
-    // 5. Create lib/di/module.dart
-    final diTemplateString = File(
-      'tools/module_generator/templates/common/di_module.dart.mustache',
-    ).readAsStringSync();
-    final diTemplate = Template(diTemplateString);
-    File(
-      '${config.modulePath}/lib/di/module.dart',
-    ).writeAsStringSync(diTemplate.renderString({}));
+    // 5. Create lib/di/module.dart (not for an API package: no DI)
+    if (!isApi) {
+      final diTemplateString = File(
+        'tools/module_generator/templates/common/di_module.dart.mustache',
+      ).readAsStringSync();
+      final diTemplate = Template(diTemplateString);
+      File(
+        '${config.modulePath}/lib/di/module.dart',
+      ).writeAsStringSync(diTemplate.renderString({}));
+    }
 
     // 6. Register in every app manifest (or only those `--apps` names) —
     // the only hand-edited composition input.
@@ -213,6 +240,13 @@ void main(List<String> args) async {
       'tools/barrel_generator/generate.dart',
       '${config.modulePath}/lib',
     ]);
+    if (featureToWire != null) {
+      // Its new navigator implementation joins the feature's barrel.
+      await CommonHelpers.runDart([
+        'tools/barrel_generator/generate.dart',
+        '$featureToWire/lib',
+      ]);
+    }
 
     stdout.writeln('[!] Fixing imports with dart fix...');
     await CommonHelpers.runDart(
@@ -223,6 +257,30 @@ void main(List<String> args) async {
     stdout.writeln('\n==========================================');
     stdout.writeln('[V] Module "${config.moduleName}" created.');
     stdout.writeln('==========================================');
+    if (isApi) {
+      final pascal = CommonHelpers.toPascalCase(config.nameInput);
+      stdout.writeln('\nWhat is left for you to do by hand:');
+      stdout.writeln(
+        '1. Shape ${pascal}Navigator in "${config.modulePath}/lib/src/navigators/" '
+        '(add action handlers under lib/src/actions/ the same way), then run '
+        '"dart tools/barrel_generator/generate.dart ${config.modulePath}/lib"',
+      );
+      stdout.writeln(
+        featureToWire != null
+            ? '2. feature_${config.nameInput} implements it in '
+                  '${CommonHelpers.navigatorImplPath(featureToWire, config.nameInput)} — '
+                  'keep the two in step'
+            : '2. Implement it in feature_${config.nameInput}: generate the '
+                  'feature now and it is wired for you, or add '
+                  '"${config.moduleName}" to an existing feature\'s pubspec and a '
+                  '@LazySingleton(as: ${pascal}Navigator) in its routing/',
+      );
+      stdout.writeln(
+        '3. A feature that navigates here declares "${config.moduleName}" and '
+        'resolves getItOrNull<${pascal}Navigator>() (RULE-22, arch_check R8)',
+      );
+      stdout.writeln('==========================================');
+    }
     if (config.type == ModuleType.feature) {
       stdout.writeln('\nWhat is left for you to do by hand:');
       stdout.writeln(
@@ -252,9 +310,13 @@ void main(List<String> args) async {
           break;
       }
       stdout.writeln(
-        '3. Other modules navigate here through a Navigator in this module\'s API package '
-        '(modules/<id>/api — see guides/12_module_isolation § 4); after adding one run '
-        '"dart tools/barrel_generator/generate.dart modules/<id>/api/lib"',
+        PubspecGenerator.hasApiPackage(config)
+            ? '3. Other modules navigate here through ${config.nameInput}_api: '
+                  'lib/src/routing/${config.nameInput}_navigator_impl.dart '
+                  'implements its navigator'
+            : '3. Other modules navigate here through a navigator in this '
+                  'module\'s API package: "dart tools/module_generator/generate.dart '
+                  '6 ${config.nameInput}" creates it and implements it here',
       );
       stdout.writeln(
         '4. Translate "${config.modulePath}/assets/language/vi.arb" — it '

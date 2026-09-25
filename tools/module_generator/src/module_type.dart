@@ -1,4 +1,7 @@
-enum ModuleType { feature, domain, data, core, custom }
+/// What `generate.dart` creates. [api] is a module's contracts package
+/// (`<name>_api` at `modules/<name>/api`) — the navigator other features
+/// reach this module through.
+enum ModuleType { feature, domain, data, core, custom, api }
 
 enum StateManagementType { provider, bloc, none }
 

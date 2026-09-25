@@ -365,10 +365,8 @@ def install_dependencies
     sh "#{dart_cmd} run build_runner build --workspace"
   end
 
-  # Generate barrel files — one package at a time, after gen-l10n and
-  # build_runner, because a barrel also exports the generated files on disk.
-  # The `lib/src/gen/gen.dart` barrels are gitignored, so on a clean runner
-  # nothing compiles until this has run. Mirrors step 6 of
+  # Regenerate each package's barrel — after gen-l10n and build_runner,
+  # because a barrel also exports the generated files on disk. Mirrors step 6 of
   # tools/workspace_setup/configure.dart: same skipped directories, and an app
   # (a dir with `app_manifest.yaml`) is skipped — it is a composition root, and
   # its `injection.dart` is composer's output, compared byte-for-byte.

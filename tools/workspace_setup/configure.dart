@@ -133,14 +133,9 @@ void main(List<String> args) async {
     '--workspace',
   ]);
 
-  // 6. Generate barrel files — one package at a time.
-  //
-  // This used to pass `packages` as a single argument. The generator emits a
-  // barrel for whatever directory it is handed, so that produced
-  // `packages/packages.dart`, `platform/core.dart` and
-  // `platform/database/database.dart` — files sitting outside every
-  // `lib/`, which nothing can import and which nobody noticed. They were
-  // deleted; this is what stops them coming back.
+  // 6. Write each package's one barrel (lib/<package>.dart). The generator
+  // takes a single package lib/ and refuses anything else, so it runs once
+  // per package.
   stdout.writeln('[!] Generating barrel files per package...');
   for (final pubspec in _findFiles(Directory('.'), 'pubspec.yaml')) {
     final pkgDir = pubspec.parent.path;

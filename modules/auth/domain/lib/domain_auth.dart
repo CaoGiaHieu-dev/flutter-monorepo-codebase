@@ -16,5 +16,12 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/entities/user/user_entity.dart';
+export 'src/entities/user/user_role.dart';
+export 'src/params/auth_params/login_params.dart';
+export 'src/repositories/i_auth_repository.dart';
+export 'src/usecases/auth/login_usecase.dart';
+export 'src/usecases/auth/logout_usecase.dart';
+export 'src/usecases/auth/refresh_token_usecase.dart';

@@ -16,6 +16,14 @@ library;
 
 // Auto-generated exports, do not edit manually.
 export 'bootstrap.dart';
-export 'di/di.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
 export 'main_scope.dart';
-export 'presentation/presentation.dart';
+export 'presentation/app_material_wrapper.dart';
+export 'presentation/navigation/app_router.dart';
+export 'presentation/providers/app_provider.dart';
+export 'presentation/providers/deeplink_provider.dart';
+export 'presentation/root_app.dart';
+export 'presentation/utils/app_shell_ui_constants.dart';
+export 'presentation/widgets/navigator_wrapper_widget.dart';
+export 'presentation/widgets/undefine_route_widget.dart';

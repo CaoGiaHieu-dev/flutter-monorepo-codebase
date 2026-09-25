@@ -5,52 +5,29 @@ import 'package:path/path.dart' as p;
 import '../shared/toolchain.dart';
 
 const _usage = '''
-Usage: dart tools/barrel_generator/generate.dart [<package>/lib]
+Usage: dart tools/barrel_generator/generate.dart <package>/lib
 
-Regenerates the `export` barrel of every directory under the given path
-(default: lib), then runs `dart format` on it.
+Writes the package's one barrel, lib/<package_name>.dart: an `export` of every
+Dart file under lib/, sorted, then runs `dart format` on it.
 
   dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 
-Hand-written `export` lines in a barrel are replaced. Run it after
-gen-l10n / build_runner: generated files on disk are exported too.
-Exits 64 when the path does not exist or on a flag, 1 when generation or
-formatting fails.''';
+There is exactly one barrel per package. A directory barrel left by an older
+generator (a file holding only the auto-generated header and `export` lines)
+is deleted; one that also holds code keeps the code and loses the exports.
+Hand-written `export` lines in the package barrel are replaced; everything
+else in it (library doc comment, `library;`) is kept.
 
-/// Directories never given a barrel, matched as whole path SEGMENTS relative
-/// to the package root (the nearest ancestor of the target holding a
-/// `pubspec.yaml`) — never as substrings, and never inside `lib/`.
-///
-/// They used to be matched as substrings of the whole path, anywhere. That was
-/// meant for runs over a package root, but it also dropped legitimate source:
-/// `lib/src/widgets/web/web_view.dart` was never exported because `web`
-/// appeared in its path. Inside `lib/` only `lib/gen` (flutter_gen output,
-/// exported by nothing) and hidden directories are skipped; `lib/src/gen`,
-/// whose barrel `core_base_ui` exports, is walked as before.
-const _excludedOutsideLib = {
-  'build',
-  'ios',
-  'android',
-  'macos',
-  'windows',
-  'linux',
-  'web',
-};
+Not exported: `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `part of` files,
+`firebase_options*.dart`, lib/gen/ and hidden directories. Generated files
+that ARE libraries (`module.module.dart`, lib/src/gen/**) are exported when
+present on disk — run it after gen-l10n / build_runner.
 
-// Cross-platform path helpers
-String _join(String part1, String part2) {
-  if (part1.isEmpty) return part2;
-  if (part2.isEmpty) return part1;
-  final endsWithSlash = part1.endsWith('/') || part1.endsWith('\\');
-  final startsWithSlash = part2.startsWith('/') || part2.startsWith('\\');
-  if (endsWithSlash && startsWithSlash) {
-    return part1 + part2.substring(1);
-  } else if (!endsWithSlash && !startsWithSlash) {
-    return '$part1/$part2';
-  } else {
-    return part1 + part2;
-  }
-}
+Exits 64 when the path is not a package's lib/ directory or on a flag, 1 when
+generation or formatting fails.''';
+
+/// The header every generated export block starts with.
+const _header = '// Auto-generated exports, do not edit manually.';
 
 String _basename(String path) {
   final parts = path
@@ -89,43 +66,60 @@ void main(List<String> args) {
     exit(64);
   }
 
-  var targetDir = 'lib';
-  if (args.isNotEmpty) {
-    targetDir = _stripTrailingSeparators(args[0]);
+  if (args.isEmpty) {
+    stderr.writeln('[ERROR] Expected a package lib/ directory.');
+    stderr.writeln(_usage);
+    exit(64);
   }
-
-  var dir = Directory(targetDir);
-  // Ask for another path only when a person is there to answer. An agent or
-  // a CI step passing a wrong path used to block forever on stdin.
-  if (!dir.existsSync() && (args.isNotEmpty || !stdin.hasTerminal)) {
+  final targetDir = _stripTrailingSeparators(args[0]);
+  final lib = Directory(targetDir);
+  if (!lib.existsSync()) {
     stderr.writeln('[ERROR] Directory "$targetDir" does not exist.');
     exit(64);
   }
-  while (!dir.existsSync()) {
-    stderr.writeln('[ERROR] Directory "$targetDir" does not exist.');
-    stdout.write(
-      'Enter a valid directory path (or "exit" to quit): ',
+  final pubspec = File(p.join(lib.parent.path, 'pubspec.yaml'));
+  if (_basename(lib.path) != 'lib' || !pubspec.existsSync()) {
+    stderr.writeln(
+      '[ERROR] "$targetDir" is not a package lib/ directory (a lib/ next to '
+      'a pubspec.yaml).',
     );
-    final input = stdin.readLineSync();
-    if (input == null || input.trim().toLowerCase() == 'exit') {
-      exit(1);
-    }
-    targetDir = _stripTrailingSeparators(input.trim());
-    dir = Directory(targetDir);
+    exit(64);
   }
+  final nameMatch = RegExp(
+    r'^name:\s+([a-zA-Z0-9_]+)',
+    multiLine: true,
+  ).firstMatch(pubspec.readAsStringSync());
+  if (nameMatch == null) {
+    stderr.writeln('[ERROR] No package name in ${pubspec.path}.');
+    exit(64);
+  }
+  final barrel = File(p.join(lib.path, '${nameMatch.group(1)}.dart'));
 
-  stdout.writeln(
-    '\n[INFO] Creating/updating barrel files for "$targetDir"...',
-  );
-  stdout.writeln(
-    '[INFO] Rules: exports sorted, placed after imports; hand-written code kept.',
-  );
+  stdout.writeln('\n[INFO] Writing ${barrel.path}...');
 
   try {
-    final allDirs = _getAllDirectories(dir);
-    for (final subDir in allDirs) {
-      _createOrUpdateBarrelForDir(subDir);
+    final sources = <String>[];
+    for (final file in _dartFiles(lib)) {
+      if (p.equals(file.path, barrel.path)) continue;
+      final content = file.readAsStringSync();
+      if (_isLegacyBarrel(content)) {
+        file.deleteSync();
+        stdout.writeln('  - Deleted directory barrel: ${file.path}');
+        continue;
+      }
+      if (content.contains(_header)) {
+        file.writeAsStringSync(_withoutExports(content));
+        stdout.writeln('  - Removed exports from: ${file.path}');
+      }
+      if (_isExported(file.path, content)) {
+        sources.add(
+          p.posix.joinAll(p.split(p.relative(file.path, from: lib.path))),
+        );
+      }
     }
+    _deleteEmptyDirectories(lib);
+    sources.sort();
+    _writeBarrel(barrel, [for (final s in sources) "export '$s';"]);
 
     stdout.writeln('\n[INFO] Formatting "$targetDir"...');
     // Through the repo's toolchain (`fvm dart` when FVM is set up), not the
@@ -139,228 +133,98 @@ void main(List<String> args) {
     if (result.exitCode != 0) {
       stderr.write(result.stderr);
       stderr.writeln(
-        '[ERROR] dart format failed (exit ${result.exitCode}). The barrels '
-        'were written but not formatted.',
+        '[ERROR] dart format failed (exit ${result.exitCode}). The barrel '
+        'was written but not formatted.',
       );
       exit(1);
     }
 
-    stdout.writeln('\n[SUCCESS] Barrel files generated.');
-  } catch (e) {
-    stderr.writeln('[ERROR] Unexpected error: $e');
+    stdout.writeln('\n[SUCCESS] Barrel generated: ${sources.length} exports.');
+  } on FileSystemException catch (e) {
+    stderr.writeln('[ERROR] ${e.path}: ${e.message}');
     exit(1);
   }
 }
 
-List<Directory> _getAllDirectories(Directory root) {
-  final result = <Directory>[];
-  final packageRoot = _packageRoot(root);
-
-  bool shouldExclude(Directory dir) {
-    final rel = p.relative(
-      p.normalize(dir.absolute.path),
-      from: packageRoot,
-    );
-    final segments = p.split(rel).where((s) => s != '.').toList();
-    if (segments.any((s) => s.startsWith('.'))) return true;
-    // Only what sits above the first `lib` is outside the Dart sources.
-    final lib = segments.indexOf('lib');
-    final outside = lib == -1 ? segments : segments.sublist(0, lib);
-    if (outside.any(_excludedOutsideLib.contains)) return true;
-    return lib != -1 && segments.length > lib + 1 && segments[lib + 1] == 'gen';
-  }
-
-  void walk(Directory current) {
-    if (shouldExclude(current)) return;
-
-    try {
-      final entities = current
-          .listSync(recursive: false)
-          .whereType<Directory>();
-      for (final entity in entities) {
-        walk(entity);
+/// Every `.dart` file under [lib], skipping `lib/gen` (flutter_gen output,
+/// exported by nothing) and hidden directories. `lib/src/gen` — gen-l10n and
+/// flutter_gen output a package does export — is walked.
+List<File> _dartFiles(Directory lib) {
+  final out = <File>[];
+  void walk(Directory dir, {required bool top}) {
+    final entries = dir.listSync()..sort((a, b) => a.path.compareTo(b.path));
+    for (final e in entries) {
+      final name = _basename(e.path);
+      if (name.startsWith('.')) continue;
+      if (e is Directory) {
+        if (top && name == 'gen') continue;
+        walk(e, top: false);
+      } else if (e is File && name.endsWith('.dart')) {
+        out.add(e);
       }
-    } on FileSystemException {
-      // An unlistable directory (permissions, removed mid-walk) has no
-      // subdirectories to visit; it is still added below, and processing it
-      // reports the problem instead of writing a barrel.
     }
-
-    result.add(current);
   }
 
-  walk(root);
-  return result;
+  walk(lib, top: true);
+  return out;
 }
 
-/// The directory exclusions are relative to: the nearest ancestor-or-self of
-/// [target] holding a `pubspec.yaml`; failing that, the parent of a target
-/// named `lib`, else the target itself.
-String _packageRoot(Directory target) {
-  final start = p.normalize(target.absolute.path);
-  var dir = start;
-  while (true) {
-    if (File(p.join(dir, 'pubspec.yaml')).existsSync()) return dir;
-    final parent = p.dirname(dir);
-    if (parent == dir) break;
-    dir = parent;
+bool _isExported(String path, String content) {
+  final name = _basename(path);
+  if (name.endsWith('.g.dart') ||
+      name.endsWith('.freezed.dart') ||
+      name.endsWith('.mocks.dart') ||
+      name.endsWith('_test.dart') ||
+      name.startsWith('firebase_options')) {
+    return false;
   }
-  return p.basename(start) == 'lib' ? p.dirname(start) : start;
+  return !RegExp(r'^part\s+of\s+', multiLine: true).hasMatch(content);
 }
 
-void _createOrUpdateBarrelForDir(Directory dir) {
-  final dirName = _basename(dir.path);
-  String barrelFileName;
+/// A barrel an older, per-directory version of this tool wrote: the header
+/// and `export` lines, nothing else.
+bool _isLegacyBarrel(String content) {
+  if (!content.contains(_header)) return false;
+  return content
+      .split('\n')
+      .map((l) => l.trim())
+      .every((l) => l.isEmpty || l == _header || l.startsWith("export '"));
+}
 
-  if (dirName == 'lib') {
-    // Try to get package name from pubspec.yaml
-    final pubspecFile = File(_join(dir.parent.path, 'pubspec.yaml'));
-    if (pubspecFile.existsSync()) {
-      final content = pubspecFile.readAsStringSync();
-      final nameMatch = RegExp(
-        r'^name:\s+([a-zA-Z0-9_]+)',
-        multiLine: true,
-      ).firstMatch(content);
-      if (nameMatch != null) {
-        barrelFileName = nameMatch.group(1)!;
-      } else {
-        stdout.writeln(
-          '  [WARN] No package name found in pubspec.yaml',
-        );
-        return;
-      }
-    } else {
-      // If no pubspec, skip lib (might not be a package root)
-      return;
-    }
-  } else {
-    barrelFileName = dirName;
-  }
+String _withoutExports(String content) {
+  final kept = content
+      .split('\n')
+      .where((l) => l.trim() != _header && !l.trim().startsWith("export '"))
+      .join('\n')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n');
+  return '${kept.trimLeft().trimRight()}\n';
+}
 
-  final barrelFile = File(_join(dir.path, '$barrelFileName.dart'));
-  final exports = <String>[];
-
-  // 1. Get all .dart files in the directory (maxdepth 1)
-  try {
-    final entities = dir.listSync(recursive: false);
-    for (final entity in entities) {
-      if (entity is File && entity.path.endsWith('.dart')) {
-        final filename = _basename(entity.path);
-        if (filename == '$barrelFileName.dart' ||
-            filename.endsWith('.g.dart') ||
-            filename.endsWith('.freezed.dart') ||
-            filename.endsWith('.mocks.dart') ||
-            filename.endsWith('.test.dart') ||
-            filename.endsWith('_test.dart') ||
-            filename.startsWith('firebase_options')) {
-          continue;
-        }
-
-        // Check if file has "part of"
-        final content = entity.readAsStringSync();
-        if (content.contains(RegExp(r'^part\s+of\s+', multiLine: true))) {
-          stdout.writeln('  - Skipped (part of file): $filename');
-          continue;
-        }
-
-        exports.add("export '$filename';");
-      }
-    }
-  } on FileSystemException catch (e) {
-    // A barrel built from a partial listing would silently drop exports.
-    stderr.writeln('  !! Skipped ${dir.path}: ${e.message}');
-    return;
-  }
-
-  // 2. Get child directories containing their own barrel files
-  try {
-    final entities = dir.listSync(recursive: false).whereType<Directory>();
-    for (final subdir in entities) {
-      final subdirName = _basename(subdir.path);
-      final childBarrel = File(_join(subdir.path, '$subdirName.dart'));
-      if (childBarrel.existsSync()) {
-        exports.add("export '$subdirName/$subdirName.dart';");
-      }
-    }
-  } on FileSystemException catch (e) {
-    stderr.writeln('  !! Skipped ${dir.path}: ${e.message}');
-    return;
-  }
-
-  if (exports.isEmpty && !barrelFile.existsSync()) {
-    return;
-  }
-
-  exports.sort();
-
-  final newExportLines = [
-    '// Auto-generated exports, do not edit manually.',
-    ...exports,
-  ];
-
-  if (!barrelFile.existsSync()) {
-    if (exports.isNotEmpty) {
-      barrelFile.writeAsStringSync('${newExportLines.join('\n')}\n');
-      stdout.writeln('  -> Created barrel: ${barrelFile.path}');
-    }
-    return;
-  }
-
-  // Update existing barrel file
-  stdout.writeln('  - Updating barrel: ${barrelFile.path}');
-  final existingLines = barrelFile.readAsLinesSync();
-
-  // Remove old exports and comment
-  final cleanedLines = <String>[];
-  for (final line in existingLines) {
-    if (line.contains('Auto-generated exports, do not edit manually.')) {
-      continue;
-    }
-    if (line.trim().startsWith("export '")) {
-      continue;
-    }
-    cleanedLines.add(line);
-  }
-
-  // Find last import or library statement index
-  var lastImportIdx = -1;
-  for (var i = 0; i < cleanedLines.length; i++) {
-    final trimmed = cleanedLines[i].trim();
-    // `library;` (Dart 3's unnamed form) must anchor too, not just the legacy
-    // `library some_name;`. Without it a barrel that opens with a doc comment
-    // has no anchor, so the exports get prepended *above* that comment and the
-    // file reads back-to-front — which is how the sample banners would end up
-    // buried under the export block on the next run.
-    if (trimmed.startsWith("import '") ||
-        trimmed == 'library;' ||
-        trimmed.startsWith('library ')) {
-      lastImportIdx = i;
+void _deleteEmptyDirectories(Directory dir) {
+  for (final sub in dir.listSync().whereType<Directory>()) {
+    _deleteEmptyDirectories(sub);
+    if (sub.listSync().isEmpty) {
+      sub.deleteSync();
+      stdout.writeln('  - Deleted empty directory: ${sub.path}');
     }
   }
+}
 
-  final finalLines = <String>[];
-  if (lastImportIdx == -1) {
-    // Prepend
-    if (exports.isNotEmpty) {
-      finalLines.addAll(newExportLines);
-      finalLines.add('');
-    }
-    finalLines.addAll(cleanedLines);
-  } else {
-    // Insert after last import
-    for (var i = 0; i <= lastImportIdx; i++) {
-      finalLines.add(cleanedLines[i]);
-    }
-    finalLines.add('');
-    if (exports.isNotEmpty) {
-      finalLines.addAll(newExportLines);
-      finalLines.add('');
-    }
-    for (var i = lastImportIdx + 1; i < cleanedLines.length; i++) {
-      finalLines.add(cleanedLines[i]);
+/// Keeps what a person wrote in the barrel (its doc comment, `library;`,
+/// imports) and replaces every `export` line with [exports].
+void _writeBarrel(File barrel, List<String> exports) {
+  final kept = <String>[];
+  if (barrel.existsSync()) {
+    for (final line in barrel.readAsLinesSync()) {
+      final t = line.trim();
+      if (t == _header || t.startsWith("export '")) continue;
+      kept.add(line);
     }
   }
-
-  barrelFile.writeAsStringSync('${finalLines.join('\n')}\n');
-  stdout.writeln('  -> Updated: ${barrelFile.path}');
+  while (kept.isNotEmpty && kept.last.trim().isEmpty) {
+    kept.removeLast();
+  }
+  final block = [_header, ...exports];
+  final out = kept.isEmpty ? block : [...kept, '', ...block];
+  barrel.writeAsStringSync('${out.join('\n')}\n');
 }

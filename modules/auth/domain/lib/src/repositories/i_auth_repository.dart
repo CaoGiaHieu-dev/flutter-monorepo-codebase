@@ -1,6 +1,6 @@
 import 'package:domain_core/domain_core.dart';
 
-import '../entities/user/user.dart';
+import '../entities/user/user_entity.dart';
 import '../params/auth_params/login_params.dart';
 
 /// SAMPLE — the repository contract for the auth module.

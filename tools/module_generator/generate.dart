@@ -189,9 +189,9 @@ void main(List<String> args) async {
       );
     }
 
-    // Barrels run twice. The templates import sibling barrels
-    // (`../pages/pages.dart`), so they must exist before build_runner reads
-    // the package; and barrels also export generated files present on disk
+    // The package barrel is written twice. `lib/di/` imports it
+    // (`localization.dart`), so it must exist before build_runner reads the
+    // package; and it also exports generated files present on disk
     // (`module.module.dart`, `lib/src/gen/**`), so the last run must come
     // after codegen.
     stdout.writeln('[!] Generating barrel files...');
@@ -255,7 +255,7 @@ void main(List<String> args) async {
       stdout.writeln(
         '3. Other modules navigate here through a Navigator in this module\'s API package '
         '(modules/<id>/api — see guides/12_module_isolation § 4); after adding one run '
-        '"dart tools/barrel_generator/generate.dart modules/<id>/api/lib" first',
+        '"dart tools/barrel_generator/generate.dart modules/<id>/api/lib"',
       );
       stdout.writeln(
         '4. Re-run "dart run build_runner build --workspace", then fully '

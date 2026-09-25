@@ -3,7 +3,7 @@ import 'package:core_responsive/core_responsive.dart';
 import 'package:core_ui_kit/buttons/custom_button.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_auth_extension.dart';
 
 /// SAMPLE — demonstrates a feature-owned form widget:
 /// feature-scoped translations (`context.l10nAuth`), `core_responsive` scaling

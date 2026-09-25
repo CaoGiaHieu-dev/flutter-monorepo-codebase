@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import 'providers/providers.dart';
+import 'providers/app_provider.dart';
+import 'providers/deeplink_provider.dart';
 import 'utils/app_shell_ui_constants.dart';
 
 /// A wrapper around [MaterialApp] and [MaterialApp.router] to avoid code duplication

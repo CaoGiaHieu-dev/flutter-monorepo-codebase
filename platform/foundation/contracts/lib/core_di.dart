@@ -1,3 +1,23 @@
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/app/i_app_splash_screen.dart';
+export 'src/app/i_app_tree_wrapper.dart';
+export 'src/feature_localization.dart';
+export 'src/language/i_language_storage.dart';
+export 'src/observability/i_analytics.dart';
+export 'src/observability/i_error_reporter.dart';
+export 'src/routing/dashboard_route_module.dart';
+export 'src/routing/i_app_entry_location.dart';
+export 'src/routing/i_nav_destination_module.dart';
+export 'src/routing/i_post_sign_in_location.dart';
+export 'src/routing/i_sign_in_location.dart';
+export 'src/routing/navigator_keys.dart';
+export 'src/routing/routing_interfaces.dart';
+export 'src/session/i_session_gateway.dart';
+export 'src/session/i_session_refresh_listenable.dart';
+export 'src/session/i_session_state.dart';
+export 'src/session/i_session_status_stream.dart';
+export 'src/session/session_failure.dart';
+export 'src/session/session_principal.dart';
+export 'src/theme/i_theme_storage.dart';

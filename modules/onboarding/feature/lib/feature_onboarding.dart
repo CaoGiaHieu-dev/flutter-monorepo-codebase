@@ -17,5 +17,14 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/localization.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/extensions/l10n_onboarding_extension.dart';
+export 'src/gen/language/app_localizations.dart';
+export 'src/gen/language/app_localizations_en.dart';
+export 'src/gen/language/app_localizations_vi.dart';
+export 'src/pages/onboarding_page.dart';
+export 'src/routing/onboarding_feature_route_module.dart';
+export 'src/routing/onboarding_route_module.dart';
+export 'src/utils/onboarding_path.dart';

@@ -17,5 +17,7 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/pages/dashboard_page.dart';
+export 'src/routing/dashboard_route_module_impl.dart';

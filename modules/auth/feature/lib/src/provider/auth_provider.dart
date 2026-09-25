@@ -7,7 +7,7 @@ import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import '../services/services.dart';
+import '../services/auth_status_stream_impl.dart';
 import 'auth_error_state.dart';
 
 /// Global auth controller, and the auth feature's side of two `core_di`

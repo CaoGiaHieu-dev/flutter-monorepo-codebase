@@ -17,5 +17,17 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/localization.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/bloc/home_profile_bloc.dart';
+export 'src/extensions/l10n_home_extension.dart';
+export 'src/gen/language/app_localizations.dart';
+export 'src/gen/language/app_localizations_en.dart';
+export 'src/gen/language/app_localizations_vi.dart';
+export 'src/pages/home_page.dart';
+export 'src/routing/home_nav_destination.dart';
+export 'src/routing/home_navigator_impl.dart';
+export 'src/routing/home_post_sign_in_location.dart';
+export 'src/routing/home_route_module.dart';
+export 'src/utils/home_path.dart';

@@ -4,7 +4,7 @@ import 'package:core_common/core_common.dart';
 import 'package:home_api/home_api.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_onboarding_extension.dart';
 
 /// SAMPLE — the app's cold-start location, contributed via `IAppEntryLocation`.
 ///

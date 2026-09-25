@@ -17,5 +17,14 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/localization.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/extensions/l10n_settings_extension.dart';
+export 'src/gen/language/app_localizations.dart';
+export 'src/gen/language/app_localizations_en.dart';
+export 'src/gen/language/app_localizations_vi.dart';
+export 'src/pages/settings_page.dart';
+export 'src/routing/settings_nav_destination.dart';
+export 'src/routing/settings_route_module.dart';
+export 'src/utils/settings_path.dart';

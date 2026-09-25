@@ -21,66 +21,88 @@ void main() {
     // feature directory named web inside lib/ is ordinary source.
     'pkg/lib/src/web/web_view.dart': 'class WebView {}\n',
     'pkg/lib/src/gen/assets.gen.dart': 'class Assets {}\n',
+    'pkg/lib/gen/flutter_gen.dart': 'class FlutterGen {}\n',
+    'pkg/lib/di/module.dart': 'class Module {}\n',
     'pkg/web/index.dart': 'void main() {}\n',
   });
 
-  test('a trailing slash still names the package barrel', () async {
+  test('one barrel exports every library file of the package', () async {
     final ws = package();
     final run = await tool.run(const [
       'pkg/lib/',
     ], workingDirectory: ws.root);
     expect(run, exitsWith(0));
-    expect(run.output, contains('[SUCCESS] Barrel files generated.'));
+    expect(run.output, contains('[SUCCESS] Barrel generated: 4 exports.'));
 
-    // `lib/` is recognised as the package root despite the slash, so the
-    // barrel is named from pubspec.yaml rather than skipped.
-    expect(ws.exists('pkg/lib/demo_pkg.dart'), isTrue);
-    expect(
-      ws.read('pkg/lib/demo_pkg.dart'),
-      contains("export 'src/src.dart';"),
-    );
-  });
-
-  test('a nested web/ directory inside lib/ is exported', () async {
-    final ws = package();
-    expect(
-      await tool.run(const ['pkg/lib'], workingDirectory: ws.root),
-      exitsWith(0),
-    );
-
-    expect(
-      ws.read('pkg/lib/src/web/web.dart'),
-      contains("export 'web_view.dart';"),
-    );
-    final src = ws.read('pkg/lib/src/src.dart');
-    expect(src, contains("export 'a.dart';"));
-    expect(src, contains("export 'web/web.dart';"));
-    // Generated `.g.dart` parts and `part of` files are never exported.
-    expect(src, isNot(contains('a.g.dart')));
-    expect(src, isNot(contains('part_file.dart')));
-    // Generated files present on disk under lib/src/gen are — the reason
-    // the generator must run after gen-l10n / build_runner.
-    expect(src, contains("export 'gen/gen.dart';"));
-    // The platform web/ folder beside lib/ is left alone.
+    final barrel = ws.read('pkg/lib/demo_pkg.dart');
+    expect(barrel, contains("export 'di/module.dart';"));
+    expect(barrel, contains("export 'src/a.dart';"));
+    expect(barrel, contains("export 'src/web/web_view.dart';"));
+    // Generated files present on disk under lib/src/gen are exported — the
+    // reason the generator must run after gen-l10n / build_runner.
+    expect(barrel, contains("export 'src/gen/assets.gen.dart';"));
+    // `.g.dart` parts, `part of` files and lib/gen are not.
+    expect(barrel, isNot(contains('a.g.dart')));
+    expect(barrel, isNot(contains('part_file.dart')));
+    expect(barrel, isNot(contains('flutter_gen.dart')));
+    // No directory barrels, and the platform web/ beside lib/ is untouched.
+    expect(ws.exists('pkg/lib/src/src.dart'), isFalse);
+    expect(ws.exists('pkg/lib/src/web/web.dart'), isFalse);
     expect(ws.exists('pkg/web/web.dart'), isFalse);
   });
 
-  test('hand-written exports are replaced, other code is kept', () async {
+  test('directory barrels from the old layout are removed', () async {
     final ws = package();
     ws.write({
       'pkg/lib/src/src.dart':
+          '// Auto-generated exports, do not edit manually.\n'
+          "export 'a.dart';\n"
+          "export 'web/web.dart';\n",
+      'pkg/lib/src/web/web.dart':
+          '// Auto-generated exports, do not edit manually.\n'
+          "export 'web_view.dart';\n",
+      'pkg/lib/src/only/only.dart':
+          '// Auto-generated exports, do not edit manually.\n',
+      // A directory barrel that also holds code keeps the code.
+      'pkg/lib/src/typedefs.dart':
           "import 'dart:async';\n\n"
-          "export 'stale.dart';\n\n"
+          '// Auto-generated exports, do not edit manually.\n'
+          "export 'a.dart';\n\n"
           'typedef Kept = FutureOr<void>;\n',
     });
     expect(
       await tool.run(const ['pkg/lib'], workingDirectory: ws.root),
       exitsWith(0),
     );
-    final src = ws.read('pkg/lib/src/src.dart');
-    expect(src, isNot(contains('stale.dart')));
-    expect(src, contains('typedef Kept = FutureOr<void>;'));
-    expect(src, contains("export 'a.dart';"));
+    expect(ws.exists('pkg/lib/src/src.dart'), isFalse);
+    expect(ws.exists('pkg/lib/src/web/web.dart'), isFalse);
+    // Left empty, the directory goes too.
+    expect(ws.exists('pkg/lib/src/only'), isFalse);
+    final kept = ws.read('pkg/lib/src/typedefs.dart');
+    expect(kept, contains('typedef Kept = FutureOr<void>;'));
+    expect(kept, isNot(contains('export')));
+    expect(
+      ws.read('pkg/lib/demo_pkg.dart'),
+      contains("export 'src/typedefs.dart';"),
+    );
+  });
+
+  test('hand-written exports are replaced, the doc comment is kept', () async {
+    final ws = package();
+    ws.write({
+      'pkg/lib/demo_pkg.dart':
+          '/// The demo package.\n'
+          'library;\n\n'
+          "export 'stale.dart';\n",
+    });
+    expect(
+      await tool.run(const ['pkg/lib'], workingDirectory: ws.root),
+      exitsWith(0),
+    );
+    final barrel = ws.read('pkg/lib/demo_pkg.dart');
+    expect(barrel, startsWith('/// The demo package.\nlibrary;\n'));
+    expect(barrel, isNot(contains('stale.dart')));
+    expect(barrel, contains("export 'src/a.dart';"));
   });
 
   test('a path that does not exist exits 64', () async {
@@ -88,5 +110,15 @@ void main() {
     final run = await tool.run(const ['nope/lib'], workingDirectory: ws.root);
     expect(run, exitsWith(64));
     expect(run.output, contains('does not exist'));
+  });
+
+  test('a directory that is not a package lib/ exits 64', () async {
+    final ws = package();
+    final run = await tool.run(const [
+      'pkg/lib/src',
+    ], workingDirectory: ws.root);
+    expect(run, exitsWith(64));
+    expect(run.output, contains('is not a package lib/ directory'));
+    expect(ws.exists('pkg/lib/src/src.dart'), isFalse);
   });
 }

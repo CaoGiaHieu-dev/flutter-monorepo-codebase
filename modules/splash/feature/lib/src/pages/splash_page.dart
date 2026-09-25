@@ -3,6 +3,7 @@ import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/l10n_splash_extension.dart';
+import '../utils/splash_ui_constants.dart';
 
 /// SAMPLE — the screen behind `IAppSplashScreen`.
 ///
@@ -23,7 +24,7 @@ class SplashPage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              FlutterLogo(size: context.w(64)),
+              FlutterLogo(size: context.r(SplashUiConstants.LOGO_SIZE)),
               SizedBox(height: AppSpacing.lgH(context)),
               Text(
                 context.l10nSplash.appName,

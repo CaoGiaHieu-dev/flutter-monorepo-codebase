@@ -1,6 +1,6 @@
 import 'package:core_database/core_database.dart';
-import 'package:get_it/get_it.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 import '../src/database/cache_database.dart';
 
@@ -30,8 +30,11 @@ abstract class DataCacheDiModule {
   @Order(1)
   @preResolve
   @lazySingleton
-  Future<CacheDatabase> cacheDatabase() =>
-      CacheDatabase.open(migrations: _registeredMigrations());
+  Future<CacheDatabase> cacheDatabase() => CacheDatabase.open(
+    // Typed to [CacheDatabase]: a step another package registers for its
+    // own database is a different GetIt type and never reaches this one.
+    migrations: getAllOrEmpty<IDatabaseMigration<CacheDatabase>>(),
+  );
 
   /// Narrow accessor handle for this package's data sources.
   ///
@@ -40,16 +43,4 @@ abstract class DataCacheDiModule {
   @lazySingleton
   IDatabaseHandle<CacheDatabase> cacheDatabaseHandle(CacheDatabase database) =>
       DatabaseHandle<CacheDatabase>(database);
-
-  /// Reads contributed migrations without throwing when none are registered.
-  ///
-  /// Typed to [CacheDatabase]: a step another package registers for its own
-  /// database is a different GetIt type and never reaches this one.
-  static Iterable<IDatabaseMigration> _registeredMigrations() {
-    final getIt = GetIt.instance;
-    if (!getIt.isRegistered<IDatabaseMigration<CacheDatabase>>()) {
-      return const <IDatabaseMigration>[];
-    }
-    return getIt.getAll<IDatabaseMigration<CacheDatabase>>();
-  }
 }

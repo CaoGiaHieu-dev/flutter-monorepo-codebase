@@ -3,7 +3,8 @@ import 'package:core_di/core_di.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../feature_onboarding.dart';
+import '../pages/onboarding_page.dart';
+import '../utils/onboarding_path.dart';
 
 part 'onboarding_route_module.g.dart';
 

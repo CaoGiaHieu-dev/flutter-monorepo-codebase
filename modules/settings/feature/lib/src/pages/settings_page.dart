@@ -2,6 +2,7 @@ import 'package:auth_api/auth_api.dart';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 import '../extensions/l10n_settings_extension.dart';
 
@@ -19,19 +20,17 @@ class _SettingsPageState extends State<SettingsPage> {
     debugLabel: 'languageButtonKey',
   );
 
-  void _onLanguageChanged() {
-    languageButtonKey.showDropDown(
+  /// The app shell mounts `LanguageProvider` and `ThemeProvider` above the
+  /// router, so this page reads them from the tree (RULE-11) — before the
+  /// `await`, while `context` is certainly mounted.
+  Future<void> _onLanguageChanged() async {
+    final languages = context.read<LanguageProvider>();
+    final picked = await languageButtonKey.showDropDown<Locale>(
       context,
       options: AppLocalizations.supportedLocales,
-      onTap: (value) {
-        if (value != null) {
-          getIt<LanguageProvider>().setLocale(value);
-        }
-      },
-      builder: (context, item) {
-        return Text(item.languageName(context));
-      },
+      builder: (context, item) => Text(item.languageName(context)),
     );
+    if (picked != null) languages.setLocale(picked);
   }
 
   @override
@@ -60,9 +59,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ListTile(
             title: Text(context.l10nSettings.changeTheme),
             trailing: const Icon(Icons.color_lens),
-            onTap: () {
-              getIt<ThemeProvider>().toggleTheme();
-            },
+            onTap: () => context.read<ThemeProvider>().toggleTheme(),
           ),
           if (authActions != null)
             ListTile(

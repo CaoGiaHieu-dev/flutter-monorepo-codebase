@@ -25,3 +25,4 @@ export 'src/gen/language/app_localizations.dart';
 export 'src/gen/language/app_localizations_en.dart';
 export 'src/gen/language/app_localizations_vi.dart';
 export 'src/pages/splash_page.dart';
+export 'src/utils/splash_ui_constants.dart';

@@ -67,8 +67,8 @@ tools/
 ├── theme_generator/                 # 🎨 Splash screen & app icons
 │   └── theme_setting.dart
 ├── android_compliance/              # 📱 Android 15+ 16KB page-size check
-│   ├── 16kb_ckeck.sh                # macOS/Linux (the actual implementation)
-│   └── 16kb_ckeck.bat               # Windows — runs the .sh through Git Bash
+│   ├── 16kb_check.sh                # macOS/Linux (the actual implementation)
+│   └── 16kb_check.bat               # Windows — runs the .sh through Git Bash
 ├── dependency_sync.dart             # 📦 Syncs dependency versions from the catalog (Gate 4 with --check)
 └── check_outdated.dart              # 🔄 Checks for outdated packages on pub.dev
 ```
@@ -375,8 +375,8 @@ GitHub Actions. CI Gate 3 runs it after the tests, advisory (no threshold).
 ### 📱 Android 16KB Page Size
 ```bash
 # Build a flavor's release APK, then check it (from the repo root):
-./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk   # macOS/Linux
-.\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
+./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk   # macOS/Linux
+.\tools\android_compliance\16kb_check.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
 ```
 
 The argument can be an APK, an APEX or a directory of native libraries. The `.bat` only locates Git
@@ -733,14 +733,11 @@ Before writing anything it checks the app can take them: the app needs `android/
 
 ```bash
 # Build a release APK of one flavor first (cd apps/mobile && flutter build apk --flavor dev --release), then:
-./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk     # macOS / Linux
-.\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
+./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk     # macOS / Linux
+.\tools\android_compliance\16kb_check.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
 ```
 
 Checks an APK (zip alignment, then the ELF alignment of its native `.so` libraries), an APEX, or a directory of native libraries for Android 15+ 16 KB page-size compliance. It takes exactly one path; with none it prints the usage and exits `1`, and `--help` prints it with exit `0`. A file must be an `.apk`, an `.apex` or a single `.so` — anything else (an `.aab` included) exits `1`. An APK that `unzip` cannot read (not a zip, truncated) exits `1`; only "no `lib/*` entry" (unzip exit `11`) is the no-native-libraries pass — every unzip failure used to be reported as that pass. The `.sh` is executable, so the `./` call works as written; the `.bat` is a thin wrapper that runs the `.sh` through Git Bash and returns its exit code. The only tools in the repo that are shell scripts rather than Dart.
-
-> [!NOTE]
-> The filename really is `16kb_ckeck` — a typo that is preserved because scripts and docs reference it.
 
 ### `code_review`
 

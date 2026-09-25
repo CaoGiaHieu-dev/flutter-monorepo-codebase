@@ -1,15 +1,15 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Android 15+ 16KB page size check - Windows wrapper around 16kb_ckeck.sh.
+:: Android 15+ 16KB page size check - Windows wrapper around 16kb_check.sh.
 ::
 :: Usage (from the repository root):
-::   .\tools\android_compliance\16kb_ckeck.bat <input-path|input-APK|input-APEX>
+::   .\tools\android_compliance\16kb_check.bat <input-path|input-APK|input-APEX>
 ::
 :: A Flutter release APK is at
 ::   apps\<app>\build\app\outputs\flutter-apk\app-<flavor>-release.apk
 :: e.g. after `flutter build apk --flavor dev --release` in apps\mobile:
-::   .\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-dev-release.apk
+::   .\tools\android_compliance\16kb_check.bat apps\mobile\build\app\outputs\flutter-apk\app-dev-release.apk
 
 :: Prioritize Git Bash standard installation paths to avoid WSL bash conflicts
 set "BASH_PATH="
@@ -33,5 +33,5 @@ if "%BASH_PATH%"=="" (
 )
 
 :: Run the original .sh script via Git Bash; its exit code is ours.
-"%BASH_PATH%" "%~dp016kb_ckeck.sh" %*
+"%BASH_PATH%" "%~dp016kb_check.sh" %*
 exit /b %ERRORLEVEL%

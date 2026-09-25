@@ -67,8 +67,8 @@ tools/
 ├── theme_generator/                 # 🎨 Sinh Splash Screen & App Icons
 │   └── theme_setting.dart
 ├── android_compliance/              # 📱 Kiểm tra Android 15+ 16KB Page Size
-│   ├── 16kb_ckeck.sh                # macOS/Linux (file thực thi)
-│   └── 16kb_ckeck.bat               # Windows — gọi .sh qua Git Bash
+│   ├── 16kb_check.sh                # macOS/Linux (file thực thi)
+│   └── 16kb_check.bat               # Windows — gọi .sh qua Git Bash
 ├── dependency_sync.dart             # 📦 Đồng bộ version thư viện từ catalog (Gate 4 với --check)
 └── check_outdated.dart              # 🔄 Kiểm tra thư viện lỗi thời trên pub.dev
 ```
@@ -370,8 +370,8 @@ CI Gate 3 chạy nó sau các test, chỉ để tham khảo (không ngưỡng).
 ### 📱 Android 16KB Page Size
 ```bash
 # Build APK release của một flavor rồi kiểm tra (từ thư mục gốc):
-./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk   # macOS/Linux
-.\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
+./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk   # macOS/Linux
+.\tools\android_compliance\16kb_check.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
 ```
 
 Tham số có thể là một APK, một APEX hoặc một thư mục chứa thư viện native. Bản `.bat` chỉ tìm
@@ -728,14 +728,11 @@ Trước khi ghi bất cứ thứ gì, tool kiểm tra app có nhận được c
 
 ```bash
 # Trước hết build APK release của một flavor (cd apps/mobile && flutter build apk --flavor dev --release), rồi:
-./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk     # macOS / Linux
-.\tools\android_compliance\16kb_ckeck.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
+./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk     # macOS / Linux
+.\tools\android_compliance\16kb_check.bat apps\mobile\build\app\outputs\flutter-apk\app-<flavor>-release.apk   # Windows (Git Bash)
 ```
 
 Kiểm tra một APK (căn chỉnh zip, rồi căn chỉnh ELF của các thư viện native `.so` bên trong), một APEX, hoặc một thư mục thư viện native xem đã tương thích 16 KB page-size cho Android 15+ chưa. Tool nhận đúng một đường dẫn; không truyền gì thì in cú pháp và thoát với mã `1`, còn `--help` in cú pháp với mã `0`. File phải là `.apk`, `.apex` hoặc một `.so` — file khác (kể cả `.aab`) thoát `1`. APK mà `unzip` không đọc được (không phải zip, bị cắt cụt) thoát `1`; chỉ trường hợp "không có entry `lib/*`" (unzip exit `11`) mới là kết quả đạt không-có-thư-viện-native — trước đây mọi lỗi unzip đều bị báo thành kết quả đạt đó. File `.sh` có quyền thực thi, nên lệnh `./` chạy được đúng như viết; file `.bat` chỉ là wrapper chạy `.sh` qua Git Bash và trả về mã thoát của nó. Đây là công cụ duy nhất trong repo viết bằng shell script thay vì Dart.
-
-> [!NOTE]
-> Tên file đúng là `16kb_ckeck` — một lỗi gõ được giữ nguyên vì đã có script và tài liệu tham chiếu tới nó.
 
 ### `code_review`
 

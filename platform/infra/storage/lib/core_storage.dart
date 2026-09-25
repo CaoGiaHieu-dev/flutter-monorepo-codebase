@@ -6,11 +6,14 @@
 /// [StorageManager], so no other feature can see or touch its data.
 ///
 /// Provides:
-/// - [StorageInterface] — abstract contract for storage backends
+/// - [StorageInterface] / [StorageType] (`src/contracts/`) — the backend
+///   contract and its kinds
 /// - [StorageManager] — resolves the right backend by [StorageType]
-/// - [StorageValue] — reactive wrapper for a single stored value
+/// - [StorageValue] — reactive wrapper for a single stored value, with
+///   serialized, awaitable writes (`save` / `remove`)
 ///
-/// Implementations (internal, resolved via DI `@Named` qualifiers):
+/// Implementations (`src/impl/`, resolved via DI `@Named` qualifiers), both
+/// on the shared AES base `EncryptedStorage`:
 /// - `PrefStorageImpl` (`@Named('Pref')`) — SharedPreferences
 /// - `SecureStorageImpl` (`@Named('Secure')`) — FlutterSecureStorage
 library core_storage;
@@ -18,10 +21,13 @@ library core_storage;
 // Auto-generated exports, do not edit manually.
 export 'di/module.dart';
 export 'di/module.module.dart';
-export 'src/contracts/storage_codec.dart';
 export 'src/contracts/storage_interface.dart';
-export 'src/contracts/storage_manager.dart';
 export 'src/contracts/storage_type.dart';
-export 'src/contracts/storage_value.dart';
+export 'src/impl/encrypted_storage.dart';
 export 'src/impl/pref_storage_impl.dart';
 export 'src/impl/secure_storage_impl.dart';
+export 'src/obfuscated_bytes.dart';
+export 'src/storage_codec.dart';
+export 'src/storage_manager.dart';
+export 'src/storage_value.dart';
+export 'src/utils/storage_constants.dart';

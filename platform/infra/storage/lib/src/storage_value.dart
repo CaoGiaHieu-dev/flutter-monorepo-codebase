@@ -1,69 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
+import 'contracts/storage_interface.dart';
+import 'obfuscated_bytes.dart';
 import 'storage_codec.dart';
-import 'storage_interface.dart';
-
-/// Container that obfuscates a String in RAM using dynamic XOR masking.
-class ObfuscatedString {
-  final Uint8List _maskedBytes;
-  final Uint8List _mask;
-
-  ObfuscatedString(String value) : this._(utf8.encode(value));
-
-  /// Sizes buffers from UTF-8 byte length, not Dart [String.length],
-  /// so multi-byte characters (e.g. Vietnamese) are not truncated.
-  ObfuscatedString._(List<int> originalBytes)
-    : _mask = _generateRandomMask(originalBytes.length),
-      _maskedBytes = Uint8List(originalBytes.length) {
-    for (int i = 0; i < originalBytes.length; i++) {
-      _maskedBytes[i] = originalBytes[i] ^ _mask[i];
-    }
-  }
-
-  /// Temporarily reconstructs the original string.
-  /// Caller should discard the returned string quickly.
-  String reveal() {
-    final originalBytes = Uint8List(_maskedBytes.length);
-    for (int i = 0; i < _maskedBytes.length; i++) {
-      originalBytes[i] = _maskedBytes[i] ^ _mask[i];
-    }
-    final revealed = utf8.decode(originalBytes);
-    originalBytes.fillRange(0, originalBytes.length, 0);
-    return revealed;
-  }
-
-  /// Disposes of the obfuscated buffers.
-  void dispose() {
-    _maskedBytes.fillRange(0, _maskedBytes.length, 0);
-    _mask.fillRange(0, _mask.length, 0);
-  }
-
-  static Uint8List _generateRandomMask(int length) {
-    final random = math.Random.secure();
-    return Uint8List.fromList(
-      List.generate(length, (_) => random.nextInt(256)),
-    );
-  }
-}
 
 /// A reactive wrapper around a single key-value pair in [StorageInterface].
 ///
 /// Provides:
 /// - In-memory cache with [value] getter/setter (obfuscated in RAM)
-/// - Automatic persistence via [StorageInterface.write] on every set
+/// - Persistence on every change: [save] / [remove] return a future that
+///   completes once the value is on disk; the [value] setter starts the same
+///   write without waiting for it
 /// - [ChangeNotifier] integration for Provider/Riverpod listeners
 /// - [Stream] broadcasting via [listen] for reactive pipelines
+///
+/// Writes are **serialized**: each starts after the previous one finished,
+/// so the last value set is the one left on disk. A failed write is logged
+/// through `DynamicLogger` and never thrown — the in-memory value is already
+/// the new one, and a storage error must not become an uncaught zone error.
 ///
 /// Example:
 /// ```dart
 /// final token = StorageValue<String>(storage, 'auth_token');
-/// token.value = 'abc123';        // writes to storage + notifies listeners
+/// await token.save('abc123');    // cache + listeners now, disk when awaited
 /// print(token.value);            // reads from in-memory cache
 /// await token.readFromStorage(); // hydrates cache from disk
 /// ```
@@ -109,22 +73,24 @@ class StorageValue<T> extends ChangeNotifier {
   get listen => _streamController.stream.listen;
 
   /// Obfuscated value stored in memory to prevent RAM dumping.
-  ObfuscatedString? _obfuscatedValue;
+  ObfuscatedBytes? _obfuscatedValue;
+
+  /// The last write started; the next one chains onto it.
+  Future<void> _lastWrite = Future.value();
 
   /// Current in-memory value (decrypted and revived on the fly).
   T? get value {
     if (_obfuscatedValue == null) return null;
-    final jsonStr = _obfuscatedValue!.reveal();
+    final jsonStr = _obfuscatedValue!.revealString();
     final decoded = json.decode(jsonStr);
     return _revive(decoded);
   }
 
-  /// Update the value — persists to storage and notifies all listeners.
+  /// Updates the value and notifies listeners at once, and starts writing it
+  /// to storage (`null` deletes it). Use [save] / [remove] to wait for the
+  /// write.
   set value(T? newValue) {
-    _updateCache(newValue);
-    _streamController.sink.add(newValue);
-    storage.write(key, newValue);
-    notifyListeners();
+    unawaited(newValue == null ? remove() : save(newValue));
   }
 
   /// Decodes and revives the deserialized value.
@@ -141,7 +107,7 @@ class StorageValue<T> extends ChangeNotifier {
 
       if (newValue != null) {
         final jsonStr = StorageCodec.encode(newValue);
-        _obfuscatedValue = ObfuscatedString(jsonStr);
+        _obfuscatedValue = ObfuscatedBytes.fromString(jsonStr);
       }
     } catch (e, s) {
       DynamicLogger.log(
@@ -156,24 +122,50 @@ class StorageValue<T> extends ChangeNotifier {
   // Storage operations
   // ---------------------------------------------------------------------------
 
-  /// Save this value to storage and in-memory cache
-  void save(T value) {
-    this.value = value;
+  /// Sets [newValue] in memory and notifies listeners at once; the returned
+  /// future completes when it is written to storage. A failed write is
+  /// logged, not thrown.
+  Future<void> save(T newValue) {
+    _publish(newValue);
+    return _enqueueWrite(() => storage.write(key, newValue));
   }
 
-  /// Delete this value from storage and reset in-memory cache.
-  void delete() {
-    _updateCache(null);
-    _streamController.sink.add(null);
-    storage.delete(key);
+  /// Clears the value in memory and notifies listeners at once; the returned
+  /// future completes when it is deleted from storage. A failed delete is
+  /// logged, not thrown.
+  Future<void> remove() {
+    _publish(null);
+    return _enqueueWrite(() => storage.delete(key));
+  }
+
+  void _publish(T? newValue) {
+    _updateCache(newValue);
+    if (!_streamController.isClosed) _streamController.sink.add(newValue);
     notifyListeners();
+  }
+
+  /// Runs [write] after every write started before it, logging a failure.
+  Future<void> _enqueueWrite(Future<void> Function() write) {
+    final next = _lastWrite.then((_) => write()).catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
+      DynamicLogger.log(
+        'Writing "$key" to storage failed: $error',
+        tag: 'StorageValue',
+        stackTrace: stackTrace,
+        level: LogLevel.ERROR,
+      );
+    });
+    _lastWrite = next;
+    return next;
   }
 
   /// Hydrate the in-memory cache from persistent storage without redundant write.
   Future<void> readFromStorage() async {
     final newValue = await storage.read(key, reviver: reviver);
     _updateCache(newValue);
-    _streamController.sink.add(newValue);
+    if (!_streamController.isClosed) _streamController.sink.add(newValue);
     notifyListeners();
   }
 

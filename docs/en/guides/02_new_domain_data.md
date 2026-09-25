@@ -345,7 +345,7 @@ The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is t
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see the outer `catch (e)` of `execute` and of `executeSync` in
-[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
+[`base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
 
 > [!CAUTION]
 > Use `ErrorHandler.handleError(e)`. **Never** `AppFailure.fromException()`. And never let a

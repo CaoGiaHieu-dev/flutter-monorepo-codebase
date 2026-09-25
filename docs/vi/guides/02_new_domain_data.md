@@ -346,7 +346,7 @@ Remote data source trả về envelope `BaseEntity<UserModel>`, nên `R` là env
 
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
 khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
-[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
+[`base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
 
 > [!CAUTION]
 > Dùng `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`. Và tuyệt

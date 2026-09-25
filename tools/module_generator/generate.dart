@@ -143,8 +143,8 @@ void main(List<String> args) async {
     final pubspecContent = pubspecGenerator.generate(config);
     File('${config.modulePath}/pubspec.yaml').writeAsStringSync(pubspecContent);
 
-    // 4.5. Create .gitignore
-    CommonHelpers.generateGitIgnore(config.modulePath);
+    // No per-package .gitignore: the root one covers build output and
+    // generated code at any depth.
 
     // 5. Create lib/di/module.dart
     final diTemplateString = File(

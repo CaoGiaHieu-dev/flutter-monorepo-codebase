@@ -279,15 +279,6 @@ class CommonHelpers {
     }
   }
 
-  static void generateGitIgnore(String modulePath) {
-    final templateString = File(
-      'tools/module_generator/templates/common/gitignore.mustache',
-    ).readAsStringSync();
-    final template = Template(templateString);
-    final content = template.renderString({});
-    File('$modulePath/.gitignore').writeAsStringSync(content);
-  }
-
   /// Adds the new module to every app manifest — or, with [apps], only to
   /// the manifests whose `app.id` is listed — then leaves the wiring alone.
   ///

@@ -32,8 +32,8 @@ class HomePage extends StatelessWidget {
                           : context.l10nHome.userLoggedOut,
                       style: AppTextStyles.bodyMediumStyle(context).copyWith(
                         color: isLoggedIn
-                            ? context.colorScheme.primary
-                            : context.colorScheme.error,
+                            ? context.colors.primary
+                            : context.colors.error,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -54,7 +54,10 @@ class HomePage extends StatelessWidget {
                   ],
                 );
               },
-              error: (failure) => Text(failure.message),
+              // `failure.message` is an English diagnostic (RULE-34): the
+              // user reads the translated sentence for its code.
+              error: (failure) =>
+                  Text(context.l10n.failureMessage(failure.code)),
             );
           },
         ),

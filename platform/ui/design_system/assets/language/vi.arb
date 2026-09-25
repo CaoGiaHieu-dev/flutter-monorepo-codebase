@@ -11,5 +11,9 @@
   "somethingWentWrong": "Đã có lỗi xảy ra",
   "pageNotFound": "Không tìm thấy trang",
   "goBack": "Quay lại",
-  "goToHome": "Về trang chủ"
+  "goToHome": "Về trang chủ",
+  "noInternetConnection": "Không có kết nối internet. Hãy kiểm tra kết nối và thử lại.",
+  "connectionTimedOut": "Kết nối đã hết thời gian chờ. Vui lòng thử lại.",
+  "networkError": "Đã xảy ra lỗi mạng. Vui lòng thử lại.",
+  "serverUnavailable": "Máy chủ hiện không khả dụng. Vui lòng thử lại sau."
 }

@@ -93,8 +93,7 @@ class AuthProvider extends BaseProvider<UserEntity>
       return error.maybeWhen(
         invalidCredentials: () => const SessionInvalidCredentialsFailure(),
         userNotFound: () => const SessionUserNotFoundFailure(),
-        serverError: (message, code) =>
-            SessionServerFailure(message: message, code: code),
+        failed: (code) => SessionServerFailure(code: code),
         orElse: () => const SessionUnknownFailure(),
       );
     }
@@ -169,25 +168,16 @@ class AuthProvider extends BaseProvider<UserEntity>
   ///
   /// Matches what `ErrorHandler` actually produces: an HTTP 401/403 arrives
   /// as an [AuthFailure] carrying that status, and every other 4xx/5xx — 404
-  /// included — as a [ServerFailure] carrying its status. This used to match
-  /// `network` failures with codes 401 and 404, which `ErrorHandler` never
-  /// produces (a network failure has no HTTP status), so a wrong password
-  /// and an unknown user both fell through to a generic server error.
+  /// included — as a [ServerFailure] carrying its status. A network failure
+  /// has no HTTP status, so it is never read as a credential problem.
   ///
-  /// A 403 stays a server error with the backend's message: it means "not
-  /// allowed" (a disabled or locked account), not "wrong password".
+  /// A 403 is `failed`, not `invalidCredentials`: it means "not allowed" (a
+  /// disabled or locked account), not "wrong password".
   static ErrorState? mapAuthFailure(AppFailure<dynamic> failure) {
-    return failure.whenOrNull(
-      auth: (message, code, data) {
-        if (code == 401) return const AuthErrorState.invalidCredentials();
-        return AuthErrorState.serverError(message: message, code: code);
-      },
-      server: (message, code, data) {
-        if (code == 404) return const AuthErrorState.userNotFound();
-        return AuthErrorState.serverError(message: message, code: code);
-      },
-      network: (message, code, data) =>
-          AuthErrorState.serverError(message: message, code: code),
-    );
+    return switch (failure) {
+      AuthFailure(code: 401) => const AuthErrorState.invalidCredentials(),
+      ServerFailure(code: 404) => const AuthErrorState.userNotFound(),
+      _ => AuthErrorState.failed(code: failure.code),
+    };
   }
 }

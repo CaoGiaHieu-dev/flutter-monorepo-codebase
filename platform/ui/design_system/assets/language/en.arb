@@ -11,5 +11,9 @@
   "somethingWentWrong": "Something went wrong",
   "pageNotFound": "Page not found",
   "goBack": "Go back",
-  "goToHome": "Go to home"
+  "goToHome": "Go to home",
+  "noInternetConnection": "No internet connection. Check your connection and try again.",
+  "connectionTimedOut": "The connection timed out. Please try again.",
+  "networkError": "A network error occurred. Please try again.",
+  "serverUnavailable": "The server is unavailable right now. Please try again later."
 }

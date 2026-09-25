@@ -8,7 +8,7 @@ resources:
   repositories:
     - repository: self
       type: git
-      ref: master
+      ref: main
 
 pool:
   name: codebase
@@ -177,22 +177,6 @@ stages:
             inputs:
               targetPath: $(Build.SourcesDirectory)/obfuscate
               artifact: debug-symbols
-          # - task: Hey24sheep.flutter.flutter-build.FlutterBuild@0
-          #   displayName: Flutter Build Ios
-          #   inputs:
-          #     target: ipa
-          #     projectDirectory: $(Build.SourcesDirectory)
-          #     flutterDirectory: $(flutterPath)
-          #     verboseMode: true
-          #     buildNumber: $(numberBuild)
-          #     buildName: $(version)
-          #     exportOptionsPlist: $(Build.SourcesDirectory)/ExportOptions.plist
-          #     extraArgs: --flavor=prod --dart-define-from-file=$(Build.SourcesDirectory)/apps/mobile/env.prod --obfuscate --split-debug-info=./obfuscate/ --no-tree-shake-icons
-          # - task: PublishPipelineArtifact@1
-          #   displayName: Publish Ios
-          #   inputs:
-          #     targetPath: $(Build.SourcesDirectory)/build/ios/ipa/codebase.ipa
-          #     artifact: ios
 
   - stage: Distribute
     dependsOn: Build
@@ -247,17 +231,3 @@ stages:
               GOOGLE_APPLICATION_CREDENTIALS: $(firebaseServiceAccount.secureFilePath)
               FIREBASE_APP_ID: $(FIREBASE-ANDROID-ID)
               RELEASE_NOTES: $(note)
-          # - task: DownloadPipelineArtifact@2
-          #   displayName: Download Ios
-          #   inputs:
-          #     artifact: ios
-          #     patterns: "**/*.ipa"
-          #     targetPath: $(Build.SourcesDirectory)/ios-download
-          # - task: CmdLine@2
-          #   displayName: "Deploy Ios to Firebase"
-          #   inputs:
-          #     script: |
-          #       firebase appdistribution:distribute codebase.ipa  \
-          #       --app $(FIREBASE-IOS-ID)  \
-          #       --release-notes "$(note)" --groups "test"
-          #     workingDirectory: $(Build.SourcesDirectory)/ios-download

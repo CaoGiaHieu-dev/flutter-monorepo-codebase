@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../gen/language/app_localizations.dart';
+import '../utils/base_ui_constants.dart';
 
 /// The languages the app ships, and the one it falls back to — the single
 /// source every locale decision reads.
@@ -19,8 +20,10 @@ abstract final class AppLanguages {
   /// Every locale the app has translations for.
   static List<Locale> get supported => AppLocalizations.supportedLocales;
 
-  /// Used when a requested locale is not [supported].
-  static const Locale fallback = Locale('en');
+  /// Used when a requested locale is not [supported]:
+  /// [BaseUiConstants.FALLBACK_LANGUAGE_CODE].
+  static Locale get fallback =>
+      const Locale(BaseUiConstants.FALLBACK_LANGUAGE_CODE);
 
   /// The supported locale with [locale]'s language code — a device's
   /// `vi_VN` resolves to `vi` — or [fallback].

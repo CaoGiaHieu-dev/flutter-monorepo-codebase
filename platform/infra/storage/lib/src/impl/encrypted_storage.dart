@@ -15,7 +15,7 @@ import '../utils/storage_constants.dart';
 /// A backend implements [init] (establishing the key with [setMasterKey])
 /// and the storage calls, sealing through [encryptData] / [decryptData].
 abstract class EncryptedStorage implements StorageInterface {
-  /// Options of every `FlutterSecureStorage` this package opens.
+  /// Android options of every `FlutterSecureStorage` this package opens.
   ///
   /// Pinned explicitly, never left to the plugin's defaults: the plugin
   /// records the pair it wrote with and re-encrypts (or, failing that,
@@ -24,21 +24,21 @@ abstract class EncryptedStorage implements StorageInterface {
   /// written (flutter_secure_storage 10.x) and is still 11.x's default, so
   /// the 10 → 11 upgrade reads existing values as they are. Both backends
   /// open the same store, so both must use this same pair.
-  static const AndroidOptions androidOptions = AndroidOptions(
+  static const AndroidOptions _androidOptions = AndroidOptions(
     keyCipherAlgorithm:
         KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
     storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
   );
 
   /// iOS options: readable once the device has been unlocked after boot.
-  static const IOSOptions iosOptions = IOSOptions(
+  static const IOSOptions _iosOptions = IOSOptions(
     accessibility: KeychainAccessibility.first_unlock,
   );
 
   /// The secure store both backends keep their master keys in.
-  static const FlutterSecureStorage secureStorage = FlutterSecureStorage(
-    aOptions: androidOptions,
-    iOptions: iosOptions,
+  static FlutterSecureStorage get secureStorage => const FlutterSecureStorage(
+    aOptions: _androidOptions,
+    iOptions: _iosOptions,
   );
 
   ObfuscatedBytes? _masterKey;

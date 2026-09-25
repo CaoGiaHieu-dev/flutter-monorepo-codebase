@@ -13,6 +13,15 @@ class BaseUiConstants {
   BaseUiConstants._();
 
   // ---------------------------------------------------------------------------
+  // Languages (app_languages.dart)
+  // ---------------------------------------------------------------------------
+
+  /// The language the app falls back to when a stored or device locale is
+  /// not one it ships. `core_network`'s `NetworkConstants.DEFAULT_LANGUAGE_CODE`
+  /// must name the same one (infra cannot import this package).
+  static const String FALLBACK_LANGUAGE_CODE = 'en';
+
+  // ---------------------------------------------------------------------------
   // Dropdown menu (key_extension.dart)
   // ---------------------------------------------------------------------------
 

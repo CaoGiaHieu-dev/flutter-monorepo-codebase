@@ -94,7 +94,6 @@ class BatchService {
           _reviewResults[result.filePath] = result;
         }
 
-        // final completedInBatch = batchResults.length;
         final totalProcessed = _reviewResults.length;
 
         stdout.writeln(

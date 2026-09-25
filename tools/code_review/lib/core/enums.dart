@@ -1,9 +1,3 @@
-/// Review mode enumeration
-enum ReviewMode { batch, individual }
-
-/// Priority levels for issues
-enum IssuePriority { high, medium, low }
-
 /// File types for better categorization
 enum FileType {
   page,

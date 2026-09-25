@@ -170,6 +170,88 @@ modules:
     });
   });
 
+  group('type 6 creates a module API package', () {
+    for (final (label, args, message) in [
+      (
+        'a state-management argument',
+        ['6', 'chat', '', '1'],
+        '<SM> and <route> apply to type 1 (Feature) only.',
+      ),
+      (
+        'a prefix',
+        ['6', 'chat', 'acme'],
+        '<prefix> applies to type 5 only',
+      ),
+      (
+        'a platform group',
+        ['6', 'chat', '--group', 'ui'],
+        '--group applies to types 4 (Core) and 5 (Custom) only',
+      ),
+      ('an invalid name', ['6', 'Chat'], 'Module name "Chat" is invalid'),
+    ]) {
+      test('$label exits 64', () async {
+        final ws = workspace();
+        final run = await generate(ws, args);
+        expect(run, exitsWith(64));
+        expect(run.output, contains(message));
+        expect(ws.exists('modules/chat'), isFalse);
+        expect(ws.read('apps/mobile/app_manifest.yaml'), mobile);
+      });
+    }
+
+    test('an existing <name>_api package name exits 64', () async {
+      final ws = workspace()
+        ..write({'modules/talk/api/pubspec.yaml': 'name: chat_api\n'});
+      final run = await generate(ws, ['6', 'chat']);
+      expect(run, exitsWith(64));
+      expect(run.output, contains('Package "chat_api" already exists'));
+    });
+
+    test('resolves to modules/<name>/api', () async {
+      final ws = workspace()..mkdir('modules/chat/api');
+      final run = await generate(ws, ['6', 'chat']);
+      expect(run, exitsWith(1));
+      expect(
+        run.output,
+        contains('Directory "modules/chat/api" already exists'),
+      );
+    });
+
+    test('--help lists the type', () async {
+      final run = await generate(workspace(), ['--help']);
+      expect(run, exitsWith(0));
+      expect(run.output, contains('6 = API'));
+    });
+
+    test('the manifests list the api layer, first', () {
+      final ws = workspace();
+      CommonHelpers.registerInAppManifests(
+        'auth_api',
+        ModuleType.api,
+        'auth',
+        root: ws.root,
+      );
+      CommonHelpers.registerInAppManifests(
+        'chat_api',
+        ModuleType.api,
+        'chat',
+        apps: const ['mobile'],
+        root: ws.root,
+      );
+      expect(
+        ws.read('apps/mobile/app_manifest.yaml'),
+        allOf(
+          contains('  - { id: auth, layers: [api, domain, data, feature] }'),
+          contains('  - { id: chat, layers: [api] }'),
+        ),
+      );
+      expect(
+        ws.read('apps/admin/app_manifest.yaml'),
+        contains('  - { id: auth, layers: [api, feature] }'),
+      );
+    });
+  });
+
   group('registerInAppManifests', () {
     test('without apps, composes into every manifest', () {
       final ws = workspace();

@@ -1,0 +1,15 @@
+import 'package:flutter/widgets.dart';
+import 'package:injectable/injectable.dart';
+import 'package:{{snakeNameInput}}_api/{{snakeNameInput}}_api.dart';
+
+import '{{snakeNameInput}}_route_module.dart';
+
+/// This module's side of [{{pascalNameInput}}Navigator] from
+/// `{{snakeNameInput}}_api`: the one place other features' navigation into
+/// `{{moduleName}}` turns into a route.
+@LazySingleton(as: {{pascalNameInput}}Navigator)
+class {{pascalNameInput}}NavigatorImpl implements {{pascalNameInput}}Navigator {
+  @override
+  void to{{pascalNameInput}}(BuildContext context) =>
+      const {{pascalNameInput}}Route().go(context);
+}

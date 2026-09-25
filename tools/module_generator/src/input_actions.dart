@@ -15,6 +15,10 @@ Usage: dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>]
             3 = Data     (modules/<name>/data,      package data_<name>)
             4 = Core     (platform/<group>/<name>,  package core_<name>)
             5 = Custom   (platform/<group>/<name>,  package <prefix>_<name>)
+            6 = API      (modules/<name>/api,       package <name>_api) — the
+                         module's contracts for other features: a navigator
+                         stub, Flutter only. Implemented by feature_<name>
+                         when that exists (generated either before or after).
   <name>    lowercase_with_underscores, starting with a letter (profile, user_profile)
   <prefix>  type 5 only: the package-name prefix. Pass "" for every other type.
   <SM>      type 1 only: 1 = Provider, 2 = BLoC, 3 = none
@@ -37,6 +41,7 @@ Examples:
   dart tools/module_generator/generate.dart 4 analytics        # core_analytics at platform/infra/analytics
   dart tools/module_generator/generate.dart 4 charts --group ui   # core_charts at platform/ui/charts
   dart tools/module_generator/generate.dart 5 billing acme     # acme_billing at platform/infra/billing
+  dart tools/module_generator/generate.dart 6 chat             # chat_api at modules/chat/api
   dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile   # mobile only, not admin
 
 Run with no arguments on a terminal to be prompted for everything; a missing
@@ -245,6 +250,9 @@ class InputActions {
       stdout.writeln(
         '5. Custom Package (platform/<group>/<name>, prefix of your choice)',
       );
+      stdout.writeln(
+        '6. Module API Package (modules/<name>/api/, contracts for other features)',
+      );
       typeInput = _prompt('Your choice: ');
     }
 
@@ -273,8 +281,12 @@ class InputActions {
         type = ModuleType.custom;
         typeDir = 'platform/<group>';
         typeName = '';
+      case '6':
+        type = ModuleType.api;
+        typeDir = 'modules/<name>/api';
+        typeName = 'api';
       default:
-        _usageError('Invalid <type>: "$typeInput" (1-5).');
+        _usageError('Invalid <type>: "$typeInput" (1-6).');
     }
 
     if (type != ModuleType.feature && args.length > 3) {
@@ -394,15 +406,21 @@ class InputActions {
       };
     }
 
-    final moduleName = typeName.isEmpty ? nameInput : '${typeName}_$nameInput';
+    // An API package is `<name>_api` — a suffix, unlike every layer prefix.
+    final moduleName = type == ModuleType.api
+        ? '${nameInput}_api'
+        : typeName.isEmpty
+        ? nameInput
+        : '${typeName}_$nameInput';
     _validateName(moduleName, 'Package name');
     // A module's layers sit side by side under the module:
-    // `modules/<name>/{domain,data,feature}`. Core and custom packages live
+    // `modules/<name>/{api,domain,data,feature}`. Core and custom packages live
     // at `platform/<group>/<name>` (`--group`, default `infra`).
     final isModuleLayer =
         type == ModuleType.feature ||
         type == ModuleType.domain ||
-        type == ModuleType.data;
+        type == ModuleType.data ||
+        type == ModuleType.api;
     final modulePath = isModuleLayer
         ? 'modules/$nameInput/$typeName'
         : '$typeDir/$nameInput';

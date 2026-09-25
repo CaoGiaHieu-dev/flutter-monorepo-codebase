@@ -18,12 +18,28 @@ import 'module_type.dart';
 /// discover paths instead of assuming them.
 class PubspecGenerator {
   String generate(ModuleConfig config) {
+    final environment = _rootEnvironment();
+    if (config.type == ModuleType.api) {
+      // Flutter only: an API package may depend on platform/foundation and
+      // Flutter/pub packages and nothing else (arch_check R3), and a
+      // navigator stub needs only `BuildContext`.
+      return Template(
+        File(
+          'tools/module_generator/templates/api/pubspec.yaml.mustache',
+        ).readAsStringSync(),
+      ).renderString({
+        'moduleName': config.moduleName,
+        'snakeNameInput': config.nameInput,
+        'sdkConstraint': environment.sdk,
+        'flutterConstraint': environment.flutter,
+      });
+    }
+
     final templateString = File(
       'tools/module_generator/templates/common/pubspec.yaml.mustache',
     ).readAsStringSync();
     final template = Template(templateString);
 
-    final environment = _rootEnvironment();
     final values = {
       'moduleName': config.moduleName,
       'sdkConstraint': environment.sdk,
@@ -99,6 +115,9 @@ class PubspecGenerator {
             // The provider template returns a `Result` from domain_core.
             'domain_core',
           ],
+          // The module's API package, when it exists: the feature implements
+          // its navigator (`routing/<name>_navigator_impl.dart`).
+          if (hasApiPackage(config)) '${config.nameInput}_api',
           if (config.smType == StateManagementType.bloc) ...[
             'bloc_state_management',
             // The bloc template settles a `Result` from domain_core through
@@ -123,9 +142,18 @@ class PubspecGenerator {
         ];
       case ModuleType.core:
       case ModuleType.custom:
+      case ModuleType.api:
         return const [];
     }
   }
+
+  /// Whether a feature's module already has its `<name>_api` — the feature
+  /// then declares it and implements its navigator.
+  static bool hasApiPackage(ModuleConfig config) =>
+      config.type == ModuleType.feature &&
+      MonorepoHelper.getPackages(
+        _posix(Directory.current.path),
+      ).containsKey('${config.nameInput}_api');
 
   /// Whether the module a data package belongs to already has its
   /// `domain_<name>` — the data template then implements that domain's

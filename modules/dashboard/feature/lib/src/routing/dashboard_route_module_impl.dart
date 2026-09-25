@@ -5,8 +5,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../pages/dashboard_page.dart';
 
-@Singleton(as: DashboardRouteModule)
-class DashboardRouteModuleImpl implements DashboardRouteModule {
+@Singleton(as: IDashboardRouteModule)
+class DashboardRouteModuleImpl implements IDashboardRouteModule {
   @override
   Widget builder(
     BuildContext context,

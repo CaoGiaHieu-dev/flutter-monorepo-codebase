@@ -738,7 +738,7 @@ class CommonHelpers {
     ).writeAsStringSync(tpl.renderString(_layerValues(config)));
   }
 
-  /// Data scaffold: a `RepositoryImpl` on data_core's `IBaseRepository`,
+  /// Data scaffold: a `RepositoryImpl` on data_core's `BaseRepository`,
   /// implementing and registered as the domain's contract when [hasDomain].
   static void createDataTemplates(
     ModuleConfig config, {

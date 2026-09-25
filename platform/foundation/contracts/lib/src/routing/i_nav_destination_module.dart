@@ -1,4 +1,3 @@
-import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -45,12 +44,6 @@ abstract class INavDestinationModule {
 
   /// Routes mounted inside this destination's own [StatefulShellBranch].
   List<RouteBase> get routes;
-
-  /// Called when the user re-selects the destination they are already on —
-  /// the conventional "scroll to top / pop to root" gesture.
-  void onRestore() {
-    DynamicLogger.log('onRestore $runtimeType', level: LogLevel.INFO);
-  }
 
   /// Context is passed so the label can be translated at build time.
   NavDestination destination(BuildContext context);

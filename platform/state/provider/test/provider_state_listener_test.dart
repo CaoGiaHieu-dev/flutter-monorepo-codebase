@@ -178,7 +178,7 @@ void main() {
         message: 'Unauthorized',
         code: 401,
       );
-      const customError = ErrorState.raw({'type': 'auth', 'code': 401});
+      const customError = ErrorState.custom();
 
       await provider.runFailureWithCustomError(failure, customError);
       await tester.pump();

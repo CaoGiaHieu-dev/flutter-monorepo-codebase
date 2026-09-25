@@ -42,8 +42,7 @@ dependencies:
   # Media & Image Processing
   cached_network_image_ce: "^4.10.0"
 
-  # Device Info & Permissions
-  device_info_plus: "^13.2.0"
+  # App Info
   package_info_plus: "^10.2.1"
 
   # UI Components & Styling

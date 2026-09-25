@@ -62,7 +62,7 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 ### 40–49 · Domain, data, storage, database and network
 - **RULE-40** *[gate]* — data sources live in `data_sources/remote/` and `data_sources/local/`, never `datasources/`.
 - **RULE-41** — a data source returns Models (only `BaseEntity<T>` may wrap one), never Entities or a generated type such as a Drift row; Models implement `BaseModel<E>` with `.toEntity()`.
-- **RULE-42** — `RepositoryImpl` extends `IBaseRepository` and wraps work in `execute()` / `executeSync()`; nothing throws from data to UI — failures return `Result.failure(AppFailure)`.
+- **RULE-42** — `RepositoryImpl` extends `BaseRepository` and wraps work in `execute()` / `executeSync()`; nothing throws from data to UI — failures return `Result.failure(AppFailure)`.
 - **RULE-43** — errors go through `ErrorHandler.handleError(e)`; there is no `AppFailure.fromException()`; a new exception family (Firebase, `PlatformException`) needs an `ErrorClassifier`, or it collapses to code 9999 "Unknown error occurred".
 - **RULE-44** — each consumer owns its `StorageValue<T>` and its keys in its own `utils/`; no shared key object; `StorageType.secure` for tokens/PII, `pref` for settings; another package gets a `core_di` interface, never the `StorageValue`.
 - **RULE-45** — a storage owner is a singleton with `@PostConstruct(preResolve: true)`, never `@injectable`.

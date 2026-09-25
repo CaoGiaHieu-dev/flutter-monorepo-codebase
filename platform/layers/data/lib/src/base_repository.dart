@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:domain_core/domain_core.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
-abstract class IBaseRepository {
+/// Base class of every `RepositoryImpl`: [execute] and [executeSync] turn
+/// an operation into a [Result], so nothing throws past the data layer.
+abstract class BaseRepository {
   /// Wrapper function for executing asynchronous operations (API, DB, etc.).
   ///
   /// - [request]: The actual async operation that returns a [Future] of type [R].
@@ -27,24 +29,7 @@ abstract class IBaseRepository {
 
       if (isSuccess) {
         await onSuccess?.call(response);
-
-        // Handle void, Null, or nullable types when no mapping is needed
-        if (response == null && null is T && mapper == null) {
-          return Success(null as T);
-        }
-
-        if (response != null) {
-          final mappedData = mapper != null
-              ? mapper(response)
-              : (response as T);
-          return Success(mappedData);
-        } else {
-          try {
-            return Success(response as T);
-          } catch (_) {
-            return Failure(ErrorHandler.emptyResponseFailure());
-          }
-        }
+        return _toResult<R, T>(response, mapper);
       }
 
       await onFailure?.call(response);
@@ -77,27 +62,30 @@ abstract class IBaseRepository {
     try {
       final result = action.call();
       onSuccess?.call(result);
-
-      // Handle void, Null, or nullable types when no mapping is needed
-      if (result == null && null is T && mapper == null) {
-        return Success(null as T);
-      }
-
-      if (result != null) {
-        final mappedData = mapper != null ? mapper(result) : (result as T);
-        return Success(mappedData);
-      } else {
-        try {
-          return Success(result as T);
-        } catch (_) {
-          return Failure(
-            ErrorHandler.emptyResponseFailure('Operation returned null'),
-          );
-        }
-      }
+      return _toResult<R, T>(result, mapper, 'Operation returned null');
     } catch (e) {
       onFailure?.call(e);
       return Failure(ErrorHandler.handleError(e));
     }
+  }
+
+  /// [value] as a [Success], mapped through [mapper] when one is given.
+  ///
+  /// A `null` [value] is a success only when [T] is nullable — a `void`,
+  /// `Null` or `T?` operation — and is never handed to [mapper]; for a
+  /// non-nullable [T] it is an empty-response failure carrying
+  /// [emptyMessage]. A non-null [value] with no [mapper] must already be a
+  /// [T]; the cast throws otherwise, and the caller's `catch` classifies it.
+  Result<T> _toResult<R, T>(
+    R value,
+    T Function(R data)? mapper, [
+    String? emptyMessage,
+  ]) {
+    if (value == null) {
+      return null is T
+          ? Success<T>(null)
+          : Failure<T>(ErrorHandler.emptyResponseFailure(emptyMessage));
+    }
+    return Success<T>(mapper != null ? mapper(value) : value as T);
   }
 }

@@ -7,8 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http_security_pinning/http_security_pinning.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
-import '../../core_common.dart';
+import '../go_route_data_custom.dart';
+import '../helpers/app_info_helper.dart';
+import 'app_config.dart';
 
 /// Orchestrates all app-wide service initializations.
 ///
@@ -61,9 +64,6 @@ class AppInitializer {
   static Future<void> init({
     RouteObserver<ModalRoute<void>>? routeObserver,
   }) async {
-    // Global setup for operations (e.g., error handling, logging)
-    _setupOperationGlobalConfig();
-
     // Logger + HttpOverrides. Normally already done by `runShellApp`, before
     // the splash was built; a no-op then.
     initBeforeRunApp();
@@ -83,14 +83,6 @@ class AppInitializer {
 
     // Configure System Settings (Orientation & UI Overlay)
     await _configureSystemSettings();
-  }
-
-  static void _setupOperationGlobalConfig() {
-    // OperationGlobalConfig.instance.setup(
-    //   onFailure: (failure) {
-    //     AppDialog.showErrorDialog(title: 'Error', message: failure.message);
-    //   },
-    // );
   }
 
   static void _setupDynamicLogger() {
@@ -160,7 +152,7 @@ class AppInitializer {
     // Requires `SslPinningConfig` to be registered in GetIt. Registering only
     // the `NetworkConfig` subtype is not enough — GetIt resolves by exact
     // type — which is why the app shell binds it explicitly in
-    // `platform/shell/app_shell/lib/di/network_binding_module.dart`.
+    // `platform/shell/adapters/lib/di/network_binding_module.dart`.
     final config = getItOrNull<SslPinningConfig>();
     final hashes = config?.sslPinningHashes;
 

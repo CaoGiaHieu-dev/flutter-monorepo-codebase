@@ -14,7 +14,7 @@ import '../widgets/undefine_route_widget.dart';
 /// Assembles GoRouter from DI contributions:
 /// - [IFeatureRouteModule] — top-level feature routes (onboarding, auth, …)
 /// - [INavDestinationModule] — primary destinations + their shell branches
-/// - [DashboardRouteModule] — dashboard chrome (optional)
+/// - [IDashboardRouteModule] — dashboard chrome (optional)
 /// - [IAppEntryLocation] — first-launch path (optional)
 ///
 /// ([ISignInLocation] / [IPostSignInLocation] are not read here: they are
@@ -167,7 +167,7 @@ class AppRouter {
             // `SizedBox`, so an app composing tabs but no dashboard — an
             // admin app with only `settings`, say — opened on a blank screen.
             builder: (context, state, navigationShell) {
-              return getItOrNull<DashboardRouteModule>()?.builder(
+              return getItOrNull<IDashboardRouteModule>()?.builder(
                     context,
                     state,
                     navigationShell,

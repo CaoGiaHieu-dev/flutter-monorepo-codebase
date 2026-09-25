@@ -18,8 +18,8 @@ void main() {
     setUp(() => service = PushNotificationService(_options));
     tearDown(() => service.dispose());
 
-    test('blocking is case-insensitive on both sides', () async {
-      await service.addBlockedTypes(['Promo']);
+    test('blocking is case-insensitive on both sides', () {
+      service.addBlockedTypes(['Promo']);
 
       expect(service.isTypeBlocked('promo'), isTrue);
       expect(service.isTypeBlocked('PROMO'), isTrue);
@@ -28,9 +28,9 @@ void main() {
       expect(service.isTypeBlocked(null), isFalse);
     });
 
-    test('removing a type unblocks it whatever its case', () async {
-      await service.addBlockedTypes(['promo']);
-      await service.removeBlockedTypes(['PROMO']);
+    test('removing a type unblocks it whatever its case', () {
+      service.addBlockedTypes(['promo']);
+      service.removeBlockedTypes(['PROMO']);
 
       expect(service.isTypeBlocked('promo'), isFalse);
     });

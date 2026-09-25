@@ -14,7 +14,6 @@ part '../management/operation_executor.dart';
 part '../management/operation_global_config.dart';
 part '../management/state_manager.dart';
 part 'base_provider.freezed.dart';
-part 'base_provider.g.dart';
 part 'view_state_model.dart';
 
 /// Clean and flexible base provider for state management

@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' as services;
 import 'package:material_ui/material_ui.dart';
-
-import '../../core_common.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 /// Central configuration class for the application
 ///
@@ -100,28 +99,4 @@ class AppConfig {
 
   /// Base URL for API calls based on current flavor
   static String get baseUrl => EnvConstants.BASE_URL;
-
-  /// Web domain for the application
-  static String get webDomain => EnvConstants.WEB_DOMAIN;
-
-  /// Gets the current environment name as a string
-  static String get environmentName => appFlavor.toValue();
-
-  /// Checks if the app is running in debug mode
-  static bool get isDebug => kDebugMode;
-
-  /// Checks if the app is running in release mode
-  static bool get isRelease => kReleaseMode;
-
-  /// Checks if the app is running in profile mode
-  static bool get isProfile => kProfileMode;
-
-  /// Checks if the app is running in development environment
-  static bool get isDevelopment => appFlavor == Flavor.dev;
-
-  /// Checks if the app is running in staging environment
-  static bool get isStaging => appFlavor == Flavor.staging;
-
-  /// Checks if the app is running in production environment
-  static bool get isProduction => appFlavor == Flavor.prod;
 }

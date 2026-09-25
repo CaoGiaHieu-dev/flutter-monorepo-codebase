@@ -763,10 +763,13 @@ class _AppDialogOverlayEntryState extends State<_AppDialogOverlayEntry> {
 
   @override
   Widget build(BuildContext context) {
-    Widget dialogContent = Builder(
-      builder: (BuildContext dialogContext) {
-        return widget.capturedThemes.wrap(widget.builder(dialogContext));
-      },
+    Widget dialogContent = _AppDialogScope(
+      internalId: widget.internalId,
+      child: Builder(
+        builder: (BuildContext dialogContext) {
+          return widget.capturedThemes.wrap(widget.builder(dialogContext));
+        },
+      ),
     );
 
     if (widget.useSafeArea) {

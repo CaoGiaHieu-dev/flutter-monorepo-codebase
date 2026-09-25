@@ -163,7 +163,7 @@ void _expectShellContractsResolve() {
 
   getItOrNull<IAppSplashScreen>();
   getItOrNull<IAppEntryLocation>();
-  getItOrNull<DashboardRouteModule>();
+  getItOrNull<IDashboardRouteModule>();
   getItOrNull<ISessionRefreshListenable>();
   getItOrNull<ISessionState>();
   getItOrNull<ISessionGateway>();

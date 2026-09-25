@@ -18,7 +18,7 @@ import '../models/user_model.dart';
 /// shape. If you do move to Firebase, add a branch to `ErrorHandler` first —
 /// it has none, so every Firebase error would arrive as `ServerFailure(9999)`.
 @LazySingleton(as: IAuthRepository)
-class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
+class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   AuthRepositoryImpl(this._remote, this._local);
 
   final AuthRemoteDataSource _remote;

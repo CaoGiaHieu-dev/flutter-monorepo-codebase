@@ -1,40 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-class CustomAppErrorState extends IErrorState {
-  final String errorCode;
-  final String description;
-
+class CustomAppErrorState extends CustomErrorState {
   const CustomAppErrorState({
     required this.errorCode,
     required this.description,
   });
 
-  @override
-  Map<String, dynamic> toJson() => {
-    'type': 'custom_app_error',
-    'errorCode': errorCode,
-    'description': description,
-  };
-
-  static CustomAppErrorState fromJson(Map<String, dynamic> json) =>
-      CustomAppErrorState(
-        errorCode: json['errorCode'] as String,
-        description: json['description'] as String,
-      );
-
-  @override
-  String get $type => toString();
+  final String errorCode;
+  final String description;
 }
 
 void main() {
-  setUpAll(() {
-    ErrorStateRegistry.register(
-      'custom_app_error',
-      CustomAppErrorState.fromJson,
-    );
-  });
-
   group('ViewStateModel', () {
     test('initial helper methods should return correct values', () {
       const model = ViewStateModel<String>(
@@ -84,7 +61,7 @@ void main() {
       expect(model.message, equals('Something went wrong'));
     });
 
-    test('should serialize and deserialize custom ErrorState successfully', () {
+    test('error state carries a feature-defined CustomErrorState', () {
       const customError = CustomAppErrorState(
         errorCode: 'ERR_401',
         description: 'Unauthorized Access',
@@ -95,64 +72,11 @@ void main() {
         message: 'Auth Error',
       );
 
-      final json = model.toJson((data) => data);
-
-      // Verification of serialized JSON structure
-      expect(json['state'], isNotNull);
-      final state = json['state'] as Map<String, dynamic>;
-      expect(state['state'], equals('error'));
-      final error = state['error'] as Map<String, dynamic>;
-      expect(error['type'], equals('custom_app_error'));
-      expect(error['errorCode'], equals('ERR_401'));
-
-      final deserialized = ViewStateModel<String>.fromJson(
-        json,
-        (dataJson) => dataJson as String,
-      );
-
-      expect(deserialized.state.isError, isTrue);
-      deserialized.state.whenOrNull(
-        error: (error) {
-          expect(error, isA<CustomAppErrorState>());
-          final typedError = error as CustomAppErrorState;
-          expect(typedError.errorCode, equals('ERR_401'));
-          expect(typedError.description, equals('Unauthorized Access'));
-        },
-      );
+      expect(model.isError, isTrue);
+      final error = model.state.whenOrNull(error: (error) => error);
+      expect(error, isA<ErrorState>());
+      expect(error, isA<CustomAppErrorState>());
+      expect((error! as CustomAppErrorState).errorCode, equals('ERR_401'));
     });
-
-    test(
-      'should fallback to RawErrorState when unregistered type is deserialized',
-      () {
-        final json = {
-          'state': {
-            'state': 'error',
-            'error': {'type': 'unknown_type', 'custom_field': 'some_val'},
-          },
-          'message': 'Failed',
-        };
-
-        final deserialized = ViewStateModel<String>.fromJson(
-          json,
-          (dataJson) => dataJson as String,
-        );
-
-        expect(deserialized.state.isError, isTrue);
-        deserialized.state.whenOrNull(
-          error: (error) {
-            expect(error, isNotNull);
-            // ErrorState.raw wraps unregistered JSON data
-            // $default positional arg (for unnamed ErrorState()) must be provided
-            error!.maybeWhen(
-              raw: (rawJson) {
-                expect(rawJson['type'], equals('unknown_type'));
-                expect(rawJson['custom_field'], equals('some_val'));
-              },
-              orElse: () => fail('Expected ErrorState.raw'),
-            );
-          },
-        );
-      },
-    );
   });
 }

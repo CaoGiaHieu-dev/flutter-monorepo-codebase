@@ -57,7 +57,7 @@ class ErrorHandler {
   /// Returns an [AppFailure] that represents the error in domain terms
   ///
   /// **Never throws.** Every repository funnels its `catch` through here, so
-  /// an exception escaping this method would escape `IBaseRepository.execute`
+  /// an exception escaping this method would escape `BaseRepository.execute`
   /// too — and a caller awaiting a `Result` (a provider in its loading state)
   /// would never get one. Anything that goes wrong while classifying [error]
   /// therefore degrades to the generic unknown-error failure.
@@ -163,21 +163,21 @@ class ErrorHandler {
     if (error is SocketException) {
       return const NetworkFailure(
         message: 'No internet connection',
-        code: 1001,
+        code: ErrorCodes.NO_INTERNET,
       );
     }
 
     if (error is HttpException) {
       return NetworkFailure(
         message: 'Network error: ${error.message}',
-        code: 1002,
+        code: ErrorCodes.HTTP_ERROR,
       );
     }
 
     if (error is FormatException) {
       return ParseFailure(
         message: 'Invalid data format: ${error.message}',
-        code: 4001,
+        code: ErrorCodes.INVALID_FORMAT,
       );
     }
 
@@ -211,7 +211,7 @@ class ErrorHandler {
   static NetworkFailure<dynamic> networkFailure([String? message]) {
     return NetworkFailure(
       message: message ?? 'Network connection failed',
-      code: 1000,
+      code: ErrorCodes.NETWORK_ERROR,
     );
   }
 
@@ -269,7 +269,7 @@ class ErrorHandler {
     return ValidationFailure(
       message: message,
       field: field,
-      code: code ?? 3000,
+      code: code ?? ErrorCodes.VALIDATION_ERROR,
     );
   }
 
@@ -277,7 +277,7 @@ class ErrorHandler {
   static StorageFailure<dynamic> storageFailure([String? message, int? code]) {
     return StorageFailure(
       message: message ?? 'Storage operation failed',
-      code: code ?? 2000,
+      code: code ?? ErrorCodes.STORAGE_ERROR,
     );
   }
 
@@ -285,7 +285,7 @@ class ErrorHandler {
   static ParseFailure<dynamic> parseFailure([String? message, int? code]) {
     return ParseFailure(
       message: message ?? 'Data parsing failed',
-      code: code ?? 4000,
+      code: code ?? ErrorCodes.PARSE_ERROR,
     );
   }
 
@@ -293,7 +293,7 @@ class ErrorHandler {
   static CacheFailure<dynamic> cacheFailure([String? message, int? code]) {
     return CacheFailure(
       message: message ?? 'Cache operation failed',
-      code: code ?? 5000,
+      code: code ?? ErrorCodes.CACHE_ERROR,
     );
   }
 
@@ -301,7 +301,7 @@ class ErrorHandler {
   static ServiceFailure<dynamic> serviceFailure([String? message, int? code]) {
     return ServiceFailure(
       message: message ?? 'External service error',
-      code: code ?? 6000,
+      code: code ?? ErrorCodes.SERVICE_ERROR,
     );
   }
 }

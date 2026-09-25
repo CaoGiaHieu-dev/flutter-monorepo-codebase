@@ -1,5 +1,5 @@
+/// A data-layer model that converts to its domain entity [E].
 abstract class BaseModel<E> {
-  E toEntity() {
-    throw UnimplementedError();
-  }
+  /// The domain entity this model represents.
+  E toEntity();
 }

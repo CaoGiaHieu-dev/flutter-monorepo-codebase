@@ -109,7 +109,7 @@ class PubspecGenerator {
         // The repository template returns `Result` from domain_core.
         return ['domain_core'];
       case ModuleType.data:
-        // The RepositoryImpl template extends data_core's `IBaseRepository`
+        // The RepositoryImpl template extends data_core's `BaseRepository`
         // and, with a domain to implement, returns its `Result`.
         return [
           'data_core',

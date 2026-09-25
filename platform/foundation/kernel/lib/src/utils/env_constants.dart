@@ -1,5 +1,3 @@
-library core.constants;
-
 /// Values passed in with `--dart-define-from-file=apps/<id>/env.<flavor>`.
 ///
 /// Only keys Dart actually reads are declared here. A key the native side

@@ -136,7 +136,7 @@ Widget build(BuildContext context) {
 
 ## 🔒 3. Feature-Specific Business Errors (Custom Error State)
 
-By default, `error` in `BlocViewState.error(error)` is an `AppFailure`. `AppFailure` is a Freezed `sealed class` in `domain_core` (`platform/layers/domain/lib/src/failures/failures.dart`), so a feature **cannot** `extends` / `implements` it to add its own errors — an `AuthErrorState extends AppFailure` does not compile. To refine errors, define the feature's **own Freezed state** carrying a feature-owned error value, use `BaseBloc<Event, CustomState>`, and map the `AppFailure` variants to that value in the handler:
+By default, `error` in `BlocViewState.error(error)` is an `AppFailure`. `AppFailure` is a Freezed `sealed class` in `domain_core` (`platform/layers/domain/lib/src/failures/app_failure.dart`), so a feature **cannot** `extends` / `implements` it to add its own errors — an `AuthErrorState extends AppFailure` does not compile. To refine errors, define the feature's **own Freezed state** carrying a feature-owned error value, use `BaseBloc<Event, CustomState>`, and map the `AppFailure` variants to that value in the handler:
 
 ```dart
 // login_state.dart

@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../utils/network_constants.dart';
 
-/// Interceptor that retries requests if the `canRetry` flag in the `ExtraRequest` is set to true.
+/// Interceptor that retries requests if the request's `NetworkConstants.EXTRA_CAN_RETRY` extra is true.
 ///
 /// This interceptor provides an additional layer of error handling by retrying requests if they
 /// fail. It uses the `retryWhen` function to determine if a request should be retried,

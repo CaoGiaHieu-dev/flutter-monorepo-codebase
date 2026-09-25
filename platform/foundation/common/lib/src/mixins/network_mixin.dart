@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../utils/app_utils.dart';
+import '../helpers/app_utils.dart';
 
 /// Mixin to handle network connectivity events.
 ///

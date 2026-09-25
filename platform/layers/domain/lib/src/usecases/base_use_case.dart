@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../repositories/result.dart';
+import '../result/result.dart';
 
 /// Base class for all use cases in the application
 ///

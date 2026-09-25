@@ -22,8 +22,8 @@ import 'dart_source.dart';
 // ---------------------------------------------------------------------------
 const _approvedUpwardEdges = <String, String>{
   'provider_state_management -> domain_core':
-      'Needs Result<T> and PaginatedEntity<T> for executeOperation / '
-      'PaginatedViewWidget.',
+      'Needs Result<T> and AppFailure for executeOperation / '
+      'OperationConfig.',
   'platform_kernel -> domain_core':
       'ErrorHandler produces AppFailure, which lives in domain_core. '
       'Core -> Domain is the correct Clean Architecture direction.',

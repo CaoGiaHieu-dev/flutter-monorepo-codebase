@@ -14,8 +14,7 @@ Package này loại bỏ các đoạn code lặp lại (boilerplate) trong việ
 - **`BaseProvider<T>`**: Lớp Base ViewModel cung cấp sẵn hàm `executeOperation()` giúp tự động hóa việc đổi state quanh một `Result<R>`: loading → gọi UseCase → `success` (kèm data) hoặc `error` (kèm `message` và `ErrorState` tùy chọn).
 - **`BaseViewWidget<TProvider, TData>`**: Widget tự động build giao diện dựa trên trạng thái `ViewStateModel` (tự hiển thị loading, nhả data đã khác `null`, hiện giao diện lỗi nếu bạn truyền `onErrorBuilder`).
 - **`ProviderStateListener`** / **`MultiProviderStateListener`**: Widget chuyên biệt để hứng các side-effects (như chuyển trang, bật toast thông báo) mà không cần viết StatefulWidget hay Stream thủ công.
-- **`PaginatedViewWidget`**: Phiên bản mở rộng của BaseViewWidget dành riêng cho `PaginatedEntity<T>`.
-- **Hỗ Trợ Multi-Providers**: `BaseViewWidget2`…`BaseViewWidget6` và `PaginatedViewWidget2`…`PaginatedViewWidget6` (tới 6 Providers); `BaseProxyWidget`…`BaseProxyWidget4` (tới 4 Providers cha).
+- **`LoadMoreMixin` / `LoadMoreListView`**: Quản lý số trang cho danh sách tải thêm, và một list có separator tự thêm ô spinner khi `isLoadingMore` là true.
 - **`DefaultLoadingWidget` / `DefaultEmptyWidget`**: Widget mặc định của core cho trạng thái loading / rỗng — core không mượn widget từ `core_ui_kit`.
 
 ---
@@ -69,12 +68,12 @@ Hành vi cần biết (`platform/state/provider/lib/src/management/operation_exe
 - **Success** → `ViewState.success()` kèm data. Nếu kiểu kết quả `R` khác kiểu state `T` của provider, truyền `convert:` cho `executeOperation`.
 - **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))`, `message = failure.message`. Lần emit này được **ép** (force), nên hai lỗi giống hệt nhau liên tiếp (người dùng bấm Retry khi vẫn offline) vẫn tới được listener.
 - **`none` / `cancel`** → không đổi state — kể cả `loading` mà `showLoading` vừa đặt.
-- `executeOperation` **không** try-catch: nó xử lý `Result.failure`, còn exception bị ném ra từ `operation` sẽ lan lên người gọi. Bắt exception là việc của `IBaseRepository.execute()` ở tầng Data.
+- `executeOperation` **không** try-catch: nó xử lý `Result.failure`, còn exception bị ném ra từ `operation` sẽ lan lên người gọi. Bắt exception là việc của `BaseRepository.execute()` ở tầng Data.
 - `onSuccess` / `onFailure` cục bộ **thay thế** callback toàn cục của `OperationGlobalConfig.instance.setup(...)` cho lần gọi đó; `onStart` / `onFinish` toàn cục luôn chạy.
 
 ---
 
-## 🧩 2. Tự Động Hóa Render UI với `BaseViewWidget` & `PaginatedViewWidget`
+## 🧩 2. Tự Động Hóa Render UI với `BaseViewWidget` & `LoadMoreListView`
 
 Thay vì phải tự viết các khối `if/else` thủ công trong `Consumer` để xử lý các trạng thái `loading`, `error`, `empty` hay `success`, hệ thống đã cung cấp các UI Widget Wrapper chuẩn hóa giúp code giao diện của bạn gọn gàng (Declarative).
 
@@ -106,22 +105,23 @@ BaseViewWidget<ProductProvider, ProductEntity>(
 
 > Không truyền `onErrorBuilder` thì trạng thái lỗi **không** có UI lỗi tự động: widget vẽ tiếp nhánh bình thường (data cũ qua `builder`, hoặc `emptyWidget` khi chưa có data). Muốn báo lỗi dạng toast/dialog, dùng `ProviderStateListener` (mục 3).
 
-*(Lưu ý: Hệ thống hỗ trợ lắng nghe lên tới 6 Providers cùng lúc thông qua `BaseViewWidget2` đến `BaseViewWidget6`. Ở các biến thể nhiều provider, `builder` nhận data dạng nullable và chỉ hiện empty khi **mọi** provider đều chưa có data.)*
+*(Một `BaseViewWidget` lắng nghe một provider. Màn hình kết hợp nhiều provider thì lồng mỗi provider một `BaseViewWidget`, hoặc đọc chúng bằng `context.select`.)*
 
-#### 2.2 `PaginatedViewWidget` (Dành cho Danh sách có phân trang)
-Được thiết kế chuyên biệt để làm việc với `PaginatedEntity<T>` (kiểu danh sách chia trang từ tầng Domain), nên provider phải là `BaseProvider<PaginatedEntity<T>>`. Logic xác định màn hình `empty` kiểm tra cả mảng bên trong (`data.data.isEmpty`): nếu Server trả về HTTP 200 nhưng danh sách rỗng `[]`, màn hình Empty sẽ tự động được kích hoạt.
+#### 2.2 Danh sách phân trang: `LoadMoreMixin` + `LoadMoreListView`
+Mix `LoadMoreMixin` vào provider để theo dõi `currentPage` / `totalPage` / `isLoadingMore`, giữ trang trong một `BaseProvider<PaginatedEntity<T>>`, và render bằng `LoadMoreListView<P>` bên trong `BaseViewWidget`. List tự thêm một ô spinner sau phần tử cuối khi `isLoadingMore` của provider là true.
 
 ```dart
-// class UsersProvider extends BaseProvider<PaginatedEntity<UserEntity>> { … }
-PaginatedViewWidget<UsersProvider, UserEntity>(
-  builder: (context, paginatedData, child) {
-    final users = paginatedData.data; // List<UserEntity>; phân trang ở paginatedData.meta
-    return ListView.builder(
+// class UsersProvider extends BaseProvider<PaginatedEntity<UserEntity>>
+//     with LoadMoreMixin<UserEntity> { … }
+BaseViewWidget<UsersProvider, PaginatedEntity<UserEntity>>(
+  builder: (context, page, child) {
+    final users = page.data; // List<UserEntity>; phân trang ở page.meta
+    if (users.isEmpty) return Text(context.l10nUsers.noUsers);
+    return LoadMoreListView<UsersProvider>(
       itemCount: users.length,
       itemBuilder: (context, index) => Text(users[index].name ?? users[index].id),
     );
   },
-  emptyWidget: (context, child) => Text(context.l10nUsers.noUsers),
 )
 ```
 
@@ -190,7 +190,7 @@ import 'package:provider_state_management/provider_state_management.dart';
 part 'auth_error_state.freezed.dart';
 
 @freezed
-abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
@@ -202,13 +202,13 @@ abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
 }
 ```
 
-`IErrorState` là biến thể `ErrorState.custom()` của `ErrorState` — kế thừa nó là cách một feature gắn lỗi riêng vào `ViewState.error`. *(Sau đó dùng tham số `errorStateBuilder` của `OperationConfig` để map từ `AppFailure` sang `AuthErrorState` như ví dụ ở mục 1 — bản thật là `AuthProvider.mapAuthFailure`.)*
+`CustomErrorState` là biến thể `ErrorState.custom()` của `ErrorState` — kế thừa nó là cách một feature gắn lỗi riêng vào `ViewState.error`. *(Sau đó dùng tham số `errorStateBuilder` của `OperationConfig` để map từ `AppFailure` sang `AuthErrorState` như ví dụ ở mục 1 — bản thật là `AuthProvider.mapAuthFailure`.)*
 
 ---
 
-## 🔗 5. Liên Kết Phụ Thuộc Giữa Các Provider (`BaseProxyWidget`)
+## 🔗 5. Liên Kết Phụ Thuộc Giữa Các Provider
 
-Khi `NewsProvider` cần tải lại dữ liệu mỗi khi người dùng đổi ngôn ngữ, hãy dùng `BaseProxyWidget` (hoặc `BaseProxyWidget2` … `BaseProxyWidget4`) ở tầng Routing. `LanguageProvider` thuộc `core_base_ui` và được mount sẵn ở gốc app (`AppMaterialWrapper`), nên feature nào cũng được phép đọc nó:
+Khi `NewsProvider` cần tải lại dữ liệu mỗi khi người dùng đổi ngôn ngữ, hãy tạo lại nó ở tầng Routing, gắn key theo giá trị nó phụ thuộc. `LanguageProvider` thuộc `core_base_ui` và được mount sẵn ở gốc app (`AppMaterialWrapper`), nên feature nào cũng được phép đọc nó:
 
 ```dart
 @TypedGoRoute<NewsRoute>(path: NewsPath.NEWS)
@@ -217,27 +217,26 @@ class NewsRoute extends GoRouteDataCustom with $NewsRoute {
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return BaseProxyWidget<LanguageProvider, NewsProvider>(
-      // NewsProvider nhận languageCode qua @factoryParam; bọc trọn NewsPage ở tầng routing
-      create: (context, language) => getIt<NewsProvider>(
-        param1: language.locale.languageCode,
-      ),
-      // Chỉ tái tạo NewsProvider khi ngôn ngữ thực sự đổi (instance cũ bị dispose)
-      updateWhen: (language, previous) {
-        return language.locale.languageCode != previous.languageCode;
-      },
+    final languageCode = context.select<LanguageProvider, String>(
+      (language) => language.locale.languageCode,
+    );
+    return ChangeNotifierProvider(
+      // Key mới sẽ dispose NewsProvider cũ và tạo instance mới —
+      // chỉ khi ngôn ngữ thực sự đổi.
+      key: ValueKey(languageCode),
+      create: (_) => getIt<NewsProvider>(param1: languageCode),
       child: const NewsPage(),
     );
   }
 }
 ```
 
-> Tầng proxy chỉ nối các provider mà feature được phép thấy: của chính nó, hoặc của `core_*`. **Không** proxy `AuthProvider` từ feature khác — import `feature_auth` phá vỡ tính tách rời của module. Trạng thái đăng nhập đi qua `ISessionStatusStream` của `core_di`.
+> Route chỉ phụ thuộc vào các provider mà feature được phép thấy: của chính nó, hoặc của `core_*`. **Không** đọc `AuthProvider` từ feature khác — import `feature_auth` phá vỡ tính tách rời của module. Trạng thái đăng nhập đi qua `ISessionStatusStream` của `core_di`.
 
 ---
 
 ## ⚠️ Lưu ý Cực Kỳ Quan Trọng về Vòng Đời
 
 1. **Route-level Auto Dispose**: Feature Providers gắn liền với một màn hình **bắt buộc dùng `@injectable`**, tuyệt đối không được dùng `@singleton` / `@lazySingleton`. (Controller toàn cục như `AuthProvider`, `ThemeProvider`, `LanguageProvider` là ngoại lệ có chủ đích và dùng `@lazySingleton`.)
-2. **Khởi tạo ở Router**: Luôn bọc `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` hoặc `BaseProxyWidget` trong hàm `build` của lớp Route (`go_router`) để provider được dispose khi route rời khỏi cây widget. Page không tự bọc thêm một provider nữa.
+2. **Khởi tạo ở Router**: Luôn bọc `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` trong hàm `build` của lớp Route (`go_router`) để provider được dispose khi route rời khỏi cây widget. Page không tự bọc thêm một provider nữa.
 3. **`initialize()`**: `BaseProvider` gọi `initialize()` trong một microtask sau khi khởi tạo; override nó (gọi `super.initialize()`) cho việc setup bất đồng bộ, và `await provider.ensureInitialized()` khi cần chờ nó xong.

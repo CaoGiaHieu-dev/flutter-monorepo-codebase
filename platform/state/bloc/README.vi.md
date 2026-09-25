@@ -135,7 +135,7 @@ Widget build(BuildContext context) {
 
 ## 🔒 3. Quản Lý Lỗi Nghiệp Vụ Chuyên Biệt (Custom Error State)
 
-Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. `AppFailure` là một `sealed class` (Freezed) trong `domain_core` (`platform/layers/domain/lib/src/failures/failures.dart`), nên feature **không thể** `extends` / `implements` nó để thêm lỗi riêng — một `AuthErrorState extends AppFailure` sẽ không compile. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa **Freezed state riêng** cho feature, mang một giá trị lỗi của chính feature, dùng `BaseBloc<Event, CustomState>`, rồi map các biến thể của `AppFailure` sang giá trị đó trong handler:
+Mặc định, biến số `error` trong `BlocViewState.error(error)` có kiểu là `AppFailure`. `AppFailure` là một `sealed class` (Freezed) trong `domain_core` (`platform/layers/domain/lib/src/failures/app_failure.dart`), nên feature **không thể** `extends` / `implements` nó để thêm lỗi riêng — một `AuthErrorState extends AppFailure` sẽ không compile. Nếu bạn muốn chi tiết hóa lỗi, hãy định nghĩa **Freezed state riêng** cho feature, mang một giá trị lỗi của chính feature, dùng `BaseBloc<Event, CustomState>`, rồi map các biến thể của `AppFailure` sang giá trị đó trong handler:
 
 ```dart
 // login_state.dart

@@ -1,11 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'base_entity.dart';
-
-part 'paginate_entity.freezed.dart';
-part 'paginate_entity.g.dart';
-
-typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
+part 'paginated_entity.freezed.dart';
+part 'paginated_entity.g.dart';
 
 @Freezed(genericArgumentFactories: true)
 abstract class PaginatedEntity<T> with _$PaginatedEntity<T> {

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:core_common/core_common.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:platform_kernel/platform_kernel.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('ErrorHandler', () {

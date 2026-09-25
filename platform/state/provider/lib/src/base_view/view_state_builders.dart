@@ -1,5 +1,4 @@
-/// The builder signatures `BaseViewWidget` and `PaginatedViewWidget` take
-/// for each view state.
+/// The builder signatures `BaseViewWidget` takes for each view state.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -29,130 +28,10 @@ typedef SuccessWidgetBuilder<T> = Widget Function(
   Widget? child,
 );
 
-/// A typedef for building a widget when the state is successful.
-typedef SuccessWidgetBuilder2<T1, T2> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  Widget? child,
-);
-
-/// A typedef for building a widget when the state is successful.
-typedef SuccessWidgetBuilder3<T1, T2, T3> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  Widget? child,
-);
-
-/// A typedef for building a widget when the state is successful.
-typedef SuccessWidgetBuilder4<T1, T2, T3, T4> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  T4 value4,
-  Widget? child,
-);
-
-/// A typedef for building a widget when the state is successful.
-typedef SuccessWidgetBuilder5<T1, T2, T3, T4, T5> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  T4 value4,
-  T5 value5,
-  Widget? child,
-);
-
-/// A typedef for building a widget when the state is successful.
-typedef SuccessWidgetBuilder6<T1, T2, T3, T4, T5, T6> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  T4 value4,
-  T5 value5,
-  T6 value6,
-  Widget? child,
-);
-
 /// A typedef for building a widget when there is an error.
 typedef ErrorWidgetBuilder<T> = Widget Function(
   BuildContext context,
   T value,
   String? message,
-  Widget? child,
-);
-
-/// A typedef for building a widget when there is an error.
-typedef ErrorWidgetBuilder2<T1, T2> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  String? message1,
-  String? message2,
-  Widget? child,
-);
-
-/// A typedef for building a widget when there is an error.
-typedef ErrorWidgetBuilder3<T1, T2, T3> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  String? message1,
-  String? message2,
-  String? message3,
-  Widget? child,
-);
-
-/// A typedef for building a widget when there is an error.
-typedef ErrorWidgetBuilder4<T1, T2, T3, T4> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  T4 value4,
-  String? message1,
-  String? message2,
-  String? message3,
-  String? message4,
-  Widget? child,
-);
-
-/// A typedef for building a widget when there is an error.
-typedef ErrorWidgetBuilder5<T1, T2, T3, T4, T5> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  T4 value4,
-  T5 value5,
-  String? message1,
-  String? message2,
-  String? message3,
-  String? message4,
-  String? message5,
-  Widget? child,
-);
-
-/// A typedef for building a widget when there is an error.
-typedef ErrorWidgetBuilder6<T1, T2, T3, T4, T5, T6> = Widget Function(
-  BuildContext context,
-  T1 value1,
-  T2 value2,
-  T3 value3,
-  T4 value4,
-  T5 value5,
-  T6 value6,
-  String? message1,
-  String? message2,
-  String? message3,
-  String? message4,
-  String? message5,
-  String? message6,
   Widget? child,
 );

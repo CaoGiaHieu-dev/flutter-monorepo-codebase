@@ -2,15 +2,9 @@ import 'dart:async';
 
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../entities/base/base_entity.dart';
-import '../entities/base/paginate_entity.dart';
-import '../failures/failures.dart';
+import '../failures/app_failure.dart';
 
 part 'result.freezed.dart';
-
-/// Type alias for a result containing a BaseEntity
-typedef BaseResult<T> = Result<BaseEntity<T>>;
-typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 
 /// A sealed class representing the result of an operation, which can be a
 /// [Success], [Failure], [None], or [Cancel].

@@ -186,7 +186,7 @@ class StorageValue<T> extends ChangeNotifier {
   /// The same guard as `core_common`'s `DisposeGuard` mixin, spelled out
   /// here so `core_storage` (infra) needs only `platform_kernel` from the
   /// foundation group, not the Flutter-bound `core_common` and everything
-  /// it pulls in (go_router, device_info_plus, http_security_pinning, …).
+  /// it pulls in (go_router, package_info_plus, http_security_pinning, …).
   bool get isDisposed => _isDisposed;
 
   @override

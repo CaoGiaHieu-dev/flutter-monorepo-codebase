@@ -10,8 +10,7 @@ import '{{snakeNameInput}}_route_module.dart';
 /// Contributes one primary navigation destination and its
 /// [StatefulShellBranch] routes.
 ///
-/// `extends` (not `implements`) so [INavDestinationModule.onRestore] keeps its
-/// default body. The app shell collects every registration with
+/// The app shell collects every registration with
 /// `getAllOrEmpty<INavDestinationModule>()` sorted by [order], so removing this
 /// package simply drops the destination.
 ///

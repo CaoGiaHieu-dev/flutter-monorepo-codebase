@@ -8,14 +8,14 @@ import 'package:injectable/injectable.dart';
 {{#hasDomain}}
 /// Implements [I{{pascalNameInput}}Repository] from `domain_{{snakeNameInput}}`.
 ///
-/// Every method goes through [IBaseRepository.execute] (async) or
-/// [IBaseRepository.executeSync]: a thrown exception becomes
+/// Every method goes through [BaseRepository.execute] (async) or
+/// [BaseRepository.executeSync]: a thrown exception becomes
 /// `Failure(ErrorHandler.handleError(e))`, so nothing throws past the data
 /// layer. Inject the data sources (`data_sources/remote/` for Retrofit,
 /// `data_sources/local/` for storage or a database) through the constructor;
 /// they return models, and `execute`'s `mapper` turns a model into an entity.
 @LazySingleton(as: I{{pascalNameInput}}Repository)
-class {{pascalNameInput}}RepositoryImpl extends IBaseRepository
+class {{pascalNameInput}}RepositoryImpl extends BaseRepository
     implements I{{pascalNameInput}}Repository {
   @override
   Future<Result<void>> ping() => execute<void, void>(() async {});
@@ -28,7 +28,7 @@ class {{pascalNameInput}}RepositoryImpl extends IBaseRepository
 /// `implements I{{pascalNameInput}}Repository` and
 /// `@LazySingleton(as: I{{pascalNameInput}}Repository)` to this class.
 ///
-/// Every method goes through [IBaseRepository.execute] (async) or
-/// [IBaseRepository.executeSync], so nothing throws past the data layer.
-class {{pascalNameInput}}RepositoryImpl extends IBaseRepository {}
+/// Every method goes through [BaseRepository.execute] (async) or
+/// [BaseRepository.executeSync], so nothing throws past the data layer.
+class {{pascalNameInput}}RepositoryImpl extends BaseRepository {}
 {{/hasDomain}}

@@ -41,7 +41,74 @@ Future<GoRouter> _pumpApp(WidgetTester tester) async {
   return router;
 }
 
+class _LabelDialog extends OverlayDialogWidget {
+  const _LabelDialog(this.label, this.states);
+
+  final String label;
+  final Map<String, OverlayDialogState<OverlayDialogWidget>> states;
+
+  @override
+  OverlayDialogState<OverlayDialogWidget> createState() => _LabelDialogState();
+}
+
+class _LabelDialogState extends OverlayDialogState<_LabelDialog> {
+  @override
+  void initState() {
+    super.initState();
+    widget.states[widget.label] = this;
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(widget.label);
+}
+
 void main() {
+  group('OverlayDialogState.closeDialog', () {
+    testWidgets('closes its own dialog and never the one shown after it', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      final states = <String, OverlayDialogState<OverlayDialogWidget>>{};
+
+      String? firstResult;
+      var secondClosed = false;
+      unawaited(
+        AppDialogController.show<String>(
+          builder: (_) => _LabelDialog('first dialog', states),
+        ).then((result) => firstResult = result),
+      );
+      unawaited(
+        AppDialogController.show<void>(
+          builder: (_) => _LabelDialog('second dialog', states),
+        ).then((_) => secondClosed = true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('first dialog'), findsOneWidget);
+      expect(find.text('second dialog'), findsNothing);
+
+      final first = states['first dialog']!;
+      first.closeDialog('done');
+      await tester.pumpAndSettle();
+
+      expect(firstResult, 'done');
+      expect(find.text('first dialog'), findsNothing);
+      expect(find.text('second dialog'), findsOneWidget);
+
+      // A late call from the first dialog (a stale callback) must not close
+      // the dialog that replaced it.
+      first.closeDialog();
+      await tester.pumpAndSettle();
+
+      expect(find.text('second dialog'), findsOneWidget);
+      expect(secondClosed, isFalse);
+
+      states['second dialog']!.closeDialog();
+      await tester.pumpAndSettle();
+      expect(find.text('second dialog'), findsNothing);
+      expect(secondClosed, isTrue);
+    });
+  });
+
   group('AppDialogController system back', () {
     testWidgets('a non-dismissible dialog swallows the back', (tester) async {
       await _pumpApp(tester);

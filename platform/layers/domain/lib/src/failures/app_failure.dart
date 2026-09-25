@@ -1,14 +1,13 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-part 'failures.freezed.dart';
-part 'failures.g.dart';
+part 'app_failure.freezed.dart';
 
 /// Base class for all application failures.
 ///
 /// This abstract class represents the result of failed operations in the
 /// application. Unlike exceptions, failures are expected outcomes that
 /// should be handled gracefully by the application logic.
-@Freezed(genericArgumentFactories: true)
+@freezed
 sealed class AppFailure<T> with _$AppFailure<T> {
   /// Failure that occurs during network operations.
   const factory AppFailure.network({
@@ -63,9 +62,4 @@ sealed class AppFailure<T> with _$AppFailure<T> {
     int? code,
     T? data,
   }) = ServiceFailure<T>;
-
-  factory AppFailure.fromJson(
-    Map<String, dynamic> json,
-    T Function(Object?) fromJsonT,
-  ) => _$AppFailureFromJson(json, fromJsonT);
 }

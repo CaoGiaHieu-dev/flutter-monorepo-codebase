@@ -6,20 +6,24 @@ import 'package:path/path.dart' as p;
 import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
+// Declared by packages that never import them directly: the Flutter SDK
+// pieces, gen-l10n's `flutter_localizations` / `intl`, the app's
+// `cupertino_icons` font, `flutter_svg` (imported by the generated
+// `lib/src/gen/assets.gen.dart`, which is not scanned), `json_annotation`
+// (required by json_serializable next to every `@JsonSerializable` / Freezed
+// `fromJson`) and `retrofit` (used through generated Retrofit code).
+// `get_it` is still declared without an import by most module and infra
+// packages; drop it here once they stop declaring it. Anything else a
+// package declares must be imported somewhere in it.
 final _alwaysAllowedPackages = <String>{
   'flutter',
   'flutter_localizations',
   'cupertino_icons',
   'intl',
   'flutter_svg',
-  'firebase_core',
   'get_it',
-  'injectable',
-  'freezed_annotation',
   'json_annotation',
   'retrofit',
-  'provider',
-  'dio',
 };
 
 final _excludedSourceFilePatterns = <Glob>[

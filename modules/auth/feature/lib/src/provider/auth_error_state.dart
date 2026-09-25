@@ -4,7 +4,7 @@ import 'package:provider_state_management/provider_state_management.dart';
 part 'auth_error_state.freezed.dart';
 
 @freezed
-abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;

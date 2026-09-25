@@ -154,7 +154,7 @@ Sử dụng checklist này để tự review code của bạn.
 ### 🧬 Theo Từng Lớp
 - **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `platform/*` KHÔNG được phụ thuộc `feature_*`, `data_*` hay `domain_*` — ngoại trừ ba cạnh đã duyệt tới `domain_core` (arch_check R1).
 - **Domain**: `Entity` phải thuần túy (không có `statusCode`, `message`). `Repository` phải trả về `Future<Result<T>>`.
-- **Data**: `RepositoryImpl` phải `implement` interface từ Domain và bọc mọi lệnh gọi trong `execute()` / `executeSync()` của `IBaseRepository` (`data_core`).
+- **Data**: `RepositoryImpl` phải `implement` interface từ Domain và bọc mọi lệnh gọi trong `execute()` / `executeSync()` của `BaseRepository` (`data_core`).
 - **Presentation**: `Provider` KHÔNG được chứa controller UI. Các lệnh gọi bất đồng bộ phải dùng `executeOperation`.
 
 ### 💅 Đặt Tên & Style

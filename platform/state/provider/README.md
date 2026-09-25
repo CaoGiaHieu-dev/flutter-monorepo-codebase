@@ -14,8 +14,7 @@ It removes the boilerplate of moving between Loading, Success and Error while ca
 - **`BaseProvider<T>`**: The base ViewModel, with a built-in `executeOperation()` that automates the state changes around a `Result<R>`: loading → call the use case → `success` (with data) or `error` (with a `message` and an optional `ErrorState`).
 - **`BaseViewWidget<TProvider, TData>`**: Builds the UI from the `ViewStateModel` (shows loading for you, hands over non-null data, shows an error UI if you pass `onErrorBuilder`).
 - **`ProviderStateListener`** / **`MultiProviderStateListener`**: Widgets for side-effects (navigating, showing a toast) without hand-writing a StatefulWidget or a stream subscription.
-- **`PaginatedViewWidget`**: A BaseViewWidget variant dedicated to `PaginatedEntity<T>`.
-- **Multi-provider support**: `BaseViewWidget2`…`BaseViewWidget6` and `PaginatedViewWidget2`…`PaginatedViewWidget6` (up to 6 providers); `BaseProxyWidget`…`BaseProxyWidget4` (up to 4 parent providers).
+- **`LoadMoreMixin` / `LoadMoreListView`**: Page bookkeeping for load-more lists, and a separated list that appends a spinner slot while `isLoadingMore` is true.
 - **`DefaultLoadingWidget` / `DefaultEmptyWidget`**: Core's default widgets for the loading / empty states — core never borrows a widget from `core_ui_kit`.
 
 ---
@@ -70,14 +69,14 @@ Behaviour worth knowing (`platform/state/provider/lib/src/management/operation_e
 - **Success** → `ViewState.success()` with the data. When the result type `R` differs from the provider's state type `T`, pass `convert:` to `executeOperation`.
 - **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))` with `message = failure.message`. This emission is **forced**, so two identical failures in a row (the user taps Retry while still offline) both reach listeners.
 - **`none` / `cancel`** → the state is left untouched — including a `loading` state `showLoading` just set.
-- `executeOperation` does **not** try-catch: it handles `Result.failure`, while an exception thrown by `operation` propagates to the caller. Catching exceptions is the job of `IBaseRepository.execute()` in the Data layer.
+- `executeOperation` does **not** try-catch: it handles `Result.failure`, while an exception thrown by `operation` propagates to the caller. Catching exceptions is the job of `BaseRepository.execute()` in the Data layer.
 - A local `onSuccess` / `onFailure` **replaces** the global callback installed through `OperationGlobalConfig.instance.setup(...)` for that call; the global `onStart` / `onFinish` always run.
 
 ---
 
-## 🧩 2. Automated UI Rendering with `BaseViewWidget` & `PaginatedViewWidget`
+## 🧩 2. Automated UI Rendering with `BaseViewWidget` & `LoadMoreListView`
 
-Instead of hand-writing `if/else` blocks inside a `Consumer` for `loading`, `error`, `empty` and `success`, the package ships standardized wrapper widgets that keep your UI code short and declarative.
+Instead of hand-writing `if/else` blocks inside a `Consumer` for `loading`, `error`, `empty` and `success`, the package ships a standardized wrapper widget that keep your UI code short and declarative.
 
 #### 2.1 `BaseViewWidget` (plain data)
 `BaseViewWidget` is built on `Selector` (it rebuilds only when `viewState` changes) and listens to exactly the `ViewStateModel` of a `BaseProvider`.
@@ -107,22 +106,23 @@ BaseViewWidget<ProductProvider, ProductEntity>(
 
 > Without `onErrorBuilder` the error state has **no** automatic error UI: the widget keeps drawing the normal branch (the previous data through `builder`, or `emptyWidget` when there is none). To report an error as a toast or dialog, use `ProviderStateListener` (section 3).
 
-*(Note: up to 6 providers can be observed at once through `BaseViewWidget2` to `BaseViewWidget6`. In the multi-provider variants the `builder` receives nullable data, and the empty widget shows only when **every** provider has no data.)*
+*(One `BaseViewWidget` observes one provider. A screen that combines several providers nests a `BaseViewWidget` per provider, or reads them with `context.select`.)*
 
-#### 2.2 `PaginatedViewWidget` (paginated lists)
-Built for `PaginatedEntity<T>` (the Domain layer's paginated list type), so the provider must be a `BaseProvider<PaginatedEntity<T>>`. Its `empty` check also looks inside the page (`data.data.isEmpty`): if the server answers HTTP 200 with an empty `[]`, the empty widget shows automatically.
+#### 2.2 Paginated lists: `LoadMoreMixin` + `LoadMoreListView`
+Mix `LoadMoreMixin` into the provider to track `currentPage` / `totalPage` / `isLoadingMore`, keep the page in a `BaseProvider<PaginatedEntity<T>>`, and render it with `LoadMoreListView<P>` inside `BaseViewWidget`. The list appends a spinner slot after the last item while the provider's `isLoadingMore` is true.
 
 ```dart
-// class UsersProvider extends BaseProvider<PaginatedEntity<UserEntity>> { … }
-PaginatedViewWidget<UsersProvider, UserEntity>(
-  builder: (context, paginatedData, child) {
-    final users = paginatedData.data; // List<UserEntity>; paging info in paginatedData.meta
-    return ListView.builder(
+// class UsersProvider extends BaseProvider<PaginatedEntity<UserEntity>>
+//     with LoadMoreMixin<UserEntity> { … }
+BaseViewWidget<UsersProvider, PaginatedEntity<UserEntity>>(
+  builder: (context, page, child) {
+    final users = page.data; // List<UserEntity>; paging info in page.meta
+    if (users.isEmpty) return Text(context.l10nUsers.noUsers);
+    return LoadMoreListView<UsersProvider>(
       itemCount: users.length,
       itemBuilder: (context, index) => Text(users[index].name ?? users[index].id),
     );
   },
-  emptyWidget: (context, child) => Text(context.l10nUsers.noUsers),
 )
 ```
 
@@ -191,7 +191,7 @@ import 'package:provider_state_management/provider_state_management.dart';
 part 'auth_error_state.freezed.dart';
 
 @freezed
-abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
@@ -203,13 +203,13 @@ abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
 }
 ```
 
-`IErrorState` is the `ErrorState.custom()` variant of `ErrorState` — extending it is how a feature attaches its own error to `ViewState.error`. *(Then map `AppFailure` to `AuthErrorState` through `OperationConfig`'s `errorStateBuilder`, as in section 1 — the real one is `AuthProvider.mapAuthFailure`.)*
+`CustomErrorState` is the `ErrorState.custom()` variant of `ErrorState` — extending it is how a feature attaches its own error to `ViewState.error`. *(Then map `AppFailure` to `AuthErrorState` through `OperationConfig`'s `errorStateBuilder`, as in section 1 — the real one is `AuthProvider.mapAuthFailure`.)*
 
 ---
 
-## 🔗 5. Dependencies Between Providers (`BaseProxyWidget`)
+## 🔗 5. Dependencies Between Providers
 
-When `NewsProvider` must reload whenever the user changes language, use `BaseProxyWidget` (or `BaseProxyWidget2` … `BaseProxyWidget4`) at the routing layer. `LanguageProvider` belongs to `core_base_ui` and is mounted at the app root (`AppMaterialWrapper`), so any feature may read it:
+When `NewsProvider` must reload whenever the user changes language, recreate it at the routing layer, keyed by the value it depends on. `LanguageProvider` belongs to `core_base_ui` and is mounted at the app root (`AppMaterialWrapper`), so any feature may read it:
 
 ```dart
 @TypedGoRoute<NewsRoute>(path: NewsPath.NEWS)
@@ -218,27 +218,26 @@ class NewsRoute extends GoRouteDataCustom with $NewsRoute {
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return BaseProxyWidget<LanguageProvider, NewsProvider>(
-      // NewsProvider takes the languageCode as an @factoryParam; it wraps the whole NewsPage at the routing layer
-      create: (context, language) => getIt<NewsProvider>(
-        param1: language.locale.languageCode,
-      ),
-      // Recreate NewsProvider only when the language really changes (the old instance is disposed)
-      updateWhen: (language, previous) {
-        return language.locale.languageCode != previous.languageCode;
-      },
+    final languageCode = context.select<LanguageProvider, String>(
+      (language) => language.locale.languageCode,
+    );
+    return ChangeNotifierProvider(
+      // A new key disposes the old NewsProvider and creates a fresh one —
+      // only when the language really changes.
+      key: ValueKey(languageCode),
+      create: (_) => getIt<NewsProvider>(param1: languageCode),
       child: const NewsPage(),
     );
   }
 }
 ```
 
-> The proxy layer only connects providers the feature is allowed to see: its own, or `core_*` ones. **Do not** proxy `AuthProvider` from another feature — importing `feature_auth` breaks module isolation. Sign-in state travels through `core_di`'s `ISessionStatusStream`.
+> A route only depends on providers the feature is allowed to see: its own, or `core_*` ones. **Do not** read `AuthProvider` from another feature — importing `feature_auth` breaks module isolation. Sign-in state travels through `core_di`'s `ISessionStatusStream`.
 
 ---
 
 ## ⚠️ Critical Lifecycle Notes
 
 1. **Route-level auto dispose**: A feature provider tied to one screen **must be `@injectable`** — never `@singleton` / `@lazySingleton`. (Global controllers such as `AuthProvider`, `ThemeProvider`, `LanguageProvider` are the deliberate exception and use `@lazySingleton`.)
-2. **Create it in the router**: Always wrap `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` or `BaseProxyWidget` in the route class's `build` (`go_router`), so the provider is disposed when the route leaves the widget tree. The page does not wrap itself in another provider.
+2. **Create it in the router**: Always wrap `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` in the route class's `build` (`go_router`), so the provider is disposed when the route leaves the widget tree. The page does not wrap itself in another provider.
 3. **`initialize()`**: `BaseProvider` calls `initialize()` in a microtask after construction; override it (calling `super.initialize()`) for async setup, and `await provider.ensureInitialized()` when you need it finished.

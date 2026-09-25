@@ -86,15 +86,4 @@ void main() {
     expect(copy.message, 'renewed');
     expect(copy.code, 401);
   });
-
-  test('round-trips through JSON', () {
-    const original = ServerFailure<String>(
-      message: 'down',
-      code: 503,
-      data: 'detail',
-    );
-    final json = original.toJson((d) => d);
-    final decoded = AppFailure<String>.fromJson(json, (o) => o as String);
-    expect(decoded, original);
-  });
 }

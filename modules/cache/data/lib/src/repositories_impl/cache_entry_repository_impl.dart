@@ -9,7 +9,7 @@ import '../models/cache_entry_model.dart';
 /// SAMPLE — wraps the local data source in `execute()` so nothing throws past
 /// the data layer, and maps [CacheEntryModel] to the domain entity.
 @LazySingleton(as: ICacheEntryRepository)
-class CacheEntryRepositoryImpl extends IBaseRepository
+class CacheEntryRepositoryImpl extends BaseRepository
     implements ICacheEntryRepository {
   CacheEntryRepositoryImpl(this._local);
 

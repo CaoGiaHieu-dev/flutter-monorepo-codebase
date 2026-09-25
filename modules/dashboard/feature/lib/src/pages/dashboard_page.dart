@@ -12,14 +12,13 @@ class DashboardPage extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  /// Re-tapping the current tab lets that tab reset itself; any other tap
-  /// switches branch, keeping each branch's own back stack.
-  void _onTap(int index, VoidCallback onRestore) {
-    if (index == navigationShell.currentIndex) {
-      onRestore();
-    } else {
-      navigationShell.goBranch(index);
-    }
+  /// Switches branch, keeping each branch's own back stack; re-tapping the
+  /// current tab returns that branch to its first page instead.
+  void _onSelect(int index) {
+    navigationShell.goBranch(
+      index,
+      initialLocation: index == navigationShell.currentIndex,
+    );
   }
 
   BottomNavigationBarItem _itemOf(NavDestination d) {
@@ -46,7 +45,6 @@ class DashboardPage extends StatelessWidget {
     if (tabs.length < 2) return Scaffold(body: navigationShell);
 
     final selected = index.clamp(0, tabs.length - 1);
-    void onSelect(int tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore);
     // This is where a neutral [NavDestination] becomes one app's widget —
     // the same modules feed both forms below, unchanged.
     final destinations = [for (final tab in tabs) tab.destination(context)];
@@ -62,7 +60,7 @@ class DashboardPage extends StatelessWidget {
         body: navigationShell,
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: selected,
-          onTap: onSelect,
+          onTap: _onSelect,
           items: [for (final d in destinations) _itemOf(d)],
         ),
       );
@@ -81,7 +79,7 @@ class DashboardPage extends StatelessWidget {
             right: isRtl,
             child: NavigationRail(
               selectedIndex: selected,
-              onDestinationSelected: onSelect,
+              onDestinationSelected: _onSelect,
               extended: extended,
               labelType: extended
                   ? NavigationRailLabelType.none

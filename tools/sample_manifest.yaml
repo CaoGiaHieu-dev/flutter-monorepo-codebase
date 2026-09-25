@@ -44,7 +44,7 @@ packages:
 
   # --- Framework: layer foundations ---------------------------------------
   # These carry the base contracts every domain/data package builds on
-  # (Result<T>, BaseEntity, IBaseRepository). They contain no sample code: the
+  # (Result<T>, BaseEntity, BaseRepository). They contain no sample code: the
   # Drift example that used to live inside them is the `cache` module now.
   domain_core: { kind: framework, path: platform/layers/domain }
   data_core: { kind: framework, path: platform/layers/data }
@@ -217,7 +217,7 @@ bundles:
   dashboard:
     packages: [feature_dashboard]
     orphaned_contracts:
-      - platform/foundation/contracts/lib/src/routing/dashboard_route_module.dart
+      - platform/foundation/contracts/lib/src/routing/i_dashboard_route_module.dart
     breaks: []
     note: >-
       Tabs still render, without chrome — AppRouter falls back to the bare
@@ -246,7 +246,7 @@ shared_files:
 # Contracts that survive every removal: they are generic mechanisms, not
 # feature-specific. Do not delete these while chasing orphans.
 framework_contracts:
-  - platform/foundation/contracts/lib/src/routing/routing_interfaces.dart # IFeatureRouteModule
+  - platform/foundation/contracts/lib/src/routing/i_feature_route_module.dart # IFeatureRouteModule
   - platform/foundation/contracts/lib/src/routing/i_nav_destination_module.dart
   - platform/foundation/contracts/lib/src/routing/i_app_entry_location.dart
   # Where the shell sends a signed-out / signed-in user. Product-neutral:
@@ -258,7 +258,7 @@ framework_contracts:
   # ISessionStatusStream, ISessionRefreshListenable, ISessionGateway).
   - platform/foundation/contracts/lib/src/session
   - platform/foundation/contracts/lib/src/routing/navigator_keys.dart
-  - platform/foundation/contracts/lib/src/feature_localization.dart
-  - platform/foundation/contracts/lib/src/theme/i_theme_storage.dart
-  - platform/foundation/contracts/lib/src/language/i_language_storage.dart
+  - platform/foundation/contracts/lib/src/i_feature_localization.dart
+  - platform/foundation/contracts/lib/src/i_theme_storage.dart
+  - platform/foundation/contracts/lib/src/i_language_storage.dart
   - platform/foundation/contracts/lib/src/app/i_app_tree_wrapper.dart

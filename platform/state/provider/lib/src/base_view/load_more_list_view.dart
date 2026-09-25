@@ -5,32 +5,10 @@ import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../mixin/load_more_mixin.dart';
+import '../mixins/load_more_mixin.dart';
 
-class LoadingMoreWidget<P extends LoadMoreMixin<Object?>>
-    extends StatelessWidget {
-  const LoadingMoreWidget({this.builder});
-
-  final WidgetBuilder? builder;
-
-  @override
-  Widget build(BuildContext context) {
-    return Selector<P, bool>(
-      selector: (_, provider) => provider.isLoadingMore,
-      builder: (_, isLoadingMore, child) {
-        if (isLoadingMore) return child!;
-        return const SizedBox();
-      },
-      child:
-          builder?.call(context) ??
-          SafeArea(
-            minimum: context.edgeInsets(vertical: 10),
-            child: const Center(child: CircularProgressIndicator.adaptive()),
-          ),
-    );
-  }
-}
-
+/// A separated list view that appends a spinner slot after the last item
+/// while [P] (a [LoadMoreMixin]) reports `isLoadingMore`.
 class LoadMoreListView<P extends LoadMoreMixin<Object?>> extends BoxScrollView {
   const LoadMoreListView({
     super.key,
@@ -117,24 +95,6 @@ class LoadMoreListView<P extends LoadMoreMixin<Object?>> extends BoxScrollView {
       );
     }
     return SliverList(delegate: childrenDelegate);
-  }
-
-  Widget loadMoreWrapper(Widget child) {
-    return Selector<P, bool>(
-      selector: (context, p) => p.isLoadingMore,
-      builder: (context, value, child) {
-        return SliverList(
-          delegate: SliverChildListDelegate([
-            child!,
-            if (value)
-              const SliverToBoxAdapter(
-                child: Center(child: CircularProgressIndicator.adaptive()),
-              ),
-          ]),
-        );
-      },
-      child: child,
-    );
   }
 
   @override

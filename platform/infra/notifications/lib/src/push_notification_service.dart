@@ -13,17 +13,6 @@ import 'package:platform_kernel/platform_kernel.dart';
 
 import 'utils/notification_constants.dart';
 
-/// Enum to define the type of operation for blocked types.
-enum _BlockedTypeOperationType { add, remove }
-
-/// Class to represent a blocked type operation.
-class _BlockedTypeOperation {
-  final String type;
-  final _BlockedTypeOperationType operationType;
-
-  _BlockedTypeOperation(this.type, this.operationType);
-}
-
 /// Builds a piece of text for the grouped (inbox-style) Android notification
 /// that summarises the [activeCount] notifications already on screen.
 ///
@@ -99,8 +88,8 @@ class PushNotificationService {
   final _foregroundMessageStreamController =
       StreamController<RemoteMessage>.broadcast();
 
-  /// List of blocked notification types.
-  final _blockedNotificationTypes = <String>[];
+  /// Blocked notification types, normalized by [_normalizeType].
+  final _blockedNotificationTypes = <String>{};
 
   /// FCM token of the device.
   String? _fcmToken;
@@ -113,10 +102,7 @@ class PushNotificationService {
 
   /// Constructor. Receives optional [FirebaseOptions] via DI.
   /// The initialization logic is handled automatically in [init].
-  PushNotificationService(this._firebaseOptions) {
-    // Set the processing function for the message queue.
-    _blockedTypeQueue.setProcessingFunction(_processBlockedTypeOperation);
-  }
+  PushNotificationService(this._firebaseOptions);
 
   /// Stream getter for the data stream.
   Stream<Map<String, dynamic>> get dataStream => _dataStreamController.stream;
@@ -152,9 +138,6 @@ class PushNotificationService {
   ///
   /// `null` by default, in which case the notification keeps its own title.
   NotificationInboxTextBuilder? inboxTitleBuilder;
-
-  /// Message queue for handling blocked types.
-  final MessageQueue<_BlockedTypeOperation> _blockedTypeQueue = MessageQueue();
 
   /// Initializes the notification service.
   ///
@@ -534,37 +517,15 @@ class PushNotificationService {
   bool isTypeBlocked(String? type) =>
       type != null && _blockedNotificationTypes.contains(_normalizeType(type));
 
-  /// Processing function for blocked type operations.
-  Future<void> _processBlockedTypeOperation(
-    _BlockedTypeOperation operation,
-  ) async {
-    // Stored normalized, so add/remove/lookup all agree on one spelling.
-    final type = _normalizeType(operation.type);
-    if (operation.operationType == _BlockedTypeOperationType.add) {
-      if (!_blockedNotificationTypes.contains(type)) {
-        _blockedNotificationTypes.add(type);
-      }
-    } else if (operation.operationType == _BlockedTypeOperationType.remove) {
-      _blockedNotificationTypes.remove(type);
-    }
-  }
-
   /// Adds notification types to the blocked list.
-  Future<void> addBlockedTypes(List<String> types) async {
-    for (var type in types) {
-      await _blockedTypeQueue.enqueue(
-        _BlockedTypeOperation(type, _BlockedTypeOperationType.add),
-      );
-    }
+  void addBlockedTypes(List<String> types) {
+    // Stored normalized, so add/remove/lookup all agree on one spelling.
+    _blockedNotificationTypes.addAll(types.map(_normalizeType));
   }
 
   /// Removes notification types from the blocked list.
-  Future<void> removeBlockedTypes(List<String> types) async {
-    for (var type in types) {
-      await _blockedTypeQueue.enqueue(
-        _BlockedTypeOperation(type, _BlockedTypeOperationType.remove),
-      );
-    }
+  void removeBlockedTypes(List<String> types) {
+    _blockedNotificationTypes.removeAll(types.map(_normalizeType));
   }
 
   /// Revokes the FCM token.

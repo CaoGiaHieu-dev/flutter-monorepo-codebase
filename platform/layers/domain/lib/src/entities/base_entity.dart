@@ -1,6 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../../utils/domain_constants.dart';
+import '../utils/domain_constants.dart';
 
 part 'base_entity.freezed.dart';
 part 'base_entity.g.dart';

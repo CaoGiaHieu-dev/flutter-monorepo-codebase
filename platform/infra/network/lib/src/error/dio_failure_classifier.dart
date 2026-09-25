@@ -35,7 +35,10 @@ final class DioFailureClassifier implements ErrorClassifier {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return const NetworkFailure(message: 'Connection timeout', code: 1003);
+        return const NetworkFailure(
+          message: 'Connection timeout',
+          code: ErrorCodes.CONNECTION_TIMEOUT,
+        );
 
       case DioExceptionType.badResponse:
         final response = error.response;
@@ -51,21 +54,27 @@ final class DioFailureClassifier implements ErrorClassifier {
         );
 
       case DioExceptionType.connectionError:
-        return const NetworkFailure(message: 'Connection error', code: 1005);
+        return const NetworkFailure(
+          message: 'Connection error',
+          code: ErrorCodes.CONNECTION_ERROR,
+        );
 
       case DioExceptionType.badCertificate:
-        return const NetworkFailure(message: 'Certificate error', code: 1006);
+        return const NetworkFailure(
+          message: 'Certificate error',
+          code: ErrorCodes.BAD_CERTIFICATE,
+        );
 
       case DioExceptionType.transformTimeout:
         return const NetworkFailure(
           message: 'Transform timeout error',
-          code: 1008,
+          code: ErrorCodes.TRANSFORM_TIMEOUT,
         );
 
       case DioExceptionType.unknown:
         return NetworkFailure(
           message: error.message ?? 'Unknown network error',
-          code: 1007,
+          code: ErrorCodes.NETWORK_UNKNOWN,
         );
     }
   }

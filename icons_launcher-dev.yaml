@@ -1,3 +1,9 @@
+# One file per flavor because tools/theme_generator/theme_setting.dart runs
+# `icons_launcher:create --flavors dev,staging,prod`, which reads
+# icons_launcher-<flavor>.yaml for each flavor. The three are identical until
+# a product gives a flavor its own icon (a "DEV" badge, say) — edit that
+# flavor's file only. Paths are relative to the app (the tool copies these
+# files into apps/<id>/ before running).
 icons_launcher:
   image_path: "../../assets/branding/ic_launcher.png"
   platforms:

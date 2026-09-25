@@ -5,7 +5,8 @@
       "name": "App (Dev)",
       "request": "launch",
       "type": "dart",
-      "program": "apps/mobile/lib/main.dart",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "dev",
@@ -17,7 +18,8 @@
       "name": "App (Staging)",
       "request": "launch",
       "type": "dart",
-      "program": "apps/mobile/lib/main.dart",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "staging",
@@ -29,7 +31,8 @@
       "name": "App (Prod)",
       "request": "launch",
       "type": "dart",
-      "program": "apps/mobile/lib/main.dart",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "prod",

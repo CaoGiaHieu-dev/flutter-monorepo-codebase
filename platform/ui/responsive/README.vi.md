@@ -25,10 +25,10 @@ Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước v
 
 ## 🚀 1. Khởi tạo
 
-Đã được wire sẵn ở `platform/shell/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — không truyền `designSize`, nên mặc định của package, artboard điện thoại `375x812`, là artboard duy nhất trong repository:
+Đã được wire sẵn ở `platform/shell/app_shell/lib/src/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — không truyền `designSize`, nên mặc định của package, artboard điện thoại `375x812`, là artboard duy nhất trong repository:
 
 ```dart
-// platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
   // No `designSize`: the 375x812 default is the app's artboard.
   // …

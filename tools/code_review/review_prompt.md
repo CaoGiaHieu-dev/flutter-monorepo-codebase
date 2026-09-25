@@ -105,7 +105,7 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 ## 🧭 Project context (not rules — what the code should look like)
 
 - An app's `main.dart` is one call, `runShellApp(configureDependencies: configureDependencies)`; zone, DI, `AppInitializer.initBeforeRunApp()` (logger + `HttpOverrides`, before any widget), splash and `AppInitializer.init()` live in `platform_app_shell`'s `bootstrap.dart`.
-- `AppRouter` is a GetIt `@singleton`; there are no static lookups such as `AppRouter.currentContext`. GoRouter's `errorPageBuilder` uses `UndefineRouteWidget`. `DeeplinkProvider.initAppLink()` is started by `NavigatorWrapperWidget` after the boot redirect or a sign-in.
+- `AppRouter` is a GetIt `@singleton`; there are no static lookups such as `AppRouter.currentContext`. GoRouter's `errorPageBuilder` uses `UndefinedRouteWidget`. `DeeplinkProvider.initAppLink()` is started by `NavigatorWrapperWidget` after the boot redirect or a sign-in.
 - DI groups run `core` → the app's own registrations → `notifications` → `shell` → `ui` → `domain` → `data` → `feature` → `other`, declared in each `apps/<id>/app_manifest.yaml`.
 - Shared widgets already exist in `platform/ui/ui_kit` — flag a re-implemented button, input or dialog.
 

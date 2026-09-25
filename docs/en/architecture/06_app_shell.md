@@ -33,7 +33,7 @@ platform/shell/app_shell/lib/              shared by every app
     ├── navigation/app_router.dart   GoRouter assembly
     ├── providers/                   AppProvider, DeeplinkProvider
     ├── utils/                       AppShellUiConstants (text-scale cap)
-    └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
+    └── widgets/                     NavigatorWrapperWidget, UndefinedRouteWidget
 
 platform/shell/adapters/lib/               the shell's infrastructure adapters (platform_shell_adapters)
 ├── di/
@@ -93,7 +93,7 @@ sequenceDiagram
 
 ### Step by step
 
-The sequence lives in `runShellApp()` ([`platform/shell/app_shell/lib/bootstrap.dart`](../../../platform/shell/app_shell/lib/bootstrap.dart)); an app's `main.dart` only calls it with its own generated `configureDependencies`.
+The sequence lives in `runShellApp()` ([`platform/shell/app_shell/lib/src/bootstrap.dart`](../../../platform/shell/app_shell/lib/src/bootstrap.dart)); an app's `main.dart` only calls it with its own generated `configureDependencies`.
 
 1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call — then **`installShellErrorHooks`**, which routes every uncaught error to one place (see [Errors and crash reporting](#errors-and-crash-reporting) below). It runs before `configureDependencies`, so a DI failure is reported too.
@@ -320,7 +320,7 @@ The parameter is typed `NetworkConfig`, so the upcast is compiler-checked — no
 
 ## 5. Router assembly
 
-[`app_router.dart`](../../../platform/shell/app_shell/lib/presentation/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
+[`app_router.dart`](../../../platform/shell/app_shell/lib/src/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [
@@ -360,7 +360,7 @@ Deleting a feature package therefore cannot crash the shell.
 > [!CAUTION]
 > **Never hardcode a feature route in `app_router.dart`.** Adding `$myFeatureRoute` there couples the shell to your feature and breaks the "remove a feature and the app still runs" guarantee. Register `IFeatureRouteModule` or `INavDestinationModule` in the feature's own DI module instead. See [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<ISessionRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `ISessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefineRouteWidget` — a named widget, never an inline closure.
+`refreshListenable: getItOrNull<ISessionRefreshListenable>()` (which `feature_auth` binds to its `AuthProvider`) makes GoRouter re-resolve the current location — running any `redirect` on it — when auth state changes. **No redirect ships today**: there is no top-level `redirect:` and no sample route declares one, so on its own this changes nothing visible. It stays as the hook for a module that adds a guard to its own `GoRouteData.redirect`. Sign-in and sign-out *navigation* is done by `NavigatorWrapperWidget`, listening to `ISessionState.sessionChanges` (§6). `errorPageBuilder` renders `UndefinedRouteWidget` — a named widget, never an inline closure.
 
 `observers: [routeObserver]` attaches `AppRouter.routeObserver` to the root navigator, and go_router forwards the root observers to every `ShellRoute` and `StatefulShellBranch` navigator (`notifyRootObserver`, on by default) — so the one observer `AppInitializer.init` hands to `RouteAwareWidget` sees pushes and pops everywhere, tabs included. `platform/shell/app_shell/test/app_router_test.dart` checks both levels.
 
@@ -399,9 +399,9 @@ builder: (context, state, navigationShell) {
 },
 ```
 
-There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefineRouteWidget`'s go-home button, and after sign-in when no `IPostSignInLocation` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
+There are two locations, deliberately different. `entryLocation` is where a cold start lands — onboarding when it is composed, but **only on the first launch**: once `NavigatorWrapperWidget` has recorded it as seen (the shell's `AppBootStorage.viewedOnboard`), every later cold start lands on `fallbackLocation`, so a returning user is not shown onboarding while the session restores. `fallbackLocation` is "home": `back()` with nothing to pop, `UndefinedRouteWidget`'s go-home button, and after sign-in when no `IPostSignInLocation` is registered. It is always a registered route and never onboarding — a user who just signed in must not be sent back to it.
 
-Unmatched paths land on `errorPageBuilder` → `UndefineRouteWidget` (a real widget class, never an inline anonymous one).
+Unmatched paths land on `errorPageBuilder` → `UndefinedRouteWidget` (a real widget class, never an inline anonymous one).
 
 ### Why `NavigatorKeys` live in `core_di`
 
@@ -480,10 +480,10 @@ Each feature owns its translations. The app shell never learns their names.
 | `core_base_ui` | Global / fallback strings shared by everyone |
 
 > [!CAUTION]
-> A feature must **never** edit `platform/shell/app_shell/lib/presentation/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI:
+> A feature must **never** edit `platform/shell/app_shell/lib/src/root_app.dart` or `app_material_wrapper.dart` to register its delegate. Registration happens through DI:
 
 ```dart
-// platform/shell/app_shell/lib/presentation/app_material_wrapper.dart
+// platform/shell/app_shell/lib/src/app_material_wrapper.dart
 // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
 // registers `IFeatureLocalization`. Every feature package is removable, so
 // an app built without any of them must still resolve its delegates —
@@ -511,7 +511,7 @@ How to add a string or a locale: [`../guides/09_localization_theming.md`](../gui
 
 ### The OS font size is honoured, up to 2x
 
-`RootApp`'s builder used to end in `MediaQuery.withNoTextScaling`, which pinned every text at 100% whatever the user had set — an accessibility failure (WCAG 2.2 SC 1.4.4 asks for text resizable to 200%), not a layout choice. It now clamps instead: the user's setting passes through unchanged up to `MAX_TEXT_SCALE_FACTOR` (2.0, in [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/shell/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), non-linear scalers (Android 14+) included, and nothing clamps the lower end.
+`RootApp`'s builder used to end in `MediaQuery.withNoTextScaling`, which pinned every text at 100% whatever the user had set — an accessibility failure (WCAG 2.2 SC 1.4.4 asks for text resizable to 200%), not a layout choice. It now clamps instead: the user's setting passes through unchanged up to `MAX_TEXT_SCALE_FACTOR` (2.0, in [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/shell/app_shell/lib/src/utils/app_shell_ui_constants.dart)), non-linear scalers (Android 14+) included, and nothing clamps the lower end.
 
 This does **not** double-scale text with `core_responsive`. The two factors are independent and applied at different points:
 

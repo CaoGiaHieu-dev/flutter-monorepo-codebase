@@ -107,7 +107,7 @@ Create `ja.arb` in `platform/ui/design_system/assets/language/` with `"@@locale"
 }
 ```
 
-`core_base_ui`'s `AppLocalizations.supportedLocales` is what the app offers: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`) all read it. `gen-l10n` builds it from the ARB files present, so the new file is what adds the locale.
+`core_base_ui`'s `AppLocalizations.supportedLocales` is what the app offers: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`) all read it. `gen-l10n` builds it from the ARB files present, so the new file is what adds the locale.
 
 ### Name the language in the picker
 
@@ -266,7 +266,7 @@ AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 Non-size defaults for shared widgets live in the package's own `utils/`:
 
 ```dart
-// platform/ui/ui_kit/lib/utils/shared_ui_constants.dart
+// platform/ui/ui_kit/lib/src/utils/shared_ui_constants.dart
 /// Timing and overlay constants owned by `core_ui_kit`.
 ///
 /// Package-internal by convention: these are defaults for the reusable
@@ -291,7 +291,7 @@ class SharedUiConstants {
 | Dialog | `_dialog.dart` | `Dialog` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` |
 
-Existing examples in `platform/ui/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
+Existing examples in `platform/ui/ui_kit/lib/src/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
 
 Inline builders cannot be reused, previewed, or tested in isolation — and they invariably end up with hard-coded strings and sizes.
 

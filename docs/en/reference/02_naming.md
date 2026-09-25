@@ -31,7 +31,7 @@ Every example below is a real path in this repository — open it to see the con
 | Module API package | package `<id>_api` at `modules/<id>/api` | — | `modules/auth/api/pubspec.yaml` (`auth_api`) |
 | Session location contribution | `_sign_in_location.dart` / `_post_sign_in_location.dart` | `SignInLocation` / `PostSignInLocation` | `modules/auth/feature/lib/src/routing/auth_sign_in_location.dart` |
 | Action handler impl | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
-| Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/dialogs/error_dialog.dart` |
+| Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/src/dialogs/retry_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
 | Route definitions (`GoRouteData`) | `_route_module.dart` | `Route` | `modules/home/feature/lib/src/routing/home_route_module.dart` (declares `HomeRoute`) |
 | Stack route contribution (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` |

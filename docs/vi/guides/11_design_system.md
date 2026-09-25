@@ -52,7 +52,7 @@ Có hai thứ khác nhau nằm trong `core_base_ui`, và nhầm lẫn giữa ch�
 | Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
 | Một shadow | `styles/app_shadows.dart` |
 | Khung thiết kế gốc | `platform/foundation/common/lib/src/config/app_config.dart` → `design` |
-| Một lớp cửa sổ được scale tới đâu (bound, profile, breakpoint) | `platform/shell/app_shell/lib/main_scope.dart` → `ResponsiveInit` (§6) |
+| Một lớp cửa sổ được scale tới đâu (bound, profile, breakpoint) | `platform/shell/app_shell/lib/src/main_scope.dart` → `ResponsiveInit` (§6) |
 | Layout trên tablet, máy gập hay chia đôi màn hình | chính page đó — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
 | Thêm hẳn một class token mới | file mới trong `styles/`, rồi chạy barrel generator |
 
@@ -62,10 +62,10 @@ Màu được cung cấp dưới dạng [`ThemeExtension`](https://api.flutter.d
 
 ### Xác định có cần ô màu mới không
 
-Mở [`theme/theme_system_interface.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_interface.dart). File này khai báo mọi ô màu mà app có thể yêu cầu:
+Mở [`theme/theme_system_interface.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart). File này khai báo mọi ô màu mà app có thể yêu cầu:
 
 ```dart
-// platform/ui/design_system/lib/src/theme/theme_system_interface.dart
+// platform/ui/design_system/lib/src/theme/theme_system_extensions.dart
 abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
     extends ThemeExtension<T> {
   // Core colors
@@ -205,7 +205,7 @@ double? scaleFont(double? size) => size == null ? null : context.sp(size);
 
 Dùng `sp`, nên chữ đi theo `textScaleBounds` của app ([§6](#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ)). Với mặc định `ScaleBounds.downOnly()`, chữ thu nhỏ trên cửa sổ hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế; lớp cửa sổ nào có `ResponsiveProfile` cho phép phóng to thì chữ cũng to theo. Với cấu hình của app này, chữ đúng bằng cỡ thiết kế trên mọi cửa sổ rộng từ 375 trở lên — điện thoại, tablet hay desktop.
 
-Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`, nơi có sẵn context.
+Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `platform/shell/app_shell/lib/src/app_material_wrapper.dart`, nơi có sẵn context.
 
 `AppTextStyles` sau đó chỉ việc đọc lại theme đã dựng xong:
 
@@ -297,7 +297,7 @@ Mọi thứ ở trên đều scale *tương đối so với một khung tham chi
 static Size get design => const Size(375, 812);
 ```
 
-Giá trị này được truyền cho `ResponsiveInit` đúng một lần, ở ngoài cùng cây widget — `_ResponsiveWrapper` trong `platform/shell/app_shell/lib/main_scope.dart` bọc mọi thứ, kể cả `AppMaterialWrapper`; lời gọi đầy đủ nằm ở §6. Đây là khung mà **mọi lớp cửa sổ** quy chiếu về, trừ khi một profile chỉ định khung riêng: `context.w(16)` nghĩa là "16 logical pixel trên khung rộng 375".
+Giá trị này được truyền cho `ResponsiveInit` đúng một lần, ở ngoài cùng cây widget — `_ResponsiveWrapper` trong `platform/shell/app_shell/lib/src/main_scope.dart` bọc mọi thứ, kể cả `AppMaterialWrapper`; lời gọi đầy đủ nằm ở §6. Đây là khung mà **mọi lớp cửa sổ** quy chiếu về, trừ khi một profile chỉ định khung riêng: `context.w(16)` nghĩa là "16 logical pixel trên khung rộng 375".
 
 > [!CAUTION]
 > **Đổi `designSize` là scale lại toàn bộ app cùng lúc.** Mọi lời gọi `context.w/h/r/sp` đều quy chiếu về nó, và cửa sổ nào hẹp hơn hoặc thấp hơn khung sẽ thu nhỏ thiết kế theo đúng tỉ lệ đó — đổi từ 375×812 sang 390×844 là mọi thứ trên điện thoại rộng 375 đều nhỏ đi. Chỉ đổi khi nguồn thiết kế gốc thực sự thay đổi, rồi rà lại app trên máy nhỏ, máy cao và tablet.
@@ -322,7 +322,7 @@ Một **`ResponsiveProfile`** ghi đè khung thiết kế, cả hai bound và `m
 Đây là toàn bộ cấu hình của app:
 
 ```dart
-// platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
   // The phone artboard every window class starts from.
   designSize: AppConfig.design,

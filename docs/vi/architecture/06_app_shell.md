@@ -34,7 +34,7 @@ platform/shell/app_shell/lib/              dùng chung cho mọi app
     ├── navigation/app_router.dart   lắp ráp GoRouter
     ├── providers/                   AppProvider, DeeplinkProvider
     ├── utils/                       AppShellUiConstants (trần text scale)
-    └── widgets/                     NavigatorWrapperWidget, UndefineRouteWidget
+    └── widgets/                     NavigatorWrapperWidget, UndefinedRouteWidget
 
 platform/shell/adapters/lib/               adapter hạ tầng của shell (platform_shell_adapters)
 ├── di/
@@ -94,7 +94,7 @@ sequenceDiagram
 
 ### Từng bước
 
-Trình tự này nằm trong `runShellApp()` ([`platform/shell/app_shell/lib/bootstrap.dart`](../../../platform/shell/app_shell/lib/bootstrap.dart)); `main.dart` của app chỉ gọi nó với `configureDependencies` được sinh cho chính app đó.
+Trình tự này nằm trong `runShellApp()` ([`platform/shell/app_shell/lib/src/bootstrap.dart`](../../../platform/shell/app_shell/lib/src/bootstrap.dart)); `main.dart` của app chỉ gọi nó với `configureDependencies` được sinh cho chính app đó.
 
 1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin — rồi **`installShellErrorHooks`**, dồn mọi lỗi không bắt được về một chỗ (xem [Lỗi và crash reporting](#lỗi-và-crash-reporting) bên dưới). Nó chạy trước `configureDependencies`, nên lỗi DI cũng được báo cáo.
@@ -323,7 +323,7 @@ Tham số khai kiểu `NetworkConfig` nên phép upcast được trình biên d�
 
 ## 5. Lắp ráp router
 
-[`app_router.dart`](../../../platform/shell/app_shell/lib/presentation/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
+[`app_router.dart`](../../../platform/shell/app_shell/lib/src/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
 
 ```dart
 List<RouteBase> get _featureRoutes => [
@@ -363,7 +363,7 @@ Nhờ vậy, xoá một feature package không thể làm sập shell.
 > [!CAUTION]
 > **Tuyệt đối không hardcode route của feature vào `app_router.dart`.** Thêm `$myFeatureRoute` vào đó là buộc app shell dính chặt vào feature của bạn, phá vỡ cam kết "gỡ feature ra app vẫn chạy". Hãy đăng ký `IFeatureRouteModule` hoặc `INavDestinationModule` trong DI module của chính feature đó. Xem [`../guides/04_routing.md`](../guides/04_routing.md).
 
-`refreshListenable: getItOrNull<ISessionRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter phân giải lại vị trí hiện tại — chạy mọi `redirect` gắn trên nó — khi trạng thái đăng nhập đổi. **Hiện không có redirect nào**: không có `redirect:` cấp cao nhất và không route mẫu nào khai báo, nên tự nó không tạo ra thay đổi nào thấy được. Nó được giữ làm điểm móc cho module nào thêm guard vào `GoRouteData.redirect` của riêng mình. Việc *điều hướng* khi đăng nhập / đăng xuất do `NavigatorWrapperWidget` làm, bằng cách lắng nghe `ISessionState.sessionChanges` (§6). `errorPageBuilder` vẽ `UndefineRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
+`refreshListenable: getItOrNull<ISessionRefreshListenable>()` (được `feature_auth` bind vào `AuthProvider` của nó) khiến GoRouter phân giải lại vị trí hiện tại — chạy mọi `redirect` gắn trên nó — khi trạng thái đăng nhập đổi. **Hiện không có redirect nào**: không có `redirect:` cấp cao nhất và không route mẫu nào khai báo, nên tự nó không tạo ra thay đổi nào thấy được. Nó được giữ làm điểm móc cho module nào thêm guard vào `GoRouteData.redirect` của riêng mình. Việc *điều hướng* khi đăng nhập / đăng xuất do `NavigatorWrapperWidget` làm, bằng cách lắng nghe `ISessionState.sessionChanges` (§6). `errorPageBuilder` vẽ `UndefinedRouteWidget` — một widget có tên, không bao giờ dùng closure ẩn danh.
 
 `observers: [routeObserver]` gắn `AppRouter.routeObserver` vào navigator gốc, và go_router chuyển tiếp các observer gốc tới mọi navigator của `ShellRoute` và `StatefulShellBranch` (`notifyRootObserver`, mặc định bật) — nên chính observer mà `AppInitializer.init` trao cho `RouteAwareWidget` thấy mọi lần push và pop, kể cả trong tab. `platform/shell/app_shell/test/app_router_test.dart` kiểm tra cả hai cấp.
 
@@ -402,9 +402,9 @@ builder: (context, state, navigationShell) {
 },
 ```
 
-Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép, nhưng **chỉ ở lần chạy đầu tiên**: khi `NavigatorWrapperWidget` đã ghi nhận là đã xem (cờ `AppBootStorage.viewedOnboard` của shell), mọi lần khởi động nguội sau đó đáp xuống `fallbackLocation`, nên người dùng quay lại không phải thấy onboarding trong lúc phiên đang khôi phục. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefineRouteWidget`, và sau khi đăng nhập nếu không có `IPostSignInLocation`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
+Có hai vị trí, và chúng khác nhau có chủ đích. `entryLocation` là nơi khởi động nguội đáp xuống — onboarding khi được ghép, nhưng **chỉ ở lần chạy đầu tiên**: khi `NavigatorWrapperWidget` đã ghi nhận là đã xem (cờ `AppBootStorage.viewedOnboard` của shell), mọi lần khởi động nguội sau đó đáp xuống `fallbackLocation`, nên người dùng quay lại không phải thấy onboarding trong lúc phiên đang khôi phục. `fallbackLocation` là "trang chủ": `back()` khi không còn gì để pop, nút "về trang chủ" của `UndefinedRouteWidget`, và sau khi đăng nhập nếu không có `IPostSignInLocation`. Nó luôn là một route đã đăng ký, không bao giờ là onboarding — người vừa đăng nhập không được đưa ngược về onboarding.
 
-Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefineRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
+Path không khớp sẽ rơi vào `errorPageBuilder` → `UndefinedRouteWidget` (một widget class thật, không bao giờ dùng widget vô danh inline).
 
 ### Vì sao `NavigatorKeys` nằm ở `core_di`
 
@@ -483,10 +483,10 @@ Mỗi feature tự sở hữu bản dịch của mình. App shell không hề bi
 | `core_base_ui` | Chuỗi global / fallback dùng chung |
 
 > [!CAUTION]
-> Một feature **tuyệt đối không** được sửa `platform/shell/app_shell/lib/presentation/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI:
+> Một feature **tuyệt đối không** được sửa `platform/shell/app_shell/lib/src/root_app.dart` hay `app_material_wrapper.dart` để đăng ký delegate của nó. Việc đăng ký đi qua DI:
 
 ```dart
-// platform/shell/app_shell/lib/presentation/app_material_wrapper.dart
+// platform/shell/app_shell/lib/src/app_material_wrapper.dart
 // `getAllOrEmpty`, not `getIt.getAll`: the latter throws when no feature
 // registers `IFeatureLocalization`. Every feature package is removable, so
 // an app built without any of them must still resolve its delegates —
@@ -514,7 +514,7 @@ Cách thêm một chuỗi hay một ngôn ngữ: [`../guides/09_localization_the
 
 ### Cỡ chữ của hệ điều hành được tôn trọng, tối đa 2x
 
-`builder` của `RootApp` trước đây kết thúc bằng `MediaQuery.withNoTextScaling`, ghim mọi chữ ở 100% bất kể người dùng đặt gì — một lỗi accessibility (WCAG 2.2 SC 1.4.4 yêu cầu chữ phóng được tới 200%), không phải một lựa chọn bố cục. Giờ nó kẹp (clamp) thay vì tắt: cài đặt của người dùng đi qua nguyên vẹn tới `MAX_TEXT_SCALE_FACTOR` (2.0, trong [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/shell/app_shell/lib/presentation/utils/app_shell_ui_constants.dart)), kể cả scaler phi tuyến (Android 14+), và đầu dưới không bị kẹp.
+`builder` của `RootApp` trước đây kết thúc bằng `MediaQuery.withNoTextScaling`, ghim mọi chữ ở 100% bất kể người dùng đặt gì — một lỗi accessibility (WCAG 2.2 SC 1.4.4 yêu cầu chữ phóng được tới 200%), không phải một lựa chọn bố cục. Giờ nó kẹp (clamp) thay vì tắt: cài đặt của người dùng đi qua nguyên vẹn tới `MAX_TEXT_SCALE_FACTOR` (2.0, trong [`presentation/utils/app_shell_ui_constants.dart`](../../../platform/shell/app_shell/lib/src/utils/app_shell_ui_constants.dart)), kể cả scaler phi tuyến (Android 14+), và đầu dưới không bị kẹp.
 
 Điều này **không** scale chữ hai lần với `core_responsive`. Hai hệ số độc lập và được áp ở hai chỗ khác nhau:
 

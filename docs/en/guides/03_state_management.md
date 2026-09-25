@@ -249,7 +249,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 
 This is an illustrative listener, as a screen inside `feature_auth` would write it. It navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages.
 
-The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator.
+The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 

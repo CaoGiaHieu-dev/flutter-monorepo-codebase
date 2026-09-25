@@ -25,10 +25,10 @@ All scaling goes through `BuildContext`. That is not a style convention — it i
 
 ## 🚀 1. Setup
 
-Already wired in `platform/shell/app_shell/lib/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — it passes no `designSize`, so the package default, the `375x812` phone artboard, is the one artboard in the repository:
+Already wired in `platform/shell/app_shell/lib/src/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — it passes no `designSize`, so the package default, the `375x812` phone artboard, is the one artboard in the repository:
 
 ```dart
-// platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
   // No `designSize`: the 375x812 default is the app's artboard.
   // …

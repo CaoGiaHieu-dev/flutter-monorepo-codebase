@@ -32,7 +32,7 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Package API của module | package `<id>_api` tại `modules/<id>/api` | — | `modules/auth/api/pubspec.yaml` (`auth_api`) |
 | Đóng góp vị trí session | `_sign_in_location.dart` / `_post_sign_in_location.dart` | `SignInLocation` / `PostSignInLocation` | `modules/auth/feature/lib/src/routing/auth_sign_in_location.dart` |
 | Impl action handler | `_action_handler_impl.dart` | `ActionHandlerImpl` | `modules/auth/feature/lib/src/handlers/auth_action_handler_impl.dart` |
-| Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/dialogs/error_dialog.dart` |
+| Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/src/dialogs/retry_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | — |
 | Định nghĩa route (`GoRouteData`) | `_route_module.dart` | `Route` | `modules/home/feature/lib/src/routing/home_route_module.dart` (khai `HomeRoute`) |
 | Đóng góp route stack (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` |

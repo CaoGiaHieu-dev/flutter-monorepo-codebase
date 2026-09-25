@@ -234,7 +234,7 @@ Scaling inside means a caller who already scaled gets it applied twice, and a ca
 
 ### Constants
 
-Defaults for these widgets live in `platform/ui/ui_kit/lib/utils/shared_ui_constants.dart`:
+Defaults for these widgets live in `platform/ui/ui_kit/lib/src/utils/shared_ui_constants.dart`:
 
 ```dart
 class SharedUiConstants {
@@ -309,7 +309,7 @@ Degenerate input never collapses a layout. An empty window — Android reports 0
 > [!NOTE]
 > A widget test that scales **must** wrap its subject in `ResponsiveInit`, or `ResponsiveScope.of` asserts. The package's own tests live in `platform/ui/responsive/test/`.
 
-The assembly at the root of the tree (`_ResponsiveWrapper` in `platform/shell/app_shell/lib/main_scope.dart`) is described in [the app shell](06_app_shell.md#_responsivewrapper); choosing an axis, changing the design canvas, the scale policy and the adaptive widgets are in [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
+The assembly at the root of the tree (`_ResponsiveWrapper` in `platform/shell/app_shell/lib/src/main_scope.dart`) is described in [the app shell](06_app_shell.md#_responsivewrapper); choosing an axis, changing the design canvas, the scale policy and the adaptive widgets are in [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 
@@ -989,7 +989,7 @@ Opening is registered with `@preResolve`, so anything thrown there aborts `confi
 `DriftDatabaseOpener.open` handles this — and the design leans hard towards *not* touching user data:
 
 ```dart
-// platform/infra/database/lib/src/opening/drift_database_opener.dart
+// platform/infra/database/lib/src/drift_database_opener.dart
 static Future<T> open<T extends GeneratedDatabase>(
   DriftDatabaseBuilder<T> build, {
   required String fileName,
@@ -1011,7 +1011,7 @@ Three deliberate decisions:
 **The file is renamed, never deleted.**
 
 ```dart
-// platform/infra/database/lib/src/connection/database_connection_factory.dart
+// platform/infra/database/lib/src/database_connection_factory.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
 /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;

@@ -269,7 +269,7 @@ Có hai dạng link đi vào app, và cả hai đều về cùng một location 
 | `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
 | `<scheme>://settings?tab=2` (custom scheme — segment đầu tiên nằm ở vị trí host) | `/settings?tab=2` |
 
-Nền tảng đưa URI cho `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/presentation/providers/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng. Nó chỉ làm vậy sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó — không bao giờ đè lên onboarding hay login. Path không module nào đăng ký sẽ rơi vào `UndefineRouteWidget`, như mọi location lạ khác.
+Nền tảng đưa URI cho `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/src/provider/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng. Nó chỉ làm vậy sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó — không bao giờ đè lên onboarding hay login. Path không module nào đăng ký sẽ rơi vào `UndefinedRouteWidget`, như mọi location lạ khác.
 
 ### Giữ deep linking có sẵn của Flutter ở trạng thái tắt
 
@@ -404,7 +404,7 @@ Checklist review:
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |:--|:--|:--|
 | `Undefined name '$myRoute'` hoặc thiếu `*.g.dart` | Chưa chạy `build_runner` từ khi đổi annotation | `dart run build_runner build --workspace` (bước 8) |
-| Không vào được màn hình mới; GoRouter hiện `UndefineRouteWidget` | Contract route chưa được đăng ký, hoặc app chỉ được hot reload | Kiểm tra annotation `@LazySingleton(as: IFeatureRouteModule)`, chạy lại `build_runner`, rồi **khởi động lại hẳn** app |
+| Không vào được màn hình mới; GoRouter hiện `UndefinedRouteWidget` | Contract route chưa được đăng ký, hoặc app chỉ được hot reload | Kiểm tra annotation `@LazySingleton(as: IFeatureRouteModule)`, chạy lại `build_runner`, rồi **khởi động lại hẳn** app |
 | `Undefined name 'MyNavigator'` ở nơi dùng | Barrel của package API chưa export file mới | Chạy barrel generator cho `modules/<id>/api/lib` (bước 6) |
 | Tab sai thứ tự, hoặc tab này thay tab kia | Hai `INavDestinationModule` trùng `order` | Cho mỗi tab một `order` riêng (bước 5) |
 | Không có bottom bar hay rail | Có ít hơn hai tab được đăng ký | Đúng thiết kế: dashboard bỏ chrome khi dưới hai tab |

@@ -142,7 +142,7 @@ Writes go to disk fire-and-forget. The in-memory cache updates synchronously, so
 
 ## 8. Store an enum or a custom type
 
-`StorageValue<T>` reads `num`, `String`, `bool`, `Map<String, dynamic>` and lists of those back directly — a `List<String>` is cast element-wise, no reviver needed. An **enum** is stored by `name`, so it needs a `reviver` to turn the name back into a value. Any **other type** is stored through its `toJson()` and needs a `reviver` to rebuild it; without one the constructor throws `ArgumentError`. All paths share `StorageCodec` (`platform/infra/storage/lib/src/contracts/storage_codec.dart`), so a value reads back the way it was written.
+`StorageValue<T>` reads `num`, `String`, `bool`, `Map<String, dynamic>` and lists of those back directly — a `List<String>` is cast element-wise, no reviver needed. An **enum** is stored by `name`, so it needs a `reviver` to turn the name back into a value. Any **other type** is stored through its `toJson()` and needs a `reviver` to rebuild it; without one the constructor throws `ArgumentError`. All paths share `StorageCodec` (`platform/infra/storage/lib/src/storage_codec.dart`), so a value reads back the way it was written.
 
 **Enum:**
 

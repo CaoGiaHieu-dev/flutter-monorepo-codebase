@@ -491,7 +491,7 @@ Registry: RULE-10 · RULE-21.
 
 Registry: RULE-20 · RULE-22 · RULE-23 · RULE-24.
 
-**Rule.** Never edit `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
+**Rule.** Never edit `platform/shell/app_shell/lib/src/navigation/app_router.dart` to add a route. Register a `core_di` contract from the feature instead:
 
 | Contract | Purpose | Ordered? |
 |---|---|---|
@@ -593,7 +593,7 @@ Registry: RULE-34 · RULE-35 · RULE-37.
 
 **Rule.** All user-facing text is translated — hardcoded UI strings are forbidden. Each feature owns its `.arb` files in `assets/language/` and registers `IFeatureLocalization` via DI. Access through the feature extension: `context.l10nAuth.someKey`.
 
-Features **must not** edit `platform/shell/app_shell/lib/presentation/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
+Features **must not** edit `platform/shell/app_shell/lib/src/root_app.dart` to add delegates; the shell collects them with `getAllOrEmpty<IFeatureLocalization>()`.
 
 Global strings live in `core_base_ui`. `core_ui_kit` **must not** define its own `.arb` files — it uses `core_base_ui`'s.
 
@@ -609,7 +609,7 @@ Registry: RULE-36.
 
 **Rule.** Every dialog and bottom sheet is its own widget class in its own file. Writing an inline widget tree inside `showDialog()` / `showModalBottomSheet()` is forbidden.
 
-Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Real examples: `platform/ui/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
+Suffixes: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Real example: `platform/ui/ui_kit/lib/src/dialogs/retry_dialog.dart`.
 
 ---
 

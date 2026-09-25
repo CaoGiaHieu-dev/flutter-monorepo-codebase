@@ -153,7 +153,7 @@ Với Retrofit, đặt chúng bằng `@Extra({...})`, như bước 3. Vì sao lo
 `core_network` đăng ký đúng một client — `Dio` mặc định mà mọi Retrofit data source nhận được:
 
 ```dart
-// platform/infra/network/lib/di/register_module.dart
+// platform/infra/network/lib/di/network_module.dart
 @module
 abstract class RegisterModule {
   @lazySingleton
@@ -189,7 +189,7 @@ abstract class RegisterModule {
 }
 ```
 
-`getIt<Dio>()` và mọi tham số `Dio` không đặt tên vẫn nhận client mặc định. Chỉ tham số gắn `@Named('public_api')` mới nhận client này (bước 4). Mỗi tên chỉ đăng ký được **một lần** trong container: nếu package thứ hai cũng cần client đó, hãy chuyển phần đăng ký vào `platform/infra/network/lib/di/register_module.dart` thay vì khai hai lần.
+`getIt<Dio>()` và mọi tham số `Dio` không đặt tên vẫn nhận client mặc định. Chỉ tham số gắn `@Named('public_api')` mới nhận client này (bước 4). Mỗi tên chỉ đăng ký được **một lần** trong container: nếu package thứ hai cũng cần client đó, hãy chuyển phần đăng ký vào `platform/infra/network/lib/di/network_module.dart` thay vì khai hai lần.
 
 ## 8. Bóc các lớp bao response
 
@@ -302,7 +302,7 @@ Checklist review:
 | Người dùng bị đăng xuất sau một lần mạng chập chờn | `refreshToken()` trả `null` cho một lỗi tạm thời | Ném lỗi khi "không có câu trả lời", chỉ trả `null` khi bị từ chối (bước 9) |
 | Server không nhận locale | Server đọc `Accept-Language`; client gửi header không chuẩn `language` | Đọc header `language` ở phía server |
 | Log `ERROR`: `SSL pinning skipped` | `sslPinningHashes` rỗng, hoặc `SslPinningConfig` chưa được bind | Điền hash và giữ binding (bước 10) |
-| Hai package đăng ký cùng một client có tên và boot ném lỗi | Mỗi tên chỉ đăng ký được một lần trong container | Chuyển phần đăng ký vào `platform/infra/network/lib/di/register_module.dart` (bước 7) |
+| Hai package đăng ký cùng một client có tên và boot ném lỗi | Mỗi tên chỉ đăng ký được một lần trong container | Chuyển phần đăng ký vào `platform/infra/network/lib/di/network_module.dart` (bước 7) |
 
 ## Liên quan
 

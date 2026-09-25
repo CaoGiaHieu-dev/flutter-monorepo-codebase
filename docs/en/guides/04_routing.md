@@ -268,7 +268,7 @@ Two link shapes reach the app, and both land on the same router location:
 | `https://<WEB_DOMAIN>/settings?tab=2` (Android App Link / iOS universal link) | `/settings?tab=2` |
 | `<scheme>://settings?tab=2` (custom scheme — the first segment sits in the host position) | `/settings?tab=2` |
 
-The platform delivers the URI to `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/presentation/providers/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it. It does so only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it — never over onboarding or login. A path no module registered lands on `UndefineRouteWidget`, like any unknown location.
+The platform delivers the URI to `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/src/provider/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it. It does so only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it — never over onboarding or login. A path no module registered lands on `UndefinedRouteWidget`, like any unknown location.
 
 ### Keep Flutter's own deep linking off
 
@@ -403,7 +403,7 @@ Review checklist:
 | Symptom | Cause | Fix |
 |:--|:--|:--|
 | `Undefined name '$myRoute'` or a missing `*.g.dart` | `build_runner` has not run since the annotation changed | `dart run build_runner build --workspace` (step 8) |
-| The new screen is unreachable; GoRouter shows `UndefineRouteWidget` | The route contract is not registered, or the app was hot-reloaded | Check the `@LazySingleton(as: IFeatureRouteModule)` annotation, re-run `build_runner`, then **full restart** |
+| The new screen is unreachable; GoRouter shows `UndefinedRouteWidget` | The route contract is not registered, or the app was hot-reloaded | Check the `@LazySingleton(as: IFeatureRouteModule)` annotation, re-run `build_runner`, then **full restart** |
 | `Undefined name 'MyNavigator'` in a consumer | The API package's barrel does not export the new file | Run the barrel generator for `modules/<id>/api/lib` (step 6) |
 | Tabs appear in the wrong order, or one replaces another | Two `INavDestinationModule`s share an `order` | Give each tab a unique `order` (step 5) |
 | No bottom bar or rail | Fewer than two tabs are registered | Expected: the dashboard drops the chrome below two tabs |

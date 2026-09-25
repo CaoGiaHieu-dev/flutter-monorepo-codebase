@@ -492,7 +492,7 @@ Bảng đăng ký: RULE-10 · RULE-21.
 
 Bảng đăng ký: RULE-20 · RULE-22 · RULE-23 · RULE-24.
 
-**Luật.** Tuyệt đối không sửa `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` để thêm route. Thay vào đó feature tự đăng ký một hợp đồng `core_di`:
+**Luật.** Tuyệt đối không sửa `platform/shell/app_shell/lib/src/navigation/app_router.dart` để thêm route. Thay vào đó feature tự đăng ký một hợp đồng `core_di`:
 
 | Hợp đồng | Mục đích | Có thứ tự? |
 |---|---|---|
@@ -594,7 +594,7 @@ Bảng đăng ký: RULE-34 · RULE-35 · RULE-37.
 
 **Luật.** Toàn bộ chữ hiển thị cho người dùng phải được dịch — cấm hardcode chuỗi UI. Mỗi feature sở hữu file `.arb` trong `assets/language/` của mình và đăng ký `IFeatureLocalization` qua DI. Truy cập qua extension của feature: `context.l10nAuth.someKey`.
 
-Feature **không được** sửa `platform/shell/app_shell/lib/presentation/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
+Feature **không được** sửa `platform/shell/app_shell/lib/src/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
 
 Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** định nghĩa `.arb` riêng — nó dùng của `core_base_ui`.
 
@@ -610,7 +610,7 @@ Bảng đăng ký: RULE-36.
 
 **Luật.** Mỗi dialog và bottom sheet là một class widget riêng trong file riêng. Cấm viết cây widget inline bên trong `showDialog()` / `showModalBottomSheet()`.
 
-Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Ví dụ thật: `platform/ui/ui_kit/lib/dialogs/error_dialog.dart`, `retry_dialog.dart`, `warning_dialog.dart`.
+Hậu tố: `_dialog.dart` → `Dialog`, `_bottom_sheet.dart` → `BottomSheet`. Ví dụ thật: `platform/ui/ui_kit/lib/src/dialogs/retry_dialog.dart`.
 
 ---
 

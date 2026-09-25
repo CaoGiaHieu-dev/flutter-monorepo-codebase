@@ -51,7 +51,7 @@ Two different things live in `core_base_ui`, and mixing them up is the most comm
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
 | The design canvas | `platform/foundation/common/lib/src/config/app_config.dart` → `design` |
-| How far a window class may scale (bounds, profiles, breakpoints) | `platform/shell/app_shell/lib/main_scope.dart` → `ResponsiveInit` (§6) |
+| How far a window class may scale (bounds, profiles, breakpoints) | `platform/shell/app_shell/lib/src/main_scope.dart` → `ResponsiveInit` (§6) |
 | The layout on a tablet, foldable or split screen | the page — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
@@ -61,10 +61,10 @@ Colours are delivered as a Flutter [`ThemeExtension`](https://api.flutter.dev/fl
 
 ### Decide whether you need a new slot
 
-Open [`theme/theme_system_interface.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_interface.dart). It declares every colour slot the app can ask for:
+Open [`theme/theme_system_interface.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart). It declares every colour slot the app can ask for:
 
 ```dart
-// platform/ui/design_system/lib/src/theme/theme_system_interface.dart
+// platform/ui/design_system/lib/src/theme/theme_system_extensions.dart
 abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
     extends ThemeExtension<T> {
   // Core colors
@@ -204,7 +204,7 @@ double? scaleFont(double? size) => size == null ? null : context.sp(size);
 
 `sp`, so type follows the app's `textScaleBounds` ([§6](#6-set-the-scale-policy-per-window-class)). With the default, `ScaleBounds.downOnly()`, text shrinks on a window narrower than the 375-wide design and never grows past the design size; a window class whose `ResponsiveProfile` opts into growth gets bigger type too. With this app's configuration, text is the design size on every window 375 wide or more — phone, tablet or desktop.
 
-That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`, which has one.
+That is why `ThemeProvider.currentTheme`, `lightTheme` and `darkTheme` all take a `BuildContext` — they cannot scale without one. They are called from inside the `Consumer2` builder in `platform/shell/app_shell/lib/src/app_material_wrapper.dart`, which has one.
 
 `AppTextStyles` then just reads the finished theme:
 
@@ -296,7 +296,7 @@ Everything above scales *relative to a reference canvas*: the screen size your d
 static Size get design => const Size(375, 812);
 ```
 
-It is handed to `ResponsiveInit` once, at the very root of the tree — `_ResponsiveWrapper` in `platform/shell/app_shell/lib/main_scope.dart` wraps everything, including `AppMaterialWrapper`; the full call is in §6. It is the artboard **every window class** measures against unless a profile names its own: `context.w(16)` means "16 logical pixels on the 375-wide design".
+It is handed to `ResponsiveInit` once, at the very root of the tree — `_ResponsiveWrapper` in `platform/shell/app_shell/lib/src/main_scope.dart` wraps everything, including `AppMaterialWrapper`; the full call is in §6. It is the artboard **every window class** measures against unless a profile names its own: `context.w(16)` means "16 logical pixels on the 375-wide design".
 
 > [!CAUTION]
 > **Changing `designSize` re-scales the entire app at once.** Every `context.w/h/r/sp` call resolves against it, and a window narrower or shorter than the artboard shrinks the design by that ratio — moving from 375×812 to 390×844 shrinks everything on a 375-wide phone. Change it only when your design source of truth actually changed, then sweep the app on a small phone, a tall phone and a tablet.
@@ -321,7 +321,7 @@ A **`ResponsiveProfile`** overrides the artboard, both bounds and `minTextAdapt`
 This is the app's whole configuration:
 
 ```dart
-// platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
   // The phone artboard every window class starts from.
   designSize: AppConfig.design,

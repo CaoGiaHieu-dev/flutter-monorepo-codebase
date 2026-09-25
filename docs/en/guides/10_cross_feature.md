@@ -256,7 +256,7 @@ Handler implementations live in the owning feature's `handlers/` directory and a
 Every consumer of a cross-feature contract must tolerate the contract being **absent** (RULE-12). The app shell already does this for routing:
 
 ```dart
-// platform/shell/app_shell/lib/presentation/navigation/app_router.dart
+// platform/shell/app_shell/lib/src/navigation/app_router.dart
 List<RouteBase> get _featureRoutes {
   return [
     for (final module in getAllOrEmpty<IFeatureRouteModule>())
@@ -279,7 +279,7 @@ Apply the same discipline everywhere:
 getItOrNull<IAuthActionHandler>()?.logout(context);
 
 // Good — falls back to the bare branch widget rather than crashing
-// (platform/shell/app_shell/lib/presentation/navigation/app_router.dart)
+// (platform/shell/app_shell/lib/src/navigation/app_router.dart)
 builder: (context, state, navigationShell) {
   return getItOrNull<IDashboardRouteModule>()?.builder(
         context,

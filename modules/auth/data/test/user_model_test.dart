@@ -15,7 +15,7 @@ void main() {
         id: 'uid-1',
         email: 'a@b.com',
         name: 'Alice',
-        role: UserRole.none,
+        role: 'none',
       );
 
       final entity = model.toEntity();
@@ -48,6 +48,23 @@ void main() {
 
       expect(model.toEntity().email, 'e@f.com');
       expect(model.toEntity().role, UserRole.none);
+    });
+
+    test('the role\'s wire spelling stays in the model', () {
+      expect(
+        UserModel.fromJson({'id': '1', 'role': 'owner'}).toEntity().role,
+        UserRole.owner,
+      );
+      expect(
+        UserModel.fromJson({'id': '1', 'role': 'admin'}).toEntity().role,
+        UserRole.unknown,
+        reason: 'a value this app does not know',
+      );
+      expect(
+        UserModel.fromEntity(const UserEntity(id: '1', role: UserRole.owner))
+            .toJson()['role'],
+        'owner',
+      );
     });
 
     test('the session token stays in the data layer', () {

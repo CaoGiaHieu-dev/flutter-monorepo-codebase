@@ -3,6 +3,7 @@ import 'package:injectable/injectable.dart';
 
 import '../repositories/i_auth_repository.dart';
 
+/// Ends the session: clears the stored credentials and user.
 @injectable
 class LogoutUseCase extends BaseUseCase<void, NoParams> {
   LogoutUseCase(this._authRepository);
@@ -10,7 +11,7 @@ class LogoutUseCase extends BaseUseCase<void, NoParams> {
   final IAuthRepository _authRepository;
 
   @override
-  Result<void> call(NoParams params) {
+  Future<Result<void>> call(NoParams params) {
     return _authRepository.logout();
   }
 }

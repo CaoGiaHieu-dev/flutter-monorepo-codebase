@@ -24,4 +24,4 @@ export 'src/params/login_params.dart';
 export 'src/repositories/i_auth_repository.dart';
 export 'src/usecases/login_usecase.dart';
 export 'src/usecases/logout_usecase.dart';
-export 'src/usecases/refresh_token_usecase.dart';
+export 'src/usecases/restore_session_usecase.dart';

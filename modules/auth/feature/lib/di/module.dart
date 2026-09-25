@@ -2,7 +2,7 @@ import 'package:core_di/core_di.dart';
 import 'package:injectable/injectable.dart';
 
 import '../src/provider/auth_provider.dart';
-import '../src/services/auth_status_stream_impl.dart';
+import '../src/session/auth_status_stream_impl.dart';
 
 @InjectableInit.microPackage()
 void initMicroPackage() {}

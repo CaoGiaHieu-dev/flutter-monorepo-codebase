@@ -7,5 +7,5 @@ import 'auth_route_module.dart';
 @LazySingleton(as: IFeatureRouteModule)
 class AuthFeatureRouteModule implements IFeatureRouteModule {
   @override
-  List<RouteBase> get routes => [$authShellRoute];
+  List<RouteBase> get routes => [$loginRoute];
 }

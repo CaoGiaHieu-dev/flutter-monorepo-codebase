@@ -7,5 +7,7 @@ import 'package:flutter/widgets.dart';
 /// `getItOrNull<IAuthActionHandler>()` — with no auth module composed the
 /// lookup is null and the caller hides the action (`arch_check` R8).
 abstract class IAuthActionHandler {
-  void logout(BuildContext context);
+  /// Signs the user out; completes once the stored session is cleared. The
+  /// app shell navigates to sign-in on its own — the caller does not.
+  Future<void> logout(BuildContext context);
 }

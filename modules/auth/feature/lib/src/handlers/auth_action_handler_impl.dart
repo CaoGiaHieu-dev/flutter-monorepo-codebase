@@ -8,7 +8,6 @@ import '../provider/auth_provider.dart';
 @Injectable(as: IAuthActionHandler)
 class AuthActionHandlerImpl implements IAuthActionHandler {
   @override
-  void logout(BuildContext context) {
-    context.read<AuthProvider>().logout();
-  }
+  Future<void> logout(BuildContext context) =>
+      context.read<AuthProvider>().logout();
 }

@@ -25,8 +25,13 @@ class AuthStatusStreamImpl implements ISessionStatusStream {
   void updateAuthStatus(UserEntity? user) {
     final principal = toPrincipal(user);
     _currentUser = principal;
-    _controller.add(principal);
+    if (!_controller.isClosed) _controller.add(principal);
   }
+
+  /// Closes the stream; listeners receive `done`. GetIt calls it when the
+  /// singleton is disposed (`getIt.reset()`, a test's tear-down).
+  @disposeMethod
+  Future<void> dispose() => _controller.close();
 
   /// The one place `UserEntity` is narrowed for the outside world.
   static SessionPrincipal? toPrincipal(UserEntity? user) {

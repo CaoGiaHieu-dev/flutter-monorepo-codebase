@@ -6,6 +6,7 @@ import 'package:injectable/injectable.dart';
 import '../data_sources/local/auth_local_data_source.dart';
 import '../data_sources/remote/auth_remote_data_source.dart';
 import '../models/user_model.dart';
+import '../session/transient_failure.dart';
 
 /// SAMPLE — the auth repository, written the way this template documents.
 ///
@@ -15,8 +16,9 @@ import '../models/user_model.dart';
 /// Nothing above this file ever sees a model.
 ///
 /// Swap the transport (Firebase, GraphQL) if your product needs to; keep the
-/// shape. If you do move to Firebase, add a branch to `ErrorHandler` first —
-/// it has none, so every Firebase error would arrive as `ServerFailure(9999)`.
+/// shape. If you do move to Firebase, register an `ErrorClassifier` for its
+/// exceptions first (`ErrorHandler.registerClassifier`, RULE-43) — without
+/// one every Firebase error arrives as `ServerFailure(ErrorCodes.UNKNOWN)`.
 @LazySingleton(as: IAuthRepository)
 class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   AuthRepositoryImpl(this._remote, this._local);
@@ -43,13 +45,25 @@ class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
       );
     }
     final result = await _authenticate(_remote.refreshToken);
-    if (result.errorOrNull is AuthFailure) _local.clearAllAuthData();
+    if (result.errorOrNull is AuthFailure) await _local.clearAllAuthData();
     return result;
   }
 
+  /// A renewal that never reached the server says nothing about the session,
+  /// so the user stored at the last sign-in stands in for the answer: an
+  /// app started offline opens signed in, and the next request that gets
+  /// through renews the token (or ends the session) as usual.
   @override
-  Result<void> logout() {
-    return executeSync<void, void>(_local.clearAllAuthData);
+  Future<Result<UserEntity>> restoreSession() async {
+    final result = await refreshToken();
+    if (!isTransientFailure(result.errorOrNull)) return result;
+    final stored = _local.getUserData();
+    return stored == null ? result : Result.success(stored.toEntity());
+  }
+
+  @override
+  Future<Result<void>> logout() {
+    return execute<void, void>(_local.clearAllAuthData);
   }
 
   /// The one shape both endpoints share: call, verify the envelope, persist
@@ -65,10 +79,10 @@ class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
       request,
       successCondition: (response) =>
           response.isSuccess && response.data != null,
-      onSuccess: (response) {
+      onSuccess: (response) async {
         final user = response.data!;
-        _local.saveUserToken(user.token);
-        _local.saveUserData(user);
+        await _local.saveUserToken(user.token);
+        await _local.saveUserData(user);
       },
       mapper: (response) => response.data!.toEntity(),
     );

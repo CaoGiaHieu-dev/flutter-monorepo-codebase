@@ -8,7 +8,7 @@ import 'package:provider_state_management/provider_state_management.dart';
 /// A hand-written [IAuthRepository]. The real use cases wrap it, so the
 /// provider is exercised through exactly the calls it makes in the app.
 class _FakeAuthRepository implements IAuthRepository {
-  Result<UserEntity> refreshResult = const Result.failure(
+  Result<UserEntity> restoreResult = const Result.failure(
     AuthFailure(message: 'no session', code: 401),
   );
   Result<UserEntity> loginResult = const Result.success(_ada);
@@ -23,13 +23,17 @@ class _FakeAuthRepository implements IAuthRepository {
   }
 
   @override
-  Result<void> logout() {
+  Future<Result<void>> logout() async {
     logouts++;
     return const Result.success();
   }
 
   @override
-  Future<Result<UserEntity>> refreshToken() async => refreshResult;
+  Future<Result<UserEntity>> refreshToken() async =>
+      throw UnimplementedError('the provider restores, it never refreshes');
+
+  @override
+  Future<Result<UserEntity>> restoreSession() async => restoreResult;
 }
 
 const _ada = UserEntity(id: '1', email: 'ada@example.com', name: 'Ada');
@@ -48,7 +52,7 @@ void main() {
     final provider = AuthProvider(
       LoginUseCase(repository),
       LogoutUseCase(repository),
-      RefreshTokenUseCase(repository),
+      RestoreSessionUseCase(repository),
       statusStream,
     );
     addTearDown(provider.dispose);
@@ -58,7 +62,7 @@ void main() {
 
   group('session restore', () {
     test('a stored session signs the user straight back in', () async {
-      repository.refreshResult = const Result.success(_ada);
+      repository.restoreResult = const Result.success(_ada);
 
       final provider = await buildProvider();
 
@@ -155,7 +159,7 @@ void main() {
   });
 
   test('logout clears the local session and signs the user out', () async {
-    repository.refreshResult = const Result.success(_ada);
+    repository.restoreResult = const Result.success(_ada);
     final provider = await buildProvider();
     expect(provider.signedInUser, isNotNull);
 
@@ -169,7 +173,7 @@ void main() {
   });
 
   test('a session lost in the transport signs the user out', () async {
-    repository.refreshResult = const Result.success(_ada);
+    repository.restoreResult = const Result.success(_ada);
     final provider = await buildProvider();
 
     provider.onSessionLost();
@@ -177,5 +181,16 @@ void main() {
 
     expect(provider.signedInUser, isNull);
     expect(repository.logouts, 0, reason: 'storage is already cleared');
+  });
+
+  test('disposing the status stream closes it for its listeners', () async {
+    final stream = AuthStatusStreamImpl();
+    var done = false;
+    stream.sessionStatusStream.listen(null, onDone: () => done = true);
+
+    await stream.dispose();
+    stream.updateAuthStatus(_ada);
+
+    expect(done, isTrue);
   });
 }

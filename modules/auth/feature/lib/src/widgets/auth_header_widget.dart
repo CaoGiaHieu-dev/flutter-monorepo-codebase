@@ -2,8 +2,11 @@ import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../utils/auth_ui_constants.dart';
+
 /// SAMPLE — demonstrates the `_widget.dart` / `Widget` suffix convention and
-/// design-token usage (`AppTextStyles`, `context.colorScheme`, `context.w/h/r`).
+/// design-token usage (`AppTextStyles`, `context.colors`, `context.r`, sizes
+/// from `AuthUiConstants`).
 ///
 /// Nothing here is auth-specific; it is a titled header. Delete it with the
 /// rest of the auth sample.
@@ -24,16 +27,16 @@ class AuthHeaderWidget extends StatelessWidget {
         Container(
           // Same scale on both axes, or the square stretches on a wide
           // window: `r` scales by the smaller of the two factors.
-          width: context.r(96),
-          height: context.r(96),
+          width: context.r(AuthUiConstants.HEADER_BADGE_SIZE),
+          height: context.r(AuthUiConstants.HEADER_BADGE_SIZE),
           decoration: BoxDecoration(
             borderRadius: AppRadius.xlRadius(context),
-            color: context.colorScheme.primaryContainer,
+            color: context.colors.primaryContainer,
           ),
           child: Icon(
             Icons.lock_outline,
-            size: context.r(44),
-            color: context.colorScheme.onPrimaryContainer,
+            size: context.r(AuthUiConstants.HEADER_ICON_SIZE),
+            color: context.colors.textInverse,
           ),
         ),
         SizedBox(height: AppSpacing.xlH(context)),
@@ -52,7 +55,7 @@ class AuthHeaderWidget extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: AppTextStyles.bodyLargeStyle(
             context,
-          ).copyWith(color: context.colorScheme.onSurfaceVariant),
+          ).copyWith(color: context.colors.textSecondary),
         ),
       ],
     );

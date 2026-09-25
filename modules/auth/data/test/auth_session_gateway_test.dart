@@ -1,6 +1,7 @@
 import 'package:core_network/core_network.dart';
 import 'package:data_auth/data_auth.dart';
 import 'package:dio/dio.dart';
+import 'package:domain_auth/domain_auth.dart';
 import 'package:domain_core/domain_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_kernel/platform_kernel.dart';
@@ -95,17 +96,103 @@ void main() {
     await expectLater(gateway.refreshToken(), throwsStateError);
   });
 
-  group('isTransient', () {
+  group('restoreSession', () {
+    late AuthRepositoryImpl repository;
+
+    setUp(() {
+      repository = AuthRepositoryImpl(remote, local);
+      local.user = const UserModel(id: 'u1', name: 'Ada', role: 'owner');
+    });
+
+    test('renews the session when the server answers', () async {
+      remote.respond = () async => const BaseEntity(
+        data: UserModel(id: 'u1', name: 'Ada', token: 'fresh-token'),
+      );
+
+      final result = await repository.restoreSession();
+
+      expect(result.dataOrNull?.name, 'Ada');
+      expect(local.token, 'fresh-token');
+    });
+
+    test('offline, restores the stored user and keeps the token', () async {
+      remote.respond = () async => throw DioException(
+        requestOptions: RequestOptions(path: '/refresh'),
+        type: DioExceptionType.connectionError,
+      );
+
+      final result = await repository.restoreSession();
+
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull?.id, 'u1');
+      expect(result.dataOrNull?.role, UserRole.owner);
+      expect(local.token, 'stale-token');
+    });
+
+    test('a 5xx restores the stored user too', () async {
+      remote.respond = () async => throw _badResponse(503);
+
+      expect((await repository.restoreSession()).dataOrNull?.id, 'u1');
+    });
+
+    test('offline with no stored user stays a failure', () async {
+      local.user = null;
+      remote.respond = () async => throw DioException(
+        requestOptions: RequestOptions(path: '/refresh'),
+        type: DioExceptionType.connectionError,
+      );
+
+      final result = await repository.restoreSession();
+
+      expect(result.errorOrNull, isA<NetworkFailure<dynamic>>());
+    });
+
+    test('a refusal ends the stored session', () async {
+      remote.respond = () async => throw _badResponse(401);
+
+      final result = await repository.restoreSession();
+
+      expect(result.errorOrNull, isA<AuthFailure<dynamic>>());
+      expect(local.token, isNull);
+      expect(local.user, isNull);
+    });
+
+    test('no stored token never reaches the network', () async {
+      local.token = null;
+      var calls = 0;
+      remote.respond = () async {
+        calls++;
+        return const BaseEntity<UserModel>();
+      };
+
+      final result = await repository.restoreSession();
+
+      expect(result.errorOrNull, isA<AuthFailure<dynamic>>());
+      expect(calls, 0);
+    });
+  });
+
+  test('logout clears the stored token and user', () async {
+    local.user = const UserModel(id: 'u1');
+
+    final result = await AuthRepositoryImpl(remote, local).logout();
+
+    expect(result.isSuccess, isTrue);
+    expect(local.token, isNull);
+    expect(local.user, isNull);
+  });
+
+  group('isTransientFailure', () {
     test('only network faults, real 5xx and cancellation are transient', () {
       expect(
-        AuthSessionGatewayImpl.isTransient(
+        isTransientFailure(
           const NetworkFailure(message: 'offline', code: 1005),
         ),
         isTrue,
       );
       for (final code in [500, 502, 599, ErrorCodes.REQUEST_CANCELLED]) {
         expect(
-          AuthSessionGatewayImpl.isTransient(
+          isTransientFailure(
             ServerFailure(message: 'x', code: code),
           ),
           isTrue,
@@ -121,7 +208,7 @@ void main() {
         null,
       ]) {
         expect(
-          AuthSessionGatewayImpl.isTransient(
+          isTransientFailure(
             ServerFailure(message: 'x', code: code),
           ),
           isFalse,
@@ -129,12 +216,12 @@ void main() {
         );
       }
       expect(
-        AuthSessionGatewayImpl.isTransient(
+        isTransientFailure(
           const AuthFailure(message: 'x', code: 401),
         ),
         isFalse,
       );
-      expect(AuthSessionGatewayImpl.isTransient(null), isFalse);
+      expect(isTransientFailure(null), isFalse);
     });
   });
 }
@@ -168,19 +255,19 @@ class _FakeLocal implements AuthLocalDataSource {
   Future<void> initialize() async {}
 
   @override
-  void saveUserToken(String? value) => token = value;
+  Future<void> saveUserToken(String? value) async => token = value;
 
   @override
   String? getUserToken() => token;
 
   @override
-  void saveUserData(UserModel? value) => user = value;
+  Future<void> saveUserData(UserModel? value) async => user = value;
 
   @override
   UserModel? getUserData() => user;
 
   @override
-  void clearAllAuthData() {
+  Future<void> clearAllAuthData() async {
     token = null;
     user = null;
   }

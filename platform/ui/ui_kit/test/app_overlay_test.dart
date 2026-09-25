@@ -9,7 +9,7 @@ import 'package:material_ui/material_ui.dart';
 Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
-      theme: ThemeData(extensions: const [ThemeSystemExtension.light]),
+      theme: ThemeData(extensions: [ThemeSystemExtension.light]),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       builder: (context, child) => ResponsiveInit(

@@ -6,8 +6,8 @@ import 'package:material_ui/material_ui.dart';
 
 void main() {
   group('ThemeSystemExtension', () {
-    const light = ThemeSystemExtension.light;
-    const dark = ThemeSystemExtension.dark;
+    final light = ThemeSystemExtension.light;
+    final dark = ThemeSystemExtension.dark;
 
     test('copyWith replaces only what it is given', () {
       final copy = light.copyWith(primary: const Color(0xff123456));
@@ -125,7 +125,7 @@ void main() {
       late BuildContext context;
       await tester.pumpWidget(
         MaterialApp(
-          theme: ThemeData(extensions: const [ThemeSystemExtension.light]),
+          theme: ThemeData(extensions: [ThemeSystemExtension.light]),
           home: ResponsiveInit(
             child: Scaffold(
               body: Builder(

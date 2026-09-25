@@ -85,7 +85,7 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
   final List<Color> liquidOnboardingColors;
 
   /// Light theme palette.
-  static const ThemeSystemExtension light = ThemeSystemExtension(
+  static final ThemeSystemExtension light = const ThemeSystemExtension(
     primary: Color(0xff0A7E8C),
     primaryContainer: Color(0xff8B5CF6),
     secondary: Color(0xff1E293B), // iOS slate secondary
@@ -117,7 +117,7 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
   );
 
   /// Dark theme palette.
-  static const ThemeSystemExtension dark = ThemeSystemExtension(
+  static final ThemeSystemExtension dark = const ThemeSystemExtension(
     primary: Color(0xff22D3EE),
     primaryContainer: Color(0xffA78BFA),
     secondary: Color(0xff94A3B8),

@@ -3,20 +3,11 @@ import 'package:feature_dashboard/feature_dashboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:platform_kernel/platform_kernel.dart';
 
 /// The side rail must pad for the system insets on its outer edge only —
 /// which is the left in LTR and the right in RTL, where a `Row` puts it.
 void main() {
-  setUp(() async {
-    await getIt.reset();
-    getIt.enableRegisteringMultipleInstancesOfOneType();
-    getIt
-      ..registerSingleton<INavDestinationModule>(_Tab(0, '/a'))
-      ..registerSingleton<INavDestinationModule>(_Tab(1, '/b'));
-  });
-
-  tearDown(getIt.reset);
+  final tabs = [_Tab(0, '/a'), _Tab(1, '/b')];
 
   Future<SafeArea> pumpRail(WidgetTester tester, TextDirection direction) async {
     tester.view
@@ -29,7 +20,7 @@ void main() {
       routes: [
         StatefulShellRoute.indexedStack(
           builder: (context, state, shell) =>
-              DashboardPage(navigationShell: shell),
+              DashboardPage(navigationShell: shell, destinations: tabs),
           branches: [
             for (final path in ['/a', '/b'])
               StatefulShellBranch(

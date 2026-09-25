@@ -1,7 +1,7 @@
 import 'package:injectable/injectable.dart';
 
-/// Registers the shell's own singletons: the router and the two app-level
-/// providers. The infrastructure adapters (`ILanguageStorage` /
+/// Registers the shell's own singletons: the router and the app-level
+/// `DeeplinkProvider`. The infrastructure adapters (`ILanguageStorage` /
 /// `IThemeStorage`, `AppBootStorage`, `NetworkConfig`) are registered by
 /// `platform_shell_adapters`.
 ///

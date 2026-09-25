@@ -7,7 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 
 import '../widgets/navigator_wrapper_widget.dart';
-import '../widgets/undefine_route_widget.dart';
+import '../widgets/undefined_route_widget.dart';
 
 /// Dynamic and decentralized application routing manager.
 ///
@@ -37,23 +37,14 @@ class AppRouter {
   /// app. `AppInitializer.init` hands it to `RouteAwareWidget`.
   final routeObserver = RouteObserver<ModalRoute<void>>();
 
-  BuildContext get currentContext {
-    final context = router.routerDelegate.navigatorKey.currentContext;
-    if (context?.mounted ?? false) {
-      return router.routerDelegate.navigatorKey.currentContext!;
-    }
-    throw FlutterError('AppRouter [currentContext] cannot be null');
-  }
-
-  String get currentRouterName {
-    final route = router.routerDelegate.currentConfiguration.last.route;
-    return route.name ?? route.path;
-  }
-
-  List<INavDestinationModule> get _destinations {
-    return getAllOrEmpty<INavDestinationModule>().toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-  }
+  /// Every [INavDestinationModule], sorted by `order` — collected once, when
+  /// the router is built. Branch `i` of the dashboard shell is destination
+  /// `i`; the dashboard receives this same list through
+  /// [IDashboardRouteModule.builder], so the two can never disagree.
+  late final List<INavDestinationModule> destinations = List.unmodifiable(
+    getAllOrEmpty<INavDestinationModule>().toList()
+      ..sort((a, b) => a.order.compareTo(b.order)),
+  );
 
   List<RouteBase> get _featureRoutes {
     return [
@@ -63,7 +54,7 @@ class AppRouter {
   }
 
   List<StatefulShellBranch> get _dashboardBranches {
-    final tabs = _destinations;
+    final tabs = destinations;
     if (tabs.isEmpty) {
       return [
         StatefulShellBranch(
@@ -88,7 +79,7 @@ class AppRouter {
   /// The app's home: the first destination, or the placeholder branch when
   /// no module contributes one. Always a registered route.
   ///
-  /// Used by [back] when there is nothing to pop, by `UndefineRouteWidget`,
+  /// Used by `UndefinedRouteWidget`,
   /// and by `NavigatorWrapperWidget` after sign-in when no
   /// `IPostSignInLocation` is registered, and as the cold-start location once the entry location has
   /// been seen (see [entryLocation]). It is deliberately *not* the entry
@@ -96,7 +87,7 @@ class AppRouter {
   /// signed-in user back to onboarding — or a "go home" tap there — would be
   /// wrong.
   String get fallbackLocation {
-    final tabs = _destinations;
+    final tabs = destinations;
     if (tabs.isNotEmpty) return tabs.first.path;
     return _emptyDestinationPath;
   }
@@ -116,7 +107,7 @@ class AppRouter {
       entryPath: entry?.path,
       entrySeen:
           entry != null &&
-          (getItOrNull<AppBootStorage>()?.viewedOnboard.value ?? false),
+          (getItOrNull<AppBootStorage>()?.viewedOnboard ?? false),
       fallback: fallbackLocation,
     );
   }
@@ -147,7 +138,7 @@ class AppRouter {
     // by `NavigatorWrapperWidget`, listening to `ISessionState`.
     refreshListenable: getItOrNull<ISessionRefreshListenable>(),
     errorPageBuilder: (context, state) {
-      return NoTransitionPage(child: UndefineRouteWidget(state: state));
+      return NoTransitionPage(child: UndefinedRouteWidget(state: state));
     },
     initialLocation: entryLocation,
     routes: [
@@ -171,6 +162,7 @@ class AppRouter {
                     context,
                     state,
                     navigationShell,
+                    destinations,
                   ) ??
                   navigationShell;
             },
@@ -182,22 +174,5 @@ class AppRouter {
 
   void go(String location, {Object? extra}) {
     router.go(location, extra: extra);
-  }
-
-  Future<T?> push<T>(String location, {Object? extra}) {
-    return router.push<T>(location, extra: extra);
-  }
-
-  Future<T?> replace<T>(String location, {Object? extra}) {
-    return router.replace<T>(location, extra: extra);
-  }
-
-  bool back() {
-    if (router.canPop()) {
-      router.pop();
-      return true;
-    }
-    router.go(fallbackLocation);
-    return false;
   }
 }

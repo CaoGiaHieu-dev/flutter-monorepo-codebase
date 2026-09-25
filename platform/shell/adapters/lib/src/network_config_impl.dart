@@ -97,8 +97,7 @@ class NetworkConfigImpl implements NetworkConfig {
     // previous one is still animating out — leaving its requests pending.
     // RetryDialog closes itself before calling back.
     AppOverlay.showDialog<void>(
-      builder: (context) =>
-          RetryDialog(onRetry: onRetry, onCancel: onCancel),
+      builder: (context) => RetryDialog(onRetry: onRetry, onCancel: onCancel),
     );
   }
 

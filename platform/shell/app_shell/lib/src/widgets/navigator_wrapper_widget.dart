@@ -9,7 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 
 import '../navigation/app_router.dart';
-import '../providers/deeplink_provider.dart';
+import '../provider/deeplink_provider.dart';
 
 /// App shell chrome wrapped around every routed page.
 ///
@@ -131,15 +131,15 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// first launch of such an app opened signed-out on a protected screen.
   bool _goToOnboarding() {
     if (getItOrNull<IAppEntryLocation>() == null) return false;
-    try {
-      if (_session?.signedInUser != null) {
-        return false;
-      }
-      final viewed = getIt<AppBootStorage>().viewedOnboard.value ?? false;
-      return !viewed;
-    } finally {
-      getIt<AppBootStorage>().viewedOnboard.value = true;
-    }
+    // `getItOrNull`, like `AppRouter.entryLocation`: without the boot flag
+    // every launch counts as a first one.
+    final boot = getItOrNull<AppBootStorage>();
+    final viewed = boot?.viewedOnboard ?? false;
+    // Recorded whichever way this goes: a signed-in user skips onboarding
+    // for good too. Persisting is fire-and-forget — the in-memory flag is
+    // already set, and `StorageValue` logs a failed write.
+    if (!viewed) unawaited(boot?.markOnboardViewed());
+    return !viewed && _session?.signedInUser == null;
   }
 
   /// Returns `true` only when it actually navigated, so the caller can stop.

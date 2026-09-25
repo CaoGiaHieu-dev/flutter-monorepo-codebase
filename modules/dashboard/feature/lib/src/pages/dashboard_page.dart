@@ -2,15 +2,19 @@ import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:platform_kernel/platform_kernel.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({
     super.key,
     required this.navigationShell,
+    required this.destinations,
   });
 
   final StatefulNavigationShell navigationShell;
+
+  /// The primary destinations in branch order, as the shell's router
+  /// collected them — see `IDashboardRouteModule.builder`.
+  final List<INavDestinationModule> destinations;
 
   /// Switches branch, keeping each branch's own back stack; re-tapping the
   /// current tab returns that branch to its first page instead.
@@ -40,14 +44,13 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final index = navigationShell.currentIndex;
-    final tabs = getAllOrEmpty<INavDestinationModule>().toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final tabs = destinations;
     if (tabs.length < 2) return Scaffold(body: navigationShell);
 
     final selected = index.clamp(0, tabs.length - 1);
     // This is where a neutral [NavDestination] becomes one app's widget —
     // the same modules feed both forms below, unchanged.
-    final destinations = [for (final tab in tabs) tab.destination(context)];
+    final items = [for (final tab in tabs) tab.destination(context)];
 
     // A phone keeps the bottom bar (the shell locks phone-sized displays to
     // portrait). From a medium window up — a tablet in either orientation,
@@ -61,7 +64,7 @@ class DashboardPage extends StatelessWidget {
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: selected,
           onTap: _onSelect,
-          items: [for (final d in destinations) _itemOf(d)],
+          items: [for (final d in items) _itemOf(d)],
         ),
       );
     }
@@ -84,7 +87,7 @@ class DashboardPage extends StatelessWidget {
               labelType: extended
                   ? NavigationRailLabelType.none
                   : NavigationRailLabelType.all,
-              destinations: [for (final d in destinations) _railItemOf(d)],
+              destinations: [for (final d in items) _railItemOf(d)],
             ),
           ),
           Expanded(child: navigationShell),

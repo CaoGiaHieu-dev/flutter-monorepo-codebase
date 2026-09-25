@@ -12,7 +12,11 @@ class DashboardRouteModuleImpl implements IDashboardRouteModule {
     BuildContext context,
     GoRouterState state,
     StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
   ) {
-    return DashboardPage(navigationShell: navigationShell);
+    return DashboardPage(
+      navigationShell: navigationShell,
+      destinations: destinations,
+    );
   }
 }

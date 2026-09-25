@@ -15,8 +15,6 @@ dependencies:
     path: ../../../platform/foundation/contracts
   core_responsive:
     path: ../../../platform/ui/responsive
-  platform_kernel:
-    path: ../../../platform/foundation/kernel
   flutter:
     sdk: flutter
   get_it: ^9.2.1

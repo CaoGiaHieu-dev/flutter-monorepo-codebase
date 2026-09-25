@@ -57,15 +57,15 @@ Current packages:
 
 | Package | Contents |
 |:---|:---|
-| `data_core` | `IBaseRepository`, `BaseModel`, request models |
+| `data_core` | `BaseRepository`, `BaseModel`, request models |
 | `data_auth` | `UserModel`, auth data sources, `AuthRepositoryImpl` |
 | `data_cache` | `CacheDatabase` (a package-owned Drift database), `CacheEntryModel`, local data source, `CacheEntryRepositoryImpl` |
 
 ---
 
-## 3. `IBaseRepository` — why repositories have no `try/catch`
+## 3. `BaseRepository` — why repositories have no `try/catch`
 
-`platform/layers/data/lib/src/base/i_base_repository.dart` gives every repository two wrappers. A `RepositoryImpl` `extends IBaseRepository` and calls them instead of handling errors itself.
+`platform/layers/data/lib/src/base_repository.dart` gives every repository two wrappers. A `RepositoryImpl` `extends BaseRepository` and calls them instead of handling errors itself.
 
 ### `execute<R, T>()` — asynchronous
 
@@ -336,7 +336,7 @@ REST endpoints follow the same ownership rule — `modules/auth/data/lib/src/uti
 
 ```dart
 @LazySingleton(as: IAuthRepository)
-class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
+class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   AuthRepositoryImpl(this._remote, this._local);
 
   final AuthRemoteDataSource _remote;
@@ -397,7 +397,7 @@ This is what closes the loop with `core_network`'s 401 refresh interceptor. See 
 
 ```dart
 @LazySingleton(as: IPaymentRepository)
-class PaymentRepositoryImpl extends IBaseRepository
+class PaymentRepositoryImpl extends BaseRepository
     implements IPaymentRepository {
   PaymentRepositoryImpl(this._remote);
 
@@ -415,7 +415,7 @@ class PaymentRepositoryImpl extends IBaseRepository
 
 Checklist:
 
-- [ ] `extends IBaseRepository` and uses `execute` / `executeSync` — no bare `try/catch`
+- [ ] `extends BaseRepository` and uses `execute` / `executeSync` — no bare `try/catch`
 - [ ] `@LazySingleton(as: IFooRepository)` or `@Injectable(as: ...)`, bound to the **Domain interface**
 - [ ] Data sources return Models; the `mapper` converts to Entities
 - [ ] No Drift / Dio / Retrofit type appears in any public signature

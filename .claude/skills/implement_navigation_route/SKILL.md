@@ -85,7 +85,7 @@ Pick **one** contribution type:
 | Bottom-nav primary tab | `INavDestinationModule` | Requires `order`, `path`, `routes`, `destination`. `order` is an ascending sort key (not a branch index — `AppRouter` and the dashboard both sort by it); keep it unique so the order stays deterministic. |
 | Stack / shell sibling (login, onboarding, …) | `IFeatureRouteModule` | **`routes` only — no `order`** (GoRouter matches by path). |
 | First-launch path | `IAppEntryLocation` | Optional, and used only until `AppBootStorage.viewedOnboard` is set; after that, and when none is registered, the first destination's path, or the placeholder `/_empty_dashboard` when no destination is registered. |
-| Dashboard scaffold chrome | `DashboardRouteModule` | **Only** in `feature_dashboard`. |
+| Dashboard scaffold chrome | `IDashboardRouteModule` | **Only** in `feature_dashboard`. |
 
 1. Implement the chosen contract with `@LazySingleton(as: …)` (or `@Singleton` for chrome).
 2. Compose the package: list its module in each `apps/<id>/app_manifest.yaml` (the generator does this) and run `dart tools/composer/composer.dart sync` — never hand-edit an app's `pubspec.yaml` or `injection.dart`.
@@ -146,7 +146,7 @@ The shell must stay buildable when any feature package is deleted. It talks to c
 - Missing modules must not crash (`platform/shell/app_shell/lib/presentation/navigation/app_router.dart`):
   no route modules → empty lists; no destination → a placeholder branch at `/_empty_dashboard`;
   no `IAppEntryLocation` → the first destination's path (else `/_empty_dashboard`); no
-  `DashboardRouteModule` → the bare `navigationShell`, i.e. tabs without chrome.
+  `IDashboardRouteModule` → the bare `navigationShell`, i.e. tabs without chrome.
 
 ---
 

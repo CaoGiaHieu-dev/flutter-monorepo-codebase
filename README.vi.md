@@ -139,7 +139,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
 │   ├── layers/                    # Hợp đồng nền của tầng domain và data
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request model
+│   │   └── data/                  # data_core: BaseRepository, BaseModel, request model
 │   ├── infra/                     # Cơ chế I/O: mạng, lưu trữ, database, push
 │   │   ├── network/               # core_network: Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
 │   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
@@ -411,7 +411,7 @@ Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến c�
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → route stack top-level (auth, onboarding, …) — **không có `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sort theo `order` → list `StatefulShellBranch`
-- `getItOrNull<DashboardRouteModule>()` → chrome dashboard (tùy chọn)
+- `getItOrNull<IDashboardRouteModule>()` → chrome dashboard (tùy chọn)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` chỉ ở lần chạy đầu tiên (các lần sau, hoặc khi không đăng ký: path của destination đầu tiên, không có nữa thì `/_empty_dashboard`)
 - `getItOrNull<ISessionRefreshListenable>()` → `refreshListenable`
 

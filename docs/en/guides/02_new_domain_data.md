@@ -21,7 +21,7 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 > [!NOTE]
 > For types `2` and `3` the generator scaffolds the folders, `pubspec.yaml`, `lib/di/module.dart`
 > and **one stub each**: `IPaymentRepository` in `domain/lib/src/repositories/` and
-> `PaymentRepositoryImpl extends IBaseRepository` in `data/lib/src/repositories_impl/`, both with a
+> `PaymentRepositoryImpl extends BaseRepository` in `data/lib/src/repositories_impl/`, both with a
 > placeholder `ping()`. Generate the domain **first**: the data package then depends on
 > `domain_payment` and registers `@LazySingleton(as: IPaymentRepository)`. Replace `ping()` with
 > the real operations of §5 (repository interface) and §9 (RepositoryImpl) below — every other
@@ -299,13 +299,13 @@ class AuthLocalDataSource {
 
 ## 9. Implement the repository
 
-Extends `IBaseRepository` from `data_core` and wraps every call in `execute()` (async) or
+Extends `BaseRepository` from `data_core` and wraps every call in `execute()` (async) or
 `executeSync()` (sync). Real code from
 [`modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
 @LazySingleton(as: ICacheEntryRepository)
-class CacheEntryRepositoryImpl extends IBaseRepository
+class CacheEntryRepositoryImpl extends BaseRepository
     implements ICacheEntryRepository {
   CacheEntryRepositoryImpl(this._local);
 
@@ -345,7 +345,7 @@ The remote data source returns the `BaseEntity<UserModel>` envelope, so `R` is t
 
 Both wrappers `catch` everything and funnel it through `ErrorHandler.handleError(e)` into a
 `Failure` — see the outer `catch (e)` of `execute` and of `executeSync` in
-[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base/i_base_repository.dart).
+[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
 
 > [!CAUTION]
 > Use `ErrorHandler.handleError(e)`. **Never** `AppFailure.fromException()`. And never let a
@@ -512,7 +512,7 @@ Review checklist:
 - [ ] UseCase is `@injectable`, returns `Result<T>`, dependencies via constructor
 - [ ] Model has `.toEntity()` and `implements BaseModel<E>`
 - [ ] DataSource returns Models, exposes no generated types, directory is `data_sources/`
-- [ ] RepositoryImpl extends `IBaseRepository`, uses `execute()` / `executeSync()`
+- [ ] RepositoryImpl extends `BaseRepository`, uses `execute()` / `executeSync()`
 - [ ] Errors go through `ErrorHandler.handleError` — no `AppFailure.fromException()`, no escaping `throw`
 - [ ] Storage owner is a singleton with `@PostConstruct(preResolve: true)`, keys in `utils/`
 - [ ] Every dependency declared explicitly and in the right section

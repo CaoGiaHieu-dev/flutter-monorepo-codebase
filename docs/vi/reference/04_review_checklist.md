@@ -76,7 +76,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 
 - [ ] **RULE-40** — data source nằm dưới `data_sources/remote/` và `data_sources/local/`
 - [ ] **RULE-41** — data source trả Model (`BaseEntity<T>` là vỏ bọc duy nhất); không có row Drift trong chữ ký công khai; Model implement `BaseModel<E>` với `.toEntity()`
-- [ ] **RULE-42** — `RepositoryImpl` kế thừa `IBaseRepository` và dùng `execute()` / `executeSync()`; không gì ném lỗi lên UI
+- [ ] **RULE-42** — `RepositoryImpl` kế thừa `BaseRepository` và dùng `execute()` / `executeSync()`; không gì ném lỗi lên UI
 - [ ] **RULE-43** — lỗi đi qua `ErrorHandler.handleError(e)`; họ exception mới đã đăng ký `ErrorClassifier`
 
 ---

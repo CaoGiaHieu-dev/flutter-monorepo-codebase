@@ -31,7 +31,7 @@ flutter-monorepo-codebase/
 │   │   └── common/                # core_common: AppConfig, AppInitializer, helper gắn với Flutter
 │   ├── layers/                    # Hợp đồng nền của tầng domain và data
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request model
+│   │   └── data/                  # data_core: BaseRepository, BaseModel, request model
 │   ├── infra/                     # Cơ chế I/O: mạng, lưu trữ, database, push
 │   │   ├── network/               # core_network: Factory Dio + Retrofit, chuỗi interceptor, SSL pinning
 │   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (KHÔNG định nghĩa key nào)
@@ -87,7 +87,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Không import module nào |
 | `platform_shell_adapters` | `platform/shell/adapters` | Các adapter hạ tầng của shell: storage adapter cho theme/ngôn ngữ/cờ boot và `NetworkConfigImpl` (+ binding `SslPinningConfig`). Không import module nào |
 | `core_common` | `platform/foundation/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom`, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
-| `core_di` | `platform/foundation/contracts` | **Trạm DI**, chỉ hợp đồng trung lập với sản phẩm: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, các hợp đồng session (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. Navigator / action handler của một module nằm trong package `modules/<id>/api` của chính nó |
+| `core_di` | `platform/foundation/contracts` | **Trạm DI**, chỉ hợp đồng trung lập với sản phẩm: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `IDashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, các hợp đồng session (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. Navigator / action handler của một module nằm trong package `modules/<id>/api` của chính nó |
 | `core_base_ui` | `platform/ui/design_system` | Design system: màu, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, asset & L10n toàn cục. **Không chứa một Flutter widget nào.** |
 | `core_ui_kit` | `platform/ui/ui_kit` | Toàn bộ widget dùng lại: button, input, dialog, feedback, layout, media, navigation (kể cả `BottomTransitionPage`) + `SharedUiConstants` |
 | `core_network` | `platform/infra/network` | `ApiClient` (factory Dio), hợp đồng `NetworkConfig`, interceptor Auth/Retry/Logging/RefreshToken, hợp đồng SSL pinning, `DioFailureClassifier` (Dio → `AppFailure`) |
@@ -114,7 +114,7 @@ Hiện thực hợp đồng của domain. Data source trả về **Model**, khô
 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
-| `data_core` | `platform/layers/data` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_core` | `platform/layers/data` | `BaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + bảng `CacheEntries` + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
 | `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 

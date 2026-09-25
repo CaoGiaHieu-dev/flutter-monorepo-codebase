@@ -23,7 +23,7 @@ Three rules apply to everything on this page — RULE-01, RULE-44 / RULE-46 (mec
 | Group | Folder | Packages (folder) | What belongs here | May depend on |
 |:--|:--|:--|:--|:--|
 | **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | What every other package builds on: the service locator and error handling, the cross-module DI contracts, Flutter-bound helpers. No I/O, no widgets, no transport type | foundation, `domain_core` |
-| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | The base contracts of the domain and data layers — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — that `modules/*/domain` and `modules/*/data` extend | `domain_core`: nothing. `data_core`: foundation, `domain_core` |
+| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | The base contracts of the domain and data layers — `Result<T>`, `AppFailure`, `BaseEntity`, `BaseRepository` — that `modules/*/domain` and `modules/*/data` extend | `domain_core`: nothing. `data_core`: foundation, `domain_core` |
 | **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Mechanisms that reach outside the process — HTTP, key–value storage, SQLite, push. Mechanism only: no product module's keys, tables or endpoints. The default group of `generate.dart 4` / `5` | foundation, layers — never another infra package |
 | **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scaling and adaptive layout, design tokens, themes and global strings, the shared widget library | foundation, ui — never state, infra or shell |
 | **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | The state-management bases, and the widgets bound to them (`LoadMoreListView`); a feature picks one | foundation, layers, ui |
@@ -89,7 +89,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | REST endpoints (`/user/login`, `/user/refresh-token`) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Two constants files live at the bottom of the stack, because they are genuinely global — both in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — the failure codes `ErrorHandler` and `IBaseRepository` assign when there is no HTTP status, e.g. `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, all outside the HTTP range so a 5xx is always a real one).
+Two constants files live at the bottom of the stack, because they are genuinely global — both in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — the failure codes `ErrorHandler` and `BaseRepository` assign when there is no HTTP status, e.g. `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, all outside the HTTP range so a 5xx is always a real one).
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.
@@ -104,10 +104,10 @@ Contracts only. No implementations, no business logic. It is the neutral ground 
 
 | Contract group | Path | Purpose |
 |:--|:--|:--|
-| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (where the shell sends a signed-out / signed-in user), `DashboardRouteModule`, `NavigatorKeys` |
+| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (where the shell sends a signed-out / signed-in user), `IDashboardRouteModule`, `NavigatorKeys` |
 | Session | `src/session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (shell-facing), `ISessionStatusStream` (feature-facing: state shared between a Provider and a BLoC feature), `ISessionRefreshListenable`, `ISessionGateway` (transport) — implemented by whichever module owns sign-in |
 | Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell's adapters package (`platform_shell_adapters`) |
-| Localization | `src/feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
+| Localization | `src/i_feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
 
 **`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.

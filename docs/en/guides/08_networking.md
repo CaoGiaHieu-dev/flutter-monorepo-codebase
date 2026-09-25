@@ -195,7 +195,7 @@ abstract class RegisterModule {
 `BaseEntity<T>` wraps a standard server response:
 
 ```dart
-// platform/layers/domain/lib/src/entities/base/base_entity.dart
+// platform/layers/domain/lib/src/entities/base_entity.dart
 const factory BaseEntity({
   @JsonKey(name: 'statusCode') @Default(200) int statusCode,
   @JsonKey(name: 'data') T? data,
@@ -209,7 +209,7 @@ bool get hasError => !isSuccess;
 `PaginatedEntity<T>` carries the page plus metadata:
 
 ```dart
-// platform/layers/domain/lib/src/entities/base/paginate_entity.dart
+// platform/layers/domain/lib/src/entities/paginated_entity.dart
 typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
 
 const factory PaginatedEntity({

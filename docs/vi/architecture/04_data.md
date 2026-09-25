@@ -58,15 +58,15 @@ Các package hiện có:
 
 | Package | Nội dung |
 |:---|:---|
-| `data_core` | `IBaseRepository`, `BaseModel`, request model |
+| `data_core` | `BaseRepository`, `BaseModel`, request model |
 | `data_auth` | `UserModel`, data source auth, `AuthRepositoryImpl` |
 | `data_cache` | `CacheDatabase` (database Drift do package tự sở hữu), `CacheEntryModel`, local data source, `CacheEntryRepositoryImpl` |
 
 ---
 
-## 3. `IBaseRepository` — vì sao repository không có `try/catch`
+## 3. `BaseRepository` — vì sao repository không có `try/catch`
 
-`platform/layers/data/lib/src/base/i_base_repository.dart` cung cấp cho mọi repository hai hàm bọc. `RepositoryImpl` sẽ `extends IBaseRepository` rồi gọi chúng thay vì tự xử lý lỗi.
+`platform/layers/data/lib/src/base_repository.dart` cung cấp cho mọi repository hai hàm bọc. `RepositoryImpl` sẽ `extends BaseRepository` rồi gọi chúng thay vì tự xử lý lỗi.
 
 ### `execute<R, T>()` — bất đồng bộ
 
@@ -337,7 +337,7 @@ Endpoint REST cũng theo đúng quy tắc sở hữu này — `modules/auth/data
 
 ```dart
 @LazySingleton(as: IAuthRepository)
-class AuthRepositoryImpl extends IBaseRepository implements IAuthRepository {
+class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   AuthRepositoryImpl(this._remote, this._local);
 
   final AuthRemoteDataSource _remote;
@@ -398,7 +398,7 @@ Ba chi tiết gánh toàn bộ sức nặng:
 
 ```dart
 @LazySingleton(as: IPaymentRepository)
-class PaymentRepositoryImpl extends IBaseRepository
+class PaymentRepositoryImpl extends BaseRepository
     implements IPaymentRepository {
   PaymentRepositoryImpl(this._remote);
 
@@ -416,7 +416,7 @@ class PaymentRepositoryImpl extends IBaseRepository
 
 Checklist:
 
-- [ ] `extends IBaseRepository` và dùng `execute` / `executeSync` — không `try/catch` trần
+- [ ] `extends BaseRepository` và dùng `execute` / `executeSync` — không `try/catch` trần
 - [ ] `@LazySingleton(as: IFooRepository)` hoặc `@Injectable(as: ...)`, bind vào **interface của Domain**
 - [ ] Data source trả Model; `mapper` chuyển sang Entity
 - [ ] Không kiểu Drift / Dio / Retrofit nào xuất hiện trong chữ ký công khai

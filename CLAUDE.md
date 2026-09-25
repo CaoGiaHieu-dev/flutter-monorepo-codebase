@@ -59,7 +59,7 @@ modules/<id>/
 platform/<group>/<pkg>     infrastructure, six groups, dependency direction = arch_check R11:
   layers/domain            domain_core (Result, AppFailure) — the leaf
   foundation/              platform_kernel (getIt helpers, ErrorHandler), core_di (contracts), core_common
-  layers/data              data_core (IBaseRepository)
+  layers/data              data_core (BaseRepository)
   infra/                   core_network, core_storage, core_database, core_notifications — mechanism only
   ui/                      core_responsive, core_base_ui (tokens, global l10n), core_ui_kit (widgets)
   state/                   provider_state_management, bloc_state_management
@@ -149,7 +149,7 @@ All in `core_di` (`platform/foundation/contracts`), all optional — resolved wi
 
 ```text
 routing     IFeatureRouteModule (stack routes) · INavDestinationModule (nav tab, unique order)
-            IAppEntryLocation (first launch) · DashboardRouteModule (dashboard chrome only)
+            IAppEntryLocation (first launch) · IDashboardRouteModule (dashboard chrome only)
             ISignInLocation / IPostSignInLocation (where the shell sends signed-out / signed-in users)
 session     ISessionState · ISessionStatusStream · ISessionRefreshListenable · ISessionGateway
 app         IAppSplashScreen · IAppTreeWrapper · IFeatureLocalization

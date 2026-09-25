@@ -196,7 +196,7 @@ abstract class RegisterModule {
 `BaseEntity<T>` bao một response chuẩn của server:
 
 ```dart
-// platform/layers/domain/lib/src/entities/base/base_entity.dart
+// platform/layers/domain/lib/src/entities/base_entity.dart
 const factory BaseEntity({
   @JsonKey(name: 'statusCode') @Default(200) int statusCode,
   @JsonKey(name: 'data') T? data,
@@ -210,7 +210,7 @@ bool get hasError => !isSuccess;
 `PaginatedEntity<T>` mang theo trang dữ liệu cộng metadata:
 
 ```dart
-// platform/layers/domain/lib/src/entities/base/paginate_entity.dart
+// platform/layers/domain/lib/src/entities/paginated_entity.dart
 typedef BaseEntityPaginate<T> = BaseEntity<PaginatedEntity<T>>;
 
 const factory PaginatedEntity({

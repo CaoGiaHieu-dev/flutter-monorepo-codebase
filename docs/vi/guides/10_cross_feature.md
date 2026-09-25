@@ -176,7 +176,7 @@ Chuỗi này bỏ qua hẳn tầng domain, vì Domain không thể import `Theme
 ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  →  StorageValue
 ```
 
-Interface — code thật từ [`platform/foundation/contracts/lib/src/theme/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/theme/i_theme_storage.dart):
+Interface — code thật từ [`platform/foundation/contracts/lib/src/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/i_theme_storage.dart):
 
 ```dart
 import 'package:material_ui/material_ui.dart';
@@ -282,7 +282,7 @@ getItOrNull<IAuthActionHandler>()?.logout(context);
 // Tốt — lùi về chính widget của nhánh thay vì crash
 // (platform/shell/app_shell/lib/presentation/navigation/app_router.dart)
 builder: (context, state, navigationShell) {
-  return getItOrNull<DashboardRouteModule>()?.builder(
+  return getItOrNull<IDashboardRouteModule>()?.builder(
         context,
         state,
         navigationShell,

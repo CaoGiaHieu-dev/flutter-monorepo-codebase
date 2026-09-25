@@ -75,7 +75,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 
 - [ ] **RULE-40** — data sources live under `data_sources/remote/` and `data_sources/local/`
 - [ ] **RULE-41** — data sources return Models (`BaseEntity<T>` the only wrapper); no Drift row in a public signature; Models implement `BaseModel<E>` with `.toEntity()`
-- [ ] **RULE-42** — `RepositoryImpl` extends `IBaseRepository` and uses `execute()` / `executeSync()`; nothing throws to UI
+- [ ] **RULE-42** — `RepositoryImpl` extends `BaseRepository` and uses `execute()` / `executeSync()`; nothing throws to UI
 - [ ] **RULE-43** — errors go through `ErrorHandler.handleError(e)`; a new exception family registered an `ErrorClassifier`
 
 ---

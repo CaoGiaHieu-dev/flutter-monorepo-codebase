@@ -339,7 +339,7 @@ GoRouter(navigatorKey: NavigatorKeys.rootKey)
 └── ShellRoute(navigatorKey: appKey)          → NavigatorWrapperWidget
     ├── ..._featureRoutes                      ← IFeatureRouteModule
     └── StatefulShellRoute.indexedStack        ← INavDestinationModule (sorted by order)
-        └── builder → DashboardRouteModule
+        └── builder → IDashboardRouteModule
 ```
 
 Every collection point degrades gracefully when nothing is registered:
@@ -348,7 +348,7 @@ Every collection point degrades gracefully when nothing is registered:
 |:--|:--|
 | `IFeatureRouteModule` | empty list — no stack routes; the app still builds |
 | `INavDestinationModule` | one placeholder branch at `/_empty_dashboard` rendering `SizedBox.shrink()`, which keeps `StatefulShellRoute` valid |
-| `DashboardRouteModule` | the bare `navigationShell` — destinations without chrome. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
+| `IDashboardRouteModule` | the bare `navigationShell` — destinations without chrome. (It used to be `SizedBox.shrink()`, a blank screen for any app with tabs but no dashboard) |
 | `IAppEntryLocation` | `AppRouter.fallbackLocation`: the first dashboard tab's path (lowest `order`), else the `/_empty_dashboard` placeholder (not `/`). With no entry location there is no onboarding to show, so boot goes on to the login check |
 | `ISignInLocation` | No redirect to a sign-in screen, at boot or on sign-out — correct with no session owner |
 | `IPostSignInLocation` | After sign-in the app goes to `fallbackLocation` instead of staying on the login screen |
@@ -390,7 +390,7 @@ String get entryLocation {
 
 ```dart
 builder: (context, state, navigationShell) {
-  return getItOrNull<DashboardRouteModule>()?.builder(
+  return getItOrNull<IDashboardRouteModule>()?.builder(
         context,
         state,
         navigationShell,
@@ -499,7 +499,7 @@ final delegates = [
 The contract, in `core_di`:
 
 ```dart
-// platform/foundation/contracts/lib/src/feature_localization.dart
+// platform/foundation/contracts/lib/src/i_feature_localization.dart
 /// Interface for feature localization delegates.
 /// Enables safe registration and retrieval via getAllOrEmpty<IFeatureLocalization>() in the app shell.
 abstract class IFeatureLocalization {

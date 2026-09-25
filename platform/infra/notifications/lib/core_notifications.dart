@@ -6,5 +6,7 @@
 library core_notifications;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/push_notification_service.dart';
+export 'src/utils/notification_constants.dart';

@@ -17,5 +17,10 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/entities/cache_entry_entity.dart';
+export 'src/params/cache_entry_params.dart';
+export 'src/repositories/i_cache_entry_repository.dart';
+export 'src/usecases/get_cache_entry_usecase.dart';
+export 'src/usecases/save_cache_entry_usecase.dart';

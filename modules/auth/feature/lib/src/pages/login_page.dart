@@ -3,7 +3,7 @@ import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_auth_extension.dart';
 import '../provider/auth_provider.dart';
 import '../widgets/auth_form_widget.dart';
 import '../widgets/auth_header_widget.dart';

@@ -16,5 +16,12 @@
 library core_storage;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/contracts/storage_codec.dart';
+export 'src/contracts/storage_interface.dart';
+export 'src/contracts/storage_manager.dart';
+export 'src/contracts/storage_type.dart';
+export 'src/contracts/storage_value.dart';
+export 'src/impl/pref/pref_storage_impl.dart';
+export 'src/impl/secure/secure_storage_impl.dart';

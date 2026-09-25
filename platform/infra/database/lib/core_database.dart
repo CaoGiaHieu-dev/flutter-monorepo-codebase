@@ -38,5 +38,13 @@
 library core_database;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/access/database_handle.dart';
+export 'src/access/i_database_handle.dart';
+export 'src/connection/database_connection_factory.dart';
+export 'src/migration/database_migration_runner.dart';
+export 'src/migration/drift_migration_strategy.dart';
+export 'src/migration/i_database_migration.dart';
+export 'src/opening/drift_database_opener.dart';
+export 'src/utils/database_constants.dart';

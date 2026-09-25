@@ -3,7 +3,7 @@ import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_settings_extension.dart';
 
 /// SAMPLE — a second nav destination, and the one screen that *consumes*
 /// another module's contract without depending on that module.

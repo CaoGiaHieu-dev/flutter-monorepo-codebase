@@ -15,4 +15,5 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'src/src.dart';
+export 'src/actions/i_auth_action_handler.dart';
+export 'src/navigators/auth_navigator.dart';

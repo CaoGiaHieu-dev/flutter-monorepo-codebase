@@ -1,14 +1,8 @@
-// Barrel file for base_view module
-// This file exports all the main components of the base_view module
+/// The builder signatures `BaseViewWidget` and `PaginatedViewWidget` take
+/// for each view state.
+library;
 
 import 'package:material_ui/material_ui.dart';
-
-// Auto-generated exports, do not edit manually.
-export 'base_proxy_widget.dart';
-export 'base_view_widget.dart';
-export 'default_state_widgets.dart';
-export 'loading_more_widget.dart';
-export 'paginated_view_widget.dart';
 
 /// A typedef for building a widget when state is initial.
 typedef InitialWidgetBuilder = Widget Function(

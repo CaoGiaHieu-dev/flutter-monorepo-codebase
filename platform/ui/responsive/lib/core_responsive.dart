@@ -38,4 +38,17 @@
 library core_responsive;
 
 // Auto-generated exports, do not edit manually.
-export 'src/src.dart';
+export 'src/adaptive/adaptive_builder.dart';
+export 'src/adaptive/adaptive_content.dart';
+export 'src/adaptive/adaptive_context_extension.dart';
+export 'src/adaptive/adaptive_split_view.dart';
+export 'src/adaptive/fold_posture.dart';
+export 'src/adaptive/window_size_class.dart';
+export 'src/context_extension.dart';
+export 'src/responsive_init.dart';
+export 'src/responsive_metrics.dart';
+export 'src/responsive_scope.dart';
+export 'src/scaling/responsive_profile.dart';
+export 'src/scaling/scale_bounds.dart';
+export 'src/utils/adaptive_constants.dart';
+export 'src/utils/responsive_constants.dart';

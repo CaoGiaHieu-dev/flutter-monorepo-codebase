@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_settings_extension.dart';
 import '../utils/settings_path.dart';
 import 'settings_route_module.dart';
 

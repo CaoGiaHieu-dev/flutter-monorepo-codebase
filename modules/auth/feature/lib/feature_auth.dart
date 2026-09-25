@@ -20,5 +20,23 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/auth_tree_wrapper.dart';
+export 'di/localization.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/extensions/l10n_auth_extension.dart';
+export 'src/gen/language/app_localizations.dart';
+export 'src/gen/language/app_localizations_en.dart';
+export 'src/gen/language/app_localizations_vi.dart';
+export 'src/handlers/auth_action_handler_impl.dart';
+export 'src/pages/login_page.dart';
+export 'src/provider/auth_error_state.dart';
+export 'src/provider/auth_provider.dart';
+export 'src/routing/auth_feature_route_module.dart';
+export 'src/routing/auth_navigator_impl.dart';
+export 'src/routing/auth_route_module.dart';
+export 'src/routing/auth_sign_in_location.dart';
+export 'src/services/auth_status_stream_impl.dart';
+export 'src/utils/auth_path.dart';
+export 'src/widgets/auth_form_widget.dart';
+export 'src/widgets/auth_header_widget.dart';

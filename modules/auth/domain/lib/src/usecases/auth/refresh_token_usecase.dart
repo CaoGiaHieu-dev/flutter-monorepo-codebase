@@ -1,7 +1,7 @@
 import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../entities/user/user.dart';
+import '../../entities/user/user_entity.dart';
 import '../../repositories/i_auth_repository.dart';
 
 @injectable

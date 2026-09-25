@@ -18,5 +18,11 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/di.dart';
-export 'src/src.dart';
+export 'di/module.dart';
+export 'di/module.module.dart';
+export 'src/data_sources/local/cache_entry_local_data_source.dart';
+export 'src/database/cache_database.dart';
+export 'src/database/tables/cache_entries_table.dart';
+export 'src/models/cache_entry_model.dart';
+export 'src/repositories_impl/cache_entry_repository_impl.dart';
+export 'src/utils/cache_constants.dart';

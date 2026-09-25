@@ -4,7 +4,7 @@ import 'package:core_di/core_di.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../bloc/home_profile_bloc.dart';
-import '../extensions/extensions.dart';
+import '../extensions/l10n_home_extension.dart';
 
 /// Home tab — sample screen using a route-scoped [HomeProfileBloc].
 class HomePage extends StatelessWidget {

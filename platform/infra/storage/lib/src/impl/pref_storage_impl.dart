@@ -1,32 +1,17 @@
 import 'dart:convert';
 
 import 'package:dynamic_logger/dynamic_logger.dart';
-import 'package:encrypt/encrypt.dart' as encrypter;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../contracts/storage_codec.dart';
 import '../contracts/storage_interface.dart';
+import '../storage_codec.dart';
+import '../utils/storage_constants.dart';
+import 'encrypted_storage.dart';
 
-/// Reserved key of this backend's master key (see
-/// `StorageInterface.isValidKey`) — in secure storage, and in
-/// SharedPreferences while the fallback key is in use.
-const String _MASTER_KEY_ID = '_internal_pref_master_key';
-
-/// AES-256.
-const int _MASTER_KEY_BYTES = 32;
-
-/// How often a failing master-key read is attempted before init gives up.
-const int _MASTER_KEY_READ_ATTEMPTS = 3;
-
-/// Base delay between those attempts.
-const Duration _MASTER_KEY_RETRY_DELAY = Duration(milliseconds: 300);
-
-/// How many stored values [PrefStorageImpl] tries when deciding which
-/// candidate master key opens them.
-const int _KEY_PROBE_SAMPLES = 3;
+const String _TAG = 'PrefStorageImpl';
 
 /// A class for managing shared preferences storage.
 ///
@@ -41,18 +26,11 @@ const int _KEY_PROBE_SAMPLES = 3;
 /// does it fall back to a key held in SharedPreferences — see [init].
 @Injectable(as: StorageInterface)
 @Named('Pref')
-class PrefStorageImpl extends StorageInterface {
+class PrefStorageImpl extends EncryptedStorage {
   /// Constructor – no singleton pattern, fully managed by DI.
   PrefStorageImpl(this._preferences)
-    : _secureStorage = const FlutterSecureStorage(
-        aOptions: AndroidOptions(
-          keyCipherAlgorithm:
-              KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
-          storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
-        ),
-        iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-      ),
-      _retryDelay = _MASTER_KEY_RETRY_DELAY;
+    : _secureStorage = EncryptedStorage.secureStorage,
+      _retryDelay = StorageConstants.MASTER_KEY_RETRY_DELAY;
 
   /// Over a given secure-storage backend, retrying after [retryDelay] — for
   /// tests that need a platform failure the real plugin cannot produce on
@@ -94,7 +72,9 @@ class PrefStorageImpl extends StorageInterface {
   ///   dropped one by one by [read].
   @override
   Future<void> init() async {
-    final fallbackKey = _usableOrNull(_preferences.getString(_MASTER_KEY_ID));
+    final fallbackKey = _usableOrNull(
+      _preferences.getString(StorageConstants.PREF_MASTER_KEY_ID),
+    );
     final sealed = _sealedValues();
 
     final String? secureKey;
@@ -110,29 +90,32 @@ class PrefStorageImpl extends StorageInterface {
         DynamicLogger.log(
           'Secure storage is unavailable; keeping the pref master key in '
           'SharedPreferences until it is readable again.',
-          tag: 'PrefStorageImpl',
+          tag: _TAG,
           level: LogLevel.WARNING,
         );
         final newKey = _generateKey();
-        await _preferences.setString(_MASTER_KEY_ID, newKey);
+        await _preferences.setString(
+          StorageConstants.PREF_MASTER_KEY_ID,
+          newKey,
+        );
         setMasterKey(newKey);
         return;
       }
       DynamicLogger.log(
         'The pref master key cannot be read and stored preferences depend '
         'on it; giving up with every preference left intact.',
-        tag: 'PrefStorageImpl',
+        tag: _TAG,
         level: LogLevel.ERROR,
       );
       rethrow;
     }
 
     var storedKey = secureKey;
-    if (storedKey != null && !_isUsableKey(storedKey)) {
+    if (storedKey != null && !EncryptedStorage.isUsableKey(storedKey)) {
       DynamicLogger.log(
         'Stored pref master key is corrupt; replacing it. Values sealed with '
         'it will be dropped as they are read.',
-        tag: 'PrefStorageImpl',
+        tag: _TAG,
         level: LogLevel.WARNING,
       );
       storedKey = null;
@@ -147,7 +130,7 @@ class PrefStorageImpl extends StorageInterface {
         setMasterKey(fallbackKey);
         return;
       }
-      await _preferences.remove(_MASTER_KEY_ID);
+      await _preferences.remove(StorageConstants.PREF_MASTER_KEY_ID);
     }
 
     if (storedKey != null) {
@@ -158,51 +141,45 @@ class PrefStorageImpl extends StorageInterface {
     // No usable key anywhere: nothing stored can be opened by any key.
     final newKey = _generateKey();
     try {
-      await _secureStorage.write(key: _MASTER_KEY_ID, value: newKey);
+      await _secureStorage.write(
+        key: StorageConstants.PREF_MASTER_KEY_ID,
+        value: newKey,
+      );
     } catch (e) {
       DynamicLogger.log(
         'Failed to write the pref master key to SecureStorage '
         '(${e.runtimeType}); keeping it in SharedPreferences.',
-        tag: 'PrefStorageImpl',
+        tag: _TAG,
         level: LogLevel.WARNING,
       );
-      await _preferences.setString(_MASTER_KEY_ID, newKey);
+      await _preferences.setString(StorageConstants.PREF_MASTER_KEY_ID, newKey);
     }
     setMasterKey(newKey);
   }
 
   /// Reads the master key from secure storage, retrying a platform failure
   /// before giving up. Rethrows the last error once the attempts run out.
-  Future<String?> _readSecureKey() async {
-    for (var attempt = 1; ; attempt++) {
-      try {
-        return await _secureStorage.read(key: _MASTER_KEY_ID);
-      } catch (e) {
-        final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
-        DynamicLogger.log(
-          'Reading the pref master key failed (attempt $attempt of '
-          '$_MASTER_KEY_READ_ATTEMPTS): ${e.runtimeType}. '
-          '${lastAttempt ? 'Giving up.' : 'Retrying.'}',
-          tag: 'PrefStorageImpl',
-          level: lastAttempt ? LogLevel.ERROR : LogLevel.WARNING,
-        );
-        if (lastAttempt) rethrow;
-        await Future<void>.delayed(_retryDelay * attempt);
-      }
-    }
-  }
+  Future<String?> _readSecureKey() => EncryptedStorage.readKeyWithRetry(
+    _secureStorage,
+    StorageConstants.PREF_MASTER_KEY_ID,
+    retryDelay: _retryDelay,
+    tag: _TAG,
+  );
 
   /// Moves [key] from SharedPreferences into secure storage. If secure
   /// storage refuses the write, the key stays where it is — still usable.
   Future<void> _adoptFallbackKey(String key) async {
     try {
-      await _secureStorage.write(key: _MASTER_KEY_ID, value: key);
-      await _preferences.remove(_MASTER_KEY_ID);
+      await _secureStorage.write(
+        key: StorageConstants.PREF_MASTER_KEY_ID,
+        value: key,
+      );
+      await _preferences.remove(StorageConstants.PREF_MASTER_KEY_ID);
     } catch (e) {
       DynamicLogger.log(
         'Could not move the pref master key into SecureStorage '
         '(${e.runtimeType}); it stays in SharedPreferences for now.',
-        tag: 'PrefStorageImpl',
+        tag: _TAG,
         level: LogLevel.WARNING,
       );
     }
@@ -225,7 +202,7 @@ class PrefStorageImpl extends StorageInterface {
     final parts = value.split(':');
     if (parts.length != 2 || parts[1].isEmpty) return false;
     try {
-      return base64.decode(parts[0]).length == 16;
+      return base64.decode(parts[0]).length == StorageConstants.IV_BYTES;
     } on FormatException {
       return false;
     }
@@ -240,7 +217,7 @@ class PrefStorageImpl extends StorageInterface {
   /// Leaves [key] installed as the master key; [init] sets the final one.
   bool _opens(String key, List<String> sealed) {
     setMasterKey(key);
-    for (final value in sealed.take(_KEY_PROBE_SAMPLES)) {
+    for (final value in sealed.take(StorageConstants.KEY_PROBE_SAMPLES)) {
       try {
         jsonDecode(decryptData(value));
         return true;
@@ -252,20 +229,12 @@ class PrefStorageImpl extends StorageInterface {
     return false;
   }
 
-  static String _generateKey() =>
-      encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
+  static String _generateKey() => EncryptedStorage.generateKey();
 
   static String? _usableOrNull(String? base64Key) =>
-      base64Key != null && _isUsableKey(base64Key) ? base64Key : null;
-
-  /// Whether [base64Key] decodes to a 256-bit key.
-  static bool _isUsableKey(String base64Key) {
-    try {
-      return base64.decode(base64Key).length == _MASTER_KEY_BYTES;
-    } on FormatException {
-      return false;
-    }
-  }
+      base64Key != null && EncryptedStorage.isUsableKey(base64Key)
+      ? base64Key
+      : null;
 
   /// Write a value to shared preferences.
   ///
@@ -276,9 +245,7 @@ class PrefStorageImpl extends StorageInterface {
   ///   value: The value to store.
   @override
   Future<void> write<T>(String key, T? value) async {
-    if (!isValidKey(key)) {
-      throw ArgumentError('Access to reserved key "$key" is forbidden.');
-    }
+    checkKey(key);
 
     if (value == null) {
       await delete(key); // Delete the value if it's null
@@ -305,9 +272,7 @@ class PrefStorageImpl extends StorageInterface {
     T Function(Object? key, Object? value)?
     reviver, // Reviver function for custom decoding
   }) async {
-    if (!isValidKey(key)) {
-      throw ArgumentError('Access to reserved key "$key" is forbidden.');
-    }
+    checkKey(key);
 
     try {
       final data = _preferences.get(key)?.toString(); // Read data from storage
@@ -318,7 +283,7 @@ class PrefStorageImpl extends StorageInterface {
     } catch (e) {
       DynamicLogger.log(
         'Failed to read or decrypt key: $key. Error: ${e.runtimeType}',
-        tag: 'PrefStorageImpl',
+        tag: _TAG,
         level: LogLevel.ERROR,
       );
       await delete(key); // Delete value on error
@@ -332,14 +297,7 @@ class PrefStorageImpl extends StorageInterface {
   ///   key: The key to delete the value from.
   @override
   Future<void> delete(String key) async {
-    if (!isValidKey(key)) {
-      throw ArgumentError('Access to reserved key "$key" is forbidden.');
-    }
+    checkKey(key);
     await _preferences.remove(key); // Delete the value from storage
-  }
-
-  /// Delete all values from shared preferences.
-  Future<void> deleteAll() async {
-    await _preferences.clear(); // Delete all values from storage
   }
 }

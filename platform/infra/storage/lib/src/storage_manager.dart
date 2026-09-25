@@ -1,7 +1,7 @@
 import 'package:injectable/injectable.dart';
 
-import 'storage_interface.dart';
-import 'storage_type.dart';
+import 'contracts/storage_interface.dart';
+import 'contracts/storage_type.dart';
 
 /// Central coordinator for all registered storage backends.
 ///

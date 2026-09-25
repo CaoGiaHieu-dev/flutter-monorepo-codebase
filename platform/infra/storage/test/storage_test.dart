@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:core_storage/core_storage.dart';
@@ -380,12 +381,67 @@ void main() {
       storageValue.value = 'token123';
       await Future<void>.delayed(Duration.zero);
 
-      storageValue.delete();
+      await storageValue.remove();
       await Future<void>.delayed(Duration.zero);
 
       expect(storageValue.value, isNull);
       final persistedValue = await prefStorage.read<String>('user_token');
       expect(persistedValue, isNull);
+    });
+  });
+
+  group('StorageValue writes', () {
+    test('save completes once the value is persisted', () async {
+      final backend = _RecordingStorage();
+      final value = StorageValue<String>(backend, 'k');
+
+      await value.save('a');
+
+      expect(backend.values['k'], 'a');
+      expect(value.value, 'a');
+    });
+
+    test('writes land in the order they were made', () async {
+      // The first write is the slow one: without serialization the second
+      // would finish first and the stale value would be left on disk.
+      final backend = _RecordingStorage(
+        delays: [const Duration(milliseconds: 20), Duration.zero],
+      );
+      final value = StorageValue<String>(backend, 'k');
+
+      value.value = 'first';
+      await value.save('second');
+
+      expect(backend.log, ['write k=first', 'write k=second']);
+      expect(backend.values['k'], 'second');
+    });
+
+    test(
+      'a failed write is logged, not thrown, and later writes run',
+      () async {
+        final backend = _RecordingStorage(failFirst: true);
+        final value = StorageValue<String>(backend, 'k');
+
+        await expectLater(value.save('lost'), completes);
+        await value.save('kept');
+
+        expect(value.value, 'kept');
+        expect(backend.values['k'], 'kept');
+      },
+    );
+
+    test('the setter never surfaces a failure as a zone error', () async {
+      final backend = _RecordingStorage(failFirst: true);
+      final value = StorageValue<String>(backend, 'k');
+      final errors = <Object>[];
+
+      await runZonedGuarded(() async {
+        value.value = 'x';
+        await value.remove();
+      }, (error, _) => errors.add(error));
+
+      expect(errors, isEmpty);
+      expect(backend.log.last, 'delete k');
     });
   });
 
@@ -528,21 +584,21 @@ void main() {
     );
 
     test(
-      'ObfuscatedString should obfuscate and de-obfuscate string correctly',
+      'ObfuscatedBytes.fromString should obfuscate and reveal a string',
       () {
         const secret = 'my_secret_token_abc';
-        final obStr = ObfuscatedString(secret);
+        final obStr = ObfuscatedBytes.fromString(secret);
 
-        expect(obStr.reveal(), equals(secret));
+        expect(obStr.revealString(), equals(secret));
         obStr.dispose();
       },
     );
 
-    group('ObfuscatedString UTF-8 multi-byte round-trips', () {
+    group('ObfuscatedBytes.fromString UTF-8 multi-byte round-trips', () {
       void expectRoundTrip(String label, String input) {
         final utf8Len = utf8.encode(input).length;
-        final obStr = ObfuscatedString(input);
-        final revealed = obStr.reveal();
+        final obStr = ObfuscatedBytes.fromString(input);
+        final revealed = obStr.revealString();
         expect(revealed, equals(input), reason: label);
         expect(utf8.encode(revealed).length, utf8Len, reason: '$label bytes');
         obStr.dispose();
@@ -609,8 +665,8 @@ void main() {
           reason: 'payload must exercise multi-byte UTF-8',
         );
 
-        final obStr = ObfuscatedString(json);
-        final revealed = obStr.reveal();
+        final obStr = ObfuscatedBytes.fromString(json);
+        final revealed = obStr.revealString();
         expect(revealed, equals(json));
         final decoded = jsonDecode(revealed);
         expect(decoded, isA<Map<String, dynamic>>());
@@ -765,5 +821,47 @@ class _FlakyStorage extends FlutterSecureStorage {
   }) {
     deleteAllCalls++;
     return super.deleteAll();
+  }
+}
+
+/// An in-memory backend that records every call, optionally delaying each
+/// write in turn or failing the first one.
+class _RecordingStorage implements StorageInterface {
+  _RecordingStorage({this.delays = const [], this.failFirst = false});
+
+  final List<Duration> delays;
+  bool failFirst;
+  final values = <String, Object?>{};
+  final log = <String>[];
+  var _writes = 0;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  bool isValidKey(String key) => true;
+
+  @override
+  Future<T?> read<T>(
+    String key, {
+    T Function(Object? key, Object? value)? reviver,
+  }) async => values[key] as T?;
+
+  @override
+  Future<void> write<T>(String key, T? value) async {
+    final index = _writes++;
+    if (index < delays.length) await Future<void>.delayed(delays[index]);
+    if (failFirst) {
+      failFirst = false;
+      throw StateError('disk full');
+    }
+    log.add('write $key=$value');
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    log.add('delete $key');
+    values.remove(key);
   }
 }

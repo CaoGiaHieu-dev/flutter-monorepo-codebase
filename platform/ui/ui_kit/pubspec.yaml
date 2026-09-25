@@ -13,21 +13,17 @@ dependencies:
   flutter:
     sdk: flutter
   material_ui: ^1.1.1
-  core_common:
-    path: ../../foundation/common
   core_base_ui:
     path: ../design_system
   get_it: ^9.2.1
   injectable: ^3.0.0
   cached_network_image_ce: "^4.10.0"
-  dotted_line: "^3.3.0"
-  gradient_borders: "^1.0.4"
-  jumping_dot: "^0.0.7"
-  refresh_sticky: "^0.1.2"
   core_responsive:
     path: ../responsive
   cupertino_ui: "^1.0.2"
+  dynamic_logger: "^0.5.0"
 dev_dependencies:
+  go_router: "^18.0.0"
   build_runner: "^2.16.0"
   injectable_generator: "^3.1.3"
   flutter_test:

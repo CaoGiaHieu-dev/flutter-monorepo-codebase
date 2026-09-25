@@ -49,12 +49,8 @@ dependencies:
   material_ui: "^1.1.1"
   cupertino_ui: "^1.0.2"
   cupertino_icons: "^1.0.9"
-  dotted_line: "^3.3.0"
   flutter_native_splash: "^2.4.8"
   flutter_svg: "^2.3.0"
-  gradient_borders: "^1.0.4"
-  jumping_dot: "^0.0.7"
-  refresh_sticky: "^0.1.2"
 
   # Utilities
   email_validator: "^3.0.0"
@@ -63,7 +59,6 @@ dependencies:
   intl: "^0.20.3"
   path: "^1.9.1"
   path_provider: "^2.1.6"
-  uuid: "^4.6.0"
 
   # Local Storage (Key-Value / Secure)
   encrypt: "^5.0.3"

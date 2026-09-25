@@ -3,34 +3,28 @@ import 'package:core_di/core_di.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../core_base_ui.dart';
+import 'app_languages.dart';
 
+/// The app's current locale, persisted through [ILanguageStorage].
+///
+/// Always one of [AppLanguages.supported]: a stored or device locale is
+/// resolved through [AppLanguages.resolve] before it reaches `MaterialApp`,
+/// which would otherwise receive a locale it has no translations for.
 @lazySingleton
 class LanguageProvider extends ChangeNotifier with DisposeGuard {
   final ILanguageStorage _storage;
 
   LanguageProvider(this._storage);
 
-  Locale _locale = AppConfig.defaultLanguage;
+  Locale _locale = AppLanguages.fallback;
 
   Locale get locale => _locale;
 
-  /// Sets the default language for the application.
+  /// Loads the stored locale — on first launch the device's — resolved to a
+  /// supported one.
   @PostConstruct(preResolve: true)
   Future<void> setDefaultLanguage() async {
-    final storageLanguageCode = _storage.getLanguage();
-    if (AppLocalizations.supportedLocales.contains(storageLanguageCode)) {
-      _locale = storageLanguageCode;
-      return;
-    }
-    if (AppLocalizations.supportedLocales.contains(AppConfig.defaultLanguage)) {
-      _locale = AppConfig.defaultLanguage;
-      return;
-    }
-    // Device locale isn't one of the app's shipped languages — fall back to
-    // the first supported locale instead of passing an unsupported Locale
-    // straight to MaterialApp (which bypasses localeResolutionCallback).
-    _locale = AppLocalizations.supportedLocales.first;
+    _locale = AppLanguages.resolve(_storage.getLanguage());
   }
 
   /// Switches the app locale and persists the choice.
@@ -38,9 +32,10 @@ class LanguageProvider extends ChangeNotifier with DisposeGuard {
   /// Re-selecting the current locale is a no-op: notifying here would rebuild
   /// the whole app for nothing. Mirrors the guard in `ThemeProvider.themeMode`.
   void setLocale(Locale locale) {
-    if (_locale == locale) return;
-    _locale = locale;
-    _storage.saveLanguage(locale);
+    final resolved = AppLanguages.resolve(locale);
+    if (_locale == resolved) return;
+    _locale = resolved;
+    _storage.saveLanguage(resolved);
     notifyListeners();
   }
 }

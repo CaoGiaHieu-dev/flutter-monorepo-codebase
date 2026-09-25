@@ -9,10 +9,12 @@ class ResponsiveConstants {
   /// vertical scaling sane instead of letting it track a 300 dp window.
   static const double SPLIT_SCREEN_MIN_HEIGHT = 700;
 
-  /// Design size used when a caller does not supply one: the common 360x690
-  /// mobile artboard.
-  static const double DEFAULT_DESIGN_WIDTH = 360;
-  static const double DEFAULT_DESIGN_HEIGHT = 690;
+  /// Design size used when a caller does not supply one: the 375x812 phone
+  /// artboard (iPhone X) the shipped app is drawn at. The app shell relies on
+  /// this default rather than passing its own, so there is one artboard in
+  /// the repository — change it here to redesign for another one.
+  static const double DEFAULT_DESIGN_WIDTH = 375;
+  static const double DEFAULT_DESIGN_HEIGHT = 812;
 
   /// The scale factor at which a design value is drawn at exactly its design
   /// size — the window matches the artboard on that axis.

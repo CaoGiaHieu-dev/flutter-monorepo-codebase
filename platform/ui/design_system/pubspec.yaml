@@ -36,9 +36,10 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  # Runtime assets only. The launcher icon and splash images are build
+  # inputs, not app assets: they live in the repository's `assets/branding/`,
+  # read by the root `icons_launcher-*.yaml` / `flutter_native_splash-*.yaml`.
   assets:
-    - assets/
-    - assets/images/
     - assets/icons/
     # Shipped with the font, as its licence requires; registered with
     # LicenseRegistry by `registerBaseUiLicenses()`.

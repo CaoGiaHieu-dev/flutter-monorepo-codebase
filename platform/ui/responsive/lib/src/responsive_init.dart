@@ -12,7 +12,7 @@ import 'utils/responsive_constants.dart';
 ///
 /// ```dart
 /// ResponsiveInit(
-///   designSize: const Size(360, 690),
+///   // designSize defaults to the 375x812 phone artboard.
 ///   minTextAdapt: true,
 ///   splitScreenMode: true,
 ///   // Both default to ScaleBounds.downOnly(): shrink on a window smaller than

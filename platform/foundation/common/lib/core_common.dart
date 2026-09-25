@@ -3,7 +3,6 @@ export 'di/module.dart';
 export 'di/module.module.dart';
 export 'src/config/app_config.dart';
 export 'src/config/app_initializer.dart';
-export 'src/dialog/app_dialog_controller.dart';
 export 'src/go_route_data_custom.dart';
 export 'src/helpers/app_info_helper.dart';
 export 'src/helpers/app_utils.dart';

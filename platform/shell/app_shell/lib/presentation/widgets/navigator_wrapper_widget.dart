@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
-import 'package:core_ui_kit/dialogs/app_overlay.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:platform_shell_adapters/platform_shell_adapters.dart';

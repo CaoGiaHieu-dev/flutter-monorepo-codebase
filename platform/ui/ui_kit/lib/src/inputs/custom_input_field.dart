@@ -3,6 +3,8 @@ import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../utils/shared_ui_constants.dart';
+
 class CustomInputField extends StatefulWidget {
   const CustomInputField({
     super.key,
@@ -85,7 +87,7 @@ class _CustomInputFieldState extends State<CustomInputField> {
     final border =
         widget.border ??
         OutlineInputBorder(
-          borderRadius: context.borderRadius(all: 8),
+          borderRadius: AppRadius.mdRadius(context),
           borderSide: BorderSide(color: context.colors.surfaceVariant),
         );
     return TextFormField(
@@ -105,11 +107,14 @@ class _CustomInputFieldState extends State<CustomInputField> {
               final isRtl = Directionality.of(context) == TextDirection.rtl;
               return Container(
                 padding: EdgeInsets.only(
-                  bottom: widget.paddingBottom ?? context.h(10),
+                  bottom:
+                      widget.paddingBottom ??
+                      context.h(SharedUiConstants.INPUT_COUNTER_OFFSET_X),
                 ),
                 transform: Matrix4.translationValues(
-                  isRtl ? context.w(10) : -context.w(10),
-                  -context.h(30),
+                  (isRtl ? 1 : -1) *
+                      context.w(SharedUiConstants.INPUT_COUNTER_OFFSET_X),
+                  -context.h(SharedUiConstants.INPUT_COUNTER_OFFSET_Y),
                   0,
                 ),
                 child: Text(
@@ -167,13 +172,22 @@ class _CustomInputFieldState extends State<CustomInputField> {
         fillColor: context.colors.surface,
         filled: true,
         prefix: widget.prefixIcon == null
-            ? Padding(padding: context.edgeInsetsDirectional(start: 12))
+            ? Padding(
+                padding: EdgeInsetsDirectional.only(
+                  start: AppSpacing.md(context),
+                ),
+              )
             : null,
         suffix: widget.suffixIcon == null
-            ? Padding(padding: context.edgeInsetsDirectional(end: 12))
+            ? Padding(
+                padding: EdgeInsetsDirectional.only(
+                  end: AppSpacing.md(context),
+                ),
+              )
             : null,
         contentPadding:
-            widget.contentPadding ?? context.edgeInsets(vertical: 11),
+            widget.contentPadding ??
+            EdgeInsets.symmetric(vertical: AppSpacing.mdH(context)),
       ),
     );
   }

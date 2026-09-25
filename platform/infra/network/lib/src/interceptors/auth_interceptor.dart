@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:dio/dio.dart';
 
@@ -13,7 +12,7 @@ class AuthInterceptor extends Interceptor {
   /// Callback to get the current language/locale code.
   final String? Function() getLocale;
 
-  /// Default fallback language code.
+  /// Sent when [getLocale] supplies no language code.
   final String defaultLanguageCode;
 
   AuthInterceptor({
@@ -24,17 +23,13 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    // Get the language code from the callback.
-    String? languageCode = getLocale();
-
-    if (languageCode == null || languageCode.isEmpty) {
-      // Get the language code of the device.
-      languageCode = PlatformDispatcher.instance.locale.languageCode;
-      // Default to Vietnamese if the locale is not Vietnamese or English.
-      if (!NetworkConstants.SUPPORTED_LANGUAGE_CODES.contains(languageCode)) {
-        languageCode = defaultLanguageCode;
-      }
-    }
+    // The app's `NetworkConfig` supplies an already-resolved, supported
+    // code (the shell's resolves through `core_base_ui`'s `AppLanguages`).
+    // The default covers a client built without one.
+    final locale = getLocale();
+    final languageCode = locale == null || locale.isEmpty
+        ? defaultLanguageCode
+        : locale;
 
     // Add the language code to the headers.
     options.headers.addAll({

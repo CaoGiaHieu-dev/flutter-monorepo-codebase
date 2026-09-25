@@ -1,3 +1,4 @@
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_network/core_network.dart';
@@ -50,9 +51,13 @@ class NetworkConfigImpl implements NetworkConfig {
   String? Function() get getToken =>
       () => _session?.readToken();
 
+  /// The app's language, resolved like `LanguageProvider` resolves it — a
+  /// stored choice, else the device's language when supported, else
+  /// `AppLanguages.fallback` — so the server always gets a language the app
+  /// ships.
   @override
   String? Function() get getLocale =>
-      () => _languageStorage.getLanguage().languageCode;
+      () => AppLanguages.resolve(_languageStorage.getLanguage()).languageCode;
 
   /// Returning null here is load-bearing: `ApiClient` adds
   /// `RefreshTokenInterceptor` **only** when this is non-null. With no auth
@@ -87,13 +92,13 @@ class NetworkConfigImpl implements NetworkConfig {
     required VoidCallback onRetry,
     required VoidCallback onCancel,
   }) {
-    AppDialogController.show<void>(
-      builder: (context) {
-        // RetryDialog closes itself before calling back. A second close
-        // through AppOverlay would target a different overlay system and
-        // could dismiss an unrelated dialog.
-        return RetryDialog(onRetry: onRetry, onCancel: onCancel);
-      },
+    // No `identity`: `RetryHandler` already keeps one prompt per batch of
+    // failed requests, and an identity would drop a prompt raised while the
+    // previous one is still animating out — leaving its requests pending.
+    // RetryDialog closes itself before calling back.
+    AppOverlay.showDialog<void>(
+      builder: (context) =>
+          RetryDialog(onRetry: onRetry, onCancel: onCancel),
     );
   }
 

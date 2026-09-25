@@ -1,7 +1,7 @@
 flutter_native_splash:
   color: "#FFFFFF"
-  image: ../../platform/ui/design_system/assets/images/ic_launcher_foreground.png
+  image: ../../assets/branding/ic_launcher_foreground.png
   android_12:
     color: "#FFFFFF"
-    image: ../../platform/ui/design_system/assets/images/ic_launcher_foreground.png
+    image: ../../assets/branding/ic_launcher_foreground.png
     android_gravity: center

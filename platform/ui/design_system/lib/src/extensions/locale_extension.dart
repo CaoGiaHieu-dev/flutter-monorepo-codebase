@@ -1,28 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../core_base_ui.dart';
+import '../language/app_languages.dart';
+import 'context_extension.dart';
 
-/// Extension methods for Locale objects
-///
-/// This extension is currently commented out but provides functionality
-/// for getting localized language names.
-///
-/// Example usage:
-/// ```dart
-/// Locale locale = Locale('vi');
-/// String displayName = locale.languageName(context); // "Tiếng Việt"
-/// ```
-
+/// Display helpers for a [Locale].
 extension LocaleExtension on Locale {
-  /// Returns the localized display name for this locale
-  ///
-  /// [context] The build context for accessing localization
-  /// Returns the localized language name or language tag as fallback
-  String languageName(BuildContext context) {
-    return switch (languageCode) {
-      'vi' => context.l10n.languageVi,
-      'en' => context.l10n.languageEn,
-      _ => toLanguageTag(),
-    };
-  }
+  /// This locale's name in the current language (`Tiếng Việt`, `English`);
+  /// see [AppLanguages.nameOf].
+  String languageName(BuildContext context) =>
+      AppLanguages.nameOf(this, context.l10n);
 }

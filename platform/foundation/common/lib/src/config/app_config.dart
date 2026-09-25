@@ -28,10 +28,6 @@ class AppConfig {
   /// Private constructor to prevent instantiation
   AppConfig._();
 
-  /// Design size used for responsive UI calculations
-  /// Based on iPhone X dimensions (375x812)
-  static Size get design => const Size(375, 812);
-
   /// Default language for the application
   static Locale defaultLanguage = PlatformDispatcher.instance.locale;
 

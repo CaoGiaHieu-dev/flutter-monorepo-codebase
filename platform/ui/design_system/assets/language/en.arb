@@ -11,9 +11,5 @@
   "somethingWentWrong": "Something went wrong",
   "pageNotFound": "Page not found",
   "goBack": "Go back",
-  "goToHome": "Go to home",
-  "ok": "OK",
-  "edit": "Edit",
-  "duplicate": "Duplicate",
-  "close": "Close"
+  "goToHome": "Go to home"
 }

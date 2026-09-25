@@ -1,7 +1,12 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:core_common/core_common.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 
+import 'app_overlay.dart';
+
+/// Asks whether to retry after a request failed on the network; shown by the
+/// shell's `NetworkConfig.onRetryCallback` through [AppOverlay.showDialog].
+///
+/// Closes itself before calling [onCancel] / [onRetry].
 class RetryDialog extends OverlayDialogWidget {
   const RetryDialog({super.key, this.onCancel, this.onRetry});
   final VoidCallback? onCancel;

@@ -1,6 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
-import 'package:core_ui_kit/buttons/custom_button.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/l10n_auth_extension.dart';

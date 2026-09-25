@@ -1,7 +1,10 @@
 import 'package:core_base_ui/core_base_ui.dart';
-import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../utils/shared_ui_constants.dart';
+
+/// The toast `AppOverlay.showToast` inserts: [content] on a pill centred on
+/// the screen.
 class ToastOverlayWidget extends StatelessWidget {
   const ToastOverlayWidget({super.key, required this.content});
 
@@ -13,13 +16,19 @@ class ToastOverlayWidget extends StatelessWidget {
       child: Center(
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: context.width - (context.w(16) * 2),
+            maxWidth:
+                MediaQuery.sizeOf(context).width - AppSpacing.lg(context) * 2,
           ),
           decoration: BoxDecoration(
-            borderRadius: context.borderRadius(all: 4),
-            color: context.colors.textPrimary.withValues(alpha: 0.4),
+            borderRadius: AppRadius.smRadius(context),
+            color: context.colors.textPrimary.withValues(
+              alpha: SharedUiConstants.TOAST_BACKGROUND_ALPHA,
+            ),
           ),
-          padding: context.edgeInsets(horizontal: 28, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.xl(context),
+            vertical: AppSpacing.mdH(context),
+          ),
           child: Text(
             content,
             // `surface`, not `Colors.white`. The pill's background is

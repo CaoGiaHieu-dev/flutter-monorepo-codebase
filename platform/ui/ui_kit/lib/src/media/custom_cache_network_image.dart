@@ -1,6 +1,8 @@
 import 'package:cached_network_image_ce/cached_network_image.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../utils/shared_ui_constants.dart';
+
 /// A cached network image with a spinner while loading and an error icon on
 /// failure.
 ///
@@ -114,7 +116,7 @@ class CustomCacheNetworkImage extends StatelessWidget {
         imageUrl: url,
         placeholder: (context, url) => Center(
           child: CircularProgressIndicator.adaptive(
-            strokeWidth: 2.0,
+            strokeWidth: SharedUiConstants.IMAGE_PROGRESS_STROKE_WIDTH,
             valueColor: AlwaysStoppedAnimation<Color>(
               Theme.of(context).primaryColor,
             ),

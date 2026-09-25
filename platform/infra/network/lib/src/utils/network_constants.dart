@@ -29,16 +29,16 @@ class NetworkConstants {
   static const String BEARER_PREFIX = 'Bearer';
 
   // ---------------------------------------------------------------------------
-  // Locale fallbacks
+  // Locale fallback
   // ---------------------------------------------------------------------------
 
-  /// Language code used when the caller supplies none and the device locale
-  /// is outside [SUPPORTED_LANGUAGE_CODES].
-  static const String DEFAULT_LANGUAGE_CODE = 'vi';
-
-  /// Device locales accepted as-is before falling back to
-  /// [DEFAULT_LANGUAGE_CODE].
-  static const List<String> SUPPORTED_LANGUAGE_CODES = ['vi', 'en'];
+  /// Language code sent when the `NetworkConfig` supplies none.
+  ///
+  /// The same language as `core_base_ui`'s `AppLanguages.fallback` — this
+  /// package cannot import it (infra never depends on ui), so keep the two
+  /// equal. The shell's `NetworkConfig` always supplies a resolved code, so
+  /// in an app this applies only to a client built without one.
+  static const String DEFAULT_LANGUAGE_CODE = 'en';
 
   // ---------------------------------------------------------------------------
   // RequestOptions.extra flags

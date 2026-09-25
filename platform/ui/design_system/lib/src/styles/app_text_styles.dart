@@ -1,37 +1,43 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../core_base_ui.dart';
-
+/// The type scale, read from the active theme.
+///
+/// `ThemeProvider` sizes every style through `context.sp` and colours it from
+/// the palette, so these are ready to use; adjust one with `copyWith`.
 class AppTextStyles {
   AppTextStyles._();
+
+  static TextTheme _textTheme(BuildContext context) =>
+      Theme.of(context).textTheme;
+
   static TextStyle titleLargeStyle(BuildContext context) =>
-      context.titleLargeStyle;
+      _textTheme(context).titleLarge!;
   static TextStyle titleMediumStyle(BuildContext context) =>
-      context.titleMediumStyle;
+      _textTheme(context).titleMedium!;
   static TextStyle titleSmallStyle(BuildContext context) =>
-      context.titleSmallStyle;
+      _textTheme(context).titleSmall!;
   static TextStyle bodyLargeStyle(BuildContext context) =>
-      context.bodyLargeStyle;
+      _textTheme(context).bodyLarge!;
   static TextStyle bodyMediumStyle(BuildContext context) =>
-      context.bodyMediumStyle;
+      _textTheme(context).bodyMedium!;
   static TextStyle bodySmallStyle(BuildContext context) =>
-      context.bodySmallStyle;
+      _textTheme(context).bodySmall!;
   static TextStyle labelLargeStyle(BuildContext context) =>
-      context.labelLargeStyle;
+      _textTheme(context).labelLarge!;
   static TextStyle labelMediumStyle(BuildContext context) =>
-      context.labelMediumStyle;
+      _textTheme(context).labelMedium!;
   static TextStyle labelSmallStyle(BuildContext context) =>
-      context.labelSmallStyle;
+      _textTheme(context).labelSmall!;
   static TextStyle displayLargeStyle(BuildContext context) =>
-      context.displayLargeStyle;
+      _textTheme(context).displayLarge!;
   static TextStyle displayMediumStyle(BuildContext context) =>
-      context.displayMediumStyle;
+      _textTheme(context).displayMedium!;
   static TextStyle displaySmallStyle(BuildContext context) =>
-      context.displaySmallStyle;
+      _textTheme(context).displaySmall!;
   static TextStyle headlineLargeStyle(BuildContext context) =>
-      context.headlineLargeStyle;
+      _textTheme(context).headlineLarge!;
   static TextStyle headlineMediumStyle(BuildContext context) =>
-      context.headlineMediumStyle;
+      _textTheme(context).headlineMedium!;
   static TextStyle headlineSmallStyle(BuildContext context) =>
-      context.headlineSmallStyle;
+      _textTheme(context).headlineSmall!;
 }

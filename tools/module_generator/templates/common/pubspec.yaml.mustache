@@ -22,9 +22,10 @@ dependencies:
   # around does not break the generator.
 {{{internalDependencies}}}
 
-  # external packages
+  # external packages — only what the generated files import, so the new
+  # package passes check_unused_packages. Add json_annotation (with
+  # json_serializable) when the first model needs fromJson.
   injectable:
-  get_it:
 {{#isFeature}}
   # gen-l10n output (lib/src/gen/language) imports both.
   flutter_localizations:
@@ -35,7 +36,6 @@ dependencies:
 {{/isFeature}}
 {{#usesFreezed}}
   freezed_annotation:
-  json_annotation:
 {{/usesFreezed}}
 
 dev_dependencies:
@@ -49,7 +49,6 @@ dev_dependencies:
   flutter_lints:
 {{#usesFreezed}}
   freezed:
-  json_serializable:
 {{/usesFreezed}}
 {{#isFeature}}
   go_router_builder:

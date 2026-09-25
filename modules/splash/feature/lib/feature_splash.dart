@@ -16,13 +16,13 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/localization.dart';
 export 'di/module.dart';
 export 'di/module.module.dart';
-export 'di/splash_screen_impl.dart';
+export 'src/app/splash_screen_impl.dart';
 export 'src/extensions/l10n_splash_extension.dart';
 export 'src/gen/language/app_localizations.dart';
 export 'src/gen/language/app_localizations_en.dart';
 export 'src/gen/language/app_localizations_vi.dart';
+export 'src/localization/splash_localization_impl.dart';
 export 'src/pages/splash_page.dart';
 export 'src/utils/splash_ui_constants.dart';

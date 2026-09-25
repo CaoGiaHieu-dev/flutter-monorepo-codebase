@@ -17,7 +17,6 @@
 library;
 
 // Auto-generated exports, do not edit manually.
-export 'di/localization.dart';
 export 'di/module.dart';
 export 'di/module.module.dart';
 export 'src/bloc/home_profile_bloc.dart';
@@ -25,6 +24,7 @@ export 'src/extensions/l10n_home_extension.dart';
 export 'src/gen/language/app_localizations.dart';
 export 'src/gen/language/app_localizations_en.dart';
 export 'src/gen/language/app_localizations_vi.dart';
+export 'src/localization/home_localization_impl.dart';
 export 'src/pages/home_page.dart';
 export 'src/routing/home_nav_destination.dart';
 export 'src/routing/home_navigator_impl.dart';

@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:mustache_template/mustache.dart';
+import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import '../../shared/app_locator.dart';
 import '../../shared/toolchain.dart' as toolchain;
 import 'module_type.dart';
 
@@ -99,10 +101,10 @@ class CommonHelpers {
   static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
     'pubspec.lock',
-    for (final manifest in _findManifests(Directory('.'))) ...[
-      manifest.path,
-      '${manifest.parent.path}/pubspec.yaml',
-      '${manifest.parent.path}/lib/di/injection.dart',
+    for (final app in discoverApps()) ...[
+      '${app.dir}/app_manifest.yaml',
+      '${app.dir}/pubspec.yaml',
+      '${app.dir}/lib/di/injection.dart',
     ],
   ];
 
@@ -304,11 +306,11 @@ class CommonHelpers {
     List<String>? apps,
     String root = '.',
   }) {
-    final manifests = _findManifests(Directory(root)).where((manifest) {
-      if (apps == null) return true;
-      final app = _parseManifest(manifest.readAsStringSync())['app'];
-      return app is Map && apps.contains(app['id']);
-    }).toList();
+    final manifests = [
+      for (final app in discoverApps(root))
+        if (apps == null || apps.contains(app.id))
+          File(p.join(root, app.dir, 'app_manifest.yaml')),
+    ];
     if (manifests.isEmpty) {
       stdout.writeln(
         '  !! No app_manifest.yaml found — skipping app composition.',
@@ -477,25 +479,6 @@ class CommonHelpers {
     }
   }
 
-  static List<File> _findManifests(Directory dir) {
-    final out = <File>[];
-    const skip = {'.git', '.dart_tool', 'build', 'packages', 'modules'};
-    void walk(Directory d) {
-      for (final e in d.listSync(followLinks: false)) {
-        final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
-        if (e is Directory) {
-          if (skip.contains(name) || name.startsWith('.')) continue;
-          walk(e);
-        } else if (e is File && name == 'app_manifest.yaml') {
-          out.add(e);
-        }
-      }
-    }
-
-    walk(dir);
-    return out;
-  }
-
   static void createL10nScaffold(
     String modulePath,
     String moduleName,
@@ -540,15 +523,18 @@ class CommonHelpers {
       '$modulePath/assets/language/vi.arb',
     ).writeAsStringSync(viArbTemplate.renderString(values));
 
-    // di/localization.dart
-    final diLocTemplate = Template(
+    // lib/src/localization/<nameInput>_localization_impl.dart — the
+    // IFeatureLocalization registration. Not in lib/di/, which holds the
+    // DI module and its generated file only.
+    final locTemplate = Template(
       File(
         'tools/module_generator/templates/feature/localization/localization.dart.mustache',
       ).readAsStringSync(),
     );
+    Directory('$modulePath/lib/src/localization').createSync(recursive: true);
     File(
-      '$modulePath/lib/di/localization.dart',
-    ).writeAsStringSync(diLocTemplate.renderString(values));
+      '$modulePath/lib/src/localization/${nameInput}_localization_impl.dart',
+    ).writeAsStringSync(locTemplate.renderString(values));
 
     // lib/src/extensions/l10n_<nameInput>_extension.dart
     final extTemplate = Template(

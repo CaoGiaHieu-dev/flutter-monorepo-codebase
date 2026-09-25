@@ -118,6 +118,9 @@ unknown layer, a duplicate id, an unknown key, …) is refused before any comman
 `apps/<id>/app_manifest.yaml: <key>: <problem>`, exit 1, nothing written. When a module declared in
 a manifest is not on disk, the PARTIAL COMPOSITION warning lists only the files that run actually
 rewrote.
+The opposite case — a package directory under `modules/` or `platform/` that no app composes (left
+behind after a module was dropped from every manifest) — fails `verify` and is a warning under
+`sync`, naming the directory and the fix: delete it, or re-add it to a manifest.
 
 ```bash
 # Partial checkout (a module submodule not initialised): composer needs a resolved workspace, and pub
@@ -784,7 +787,7 @@ Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` �
 | File | Covers |
 |:---|:---|
 | `arch_check_test.dart` | A clean and a violating fixture for every rule R1–R15 (R6 warns and still exits `0`), the group DAG edge by edge (ui → state, infra → infra, anything from `domain_core`, foundation → shell, a package outside a group folder) and the module API rules (own domain, another API, a non-foundation platform package, a throwing lookup, R1/R10 imports); an empty workspace fails; an unknown flag exits `64` |
-| `composer_test.dart` | `sync` then `verify` passes; an `api` layer is a workspace member only, an API package reached only through a feature joins the workspace, a missing one fails `verify`; a hand-edited region, a module missing from disk, `phase: befor`, an unknown layer and a duplicate module exit `1` naming the key path |
+| `composer_test.dart` | `sync` then `verify` passes; an `api` layer is a workspace member only, an API package reached only through a feature joins the workspace, a missing one fails `verify`; a hand-edited region, a module missing from disk, `phase: befor`, an unknown layer and a duplicate module exit `1` naming the key path; a package on disk that no app composes fails `verify` and only warns under `sync` |
 | `dependency_sync_test.dart` | `--check`: in step passes; a version mismatch, a malformed catalog and invalid YAML exit `1` |
 | `docs_check_test.dart` | A dead path or link exits `1`; a `<placeholder>` span, an allowlisted path and a removed sample bundle (INFO) exit `0`; the root comes from the script, not the cwd; en ↔ vi parity: a missing heading, code block or table row exits `1` with both counts, fences are ignored, an allowlisted difference passes, a stale entry warns, an entry without a reason is refused |
 | `module_generator_test.dart` | `--apps` with an unknown id, no value, an empty list or given twice exits `64` and writes nothing; type 6 (API) refuses `<SM>`, a prefix, `--group`, a taken `<name>_api` and resolves to `modules/<name>/api`; `registerInAppManifests` touches every manifest by default and only the listed ones with `apps:`, and adds `api` first to a module's `layers:` |

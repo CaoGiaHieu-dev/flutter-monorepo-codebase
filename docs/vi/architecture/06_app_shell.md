@@ -342,7 +342,7 @@ GoRouter(navigatorKey: NavigatorKeys.rootKey)
 └── ShellRoute(navigatorKey: appKey)          → NavigatorWrapperWidget
     ├── ..._featureRoutes                      ← IFeatureRouteModule
     └── StatefulShellRoute.indexedStack        ← INavDestinationModule (sắp theo order)
-        └── builder → DashboardRouteModule
+        └── builder → IDashboardRouteModule
 ```
 
 Mọi điểm gom đều lùi về phương án dự phòng khi không có đóng góp nào:
@@ -351,7 +351,7 @@ Mọi điểm gom đều lùi về phương án dự phòng khi không có đón
 |:--|:--|
 | `IFeatureRouteModule` | danh sách rỗng — không có route stack; app vẫn dựng được |
 | `INavDestinationModule` | một nhánh giữ chỗ tại `/_empty_dashboard` vẽ `SizedBox.shrink()`, giữ `StatefulShellRoute` hợp lệ |
-| `DashboardRouteModule` | chính `navigationShell` — các tab không có chrome. (Trước đây là `SizedBox.shrink()`: app có tab mà không có dashboard sẽ mở ra màn hình trắng) |
+| `IDashboardRouteModule` | chính `navigationShell` — các tab không có chrome. (Trước đây là `SizedBox.shrink()`: app có tab mà không có dashboard sẽ mở ra màn hình trắng) |
 | `IAppEntryLocation` | `AppRouter.fallbackLocation`: path của tab dashboard đầu tiên (`order` nhỏ nhất), nếu không có thì placeholder `/_empty_dashboard` (không phải `/`). Không có entry location nghĩa là không có onboarding để hiện, nên boot đi tiếp tới bước kiểm tra đăng nhập |
 | `ISignInLocation` | Không redirect tới màn đăng nhập, lúc boot hay khi đăng xuất — đúng khi không có module sở hữu phiên |
 | `IPostSignInLocation` | Sau khi đăng nhập, app đi tới `fallbackLocation` thay vì đứng yên ở màn hình login |
@@ -393,7 +393,7 @@ String get entryLocation {
 
 ```dart
 builder: (context, state, navigationShell) {
-  return getItOrNull<DashboardRouteModule>()?.builder(
+  return getItOrNull<IDashboardRouteModule>()?.builder(
         context,
         state,
         navigationShell,
@@ -502,7 +502,7 @@ Chính `getAllOrEmpty` là thứ khiến feature có thể gỡ bỏ được: x
 Hợp đồng, trong `core_di`:
 
 ```dart
-// platform/foundation/contracts/lib/src/feature_localization.dart
+// platform/foundation/contracts/lib/src/i_feature_localization.dart
 /// Interface for feature localization delegates.
 /// Enables safe registration and retrieval via getAllOrEmpty<IFeatureLocalization>() in the app shell.
 abstract class IFeatureLocalization {

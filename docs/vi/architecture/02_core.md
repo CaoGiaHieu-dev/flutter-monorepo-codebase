@@ -24,7 +24,7 @@ Ba luật áp dụng cho mọi thứ trong trang này — RULE-01, RULE-44 / RUL
 | Nhóm | Thư mục | Package (thư mục) | Thứ thuộc về đây | Được phụ thuộc vào |
 |:--|:--|:--|:--|:--|
 | **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | Nền mà mọi package khác dựng lên: service locator và xử lý lỗi, các hợp đồng DI giữa module, helper gắn với Flutter. Không I/O, không widget, không kiểu transport | foundation, `domain_core` |
-| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | Hợp đồng nền của tầng domain và data — `Result<T>`, `AppFailure`, `BaseEntity`, `IBaseRepository` — mà `modules/*/domain` và `modules/*/data` mở rộng | `domain_core`: không gì. `data_core`: foundation, `domain_core` |
+| **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | Hợp đồng nền của tầng domain và data — `Result<T>`, `AppFailure`, `BaseEntity`, `BaseRepository` — mà `modules/*/domain` và `modules/*/data` mở rộng | `domain_core`: không gì. `data_core`: foundation, `domain_core` |
 | **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Cơ chế với ra ngoài tiến trình — HTTP, lưu trữ key–value, SQLite, push. Chỉ cơ chế: không key, bảng hay endpoint của module sản phẩm nào. Nhóm mặc định của `generate.dart 4` / `5` | foundation, layers — không bao giờ một package infra khác |
 | **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scale và layout thích ứng, design token, theme và chuỗi dùng chung, thư viện widget dùng chung | foundation, ui — không bao giờ state, infra hay shell |
 | **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | Lớp nền quản lý state, và các widget gắn với nó (`LoadMoreListView`); mỗi feature chọn một | foundation, layers, ui |
@@ -90,7 +90,7 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 | Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
-Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — cả hai trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`) và `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — mã lỗi mà `ErrorHandler` và `IBaseRepository` gán khi không có HTTP status, ví dụ `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, đều nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
+Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — cả hai trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`) và `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — mã lỗi mà `ErrorHandler` và `BaseRepository` gán khi không có HTTP status, ví dụ `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, đều nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.
@@ -105,10 +105,10 @@ Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây l�
 
 | Nhóm hợp đồng | Đường dẫn | Mục đích |
 |:--|:--|:--|
-| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (nơi shell đưa người dùng đã đăng xuất / đã đăng nhập tới), `DashboardRouteModule`, `NavigatorKeys` |
+| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (nơi shell đưa người dùng đã đăng xuất / đã đăng nhập tới), `IDashboardRouteModule`, `NavigatorKeys` |
 | Session | `src/session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (phía shell), `ISessionStatusStream` (phía feature: chia sẻ state giữa feature Provider và feature BLoC), `ISessionRefreshListenable`, `ISessionGateway` (transport) — do module nào sở hữu đăng nhập hiện thực |
 | Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong package adapter của app shell (`platform_shell_adapters`) |
-| Localization | `src/feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
+| Localization | `src/i_feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
 | Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
 
 **`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.

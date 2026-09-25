@@ -171,7 +171,7 @@ Vậy `provider.viewState.state` là pha, còn `provider.viewState.data` là d�
 
 ### Map lỗi sang error state của riêng bạn
 
-`ErrorState` mở rộng được. Feature tự khai một union Freezed riêng rồi map vào qua `errorStateBuilder`. Union đó phải **extends `IErrorState`** — chính là biến thể `ErrorState.custom()`, thứ khiến nó là một `ErrorState`. Vì kế thừa một class, nó cần constructor private `const X._()`. Bản thật:
+`ErrorState` mở rộng được. Feature tự khai một union Freezed riêng rồi map vào qua `errorStateBuilder`. Union đó phải **extends `CustomErrorState`** — chính là biến thể `ErrorState.custom()`, thứ khiến nó là một `ErrorState`. Vì kế thừa một class, nó cần constructor private `const X._()`. Bản thật:
 
 ```dart
 // modules/auth/feature/lib/src/provider/auth_error_state.dart
@@ -181,7 +181,7 @@ import 'package:provider_state_management/provider_state_management.dart';
 part 'auth_error_state.freezed.dart';
 
 @freezed
-abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;

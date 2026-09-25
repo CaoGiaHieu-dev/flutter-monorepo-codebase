@@ -22,7 +22,7 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 > [!NOTE]
 > Với loại `2` và `3`, generator tạo thư mục, `pubspec.yaml`, `lib/di/module.dart` và **mỗi
 > package một stub**: `IPaymentRepository` trong `domain/lib/src/repositories/` và
-> `PaymentRepositoryImpl extends IBaseRepository` trong `data/lib/src/repositories_impl/`, cả hai
+> `PaymentRepositoryImpl extends BaseRepository` trong `data/lib/src/repositories_impl/`, cả hai
 > có một method giữ chỗ `ping()`. Hãy sinh domain **trước**: package data khi đó phụ thuộc
 > `domain_payment` và đăng ký `@LazySingleton(as: IPaymentRepository)`. Thay `ping()` bằng các
 > thao tác thật ở §5 (interface repository) và §9 (RepositoryImpl) bên dưới — mọi class khác bạn
@@ -300,13 +300,13 @@ class AuthLocalDataSource {
 
 ## 9. Hiện thực repository
 
-Kế thừa `IBaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
+Kế thừa `BaseRepository` từ `data_core` và bọc mọi lời gọi trong `execute()` (bất đồng bộ) hoặc
 `executeSync()` (đồng bộ). Code thật từ
 [`modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart`](../../../modules/cache/data/lib/src/repositories_impl/cache_entry_repository_impl.dart):
 
 ```dart
 @LazySingleton(as: ICacheEntryRepository)
-class CacheEntryRepositoryImpl extends IBaseRepository
+class CacheEntryRepositoryImpl extends BaseRepository
     implements ICacheEntryRepository {
   CacheEntryRepositoryImpl(this._local);
 
@@ -346,7 +346,7 @@ Remote data source trả về envelope `BaseEntity<UserModel>`, nên `R` là env
 
 Cả hai wrapper đều `catch` mọi thứ rồi dồn qua `ErrorHandler.handleError(e)` thành `Failure` — xem
 khối `catch (e)` ngoài cùng của `execute` và của `executeSync` trong
-[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base/i_base_repository.dart).
+[`i_base_repository.dart`](../../../platform/layers/data/lib/src/base_repository.dart).
 
 > [!CAUTION]
 > Dùng `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`. Và tuyệt
@@ -511,7 +511,7 @@ Checklist review:
 - [ ] UseCase là `@injectable`, trả `Result<T>`, nhận dependency qua constructor
 - [ ] Model có `.toEntity()` và `implements BaseModel<E>`
 - [ ] DataSource trả Model, không lộ kiểu được sinh, thư mục là `data_sources/`
-- [ ] RepositoryImpl kế thừa `IBaseRepository`, dùng `execute()` / `executeSync()`
+- [ ] RepositoryImpl kế thừa `BaseRepository`, dùng `execute()` / `executeSync()`
 - [ ] Lỗi đi qua `ErrorHandler.handleError` — không `AppFailure.fromException()`, không để `throw` lọt ra
 - [ ] Lớp sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`, key nằm trong `utils/`
 - [ ] Mọi dependency được khai tường minh và đúng mục

@@ -82,7 +82,7 @@ class AuthPath {
 |:---|:---|:---|:---|
 | `feature_onboarding` | First-run intro | none | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Login (one screen) | **Provider** | `IFeatureRouteModule`, `ISignInLocation`, `ISessionStatusStream`, `ISessionState`, `ISessionRefreshListenable`, `IAppTreeWrapper` (`core_di`); `AuthNavigator`, `IAuthActionHandler` (its own `auth_api`) |
-| `feature_dashboard` | Navigation shell chrome (bottom bar / rail) | none | `DashboardRouteModule` |
+| `feature_dashboard` | Navigation shell chrome (bottom bar / rail) | none | `IDashboardRouteModule` |
 | `feature_home` | Home tab | **BLoC** | `INavDestinationModule` (order 0), `IPostSignInLocation` (`core_di`); `HomeNavigator` (its own `home_api`) |
 | `feature_settings` | Settings tab | none (uses global providers) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Splash screen | none | `IAppSplashScreen` — **not a route**; shown by `MainScope` |

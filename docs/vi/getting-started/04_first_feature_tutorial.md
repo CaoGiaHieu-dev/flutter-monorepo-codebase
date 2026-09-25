@@ -196,7 +196,7 @@ import '../data_sources/local/notes_local_data_source.dart';
 import '../models/note_model.dart';
 
 @LazySingleton(as: INotesRepository)
-class NotesRepositoryImpl extends IBaseRepository implements INotesRepository {
+class NotesRepositoryImpl extends BaseRepository implements INotesRepository {
   NotesRepositoryImpl(this._local);
 
   final INotesLocalDataSource _local;

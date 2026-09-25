@@ -24,7 +24,7 @@ Tất cả contract nằm ở `platform/foundation/contracts/lib/src/routing/`.
 | `IAppEntryLocation` | Điểm bắt đầu ở lần chạy đầu tiên (`initialLocation` cho tới khi đã hiện một lần) | n/a | thường là onboarding |
 | `ISignInLocation` | Nơi shell đưa người dùng chưa đăng nhập tới (boot, đăng xuất, mất phiên) | n/a | module sở hữu phiên — `feature_auth` |
 | `IPostSignInLocation` | Nơi shell đưa người dùng đã đăng nhập tới (boot, đăng nhập); không có thì `fallbackLocation` | n/a | module trang đích — `feature_home` |
-| `DashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
+| `IDashboardRouteModule` | Chrome của dashboard (scaffold + host bottom bar / rail) | n/a | **chỉ** `feature_dashboard` |
 
 Chỉ dùng `INavDestinationModule` cho **đích đến bottom-nav thật sự** cần back stack riêng bền vững. Màn hình chỉ push lên stack thì thuộc về `IFeatureRouteModule` (RULE-24).
 

@@ -129,7 +129,7 @@ abstract class IProductRepository {
 ```
 
 ### Step 5: Implement the Repository in the `Data` Layer (RepositoryImpl)
-Extend `IBaseRepository` from `data_core` so exceptions become `AppFailure` automatically.
+Extend `BaseRepository` from `data_core` so exceptions become `AppFailure` automatically.
 `execute<R, T>`'s `R` is what the request returns — here the whole envelope — and `T` is the
 entity. `successCondition` turns a 200 with an error body into a `Failure` (without it any
 response that did not throw counts as success); `mapper` unwraps the envelope. Same shape as
@@ -144,7 +144,7 @@ import '../data_sources/remote/product_remote_data_source.dart';
 import '../models/product_model.dart';
 
 @LazySingleton(as: IProductRepository)
-class ProductRepositoryImpl extends IBaseRepository implements IProductRepository {
+class ProductRepositoryImpl extends BaseRepository implements IProductRepository {
   ProductRepositoryImpl(this._remoteDataSource);
 
   final ProductRemoteDataSource _remoteDataSource;

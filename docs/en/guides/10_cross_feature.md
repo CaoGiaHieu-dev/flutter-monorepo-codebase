@@ -175,7 +175,7 @@ The chain skips the domain layer entirely, because Domain cannot import Flutter'
 ThemeProvider  →  IThemeStorage (core_di)  →  ThemeStorageImpl (app shell)  →  StorageValue
 ```
 
-The interface — real code from [`platform/foundation/contracts/lib/src/theme/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/theme/i_theme_storage.dart):
+The interface — real code from [`platform/foundation/contracts/lib/src/i_theme_storage.dart`](../../../platform/foundation/contracts/lib/src/i_theme_storage.dart):
 
 ```dart
 import 'package:material_ui/material_ui.dart';
@@ -281,7 +281,7 @@ getItOrNull<IAuthActionHandler>()?.logout(context);
 // Good — falls back to the bare branch widget rather than crashing
 // (platform/shell/app_shell/lib/presentation/navigation/app_router.dart)
 builder: (context, state, navigationShell) {
-  return getItOrNull<DashboardRouteModule>()?.builder(
+  return getItOrNull<IDashboardRouteModule>()?.builder(
         context,
         state,
         navigationShell,

@@ -83,7 +83,7 @@ class AuthPath {
 |:---|:---|:---|:---|
 | `feature_onboarding` | Giới thiệu lần đầu chạy | không | `IFeatureRouteModule`, `IAppEntryLocation` |
 | `feature_auth` | Đăng nhập (một màn hình) | **Provider** | `IFeatureRouteModule`, `ISignInLocation`, `ISessionStatusStream`, `ISessionState`, `ISessionRefreshListenable`, `IAppTreeWrapper` (`core_di`); `AuthNavigator`, `IAuthActionHandler` (`auth_api` của chính nó) |
-| `feature_dashboard` | Khung chrome điều hướng (bottom bar / rail) | không | `DashboardRouteModule` |
+| `feature_dashboard` | Khung chrome điều hướng (bottom bar / rail) | không | `IDashboardRouteModule` |
 | `feature_home` | Tab Home | **BLoC** | `INavDestinationModule` (order 0), `IPostSignInLocation` (`core_di`); `HomeNavigator` (`home_api` của chính nó) |
 | `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Màn hình splash | không | `IAppSplashScreen` — **không phải route**; do `MainScope` hiển thị |

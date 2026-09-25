@@ -170,7 +170,7 @@ So `provider.viewState.state` is the phase and `provider.viewState.data` is the 
 
 ### Map a failure to your own error state
 
-`ErrorState` is extensible. A feature declares its own Freezed union and maps into it through `errorStateBuilder`. The union must **extend `IErrorState`** — the `ErrorState.custom()` variant, which is what makes it an `ErrorState` at all. Because it extends a class, it needs the private `const X._()` constructor. The real one:
+`ErrorState` is extensible. A feature declares its own Freezed union and maps into it through `errorStateBuilder`. The union must **extend `CustomErrorState`** — the `ErrorState.custom()` variant, which is what makes it an `ErrorState` at all. Because it extends a class, it needs the private `const X._()` constructor. The real one:
 
 ```dart
 // modules/auth/feature/lib/src/provider/auth_error_state.dart
@@ -180,7 +180,7 @@ import 'package:provider_state_management/provider_state_management.dart';
 part 'auth_error_state.freezed.dart';
 
 @freezed
-abstract class AuthErrorState extends IErrorState with _$AuthErrorState {
+abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;

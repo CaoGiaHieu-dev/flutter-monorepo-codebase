@@ -30,7 +30,7 @@ flutter-monorepo-codebase/
 │   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
 │   ├── layers/                    # Base contracts of the domain and data layers
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request models
+│   │   └── data/                  # data_core: BaseRepository, BaseModel, request models
 │   ├── infra/                     # I/O mechanisms: network, storage, database, push
 │   │   ├── network/               # core_network: Dio + Retrofit factory, interceptor chain, SSL pinning
 │   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (defines NO keys)
@@ -86,7 +86,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Imports no module |
 | `platform_shell_adapters` | `platform/shell/adapters` | The shell's infrastructure adapters: the theme/language/boot storage adapters and `NetworkConfigImpl` (+ its `SslPinningConfig` binding). Imports no module |
 | `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
-| `core_di` | `platform/foundation/contracts` | The **DI hub**, product-neutral contracts only: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `DashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, the session contracts (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. A module's navigator / action handler lives in its own `modules/<id>/api` package |
+| `core_di` | `platform/foundation/contracts` | The **DI hub**, product-neutral contracts only: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `IDashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, the session contracts (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. A module's navigator / action handler lives in its own `modules/<id>/api` package |
 | `core_base_ui` | `platform/ui/design_system` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
 | `core_ui_kit` | `platform/ui/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation (incl. `BottomTransitionPage`) + `SharedUiConstants` |
 | `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract, `DioFailureClassifier` (Dio → `AppFailure`) |
@@ -113,7 +113,7 @@ Implements the domain contracts. Data sources return **Models**, never entities,
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `data_core` | `platform/layers/data` | `IBaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_core` | `platform/layers/data` | `BaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + `CacheEntries` table + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
 | `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 

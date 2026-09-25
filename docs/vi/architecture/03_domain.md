@@ -88,7 +88,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ### `Result<T>` — kiểu trả về của mọi use case
 
-Định nghĩa tại `platform/layers/domain/lib/src/repositories/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
+Định nghĩa tại `platform/layers/domain/lib/src/result/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
 
 ```dart
 @freezed
@@ -151,7 +151,7 @@ typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 
 ### `BaseEntity<T>` — vỏ response chuẩn
 
-`platform/layers/domain/lib/src/entities/base/base_entity.dart`:
+`platform/layers/domain/lib/src/entities/base_entity.dart`:
 
 ```dart
 @Freezed(genericArgumentFactories: true)
@@ -170,7 +170,7 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 
-`platform/layers/domain/lib/src/entities/base/paginate_entity.dart` — danh sách nằm ở `data` (JSON key `items`), thông tin phân trang ở `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
+`platform/layers/domain/lib/src/entities/paginated_entity.dart` — danh sách nằm ở `data` (JSON key `items`), thông tin phân trang ở `meta` (`totalItems`, `itemCount`, `itemsPerPage`, `totalPages`, `currentPage`).
 
 ### `BaseUseCase<RType, Params>`
 

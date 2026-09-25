@@ -90,7 +90,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 |---|---|---|---|---|---|
 | RULE-40 | Data source nằm trong `data_sources/remote/` và `data_sources/local/` — không bao giờ `datasources/` | Một quy ước trong mọi module | arch_check R14 | `dart tools/arch_check/check.dart` | [§8](#8-tầng-data) |
 | RULE-41 | Data source trả về Model (vỏ bọc duy nhất: `BaseEntity<T>`), không bao giờ Entity hay type sinh ra (row Drift chuyển đổi ở biên); Model implement `BaseModel<E>` với `.toEntity()` | Type transport và lưu trữ ở lại trong package data | review | review | [§8](#8-tầng-data) |
-| RULE-42 | `RepositoryImpl` kế thừa `IBaseRepository` và bọc việc trong `execute()` / `executeSync()`; tầng data không bao giờ ném lỗi lên UI — nó trả `Result.failure(AppFailure)` | Lỗi đi qua biên dưới dạng giá trị | review | review | [§8](#8-tầng-data) |
+| RULE-42 | `RepositoryImpl` kế thừa `BaseRepository` và bọc việc trong `execute()` / `executeSync()`; tầng data không bao giờ ném lỗi lên UI — nó trả `Result.failure(AppFailure)` | Lỗi đi qua biên dưới dạng giá trị | review | review | [§8](#8-tầng-data) |
 | RULE-43 | Lỗi được phân loại bằng `ErrorHandler.handleError(e)` — không bao giờ tự chế `AppFailure.fromException()`; một họ exception mới (Firebase, platform) đăng ký một `ErrorClassifier` | Lỗi chưa phân loại rơi về mã 9999, "Unknown error occurred" | review | review | [§8](#8-tầng-data) |
 | RULE-44 | `core_storage` không định nghĩa khoá: mỗi bên tiêu thụ khai `StorageValue<T>` của riêng mình, khoá từ `utils/*_storage_keys.dart` của chính nó, không bao giờ đưa nó cho package khác (hãy công bố interface trên `core_di`), và chọn `secure` cho token/PII, `pref` cho cài đặt | Một object khoá dùng chung cho phép bất kỳ package nào đọc dữ liệu của package khác | review | review | [§4](#4-storage-do-package-sở-hữu) |
 | RULE-45 | Chủ sở hữu storage là singleton (`@singleton` / `@lazySingleton` / `@Singleton(as:)`) kèm `@PostConstruct(preResolve: true)` — không bao giờ `@injectable` | Factory phát ra cache rỗng, getter lặng lẽ trả `null` | review | review | [§4](#4-storage-do-package-sở-hữu) |
@@ -438,7 +438,7 @@ Bảng đăng ký: RULE-40 · RULE-41 · RULE-42 · RULE-43.
 **Luật.**
 
 - Thư mục là `data_sources/remote/` và `data_sources/local/` — **snake_case, số nhiều `data_sources`**, không bao giờ là `datasources/`.
-- `RepositoryImpl` kế thừa `IBaseRepository` và bọc công việc trong `execute()` (async) hoặc `executeSync()`.
+- `RepositoryImpl` kế thừa `BaseRepository` và bọc công việc trong `execute()` (async) hoặc `executeSync()`.
 - Lỗi chuyển đổi qua `ErrorHandler.handleError(e)`. **Không bao giờ** dùng `AppFailure.fromException()`.
 - **DataSource trả Model, không bao giờ trả Entity** — và không bao giờ trả class do Drift sinh. Lớp bọc duy nhất được phép là envelope phản hồi `BaseEntity<T>` của `domain_core`: `AuthRemoteDataSource` trả `Future<BaseEntity<UserModel>>`, và repository bóc nó ra trong `mapper` của `execute`.
 - Không bao giờ `throw` từ Data lên UI; trả về `Result.failure(AppFailure)`.
@@ -499,7 +499,7 @@ Bảng đăng ký: RULE-20 · RULE-22 · RULE-23 · RULE-24.
 | `IFeatureRouteModule` | route dạng stack dưới `ShellRoute` của app | không (khớp theo path) |
 | `INavDestinationModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` tăng dần |
 | `IAppEntryLocation` | `initialLocation` ở lần chạy đầu tiên (các lần cold-start sau dùng fallback) | không áp dụng |
-| `DashboardRouteModule` | chỉ phần chrome của dashboard | chỉ `feature_dashboard` |
+| `IDashboardRouteModule` | chỉ phần chrome của dashboard | chỉ `feature_dashboard` |
 
 Điều hướng xuyên feature đi qua interface Navigator khai trong package API của module sở hữu (`modules/<id>/api`, ví dụ `AuthNavigator` trong `auth_api`), implement trong `routing/` của feature thuộc module đó, và resolve bằng `getItOrNull`. App shell không dùng navigator của module nào: nó đưa người dùng tới `ISignInLocation` / `IPostSignInLocation` (`core_di`), fallback về `AppRouter.fallbackLocation`. Cấm hardcode path hoặc gọi `GoRouter.of(context).go(...)` sang feature khác. **`BuildContext` phải được truyền trực tiếp từ nơi gọi ở UI** — đừng với lấy `NavigatorKeys.*.currentContext`.
 

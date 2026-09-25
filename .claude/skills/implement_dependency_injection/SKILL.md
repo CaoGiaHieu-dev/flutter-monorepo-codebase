@@ -116,7 +116,7 @@ Use `@preResolve` only where construction is genuinely async; the rest are plain
 
 ## ⚠️ Trap 3 — `getAll` throws when nothing is registered
 
-`platform_kernel` (`platform/foundation/kernel/lib/src/di/service_locator.dart`, re-exported by `core_common`)
+`platform_kernel` (`platform/foundation/kernel/lib/src/service_locator.dart`, re-exported by `core_common`)
 exposes four lookups; picking the wrong one breaks feature removal:
 
 | Function | Missing registration |

@@ -140,7 +140,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
 │   ├── layers/                    # Base contracts of the domain and data layers
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
-│   │   └── data/                  # data_core: IBaseRepository, BaseModel, request models
+│   │   └── data/                  # data_core: BaseRepository, BaseModel, request models
 │   ├── infra/                     # I/O mechanisms: network, storage, database, push
 │   │   ├── network/               # core_network: Dio + Retrofit factory, interceptor chain, SSL pinning
 │   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (defines NO keys)
@@ -412,7 +412,7 @@ Each Feature Package owns its own routing structure and files:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list
-- `getItOrNull<DashboardRouteModule>()` → dashboard chrome (optional)
+- `getItOrNull<IDashboardRouteModule>()` → dashboard chrome (optional)
 - `getItOrNull<IAppEntryLocation>()?.path` → `initialLocation` on the first launch only (later launches, or none registered: the first destination's path, else `/_empty_dashboard`)
 - `getItOrNull<ISessionRefreshListenable>()` → `refreshListenable`
 

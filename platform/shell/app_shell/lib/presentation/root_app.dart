@@ -1,7 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_ui_kit/core_ui_kit.dart';
-import 'package:core_ui_kit/dialogs/app_overlay.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_material_wrapper.dart';
@@ -57,15 +56,15 @@ class RootApp extends StatelessWidget {
       // Global app builder for consistent behavior
       builder: (context, child) {
         return Overlay.wrap(
+          // The one overlay system (dialogs, toast, loading); it also
+          // routes the system back to a visible dialog.
           child: AppOverlayInitializer(
-            child: AppDialogControllerInitializer(
-              child: GestureDetector(
-                // Global tap handler to unfocus keyboard when tapping outside input fields
-                onTap: AppUtils.unfocusKeyboard,
-                // No text-scale override here: `AppMaterialWrapper` caps the
-                // OS font size around this whole builder, overlays included.
-                child: child,
-              ),
+            child: GestureDetector(
+              // Global tap handler to unfocus keyboard when tapping outside input fields
+              onTap: AppUtils.unfocusKeyboard,
+              // No text-scale override here: `AppMaterialWrapper` caps the
+              // OS font size around this whole builder, overlays included.
+              child: child,
             ),
           ),
         );

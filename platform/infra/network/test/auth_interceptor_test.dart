@@ -74,9 +74,23 @@ void main() {
 
         interceptor.onRequest(options, handler);
 
-        // Should capitalized language header
-        expect(options.headers['language'], isNotNull);
+        expect(options.headers['language'], equals('EN'));
       },
     );
+
+    test('an empty locale also falls back to the default', () {
+      final interceptor = AuthInterceptor(
+        getToken: () => null,
+        getLocale: () => '',
+      );
+
+      final options = RequestOptions(path: '/user');
+      interceptor.onRequest(options, RequestInterceptorHandler());
+
+      expect(
+        options.headers['language'],
+        NetworkConstants.DEFAULT_LANGUAGE_CODE.toUpperCase(),
+      );
+    });
   });
 }

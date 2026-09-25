@@ -1,4 +1,4 @@
-import 'package:core_responsive/core_responsive.dart';
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A custom Page that creates a ModalBottomSheetRoute.
@@ -79,8 +79,8 @@ class BottomTransitionPage<T> extends Page<T> {
       settings: this,
       builder: (BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(context.r(16)),
-          topRight: Radius.circular(context.r(16)),
+          topLeft: Radius.circular(AppRadius.xl(context)),
+          topRight: Radius.circular(AppRadius.xl(context)),
         ),
         child: child,
       ),

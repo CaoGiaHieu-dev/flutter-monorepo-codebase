@@ -19,19 +19,18 @@ Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước v
 - **`ResponsiveContext`**: Extension trên `BuildContext` — `context.w`, `.h`, `.r`, `.sp`, `.spMin`, `.dg`, `.dm`, `.edgeInsets`, `.borderRadius`, `.verticalSpace`, `.horizontalSpace`, `.responsive`, `.windowSizeClass`, `.windowHeightClass`.
 - **`AdaptiveContext`**: Extension trên `BuildContext` — `context.adaptive(...)`, `.isCompactWindow`, `.isExpandedOrWider`, `.separatingDisplayFeature`, `.foldPosture`.
 - **`AdaptiveBuilder` / `AdaptiveLayout` / `AdaptiveSplitView` / `AdaptiveContent`**, **`FoldPosture`**: Widget layout thích ứng — xem §3.
-- **`ResponsiveConstants`** / **`AdaptiveConstants`**: Hằng số của package (`SPLIT_SCREEN_MIN_HEIGHT = 700`, design mặc định `360x690`, các `BREAKPOINT_*` theo chiều rộng và chiều cao; `SPLIT_PRIMARY_FRACTION = 0.4`, `SPLIT_DIVIDER_EXTENT = 1`, `CONTENT_MAX_WIDTH = 640`).
+- **`ResponsiveConstants`** / **`AdaptiveConstants`**: Hằng số của package (`SPLIT_SCREEN_MIN_HEIGHT = 700`, design mặc định `375x812`, các `BREAKPOINT_*` theo chiều rộng và chiều cao; `SPLIT_PRIMARY_FRACTION = 0.4`, `SPLIT_DIVIDER_EXTENT = 1`, `CONTENT_MAX_WIDTH = 640`).
 
 ---
 
 ## 🚀 1. Khởi tạo
 
-Đã được wire sẵn ở `platform/shell/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — `AppConfig.design` là artboard `375x812`, không phải mặc định `360x690` của package:
+Đã được wire sẵn ở `platform/shell/app_shell/lib/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — không truyền `designSize`, nên mặc định của package, artboard điện thoại `375x812`, là artboard duy nhất trong repository:
 
 ```dart
 // platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
-  // The phone artboard every window class starts from.
-  designSize: AppConfig.design,
+  // No `designSize`: the 375x812 default is the app's artboard.
   // …
   profiles: const {
     // …
@@ -50,7 +49,7 @@ return ResponsiveInit(
 
 | Tham số | Mặc định | Ý nghĩa |
 |:--|:--|:--|
-| `designSize` | `360x690` | Artboard mà bản thiết kế được vẽ ở đó — mọi lớp cửa sổ quy chiếu về nó, trừ khi profile chỉ định khung khác |
+| `designSize` | `375x812` | Artboard mà bản thiết kế được vẽ ở đó — mọi lớp cửa sổ quy chiếu về nó, trừ khi profile chỉ định khung khác |
 | `scaleBounds` | `ScaleBounds.downOnly()` | Khoảng của hệ số layout: `w`, `h`, và `r` / `dg` / `dm` dựng từ chúng |
 | `textScaleBounds` | `ScaleBounds.downOnly()` | Khoảng của hệ số chữ đứng sau `sp`, độc lập với `scaleBounds` |
 | `profiles` | `{}` | `Map<WindowSizeClass, ResponsiveProfile>` — ghi đè `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` cho từng lớp (`null` là kế thừa). Áp dụng profile của đúng lớp, không có thì của lớp nhỏ hơn gần nhất |

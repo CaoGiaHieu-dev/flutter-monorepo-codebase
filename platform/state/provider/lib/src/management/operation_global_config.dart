@@ -44,7 +44,7 @@ class OperationGlobalConfig {
   /// Example:
   /// ```dart
   /// OperationGlobalConfig.instance.setup(
-  ///   onFailure: (failure) => AppDialog.showErrorDialog(message: failure.message),
+  ///   onFailure: (failure) => AppOverlay.showToast(content: failure.message),
   /// );
   /// ```
   void setup({

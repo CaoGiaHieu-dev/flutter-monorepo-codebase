@@ -19,19 +19,18 @@ All scaling goes through `BuildContext`. That is not a style convention — it i
 - **`ResponsiveContext`**: An extension on `BuildContext` — `context.w`, `.h`, `.r`, `.sp`, `.spMin`, `.dg`, `.dm`, `.edgeInsets`, `.borderRadius`, `.verticalSpace`, `.horizontalSpace`, `.responsive`, `.windowSizeClass`, `.windowHeightClass`.
 - **`AdaptiveContext`**: An extension on `BuildContext` — `context.adaptive(...)`, `.isCompactWindow`, `.isExpandedOrWider`, `.separatingDisplayFeature`, `.foldPosture`.
 - **`AdaptiveBuilder` / `AdaptiveLayout` / `AdaptiveSplitView` / `AdaptiveContent`**, **`FoldPosture`**: Adaptive layout widgets — see §3.
-- **`ResponsiveConstants`** / **`AdaptiveConstants`**: The package's constants (`SPLIT_SCREEN_MIN_HEIGHT = 700`, the default `360x690` design, the width and height `BREAKPOINT_*`s; `SPLIT_PRIMARY_FRACTION = 0.4`, `SPLIT_DIVIDER_EXTENT = 1`, `CONTENT_MAX_WIDTH = 640`).
+- **`ResponsiveConstants`** / **`AdaptiveConstants`**: The package's constants (`SPLIT_SCREEN_MIN_HEIGHT = 700`, the default `375x812` design, the width and height `BREAKPOINT_*`s; `SPLIT_PRIMARY_FRACTION = 0.4`, `SPLIT_DIVIDER_EXTENT = 1`, `CONTENT_MAX_WIDTH = 640`).
 
 ---
 
 ## 🚀 1. Setup
 
-Already wired in `platform/shell/app_shell/lib/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — `AppConfig.design` is a `375x812` artboard, not the package's `360x690` default:
+Already wired in `platform/shell/app_shell/lib/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — it passes no `designSize`, so the package default, the `375x812` phone artboard, is the one artboard in the repository:
 
 ```dart
 // platform/shell/app_shell/lib/main_scope.dart — _ResponsiveWrapper.build
 return ResponsiveInit(
-  // The phone artboard every window class starts from.
-  designSize: AppConfig.design,
+  // No `designSize`: the 375x812 default is the app's artboard.
   // …
   profiles: const {
     // …
@@ -50,7 +49,7 @@ return ResponsiveInit(
 
 | Parameter | Default | Meaning |
 |:--|:--|:--|
-| `designSize` | `360x690` | The artboard the design was drawn at — every window class is measured against it unless a profile names another |
+| `designSize` | `375x812` | The artboard the design was drawn at — every window class is measured against it unless a profile names another |
 | `scaleBounds` | `ScaleBounds.downOnly()` | Range of the layout factors: `w`, `h`, and the `r` / `dg` / `dm` built from them |
 | `textScaleBounds` | `ScaleBounds.downOnly()` | Range of the text factor behind `sp`, independent of `scaleBounds` |
 | `profiles` | `{}` | `Map<WindowSizeClass, ResponsiveProfile>` — overrides `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` per class (`null` inherits). The profile of the exact class applies, else that of the nearest smaller class that has one |

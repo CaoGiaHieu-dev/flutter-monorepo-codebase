@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:core_common/core_common.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -113,8 +112,8 @@ class _ResponsiveWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ResponsiveInit(
-      // The phone artboard every window class starts from.
-      designSize: AppConfig.design,
+      // No `designSize`: the default — `ResponsiveConstants`' 375x812 phone
+      // artboard — is the one artboard every window class starts from.
       // Left at their defaults, `scaleBounds` and `textScaleBounds` are
       // `ScaleBounds.downOnly()`: a phone narrower than the artboard scales
       // the design down to fit, and nothing ever scales up — a tablet or a

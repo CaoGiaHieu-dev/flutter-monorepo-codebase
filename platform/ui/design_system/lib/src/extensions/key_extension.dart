@@ -4,76 +4,35 @@ import 'package:material_ui/material_ui.dart';
 import '../utils/base_ui_constants.dart';
 import 'context_extension.dart';
 
-/// Extension methods for [GlobalKey] to provide additional functionality.
-///
-/// This extension adds utility methods for working with GlobalKey objects,
-/// including getting global paint bounds and showing dropdown menus.
+/// Anchors a popup menu to the widget a [GlobalKey] is attached to.
 extension GlobalKeyExtension on GlobalKey {
-  /// Returns the global paint bounds of the widget associated with this [GlobalKey].
+  /// Shows [options] in a menu anchored below this key's widget and returns
+  /// the one picked.
   ///
-  /// This method uses the `findRenderObject()` method to get the `RenderObject`
-  /// associated with the key. It then uses the `getTransformTo()` method to get
-  /// the translation of the `RenderObject` in the global coordinate space.
-  /// Finally, it shifts the `paintBounds` of the `RenderObject` by the
-  /// translation to get the global paint bounds.
+  /// - [onTap] is called with the pick as well — `null` for the empty row of
+  ///   [allowEmptySelection] — and not at all when the menu is dismissed.
+  /// - [builder] renders a row; by default the item's `toString()`, aligned
+  ///   by [alignment] (start-aligned, so it follows right-to-left locales).
+  /// - [fixedWidth] caps the menu at the anchor's width.
   ///
-  /// Returns `null` if the `RenderObject` is not found or its `paintBounds` is null.
+  /// Returns the picked item, or `null` when the menu was dismissed, the
+  /// empty row was picked, [options] is empty or the key is not attached to
+  /// a laid-out widget.
   ///
-  /// Example:
   /// ```dart
-  /// final GlobalKey key = GlobalKey();
-  /// final Rect? bounds = key.globalPaintBounds;
-  /// if (bounds != null) {
-  ///   print('Widget bounds: ${bounds.toString()}');
-  /// }
-  /// ```
-  Rect? get globalPaintBounds {
-    final renderObject = currentContext?.findRenderObject();
-    final translation = renderObject?.getTransformTo(null).getTranslation();
-    if (translation != null && renderObject?.paintBounds != null) {
-      final offset = Offset(translation.x, translation.y);
-      return renderObject!.paintBounds.shift(offset);
-    } else {
-      return null;
-    }
-  }
-
-  /// Shows a dropdown menu at the position of the widget associated with this [GlobalKey].
-  ///
-  /// This method displays a dropdown menu with the provided [options] list.
-  /// The menu is positioned relative to the widget associated with this key.
-  ///
-  /// Parameters:
-  /// - [context]: The build context for showing the menu
-  /// - [options]: List of items to display in the dropdown
-  /// - [onTap]: Optional callback when an item is selected
-  /// - [builder]: Optional custom widget builder for menu items
-  /// - [alignment]: Alignment of items within the menu (default: centerLeft)
-  /// - [padding]: Padding around menu items
-  /// - [elevation]: Elevation of the dropdown menu (default: 0)
-  /// - [fixedWidth]: Whether to fix the width to match the key's widget
-  /// - [side]: Border side styling for the menu
-  /// - [allowEmptySelection]: Whether to allow selecting empty/null values
-  /// - [shape]: Custom shape for the dropdown menu
-  ///
-  /// Returns the selected item of type [T], or null if nothing is selected.
-  ///
-  /// Example:
-  /// ```dart
-  /// final GlobalKey dropdownKey = GlobalKey();
-  ///
-  /// final String? selected = await dropdownKey.showDropDown<String>(
+  /// final key = GlobalKey();
+  /// final picked = await key.showDropDown<Locale>(
   ///   context,
-  ///   options: ['Option 1', 'Option 2', 'Option 3'],
-  ///   onTap: (value) => print('Selected: $value'),
+  ///   options: AppLocalizations.supportedLocales,
+  ///   builder: (context, locale) => Text(locale.languageName(context)),
   /// );
   /// ```
-  Future<T?> showDropDown<T>(
+  Future<T?> showDropDown<T extends Object>(
     BuildContext context, {
     required List<T> options,
     ValueChanged<T?>? onTap,
     Widget Function(BuildContext context, T item)? builder,
-    Alignment alignment = Alignment.centerLeft,
+    AlignmentGeometry alignment = AlignmentDirectional.centerStart,
     EdgeInsets? padding,
     double elevation = 0,
     bool fixedWidth = false,
@@ -82,22 +41,19 @@ extension GlobalKeyExtension on GlobalKey {
     OutlinedBorder? shape,
   }) async {
     if (options.isEmpty) return null;
-    // Get the render object of the widget associated with the key
-    final button = currentContext?.findRenderObject()! as RenderBox;
+    final button = currentContext?.findRenderObject();
+    if (button is! RenderBox || !button.hasSize) return null;
 
-    // Get the render object of the overlay
-    final overlay =
-        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final overlay = Navigator.of(context).overlay?.context.findRenderObject();
+    if (overlay is! RenderBox) return null;
 
-    // Calculate the position of the dropdown menu relative to the button
-    // `localToGlobal` converts local coordinates to global coordinates
-    // `ancestor: overlay` specifies the overlay as the ancestor for the global coordinates
-    // The `RelativeRect` object is used to position the dropdown menu relative to the overlay
-    final RelativeRect position = RelativeRect.fromRect(
+    // The anchor's bottom edge, in the overlay's coordinates; the menu opens
+    // there.
+    final position = RelativeRect.fromRect(
       Rect.fromPoints(
         button.localToGlobal(Offset(0, button.size.height), ancestor: overlay),
         button.localToGlobal(
-          button.size.bottomRight(Offset.zero) + Offset.zero,
+          button.size.bottomRight(Offset.zero),
           ancestor: overlay,
         ),
       ),
@@ -105,19 +61,18 @@ extension GlobalKeyExtension on GlobalKey {
           overlay.size,
     );
 
-    // Get the size of the screen
+    // At most a third of the screen's longest side.
     final size = MediaQuery.sizeOf(context);
+    final longestSide = size.longestSide;
 
-    // Calculate the maximum height of the dropdown menu
-    // The maximum height is 1/3 of the screen height or screen width, whichever is larger
-    final realHeight = size.height > size.width ? size.height : size.width;
+    // `null` is the empty row; wrapping every value in `_Choice` keeps it
+    // apart from a dismissed menu, which `showMenu` also reports as `null`.
+    final choices = <_Choice<T>>[
+      if (allowEmptySelection) const _Choice(null),
+      for (final option in options) _Choice(option),
+    ];
 
-    // Add an empty item at the top if allowEmptySelection is true
-    final modifiedOptions = allowEmptySelection ? [null, ...options] : options;
-
-    // Show the dropdown menu using the `showMenu` method
-    // `showMenu` is a custom method that displays a menu with the specified configuration
-    return showMenu<T?>(
+    final picked = await showMenu<_Choice<T>>(
       context: context,
       elevation: elevation,
       color: context.colors.surface,
@@ -137,37 +92,39 @@ extension GlobalKeyExtension on GlobalKey {
       shadowColor: Colors.transparent,
       clipBehavior: Clip.antiAlias,
       constraints: BoxConstraints(
-        maxHeight: realHeight / BaseUiConstants.DROPDOWN_MAX_HEIGHT_DIVISOR,
+        maxHeight: longestSide / BaseUiConstants.DROPDOWN_MAX_HEIGHT_DIVISOR,
         minWidth: button.size.width,
         maxWidth: fixedWidth ? button.size.width : double.infinity,
       ),
       position: position,
-
-      // Generate a list of items for the dropdown menu
-      // For every item in the `modifiedOptions` list, create two items:
-      // one for the item itself and one for a divider
-      items: List.generate(modifiedOptions.length * 2 - 1, (index) {
-        if (index.isOdd) {
-          // If the index is odd, create a divider
-          return const PopupMenuDivider();
-        }
-        // If the index is even, create a menu item
-        final int itemIndex = index ~/ 2;
-        final item = modifiedOptions[itemIndex];
-        return PopupMenuItem<T>(
-          onTap: () {
-            // When the item is tapped, call the `onTap` callback and pass the item value
-            onTap?.call(item);
-          },
-          height: context.h(BaseUiConstants.DROPDOWN_ITEM_HEIGHT),
-          padding: padding,
-          child: item == null
-              ? const SizedBox()
-              : builder?.call(context, item) ??
-                    // If the `builder` parameter is null, use the default item builder
+      items: [
+        for (final (index, choice) in choices.indexed) ...[
+          if (index > 0) const PopupMenuDivider(),
+          PopupMenuItem<_Choice<T>>(
+            value: choice,
+            height: context.h(BaseUiConstants.DROPDOWN_ITEM_HEIGHT),
+            padding: padding,
+            child: switch (choice.value) {
+              null => const SizedBox.shrink(),
+              final item =>
+                builder?.call(context, item) ??
                     Align(alignment: alignment, child: Text(item.toString())),
-        );
-      }),
+            },
+          ),
+        ],
+      ],
     );
+
+    if (picked == null) return null;
+    onTap?.call(picked.value);
+    return picked.value;
   }
+}
+
+/// One row of [GlobalKeyExtension.showDropDown]; [value] `null` is the empty
+/// row.
+class _Choice<T extends Object> {
+  const _Choice(this.value);
+
+  final T? value;
 }

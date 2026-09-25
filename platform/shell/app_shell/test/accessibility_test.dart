@@ -41,8 +41,7 @@ void main() {
       _registerProviders(AppRouter());
       await tester.pumpWidget(
         ResponsiveInit(
-          designSize: AppConfig.design,
-          child: AppMaterialWrapper(
+                    child: AppMaterialWrapper(
             home: Scaffold(
               body: Center(
                 child: IconButton(
@@ -115,7 +114,7 @@ void main() {
         );
 
       await tester.pumpWidget(
-        ResponsiveInit(designSize: AppConfig.design, child: const RootApp()),
+        const ResponsiveInit(child: RootApp()),
       );
       await tester.pumpAndSettle();
       await _unmount(tester);
@@ -142,8 +141,7 @@ void main() {
       late TextScaler seen;
       await tester.pumpWidget(
         ResponsiveInit(
-          designSize: AppConfig.design,
-          child: AppMaterialWrapper(
+                    child: AppMaterialWrapper(
             home: Builder(
               builder: (context) {
                 seen = MediaQuery.textScalerOf(context);

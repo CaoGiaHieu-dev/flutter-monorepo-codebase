@@ -361,14 +361,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
-  dotted_line:
-    dependency: transitive
-    description:
-      name: dotted_line
-      sha256: "8a07899b954d9f50f24a6d512ba7e8cc66c08c3c065ab037cc73c3e9c5c5a557"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.3.0"
   drift:
     dependency: transitive
     description:
@@ -709,14 +701,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.5.0"
-  gradient_borders:
-    dependency: transitive
-    description:
-      name: gradient_borders
-      sha256: c65c9b2169cb32fa7164625fc438a597409576e4b5bee498655152abea4a93cc
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.4"
   graphs:
     dependency: transitive
     description:
@@ -925,14 +909,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.14.1"
-  jumping_dot:
-    dependency: transitive
-    description:
-      name: jumping_dot
-      sha256: "031d8f45a41b95df7d7438f7ce5f3105503cbe5432b6c9dd10cf9b6f0a8d6472"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.7"
   leak_tracker:
     dependency: transitive
     description:
@@ -1285,14 +1261,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
-  refresh_sticky:
-    dependency: transitive
-    description:
-      name: refresh_sticky
-      sha256: e5771b3ac02bd70f8238c218e78ad5ce9c0d3c48a2c3339bcdf24bea7ff2471b
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.2"
   retrofit:
     dependency: transitive
     description:
@@ -1554,14 +1522,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.1"
-  uuid:
-    dependency: transitive
-    description:
-      name: uuid
-      sha256: "9b129329f58692f6e6578329498a8fe9fbe98f090beb764ffbb8ee2eadd01dcd"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.6.0"
   vector_graphics:
     dependency: transitive
     description:

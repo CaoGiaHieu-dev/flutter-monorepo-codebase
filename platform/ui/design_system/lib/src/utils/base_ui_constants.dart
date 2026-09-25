@@ -13,13 +13,6 @@ class BaseUiConstants {
   BaseUiConstants._();
 
   // ---------------------------------------------------------------------------
-  // Snackbar (context_extension.dart)
-  // ---------------------------------------------------------------------------
-
-  /// Default visible duration for `BuildContext.showSnackBar`.
-  static const Duration SNACK_BAR_DURATION = Duration(seconds: 3);
-
-  // ---------------------------------------------------------------------------
   // Dropdown menu (key_extension.dart)
   // ---------------------------------------------------------------------------
 

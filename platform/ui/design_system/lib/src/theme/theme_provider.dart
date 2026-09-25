@@ -99,11 +99,12 @@ class ThemeProvider extends ChangeNotifier
   /// and applies the theme system's colors to the text theme.
   ThemeData _themeData(BuildContext context, ThemeMode mode) {
     final themeSystem = ThemeSystemExtension.withMode(mode);
-    final colorScheme = switch (mode) {
-      ThemeMode.dark => const ColorScheme.dark(),
-      ThemeMode.light => const ColorScheme.light(),
-      ThemeMode.system => ColorScheme.fromSwatch(),
-    };
+    final brightness = mode == ThemeMode.dark
+        ? Brightness.dark
+        : Brightness.light;
+    // Every slot built from the palette, so `colorScheme.*` and
+    // `context.colors.*` agree — Material's components read the scheme.
+    final colorScheme = themeSystem.toColorScheme(brightness);
 
     // The type scale's sizes. A Material 3 `ThemeData().textTheme` carries
     // colours only — its sizes are merged in later, when MaterialApp
@@ -120,13 +121,11 @@ class ThemeProvider extends ChangeNotifier
     TextTheme applyFont(TextTheme colors) =>
         geometry.merge(colors).apply(fontFamily: FontFamily.plusJakartaSans);
 
-    final defaultTheme = switch (mode) {
-      ThemeMode.dark => applyFont(ThemeData.dark().textTheme),
-      ThemeMode.light => applyFont(ThemeData.light().textTheme),
-      ThemeMode.system => applyFont(
-        ThemeData.from(colorScheme: colorScheme).textTheme,
-      ),
-    };
+    final defaultTheme = applyFont(
+      brightness == Brightness.dark
+          ? ThemeData.dark().textTheme
+          : ThemeData.light().textTheme,
+    );
 
     /// Scales one font size through the context-aware extension.
     ///
@@ -197,11 +196,8 @@ class ThemeProvider extends ChangeNotifier
       hoverColor: Colors.transparent,
       splashFactory: NoSplash.splashFactory,
 
-      /// Sets the color scheme for the theme.
-      colorScheme: colorScheme.copyWith(
-        primary: themeSystem.primary,
-        surface: themeSystem.surface,
-      ),
+      /// The Material colour scheme, built from the palette.
+      colorScheme: colorScheme,
 
       /// The side rail tablets and desktops navigate with (see the
       /// dashboard). Left to Material, its selection indicator takes the
@@ -236,7 +232,7 @@ class ThemeProvider extends ChangeNotifier
       ),
 
       /// Extends the theme with the selected theme system.
-      extensions: [ThemeSystemExtension.withMode(mode)],
+      extensions: [themeSystem],
 
       /// Sets the app bar theme for the theme.
       appBarTheme: AppBarTheme(

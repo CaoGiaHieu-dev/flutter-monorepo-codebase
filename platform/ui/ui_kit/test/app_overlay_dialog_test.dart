@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:core_common/core_common.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Mirrors the app shell: a router app whose `builder` wraps the Router in
-/// an Overlay hosting [AppDialogControllerInitializer].
+/// an Overlay hosting [AppOverlayInitializer].
 Future<GoRouter> _pumpApp(WidgetTester tester) async {
   final router = GoRouter(
     routes: [
@@ -28,10 +28,10 @@ Future<GoRouter> _pumpApp(WidgetTester tester) async {
     MaterialApp.router(
       routerConfig: router,
       builder: (context, child) =>
-          Overlay.wrap(child: AppDialogControllerInitializer(child: child!)),
+          Overlay.wrap(child: AppOverlayInitializer(child: child!)),
     ),
   );
-  // The controller is created at the end of the first frame.
+  // The overlay is created at the end of the first frame.
   await tester.pump();
 
   // push completes only when /second pops — pumping drives the navigation.
@@ -73,12 +73,12 @@ void main() {
       String? firstResult;
       var secondClosed = false;
       unawaited(
-        AppDialogController.show<String>(
+        AppOverlay.showDialog<String>(
           builder: (_) => _LabelDialog('first dialog', states),
         ).then((result) => firstResult = result),
       );
       unawaited(
-        AppDialogController.show<void>(
+        AppOverlay.showDialog<void>(
           builder: (_) => _LabelDialog('second dialog', states),
         ).then((_) => secondClosed = true),
       );
@@ -109,13 +109,13 @@ void main() {
     });
   });
 
-  group('AppDialogController system back', () {
+  group('AppOverlay dialog system back', () {
     testWidgets('a non-dismissible dialog swallows the back', (tester) async {
       await _pumpApp(tester);
 
       // show completes only when the dialog closes, which this test forbids.
       unawaited(
-        AppDialogController.show<void>(builder: (_) => const Text('dialog')),
+        AppOverlay.showDialog<void>(builder: (_) => const Text('dialog')),
       );
       await tester.pumpAndSettle();
       expect(find.text('dialog'), findsOneWidget);
@@ -135,7 +135,7 @@ void main() {
       var closed = false;
       // Observed through `closed`; awaiting here would wait for the back.
       unawaited(
-        AppDialogController.show<void>(
+        AppOverlay.showDialog<void>(
           barrierDismissible: true,
           builder: (_) => const Text('dialog'),
         ).then((_) => closed = true),

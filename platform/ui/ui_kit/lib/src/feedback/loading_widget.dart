@@ -64,7 +64,7 @@ class LoadingWidget extends StatelessWidget {
         ),
         child: ColoredBox(
           // Use provided color or fallback to theme surface color
-          color: color ?? context.surface,
+          color: color ?? context.colors.surface,
           child: SizedBox.square(
             // Square dimensions for consistent sizing
             dimension:

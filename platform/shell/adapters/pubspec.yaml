@@ -10,13 +10,16 @@ environment:
 resolution: workspace
 
 # Shell group (`platform/shell/`): may depend on any other platform group,
-# never on `modules/` (arch_check R1). `core_ui_kit` is here for one thing —
-# the `RetryDialog` that `NetworkConfigImpl.onRetryCallback` shows when a
-# request times out. `platform_app_shell` depends on this package, never the
-# other way round.
+# never on `modules/` (arch_check R1). The ui group is here for two things —
+# `core_ui_kit`'s `RetryDialog`, which `NetworkConfigImpl.onRetryCallback`
+# shows when a request times out, and `core_base_ui`'s `AppLanguages`, which
+# resolves the `language` header. `platform_app_shell` depends on this
+# package, never the other way round.
 dependencies:
   flutter:
     sdk: flutter
+  core_base_ui:
+    path: ../../ui/design_system
   core_common:
     path: ../../foundation/common
   core_di:

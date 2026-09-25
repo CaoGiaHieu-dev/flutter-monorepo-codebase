@@ -28,7 +28,6 @@ dependencies:
     path: ../adapters
   material_ui: "^1.1.1"
   go_router: "^18.0.0"
-  get_it: "^9.2.1"
   injectable: "^3.0.0"
   flutter_native_splash: "^2.4.8"
   dynamic_logger: "^0.5.0"

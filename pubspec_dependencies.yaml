@@ -48,7 +48,6 @@ dependencies:
   # UI Components & Styling
   material_ui: "^1.1.1"
   cupertino_ui: "^1.0.2"
-  cupertino_icons: "^1.0.9"
   flutter_native_splash: "^2.4.8"
   flutter_svg: "^2.3.0"
 

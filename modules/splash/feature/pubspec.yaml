@@ -17,7 +17,6 @@ dependencies:
     path: ../../../platform/ui/design_system
   core_di:
     path: ../../../platform/foundation/contracts
-  get_it: ^9.2.1
   injectable: ^3.0.0
   core_responsive:
     path: ../../../platform/ui/responsive

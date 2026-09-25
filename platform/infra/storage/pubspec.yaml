@@ -15,7 +15,6 @@ dependencies:
   shared_preferences: ^2.5.5
   flutter_secure_storage: "11.2.0"
   encrypt: ^5.0.3
-  get_it: ^9.2.1
   injectable: ^3.0.0
   dynamic_logger: "^0.5.0"
   platform_kernel:

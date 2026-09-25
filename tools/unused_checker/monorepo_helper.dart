@@ -7,12 +7,23 @@ import 'package:yaml/yaml.dart';
 class MonorepoPackage {
   final String name;
   final String rootPath;
+
+  /// Keys of `dependencies:`.
   final Set<String> dependencies;
+
+  /// Keys of `dev_dependencies:`.
+  final Set<String> devDependencies;
+
+  /// The parsed `pubspec.yaml`, for checks that need more than the
+  /// dependency names (e.g. `flutter_gen:` settings).
+  final YamlMap? pubspec;
 
   MonorepoPackage({
     required this.name,
     required this.rootPath,
     required this.dependencies,
+    this.devDependencies = const {},
+    this.pubspec,
   });
 }
 
@@ -87,18 +98,18 @@ class MonorepoHelper {
         final name = yaml?['name'] as String?;
         if (name == null) return;
 
-        final deps = <String>{};
-        final dependenciesNode = yaml?['dependencies'];
-        if (dependenciesNode is YamlMap) {
-          dependenciesNode.keys.forEach((k) {
-            if (k is String) deps.add(k);
-          });
-        }
+        Set<String> keysOf(Object? node) => {
+          if (node is YamlMap)
+            for (final key in node.keys)
+              if (key is String) key,
+        };
 
         packages[name] = MonorepoPackage(
           name: name,
           rootPath: dirPath,
-          dependencies: deps,
+          dependencies: keysOf(yaml?['dependencies']),
+          devDependencies: keysOf(yaml?['dev_dependencies']),
+          pubspec: yaml,
         );
       } catch (e) {
         stderr.writeln('Warning: Failed to parse pubspec.yaml at $dirPath: $e');

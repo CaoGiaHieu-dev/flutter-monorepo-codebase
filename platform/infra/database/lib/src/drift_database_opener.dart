@@ -1,8 +1,9 @@
 import 'package:drift/drift.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 
-import '../connection/database_connection_factory.dart';
-import '../utils/database_constants.dart';
+import 'database_connection_factory.dart';
+import 'utils/database_constants.dart';
 
 /// Builds a drift database from an executor.
 ///
@@ -49,12 +50,14 @@ abstract final class DriftDatabaseOpener {
     } catch (error, stackTrace) {
       if (!isCorruptionError(error)) rethrow;
 
-      debugPrint(
-        'core_database: database file "$fileName" is corrupt and will be '
-        'quarantined as "$fileName${DatabaseConstants.CORRUPT_FILE_SUFFIX}", '
-        'then recreated empty. Stored data is lost. Error: $error',
+      DynamicLogger.log(
+        'Database file "$fileName" is corrupt and will be quarantined as '
+        '"$fileName${DatabaseConstants.CORRUPT_FILE_SUFFIX}", then recreated '
+        'empty. Stored data is lost. Error: $error',
+        tag: 'core_database',
+        level: LogLevel.ERROR,
+        stackTrace: stackTrace,
       );
-      debugPrintStack(stackTrace: stackTrace, label: 'core_database');
 
       await DatabaseConnectionFactory.quarantineDatabaseFile(
         fileName: fileName,

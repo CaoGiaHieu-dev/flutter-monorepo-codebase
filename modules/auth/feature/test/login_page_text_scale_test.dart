@@ -20,10 +20,13 @@ class _SignedOutRepository implements IAuthRepository {
       const Result.failure(AuthFailure(message: 'nope', code: 401));
 
   @override
-  Result<void> logout() => const Result.success(null);
+  Future<Result<void>> logout() async => const Result.success(null);
 
   @override
-  Future<Result<UserEntity>> refreshToken() async =>
+  Future<Result<UserEntity>> refreshToken() => restoreSession();
+
+  @override
+  Future<Result<UserEntity>> restoreSession() async =>
       const Result.failure(AuthFailure(message: 'no session', code: 401));
 }
 
@@ -40,7 +43,7 @@ AuthProvider _authProvider() {
   return AuthProvider(
     LoginUseCase(repository),
     LogoutUseCase(repository),
-    RefreshTokenUseCase(repository),
+    RestoreSessionUseCase(repository),
     AuthStatusStreamImpl(),
   );
 }
@@ -109,4 +112,21 @@ void main() {
       },
     );
   }
+
+  testWidgets('a rejected password is cleared for the next attempt', (
+    tester,
+  ) async {
+    await _pumpLogin(tester, const Size(375, 812));
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.first, 'ada@example.com');
+    await tester.enterText(fields.last, 'wrong-password');
+    final submit = find.text('Sign In').last;
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(find.text('ada@example.com'), findsOneWidget);
+    expect(find.text('wrong-password'), findsNothing);
+  });
 }

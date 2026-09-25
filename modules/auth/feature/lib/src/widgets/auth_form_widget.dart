@@ -4,6 +4,7 @@ import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../extensions/l10n_auth_extension.dart';
+import '../utils/auth_ui_constants.dart';
 
 /// SAMPLE — demonstrates a feature-owned form widget:
 /// feature-scoped translations (`context.l10nAuth`), `core_responsive` scaling
@@ -77,15 +78,13 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
       border: OutlineInputBorder(borderRadius: radius),
       enabledBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(
-          color: context.colorScheme.outline.withValues(alpha: 0.5),
-        ),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: radius,
         borderSide: BorderSide(
-          color: context.colorScheme.primary,
-          width: context.r(2),
+          color: context.colors.primary,
+          width: context.r(AuthUiConstants.FOCUSED_BORDER_WIDTH),
         ),
       ),
     );
@@ -138,10 +137,13 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
               _onSubmit();
             },
             child: widget.isLoading
-                ? SizedBox(
-                    width: context.w(20),
-                    height: context.h(20),
-                    child: CircularProgressIndicator(strokeWidth: context.r(2)),
+                ? SizedBox.square(
+                    dimension: context.r(AuthUiConstants.SUBMIT_SPINNER_SIZE),
+                    child: CircularProgressIndicator(
+                      strokeWidth: context.r(
+                        AuthUiConstants.SUBMIT_SPINNER_STROKE,
+                      ),
+                    ),
                   )
                 : Text(
                     widget.submitButtonText,

@@ -7,7 +7,7 @@ import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:injectable/injectable.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import '../services/auth_status_stream_impl.dart';
+import '../session/auth_status_stream_impl.dart';
 import 'auth_error_state.dart';
 
 /// Global auth controller, and the auth feature's side of two `core_di`
@@ -23,13 +23,13 @@ class AuthProvider extends BaseProvider<UserEntity>
   AuthProvider(
     this._loginUseCase,
     this._logoutUseCase,
-    this._refreshTokenUseCase,
+    this._restoreSessionUseCase,
     this._authStream,
   ) : super();
 
   final LoginUseCase _loginUseCase;
   final LogoutUseCase _logoutUseCase;
-  final RefreshTokenUseCase _refreshTokenUseCase;
+  final RestoreSessionUseCase _restoreSessionUseCase;
   final AuthStatusStreamImpl _authStream;
 
   StreamSubscription<ViewStateModel<UserEntity>>? _authSubscription;
@@ -100,9 +100,12 @@ class AuthProvider extends BaseProvider<UserEntity>
     return const SessionUnknownFailure();
   }
 
+  /// Restores the stored session. Offline, the repository answers with the
+  /// user stored at the last sign-in, so this sees a success and the app
+  /// opens signed in; only a refused or missing session signs the user out.
   Future<void> _restoreSession() async {
     try {
-      final result = await _refreshTokenUseCase(const NoParams());
+      final result = await _restoreSessionUseCase(const NoParams());
       await result.whenAsync(
         success: (user) {
           updateState(state: const ViewState.success(), data: user);
@@ -127,8 +130,11 @@ class AuthProvider extends BaseProvider<UserEntity>
     );
   }
 
+  /// Signs in. `executeOperation` shows loading, runs the use case and
+  /// settles success or the classified error ([mapAuthFailure]) — the page
+  /// reacts through `ProviderStateListener`, the shell through the session
+  /// channels.
   Future<void> login(String email, String password) async {
-    updateState(state: const ViewState.loading());
     await executeOperation(
       OperationConfig(
         operation: () =>
@@ -141,18 +147,27 @@ class AuthProvider extends BaseProvider<UserEntity>
     );
   }
 
-  /// Clears the session. Navigation is handled by the app shell, which listens
-  /// to [sessionChanges] — do not navigate from here.
-  ///
-  /// Clearing local storage is synchronous and cannot meaningfully fail, so
-  /// this skips `executeOperation` — [login] is where that pattern is shown.
   /// The transport cleared a session the server refused to renew; the stored
   /// credentials are already gone, so only the state changes.
   @override
   void onSessionLost() => _setLoggedOut();
 
+  /// Clears the session. Navigation is handled by the app shell, which listens
+  /// to [sessionChanges] — do not navigate from here.
+  ///
+  /// Clearing the stored session cannot leave the user half signed in: the
+  /// state changes whatever the use case returns, and a failed delete —
+  /// already logged by `StorageValue` — is logged here too. It skips
+  /// `executeOperation` on purpose: a sign-out has no loading or error screen
+  /// to show; [login] is where that pattern is shown.
   Future<void> logout() async {
-    _logoutUseCase(const NoParams());
+    final result = await _logoutUseCase(const NoParams());
+    final failure = result.errorOrNull;
+    if (failure != null) {
+      DynamicLogger.log(
+        'Clearing the stored session failed: ${failure.message}',
+      );
+    }
     _setLoggedOut();
   }
 

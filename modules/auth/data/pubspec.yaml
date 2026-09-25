@@ -24,7 +24,6 @@ dependencies:
     path: ../../../platform/layers/data
   platform_kernel:
     path: ../../../platform/foundation/kernel
-  get_it: ^9.2.1
   injectable: ^3.0.0
   freezed_annotation: "^3.1.0"
   json_annotation: "^4.12.0"

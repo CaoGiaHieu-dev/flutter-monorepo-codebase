@@ -26,8 +26,8 @@ import 'package:material_ui/material_ui.dart';
 /// declaring anything centrally.
 ///
 /// ```dart
-/// class AuthShellRoute extends ShellRouteData {
-///   static final $navigatorKey = NavigatorKeys.nested('auth');
+/// class CheckoutShellRoute extends ShellRouteData {
+///   static final $navigatorKey = NavigatorKeys.nested('checkout');
 /// }
 /// ```
 ///

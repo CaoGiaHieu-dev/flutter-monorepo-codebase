@@ -3,37 +3,28 @@ import 'package:core_di/core_di.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../feature_auth.dart';
+import '../pages/login_page.dart';
+import '../utils/auth_path.dart';
 
 part 'auth_route_module.g.dart';
 
-/// SAMPLE — a feature contributing top-level routes.
+/// SAMPLE — a feature contributing a top-level route.
 ///
-/// The shell route gives the auth flow its own nested [Navigator] (its own back
-/// stack) via a key requested from [NavigatorKeys.nested]. One child route is enough to show the
-/// shape; add siblings as `TypedGoRoute` entries here.
-@TypedShellRoute<AuthShellRoute>(
-  routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
-)
-class AuthShellRoute extends ShellRouteData {
-  const AuthShellRoute();
-
-  static final $navigatorKey = NavigatorKeys.nested('auth');
-  static final $parentNavigatorKey = NavigatorKeys.appKey;
-
-  @override
-  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
-    return navigator;
-  }
-}
-
+/// The login screen sits on the app navigator, above the dashboard's tabs,
+/// so it names [NavigatorKeys.appKey] as its parent. Add sibling screens as
+/// further `@TypedGoRoute` classes here and list them in
+/// `AuthFeatureRouteModule.routes`.
+///
 /// Controllers are instantiated at the route, not inside the page — RULE-21.
-/// Here `AuthProvider` is a global `@lazySingleton` mounted by `AuthTreeWrapper`,
-/// so this route builds the page directly. A screen-scoped controller would wrap
-/// it in `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.
+/// Here `AuthProvider` is a global `@lazySingleton` mounted by
+/// `AuthTreeWrapper`, so this route builds the page directly. A screen-scoped
+/// controller would wrap it in
+/// `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.
+@TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
+
+  static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
   Widget build(BuildContext context, GoRouterState state) => const LoginPage();

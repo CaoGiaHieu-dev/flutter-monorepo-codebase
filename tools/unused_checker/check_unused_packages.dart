@@ -6,25 +6,36 @@ import 'package:path/path.dart' as p;
 import 'monorepo_helper.dart';
 import 'output_formatter.dart';
 
-// Declared by packages that never import them directly: the Flutter SDK
-// pieces, gen-l10n's `flutter_localizations` / `intl`, the app's
-// `cupertino_icons` font, `flutter_svg` (imported by the generated
-// `lib/src/gen/assets.gen.dart`, which is not scanned), `json_annotation`
-// (required by json_serializable next to every `@JsonSerializable` / Freezed
-// `fromJson`) and `retrofit` (used through generated Retrofit code).
-// `get_it` is still declared without an import by most module and infra
-// packages; drop it here once they stop declaring it. Anything else a
-// package declares must be imported somewhere in it.
-final _alwaysAllowedPackages = <String>{
-  'flutter',
-  'flutter_localizations',
-  'cupertino_icons',
-  'intl',
-  'flutter_svg',
-  'get_it',
-  'json_annotation',
-  'retrofit',
-};
+/// Whether [pkg] needs [dependency] although none of its scanned sources
+/// imports it. Each case names the one condition that makes it needed —
+/// there is no blanket allowlist, so a leftover declaration anywhere else is
+/// reported.
+bool usedWithoutImport(String dependency, MonorepoPackage pkg) {
+  return switch (dependency) {
+    // The SDK itself; every Flutter package declares it.
+    'flutter' => true,
+    // gen-l10n writes lib/src/gen/language/, which imports both — and the
+    // scan skips generated files. Needed exactly when there is an l10n.yaml.
+    'flutter_localizations' || 'intl' => File(
+      p.join(pkg.rootPath, 'l10n.yaml'),
+    ).existsSync(),
+    // json_serializable refuses to build unless json_annotation is a
+    // dependency, even when every source imports freezed_annotation (which
+    // re-exports it).
+    'json_annotation' => pkg.devDependencies.contains('json_serializable'),
+    // flutter_gen's flutter_svg integration: the generated assets.gen.dart
+    // imports it.
+    'flutter_svg' => _flutterGenUsesSvg(pkg),
+    _ => false,
+  };
+}
+
+bool _flutterGenUsesSvg(MonorepoPackage pkg) {
+  final flutterGen = pkg.pubspec?['flutter_gen'];
+  if (flutterGen is! Map) return false;
+  final integrations = flutterGen['integrations'];
+  return integrations is Map && integrations['flutter_svg'] == true;
+}
 
 final _excludedSourceFilePatterns = <Glob>[
   Glob('lib/generated_plugin_registrant.dart'),
@@ -38,7 +49,10 @@ const _usage = '''
 Usage: dart tools/unused_checker/check_unused_packages.dart [--help]
 
 Reports dependencies a workspace package declares but never imports
-(its lib/, bin/, test/ and tool/; common SDK/implicit packages allowed).
+(its lib/, bin/, test/ and tool/). Allowed without an import, each only
+where it is needed: flutter; flutter_localizations and intl in a package
+with an l10n.yaml; json_annotation next to json_serializable; flutter_svg
+with flutter_gen's flutter_svg integration.
 
 Works on the repository this script belongs to, whatever the working
 directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
@@ -79,10 +93,8 @@ void main(List<String> args) async {
     // Determine unused dependencies
     final unused = <String>[];
     for (final depName in pkg.dependencies) {
-      if (!_alwaysAllowedPackages.contains(depName) &&
-          !importedPackages.contains(depName)) {
-        // Skip local packages unless they are completely unused
-        // Wait, local packages are prefix-based or path-based, we treat them like any package!
+      if (!importedPackages.contains(depName) &&
+          !usedWithoutImport(depName, pkg)) {
         unused.add(depName);
       }
     }
@@ -126,7 +138,7 @@ void main(List<String> args) async {
       '  - Dependencies are analyzed package-by-package against that package\'s own lib/, bin/, test/ and tool/ (a package with no lib/ is read whole).',
     );
     stdout.writeln(
-      '  - Common SDK and implicit packages are allowed automatically.',
+      '  - Allowed without an import: flutter; flutter_localizations/intl with an l10n.yaml; json_annotation with json_serializable; flutter_svg with flutter_gen\'s flutter_svg integration.',
     );
     exit(2);
   }

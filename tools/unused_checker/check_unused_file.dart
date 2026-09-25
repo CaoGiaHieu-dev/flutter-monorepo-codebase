@@ -25,8 +25,18 @@ final _excludedFilePatterns = <Glob>[
 const _usage = '''
 Usage: dart tools/unused_checker/check_unused_file.dart [--help]
 
-Reports Dart files under a package's lib/ that nothing imports, exports
-or parts (entry points and generated files excluded).
+Reports Dart files under a package's lib/ that no used code reaches.
+
+Entry points: every lib/main.dart, every file under lib/di/, routing files
+(name contains "route"/"routing"), injectable-annotated classes, and any
+file directly under lib/ other than the package barrel. From there a file
+is reached by a relative or package import/export/part — except through a
+package barrel (lib/<package>.dart): a file the barrel exports counts as
+used only when a file importing that barrel names one of its public
+declarations. A barrel export alone is not a use, so a file nothing
+references is reported even though its package exports it. Files that
+declare only extensions or re-exports are counted as used once their
+barrel is imported (their use cannot be seen by name).
 
 Works on the repository this script belongs to, whatever the working
 directory. Exit 0 = clean, non-zero = findings or failure, 64 = bad argument.''';
@@ -63,52 +73,10 @@ void main(List<String> args) async {
   stdout.writeln('[INFO] Found ${allDartFiles.length} Dart files to analyze.');
 
   // 3. Determine Entry Points
-  final entryPoints = <String>{};
-  for (final file in allDartFiles) {
-    final normalized = file.replaceAll('\\', '/');
-
-    // Any `lib/main.dart` is an entry point — that is what the name means.
-    // This used to test for `/app/lib/main.dart`, which stopped matching when
-    // the app moved to `apps/mobile/`, and the checker would then have
-    // reported the application's own entrypoint as an orphaned file.
-    if (normalized.endsWith('/lib/main.dart')) {
-      entryPoints.add(file);
-      continue;
-    }
-
-    // Treat any file directly under the lib/ directory (not in subdirectories like src/) as public entry point
-    final parts = normalized.split('/');
-    final libIndex = parts.indexOf('lib');
-    if (libIndex != -1 && libIndex == parts.length - 2) {
-      entryPoints.add(file);
-      continue;
-    }
-
-    // DI files (often loaded dynamically/externically)
-    if (normalized.contains('/lib/di/')) {
-      entryPoints.add(file);
-      continue;
-    }
-
-    // Routing files
-    final name = p.basename(normalized).toLowerCase();
-    if (name.contains('route') || name.contains('routing')) {
-      entryPoints.add(file);
-      continue;
-    }
-
-    // Injectable registrations. The generator finds these by annotation, not
-    // by import, so nothing hand-written need reference them — an app's
-    // `lib/firebase/firebase_module.dart` is reachable from no import at all
-    // and would otherwise be reported as orphaned.
-    try {
-      if (_injectableAnnotation.hasMatch(File(file).readAsStringSync())) {
-        entryPoints.add(file);
-      }
-    } on FileSystemException {
-      // Unreadable: leave it to the reachability pass to report.
-    }
-  }
+  final entryPoints = <String>{
+    for (final file in allDartFiles)
+      if (isEntryPoint(file, packages.values)) file,
+  };
 
   stdout.writeln(
     '[INFO] Identified ${entryPoints.length} entry points across all packages.',
@@ -123,8 +91,12 @@ void main(List<String> args) async {
 
   stdout.writeln('[INFO] Identified ${usedFiles.length} actively used files.');
 
-  // 5. Determine unused files
-  final unusedFiles = allDartFiles.difference(usedFiles);
+  // 5. Determine unused files. A barrel is the package's public surface,
+  // not a file anything "uses": it is never reported.
+  final barrels = barrelFiles(packages.values);
+  final unusedFiles = allDartFiles
+      .difference(usedFiles)
+      .difference(barrels);
 
   stopwatch.stop();
   stdout.writeln(
@@ -174,7 +146,7 @@ void main(List<String> args) async {
 
     stdout.writeln('\nNotes:');
     stdout.writeln(
-      '  - Files are considered used if reachable from main.dart, package public API barrel files, DI configuration, or routing files.',
+      '  - Files are used when reachable from main.dart, lib/di/, routing files or injectable classes; a package barrel export counts only when an importer names the file\'s declarations.',
     );
     stdout.writeln(
       '  - Files used only in unit tests might appear here as unused.',
@@ -183,49 +155,153 @@ void main(List<String> args) async {
   }
 }
 
+/// Whether [file] is where reachability starts: an app's `lib/main.dart`,
+/// DI configuration (`lib/di/`, loaded by the generator), a routing file, a
+/// class injectable registers by annotation, or a public library other than
+/// its package's barrel (a file directly under `lib/`).
+bool isEntryPoint(String file, Iterable<MonorepoPackage> packages) {
+  final normalized = file.replaceAll('\\', '/');
+  if (normalized.endsWith('/lib/main.dart')) return true;
+
+  final parts = normalized.split('/');
+  final libIndex = parts.lastIndexOf('lib');
+  if (libIndex != -1 && libIndex == parts.length - 2) {
+    return !barrelFiles(packages).contains(normalized);
+  }
+
+  if (normalized.contains('/lib/di/')) return true;
+
+  final name = p.basename(normalized).toLowerCase();
+  if (name.contains('route') || name.contains('routing')) return true;
+
+  // Injectable registrations. The generator finds these by annotation, not
+  // by import, so nothing hand-written need reference them — an app's
+  // `lib/firebase/firebase_module.dart` is reachable from no import at all.
+  try {
+    return _injectableAnnotation.hasMatch(File(file).readAsStringSync());
+  } on FileSystemException {
+    // Unreadable: leave it to the reachability pass to report.
+    return false;
+  }
+}
+
+/// Every package's barrel, `lib/<package name>.dart`.
+Set<String> barrelFiles(Iterable<MonorepoPackage> packages) => {
+  for (final pkg in packages)
+    p.posix.normalize(p.posix.join(pkg.rootPath, 'lib', '${pkg.name}.dart')),
+};
+
+final _directive = RegExp(
+  r'''^\s*(import|export|part)\s+['"]([^'"]+)['"]''',
+  multiLine: true,
+);
+
+final _identifier = RegExp(r'[A-Za-z_$][A-Za-z0-9_$]*');
+
+/// Public top-level names a file declares — what an importer of its barrel
+/// would have to write to use it. `null` when the file declares an
+/// extension (used by member name, invisible to this scan) or nothing
+/// public at all (a re-export shim): its use cannot be seen by name.
+Set<String>? declaredNames(String content) {
+  if (RegExp(r'^extension\b', multiLine: true).hasMatch(content)) return null;
+  final names = <String>{
+    for (final m in RegExp(
+      r'^(?:(?:abstract|sealed|base|final|interface|mixin)\s+)*'
+      r'(?:class|mixin|enum|typedef|extension\s+type)\s+([A-Za-z]\w*)',
+      multiLine: true,
+    ).allMatches(content))
+      m.group(1)!,
+    // Top-level functions, getters and variables: an unindented line that is
+    // not a directive or a type declaration, ending its name with `(`, `=`,
+    // `;` or `=>`.
+    for (final m in RegExp(
+      r'^(?!(?:import|export|part|library|class|abstract|sealed|base|final class|interface|mixin|enum|typedef|extension)\b)'
+      r'(?:(?:final|const|var|late|external)\s+)*(?:[\w<>?,.\[\]]+\s+)*?(?:get\s+)?([A-Za-z]\w*)\s*(?:<[^>(]*>)?\s*(?:\(|=>|=|;)',
+      multiLine: true,
+    ).allMatches(content))
+      m.group(1)!,
+  };
+  return names.isEmpty ? null : names;
+}
+
 Set<String> findUsedFilesByGraphTraversal(
   String projectRootPosix,
   Set<String> allAnalyzedFiles,
   Set<String> entryPoints,
 ) {
-  final usedFiles = <String>{};
-  final worklist = Queue<String>();
+  final packages = MonorepoHelper.getPackages(projectRootPosix).values;
+  final barrels = barrelFiles(packages);
+  final contents = <String, String>{};
+  String read(String file) => contents.putIfAbsent(file, () {
+    try {
+      return File(file).readAsStringSync();
+    } on FileSystemException {
+      return '';
+    }
+  });
 
-  for (final ep in entryPoints) {
-    if (allAnalyzedFiles.contains(ep) && usedFiles.add(ep)) {
-      worklist.add(ep);
+  Iterable<(String, String)> directives(String file) sync* {
+    for (final m in _directive.allMatches(read(file))) {
+      final target = MonorepoHelper.resolveDirectivePath(
+        projectRootPosix,
+        file,
+        m.group(2)!,
+      );
+      if (target != null) yield (m.group(1)!, target);
     }
   }
 
-  while (worklist.isNotEmpty) {
-    final currentFile = worklist.removeFirst();
-
-    try {
-      final content = File(currentFile).readAsStringSync();
-      // Match import '...', export "...", part '...' across the entire file
-      final importRegex = RegExp(
-        r'''(?:import|export|part)\s+['"]([^'"]+)['"]''',
-      );
-      final matches = importRegex.allMatches(content);
-
-      for (final match in matches) {
-        final pathString = match.group(1);
-        if (pathString == null) continue;
-
-        final resolvedPath = MonorepoHelper.resolveDirectivePath(
-          projectRootPosix,
-          currentFile,
-          pathString,
-        );
-
-        if (resolvedPath != null &&
-            allAnalyzedFiles.contains(resolvedPath) &&
-            usedFiles.add(resolvedPath)) {
-          worklist.add(resolvedPath);
+  // Every file a barrel exposes: its exports, and theirs, across packages.
+  final exposedCache = <String, Set<String>>{};
+  Set<String> exposedBy(String barrel) =>
+      exposedCache.putIfAbsent(barrel, () {
+        final out = <String>{};
+        final queue = Queue<String>()..add(barrel);
+        while (queue.isNotEmpty) {
+          for (final (kind, target) in directives(queue.removeFirst())) {
+            if (kind == 'export' && out.add(target)) queue.add(target);
+          }
         }
+        return out;
+      });
+
+  final namesCache = <String, Set<String>?>{};
+  Set<String>? namesOf(String file) =>
+      namesCache.putIfAbsent(file, () => declaredNames(read(file)));
+
+  final usedFiles = <String>{};
+  final worklist = Queue<String>();
+  void use(String file) {
+    if (allAnalyzedFiles.contains(file) && usedFiles.add(file)) {
+      worklist.add(file);
+    }
+  }
+
+  entryPoints.forEach(use);
+
+  while (worklist.isNotEmpty) {
+    final current = worklist.removeFirst();
+    Set<String>? identifiers;
+    for (final (kind, target) in directives(current)) {
+      if (!barrels.contains(target)) {
+        use(target);
+        continue;
       }
-    } catch (e) {
-      // Ignore reading errors silently or log them lightly
+      // Re-exporting a whole barrel makes all of it part of this file's
+      // surface; nothing finer can be told.
+      if (kind == 'export') {
+        exposedBy(target).forEach(use);
+        continue;
+      }
+      // Importing a barrel uses exactly the exposed files whose names this
+      // file mentions.
+      identifiers ??= {
+        for (final m in _identifier.allMatches(read(current))) m.group(0)!,
+      };
+      for (final exposed in exposedBy(target)) {
+        final names = namesOf(exposed);
+        if (names == null || names.any(identifiers.contains)) use(exposed);
+      }
     }
   }
 

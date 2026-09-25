@@ -15,7 +15,6 @@ dependencies:
   material_ui: ^1.1.1
   core_base_ui:
     path: ../design_system
-  get_it: ^9.2.1
   injectable: ^3.0.0
   cached_network_image_ce: "^4.10.0"
   core_responsive:

@@ -18,7 +18,6 @@ dependencies:
   core_responsive:
     path: ../responsive
   flutter_svg: ^2.3.0
-  get_it: ^9.2.1
   injectable: ^3.0.0
   core_di:
     path: ../../foundation/contracts

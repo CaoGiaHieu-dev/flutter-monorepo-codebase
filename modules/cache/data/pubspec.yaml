@@ -21,7 +21,8 @@ dependencies:
   data_core:
     path: ../../../platform/layers/data
   drift: "^2.34.3"
-  get_it: ^9.2.1
+  platform_kernel:
+    path: ../../../platform/foundation/kernel
   injectable: ^3.0.0
   freezed_annotation: "^3.1.0"
 

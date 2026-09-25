@@ -1,27 +1,16 @@
+import 'package:auth_api/auth_api.dart';
 import 'package:core_common/core_common.dart';
-import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:feature_onboarding/feature_onboarding.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:home_api/home_api.dart';
 import 'package:material_ui/material_ui.dart';
 
-class _Tab extends INavDestinationModule {
-  _Tab(this.order, this.path);
+class _Auth implements AuthNavigator {
+  int calls = 0;
 
   @override
-  final int order;
-
-  @override
-  final String path;
-
-  @override
-  List<RouteBase> get routes => const [];
-
-  @override
-  NavDestination destination(BuildContext context) =>
-      NavDestination(label: path, icon: Icons.circle);
+  void toLogin(BuildContext context) => calls++;
 }
 
 class _Home implements HomeNavigator {
@@ -31,57 +20,51 @@ class _Home implements HomeNavigator {
   void toHome(BuildContext context) => calls++;
 }
 
-/// "Get started" reaches auth, else home — and with neither composed it does
-/// nothing rather than hardcoding a route.
+/// "Get started" goes to sign-in when the auth module is composed, to home
+/// when only home is, and does nothing when neither is — it never hardcodes
+/// a route.
 void main() {
   tearDown(getIt.reset);
 
-  Future<GoRouter> pumpOnboarding(WidgetTester tester) async {
-    final router = GoRouter(
-      initialLocation: '/onboarding',
-      routes: [
-        GoRoute(
-          path: '/onboarding',
-          builder: (_, _) => const OnboardingPage(),
-        ),
-        for (final path in ['/first', '/second'])
-          GoRoute(path: path, builder: (_, _) => Text('at $path')),
-      ],
-    );
-    addTearDown(router.dispose);
-
+  Future<void> tapGetStarted(WidgetTester tester) async {
     await tester.pumpWidget(
-      MaterialApp.router(
-        routerConfig: router,
+      MaterialApp(
         localizationsDelegates:
             FeatureOnboardingLocalizations.localizationsDelegates,
         supportedLocales: FeatureOnboardingLocalizations.supportedLocales,
         builder: (context, child) => ResponsiveInit(child: child!),
+        home: const OnboardingPage(),
       ),
     );
     await tester.pumpAndSettle();
-    return router;
-  }
-
-  testWidgets('prefers the home module when one is composed', (tester) async {
-    final home = _Home();
-    getIt
-      ..registerSingleton<HomeNavigator>(home)
-      ..registerSingleton<INavDestinationModule>(_Tab(0, '/first'));
-    await pumpOnboarding(tester);
-
     await tester.tap(find.byType(ElevatedButton));
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('with auth and home composed, sign-in wins', (tester) async {
+    final auth = _Auth();
+    final home = _Home();
+    getIt
+      ..registerSingleton<AuthNavigator>(auth)
+      ..registerSingleton<HomeNavigator>(home);
+
+    await tapGetStarted(tester);
+
+    expect(auth.calls, 1);
+    expect(home.calls, 0);
+  });
+
+  testWidgets('without auth, falls back to home', (tester) async {
+    final home = _Home();
+    getIt.registerSingleton<HomeNavigator>(home);
+
+    await tapGetStarted(tester);
 
     expect(home.calls, 1);
-    expect(find.text('at /first'), findsNothing);
   });
 
   testWidgets('with neither auth nor home, stays put', (tester) async {
-    await pumpOnboarding(tester);
-
-    await tester.tap(find.byType(ElevatedButton));
-    await tester.pumpAndSettle();
+    await tapGetStarted(tester);
 
     expect(find.byType(OnboardingPage), findsOneWidget);
   });

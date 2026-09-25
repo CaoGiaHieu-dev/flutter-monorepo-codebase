@@ -25,6 +25,7 @@ export 'src/gen/language/app_localizations.dart';
 export 'src/gen/language/app_localizations_en.dart';
 export 'src/gen/language/app_localizations_vi.dart';
 export 'src/pages/onboarding_page.dart';
+export 'src/routing/onboarding_app_entry_location.dart';
 export 'src/routing/onboarding_feature_route_module.dart';
 export 'src/routing/onboarding_route_module.dart';
 export 'src/utils/onboarding_path.dart';

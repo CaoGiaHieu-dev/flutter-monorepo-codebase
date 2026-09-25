@@ -1,9 +1,10 @@
-import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:feature_dashboard/feature_dashboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
+
+import 'support/fake_nav_destination.dart';
 
 /// The app honours the OS font size up to 2x (`RootApp` clamps it with
 /// `MediaQuery.withClampedTextScaling`). The dashboard chrome — bottom bar
@@ -11,35 +12,13 @@ import 'package:material_ui/material_ui.dart';
 /// must lay out at that cap without an overflow.
 const _maxTextScale = 2.0;
 
-class _Tab extends INavDestinationModule {
-  _Tab(this.order, this.path, this.label);
-
-  @override
-  final int order;
-
-  @override
-  final String path;
-
-  final String label;
-
-  @override
-  List<RouteBase> get routes => const [];
-
-  @override
-  NavDestination destination(BuildContext context) => NavDestination(
-    label: label,
-    icon: Icons.circle_outlined,
-    selectedIcon: Icons.circle,
-  );
-}
-
 const _tabs = {'/home': 'Home', '/settings': 'Settings', '/inbox': 'Messages'};
 
 void main() {
   var order = 0;
   final tabs = [
     for (final MapEntry(key: path, value: label) in _tabs.entries)
-      _Tab(order += 10, path, label),
+      FakeNavDestination(order += 10, path, label: label),
   ];
 
   Future<void> pumpDashboard(WidgetTester tester, Size window) async {

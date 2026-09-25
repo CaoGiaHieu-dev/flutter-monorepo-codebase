@@ -1,15 +1,19 @@
-import 'package:core_di/core_di.dart';
 import 'package:feature_dashboard/feature_dashboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'support/fake_nav_destination.dart';
+
 /// The side rail must pad for the system insets on its outer edge only —
 /// which is the left in LTR and the right in RTL, where a `Row` puts it.
 void main() {
-  final tabs = [_Tab(0, '/a'), _Tab(1, '/b')];
+  final tabs = [FakeNavDestination(0, '/a'), FakeNavDestination(1, '/b')];
 
-  Future<SafeArea> pumpRail(WidgetTester tester, TextDirection direction) async {
+  Future<SafeArea> pumpRail(
+    WidgetTester tester,
+    TextDirection direction,
+  ) async {
     tester.view
       ..physicalSize = const Size(1000, 800)
       ..devicePixelRatio = 1;
@@ -70,21 +74,4 @@ void main() {
     expect(safeArea.left, isFalse);
     expect(safeArea.right, isTrue);
   });
-}
-
-class _Tab extends INavDestinationModule {
-  _Tab(this.order, this.path);
-
-  @override
-  final int order;
-
-  @override
-  final String path;
-
-  @override
-  List<RouteBase> get routes => const [];
-
-  @override
-  NavDestination destination(BuildContext context) =>
-      NavDestination(label: 'Tab $order', icon: Icons.circle);
 }

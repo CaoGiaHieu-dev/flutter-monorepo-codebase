@@ -1047,6 +1047,7 @@ void _sync(
     }
   }
   final ordered = workspace.toList()..sort();
+  final stranded = _strandedPackages(root, packages, workspace);
   regions.add(
     _Region(
       p.posix.join(root, 'pubspec.yaml'),
@@ -1092,18 +1093,28 @@ void _sync(
   }
 
   if (dryRun) {
-    if (drift.isEmpty) {
+    for (final line in stranded) {
+      OutputFormatter.printError('  $line');
+    }
+    if (stranded.isNotEmpty) _explainStranded(OutputFormatter.printError);
+    if (drift.isEmpty && stranded.isEmpty) {
       OutputFormatter.printSuccess('Generated artifacts are up to date.');
     } else {
       for (final d in drift) {
         OutputFormatter.printError('  out of date: $d');
       }
-      OutputFormatter.printError(
-        'Run `dart tools/composer/composer.dart sync`.',
-      );
+      if (drift.isNotEmpty) {
+        OutputFormatter.printError(
+          'Run `dart tools/composer/composer.dart sync`.',
+        );
+      }
       exit(1);
     }
   } else {
+    for (final line in stranded) {
+      OutputFormatter.printWarning('  $line');
+    }
+    if (stranded.isNotEmpty) _explainStranded(OutputFormatter.printWarning);
     OutputFormatter.printSuccess(
       '${selected.length} app(s) composed, '
       '${ordered.length} workspace members.',
@@ -1113,6 +1124,38 @@ void _sync(
     }
   }
 }
+
+/// Packages on disk under `modules/` or `platform/` that no app composes —
+/// one line each, `<dir> (<name>)`, sorted.
+///
+/// Dropping a module from every manifest removes it from the root
+/// `workspace:` list, but its directory stays. `flutter analyze` from the
+/// root still reads it, and Gate 3 still runs its tests, against a package
+/// pub no longer resolves — failing with errors that never name the cause.
+List<String> _strandedPackages(
+  String root,
+  Map<String, String> packages,
+  Set<String> workspace,
+) {
+  final out = <String>[
+    for (final entry in packages.entries)
+      if (p.posix.relative(entry.value, from: root) case final dir
+          when (dir.startsWith('modules/') || dir.startsWith('platform/')) &&
+              !workspace.contains(dir))
+        '$dir (${entry.key}) is on disk but in no app\'s composition',
+  ];
+  return out..sort();
+}
+
+/// The fix for [_strandedPackages], printed once after the list.
+void _explainStranded(void Function(String) print) => print(
+  'A package left on disk outside the workspace breaks `flutter analyze` and '
+  'Gate 3 with errors that do not name it. Delete it (the module\'s '
+  '`modules/<id>/<layer>`, or the platform package), or re-add it: a module '
+  'layer to an app_manifest.yaml `layers:` list, a platform package to a DI '
+  'group or to what an app depends on — then run '
+  '`dart tools/composer/composer.dart sync`.',
+);
 
 /// Says, loudly, that the files just written describe a *partial* workspace.
 ///
@@ -1299,8 +1342,9 @@ COMMANDS
                     region's composer:managed / composer:end marker, is
                     missing.
   verify            Same resolution, writes nothing; exits 1 on drift — a
-                    missing file or marker counts as drift.
-                    Also implies --strict. Use in CI.
+                    missing file or marker counts as drift — and on a package
+                    under modules/ or platform/ that no app composes (sync
+                    only warns about one). Also implies --strict. Use in CI.
 
 OPTIONS
   --app <id>        Only this app (list, sync, verify). The root `workspace:`

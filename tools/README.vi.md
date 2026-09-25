@@ -117,6 +117,9 @@ key trùng) bị từ chối với tên file và dòng lỗi thay vì crash; m�
 `apps/<id>/app_manifest.yaml: <key>: <vấn đề>`, exit 1, không ghi gì. Khi một module khai báo
 trong manifest không có trên đĩa, cảnh báo PARTIAL COMPOSITION chỉ liệt kê file thực sự bị
 ghi lại trong lần chạy đó.
+Trường hợp ngược lại — một thư mục package dưới `modules/` hoặc `platform/` mà không app nào lắp
+ráp (còn sót lại sau khi module bị gỡ khỏi mọi manifest) — làm `verify` fail và chỉ là cảnh báo
+khi `sync`, kèm tên thư mục và cách sửa: xoá nó, hoặc thêm lại vào một manifest.
 
 ```bash
 # Checkout từng phần (một submodule module chưa init): composer cần workspace đã resolve, còn pub
@@ -779,7 +782,7 @@ Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp
 | File | Phủ |
 |:---|:---|
 | `arch_check_test.dart` | Một fixture sạch và một fixture vi phạm cho mỗi luật R1–R15 (R6 cảnh báo mà vẫn exit `0`), DAG giữa các nhóm theo từng cạnh (ui → state, infra → infra, mọi thứ từ `domain_core`, foundation → shell, package nằm ngoài thư mục nhóm) và các luật package API (domain của chính nó, API khác, package platform ngoài foundation, lookup ném lỗi, import R1/R10); workspace rỗng thì fail; flag lạ exit `64` |
-| `composer_test.dart` | `sync` rồi `verify` thì qua; layer `api` chỉ là workspace member, package API chỉ được chạm tới qua một feature vẫn vào workspace, thiếu nó thì `verify` fail; vùng managed bị sửa tay, module không có trên đĩa, `phase: befor`, layer lạ và module trùng exit `1` kèm đường dẫn key |
+| `composer_test.dart` | `sync` rồi `verify` thì qua; layer `api` chỉ là workspace member, package API chỉ được chạm tới qua một feature vẫn vào workspace, thiếu nó thì `verify` fail; vùng managed bị sửa tay, module không có trên đĩa, `phase: befor`, layer lạ và module trùng exit `1` kèm đường dẫn key; package có trên đĩa mà không app nào lắp ráp làm `verify` fail và chỉ cảnh báo khi `sync` |
 | `dependency_sync_test.dart` | `--check`: khớp thì qua; lệch version, catalog sai định dạng và YAML hỏng exit `1` |
 | `docs_check_test.dart` | Đường dẫn hay link chết exit `1`; span `<placeholder>`, đường dẫn trong allowlist và sample bundle đã gỡ (INFO) exit `0`; gốc repo lấy từ script chứ không từ cwd; tương đương en ↔ vi: thiếu heading, code block hay dòng bảng exit `1` kèm cả hai con số, fence bị bỏ qua, chênh lệch có trong allowlist thì qua, entry cũ thì cảnh báo, entry không lý do bị từ chối |
 | `module_generator_test.dart` | `--apps` với id lạ, không có giá trị, danh sách rỗng hoặc truyền hai lần exit `64` và không ghi gì; loại 6 (API) từ chối `<SM>`, prefix, `--group`, tên `<name>_api` đã có và trỏ tới `modules/<name>/api`; `registerInAppManifests` mặc định đụng mọi manifest, với `apps:` thì chỉ các manifest được liệt kê, và thêm `api` vào đầu `layers:` của module |

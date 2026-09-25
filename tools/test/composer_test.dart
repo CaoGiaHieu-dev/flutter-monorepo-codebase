@@ -75,6 +75,46 @@ void main() {
   Future<ToolRun> run(TempWorkspace ws, List<String> args) =>
       tool.run(args, workingDirectory: ws.root);
 
+  group('a package left on disk outside every composition', () {
+    TempWorkspace stranded() => workspace()
+      ..write({
+        // Dropped from the manifest, directory left behind.
+        'modules/bar/feature/pubspec.yaml': 'name: feature_bar\n',
+        'modules/bar/feature/lib/di/module.dart': diModule(),
+        // A platform package nothing composes or depends on.
+        'platform/infra/unused/pubspec.yaml': 'name: core_unused\n',
+      });
+
+    test('fails verify, naming it and the fix', () async {
+      final ws = stranded();
+      expect(await run(ws, ['sync']), exitsWith(0));
+
+      final verify = await run(ws, ['verify']);
+
+      expect(verify, exitsWith(1));
+      expect(
+        verify.output,
+        contains(
+          "modules/bar/feature (feature_bar) is on disk but in no app's "
+          'composition',
+        ),
+      );
+      expect(verify.output, contains('platform/infra/unused (core_unused)'));
+      expect(verify.output, contains('Delete it'));
+      expect(verify.output, isNot(contains('up to date')));
+    });
+
+    test('is only a warning under sync, which still composes', () async {
+      final ws = stranded();
+
+      final sync = await run(ws, ['sync']);
+
+      expect(sync, exitsWith(0));
+      expect(sync.output, contains('modules/bar/feature (feature_bar)'));
+      expect(ws.read('pubspec.yaml'), isNot(contains('modules/bar/feature')));
+    });
+  });
+
   group('a valid manifest', () {
     test('sync writes every region, then verify passes', () async {
       final ws = workspace();

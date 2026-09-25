@@ -223,7 +223,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 No `order`: these routes are matched by path, not by index.
 
 > [!CAUTION]
-> Never edit `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` to add your routes (RULE-20). It collects contributions through `getAllOrEmpty<IFeatureRouteModule>()` and `getAllOrEmpty<INavDestinationModule>()`. Hardcoding there breaks feature removability.
+> Never edit `platform/shell/app_shell/lib/src/navigation/app_router.dart` to add your routes (RULE-20). It collects contributions through `getAllOrEmpty<IFeatureRouteModule>()` and `getAllOrEmpty<INavDestinationModule>()`. Hardcoding there breaks feature removability.
 
 ## 5. Create the controller at the route
 
@@ -312,7 +312,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-The app shell's [`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/presentation/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`. So **do not edit `root_app.dart`** (or the wrapper).
+The app shell's [`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/src/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`. So **do not edit `root_app.dart`** (or the wrapper).
 
 Regenerate after editing any `.arb`:
 

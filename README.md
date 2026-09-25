@@ -408,7 +408,7 @@ Each Feature Package owns its own routing structure and files:
 - Routes inherit from `GoRouteDataCustom` to inherently possess automatic screen tracking and smooth cross-platform transitions.
 
 ### Runtime Assembly (Assembly)
-`platform/shell/app_shell/lib/presentation/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeRoute` lists. It collects:
+`platform/shell/app_shell/lib/src/navigation/app_router.dart` **does not** hardcode `$onboardingRoute` / `$homeRoute` lists. It collects:
 
 - `getAllOrEmpty<IFeatureRouteModule>()` → top-level stack routes (auth, onboarding, …) — **no `order`**
 - `getAllOrEmpty<INavDestinationModule>()` sorted by `order` → `StatefulShellBranch` list

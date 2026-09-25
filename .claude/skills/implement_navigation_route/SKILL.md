@@ -143,7 +143,7 @@ The shell must stay buildable when any feature package is deleted. It talks to c
 - Splash is managed by `MainScope`, **not** a GoRouter route; absent `IAppSplashScreen` the
   app falls back to the native splash.
 - Impl classes: `*NavigatorImpl` in `*_navigator_impl.dart` (RULE-78).
-- Missing modules must not crash (`platform/shell/app_shell/lib/presentation/navigation/app_router.dart`):
+- Missing modules must not crash (`platform/shell/app_shell/lib/src/navigation/app_router.dart`):
   no route modules → empty lists; no destination → a placeholder branch at `/_empty_dashboard`;
   no `IAppEntryLocation` → the first destination's path (else `/_empty_dashboard`); no
   `IDashboardRouteModule` → the bare `navigationShell`, i.e. tabs without chrome.

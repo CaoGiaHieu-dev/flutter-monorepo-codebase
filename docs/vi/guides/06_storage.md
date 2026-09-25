@@ -143,7 +143,7 @@ Ghi xuống đĩa là fire-and-forget. Cache RAM cập nhật đồng bộ, nên
 
 ## 8. Lưu một enum hay một kiểu tuỳ biến
 
-`StorageValue<T>` đọc lại trực tiếp `num`, `String`, `bool`, `Map<String, dynamic>` và list của các kiểu đó — `List<String>` được cast từng phần tử, không cần reviver. **Enum** được lưu bằng `name`, nên cần `reviver` để đổi tên về lại giá trị. **Mọi kiểu khác** được lưu qua `toJson()` và cần `reviver` để dựng lại; thiếu nó constructor ném `ArgumentError`. Mọi đường đọc/ghi dùng chung `StorageCodec` (`platform/infra/storage/lib/src/contracts/storage_codec.dart`), nên giá trị đọc ra đúng như lúc ghi.
+`StorageValue<T>` đọc lại trực tiếp `num`, `String`, `bool`, `Map<String, dynamic>` và list của các kiểu đó — `List<String>` được cast từng phần tử, không cần reviver. **Enum** được lưu bằng `name`, nên cần `reviver` để đổi tên về lại giá trị. **Mọi kiểu khác** được lưu qua `toJson()` và cần `reviver` để dựng lại; thiếu nó constructor ném `ArgumentError`. Mọi đường đọc/ghi dùng chung `StorageCodec` (`platform/infra/storage/lib/src/storage_codec.dart`), nên giá trị đọc ra đúng như lúc ghi.
 
 **Enum:**
 

@@ -250,7 +250,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 
 Đây là listener minh hoạ, đúng như một màn hình trong `feature_auth` sẽ viết. Nó điều hướng qua **navigator interface resolve bằng `getItOrNull`**, không bao giờ qua path hardcode ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` đến từ package `auth_api` / `home_api`.
 
-App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/presentation/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`. Thay vào đó nó lắng nghe `ISessionState.sessionChanges` / `sessionFailures` của `core_di`, và điều hướng tới path của `ISignInLocation` / `IPostSignInLocation`. Nó không dùng navigator của module nào.
+App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`. Thay vào đó nó lắng nghe `ISessionState.sessionChanges` / `sessionFailures` của `core_di`, và điều hướng tới path của `ISignInLocation` / `IPostSignInLocation`. Nó không dùng navigator của module nào.
 
 `MultiProviderStateListener` cho phép lồng nhiều listener mà không tạo kim tự tháp widget.
 

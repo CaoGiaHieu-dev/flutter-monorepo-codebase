@@ -224,7 +224,7 @@ class AuthFeatureRouteModule implements IFeatureRouteModule {
 Không có `order`: nhóm route này khớp theo path chứ không theo chỉ số.
 
 > [!CAUTION]
-> Tuyệt đối không sửa `platform/shell/app_shell/lib/presentation/navigation/app_router.dart` để thêm route của bạn (RULE-20). Nó gom các đóng góp qua `getAllOrEmpty<IFeatureRouteModule>()` và `getAllOrEmpty<INavDestinationModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
+> Tuyệt đối không sửa `platform/shell/app_shell/lib/src/navigation/app_router.dart` để thêm route của bạn (RULE-20). Nó gom các đóng góp qua `getAllOrEmpty<IFeatureRouteModule>()` và `getAllOrEmpty<INavDestinationModule>()`. Hardcode ở đó là phá khả năng gỡ feature.
 
 ## 5. Tạo controller ở tầng route
 
@@ -316,7 +316,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-[`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/presentation/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`. Vì vậy **không sửa `root_app.dart`** (hay wrapper đó).
+[`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/src/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`. Vì vậy **không sửa `root_app.dart`** (hay wrapper đó).
 
 Sinh lại sau mỗi lần đổi `.arb`:
 

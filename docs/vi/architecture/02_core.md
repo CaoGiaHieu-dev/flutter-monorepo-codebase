@@ -235,7 +235,7 @@ Scale bên trong nghĩa là bên gọi nào đã scale sẽ bị scale hai lần
 
 ### Hằng số
 
-Giá trị mặc định của các widget này nằm ở `platform/ui/ui_kit/lib/utils/shared_ui_constants.dart`:
+Giá trị mặc định của các widget này nằm ở `platform/ui/ui_kit/lib/src/utils/shared_ui_constants.dart`:
 
 ```dart
 class SharedUiConstants {
@@ -310,7 +310,7 @@ Luật **R7** của `dart tools/arch_check/check.dart` chặn dạng bare — m�
 > [!NOTE]
 > Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/ui/responsive/test/`.
 
-Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/shell/app_shell/lib/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
+Phần lắp ráp ở gốc cây (`_ResponsiveWrapper` trong `platform/shell/app_shell/lib/src/main_scope.dart`) mô tả tại [app shell](06_app_shell.md#_responsivewrapper); cách chọn trục, đổi khung thiết kế, chính sách scale và các widget thích ứng nằm ở [`../guides/11_design_system.md`](../guides/11_design_system.md) (§4–§7).
 
 ---
 
@@ -990,7 +990,7 @@ Việc mở database được đăng ký với `@preResolve`, nên bất cứ th
 `DriftDatabaseOpener.open` xử lý việc này — và thiết kế nghiêng hẳn về phía *không* đụng vào dữ liệu người dùng:
 
 ```dart
-// platform/infra/database/lib/src/opening/drift_database_opener.dart
+// platform/infra/database/lib/src/drift_database_opener.dart
 static Future<T> open<T extends GeneratedDatabase>(
   DriftDatabaseBuilder<T> build, {
   required String fileName,
@@ -1012,7 +1012,7 @@ Ba quyết định có chủ đích:
 **File được đổi tên, không bao giờ bị xoá.**
 
 ```dart
-// platform/infra/database/lib/src/connection/database_connection_factory.dart
+// platform/infra/database/lib/src/database_connection_factory.dart
 /// The file is **renamed, never deleted** — if the corruption check ever
 /// misfires the user's bytes are still recoverable from
 /// `<fileName><CORRUPT_FILE_SUFFIX>`. Only one quarantined copy is kept;

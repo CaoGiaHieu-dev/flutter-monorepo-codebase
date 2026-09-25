@@ -109,7 +109,7 @@ Tạo `ja.arb` trong `platform/ui/design_system/assets/language/` với `"@@loca
 }
 ```
 
-`AppLocalizations.supportedLocales` của `core_base_ui` chính là những gì app cung cấp: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/presentation/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider` và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`) đều đọc nó. `gen-l10n` dựng nó từ các file ARB đang có, nên chính file mới là thứ thêm locale vào.
+`AppLocalizations.supportedLocales` của `core_base_ui` chính là những gì app cung cấp: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider` và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`) đều đọc nó. `gen-l10n` dựng nó từ các file ARB đang có, nên chính file mới là thứ thêm locale vào.
 
 ### Đặt tên ngôn ngữ trong bộ chọn
 
@@ -269,7 +269,7 @@ AppBarCustom(leadingWidth: context.w(64), title: Text(context.l10nHome.home))
 Các giá trị mặc định không phải kích thước nằm trong `utils/` của chính package:
 
 ```dart
-// platform/ui/ui_kit/lib/utils/shared_ui_constants.dart
+// platform/ui/ui_kit/lib/src/utils/shared_ui_constants.dart
 /// Timing and overlay constants owned by `core_ui_kit`.
 ///
 /// Package-internal by convention: these are defaults for the reusable
@@ -294,7 +294,7 @@ class SharedUiConstants {
 | Dialog | `_dialog.dart` | `Dialog` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` |
 
-Ví dụ có sẵn trong `platform/ui/ui_kit/lib/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
+Ví dụ có sẵn trong `platform/ui/ui_kit/lib/src/dialogs/`: `error_dialog.dart`, `warning_dialog.dart`, `retry_dialog.dart`, `bottom_wrapper_dialog.dart`.
 
 Builder inline không thể tái sử dụng, không preview được, không test riêng được — và hầu như luôn kết thúc bằng chuỗi cứng và kích thước cứng.
 

@@ -152,7 +152,7 @@ With Retrofit, set them with `@Extra({...})`, as step 3 shows. Why login and ref
 `core_network` registers exactly one client — the default `Dio` every Retrofit data source receives:
 
 ```dart
-// platform/infra/network/lib/di/register_module.dart
+// platform/infra/network/lib/di/network_module.dart
 @module
 abstract class RegisterModule {
   @lazySingleton
@@ -188,7 +188,7 @@ abstract class RegisterModule {
 }
 ```
 
-`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client. Only a parameter annotated `@Named('public_api')` gets this one (step 4). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/infra/network/lib/di/register_module.dart` rather than declaring it twice.
+`getIt<Dio>()` and every unnamed `Dio` parameter still get the default client. Only a parameter annotated `@Named('public_api')` gets this one (step 4). A name can be registered **once** per container: if a second package needs the same client, move the registration into `platform/infra/network/lib/di/network_module.dart` rather than declaring it twice.
 
 ## 8. Unwrap the response envelopes
 
@@ -301,7 +301,7 @@ Review checklist:
 | The user is signed out after a network blip | `refreshToken()` returned `null` for a transient error | Throw for "no answer" and return `null` only for a refusal (step 9) |
 | The server ignores the locale | It reads `Accept-Language`; the client sends the non-standard `language` header | Read `language` on the server |
 | `ERROR` log: `SSL pinning skipped` | `sslPinningHashes` is empty, or `SslPinningConfig` is not bound | Fill the hashes and keep the binding (step 10) |
-| Two packages register the same named client and boot throws | A name can be registered once per container | Move the registration into `platform/infra/network/lib/di/register_module.dart` (step 7) |
+| Two packages register the same named client and boot throws | A name can be registered once per container | Move the registration into `platform/infra/network/lib/di/network_module.dart` (step 7) |
 
 ## Related
 

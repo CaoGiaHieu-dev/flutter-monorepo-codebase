@@ -257,7 +257,7 @@ Các handler nằm trong thư mục `handlers/` của feature sở hữu và đ�
 Mọi bên tiêu thụ một hợp đồng cross-feature đều phải chịu được việc hợp đồng đó **không tồn tại** (RULE-12). App shell đã làm đúng như vậy cho routing:
 
 ```dart
-// platform/shell/app_shell/lib/presentation/navigation/app_router.dart
+// platform/shell/app_shell/lib/src/navigation/app_router.dart
 List<RouteBase> get _featureRoutes {
   return [
     for (final module in getAllOrEmpty<IFeatureRouteModule>())
@@ -280,7 +280,7 @@ List<RouteBase> get _featureRoutes {
 getItOrNull<IAuthActionHandler>()?.logout(context);
 
 // Tốt — lùi về chính widget của nhánh thay vì crash
-// (platform/shell/app_shell/lib/presentation/navigation/app_router.dart)
+// (platform/shell/app_shell/lib/src/navigation/app_router.dart)
 builder: (context, state, navigationShell) {
   return getItOrNull<IDashboardRouteModule>()?.builder(
         context,

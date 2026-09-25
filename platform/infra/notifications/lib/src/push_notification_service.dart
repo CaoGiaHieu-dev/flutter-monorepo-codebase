@@ -6,10 +6,8 @@ import 'dart:math';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:injectable/injectable.dart';
-import 'package:platform_kernel/platform_kernel.dart';
 
 import 'utils/notification_constants.dart';
 
@@ -39,13 +37,28 @@ const _channelGroup = AndroidNotificationChannelGroup(
   description: NotificationConstants.CHANNEL_GROUP_DESCRIPTION,
 );
 
-/// Handles background messages received when the app is in the background.
+/// Handles a message received while the app is in the background or
+/// terminated.
+///
+/// It runs in a **separate background isolate** that has never run
+/// `configureDependencies()`: GetIt is empty there, so the app's
+/// `FirebaseOptions` cannot be resolved (the old `getItOrNull` lookup was
+/// always `null`). Firebase is initialized from the platform's native
+/// configuration instead — `google-services.json` on Android,
+/// `GoogleService-Info.plist` on iOS, which every flavor ships (the same
+/// files FCM itself needs to deliver the message). An app without them
+/// cannot receive a background message in the first place.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    await Firebase.initializeApp(options: getItOrNull<FirebaseOptions>());
-  } catch (_) {
-    // If Firebase is already initialized, or fails because of lack of options, ignore.
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+  } catch (e, s) {
+    DynamicLogger.log(
+      'Initializing Firebase in the background isolate failed: $e',
+      tag: 'PushNotificationService.firebaseMessagingBackgroundHandler',
+      level: LogLevel.ERROR,
+      stackTrace: s,
+    );
   }
   DynamicLogger.log(
     message,
@@ -60,9 +73,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// `@PostConstruct(preResolve: true)` — so everything it awaits delays
 /// `configureDependencies()`, and with it the first frame. It therefore awaits
 /// only what must exist by then (Firebase, the channels, the message handlers,
-/// the initial message); the permission prompt and the FCM token fetch run in
-/// the background. Read the token from [tokenStream], not [fcmToken], right
-/// after boot.
+/// the initial message); the FCM token fetch runs in the background. Read the
+/// token from [tokenStream], not [fcmToken], right after boot.
+///
+/// **It never asks for notification permission by itself.** A prompt at DI
+/// time — the first launch, before the user has seen a screen — is the one
+/// most users refuse. Call [requestPermission] where the app can explain why
+/// (after sign-in, from a settings toggle).
 @singleton
 class PushNotificationService {
   /// Flutter local notifications plugin instance.
@@ -99,6 +116,9 @@ class PushNotificationService {
 
   /// The initial message received when the app is launched.
   RemoteMessage? _initialMessage;
+
+  /// FCM subscriptions opened by [init], cancelled by [dispose].
+  final _subscriptions = <StreamSubscription<Object?>>[];
 
   /// Constructor. Receives optional [FirebaseOptions] via DI.
   /// The initialization logic is handled automatically in [init].
@@ -143,11 +163,10 @@ class PushNotificationService {
   ///
   /// Awaits only what must be ready when DI finishes: Firebase, the Android
   /// channels, the message handlers, the local notifications plugin and the
-  /// message that launched the app. The permission prompt and the FCM token
-  /// fetch are started but **not** awaited — awaiting them held the whole boot
-  /// on a system dialog (until the user answered it) or on the network (the
-  /// token fetch, offline). Their failures are logged, never thrown.
-  /// Automatically called during DI setup.
+  /// message that launched the app. The FCM token fetch is started but **not**
+  /// awaited — awaiting it held the whole boot on the network when offline.
+  /// Its failure is logged, never thrown. Asks for no permission (see
+  /// [requestPermission]). Automatically called during DI setup.
   @PostConstruct(preResolve: true)
   Future<void> init() async {
     await _initializeFirebase();
@@ -159,13 +178,16 @@ class PushNotificationService {
     // This is crucial for handling app launches from terminated state via a notification tap.
     await _getInitialMessage();
 
-    unawaited(_requestPermissionsAndRegisterToken());
+    unawaited(_registerTokenSafely());
   }
 
-  /// Requests notification permission, then registers the FCM token.
+  /// Asks the user for notification permission (the system prompt), then
+  /// registers the FCM token again — on iOS a token is only issued once the
+  /// app may notify.
   ///
-  /// Runs in the background from [init]; never throws.
-  Future<void> _requestPermissionsAndRegisterToken() async {
+  /// Call it from the app at a moment the user understands; nothing in the
+  /// platform calls it. Never throws: a failure is logged.
+  Future<void> requestPermission() async {
     try {
       final settings = await _firebaseMessaging.requestPermission(
         alert: true,
@@ -178,7 +200,7 @@ class PushNotificationService {
       );
       DynamicLogger.log(
         'User granted permission: ${settings.authorizationStatus}',
-        tag: 'PushNotificationService.init',
+        tag: 'PushNotificationService.requestPermission',
       );
 
       if (Platform.isAndroid) {
@@ -189,12 +211,16 @@ class PushNotificationService {
     } catch (e, s) {
       DynamicLogger.log(
         'Requesting notification permission failed: $e',
-        tag: 'PushNotificationService.init',
+        tag: 'PushNotificationService.requestPermission',
         level: LogLevel.ERROR,
         stackTrace: s,
       );
     }
+    await _registerTokenSafely();
+  }
 
+  /// [registerToken], logging instead of throwing.
+  Future<void> _registerTokenSafely() async {
     try {
       await registerToken();
       DynamicLogger.log(fcmToken, tag: 'PushNotificationService.Fcm token');
@@ -305,25 +331,26 @@ class PushNotificationService {
   /// The token itself is fetched by [registerToken], in the background.
   void _setNotificationListeners() {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedAppMessage);
-
-    _firebaseMessaging.onTokenRefresh.listen((newToken) {
-      if (_fcmToken == newToken) return;
-      _fcmToken = newToken;
-      _tokenStreamController.sink.add(newToken);
-      DynamicLogger.log(
-        newToken,
-        tag: 'PushNotificationService.Fcm onTokenRefresh',
-      );
-    });
+    _subscriptions.addAll([
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage),
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedAppMessage),
+      _firebaseMessaging.onTokenRefresh.listen((newToken) {
+        if (_fcmToken == newToken) return;
+        _fcmToken = newToken;
+        _tokenStreamController.sink.add(newToken);
+        DynamicLogger.log(
+          newToken,
+          tag: 'PushNotificationService.Fcm onTokenRefresh',
+        );
+      }),
+    ]);
   }
 
   /// Initializes Flutter local notifications.
   Future<void> _initializeFlutterLocalNotifications() async {
     // No permission request here: on iOS it would make this awaited call wait
-    // for the user to answer the prompt. [_requestPermissionsAndRegisterToken]
-    // asks, in the background.
+    // for the user to answer the prompt. [requestPermission] asks, when the
+    // app calls it.
     final initializationSettingsDarwin = const DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -547,8 +574,8 @@ class PushNotificationService {
         e,
         tag: 'PushNotificationService.registerToken',
         level: LogLevel.ERROR,
+        stackTrace: s,
       );
-      debugPrintStack(stackTrace: s);
       return null;
     });
     if (_fcmToken != null) {
@@ -556,21 +583,27 @@ class PushNotificationService {
     }
   }
 
-  /// Closes every broadcast controller owned by this service.
+  /// Cancels the FCM subscriptions and closes every broadcast controller
+  /// owned by this service.
   ///
-  /// Not called in production: this service is registered as a `@singleton`,
-  /// so the DI container holds it for the whole application lifetime and the
-  /// process exits before teardown would matter. It exists for tests and for
-  /// callers that tear the container down explicitly (e.g. `getIt.reset()`
-  /// between integration tests) — without it those tests leak stream
-  /// controllers across cases.
+  /// Marked `@disposeMethod`, so GetIt calls it when the container is reset
+  /// (`getIt.reset()` between integration tests) — without it those tests
+  /// leak subscriptions and stream controllers across cases. In a running
+  /// app it never fires: the singleton lives for the whole process.
   ///
   /// After calling this the instance is unusable; resolve a fresh one from DI.
-  void dispose() {
-    _dataStreamController.close();
-    _bodyStreamController.close();
-    _titleStreamController.close();
-    _tokenStreamController.close();
-    _foregroundMessageStreamController.close();
+  @disposeMethod
+  Future<void> dispose() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
+    }
+    _subscriptions.clear();
+    await Future.wait([
+      _dataStreamController.close(),
+      _bodyStreamController.close(),
+      _titleStreamController.close(),
+      _tokenStreamController.close(),
+      _foregroundMessageStreamController.close(),
+    ]);
   }
 }

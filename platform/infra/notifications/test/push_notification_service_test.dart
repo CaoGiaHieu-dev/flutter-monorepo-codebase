@@ -16,7 +16,7 @@ void main() {
     late PushNotificationService service;
 
     setUp(() => service = PushNotificationService(_options));
-    tearDown(() => service.dispose());
+    tearDown(() async => service.dispose());
 
     test('blocking is case-insensitive on both sides', () {
       service.addBlockedTypes(['Promo']);
@@ -34,5 +34,14 @@ void main() {
 
       expect(service.isTypeBlocked('promo'), isFalse);
     });
+  });
+
+  test('dispose closes the streams and can run before init', () async {
+    final service = PushNotificationService(_options);
+    final done = service.tokenStream.drain<void>();
+
+    await service.dispose();
+
+    await expectLater(done, completes);
   });
 }

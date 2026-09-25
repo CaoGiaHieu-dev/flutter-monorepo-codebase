@@ -15,8 +15,10 @@ import 'firebase_options_staging.dart' as stg;
 ///
 /// The three imported files are generated per project and git-ignored; create
 /// them with `dart tools/firebase/firebase_config.dart --app mobile`. An app
-/// that does not use Firebase simply has no such module: `core_notifications`
-/// resolves [FirebaseOptions] with `getItOrNull`.
+/// that does not use Firebase has no such module and composes no
+/// `core_notifications`, whose `PushNotificationService` injects these
+/// options. (Its background-message handler runs in an isolate without DI,
+/// so it initializes Firebase from the native config files instead.)
 @module
 abstract class FirebaseModule {
   /// Provides development Firebase options.

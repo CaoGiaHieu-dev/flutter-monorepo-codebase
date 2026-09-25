@@ -119,6 +119,25 @@ String? _platformGroupOf(MonorepoPackage pkg, String root) {
   return segments[1];
 }
 
+/// Why a domain package (`domain_*`, `domain_core` included) may not depend
+/// on [dep] — null when it may. RULE-03: pure Dart, no transport, and no
+/// workspace package outside the domain layer — `domain_core` and another
+/// module's `domain_*` are the only workspace edges a domain may have.
+String? _domainDependencyProblem(String dep) {
+  const flutterOrTransport = {
+    'flutter',
+    'dio',
+    'retrofit',
+    'material_ui',
+    'cupertino_ui',
+  };
+  if (flutterOrTransport.contains(dep)) return 'Flutter or transport';
+  for (final prefix in const ['core_', 'platform_', 'data_', 'feature_']) {
+    if (dep.startsWith(prefix)) return 'a `$prefix*` package';
+  }
+  return null;
+}
+
 /// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
 /// binding anywhere in their dependency closure.
 ///
@@ -539,20 +558,15 @@ void main(List<String> args) {
         }
 
         if (layer == 'domain') {
-          const banned = {
-            'flutter',
-            'dio',
-            'retrofit',
-            'material_ui',
-            'cupertino_ui',
-          };
-          if (banned.contains(target)) {
+          final problem = _domainDependencyProblem(target);
+          if (problem != null) {
             blocking.add(
               Violation(
                 'R2',
                 '$rel:${ref.line}',
-                'domain package `${pkg.name}` imports `$target`. '
-                    'Domain is pure Dart.',
+                'domain package `${pkg.name}` imports `$target` ($problem). '
+                    'Domain is pure Dart and depends on domain_* packages '
+                    'only.',
               ),
             );
           }
@@ -653,18 +667,20 @@ void main(List<String> args) {
       }
     }
 
-    if (layer == 'domain' &&
-        (declared.contains('flutter') ||
-            declared.contains('material_ui') ||
-            declared.contains('cupertino_ui'))) {
-      blocking.add(
-        Violation(
-          'R2',
-          pubspecRel,
-          'domain package `${pkg.name}` declares Flutter/UI dependencies under '
-              '`dependencies:`. Domain must resolve without the Flutter SDK.',
-        ),
-      );
+    if (layer == 'domain') {
+      for (final dep in declared) {
+        final problem = _domainDependencyProblem(dep);
+        if (problem == null) continue;
+        blocking.add(
+          Violation(
+            'R2',
+            pubspecRel,
+            'domain package `${pkg.name}` declares `$dep` under '
+                '`dependencies:` ($problem). Domain must resolve without the '
+                'Flutter SDK and depend on domain_* packages only.',
+          ),
+        );
+      }
     }
 
     // --- R4: shared constants belong in utils/ ----------------------------
@@ -1180,9 +1196,11 @@ RULES CHECKED
       pubspec.yaml.
 
   R2  Domain is pure Dart
-      No modules/*/domain/lib file may import flutter, dio or retrofit, and no
-      domain pubspec may declare `flutter` under `dependencies:`
-      (dev_dependencies is fine).
+      No domain_* package (domain_core included) may import or declare under
+      `dependencies:` flutter, material_ui, cupertino_ui, dio or retrofit, nor
+      any core_*, platform_*, data_* or feature_* package. domain_core and
+      other domain_* packages are its only workspace dependencies
+      (dev_dependencies are not checked).
 
   R3  Feature and module-API boundaries
       A feature may not import another feature, nor any data_* package.

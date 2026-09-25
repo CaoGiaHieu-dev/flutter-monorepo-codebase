@@ -397,7 +397,7 @@ Tool không nhận tham số nào khác: bất cứ thứ gì ngoài `--help` (m
 | Luật | Kiểm tra gì |
 |---|---|
 | R1 | Hướng phụ thuộc — không package `platform/*` nào được import hay khai `feature_*` / `data_*` / `domain_*` hay package API của module (`<id>_api`), trừ các ngoại lệ đã duyệt |
-| R2 | Domain thuần Dart — không import `flutter` / `dio` / `retrofit`, không khai `flutter` trong `dependencies:` |
+| R2 | Domain thuần Dart — không `flutter` / UI / `dio` / `retrofit`, và không package `core_*` / `platform_*` / `data_*` / `feature_*` nào, dù import hay khai trong `dependencies:`; chỉ `domain_core` và các package `domain_*` khác |
 | R3 | Ranh giới feature và package API — không feature nào import feature khác hay package `data_*` (`<id>_api` của module khác thì được); package API của module (`modules/<id>/api`) chỉ import và khai `platform/foundation/*` cùng package Flutter/pub |
 | R4 | `static const` public phải nằm trong một thư mục `utils/` (file dưới `styles/` — design token của `core_base_ui` — được miễn). Package không có hằng số public thì không cần `utils/` |
 | R5 | Mọi `package:` import dùng trong `lib/` phải được khai trong mục `dependencies:` của chính package đó — khai ở `dev_dependencies` không được tính |

@@ -97,6 +97,57 @@ void main() {
       });
       expectViolation(run, 'R2', 'modules/x/domain/lib/x.dart:1');
     });
+
+    test('domain_core and another domain_* package pass', () async {
+      final run = await check({
+        'platform/layers/domain/pubspec.yaml': pubspec('domain_core'),
+        'modules/y/domain/pubspec.yaml': pubspec(
+          'domain_y',
+          deps: ['domain_core'],
+        ),
+        'modules/x/domain/pubspec.yaml': pubspec(
+          'domain_x',
+          deps: ['domain_core', 'domain_y'],
+        ),
+        'modules/x/domain/lib/x.dart':
+            "import 'package:domain_core/domain_core.dart';\n"
+            "import 'package:domain_y/domain_y.dart';\n",
+      });
+      expectClean(run, 'R2');
+    });
+
+    for (final dep in [
+      'core_network',
+      'platform_kernel',
+      'data_core',
+      'feature_x',
+    ]) {
+      test('a domain package importing $dep fails', () async {
+        final run = await check({
+          'modules/x/domain/pubspec.yaml': pubspec('domain_x', deps: [dep]),
+          'modules/x/domain/lib/x.dart': "import 'package:$dep/$dep.dart';\n",
+        });
+        expectViolation(run, 'R2', 'modules/x/domain/lib/x.dart:1');
+        expect(run.output, contains('declares `$dep`'));
+      });
+    }
+
+    test('domain_core declaring a core_* package fails', () async {
+      final run = await check({
+        'platform/layers/domain/pubspec.yaml': pubspec(
+          'domain_core',
+          deps: ['core_di'],
+        ),
+      });
+      expectViolation(run, 'R2', 'platform/layers/domain/pubspec.yaml');
+    });
+
+    test('a domain package declaring dio fails', () async {
+      final run = await check({
+        'modules/x/domain/pubspec.yaml': pubspec('domain_x', deps: ['dio']),
+      });
+      expectViolation(run, 'R2', 'modules/x/domain/pubspec.yaml');
+    });
   });
 
   group('R3 feature boundaries', () {

@@ -402,7 +402,7 @@ It takes no other argument: anything besides `--help` (a `--fix`, a typo of `--h
 | Rule | What it checks |
 |---|---|
 | R1 | Dependency direction — no `platform/*` package may import or declare `feature_*` / `data_*` / `domain_*` or a module API package (`<id>_api`), except the approved edges |
-| R2 | Domain is pure Dart — no `flutter` / `dio` / `retrofit` import, no `flutter` under `dependencies:` |
+| R2 | Domain is pure Dart — no `flutter` / UI / `dio` / `retrofit`, and no `core_*` / `platform_*` / `data_*` / `feature_*` package, imported or under `dependencies:`; `domain_core` and other `domain_*` packages only |
 | R3 | Feature and module-API boundaries — no feature imports another feature or a `data_*` package (another module's `<id>_api` is fine); a module API package (`modules/<id>/api`) imports and declares only `platform/foundation/*` and Flutter/pub packages |
 | R4 | Public `static const` live in a `utils/` directory (files under `styles/` — `core_base_ui`'s design tokens — are exempt). A package with no public constants needs no `utils/` |
 | R5 | Every `package:` import used in `lib/` is declared under that package's `dependencies:` — a `dev_dependencies` entry does not count |

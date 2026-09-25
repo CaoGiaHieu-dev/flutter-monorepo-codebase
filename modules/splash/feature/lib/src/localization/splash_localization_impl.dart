@@ -2,8 +2,10 @@ import 'package:core_di/core_di.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 
-import '../feature_splash.dart';
+import '../extensions/l10n_splash_extension.dart';
 
+/// Hands this feature's translations to the app shell, which collects every
+/// `IFeatureLocalization` into `MaterialApp.localizationsDelegates`.
 @Injectable(as: IFeatureLocalization)
 class SplashLocalizationImpl implements IFeatureLocalization {
   @override

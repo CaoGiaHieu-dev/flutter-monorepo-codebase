@@ -189,11 +189,10 @@ void main(List<String> args) async {
       );
     }
 
-    // The package barrel is written twice. `lib/di/` imports it
-    // (`localization.dart`), so it must exist before build_runner reads the
-    // package; and it also exports generated files present on disk
-    // (`module.module.dart`, `lib/src/gen/**`), so the last run must come
-    // after codegen.
+    // The package barrel is written twice: once so the package has its
+    // public entry point while build_runner reads it, and again after
+    // codegen, because it also exports generated files present on disk
+    // (`module.module.dart`, `lib/src/gen/**`).
     stdout.writeln('[!] Generating barrel files...');
     await CommonHelpers.runDart([
       'tools/barrel_generator/generate.dart',
@@ -243,7 +242,7 @@ void main(List<String> args) async {
             '   ⚠ For a primary bottom-nav tab only. Pushed screens (login/detail) do not belong here.',
           );
           stdout.writeln(
-            '   See docs/{en,vi}/guides/04_routing.md, the Dashboard section.',
+            '   See docs/en/guides/04_routing.md § 1 (Pick the routing contract).',
           );
           break;
         case FeatureRouteContribution.none:
@@ -258,7 +257,11 @@ void main(List<String> args) async {
         '"dart tools/barrel_generator/generate.dart modules/<id>/api/lib"',
       );
       stdout.writeln(
-        '4. Re-run "dart run build_runner build --workspace", then fully '
+        '4. Translate "${config.modulePath}/assets/language/vi.arb" — it '
+        'starts as a copy of the English text',
+      );
+      stdout.writeln(
+        '5. Re-run "dart run build_runner build --workspace", then fully '
         'restart the app — hot reload does not pick up new DI registrations',
       );
       stdout.writeln('==========================================');

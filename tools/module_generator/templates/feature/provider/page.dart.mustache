@@ -21,7 +21,7 @@ class {{pascalNameInput}}Page extends StatelessWidget {
           // width on a tablet or desktop window and changes nothing on a
           // phone. Sizes and type come from the design system, already
           // scaled through context — never a raw number, and never re-scaled
-          // (rule 12).
+          // (RULE-30, RULE-31).
           return AdaptiveContent(
             padding: EdgeInsets.all(AppSpacing.lg(context)),
             child: Text(

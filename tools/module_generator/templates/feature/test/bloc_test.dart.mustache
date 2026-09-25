@@ -15,7 +15,7 @@ void main() {
     expect(bloc.state, const BlocViewState<{{pascalNameInput}}StateData>.initial());
   });
 
-  test('started emits success', () async {
+  test('started emits loading, then success', () async {
     final bloc = {{pascalNameInput}}Bloc();
     addTearDown(bloc.close);
 
@@ -23,11 +23,12 @@ void main() {
 
     await expectLater(
       bloc.stream,
-      emits(
+      emitsInOrder([
+        const BlocViewState<{{pascalNameInput}}StateData>.loading(),
         const BlocViewState<{{pascalNameInput}}StateData>.success(
           {{pascalNameInput}}StateData(),
         ),
-      ),
+      ]),
     );
   });
 }

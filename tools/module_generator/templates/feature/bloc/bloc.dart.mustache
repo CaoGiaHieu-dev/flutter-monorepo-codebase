@@ -1,4 +1,5 @@
 import 'package:bloc_state_management/bloc_state_management.dart';
+import 'package:domain_core/domain_core.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
 
@@ -6,17 +7,28 @@ part '{{snakeNameInput}}_event.dart';
 part '{{snakeNameInput}}_state.dart';
 part '{{snakeNameInput}}_bloc.freezed.dart';
 
+/// A screen-scoped Bloc: an `@injectable` factory, created at the route
+/// (RULE-10, RULE-21).
+///
+/// [BlocResultMixin] gives it `emitResult`, the BLoC counterpart of the
+/// Provider branch's `executeOperation` (RULE-53): it emits `loading`, runs
+/// the operation and settles its `Result` into `success` or `error`.
 @injectable
 class {{pascalNameInput}}Bloc
-    extends BaseBloc<{{pascalNameInput}}Event, BlocViewState<{{pascalNameInput}}StateData>> {
+    extends BaseBloc<{{pascalNameInput}}Event, BlocViewState<{{pascalNameInput}}StateData>>
+    with BlocResultMixin<{{pascalNameInput}}StateData> {
   {{pascalNameInput}}Bloc() : super(const BlocViewState.initial()) {
     on<_{{pascalNameInput}}Started>(_onStarted);
   }
 
+  /// Replace the placeholder operation with a use case: inject it through
+  /// the constructor and call it here, e.g.
+  /// `emitResult(emit, () => _getThing(const NoParams()), convert: ...)`.
   Future<void> _onStarted(
     _{{pascalNameInput}}Started event,
     Emitter<BlocViewState<{{pascalNameInput}}StateData>> emit,
-  ) async {
-    emit(const BlocViewState.success({{pascalNameInput}}StateData()));
-  }
+  ) => emitResult(
+    emit,
+    () async => const Result.success({{pascalNameInput}}StateData()),
+  );
 }

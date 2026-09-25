@@ -37,12 +37,12 @@ class PubspecGenerator {
           config.type == ModuleType.core || config.type == ModuleType.custom,
       'isProvider': config.smType == StateManagementType.provider,
       'isBloc': config.smType == StateManagementType.bloc,
-      // Entities, models and BLoC events are all Freezed; core/custom
-      // packages carry no codegen'd data classes by default.
+      // Only the BLoC templates declare Freezed classes (the events and the
+      // state data). A domain or data package adds freezed with its first
+      // entity or model — declared up front it is reported as unused.
       'usesFreezed':
-          config.type == ModuleType.feature ||
-          config.type == ModuleType.domain ||
-          config.type == ModuleType.data,
+          config.type == ModuleType.feature &&
+          config.smType == StateManagementType.bloc,
       'internalDependencies': _internalDependencies(config),
     };
 
@@ -81,7 +81,7 @@ class PubspecGenerator {
   /// packages used to fail that check out of the box.
   ///
   /// Note `domain` gets `domain_core` and nothing else: a domain package that
-  /// depends on a `core_*` package stops being pure Dart, which rule 26
+  /// depends on a `core_*` package stops being pure Dart, which RULE-03
   /// forbids and `arch_check` R2 blocks. A data package depends on its own
   /// module's `domain_<name>` when that exists (generate the domain first);
   /// core and custom packages start with no workspace dependency at all.
@@ -101,6 +101,9 @@ class PubspecGenerator {
           ],
           if (config.smType == StateManagementType.bloc) ...[
             'bloc_state_management',
+            // The bloc template settles a `Result` from domain_core through
+            // `emitResult`.
+            'domain_core',
             // The BLoC page's loading state is the kit's `LoadingWidget`.
             'core_ui_kit',
           ],

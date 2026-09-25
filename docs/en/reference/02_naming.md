@@ -18,8 +18,8 @@ Every example below is a real path in this repository — open it to see the con
 | Controller (BLoC) | `_bloc.dart` | `Bloc` | `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` |
 | Controller (Cubit) | `_cubit.dart` | `Cubit` | *only when events are unnecessary* |
 | BLoC events | `_event.dart` | `Event` | `modules/home/feature/lib/src/bloc/home_profile_event.dart` |
-| Use case | `_usecase.dart` | `UseCase` | `modules/auth/domain/lib/src/usecases/auth/login_usecase.dart` |
-| Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user/user_entity.dart` |
+| Use case | `_usecase.dart` | `UseCase` | `modules/auth/domain/lib/src/usecases/login_usecase.dart` |
+| Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user_entity.dart` |
 | Repository interface | `i_<name>_repository.dart` | prefix `I` | `modules/auth/domain/lib/src/repositories/i_auth_repository.dart` |
 | Repository impl | `_repository_impl.dart` | `RepositoryImpl` | `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart` |
 | Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `modules/cache/data/lib/src/models/cache_entry_model.dart` |

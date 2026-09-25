@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:domain_core/domain_core.dart';
 import 'package:retrofit/retrofit.dart';
 
-import '../../models/user/user_model.dart';
+import '../../models/user_model.dart';
 import '../../utils/auth_api_constants.dart';
 
 part 'auth_remote_data_source.g.dart';

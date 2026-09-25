@@ -23,5 +23,5 @@ export 'src/contracts/storage_interface.dart';
 export 'src/contracts/storage_manager.dart';
 export 'src/contracts/storage_type.dart';
 export 'src/contracts/storage_value.dart';
-export 'src/impl/pref/pref_storage_impl.dart';
-export 'src/impl/secure/secure_storage_impl.dart';
+export 'src/impl/pref_storage_impl.dart';
+export 'src/impl/secure_storage_impl.dart';

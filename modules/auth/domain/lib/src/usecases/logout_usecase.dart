@@ -1,7 +1,7 @@
 import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../repositories/i_auth_repository.dart';
+import '../repositories/i_auth_repository.dart';
 
 @injectable
 class LogoutUseCase extends BaseUseCase<void, NoParams> {

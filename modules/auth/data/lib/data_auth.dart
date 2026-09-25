@@ -23,7 +23,7 @@ export 'di/module.module.dart';
 export 'di/register_module.dart';
 export 'src/data_sources/local/auth_local_data_source.dart';
 export 'src/data_sources/remote/auth_remote_data_source.dart';
-export 'src/models/user/user_model.dart';
+export 'src/models/user_model.dart';
 export 'src/repositories_impl/auth_repository_impl.dart';
 export 'src/services/auth_session_gateway_impl.dart';
 export 'src/utils/auth_api_constants.dart';

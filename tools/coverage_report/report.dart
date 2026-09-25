@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../shared/workspace.dart';
+
 /// Per-package line coverage from the `coverage/lcov.info` files that
 /// `flutter test --coverage` leaves in each package.
 ///
@@ -258,26 +260,9 @@ PackageCoverage _package(String root, String trace) {
   );
 }
 
-/// Every `coverage/lcov.info` under [root], skipping tool state and build
-/// output.
-List<String> _findLcovFiles(String root) {
-  const skip = {'.git', '.dart_tool', 'build', 'node_modules', '.symlinks'};
-  final out = <String>[];
-  void walk(Directory dir) {
-    for (final e in dir.listSync(followLinks: false)) {
-      final name = p.basename(e.path);
-      if (e is Directory) {
-        if (skip.contains(name)) continue;
-        walk(e);
-      } else if (e is File &&
-          name == 'lcov.info' &&
-          p.basename(e.parent.path) == 'coverage') {
-        out.add(e.path);
-      }
-    }
-  }
-
-  walk(Directory(root));
-  out.sort();
-  return out;
-}
+/// Every `coverage/lcov.info` under [root] — the shared workspace walk
+/// (`tools/shared/workspace.dart`), sorted by path.
+List<String> _findLcovFiles(String root) => [
+  for (final file in findWorkspaceFiles(root, 'lcov.info'))
+    if (p.basename(file.parent.path) == 'coverage') file.path,
+];

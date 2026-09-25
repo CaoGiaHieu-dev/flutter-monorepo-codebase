@@ -27,7 +27,8 @@ tools/
 │   └── parity_allowlist.txt         # Intentional en/vi shape differences, each with its reason
 ├── shared/                          # 🔗 Code shared between tools
 │   ├── app_locator.dart             # Finds apps by app_manifest.yaml, picks one with --app <id>
-│   └── toolchain.dart               # FVM detection (.fvmrc + `fvm --version`) for every tool that runs dart/flutter
+│   ├── toolchain.dart               # FVM detection (.fvmrc + `fvm --version`) for every tool that runs dart/flutter
+│   └── workspace.dart               # The one discovery walk (pubspecs, app manifests, lcov) and its skip set
 ├── sample_cleanup/                  # 🧹 Classifies and safely removes sample code
 │   └── remove_sample.dart           # --list / dry-run / --apply, with rollback
 ├── sample_manifest.yaml             # 📑 Source of truth: which package is sample/framework/shell

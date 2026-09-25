@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import '../shared/workspace.dart';
 import '../unused_checker/output_formatter.dart';
 
 /// Composes an app from its `app_manifest.yaml`.
@@ -170,44 +171,23 @@ dynamic _loadYamlFile(String path) => loadYaml(
 /// Package name -> directory, for every `pubspec.yaml` in the tree.
 Map<String, String> _discoverPackages(String root) {
   final out = <String, String>{};
-  void walk(Directory dir) {
-    for (final e in dir.listSync(followLinks: false)) {
-      final name = p.posix.basename(e.path.replaceAll(r'\', '/'));
-      if (e is Directory) {
-        const skip = {
-          '.git',
-          '.dart_tool',
-          'build',
-          'ios',
-          'android',
-          'macos',
-          'windows',
-          'linux',
-          'web',
-        };
-        if (skip.contains(name)) continue;
-        walk(e);
-      } else if (e is File && name == 'pubspec.yaml') {
-        final path = p.posix.normalize(e.path.replaceAll(r'\', '/'));
-        Object? pkg;
-        try {
-          final doc = _loadYamlFile(path);
-          if (doc is! YamlMap) continue;
-          pkg = doc['name'];
-        } on YamlException catch (error) {
-          _invalidYaml[path] = error;
-          pkg = RegExp(
-            r'^name:\s*([A-Za-z_]\w*)\s*$',
-            multiLine: true,
-          ).firstMatch(e.readAsStringSync())?.group(1);
-        }
-        if (pkg is! String) continue;
-        out[pkg] = p.posix.dirname(path);
-      }
+  for (final file in findPubspecs(root)) {
+    final path = p.posix.normalize(file.path.replaceAll(r'\', '/'));
+    Object? pkg;
+    try {
+      final doc = _loadYamlFile(path);
+      if (doc is! YamlMap) continue;
+      pkg = doc['name'];
+    } on YamlException catch (error) {
+      _invalidYaml[path] = error;
+      pkg = RegExp(
+        r'^name:\s*([A-Za-z_]\w*)\s*$',
+        multiLine: true,
+      ).firstMatch(file.readAsStringSync())?.group(1);
     }
+    if (pkg is! String) continue;
+    out[pkg] = p.posix.dirname(path);
   }
-
-  walk(Directory(root));
   return out;
 }
 
@@ -301,22 +281,10 @@ List<AppManifest> _discoverApps(String root) {
   final out = <AppManifest>[];
   final problems = <String>[];
   final idOwner = <String, String>{};
-  final paths = <String>[];
-
-  void walk(Directory dir) {
-    for (final e in dir.listSync(followLinks: false)) {
-      final name = p.posix.basename(e.path.replaceAll(r'\', '/'));
-      if (e is Directory) {
-        const skip = {'.git', '.dart_tool', 'build', 'packages', 'modules'};
-        if (skip.contains(name)) continue;
-        walk(e);
-      } else if (e is File && name == 'app_manifest.yaml') {
-        paths.add(p.posix.normalize(e.path.replaceAll(r'\', '/')));
-      }
-    }
-  }
-
-  walk(Directory(root));
+  final paths = [
+    for (final file in findAppManifests(root))
+      p.posix.normalize(file.path.replaceAll(r'\', '/')),
+  ];
   // Directory listing order is filesystem-dependent; sorting the paths makes
   // "which manifest is the duplicate" the same answer on every machine.
   paths.sort();

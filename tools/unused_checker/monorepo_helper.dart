@@ -4,6 +4,8 @@ import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import '../shared/workspace.dart';
+
 class MonorepoPackage {
   final String name;
   final String rootPath;
@@ -116,37 +118,16 @@ class MonorepoHelper {
       }
     }
 
-    // Discovery is a recursive scan for `pubspec.yaml`, not a fixed list of
-    // directories. The previous version hardcoded `apps/mobile/`, `packages/core`,
-    // `modules/*/feature`, `modules/*/data` and `modules/*/domain`, so moving a
-    // package anywhere else made it invisible — and every consumer of this
-    // helper (unused_checker, arch_check) would then report a clean result for
-    // a package it had simply stopped looking at.
-    void walk(Directory dir) {
-      for (final entity in dir.listSync(followLinks: false)) {
-        final name = p.posix.basename(entity.path.replaceAll('\\', '/'));
-        if (entity is Directory) {
-          const skip = {
-            '.git',
-            '.dart_tool',
-            'build',
-            'ios',
-            'android',
-            'macos',
-            'windows',
-            'linux',
-            'web',
-            'node_modules',
-          };
-          if (skip.contains(name) || name.startsWith('.')) continue;
-          walk(entity);
-        } else if (entity is File && name == 'pubspec.yaml') {
-          parsePubspec(p.posix.dirname(entity.path.replaceAll('\\', '/')));
-        }
-      }
+    // Discovery is a recursive scan for `pubspec.yaml` (the shared walk in
+    // tools/shared/workspace.dart), not a fixed list of directories. The
+    // previous version hardcoded `apps/mobile/`, `packages/core`,
+    // `modules/*/feature`, `modules/*/data` and `modules/*/domain`, so moving
+    // a package anywhere else made it invisible — and every consumer of this
+    // helper (unused_checker, arch_check) would then report a clean result
+    // for a package it had simply stopped looking at.
+    for (final pubspec in findPubspecs(projectRootPosix)) {
+      parsePubspec(p.posix.dirname(pubspec.path.replaceAll('\\', '/')));
     }
-
-    walk(Directory(projectRootPosix));
     // The repository root is a workspace anchor, not a package anyone depends
     // on; including it would make every path check relative to the wrong node.
     packages.removeWhere((_, pkg) => pkg.rootPath == projectRootPosix);

@@ -94,9 +94,7 @@ void main(List<String> args) async {
   // 5. Determine unused files. A barrel is the package's public surface,
   // not a file anything "uses": it is never reported.
   final barrels = barrelFiles(packages.values);
-  final unusedFiles = allDartFiles
-      .difference(usedFiles)
-      .difference(barrels);
+  final unusedFiles = allDartFiles.difference(usedFiles).difference(barrels);
 
   stopwatch.stop();
   stdout.writeln(
@@ -253,17 +251,16 @@ Set<String> findUsedFilesByGraphTraversal(
 
   // Every file a barrel exposes: its exports, and theirs, across packages.
   final exposedCache = <String, Set<String>>{};
-  Set<String> exposedBy(String barrel) =>
-      exposedCache.putIfAbsent(barrel, () {
-        final out = <String>{};
-        final queue = Queue<String>()..add(barrel);
-        while (queue.isNotEmpty) {
-          for (final (kind, target) in directives(queue.removeFirst())) {
-            if (kind == 'export' && out.add(target)) queue.add(target);
-          }
-        }
-        return out;
-      });
+  Set<String> exposedBy(String barrel) => exposedCache.putIfAbsent(barrel, () {
+    final out = <String>{};
+    final queue = Queue<String>()..add(barrel);
+    while (queue.isNotEmpty) {
+      for (final (kind, target) in directives(queue.removeFirst())) {
+        if (kind == 'export' && out.add(target)) queue.add(target);
+      }
+    }
+    return out;
+  });
 
   final namesCache = <String, Set<String>?>{};
   Set<String>? namesOf(String file) =>

@@ -78,7 +78,7 @@ DioException _error(
 /// One dialog request captured from [RetryHandler.onRetryCallback].
 typedef _Dialog = ({void Function() onRetry, void Function() onCancel});
 
-/// Lets the `async void` `onError` of [RetryInterceptor] run to completion.
+/// Lets [RetryInterceptor]'s asynchronous retry decision run to completion.
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
 void main() {
@@ -153,6 +153,37 @@ void main() {
       await _settle();
 
       expect(retried, isEmpty);
+      expect(handler.passedOn, 1);
+    });
+
+    test(
+      'a throwing retryWhen passes the error on instead of escaping',
+      () async {
+        final throwing = RetryInterceptor(
+          retryWhen: (_) => throw StateError('boom'),
+          handleRetry: (err, handler) => retried.add(err),
+        );
+        final handler = _RecordingErrorHandler();
+        final errors = <Object>[];
+        await runZonedGuarded(() async {
+          throwing.onError(_error(DioExceptionType.connectionTimeout), handler);
+          await _settle();
+        }, (error, _) => errors.add(error));
+
+        expect(errors, isEmpty);
+        expect(retried, isEmpty);
+        expect(handler.passedOn, 1);
+      },
+    );
+
+    test('a retryable error with no handleRetry is passed on', () async {
+      final noHandler = RetryInterceptor(
+        retryWhen: RetryHandler(Dio()).retryWhen,
+      );
+      final handler = _RecordingErrorHandler();
+      noHandler.onError(_error(DioExceptionType.connectionTimeout), handler);
+      await _settle();
+
       expect(handler.passedOn, 1);
     });
 

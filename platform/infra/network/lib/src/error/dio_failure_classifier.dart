@@ -4,6 +4,12 @@ import 'package:platform_kernel/platform_kernel.dart';
 
 /// Maps Dio's [DioException] to an [AppFailure] for `ErrorHandler`.
 ///
+/// **Every failure carries a stable code** — an [ErrorCodes] constant for a
+/// transport failure, the HTTP status for an error response — and that code
+/// is what a UI maps to a translated message. [AppFailure.message] is an
+/// English diagnostic (or the server's own text) for logs and crash
+/// reports; do not show it as-is.
+///
 /// The kernel is pure Dart and names no transport, so the Dio rules live
 /// here, next to the client that throws them, and reach `ErrorHandler`
 /// through [ErrorHandler.registerClassifier].
@@ -80,13 +86,15 @@ final class DioFailureClassifier implements ErrorClassifier {
   }
 
   /// The failure for an HTTP error response: 401/403 → [AuthFailure],
-  /// any other status → [ServerFailure] carrying it, no status → 500.
+  /// any other status → [ServerFailure] carrying it, no status →
+  /// [ErrorCodes.HTTP_ERROR] — never a made-up 500, so a code in 500–599
+  /// always is a real server error.
   static AppFailure<dynamic> _failureFromStatusCode(
     int? statusCode,
     String message,
   ) {
     if (statusCode == null) {
-      return ServerFailure(message: message, code: 500);
+      return ServerFailure(message: message, code: ErrorCodes.HTTP_ERROR);
     }
     if (statusCode == 401 || statusCode == 403) {
       return AuthFailure(message: message, code: statusCode);
@@ -94,7 +102,8 @@ final class DioFailureClassifier implements ErrorClassifier {
     return ServerFailure(message: message, code: statusCode);
   }
 
-  /// The user-facing message of an error response.
+  /// The diagnostic message of an error response — the server's own text
+  /// when it sent one.
   ///
   /// Backends disagree on the shape of `message`: a plain string, a list of
   /// validation messages (NestJS's `{"message": ["email must be an

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../utils/network_constants.dart';
+import 'request_replay.dart';
 
 /// Handles refreshing the token when a request fails due to an expired token.
 /// This handler uses a Completer to ensure that the token is refreshed only once,
@@ -122,10 +123,7 @@ class RefreshTokenHandler {
     ErrorInterceptorHandler handler,
   ) async {
     try {
-      // For FormData, we need to create a new instance for the retry.
-      final requestOptions = err.requestOptions.data is FormData
-          ? _recreateOptions(err.requestOptions)
-          : err.requestOptions;
+      final requestOptions = err.requestOptions.forReplay();
 
       final response = await dio.fetch<dynamic>(requestOptions);
       return handler.resolve(response);
@@ -136,19 +134,5 @@ class RefreshTokenHandler {
         DioException(requestOptions: err.requestOptions, error: e),
       );
     }
-  }
-
-  /// Recreates the request options with a new FormData instance.
-  /// This is necessary because FormData streams can only be used once.
-  RequestOptions _recreateOptions(RequestOptions options) {
-    final formData = options.data as FormData;
-    final newFormData = FormData();
-
-    newFormData.fields.addAll(formData.fields);
-    for (final pair in formData.files) {
-      newFormData.files.add(MapEntry(pair.key, pair.value.clone()));
-    }
-
-    return options.copyWith(data: newFormData);
   }
 }

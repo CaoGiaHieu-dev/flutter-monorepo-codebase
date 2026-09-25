@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
 
 import '../utils/network_constants.dart';
 
@@ -42,28 +43,44 @@ class RetryInterceptor extends Interceptor {
   )?
   handleRetry;
 
+  /// Hands a retryable failure to [handleRetry]; passes everything else on.
+  ///
+  /// Dio's `onError` is synchronous, so the decision runs in [_decide] and
+  /// every path ends the handler: passed on, or owned by [handleRetry]. An
+  /// exception thrown by [retryWhen] or [handleRetry] is logged and the
+  /// original error passed on — before, `void … async` let it escape as an
+  /// uncaught zone error and left the request waiting forever.
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) async {
-    /// Retrieve the `canRetry` configuration from the request options extra map.
-    final canRetry =
-        err.requestOptions.extra[NetworkConstants.EXTRA_CAN_RETRY] as bool? ??
-        true;
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    unawaited(_decide(err, handler));
+  }
 
-    /// If the `canRetry` flag is false, do not retry the request.
-    if (!canRetry) {
-      super.onError(err, handler);
-      return;
-    }
-
-    /// Check if the retry condition is met.
-    final shouldRetry = await retryWhen?.call(err.type);
-
-    /// If the retry condition is met, execute the retry logic.
-    if (shouldRetry ?? false) {
-      handleRetry?.call(err, handler);
-    } else {
-      /// Otherwise, handle the error as usual.
-      super.onError(err, handler);
+  Future<void> _decide(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    try {
+      final canRetry =
+          err.requestOptions.extra[NetworkConstants.EXTRA_CAN_RETRY] as bool? ??
+          true;
+      final retry = handleRetry;
+      final shouldRetry =
+          canRetry &&
+          retry != null &&
+          (await retryWhen?.call(err.type) ?? false);
+      if (!shouldRetry) {
+        handler.next(err);
+        return;
+      }
+      await retry(err, handler);
+    } catch (error, stackTrace) {
+      DynamicLogger.log(
+        'Retry decision failed for ${err.requestOptions.uri}: $error',
+        tag: NetworkConstants.CLIENT_LOG_TAG,
+        level: LogLevel.ERROR,
+        stackTrace: stackTrace,
+      );
+      if (!handler.isCompleted) handler.next(err);
     }
   }
 }

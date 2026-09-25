@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../utils/network_constants.dart';
+import 'request_replay.dart';
 
 /// A class that handles retrying requests when there is an error.
 ///
@@ -122,10 +123,7 @@ class RetryHandler {
   /// anything else is reported as *that* failure — not the original timeout.
   Future<void> _request(_RetryItem retryItem) async {
     final handler = retryItem.errorHandler;
-    var options = retryItem.exception.requestOptions;
-    if (options.data is FormData) {
-      options = _recreateOptions(options);
-    }
+    var options = retryItem.exception.requestOptions.forReplay();
     options = options.copyWith(
       extra: {...options.extra, NetworkConstants.EXTRA_CAN_RETRY: false},
     );
@@ -146,34 +144,6 @@ class RetryHandler {
         DioException(requestOptions: options, error: e),
       );
     }
-  }
-
-  /// Recreates the [FormData] object.
-  ///
-  /// This method will recreate the [FormData] object with the same fields and files as the
-  /// original [FormData] object. This is necessary because the [FormData] object cannot be
-  /// cloned directly.
-  RequestOptions _recreateOptions(RequestOptions options) {
-    // Check if the request data is a [FormData].
-    if (options.data is! FormData) {
-      throw ArgumentError(
-        'requestOptions.data is not FormData',
-        'requestOptions',
-      );
-    }
-    // Cast the request data to a [FormData].
-    final formData = options.data as FormData;
-    // Create a new [FormData] object.
-    final newFormData = FormData();
-    // Add all fields from the original [FormData] object to the new [FormData] object.
-    newFormData.fields.addAll(formData.fields);
-    // Add all files from the original [FormData] object to the new [FormData] object.
-    for (final pair in formData.files) {
-      final file = pair.value;
-      newFormData.files.add(MapEntry(pair.key, file.clone()));
-    }
-    // Return the new [RequestOptions] object with the new [FormData] object.
-    return options.copyWith(data: newFormData);
   }
 }
 

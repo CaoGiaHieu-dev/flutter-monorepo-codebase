@@ -55,6 +55,38 @@ void main() {
         expect(failure.message, equals('Internal Error'));
         expect(failure.code, equals(500));
       });
+
+      test('a response without a status is HTTP_ERROR, not a made-up 500', () {
+        final exception = DioException(
+          requestOptions: RequestOptions(path: '/'),
+          type: DioExceptionType.badResponse,
+        );
+        final failure = ErrorHandler.handleError(exception);
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.HTTP_ERROR);
+      });
+
+      test('every transport failure carries its ErrorCodes code', () {
+        const expected = {
+          DioExceptionType.connectionTimeout: ErrorCodes.CONNECTION_TIMEOUT,
+          DioExceptionType.sendTimeout: ErrorCodes.CONNECTION_TIMEOUT,
+          DioExceptionType.receiveTimeout: ErrorCodes.CONNECTION_TIMEOUT,
+          DioExceptionType.cancel: ErrorCodes.REQUEST_CANCELLED,
+          DioExceptionType.connectionError: ErrorCodes.CONNECTION_ERROR,
+          DioExceptionType.badCertificate: ErrorCodes.BAD_CERTIFICATE,
+          DioExceptionType.transformTimeout: ErrorCodes.TRANSFORM_TIMEOUT,
+          DioExceptionType.unknown: ErrorCodes.NETWORK_UNKNOWN,
+        };
+        for (final MapEntry(key: type, value: code) in expected.entries) {
+          final failure = const DioFailureClassifier().classify(
+            DioException(
+              requestOptions: RequestOptions(path: '/'),
+              type: type,
+            ),
+          );
+          expect(failure?.code, code, reason: '$type');
+        }
+      });
     });
 
     group('badResponse message extraction', () {

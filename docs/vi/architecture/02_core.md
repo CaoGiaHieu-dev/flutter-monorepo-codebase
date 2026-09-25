@@ -724,7 +724,7 @@ IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần
 **Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới key `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
 
 ```dart
-// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
   final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
@@ -755,7 +755,7 @@ class ObfuscatedBytes {
 Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Trước đây `SecureStorageImpl` coi *mọi* lỗi như vậy là hỏng dữ liệu và gọi `deleteAll()` — xoá sạch mọi giá trị bảo mật, kể cả master key của `PrefStorageImpl` vốn nằm trong cùng kho. Giờ thì:
 
 ```dart
-// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure_storage_impl.dart
 Future<String?> _readMasterKey() async {
   for (var attempt = 1; ; attempt++) {
     try {

@@ -59,7 +59,7 @@ Each step only depends on the ones above it, so nothing needs rework:
 
 Freezed, immutable, with the `const Class._()` private constructor so you can add methods later.
 Real code from
-[`modules/auth/domain/lib/src/entities/user/user_entity.dart`](../../../modules/auth/domain/lib/src/entities/user/user_entity.dart):
+[`modules/auth/domain/lib/src/entities/user_entity.dart`](../../../modules/auth/domain/lib/src/entities/user_entity.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -93,7 +93,7 @@ Entities carry **business** fields only — no `statusCode`, no `message`, no tr
 ## 4. Write the params
 
 Also Freezed. Real code from
-[`login_params.dart`](../../../modules/auth/domain/lib/src/params/auth_params/login_params.dart):
+[`login_params.dart`](../../../modules/auth/domain/lib/src/params/login_params.dart):
 
 ```dart
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -135,15 +135,15 @@ keeps domain free of Dio, Firebase and Drift.
 ## 6. Write the use case
 
 `@injectable`, extends `BaseUseCase<ReturnType, Params>`, returns `Result<T>`. Real code from
-[`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`](../../../modules/auth/domain/lib/src/usecases/auth/login_usecase.dart):
+[`modules/auth/domain/lib/src/usecases/login_usecase.dart`](../../../modules/auth/domain/lib/src/usecases/login_usecase.dart):
 
 ```dart
 import 'package:domain_core/domain_core.dart';
 import 'package:injectable/injectable.dart';
 
-import '../../entities/user/user.dart';
-import '../../params/auth_params/login_params.dart';
-import '../../repositories/i_auth_repository.dart';
+import '../entities/user_entity.dart';
+import '../params/login_params.dart';
+import '../repositories/i_auth_repository.dart';
 
 /// Authenticates a user with email and password.
 @injectable
@@ -168,7 +168,7 @@ inside a use case.
 
 Freezed + `json_serializable`, `implements BaseModel<Entity>`, with a `toEntity()` mapper. Real
 code from
-[`modules/auth/data/lib/src/models/user/user_model.dart`](../../../modules/auth/data/lib/src/models/user/user_model.dart):
+[`modules/auth/data/lib/src/models/user_model.dart`](../../../modules/auth/data/lib/src/models/user_model.dart):
 
 ```dart
 import 'package:data_core/data_core.dart';

@@ -156,7 +156,7 @@ abstract class BaseModel<E> {
 
 ### Model cho mạng
 
-`modules/auth/data/lib/src/models/user/user_model.dart` — Freezed + `json_serializable`:
+`modules/auth/data/lib/src/models/user_model.dart` — Freezed + `json_serializable`:
 
 ```dart
 @freezed

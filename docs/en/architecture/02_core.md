@@ -723,7 +723,7 @@ A random IV per write means writing the same value twice produces different ciph
 **Layer 2 — hardware.** The 256-bit master key lives in Keychain/KeyStore under `_internal_master_key`, generated on first launch:
 
 ```dart
-// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
   final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
@@ -754,7 +754,7 @@ class ObfuscatedBytes {
 Reading the master key can fail for reasons that pass: the Keychain before the first unlock after a reboot (a background launch), a busy KeyStore. `SecureStorageImpl` used to treat *any* such failure as corruption and call `deleteAll()` — which destroyed every secure value, including `PrefStorageImpl`'s master key, which lives in the same store. Now:
 
 ```dart
-// platform/infra/storage/lib/src/impl/secure/secure_storage_impl.dart
+// platform/infra/storage/lib/src/impl/secure_storage_impl.dart
 Future<String?> _readMasterKey() async {
   for (var attempt = 1; ; attempt++) {
     try {

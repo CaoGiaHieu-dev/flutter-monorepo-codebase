@@ -5,7 +5,7 @@ import 'package:injectable/injectable.dart';
 
 import '../data_sources/local/auth_local_data_source.dart';
 import '../data_sources/remote/auth_remote_data_source.dart';
-import '../models/user/user_model.dart';
+import '../models/user_model.dart';
 
 /// SAMPLE — the auth repository, written the way this template documents.
 ///

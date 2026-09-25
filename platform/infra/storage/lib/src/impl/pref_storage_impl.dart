@@ -7,8 +7,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../contracts/storage_codec.dart';
-import '../../contracts/storage_interface.dart';
+import '../contracts/storage_codec.dart';
+import '../contracts/storage_interface.dart';
 
 /// Reserved key of this backend's master key (see
 /// `StorageInterface.isValidKey`) — in secure storage, and in

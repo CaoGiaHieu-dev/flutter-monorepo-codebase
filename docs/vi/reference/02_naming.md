@@ -19,8 +19,8 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Controller (BLoC) | `_bloc.dart` | `Bloc` | `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` |
 | Controller (Cubit) | `_cubit.dart` | `Cubit` | *chỉ khi không cần event* |
 | Event của BLoC | `_event.dart` | `Event` | `modules/home/feature/lib/src/bloc/home_profile_event.dart` |
-| Use case | `_usecase.dart` | `UseCase` | `modules/auth/domain/lib/src/usecases/auth/login_usecase.dart` |
-| Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user/user_entity.dart` |
+| Use case | `_usecase.dart` | `UseCase` | `modules/auth/domain/lib/src/usecases/login_usecase.dart` |
+| Entity | `_entity.dart` | `Entity` | `modules/auth/domain/lib/src/entities/user_entity.dart` |
 | Interface repository | `i_<name>_repository.dart` | tiền tố `I` | `modules/auth/domain/lib/src/repositories/i_auth_repository.dart` |
 | Impl repository | `_repository_impl.dart` | `RepositoryImpl` | `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart` |
 | Model / DTO | `_model.dart` / `_response.dart` | `Model` / `Response` | `modules/cache/data/lib/src/models/cache_entry_model.dart` |

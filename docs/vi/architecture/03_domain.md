@@ -194,15 +194,15 @@ Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là m�
 
 | File | Nội dung |
 |:---|:---|
-| `entities/user/user_entity.dart` | `UserEntity` (Freezed) |
-| `entities/user/user_role.dart` | enum `UserRole` — `customer`, `owner`, `none`, `unknown` |
-| `params/auth_params/login_params.dart` | `LoginParams` |
+| `entities/user_entity.dart` | `UserEntity` (Freezed) |
+| `entities/user_role.dart` | enum `UserRole` — `customer`, `owner`, `none`, `unknown` |
+| `params/login_params.dart` | `LoginParams` |
 | `repositories/i_auth_repository.dart` | `IAuthRepository` |
-| `usecases/auth/` | `LoginUseCase`, `LogoutUseCase`, `RefreshTokenUseCase` |
+| `usecases/` | `LoginUseCase`, `LogoutUseCase`, `RefreshTokenUseCase` |
 
 ### Một use case đầy đủ
 
-`modules/auth/domain/lib/src/usecases/auth/login_usecase.dart`:
+`modules/auth/domain/lib/src/usecases/login_usecase.dart`:
 
 ```dart
 @injectable

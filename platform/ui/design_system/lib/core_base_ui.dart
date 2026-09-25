@@ -2,6 +2,7 @@
 export 'di/module.dart';
 export 'di/module.module.dart';
 export 'src/extensions/context_extension.dart';
+export 'src/extensions/failure_message_extension.dart';
 export 'src/extensions/key_extension.dart';
 export 'src/extensions/locale_extension.dart';
 export 'src/gen/assets.gen.dart';

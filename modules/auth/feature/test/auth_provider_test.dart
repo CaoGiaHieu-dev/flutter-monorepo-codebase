@@ -135,7 +135,7 @@ void main() {
       expect(failures.single, isA<SessionUserNotFoundFailure>());
     });
 
-    test('any other failure keeps the backend message', () async {
+    test('any other failure is published by its code, not its text', () async {
       repository.loginResult = const Result.failure(
         ServerFailure(message: 'Maintenance', code: 503),
       );
@@ -150,7 +150,6 @@ void main() {
       final failure = failures.single;
       expect(failure, isA<SessionServerFailure>());
       failure as SessionServerFailure;
-      expect(failure.message, 'Maintenance');
       expect(failure.code, 503);
     });
   });

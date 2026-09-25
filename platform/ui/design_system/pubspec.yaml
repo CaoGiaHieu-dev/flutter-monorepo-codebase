@@ -24,6 +24,8 @@ dependencies:
     path: ../../foundation/contracts
   core_common:
     path: ../../foundation/common
+  platform_kernel:
+    path: ../../foundation/kernel
   cupertino_ui: "^1.0.2"
   intl: "^0.20.3"
 dev_dependencies:

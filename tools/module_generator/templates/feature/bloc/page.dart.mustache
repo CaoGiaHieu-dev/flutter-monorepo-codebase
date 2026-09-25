@@ -27,7 +27,7 @@ class {{pascalNameInput}}Page extends StatelessWidget {
             // width on a tablet or desktop window and changes nothing on a
             // phone. Sizes and type come from the design system, already
             // scaled through context — never a raw number, and never
-            // re-scaled (rule 12).
+            // re-scaled (RULE-30, RULE-31).
             success: (data) => AdaptiveContent(
               padding: EdgeInsets.all(AppSpacing.lg(context)),
               child: Text(
@@ -35,8 +35,11 @@ class {{pascalNameInput}}Page extends StatelessWidget {
                 style: AppTextStyles.bodyMediumStyle(context),
               ),
             ),
+            // `failure.message` is an English diagnostic, never shown
+            // (RULE-34): the user reads the translated sentence for the
+            // failure's code.
             error: (failure) => Center(
-              child: Text(failure.message),
+              child: Text(context.l10n.failureMessage(failure.code)),
             ),
           );
         },

@@ -17,11 +17,15 @@
 /// `build_runner` for what is a four-variant tag. Dart 3 `sealed` gives the
 /// exhaustive `switch` that matters, with zero generated files.
 ///
+/// None of them carries text: `AppFailure.message` is an English
+/// diagnostic, never shown (RULE-34). The shell picks a translated sentence
+/// per variant, and for [SessionServerFailure] by its code:
+///
 /// ```dart
 /// final message = switch (failure) {
 ///   SessionInvalidCredentialsFailure() => l10n.invalidCredentials,
 ///   SessionUserNotFoundFailure()       => l10n.userNotFound,
-///   SessionServerFailure(:final message) => message,
+///   SessionServerFailure(:final code)  => l10n.failureMessage(code),
 ///   SessionUnknownFailure()            => l10n.somethingWentWrong,
 /// };
 /// ```
@@ -39,15 +43,13 @@ final class SessionUserNotFoundFailure extends SessionFailure {
   const SessionUserNotFoundFailure();
 }
 
-/// The backend reported a failure and provided a displayable reason.
+/// The operation failed for another reason — offline, a timeout, a server
+/// error, a refused account — identified by its [code].
 final class SessionServerFailure extends SessionFailure {
-  const SessionServerFailure({required this.message, this.code});
+  const SessionServerFailure({this.code});
 
-  /// Message already fit to show to a user; the owning module decides its
-  /// wording.
-  final String message;
-
-  /// Transport or application status code, when the owner knows one.
+  /// The failure's code — an `ErrorCodes` value or an HTTP status — when the
+  /// owner knows one. The shell maps it to a translated sentence.
   final int? code;
 }
 

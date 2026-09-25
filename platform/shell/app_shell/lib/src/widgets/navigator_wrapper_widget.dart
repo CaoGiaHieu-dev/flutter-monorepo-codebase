@@ -197,7 +197,9 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// Surfaces a failed session operation as a toast.
   ///
   /// Strings come from `core_base_ui`'s global translations rather than a
-  /// module's, so the shell stays translatable with no module present.
+  /// module's, so the shell stays translatable with no module present. No
+  /// failure carries text to show: a [SessionServerFailure] is worded by its
+  /// code (`failureMessage`), never by a server or diagnostic message.
   void _onSessionFailure(SessionFailure failure) {
     if (!mounted || !_bootCompleted) return;
 
@@ -205,7 +207,7 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
     final content = switch (failure) {
       SessionInvalidCredentialsFailure() => l10n.invalidCredentials,
       SessionUserNotFoundFailure() => l10n.userNotFound,
-      SessionServerFailure(:final message) => message,
+      SessionServerFailure(:final code) => l10n.failureMessage(code),
       SessionUnknownFailure() => l10n.somethingWentWrong,
     };
 

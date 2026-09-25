@@ -25,21 +25,21 @@ void main() {
       );
     });
 
-    test('an HTTP 403 keeps the backend message as a server error', () {
+    test('an HTTP 403 is a failure with its code, not wrong credentials', () {
       expect(
         AuthProvider.mapAuthFailure(
           const AuthFailure(message: 'Account locked', code: 403),
         ),
-        const AuthErrorState.serverError(message: 'Account locked', code: 403),
+        const AuthErrorState.failed(code: 403),
       );
     });
 
-    test('other server failures surface their message', () {
+    test('other server failures keep only their code', () {
       expect(
         AuthProvider.mapAuthFailure(
           const ServerFailure(message: 'Down', code: 503),
         ),
-        const AuthErrorState.serverError(message: 'Down', code: 503),
+        const AuthErrorState.failed(code: 503),
       );
     });
 
@@ -49,7 +49,7 @@ void main() {
           AuthProvider.mapAuthFailure(
             NetworkFailure(message: 'offline', code: code),
           ),
-          AuthErrorState.serverError(message: 'offline', code: code),
+          AuthErrorState.failed(code: code),
         );
       }
     });

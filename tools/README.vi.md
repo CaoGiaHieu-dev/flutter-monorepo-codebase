@@ -27,7 +27,8 @@ tools/
 │   └── parity_allowlist.txt         # Chênh lệch hình dạng en/vi có chủ đích, kèm lý do
 ├── shared/                          # 🔗 Code dùng chung giữa các tool
 │   ├── app_locator.dart             # Tìm app qua app_manifest.yaml, chọn app bằng --app <id>
-│   └── toolchain.dart               # Phát hiện FVM (.fvmrc + `fvm --version`) cho mọi tool gọi dart/flutter
+│   ├── toolchain.dart               # Phát hiện FVM (.fvmrc + `fvm --version`) cho mọi tool gọi dart/flutter
+│   └── workspace.dart               # Phép duyệt khám phá dùng chung (pubspec, app manifest, lcov) và tập thư mục bỏ qua
 ├── sample_cleanup/                  # 🧹 Phân loại và gỡ code mẫu an toàn
 │   └── remove_sample.dart           # --list / dry-run / --apply, có rollback
 ├── sample_manifest.yaml             # 📑 Nguồn chân lý: package nào là sample/framework/shell

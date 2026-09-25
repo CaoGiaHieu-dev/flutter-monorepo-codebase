@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import 'workspace.dart';
+
 /// One app in the workspace: a directory holding an `app_manifest.yaml`.
 class WorkspaceApp {
   WorkspaceApp(this.id, this.dir);
@@ -16,30 +18,19 @@ class WorkspaceApp {
 
 /// Every app under [root], sorted by id.
 ///
-/// Uses the same marker and the same skip list as `composer`, so the tools
-/// agree on what an app is. Relying on a directory *name* is what broke
+/// Uses the same marker and the same walk as `composer`
+/// (`tools/shared/workspace.dart`), so the tools agree on what an app is. Relying on a directory *name* is what broke
 /// `firebase_config.dart` and `theme_setting.dart` the day `app/` became
 /// `apps/mobile/`.
 List<WorkspaceApp> discoverApps([String root = '.']) {
-  final out = <WorkspaceApp>[];
-  const skip = {'.git', '.dart_tool', 'build', 'packages', 'modules'};
-
-  void walk(Directory dir) {
-    for (final e in dir.listSync(followLinks: false)) {
-      final name = p.basename(e.path);
-      if (e is Directory) {
-        if (skip.contains(name)) continue;
-        walk(e);
-      } else if (e is File && name == 'app_manifest.yaml') {
-        final doc = loadYaml(e.readAsStringSync()) as YamlMap;
-        final id = (doc['app'] as YamlMap)['id'] as String;
-        final dir = p.relative(e.parent.path, from: root);
-        out.add(WorkspaceApp(id, p.split(dir).join('/')));
-      }
-    }
-  }
-
-  walk(Directory(root));
+  final out = <WorkspaceApp>[
+    for (final file in findAppManifests(root))
+      WorkspaceApp(
+        ((loadYaml(file.readAsStringSync()) as YamlMap)['app'] as YamlMap)['id']
+            as String,
+        p.split(p.relative(file.parent.path, from: root)).join('/'),
+      ),
+  ];
   out.sort((a, b) => a.id.compareTo(b.id));
   return out;
 }

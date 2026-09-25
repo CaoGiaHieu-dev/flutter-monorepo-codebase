@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../shared/toolchain.dart';
+import '../shared/workspace.dart';
 import 'firebase_stubs.dart';
 
 const String _usage = '''
@@ -106,7 +107,7 @@ void main(List<String> args) async {
   // Scanned from the repository root, not from a hardcoded `packages/`: a
   // package that lives anywhere else still needs its ARBs generated, and
   // missing one fails later with an unresolved `AppLocalizations`.
-  final l10nFiles = _findFiles(Directory('.'), 'l10n.yaml');
+  final l10nFiles = findWorkspaceFiles('.', 'l10n.yaml');
 
   if (l10nFiles.isEmpty) {
     stdout.writeln('    - No l10n.yaml found.');
@@ -137,7 +138,7 @@ void main(List<String> args) async {
   // takes a single package lib/ and refuses anything else, so it runs once
   // per package.
   stdout.writeln('[!] Generating barrel files per package...');
-  for (final pubspec in _findFiles(Directory('.'), 'pubspec.yaml')) {
+  for (final pubspec in findPubspecs('.')) {
     final pkgDir = pubspec.parent.path;
     final lib = Directory('$pkgDir/lib');
     if (!lib.existsSync()) continue;
@@ -217,36 +218,4 @@ Future<void> _runCommand(
     );
     exit(exitCode);
   }
-}
-
-/// Every file named [fileName] under [dir], skipping build output and
-/// platform folders.
-List<File> _findFiles(Directory dir, String fileName) {
-  final out = <File>[];
-  const skip = {
-    '.git',
-    '.dart_tool',
-    'build',
-    'ios',
-    'android',
-    'macos',
-    'windows',
-    'linux',
-    'web',
-    'node_modules',
-  };
-  void walk(Directory d) {
-    for (final e in d.listSync(followLinks: false)) {
-      final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
-      if (e is Directory) {
-        if (skip.contains(name) || name.startsWith('.')) continue;
-        walk(e);
-      } else if (e is File && name == fileName) {
-        out.add(e);
-      }
-    }
-  }
-
-  walk(dir);
-  return out;
 }

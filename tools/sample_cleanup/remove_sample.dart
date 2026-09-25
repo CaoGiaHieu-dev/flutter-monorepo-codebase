@@ -5,6 +5,7 @@ import 'package:glob/list_local_fs.dart';
 import 'package:yaml/yaml.dart';
 
 import '../shared/app_locator.dart';
+import '../shared/workspace.dart';
 
 /// Removes a sample bundle — the feature package *and* everything that travels
 /// with it (domain/data pairs, its API package, workspace entries, DI
@@ -445,35 +446,9 @@ Map<String, List<String>> _keptApiPackages(
   return out;
 }
 
-/// Every `pubspec.yaml` under the working directory, build output skipped.
-List<File> _workspacePubspecs() {
-  const skip = {
-    '.git',
-    '.dart_tool',
-    'build',
-    'ios',
-    'android',
-    'macos',
-    'windows',
-    'linux',
-    'web',
-    'node_modules',
-  };
-  final out = <File>[];
-  void walk(Directory dir) {
-    for (final entity in dir.listSync(followLinks: false)) {
-      final name = entity.path.replaceAll('\\', '/').split('/').last;
-      if (entity is Directory) {
-        if (!skip.contains(name)) walk(entity);
-      } else if (entity is File && name == 'pubspec.yaml') {
-        out.add(entity);
-      }
-    }
-  }
-
-  walk(Directory('.'));
-  return out;
-}
+/// Every `pubspec.yaml` under the working directory — the shared workspace
+/// walk (`tools/shared/workspace.dart`), build output skipped.
+List<File> _workspacePubspecs() => findPubspecs('.');
 
 void _reportKept(
   Map<String, List<String>> kept,

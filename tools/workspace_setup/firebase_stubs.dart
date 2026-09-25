@@ -4,6 +4,8 @@ import 'dart:io';
 // `pub get` on a fresh clone — a package import here would stop it compiling
 // before the step that fetches that package.
 
+import '../shared/workspace.dart';
+
 /// Compile-only Firebase stand-ins for a checkout with no Firebase project —
 /// what `configure.dart --stub-firebase` writes, and the one place their
 /// content lives. CI's jobs call that flag instead of carrying a heredoc
@@ -167,35 +169,24 @@ FirebaseStubReport writeFirebaseStubs(String root) {
 }
 
 /// Every app under [root] — a directory holding an `app_manifest.yaml` —
-/// sorted by id: the same marker and skip list as
+/// sorted by id: the same marker and walk (`tools/shared/workspace.dart`) as
 /// `tools/shared/app_locator.dart`, whose `package:yaml` this file cannot use.
 List<({String id, String dir})> _apps(String root) {
   final out = <({String id, String dir})>[];
-  const skip = {'.git', '.dart_tool', 'build', 'packages', 'modules'};
   final idPattern = RegExp(
     r'''^app:\s*\n(?:[ \t]+.*\n|[ \t]*#.*\n|\s*\n)*?[ \t]+id:\s*["']?([\w-]+)''',
     multiLine: true,
   );
   final rootPath = Directory(root).absolute.path;
-  void walk(Directory dir) {
-    for (final e in dir.listSync(followLinks: false)) {
-      final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
-      if (e is Directory) {
-        if (skip.contains(name)) continue;
-        walk(e);
-      } else if (e is File && name == 'app_manifest.yaml') {
-        final id = idPattern.firstMatch(e.readAsStringSync())?.group(1);
-        if (id == null) continue;
-        final dir = e.parent.absolute.path
-            .substring(rootPath.length)
-            .replaceAll('\\', '/')
-            .replaceFirst(RegExp(r'^/+'), '');
-        out.add((id: id, dir: dir));
-      }
-    }
+  for (final file in findAppManifests(root)) {
+    final id = idPattern.firstMatch(file.readAsStringSync())?.group(1);
+    if (id == null) continue;
+    final dir = file.parent.absolute.path
+        .substring(rootPath.length)
+        .replaceAll('\\', '/')
+        .replaceFirst(RegExp(r'^/+'), '');
+    out.add((id: id, dir: dir));
   }
-
-  walk(Directory(root));
   out.sort((a, b) => a.id.compareTo(b.id));
   return out;
 }

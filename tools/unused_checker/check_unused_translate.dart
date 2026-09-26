@@ -165,7 +165,6 @@ StringKeyResult findUsedAndUnusedStringKeys(
     r'(?:S\s*\.\s*of\(\s*context\s*\)\s*\.\s*'
     r'|AppLocalizations\s*\.\s*of\(\s*context\s*\)\s*\.\s*'
     r'|(?:\w+\s*\.\s*)*context\s*\.\s*l10n[a-zA-Z0-9_]*\s*\.\s*'
-    r'|AppRouter\s*\.\s*currentContext\s*\.\s*l10n[a-zA-Z0-9_]*\s*\.\s*'
     r'|\b(?:l10n|loc)[a-zA-Z0-9_]*\s*\.\s*'
     r')'
     r'([a-zA-Z_][a-zA-Z0-9_]*)'

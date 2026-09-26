@@ -1,6 +1,7 @@
 {{#isBloc}}
 import 'package:bloc_state_management/bloc_state_management.dart';
 {{/isBloc}}
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:{{moduleName}}/{{moduleName}}.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,8 @@ import 'package:provider_state_management/provider_state_management.dart';
 
 /// Pumps [{{pascalNameInput}}Page] the way the app shows it: under
 /// `ResponsiveInit` (every size in the page goes through `context`, and
-/// `ResponsiveScope.of` asserts without it) and with this feature's
+/// `ResponsiveScope.of` asserts without it), the palette's theme extension
+/// and this feature's
 /// localizations{{^isNone}}, its controller provided above it exactly as
 /// `{{pascalNameInput}}Route.build` does — the page never creates its own{{/isNone}}.
 ///
@@ -20,6 +22,8 @@ import 'package:provider_state_management/provider_state_management.dart';
 Future<void> _pumpPage(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
+      // Widgets read palette tokens through `context.colors`.
+      theme: ThemeData(extensions: [ThemeSystemExtension.light]),
       localizationsDelegates:
           {{pascalName}}Localizations.localizationsDelegates,
       supportedLocales: {{pascalName}}Localizations.supportedLocales,

@@ -87,7 +87,7 @@ abstract class AuthRemoteDataSource {
 Lớp Retrofit là một factory constructor, không phải lớp `@injectable`, nên phải đi qua một `@module` trong `lib/di/register_module.dart` của package. Bản thật:
 
    ```dart
-   // modules/auth/data/lib/di/register_module.dart
+   // modules/auth/data/lib/di/module.dart
    import 'package:dio/dio.dart';
    import 'package:injectable/injectable.dart';
 
@@ -236,7 +236,7 @@ Repository bóc các lớp bao này thành `Result<T>` qua `execute()` — xem [
 
 ## 9. Cắm luồng refresh token
 
-Bạn không tự nối interceptor refresh. `NetworkConfigImpl` cài nó ngay khi có module đăng ký một `ISessionGateway` (ở sample là `AuthSessionGatewayImpl` của `data_auth`, `modules/auth/data/lib/src/services/auth_session_gateway_impl.dart`). Không có gateway nào thì `401` tới thẳng bên gọi, nguyên vẹn.
+Bạn không tự nối interceptor refresh. `NetworkConfigImpl` cài nó ngay khi có module đăng ký một `ISessionGateway` (ở sample là `AuthSessionGatewayImpl` của `data_auth`, `modules/auth/data/lib/src/session/auth_session_gateway_impl.dart`). Không có gateway nào thì `401` tới thẳng bên gọi, nguyên vẹn.
 
 Để dùng backend của riêng bạn, hãy implement `ISessionGateway` (`platform/foundation/contracts/lib/src/session/i_session_gateway.dart`) trong package data auth của bạn. `refreshToken()` của nó phải trả lời theo một trong ba cách, vì câu trả lời quyết định số phận của phiên:
 

@@ -344,7 +344,7 @@ class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   final AuthLocalDataSource _local;
 ```
 
-Retrofit client được dựng một lần trong [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart) từ `Dio` dùng chung, nên data source thừa hưởng toàn bộ chuỗi interceptor — header auth, refresh 401, retry, logging — mà không cần biết chúng tồn tại:
+Retrofit client được dựng một lần trong [`modules/auth/data/lib/di/module.dart`](../../../modules/auth/data/lib/di/module.dart) từ `Dio` dùng chung, nên data source thừa hưởng toàn bộ chuỗi interceptor — header auth, refresh 401, retry, logging — mà không cần biết chúng tồn tại:
 
 ```dart
 @module

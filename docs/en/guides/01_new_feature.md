@@ -295,7 +295,7 @@ extension ContextHomeExtension on BuildContext {
 }
 ```
 
-The DI registration of the delegate — generated as `lib/di/localization.dart`, like this real code from [`modules/home/feature/lib/di/localization.dart`](../../../modules/home/feature/lib/di/localization.dart):
+The DI registration of the delegate — generated as `lib/di/localization.dart`, like this real code from [`modules/home/feature/lib/src/localization/home_localization_impl.dart`](../../../modules/home/feature/lib/src/localization/home_localization_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';

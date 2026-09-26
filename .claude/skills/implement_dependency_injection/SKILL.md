@@ -88,7 +88,7 @@ The same dual-registration pattern binds `ISessionStatusStream`, `ISessionState`
 
 Never call `SomeSdk.instance` inside a repository — it hides the dependency from the
 container and leaves no seam for a fake. Register it, then take it as a constructor
-parameter. `modules/auth/data/lib/di/register_module.dart`:
+parameter. `modules/auth/data/lib/di/module.dart`:
 
 ```dart
 @module

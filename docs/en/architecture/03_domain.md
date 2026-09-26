@@ -195,7 +195,7 @@ The second sample domain package, `domain_cache` (`modules/cache/domain`), is a 
 | `entities/user_role.dart` | `UserRole` enum — `customer`, `owner`, `none`, `unknown` |
 | `params/login_params.dart` | `LoginParams` |
 | `repositories/i_auth_repository.dart` | `IAuthRepository` |
-| `usecases/` | `LoginUseCase`, `LogoutUseCase`, `RefreshTokenUseCase` |
+| `usecases/` | `LoginUseCase`, `LogoutUseCase`, `RestoreSessionUseCase` |
 
 ### A use case, in full
 

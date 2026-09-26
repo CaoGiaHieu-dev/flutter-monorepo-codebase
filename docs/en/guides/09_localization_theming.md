@@ -66,7 +66,7 @@ Missing translations are reported in `untranslated-messages.txt`.
 ### Register the delegate (once per feature)
 
 ```dart
-// modules/home/feature/lib/di/localization.dart
+// modules/home/feature/lib/src/localization/home_localization_impl.dart
 @Injectable(as: IFeatureLocalization)
 class HomeLocalizationImpl implements IFeatureLocalization {
   @override

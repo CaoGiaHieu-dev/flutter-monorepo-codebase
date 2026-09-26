@@ -476,7 +476,7 @@ Each feature owns its translations. The app shell never learns their names.
 | `modules/<f>/feature/assets/language/*.arb` | The feature's translation files |
 | `modules/<f>/feature/l10n.yaml` | Codegen config for that feature |
 | `modules/<f>/feature/lib/src/gen/language/` | Generated delegate + classes |
-| `modules/<f>/feature/lib/di/localization.dart` | `IFeatureLocalization` implementation |
+| `modules/<f>/feature/lib/src/localization/<f>_localization_impl.dart` | `IFeatureLocalization` implementation |
 | `core_base_ui` | Global / fallback strings shared by everyone |
 
 > [!CAUTION]

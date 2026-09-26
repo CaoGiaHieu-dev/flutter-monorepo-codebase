@@ -244,7 +244,7 @@ All tools can be run from the root directory.
     ```
 9.  **Android 16 KB page-size check (`tools/android_compliance/`)**:
     ```bash
-    ./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
+    ./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
     ```
 
 ---

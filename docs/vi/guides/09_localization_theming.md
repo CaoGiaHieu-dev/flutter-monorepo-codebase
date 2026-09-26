@@ -68,7 +68,7 @@ Chuỗi còn thiếu bản dịch sẽ được liệt kê trong `untranslated-m
 ### Đăng ký delegate (một lần cho mỗi feature)
 
 ```dart
-// modules/home/feature/lib/di/localization.dart
+// modules/home/feature/lib/src/localization/home_localization_impl.dart
 @Injectable(as: IFeatureLocalization)
 class HomeLocalizationImpl implements IFeatureLocalization {
   @override

@@ -243,7 +243,7 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 9.  **Kiểm tra 16 KB page-size cho Android (`tools/android_compliance/`)**:
     ```bash
-    ./tools/android_compliance/16kb_ckeck.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
+    ./tools/android_compliance/16kb_check.sh apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk
     ```
 
 ---

@@ -29,7 +29,7 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 | Test phủ bao nhiêu phần trăm mỗi package? | `flutter test --coverage` trong từng package, rồi `dart tools/coverage_report/report.dart` |
 | Cấu hình Firebase cho dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
 | Sinh lại splash screen và app icon | `dart tools/theme_generator/theme_setting.dart --app mobile` |
-| Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_ckeck.sh <apk>` |
+| Kiểm tra tương thích 16 KB page-size của Android 15+ | `./tools/android_compliance/16kb_check.sh <apk>` |
 | Nhờ AI review một thay đổi | `dart tools/code_review/code_review.dart --changed` |
 
 ## Các CI gate trong một bảng
@@ -195,8 +195,8 @@ Chỉ chạy tương tác; cần Firebase CLI đã cài và đã đăng nhập. 
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `./tools/android_compliance/16kb_ckeck.sh <apk\|apex\|dir>` | Kiểm tra tương thích 16 KB page-size của Android 15+ (căn lề zip và ELF) | `0` mọi thư viện native đều căn 16 KB (hoặc không có thư viện nào) · `1` có thư viện lệch căn, thiếu tham số, sai loại file, APK không đọc được, hoặc thiếu công cụ SDK | — |
-| `.\tools\android_compliance\16kb_ckeck.bat <apk>` | Như trên trên Windows, qua Git Bash | như trên | — |
+| `./tools/android_compliance/16kb_check.sh <apk\|apex\|dir>` | Kiểm tra tương thích 16 KB page-size của Android 15+ (căn lề zip và ELF) | `0` mọi thư viện native đều căn 16 KB (hoặc không có thư viện nào) · `1` có thư viện lệch căn, thiếu tham số, sai loại file, APK không đọc được, hoặc thiếu công cụ SDK | — |
+| `.\tools\android_compliance\16kb_check.bat <apk>` | Như trên trên Windows, qua Git Bash | như trên | — |
 
 Hãy build APK release của một flavor trước. Lỗi chính tả trong tên file (`ckeck`) được giữ có chủ đích. Chi tiết: [`android_compliance`](../../../tools/README.vi.md#android_compliance).
 

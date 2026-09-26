@@ -76,7 +76,7 @@ Hợp đồng mang [`SessionPrincipal`](../../../platform/foundation/contracts/l
 
 ### Implement trong feature sở hữu
 
-Code thật từ [`modules/auth/feature/lib/src/services/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/services/auth_status_stream_impl.dart):
+Code thật từ [`modules/auth/feature/lib/src/session/auth_status_stream_impl.dart`](../../../modules/auth/feature/lib/src/session/auth_status_stream_impl.dart):
 
 ```dart
 /// Implementation of [ISessionStatusStream] provided by `feature_auth`.

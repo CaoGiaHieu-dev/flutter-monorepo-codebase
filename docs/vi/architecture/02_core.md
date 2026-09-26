@@ -537,7 +537,7 @@ class NetworkConfigImpl implements NetworkConfig {
 // platform/shell/adapters/lib/src/network_config_impl.dart
 Future<String?> _refreshSession() async => await _session?.refreshToken();
 
-// modules/auth/data/lib/src/services/auth_session_gateway_impl.dart
+// modules/auth/data/lib/src/session/auth_session_gateway_impl.dart
 @override
 Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();

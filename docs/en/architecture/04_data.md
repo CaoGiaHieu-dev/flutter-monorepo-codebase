@@ -343,7 +343,7 @@ class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   final AuthLocalDataSource _local;
 ```
 
-The Retrofit client is built once in [`modules/auth/data/lib/di/register_module.dart`](../../../modules/auth/data/lib/di/register_module.dart) from the shared `Dio`, so the data source inherits the whole interceptor chain — auth header, 401 refresh, retry, logging — without knowing any of it exists:
+The Retrofit client is built once in [`modules/auth/data/lib/di/module.dart`](../../../modules/auth/data/lib/di/module.dart) from the shared `Dio`, so the data source inherits the whole interceptor chain — auth header, 401 refresh, retry, logging — without knowing any of it exists:
 
 ```dart
 @module

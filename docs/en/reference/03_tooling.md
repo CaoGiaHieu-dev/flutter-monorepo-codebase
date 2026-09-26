@@ -28,7 +28,7 @@ Exit codes follow one convention across the tools: `0` success, `1` the check fa
 | How much of each package do the tests cover? | `flutter test --coverage` per package, then `dart tools/coverage_report/report.dart` |
 | Set up Firebase for dev / staging / prod | `dart tools/firebase/firebase_config.dart --app mobile` |
 | Regenerate splash screen and app icons | `dart tools/theme_generator/theme_setting.dart --app mobile` |
-| Check Android 15+ 16 KB page-size compliance | `./tools/android_compliance/16kb_ckeck.sh <apk>` |
+| Check Android 15+ 16 KB page-size compliance | `./tools/android_compliance/16kb_check.sh <apk>` |
 | AI review of a change | `dart tools/code_review/code_review.dart --changed` |
 
 ## CI gates at a glance
@@ -194,8 +194,8 @@ Interactive only; needs the Firebase CLI installed and logged in. `--app` is req
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `./tools/android_compliance/16kb_ckeck.sh <apk\|apex\|dir>` | Check Android 15+ 16 KB page-size compliance (zip and ELF alignment) | `0` every native library is 16 KB aligned (or there are none) · `1` an unaligned library, no argument, a wrong file type, an unreadable APK or a missing SDK tool | — |
-| `.\tools\android_compliance\16kb_ckeck.bat <apk>` | The same on Windows, through Git Bash | as above | — |
+| `./tools/android_compliance/16kb_check.sh <apk\|apex\|dir>` | Check Android 15+ 16 KB page-size compliance (zip and ELF alignment) | `0` every native library is 16 KB aligned (or there are none) · `1` an unaligned library, no argument, a wrong file type, an unreadable APK or a missing SDK tool | — |
+| `.\tools\android_compliance\16kb_check.bat <apk>` | The same on Windows, through Git Bash | as above | — |
 
 Build a release APK of one flavor first. The filename typo (`ckeck`) is kept on purpose. Details: [`android_compliance`](../../../tools/README.md#android_compliance).
 

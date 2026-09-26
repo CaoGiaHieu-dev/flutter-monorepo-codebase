@@ -86,7 +86,7 @@ abstract class AuthRemoteDataSource {
 A Retrofit class is a factory constructor, not an `@injectable` class, so it goes through a `@module` in the package's `lib/di/register_module.dart`. The real one:
 
    ```dart
-   // modules/auth/data/lib/di/register_module.dart
+   // modules/auth/data/lib/di/module.dart
    import 'package:dio/dio.dart';
    import 'package:injectable/injectable.dart';
 
@@ -235,7 +235,7 @@ Repositories unwrap these into `Result<T>` via `execute()` — see [`02_new_doma
 
 ## 9. Plug in token refresh
 
-You do not wire the refresh interceptor yourself. `NetworkConfigImpl` installs it as soon as some module registers an `ISessionGateway` (in the sample, `data_auth`'s `AuthSessionGatewayImpl`, `modules/auth/data/lib/src/services/auth_session_gateway_impl.dart`). With none registered, a `401` reaches the caller unchanged.
+You do not wire the refresh interceptor yourself. `NetworkConfigImpl` installs it as soon as some module registers an `ISessionGateway` (in the sample, `data_auth`'s `AuthSessionGatewayImpl`, `modules/auth/data/lib/src/session/auth_session_gateway_impl.dart`). With none registered, a `401` reaches the caller unchanged.
 
 To use your own backend, implement `ISessionGateway` (`platform/foundation/contracts/lib/src/session/i_session_gateway.dart`) in your auth data package. Its `refreshToken()` must answer in one of three ways, because the answer decides what happens to the session:
 

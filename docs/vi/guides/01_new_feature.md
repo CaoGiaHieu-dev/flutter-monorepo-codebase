@@ -299,7 +299,7 @@ extension ContextHomeExtension on BuildContext {
 }
 ```
 
-Phần đăng ký delegate qua DI — được sinh thành `lib/di/localization.dart`, giống code thật này từ [`modules/home/feature/lib/di/localization.dart`](../../../modules/home/feature/lib/di/localization.dart):
+Phần đăng ký delegate qua DI — được sinh thành `lib/di/localization.dart`, giống code thật này từ [`modules/home/feature/lib/src/localization/home_localization_impl.dart`](../../../modules/home/feature/lib/src/localization/home_localization_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';

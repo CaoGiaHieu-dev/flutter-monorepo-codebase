@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../arch_check/platform_forks.dart';
 import '../composer/src/catalog.dart';
 import '../composer/src/manifest_v2.dart';
+import '../composer/src/package_facts.dart';
 import 'support/tool_harness.dart';
 
 /// composer cannot import `platform_kernel` or `platform_app_shell` — it runs
@@ -20,7 +22,12 @@ import 'support/tool_harness.dart';
 ///   really reads it — `app.kind` was a key nothing read, and that class of bug
 ///   must not recur;
 /// - `PlatformFacts.today()` — the one place a default exists twice — equals
-///   the table composer derives from.
+///   the table composer derives from;
+/// - `WindowClass` (the kernel's spelling) equals `core_responsive`'s
+///   `WindowSizeClass`;
+/// - the package facts composer checks (`platforms:`, `composition.app_provides`)
+///   are the ones the shipped packages declare, and every R17 allow-list entry
+///   names a file that exists.
 void main() {
   String read(String relative) =>
       File(p.join(repoRoot, relative)).readAsStringSync();
@@ -165,6 +172,18 @@ void main() {
       });
     }
 
+    test('the pubspec keys composer checks have a reader, too', () {
+      // `platforms:` and `composition.app_provides` are not manifest keys, so
+      // the table above does not list them; the file that reads them does.
+      final reader = read('tools/composer/src/package_facts.dart');
+      expect(reader, contains("doc['platforms']"));
+      expect(reader, contains("composition['app_provides']"));
+      // And two checks consume what it reads.
+      final checks = read('tools/composer/src/checks.dart');
+      expect(checks, contains('facts.supports('), reason: 'V7');
+      expect(checks, contains('appProvides'), reason: 'V10');
+    });
+
     test('no key is listed twice', () {
       final keys = [for (final k in kManifestKeys) k.key];
       expect(keys.toSet(), hasLength(keys.length));
@@ -201,6 +220,96 @@ void main() {
 
     test('the runner folder is committed', () {
       expect(field('runner'), 'RunnerKind.committed');
+    });
+  });
+
+  group('WindowClass equals core_responsive WindowSizeClass', () {
+    test('by name and order', () {
+      final kernel = enumValues(
+        read('platform/foundation/kernel/lib/src/profile/display_profile.dart'),
+        'WindowClass',
+      );
+      final responsive = enumValues(
+        read('platform/ui/responsive/lib/src/adaptive/window_size_class.dart'),
+        'WindowSizeClass',
+      );
+      expect(kernel, responsive);
+    });
+  });
+
+  group('the package facts composer checks', () {
+    PackageFacts facts(String name, String dir) {
+      final problems = <String>[];
+      final result = readPackageFacts(
+        name,
+        p.join(repoRoot, dir),
+        '$dir/pubspec.yaml',
+        problems,
+      );
+      expect(problems, isEmpty);
+      return result;
+    }
+
+    test(
+      'core_notifications: no Windows or Linux, FirebaseOptions per flavor',
+      () {
+        final notifications = facts(
+          'core_notifications',
+          'platform/infra/notifications',
+        );
+        expect(notifications.platforms, ['android', 'ios', 'web', 'macos']);
+        expect(notifications.supports('windows'), isFalse);
+        expect(notifications.supports('linux'), isFalse);
+        final needs = notifications.appProvides;
+        expect(needs.map((n) => n.type), ['FirebaseOptions']);
+        expect(needs.single.perFlavor, isTrue);
+      },
+    );
+
+    test('core_database: no web, because drift/native needs dart:ffi', () {
+      final database = facts('core_database', 'platform/infra/database');
+      expect(database.supports('web'), isFalse);
+      expect(database.platforms, [
+        'android',
+        'ios',
+        'windows',
+        'macos',
+        'linux',
+      ]);
+    });
+
+    test('every declared platform is a name composer knows', () {
+      // A typo in a pubspec would make `supports()` silently false.
+      for (final dir
+          in Directory(p.join(repoRoot, 'platform'))
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => p.basename(f.path) == 'pubspec.yaml')
+              .map((f) => f.parent.path)) {
+        final problems = <String>[];
+        readPackageFacts('x', dir, '$dir/pubspec.yaml', problems);
+        expect(problems, isEmpty, reason: dir);
+      }
+    });
+  });
+
+  group('the R17 allow-list', () {
+    test('names files that exist, each with a reason', () {
+      for (final entry in kPlatformForkAllowList.entries) {
+        expect(
+          File(p.join(repoRoot, entry.key)).existsSync(),
+          isTrue,
+          reason: '${entry.key} is allow-listed but gone',
+        );
+      }
+      expect(allowListProblems(kPlatformForkAllowList), isEmpty);
+    });
+
+    test('the policy fork itself is the first entry', () {
+      expect(
+        kPlatformForkAllowList.keys.first,
+        endsWith('config/platform_resolver.dart'),
+      );
     });
   });
 }

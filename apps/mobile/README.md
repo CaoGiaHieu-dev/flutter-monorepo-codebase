@@ -73,32 +73,32 @@ Modules: auth (api, domain, data, feature) · home (api, feature) · settings (f
 The DI smoke test boots every flavor, so a missing registration fails it with "<Type> is not registered".
 
 ### 4. What the shell resolves from this app (d)
-| Capability | Contract | Need | State | If absent |
-|:--|:--|:--|:--|:--|
-| `language_storage` | `ILanguageStorage` | **required** | registered by the shell's own packages | boot throws "ILanguageStorage is not registered" |
-| `theme_storage` | `IThemeStorage` | **required** | registered by the shell's own packages | boot throws "IThemeStorage is not registered" |
-| `boot_storage` | `AppBootStorage` | **required** | registered by the shell's own packages | the first-launch rule cannot run |
-| `ssl_pinning` | `SslPinningConfig` | **required** | registered by the shell's own packages | the pinning view of the app's manifest decision is not bound, so a boot without a profile skips pinning and logs an ERROR; it must be bound in its own right, never as a supertype (RULE-14) |
-| `app_router` | `AppRouter` | **required** | registered by the shell's own packages | boot throws "AppRouter is not registered" |
-| `deeplink_provider` | `DeeplinkProvider` | **required** | registered by the shell's own packages | boot throws "DeeplinkProvider is not registered" |
-| `theme_provider` | `ThemeProvider` | **required** | registered by the shell's own packages | boot throws "ThemeProvider is not registered" |
-| `language_provider` | `LanguageProvider` | **required** | registered by the shell's own packages | boot throws "LanguageProvider is not registered" |
-| `session_state` | `ISessionState` | optional | provided | the navigation wrapper treats the app as signed out, every deep link is routed, and a lost session is a no-op |
-| `session_gateway` | `ISessionGateway` | optional | provided | requests carry no bearer token and nothing refreshes it |
-| `session_refresh` | `ISessionRefreshListenable` | optional | provided | the router never re-resolves its location on a session change |
-| `sign_in` | `ISignInLocation` | optional | provided | the shell never redirects a signed-out user |
-| `routes` | `IFeatureRouteModule` | optional | provided | the router has no stack routes |
-| `tabs` | `INavDestinationModule` | optional | provided | the router opens one placeholder route (`/_empty_dashboard`) |
-| `dashboard` | `IDashboardRouteModule` | optional | provided | the destinations render without any chrome |
-| `entry` | `IAppEntryLocation` | optional | provided | there is no first-launch entry; boot goes to the sign-in check |
-| `post_sign_in` | `IPostSignInLocation` | optional | provided | after sign-in the router opens its fallback, the first tab |
-| `splash` | `IAppSplashScreen` | optional | provided | the native splash is kept through boot |
-| `tree_wrappers` | `IAppTreeWrapper` | optional | provided | the widget tree is built unwrapped |
-| `localization` | `IFeatureLocalization` | optional | provided | only core_base_ui's own strings are translated |
-| `error_reporter` | `IErrorReporter` | optional | **absent** — no crash backend chosen: errors are printed and sent nowhere — implement IErrorReporter in lib/app/, then declare it provided (RULE-67) | errors are printed and sent nowhere (RULE-67) |
-| `analytics` | `IAnalytics` | optional | **absent** — no analytics backend chosen: no screen events | no screen events are sent |
+| Capability | Contract | Need | State | Implemented by | If absent |
+|:--|:--|:--|:--|:--|:--|
+| `language_storage` | `ILanguageStorage` | **required** | registered by the shell's own packages | platform_shell_adapters | boot throws "ILanguageStorage is not registered" |
+| `theme_storage` | `IThemeStorage` | **required** | registered by the shell's own packages | platform_shell_adapters | boot throws "IThemeStorage is not registered" |
+| `boot_storage` | `AppBootStorage` | **required** | registered by the shell's own packages | platform_shell_adapters | the first-launch rule cannot run |
+| `ssl_pinning` | `SslPinningConfig` | **required** | registered by the shell's own packages | platform_shell_adapters | the pinning view of the app's manifest decision is not bound, so a boot without a profile skips pinning and logs an ERROR; it must be bound in its own right, never as a supertype (RULE-14) |
+| `app_router` | `AppRouter` | **required** | registered by the shell's own packages | platform_app_shell | boot throws "AppRouter is not registered" |
+| `deeplink_provider` | `DeeplinkProvider` | **required** | registered by the shell's own packages | platform_app_shell | boot throws "DeeplinkProvider is not registered" |
+| `theme_provider` | `ThemeProvider` | **required** | registered by the shell's own packages | core_base_ui | boot throws "ThemeProvider is not registered" |
+| `language_provider` | `LanguageProvider` | **required** | registered by the shell's own packages | core_base_ui | boot throws "LanguageProvider is not registered" |
+| `session_state` | `ISessionState` | optional | provided | feature_auth | the navigation wrapper treats the app as signed out, every deep link is routed, and a lost session is a no-op |
+| `session_gateway` | `ISessionGateway` | optional | provided | data_auth | requests carry no bearer token and nothing refreshes it |
+| `session_refresh` | `ISessionRefreshListenable` | optional | provided | feature_auth | the router never re-resolves its location on a session change |
+| `sign_in` | `ISignInLocation` | optional | provided | feature_auth | the shell never redirects a signed-out user |
+| `routes` | `IFeatureRouteModule` | optional | provided | feature_auth, feature_onboarding | the router has no stack routes |
+| `tabs` | `INavDestinationModule` | optional | provided | feature_home, feature_settings | the router opens one placeholder route (`/_empty_dashboard`) |
+| `dashboard` | `IDashboardRouteModule` | optional | provided | feature_dashboard | the destinations render without any chrome |
+| `entry` | `IAppEntryLocation` | optional | provided | feature_onboarding | there is no first-launch entry; boot goes to the sign-in check |
+| `post_sign_in` | `IPostSignInLocation` | optional | provided | feature_home | after sign-in the router opens its fallback, the first tab |
+| `splash` | `IAppSplashScreen` | optional | provided | feature_splash | the native splash is kept through boot |
+| `tree_wrappers` | `IAppTreeWrapper` | optional | provided | feature_auth | the widget tree is built unwrapped |
+| `localization` | `IFeatureLocalization` | optional | provided | feature_auth, feature_home, feature_onboarding, feature_settings, feature_splash | only core_base_ui's own strings are translated |
+| `error_reporter` | `IErrorReporter` | optional | **absent** — no crash backend chosen: errors are printed and sent nowhere — implement IErrorReporter in lib/app/, then declare it provided (RULE-67) | — | errors are printed and sent nowhere (RULE-67) |
+| `analytics` | `IAnalytics` | optional | **absent** — no analytics backend chosen: no screen events | — | no screen events are sent |
 
-The shell's catalog is `kShellContracts` in `platform_app_shell`; a required row is registered by a shell package, an optional one by an app or a module, and `checkAppContract` holds this table to the graph the app actually builds. `ISessionStatusStream` has no row: only a module looks it up.
+The shell's catalog is `kShellContracts` in `platform_app_shell`; a required row is registered by a shell package, an optional one by an app or a module, and `checkAppContract` holds this table to the graph the app actually builds. `ISessionStatusStream` has no row: only a module looks it up. "Implemented by" is a static scan of the composed packages and this app's own source for a registration of the exact type (`composer verify` holds it to the state above, check V3); a hand-written `getIt.register…` is invisible to it, which is why `checkAppContract` stays the authority.
 
 ### 5. Behaviour values (profile)
 Typed Dart in `lib/app/app_profile.dart`, below the generated facts. A section left out is the template default, and every section type documents its defaults and ranges: `display:` (`DisplayProfile` — the design artboard, the scale policy of each window class, the OS font-size cap, split-screen mode, the phone threshold), `router:` (`RouterProfile` — when the entry location is used, the fallback location), `locale:` (`LocaleProfile` — the languages offered, the fallback and first-launch language), `theme:` (`ThemeProfile` — the mode a first launch opens in, the palette overrides) and `network:` (`NetworkProfile` — the default HTTP client's timeouts, extra headers and redirect policy).

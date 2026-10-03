@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../arch_check/platform_forks.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/arch_check/check.dart` — CI Gate 1.
@@ -603,6 +604,242 @@ void main() {
       expect(run.output, contains('modules/a/feature/lib/a.dart:3'));
       expect(run.output, contains('apps/demo/lib/main.dart:1'));
       expect(run.output, contains('`AuthProviderImpl`'));
+    });
+  });
+
+  group('R16 the shell catalog is complete', () {
+    const catalogPath =
+        'platform/shell/app_shell/lib/src/composition/shell_contracts.dart';
+
+    /// A catalog source with one row per type in [types].
+    String catalog(List<String> types) {
+      final rows = [
+        for (final t in types)
+          'ShellContract<$t>(\n'
+              "  id: '${t.toLowerCase()}',\n"
+              '  need: ShellNeed.optional,\n'
+              '  cardinality: ContractCardinality.one,\n'
+              "  consumer: 'a.dart:1',\n"
+              "  whenAbsent: 'nothing',\n"
+              '),',
+      ];
+      return 'const List<ShellContract<Object>> kShellContracts = [\n'
+          '${rows.join('\n')}\n];\n';
+    }
+
+    /// `IFooContract` is implemented only in `modules/foo`; `IBarContract` by
+    /// nobody (an app brings it). The shell package resolves [lookup].
+    Map<String, String> shellFixture({
+      required List<String> rows,
+      String lookup = 'final foo = getItOrNull<IFooContract>();',
+      Map<String, String> extra = const {},
+    }) => {
+      'platform/foundation/contracts/pubspec.yaml': pubspec('core_di'),
+      'platform/foundation/contracts/lib/contracts.dart':
+          'abstract class IFooContract {}\n'
+          'abstract class IBarContract {}\n',
+      'modules/foo/feature/pubspec.yaml': pubspec(
+        'feature_foo',
+        deps: ['core_di'],
+      ),
+      'modules/foo/feature/lib/foo.dart':
+          'class FooImpl implements IFooContract {}\n',
+      'platform/shell/app_shell/pubspec.yaml': pubspec(
+        'platform_app_shell',
+        deps: ['core_di'],
+      ),
+      catalogPath: catalog(rows),
+      'platform/shell/app_shell/lib/shell.dart':
+          "import 'package:core_di/core_di.dart';\n$lookup\n",
+      ...extra,
+    };
+
+    test('a module-implemented contract with a catalog row passes', () async {
+      final run = await check(shellFixture(rows: ['IFooContract']));
+      expectClean(run, 'R16');
+    });
+
+    test('an optional lookup with no row fails, naming the module', () async {
+      final run = await check(shellFixture(rows: ['IBarContract']));
+      expectViolation(run, 'R16', 'platform/shell/app_shell/lib/shell.dart:2');
+      expect(run.output, contains('`IFooContract`'));
+      expect(run.output, contains('implemented only in modules/foo'));
+      expect(run.output, contains('ShellContract<IFooContract>'));
+    });
+
+    test('a lookup of a contract nobody registers needs a row too', () async {
+      final run = await check(
+        shellFixture(
+          rows: ['IFooContract'],
+          lookup: 'final bar = getAllOrEmpty<IBarContract>();',
+        ),
+      );
+      expectViolation(run, 'R16', 'platform/shell/app_shell/lib/shell.dart:2');
+      expect(run.output, contains('No package registers it'));
+    });
+
+    test('a lookup of a type that is not a contract passes', () async {
+      final run = await check(
+        shellFixture(
+          rows: ['IFooContract'],
+          lookup: 'final hooks = getItOrNull<ShellHooks>();',
+          extra: {
+            'platform/shell/app_shell/lib/hooks.dart': 'class ShellHooks {}\n',
+          },
+        ),
+      );
+      expectClean(run, 'R16');
+    });
+
+    test('a lookup in a comment or a string passes', () async {
+      final run = await check(
+        shellFixture(
+          rows: ['IFooContract'],
+          lookup:
+              '// getItOrNull<IBarContract>()\n'
+              "const s = 'getItOrNull<IBarContract>()';",
+        ),
+      );
+      expectClean(run, 'R16');
+    });
+
+    test('an uncatalogued lookup outside platform/ is not the shell', () async {
+      final run = await check(
+        shellFixture(
+          rows: ['IFooContract'],
+          extra: {
+            'modules/foo/feature/lib/bar.dart':
+                'final bar = getItOrNull<IBarContract>();\n',
+          },
+        ),
+      );
+      expectClean(run, 'R16');
+    });
+
+    test('a row for a type no package declares fails', () async {
+      final run = await check(
+        shellFixture(rows: ['IFooContract', 'IGoneContract']),
+      );
+      expectViolation(run, 'R16', catalogPath);
+      expect(run.output, contains('`ShellContract<IGoneContract>`'));
+    });
+
+    test('a catalog row the parser cannot read fails', () async {
+      final run = await check(
+        shellFixture(
+          rows: ['IFooContract'],
+          extra: {
+            catalogPath:
+                'const kShellContracts = [\n'
+                'ShellContract<IFooContract>(id: 1),\n'
+                '];\n',
+          },
+        ),
+      );
+      expectViolation(run, 'R16', catalogPath);
+      expect(run.output, contains('cannot be read'));
+    });
+
+    test('a workspace with no catalog is not asked for one', () async {
+      final files = shellFixture(rows: ['IFooContract'])..remove(catalogPath);
+      final run = await check(files);
+      expectClean(run, 'R16');
+    });
+  });
+
+  group('R17 platform forks are an app decision', () {
+    const resolver =
+        'platform/foundation/common/lib/src/config/platform_resolver.dart';
+
+    Map<String, String> forkFixture(Map<String, String> files) => {
+      'platform/foundation/common/pubspec.yaml': pubspec('core_common'),
+      'modules/a/feature/pubspec.yaml': pubspec('feature_a'),
+      'apps/demo/pubspec.yaml': pubspec('demo_app'),
+      ...files,
+    };
+
+    test('the resolver may fork, and a fork named in a comment or string is '
+        'not one', () async {
+      final run = await check(
+        forkFixture({
+          resolver:
+              "import 'package:flutter/foundation.dart';\n"
+              'final web = kIsWeb;\n'
+              'final target = defaultTargetPlatform;\n',
+          'modules/a/feature/lib/a.dart':
+              '/// Not `kIsWeb`, not Platform.isIOS.\n'
+              "const s = 'Platform.isAndroid';\n",
+        }),
+      );
+      expectClean(run, 'R17');
+    });
+
+    test('a fork in a test, or outside lib/, is not read', () async {
+      final run = await check(
+        forkFixture({
+          'modules/a/feature/test/a_test.dart': 'final w = kIsWeb;\n',
+          'modules/a/feature/tool/x.dart': 'final w = kIsWeb;\n',
+        }),
+      );
+      expectClean(run, 'R17');
+    });
+
+    for (final fork in [
+      'Platform.isAndroid',
+      'Platform.isIOS',
+      'Platform.operatingSystem',
+      'kIsWeb',
+      'defaultTargetPlatform',
+      'TargetPlatform.iOS',
+    ]) {
+      test('$fork in a feature fails, naming the file and the line', () async {
+        final run = await check(
+          forkFixture({
+            'modules/a/feature/lib/a.dart':
+                "import 'dart:io';\nfinal here = $fork;\n",
+          }),
+        );
+        expectViolation(run, 'R17', 'modules/a/feature/lib/a.dart:2');
+        expect(run.output, contains('`${fork.replaceAll(' ', '')}`'));
+        expect(run.output, contains('PlatformFacts'));
+      });
+    }
+
+    test('an app fork fails too', () async {
+      final run = await check(
+        forkFixture({'apps/demo/lib/main.dart': 'final w = kIsWeb;\n'}),
+      );
+      expectViolation(run, 'R17', 'apps/demo/lib/main.dart:1');
+    });
+
+    test('an allow-listed file that no longer forks fails', () async {
+      final run = await check(
+        forkFixture({resolver: 'AppPlatform resolveAppPlatform() => web;\n'}),
+      );
+      expectViolation(run, 'R17', resolver);
+      expect(run.output, contains('no longer forks'));
+    });
+
+    test('every shipped allow-list entry says why', () {
+      expect(kPlatformForkAllowList, isNotEmpty);
+      expect(allowListProblems(kPlatformForkAllowList), isEmpty);
+    });
+
+    test('an allow-list entry without a reason is itself a failure', () {
+      expect(
+        allowListProblems({'platform/a/lib/a.dart': '', 'b.dart': '  '}),
+        hasLength(2),
+      );
+      expect(
+        allowListProblems({'platform/a/lib/a.dart': 'TODO'}),
+        hasLength(1),
+      );
+      expect(
+        allowListProblems({
+          'platform/a/lib/a.dart': 'dart:io Platform throws on the web',
+        }),
+        isEmpty,
+      );
     });
   });
 

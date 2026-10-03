@@ -1,6 +1,7 @@
 import 'catalog.dart';
 import 'manifest_v2.dart';
 import 'package_facts.dart';
+import 'provisions.dart';
 
 /// One `di_groups` entry, resolved to the packages it composes.
 class ViewGroup {
@@ -45,6 +46,7 @@ class AppView {
     required this.composed,
     required this.packageFacts,
     required this.catalog,
+    this.provisions = const ProvisionIndex.empty(),
   });
 
   final String id;
@@ -66,6 +68,17 @@ class AppView {
   final Map<String, PackageFacts> packageFacts;
 
   final ShellCatalog catalog;
+
+  /// What every workspace package registers, from the static scan.
+  final ProvisionIndex provisions;
+
+  /// The packages whose registrations are part of this app's graph: the ones it
+  /// composes, and the app's own `lib/`.
+  Set<String> get graphPackages => {...composed, pubspecName};
+
+  /// The registrations of [type] in this app's graph.
+  List<Provision> providersOf(String type) =>
+      provisions.of(type, graphPackages);
 
   String get manifestPath => '$dir/app_manifest.yaml';
 

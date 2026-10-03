@@ -19,13 +19,6 @@ import 'platform_notes.dart';
 /// `scaffold` platform — appears only inside the `flutter create` command
 /// block, never as a span.
 
-/// The `.env` file each flavor reads, by the repository's convention.
-const Map<String, String> kEnvFiles = {
-  'dev': 'env.dev',
-  'staging': 'env.stg',
-  'prod': 'env.prod',
-};
-
 /// The report for [view], Markdown, without the region markers.
 String renderReport(AppView view) {
   final decl = view.declaration;
@@ -202,12 +195,13 @@ String renderReport(AppView view) {
 
   // -- 4. what the shell resolves -----------------------------------------
   line('### 4. What the shell resolves from this app (d)');
-  line('| Capability | Contract | Need | State | If absent |');
-  line('|:--|:--|:--|:--|:--|');
+  line('| Capability | Contract | Need | State | Implemented by | If absent |');
+  line('|:--|:--|:--|:--|:--|:--|');
   for (final row in view.catalog.requiredRows) {
     line(
       '| `${row.id}` | `${row.type}` | **required** | registered by the '
-      'shell\'s own packages | ${_cell(row.whenAbsent)} |',
+      'shell\'s own packages | ${_implementedBy(view, row.type)} '
+      '| ${_cell(row.whenAbsent)} |',
     );
   }
   for (final row in view.catalog.optional) {
@@ -219,7 +213,7 @@ String renderReport(AppView view) {
         : '**absent** — ${_cell(state.reason ?? '')}';
     line(
       '| `${row.id}` | `${row.type}` | optional | $stateText '
-      '| ${_cell(row.whenAbsent)} |',
+      '| ${_implementedBy(view, row.type)} | ${_cell(row.whenAbsent)} |',
     );
   }
   line();
@@ -228,7 +222,11 @@ String renderReport(AppView view) {
     'required row is registered by a shell package, an optional one by an app '
     'or a module, and `checkAppContract` holds this table to the graph the app '
     'actually builds. `ISessionStatusStream` has no row: only a module looks '
-    'it up.',
+    'it up. "Implemented by" is a static scan of the composed packages and '
+    'this app\'s own source for a registration of the exact type '
+    '(`composer verify` holds it to the state above, check V3); a hand-written '
+    '`getIt.register…` is invisible to it, which is why `checkAppContract` '
+    'stays the authority.',
   );
   line();
 
@@ -301,6 +299,16 @@ String renderReport(AppView view) {
     'types registered in the `after` groups.',
   );
   return b.toString();
+}
+
+/// The packages of the app's graph that register [type], or `—`; the app's own
+/// source is `this app`.
+String _implementedBy(AppView view, String type) {
+  final names = {
+    for (final provision in view.providersOf(type))
+      provision.package == view.pubspecName ? 'this app' : provision.package,
+  }.toList()..sort();
+  return names.isEmpty ? '—' : names.join(', ');
 }
 
 /// What the kernel's `OrientationPolicy` constant [policy] does.

@@ -90,6 +90,18 @@ with the architecture rules enforced by CI instead of review alone.
   picker in settings and the `language` header all read. Every default is today's behaviour; each
   DI smoke test also checks that every feature's localization delegate supports every language the
   app offers.
+- Gate 0 and Gate 1 hold an app's declaration to its source (the apps layer, step 5 of 6):
+  `composer verify` now checks that `capabilities:` equals what the composed packages and the
+  app's own `lib/` register, both directions (V3, with the registering package named when it is not
+  composed), that every composed package supports every declared platform (V7), that the app
+  registers `FirebaseOptions` for every declared flavor when it composes `core_notifications`
+  (V10), that the env files hold exactly the declared keys (V11), and that the entry point passes
+  `profile:` and the smoke test calls `checkAppContract` (V12). The report's contract table gains an
+  **Implemented by** column. `arch_check` gains R16 (every contract the shell resolves optionally
+  has a row in the shell catalog) and R17 (platform forks — `Platform.isX`, `kIsWeb`,
+  `defaultTargetPlatform`, `TargetPlatform.x` — only in an allow-list, each entry with its reason).
+  `tools/shared/contract_scan.dart` is the one scanner `arch_check` and `composer` share.
+  `apps/admin/env.dev` drops two keys the app never declared (`WEB_DOMAIN`, `APP_LINK_MODE`).
 
 ### Changed
 

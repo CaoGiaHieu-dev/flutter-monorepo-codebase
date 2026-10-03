@@ -257,6 +257,18 @@ void main(List<String> args) async {
     stdout.writeln('\n==========================================');
     stdout.writeln('[V] Module "${config.moduleName}" created.');
     stdout.writeln('==========================================');
+    if (!isApi) {
+      // V3 holds each app's `capabilities:` to what it composes; the new module
+      // is composed now, so a contract it registers changes that answer.
+      stdout.writeln(
+        '\n"dart tools/composer/composer.dart verify" now holds each app\'s '
+        '`capabilities:` to this module (check V3). If it registers a contract '
+        'the shell resolves (a route, a nav tab, a splash, an entry location, '
+        '...), declare it `provided` — or `absent` with a reason — in every '
+        'app_manifest.yaml that composes it; "dart tools/composer/composer.dart '
+        'describe --catalog" lists the contracts.',
+      );
+    }
     if (isApi) {
       final pascal = CommonHelpers.toPascalCase(config.nameInput);
       stdout.writeln('\nWhat is left for you to do by hand:');

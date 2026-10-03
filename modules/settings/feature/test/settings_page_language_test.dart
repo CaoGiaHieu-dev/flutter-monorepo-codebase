@@ -24,6 +24,9 @@ void main() {
             localizationsDelegates: [
               ...FeatureSettingsLocalizations.localizationsDelegates,
               ...AppLocalizations.localizationsDelegates,
+              // material_ui reads its own localization types (see the shell's
+              // AppMaterialWrapper), which have English alone without these.
+              ...GlobalMaterialLocalizations.delegates,
             ],
             supportedLocales: languages.languageSet.supported,
             locale: const Locale('en'),
@@ -61,6 +64,18 @@ void main() {
 
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Tiếng Việt'), findsNothing);
+  });
+
+  testWidgets('an app that offers Vietnamese alone lists Vietnamese alone', (
+    tester,
+  ) async {
+    await openPicker(
+      tester,
+      const LocaleProfile(supported: ['vi'], fallback: 'vi'),
+    );
+
+    expect(find.text('Tiếng Việt'), findsOneWidget);
+    expect(find.text('English'), findsNothing);
   });
 }
 

@@ -10,24 +10,25 @@ Each box names the registry row it checks. The rule itself, its reason and its v
 
 ## 0. Automated gate — run these first
 
-The same gates `.github/workflows/pr_quality_check.yml` runs, in its order (CI first runs `dart tools/workspace_setup/configure.dart` — pub get, gen-l10n, build_runner, barrels):
+The same gates `.github/workflows/pr_quality_check.yml` runs, in its order. Gates 0 and 1 read manifests, pubspecs and sources, so CI runs them straight after `flutter pub get`; the setup step (gen-l10n, build_runner, barrels) comes after them and before analyze. On a fresh clone, run the setup line once before `flutter analyze` and the tests.
 
 ```bash
-dart run build_runner build --workspace              # generated code up to date
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R17
+dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R20
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
+dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrels
+git status --short -- '*.dart'                       # barrel drift — CI fails on any change or untracked .dart file here
 flutter analyze                                      # Gate 2 — static analysis, 0 issues
 # Gate 3 — `flutter test` in every package that has a test/ directory (apps/*: the DI smoke test)
 dart tools/dependency_sync.dart --check              # Gate 4 — version catalog drift
 dart tools/docs_check/check.dart                     # Gate 5 — doc paths, en ↔ vi parity, RULE-ID citations
-dart tools/unused_checker/check_unused_packages.dart # advisory — declared but never imported
+dart tools/unused_checker/check_unused_packages.dart # declared but never imported — blocking too
 ```
 
-- [ ] Gates 0–5 pass clean (the unused-dependency audit is advisory)
-- [ ] **RULE-60 · RULE-63** — tests pass in every touched package with a `test/` directory, including each app's DI smoke test
-- [ ] **RULE-76** — no generated file (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) was hand-edited
-- [ ] **RULE-75** — the barrel generator was re-run, after codegen, if a `lib/` file was added, renamed or deleted
+- [ ] Gates 0–5, the barrel-drift check and the unused-dependency audit all pass clean
+- [ ] **RULE-60 · RULE-63** — tests pass in every touched package with a `test/` directory, including each app's DI smoke test (it builds every `@injectable` factory)
+- [ ] **RULE-76** — no generated file (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) was hand-edited or committed
+- [ ] **RULE-75** — the barrel generator was re-run, after codegen, if a `lib/` file was added, renamed or deleted; no hand-added `export`
 - [ ] **RULE-77** — a DI, dependency or type-move change was followed by the debug APK build (CI's `build` job)
 - [ ] **RULE-80 · RULE-81 · RULE-82** — a per-app value is declared in `apps/<id>/` (manifest, profile, hook), not a constant in `platform/`; a module that registers a catalogued contract is declared `provided` in each app that composes it; no new platform fork outside the R17 allow-list
 
@@ -37,7 +38,7 @@ dart tools/unused_checker/check_unused_packages.dart # advisory — declared but
 
 - [ ] **RULE-16** — a new package declares `resolution: workspace` and reached the root `workspace:` list through `composer sync`, not a hand edit
 - [ ] **RULE-78** — its name matches its layer prefix (`core_` / `domain_` / `data_` / `feature_` / `<id>_api`); files and classes follow the suffix table
-- [ ] **RULE-75** — its public API is exported through the barrel; implementation stays under `src/`
+- [ ] **RULE-75** — its one barrel, `lib/<package_name>.dart`, was generated, not hand-written; its files import each other directly, never through the barrel
 - [ ] **RULE-09** — its public constants live in its own `utils/`
 
 ---
@@ -46,14 +47,16 @@ dart tools/unused_checker/check_unused_packages.dart # advisory — declared but
 
 - [ ] **RULE-01** — no platform package depends on a module; a new approved `→ domain_core` edge updated the allow-list and the registry in the same PR
 - [ ] **RULE-02** — a new platform package sits in a group folder and its `dependencies:` follow the group DAG
+- [ ] **RULE-07** — `platform_kernel` gained no Flutter-bound or transport dependency
 - [ ] **RULE-06** — every `package:` import is declared under `dependencies:`; removed code removed its unused entries
 - [ ] **RULE-04** — no feature imports another feature or a data package; module API packages depend on the foundation only
 
 **Verify**
 
 ```bash
-dart tools/arch_check/check.dart                            # R1, R2, R3, R5, R11
-grep -rn "package:feature_\|package:data_" platform/*/*/lib   # must be empty
+dart tools/arch_check/check.dart                            # R1, R2, R3, R5, R9, R10, R11
+grep -rn "package:feature_" platform/*/*/lib                # must be empty
+grep -rn "package:data_" platform/*/*/lib | grep -v "package:data_core"   # must be empty
 dart tools/unused_checker/check_unused_packages.dart        # declared but unused
 ```
 
@@ -97,7 +100,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 - [ ] **RULE-16** — it is composed through each `apps/<id>/app_manifest.yaml` and `composer verify` is clean
 - [ ] **RULE-10** — screen controllers are `@injectable`; singletons are genuinely app-wide
 - [ ] **RULE-11** — dependencies arrive via the constructor; no `getIt<T>()` in a ViewModel, Bloc, Repository or UseCase
-- [ ] **RULE-13 · RULE-63** — no eager `@Singleton` depends on a later group; a plugin touched during DI has its test double in the smoke tests
+- [ ] **RULE-13 · RULE-63** — no eager `@Singleton` depends on a later group; a plugin touched during DI has its test double in the smoke tests; a factory needing a non-nullable `@factoryParam` is listed with its reason
 - [ ] **RULE-14** — a second interface on one implementation is bound through a `@module`
 
 **Verify** — the DI smoke test boots the real graph for every flavor:
@@ -141,10 +144,10 @@ flutter analyze
 ## 9. UI and presentation
 
 - [ ] **RULE-50** — controllers extend `BaseProvider` / `BaseBloc` (`BaseCubit` only without events)
-- [ ] **RULE-51 · RULE-52** — BLoC events are private `part` subclasses; every `on<Event>` handler is `async (event, emit)`
+- [ ] **RULE-51 · RULE-52** — BLoC events are private `part` subclasses; every `on<Event>` handler is `async (event, emit)` (`arch_check` R18 reads it)
 - [ ] **RULE-53** — a `BlocViewState<T>` state settles through `emitResult`; generic code writes the type argument
 - [ ] **RULE-54** — cross-feature state is a neutral `Stream` / `ValueListenable` interface, dual-registered
-- [ ] **RULE-30** — all sizing goes through `BuildContext`; values needed after an `await` were read before it
+- [ ] **RULE-30** — all sizing goes through `BuildContext`; values needed after an `await` were read before it (R7 and R20 catch the literal forms, not a value reached through a variable)
 - [ ] **RULE-31** — reusable widgets use parameters as received; nothing is scaled twice
 - [ ] **RULE-32** — layout choices use the window size class, not `Platform.is*` or a device check
 - [ ] **RULE-33** — colours, typography, spacing and radii come from the design tokens
@@ -168,7 +171,7 @@ flutter analyze
 - [ ] **RULE-72** — no `.ps1` script was added
 - [ ] **RULE-73** — no command or tool hardcodes `fvm`
 - [ ] **RULE-74** — versions were changed in `pubspec_dependencies.yaml` and synced
-- [ ] **RULE-65 · RULE-66** — no `print`; nothing secret was committed or logged
+- [ ] **RULE-65 · RULE-66** — no `print` / `debugPrint` in `lib/` (R19); nothing secret was committed or logged
 - [ ] **RULE-67** — error reporting goes through `IErrorReporter`, not a reassigned `FlutterError.onError`
 - [ ] **RULE-61 · RULE-62** — fakes are hand-written; scaled widget tests wrap the subject in `ResponsiveInit`
 - [ ] **RULE-64** — a change to a gate tool added a case to `tools/test/`

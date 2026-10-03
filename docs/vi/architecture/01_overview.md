@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/01_overview.md@e7602d5 -->
+<!-- translated-from: docs/en/architecture/01_overview.md@d21d457 -->
 # Tổng quan kiến trúc
 
 Tài liệu này trả lời câu hỏi **"monorepo này được bố trí ra sao, và package nào được phép phụ thuộc package nào?"**. Đọc xong bạn sẽ biết đặt một file mới vào đúng package, và biết chắc — không phải đoán — rằng dòng `import` sắp viết có hợp lệ hay không.

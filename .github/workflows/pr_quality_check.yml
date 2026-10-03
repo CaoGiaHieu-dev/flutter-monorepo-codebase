@@ -64,7 +64,7 @@ jobs:
       # quietly stopped failing looks exactly like a clean PR. tools/test/
       # builds throwaway workspaces in a temp directory and runs each gating
       # tool against them as a subprocess, asserting exit code and output:
-      # arch_check (a clean and a violating fixture for every rule R1-R10),
+      # arch_check (a clean and a violating fixture for every rule R1-R20),
       # composer verify, dependency_sync --check, docs_check (paths and en↔vi
       # parity), the barrel generator, composer bootstrap, the module
       # generator's argument checks, configure's Firebase stubs and the
@@ -89,6 +89,29 @@ jobs:
       # copy CI and docs/en/getting-started/01_setup.md § 3.2 share.
       - name: Install dependencies, run code generation, stub Firebase
         run: dart tools/workspace_setup/configure.dart --stub-firebase
+
+      # Barrel drift gate (RULE-75). configure.dart has just rewritten every
+      # package's one barrel (lib/<package>.dart) from the files on disk, after
+      # codegen. The barrels are committed and the codegen output is not, so
+      # any change to a tracked .dart file now is a barrel that was stale (a
+      # file added, renamed or deleted without re-running the generator) or
+      # had an `export` added by hand — the generator deletes those. A barrel
+      # for a package that has none yet shows up as an untracked file. Fix it
+      # locally with `dart tools/barrel_generator/generate.dart <package>/lib`
+      # and commit the result.
+      - name: Barrels match the generator
+        run: |
+          set -e
+          untracked="$(git ls-files --others --exclude-standard -- '*.dart')"
+          if [ -n "$untracked" ]; then
+            echo "::error::The barrel generator wrote a file that is not committed (RULE-75):"
+            echo "$untracked"
+            exit 1
+          fi
+          if ! git diff --exit-code -- '*.dart'; then
+            echo "::error::A barrel differs from what the generator writes: re-run 'dart tools/barrel_generator/generate.dart <package>/lib' and commit (RULE-75)."
+            exit 1
+          fi
 
       # Gate 2 — static analysis.
       # Note this cannot see generated code: analysis_options.yaml excludes
@@ -159,13 +182,13 @@ jobs:
       - name: Documentation accuracy
         run: dart tools/docs_check/check.dart
 
-      # Advisory: declared-but-unused package dependencies (an undeclared
-      # import is Gate 1's rule R5). Not a hard gate
-      # because the checker cannot see intentional scaffolding — see
-      # .claude/skills/run_repo_tooling/SKILL.md for what is deliberately
-      # unused and must not be deleted on the tool's word.
-      - name: Unused dependency audit (advisory)
-        continue-on-error: true
+      # RULE-06 — no declared-but-unused package dependency (an
+      # undeclared import is Gate 1's rule R5). Blocking: the tree is clean, so
+      # a PR that leaves an unused entry in a pubspec is the one that fails.
+      # Only unused *files* stay advisory — `check_unused_file.dart` cannot
+      # see intentional toolkit APIs and is not run here; see
+      # .claude/skills/run_repo_tooling/SKILL.md for what is deliberately kept.
+      - name: Unused dependency audit
         run: dart tools/unused_checker/check_unused_packages.dart
 
   # Template regression check: generate a module the way a developer would,
@@ -225,8 +248,8 @@ jobs:
         run: dart tools/composer/composer.dart verify
 
       # Blocking only for the generated package: an unused dependency there
-      # is a template bug. Anywhere else it is the quality job's advisory
-      # audit, and is reported here as a warning.
+      # is a template bug. Anywhere else it is the quality job's audit (also
+      # blocking) that owns it; here it is only reported as a warning.
       - name: No unused dependency in the generated module
         run: |
           set +e

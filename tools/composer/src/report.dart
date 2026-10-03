@@ -19,6 +19,100 @@ import 'platform_notes.dart';
 /// `scaffold` platform — appears only inside the `flutter create` command
 /// block, never as a span.
 
+/// One check or problem code, as `describe --catalog` lists it.
+class CodedLine {
+  const CodedLine(this.id, this.what);
+
+  final String id;
+  final String what;
+}
+
+/// What `composer verify` holds an app to. V1 lives in the parser and V13 in
+/// the drift pass; the rest are in `checks.dart`.
+const List<CodedLine> kComposerChecks = [
+  CodedLine(
+    'V1',
+    'closed vocabularies, types and ranges; an unknown key; `app.kind` (removed)',
+  ),
+  CodedLine(
+    'V2',
+    'every optional contract in the catalog has a declared state; no unknown id',
+  ),
+  CodedLine(
+    'V3',
+    '`capabilities:` equals what the composed packages and the app register, both directions; every required contract has an implementer',
+  ),
+  CodedLine('V4', 'the members of a bundle share one state'),
+  CodedLine('V5', '`splash: dart` needs capability `splash` provided'),
+  CodedLine(
+    'V6',
+    '`runner: committed` needs the platform folder; `scaffold` needs it absent',
+  ),
+  CodedLine(
+    'V7',
+    'every package the app links that declares `platforms:` supports every platform the app declares',
+  ),
+  CodedLine(
+    'V8',
+    '`push: true` needs core_notifications composed and supporting the platform; `window` only on a desktop platform',
+  ),
+  CodedLine(
+    'V9',
+    'a pin decision per flavor where a declared platform can pin, refused where none can; pins well-formed',
+  ),
+  CodedLine(
+    'V10',
+    'what a composed package needs the app to register (`FirebaseOptions` per flavor) is registered under the app\'s lib/',
+  ),
+  CodedLine(
+    'V11',
+    'the env files that exist hold exactly the keys `env:` declares',
+  ),
+  CodedLine(
+    'V12',
+    'the entry point passes `profile:`; test/di_smoke_test.dart exists and calls checkAppContract',
+  ),
+  CodedLine(
+    'V13',
+    'the generated regions (facts, report, imports, modules) equal regeneration',
+  ),
+  CodedLine('V14', 'no reason is empty, `TODO` or `TBD`'),
+];
+
+/// The problem codes the kernel (`validate`, P) and the shell
+/// (`checkAppContract`, C) report; a tools test keeps the list equal to them.
+const List<CodedLine> kBootProblems = [
+  CodedLine(
+    'P01',
+    'the platform the app runs on is not declared under `platforms:`',
+  ),
+  CodedLine('P02', 'the flavor is not declared under `flavors:`'),
+  CodedLine(
+    'P03',
+    'an env key `required_in` this flavor is empty (non-debug builds)',
+  ),
+  CodedLine(
+    'P04',
+    'no pin decision for this flavor on a platform that can pin',
+  ),
+  CodedLine(
+    'P05',
+    'a `window` is declared and no `configureWindow` hook is set',
+  ),
+  CodedLine('C01', 'a required contract is not registered'),
+  CodedLine('C02', 'declared provided, but nothing registers it'),
+  CodedLine('C03', 'declared absent, but something registers it'),
+  CodedLine('C04', 'the members of a bundle disagree'),
+  CodedLine('C05', 'no route and no tab: the app shows nothing'),
+  CodedLine('C06', 'two navigation tabs share an `order` (RULE-24)'),
+  CodedLine('C07', '`AppRouter.router` failed to assemble'),
+  CodedLine('C08', '`DioFailureClassifier` is not registered exactly once'),
+  CodedLine(
+    'C09',
+    'a catalog contract is missing from `facts.capabilities`: run `composer sync`',
+  ),
+];
+
 /// The report for [view], Markdown, without the region markers.
 String renderReport(AppView view) {
   final decl = view.declaration;
@@ -385,9 +479,15 @@ String renderCatalog(ShellCatalog catalog) {
     );
   }
   line();
-  line('  If absent, the shell:');
-  for (final row in catalog.optional) {
-    line('    ${row.id.padRight(20)} ${row.whenAbsent}');
+  line('  Where the shell looks each one up, and what it does without it:');
+  for (final row in catalog.entries) {
+    line('    ${row.id}');
+    line('        looked up at  ${row.consumer}');
+    line(
+      '        if absent     '
+      '${row.required ? 'the shell\'s own packages register it, so: ' : ''}'
+      '${row.whenAbsent}',
+    );
   }
   line();
 
@@ -416,5 +516,59 @@ String renderCatalog(ShellCatalog catalog) {
     'printed with `manifest` as its source)',
   );
   line('  ssl_pinning, dev flavor    disabled — "$kDevPinReason"');
+  line();
+
+  line('PACKAGE KEYS (pubspec.yaml of a package an app composes)');
+  line(
+    'Dart-native keys pub accepts and validates nothing about, so composer '
+    'does (checks V7 and V10).',
+  );
+  line();
+  line('  platforms: [android, ios, ...]');
+  line(
+    '      where the package works: ${kPlatformNames.join(', ')}; left out, '
+    'everywhere. An app that declares a platform a composed package '
+    '(or one it links through another) does not list is refused.',
+  );
+  line('  composition.app_provides.<Type>: { per_flavor: bool, hint: "..." }');
+  line(
+    '      what the package needs the app to register itself. per_flavor: an '
+    '@Environment(\'<flavor>\') registration for every declared flavor. '
+    'The hint says where and how; it is printed in the app report.',
+  );
+  line();
+
+  line('CHECKS (`composer verify`, CI Gate 0)');
+  for (final check in kComposerChecks) {
+    line('  ${check.id.padRight(4)} ${check.what}');
+  }
+  line(
+    '  Each prints `<file>: <key>: <problem>` with the line to paste. The scan '
+    'behind V3, V10 and the report\'s "implemented by" column reads source, '
+    'not the graph: `checkAppContract` stays the authority.',
+  );
+  line();
+
+  line('PROBLEM CODES (boot, and `checkAppContract` in the smoke test)');
+  for (final code in kBootProblems) {
+    line('  ${code.id.padRight(4)} ${code.what}');
+  }
+  line(
+    '  Each prints `Description:` and `Action:`, the action paste-ready. A dev '
+    'or staging flavor, or a debug build, stops at the boot-error screen; a '
+    'production release logs an ERROR and reports it non-fatally.',
+  );
+  line();
+
+  line('NEW APP');
+  line(
+    '  composer new <id> --platforms <a,b> [--modules <x,y>] [--name "<text>"] '
+    'renders tools/composer/app_template/ into apps/<id>/, derives '
+    '`capabilities:` from what the modules register (an absent contract '
+    'carries what the shell does without it as its reason), then runs sync '
+    'and verify. It refuses an id that exists or a platform a module blocks '
+    'before writing, and prints the `flutter create` line instead of running '
+    'it.',
+  );
   return b.toString();
 }

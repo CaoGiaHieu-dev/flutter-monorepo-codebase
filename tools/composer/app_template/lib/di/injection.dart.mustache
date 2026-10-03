@@ -1,0 +1,24 @@
+// composer:managed:imports — generated from app_manifest.yaml
+// composer:end:imports
+
+// Dependency injection for the `{{id}}` app.
+//
+// **This whole file is generated** — the imports, the module lists and the
+// `configureDependencies` entry point below — from
+// `apps/{{id}}/app_manifest.yaml` by:
+//
+//   dart tools/composer/composer.dart sync --app {{id}}
+//
+// There is no hand-written code in it, so there is nothing to keep in step
+// by hand: edit the manifest instead, and `composer verify` fails CI if this
+// file has drifted from it. Getting a module list wrong fails at boot with
+// `"<Type> is not registered"`, which `flutter analyze` cannot see.
+//
+// Group order is load-bearing and is declared in the manifest's `di_groups`:
+// `configureDependencies()` initialises modules in exactly that sequence, and
+// an eager `@Singleton` may only depend on a type registered by an earlier
+// group (RULE-13 in docs/en/reference/01_rules.md; test/di_smoke_test.dart
+// proves it).
+
+// composer:managed:modules — generated from app_manifest.yaml
+// composer:end:modules

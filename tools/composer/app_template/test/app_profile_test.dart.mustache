@@ -1,0 +1,22 @@
+{{#profileTestImports}}
+{{{line}}}
+{{/profileTestImports}}
+
+/// What `apps/{{id}}` is, held to the values it was created with.
+///
+/// This is the place to assert what you tune: when you set a section in
+/// `appProfile` (a `DisplayProfile`, a `LocaleProfile`, ...) add the test that
+/// says what it changes, so a later edit that moves it is a visible decision
+/// and not a silent one. The platforms, flavors and capabilities need no test
+/// here: `app_manifest.yaml` declares them, `composer verify` holds the
+/// generated facts to it, and `di_smoke_test.dart` holds them to the graph.
+void main() {
+  test('the facts are for this app', () {
+    expect(appFacts.id, '{{id}}');
+    expect(appFacts.name, '{{name}}');
+  });
+
+  test('the profile is built on the generated facts', () {
+    expect(appProfile.facts, same(appFacts));
+  });
+}

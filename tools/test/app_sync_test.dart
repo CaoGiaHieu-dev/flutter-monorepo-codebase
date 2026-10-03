@@ -7,6 +7,7 @@ import '../arch_check/platform_forks.dart';
 import '../composer/src/catalog.dart';
 import '../composer/src/manifest_v2.dart';
 import '../composer/src/package_facts.dart';
+import '../composer/src/report.dart';
 import 'support/tool_harness.dart';
 
 /// composer cannot import `platform_kernel` or `platform_app_shell` — it runs
@@ -311,5 +312,57 @@ void main() {
         endsWith('config/platform_resolver.dart'),
       );
     });
+  });
+
+  group('what `describe --catalog` lists', () {
+    test('every problem code is one the kernel or the shell reports', () {
+      final sources =
+          read('platform/foundation/kernel/lib/src/profile/app_profile.dart') +
+          read(
+            'platform/shell/app_shell/lib/src/composition/composition_check.dart',
+          ) +
+          read('platform/shell/app_shell/lib/src/bootstrap.dart');
+      for (final problem in kBootProblems) {
+        expect(
+          sources,
+          contains("'${problem.id}'"),
+          reason: '${problem.id} is listed but no source reports it',
+        );
+      }
+      // And no code the sources report is left out of the list.
+      final reported = {
+        for (final m in RegExp(r"'([PC]0\d)'").allMatches(sources)) m.group(1)!,
+      };
+      expect({for (final problem in kBootProblems) problem.id}, reported);
+    });
+
+    test(
+      'every check V1 to V14 is listed once, and composer implements it',
+      () {
+        expect(
+          [for (final check in kComposerChecks) check.id],
+          [for (var i = 1; i <= 14; i++) 'V$i'],
+        );
+        final implementation =
+            read('tools/composer/src/checks.dart') +
+            read('tools/composer/src/manifest_v2.dart') +
+            read('tools/composer/composer.dart');
+        for (final check in kComposerChecks) {
+          expect(
+            implementation,
+            anyOf(
+              contains('${check.id} '),
+              contains('${check.id}\n'),
+              contains('${check.id},'),
+              contains('${check.id}.'),
+              contains('${check.id}:'),
+              contains('(${check.id}'),
+              contains('${check.id})'),
+            ),
+            reason: '${check.id} is listed but no composer source names it',
+          );
+        }
+      },
+    );
   });
 }

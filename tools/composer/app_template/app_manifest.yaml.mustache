@@ -1,0 +1,136 @@
+# Declaration + composition for the `{{id}}` app, created by
+#   dart tools/composer/composer.dart new {{id}} --platforms {{platformsCsv}}{{#hasModules}} --modules {{modulesCsv}}{{/hasModules}}
+# After README.md, the file to read — and, with lib/app/app_profile.dart, the one to edit.
+#
+#   dart tools/composer/composer.dart sync --app {{id}}     regenerates, all committed, all drift-checked by `verify`:
+#     README.md                  region `report`   what this app is, derived from this file and the composed packages
+#     lib/app/app_profile.dart   region `facts`    this file as const Dart the shell reads at boot
+#     lib/di/injection.dart      regions `imports`, `modules`   DI order and the configureDependencies entry point
+#     pubspec.yaml (deps) and the root workspace list   as before
+#   dart tools/composer/composer.dart describe --app {{id}}   prints the report;  `describe --catalog` prints every key below
+#
+#   app / flavors / env        (b) identity, flavors (and the SSL pin decision each carries), environment values
+#   platforms                  (c) where it runs, and what each platform enables
+#   capabilities               (d) what the shell may use from this app — absence is a decision, with a reason
+#   di_groups / modules        (a) what is composed, in what order, and why
+#   lib/app/app_profile.dart   how the shell behaves (typed Dart)
+#   lib/app/app_hooks.dart     (e) the typed extension points (code)
+#
+# Packages are resolved by *name*, discovered by scanning for `pubspec.yaml`.
+# Nothing here encodes a directory, so moving packages around does not edit
+# this file.
+
+app:
+  id: {{id}}
+  name: "{{name}}"
+  entrypoint: lib/main.dart
+
+flavors: # closed set: dev | staging | prod
+  dev: # ssl_pinning default: disabled — local servers use self-signed certificates
+{{#pinning}}
+  staging:
+    ssl_pinning: { disabled: "{{pinReason}}" }
+  prod:
+    # A real decision:  ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+    ssl_pinning: { disabled: "{{pinReason}}" }
+{{/pinning}}
+{{^pinning}}
+  staging:
+  prod: # no ssl_pinning: no declared platform can pin (web: the browser owns TLS; desktop: the plugin has no implementation)
+{{/pinning}}
+
+env: # the keys of the env.<flavor> files; checked here, validated again at boot
+  BASE_URL: { required_in: [prod] }
+  APP_NAME: { required_in: [staging, prod] }
+
+platforms: # a platform missing here is a platform this app does not run on; `scaffold` = run `flutter create` for it (README §2 prints the line), then declare `committed`
+{{#platforms}}
+  {{name}}: { runner: scaffold }
+{{/platforms}}
+  # each platform may also set splash, push, deep_links, orientation, window; left out, they are derived or default — README §2 shows the effective values
+
+capabilities: # the optional contracts the shell resolves; `composer describe --catalog` lists them. Derived from the modules this app composes: provided where one registers it, else absent with what the shell does instead
+{{#capabilities}}
+{{#provided}}
+  {{key}}: provided
+{{/provided}}
+{{^provided}}
+  {{key}}: { state: absent, reason: "{{reason}}" }
+{{/provided}}
+{{/capabilities}}
+
+# ---------------------------------------------------------------------------
+# DI groups — ORDERED, and the order is load-bearing.
+#
+# `configureDependencies()` initialises modules in exactly this sequence. An
+# eager `@Singleton` may only depend on a type registered by an earlier group;
+# depending on a later one throws "<Type> is not registered" at boot, which
+# `flutter analyze` cannot see — RULE-13; test/di_smoke_test.dart catches it.
+#
+# `phase: before` maps to `externalPackageModulesBefore`, `after` to
+# `externalPackageModulesAfter`. `why` records the reason for the slot.
+# ---------------------------------------------------------------------------
+di_groups:
+  - name: core
+    phase: before
+    packages:
+{{#corePackages}}
+      - {{name}}
+{{/corePackages}}
+    why: "{{coreWhy}}"
+
+  - name: shell
+    phase: after
+    packages: [platform_shell_adapters, platform_app_shell]
+    why: "adapters first (storage adapters, AppBootStorage, NetworkConfig + SslPinningConfig), then router and deep links. ui depends on it"
+
+  - name: ui
+    phase: after
+    packages: [core_base_ui]
+    why: "ThemeProvider and LanguageProvider inject IThemeStorage / ILanguageStorage registered by shell (RULE-13)"
+
+  - name: domain
+    phase: after
+    packages: [domain_core]
+    from_modules: domain
+
+  - name: data
+    phase: after
+    packages: [data_core]
+    from_modules: data
+    why: "a module that opens a database with @preResolve runs the migrations contributed before it, so contributors precede it"
+
+  - name: feature
+    phase: after
+    from_modules: feature
+
+  - name: other
+    phase: after
+    packages:
+      - provider_state_management
+      - bloc_state_management
+
+# ---------------------------------------------------------------------------
+# Modules this app composes.
+#
+# `layers` picks which of a module's packages are included. `api` is the
+# module's contracts package (`<id>_api`) other features may import: a
+# workspace member only — no DI group collects it and this app does not
+# depend on it. A module absent from disk is skipped with a warning by `sync`,
+# and is an error under `sync --strict` — which is what CI runs, so a release
+# can never silently ship without one.
+# ---------------------------------------------------------------------------
+{{#hasModules}}
+modules:
+{{#modules}}
+  - { id: {{id}}, layers: [{{layers}}] }
+{{/modules}}
+{{/hasModules}}
+{{^hasModules}}
+modules: []
+{{/hasModules}}
+
+# `extra_dependencies:` (optional) — a workspace package this app's own lib/
+# imports that registers no DI module. Packages reached only through another
+# package (core_responsive, core_ui_kit, platform_kernel, ...) need no entry:
+# composer walks the pubspecs and adds them to the root `workspace:` list.

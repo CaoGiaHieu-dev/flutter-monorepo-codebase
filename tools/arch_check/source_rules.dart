@@ -74,42 +74,206 @@ List<_Argument> _argumentsOf(String code, int open) {
 }
 
 // ---------------------------------------------------------------------------
+// R7 — responsive sizing goes through BuildContext
+// ---------------------------------------------------------------------------
+
+/// The sizing extension names `core_responsive` once offered on `num`.
+const _sizingNames = r'spMin|sp|dg|dm|w|h|r';
+
+/// A number literal followed by a sizing extension: `16.w`, `1.5.h`,
+/// `16\n    .w` (the receiver and the dot on different lines). The receiver may
+/// not continue an identifier (`a2.w`) or a member chain (`x.5.w`).
+final RegExp _numberReceiver = RegExp(
+  r'(?<![\w.$])(?:\d[\d_]*(?:\.\d[\d_]*)?|\.\d[\d_]*)\s*\.\s*(' +
+      _sizingNames +
+      r')\b(?!\s*\()',
+);
+
+/// `)` followed by a sizing extension; whether it is a sum or a call is decided
+/// by [_isArithmeticGroup].
+final RegExp _parenReceiver = RegExp(
+  r'\)\s*\.\s*(' + _sizingNames + r')\b(?!\s*\()',
+);
+
+/// Words after which a `(` is a grouping parenthesis, not a call.
+const _beforeGroup = {
+  'return',
+  'await',
+  'in',
+  'else',
+  'case',
+  'yield',
+  'throw',
+  'is',
+  'as',
+  'assert',
+};
+
+/// Whether the `)` at [close] closes a parenthesised arithmetic expression —
+/// `(4 + 4)`, `(spacing * 2)` — and not the argument list of a call
+/// (`Color.fromARGB(255, 0, 0, 0).r`, `c.withValues(alpha: .5).r`,
+/// `Size(1, 2).h`), where `.r` / `.h` are members of the result and nothing
+/// to do with sizing. Needs an arithmetic operator inside and nothing that
+/// makes it a Dart expression of another kind (`?`, `:`, `,`, `=`, `<`).
+bool _isArithmeticGroup(String code, int close) {
+  var depth = 0;
+  var open = -1;
+  for (var i = close; i >= 0; i--) {
+    final c = code[i];
+    if (c == ')') depth++;
+    if (c == '(') {
+      depth--;
+      if (depth == 0) {
+        open = i;
+        break;
+      }
+    }
+  }
+  if (open == -1) return false;
+  var before = open - 1;
+  while (before >= 0 && code[before].trim().isEmpty) {
+    before--;
+  }
+  if (before >= 0 && RegExp(r'[\w$>)\]]').hasMatch(code[before])) {
+    final word = RegExp(r'([A-Za-z_$][\w$]*)$')
+        .firstMatch(code.substring(0, before + 1))
+        ?.group(1);
+    if (word == null || !_beforeGroup.contains(word)) return false; // a call
+  }
+  final inner = code.substring(open + 1, close);
+  return RegExp(r'^[\w\s.+\-*/%~()$]+$').hasMatch(inner) &&
+      RegExp(r'[+\-*/%]').hasMatch(inner);
+}
+
+/// Bare sizing extensions in [scanned]: a number literal (the receiver may sit
+/// on the line above the dot) or a parenthesised sum followed by `.w`, `.h`,
+/// `.r`, `.sp`, `.spMin`, `.dg` or `.dm`. Finding text is the extension name.
+///
+/// What it does not follow: a *variable* receiver (`final p = 8; p.w`, a
+/// `Pad.md.w` constant) — without types a `.r` on an identifier may be
+/// `Color.r`, which exists. The declaration check
+/// ([sizingExtensionDeclarationsIn]) covers the other side: a workspace
+/// extension that would make any of these compile.
+List<SourceFinding> bareSizingExtensionsIn(DartSource scanned) {
+  final code = scanned.code;
+  return [
+    for (final m in _numberReceiver.allMatches(code))
+      SourceFinding(scanned.lineOf(m.start), m.group(1)!),
+    for (final m in _parenReceiver.allMatches(code))
+      if (_isArithmeticGroup(code, m.start))
+        SourceFinding(scanned.lineOf(m.start), m.group(1)!),
+  ]..sort((a, b) => a.line.compareTo(b.line));
+}
+
+/// `extension … on num | int | double { … }` — the head of an extension a bare
+/// sizing getter could live in.
+final RegExp _numExtension = RegExp(
+  r'\bextension\b[^{;]*?\bon\s+(?:num|int|double)\b[^{;]*\{',
+);
+
+/// A member of an extension named like a sizing extension: `double get w =>`,
+/// `double h(BuildContext c)`.
+final RegExp _sizingMember = RegExp(
+  r'(?:\bget\s+|[\w>?]\s+)(' + _sizingNames + r')\s*(?:=>|\(|\{)',
+);
+
+/// Declarations, in [scanned], of an extension on `num` / `int` / `double`
+/// with a member named `w`, `h`, `r`, `sp`, `spMin`, `dg` or `dm` — what would
+/// make `16.w` type-check. `core_responsive` ships none, and a workspace file
+/// that declares one is reported at the declaration.
+List<SourceFinding> sizingExtensionDeclarationsIn(DartSource scanned) {
+  final code = scanned.code;
+  final out = <SourceFinding>[];
+  for (final head in _numExtension.allMatches(code)) {
+    final open = head.end - 1;
+    final close = matchingBracket(code, open);
+    if (close == -1) continue;
+    final body = code.substring(open + 1, close);
+    for (final m in _sizingMember.allMatches(body)) {
+      out.add(SourceFinding(scanned.lineOf(open + 1 + m.start), m.group(1)!));
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // R8 — throwing DI lookups
 // ---------------------------------------------------------------------------
 
-/// The ways to name the service locator: the shared `getIt` global and the
-/// `GetIt.I` / `GetIt.instance` singleton, optionally through `.get`, `.call`,
-/// `.getAsync` or `.getAll`. `getAll<T>` stands alone as well — the lookup
-/// extension `getAllOrEmpty` is its safe counterpart.
+/// Words that follow `GetIt get` as an accessor, not a name: `GetIt get sl =>
+/// ...` names `sl`, never `get`.
+const _notLocatorNames = {'get', 'set', 'operator'};
+
+/// The identifiers in [code] that hold a `GetIt`: the shared `getIt` global
+/// and anything declared with type `GetIt` (a field, a parameter, a local, an
+/// accessor) or initialised from `GetIt.I` / `GetIt.instance` /
+/// `GetIt.asNewInstance()` / `getIt`. A private field (`_getIt`), a local alias
+/// (`final sl = GetIt.instance;`) and an injected `GetIt locator` parameter are
+/// spelled differently from `getIt` and resolve exactly the same way.
+///
+/// Per file: an alias that crosses files (a `locator` inherited from a base
+/// class in another file) cannot be placed.
+Set<String> locatorNamesIn(String code) {
+  final names = <String>{'getIt'};
+  for (final m in RegExp(
+    r'\bGetIt\s*\??\s+(?:get\s+)?([A-Za-z_]\w*)',
+  ).allMatches(code)) {
+    final name = m.group(1)!;
+    if (!_notLocatorNames.contains(name)) names.add(name);
+  }
+  for (final m in RegExp(
+    r'(?:\bfinal|\bvar|\blate(?:\s+final)?|\bconst)\s+(?:[A-Z]\w*\??\s+)?'
+    r'([A-Za-z_]\w*)\s*=\s*'
+    r'(?:GetIt\s*\.\s*(?:I|instance|asNewInstance\s*\(\s*\))|getIt)\b',
+  ).allMatches(code)) {
+    names.add(m.group(1)!);
+  }
+  return names;
+}
+
+/// The ways to call a locator in [names]: the name itself, or `GetIt.I` /
+/// `GetIt.instance`, optionally through `.get`, `.call`, `.getAsync` or
+/// `.getAll`, optionally behind `this.`. `getAll<T>` stands alone as well —
+/// the lookup extension `getAllOrEmpty` is its safe counterpart.
 ///
 /// `getItOrNull<T>` and `getAllOrEmpty<T>` never match: after `getIt` the
 /// pattern wants `<` (or one of the listed members), and those two continue
-/// with more identifier characters.
-final RegExp _throwingLookup = RegExp(
-  r'(?:\b(?:getIt|GetIt\s*\.\s*(?:I|instance))'
-  r'(?:\s*\.\s*(?:get|getAll|getAsync|call))?|\bgetAll)'
-  r'\s*<\s*(?:\w+\s*\.\s*)?([A-Z]\w*)',
-);
-
-/// A typed declaration initialised by an untyped lookup —
-/// `final IFoo foo = getIt();`, `IFoo foo = getIt.get();` — where the type
-/// argument is inferred from the declared type. Group 1 is that type.
-final RegExp _untypedLookup = RegExp(
-  r'\b([A-Z]\w*)(?:\s*<[^;=()]*>)?\??\s+[a-z_]\w*\s*=\s*'
-  r'(?:getIt|GetIt\s*\.\s*(?:I|instance))'
-  r'(?:\s*\.\s*(?:get|getAsync|call))?\s*\(',
-);
+/// with more identifier characters. The receiver may follow a `.`
+/// (`widget.getIt<T>()`, `this._getIt.get<T>()`) but not an identifier
+/// character, so `forgetIt<T>` is not `getIt<T>`.
+String _receiver(Set<String> names) =>
+    '(?<![\\w\$])(?:(?:${[for (final n in names) RegExp.escape(n)].join('|')})'
+    r'|GetIt\s*\.\s*(?:I|instance))';
 
 /// Every throwing lookup in [scanned], by the type it asks for: the generic
 /// spellings (`getIt<T>()`, `getIt.get<T>()`, `getIt.getAll<T>()`,
-/// `GetIt.I<T>()`, `GetIt.instance<T>()`, a type argument on the next line)
-/// and an untyped `getIt()` assigned to a declared type.
-List<SourceFinding> throwingLookupsIn(DartSource scanned) => [
-  for (final m in _throwingLookup.allMatches(scanned.code))
-    SourceFinding(scanned.lineOf(m.start), m.group(1)!),
-  for (final m in _untypedLookup.allMatches(scanned.code))
-    SourceFinding(scanned.lineOf(m.start), m.group(1)!),
-];
+/// `GetIt.I<T>()`, `GetIt.instance<T>()`, the same through any alias of a
+/// `GetIt` — `_getIt`, `locator`, `sl` — and a type argument on the next line)
+/// and an untyped lookup assigned to a declared type.
+List<SourceFinding> throwingLookupsIn(DartSource scanned) {
+  final code = scanned.code;
+  final receiver = _receiver(locatorNamesIn(code));
+  final throwing = RegExp(
+    '(?:$receiver'
+    r'(?:\s*[!?]?\s*\.\s*(?:get|getAll|getAsync|call))?|(?<![\w$])getAll)'
+    // `>` then `(`: a call with a type argument, not a comparison.
+    r'\s*<\s*(?:\w+\s*\.\s*)?([A-Z]\w*)(?=[\w\s<>?,.]*>\s*\()',
+  );
+  // A typed declaration initialised by an untyped lookup —
+  // `final IFoo foo = getIt();`, `IFoo foo = getIt.get();` — where the type
+  // argument is inferred from the declared type.
+  final untyped = RegExp(
+    r'\b([A-Z]\w*)(?:\s*<[^;=()]*>)?\??\s+[a-z_]\w*\s*=\s*'
+    '$receiver'
+    r'(?:\s*[!?]?\s*\.\s*(?:get|getAsync|call))?\s*\(',
+  );
+  return [
+    for (final m in throwing.allMatches(code))
+      SourceFinding(scanned.lineOf(m.start), m.group(1)!),
+    for (final m in untyped.allMatches(code))
+      SourceFinding(scanned.lineOf(m.start), m.group(1)!),
+  ];
+}
 
 /// A constructor parameter that DI must supply, whose type is [type].
 class InjectedParameter {
@@ -382,22 +546,93 @@ String _valueOf(String argument, {String? only}) {
 /// Constructors whose every positional or named numeric argument is a layout
 /// or paint magnitude.
 final RegExp _numericConstructor = RegExp(
-  r'\b(EdgeInsets(?:Directional)?\s*\.\s*(?:all|symmetric|only|fromLTRB|fromSTEB)'
-  r'|BorderRadius\s*\.\s*circular|Radius\s*\.\s*circular|Offset)\s*\(',
+  r'(?<![\w.$])(EdgeInsets(?:Directional)?\s*\.\s*(?:all|symmetric|only|fromLTRB|fromSTEB)'
+  r'|BorderRadius\s*\.\s*circular|Radius\s*\.\s*(?:circular|elliptical)'
+  r'|Size(?:\s*\.\s*(?:square|fromWidth|fromHeight|fromRadius))?'
+  r'|Rect\s*\.\s*(?:fromLTWH|fromLTRB|fromCircle|fromPoints))\s*\(',
 );
+
+/// `Offset(x, y)`: a number is a pixel distance, except a fraction of the
+/// widget's own size — `Offset(0, 1)` for a `SlideTransition`, `Offset(.5, .5)`
+/// — which no layout scale applies to. Only an argument whose magnitude is
+/// above 1 is flagged.
+final RegExp _offset = RegExp(r'(?<![\w.$])Offset\s*\(');
 
 /// `SizedBox(width: 8)` and friends: only the sized arguments count.
 final RegExp _sizedBox = RegExp(
   r'\bSizedBox\s*(?:\.\s*(?:square|fromSize))?\s*\(',
 );
 
+/// Widgets and value types whose named arguments are layout or paint
+/// magnitudes, with those arguments. `Container(width: 100)`, `Icon(size: 24)`,
+/// `Positioned(top: 8)`, `BorderSide(width: 1)`, `Divider(thickness: 1)`,
+/// `BoxConstraints(maxWidth: 300)`.
+///
+/// A list of known widgets, not "any argument called `width`": a data class
+/// can have a `width` field that is a pixel count from the server, and
+/// `TextStyle(height: 1.2)` is a ratio, not a size.
+const Map<String, Set<String>> _magnitudeArguments = {
+  'Container': {'width', 'height'},
+  'AnimatedContainer': {'width', 'height'},
+  'BoxConstraints': {
+    'minWidth',
+    'maxWidth',
+    'minHeight',
+    'maxHeight',
+    'width',
+    'height',
+  },
+  'Icon': {'size'},
+  'IconButton': {'iconSize', 'splashRadius'},
+  'Positioned': {
+    'left',
+    'top',
+    'right',
+    'bottom',
+    'width',
+    'height',
+    'start',
+    'end',
+  },
+  'PositionedDirectional': {'start', 'top', 'end', 'bottom', 'width', 'height'},
+  'BorderSide': {'width'},
+  'Border': {'width'},
+  'Divider': {'height', 'thickness', 'indent', 'endIndent'},
+  'VerticalDivider': {'width', 'thickness', 'indent', 'endIndent'},
+  'CircleAvatar': {'radius', 'minRadius', 'maxRadius'},
+  'Image': {'width', 'height'},
+  'SvgPicture': {'width', 'height'},
+  'LinearProgressIndicator': {'minHeight'},
+};
+
+final RegExp _magnitudeWidget = RegExp(
+  '(?<![\\w.\$])(${_magnitudeArguments.keys.join('|')})'
+  r'(?:\s*\.\s*\w+)?\s*\(',
+);
+
 /// A named argument whose value is a magnitude wherever it is written.
 final RegExp _numericNamed = RegExp(
-  r'(?<![\w.$])(fontSize|blurRadius|strokeWidth)\s*:\s*([-+]?\s*(?:\d|\.\d)[\w.]*)',
+  r'(?<![\w.$])(fontSize|blurRadius|spreadRadius|strokeWidth)\s*:\s*([-+]?\s*(?:\d|\.\d)[\w.]*)',
 );
+
+/// `paint.strokeWidth = 2;` — the same magnitude, assigned.
+final RegExp _strokeWidthAssignment = RegExp(
+  r'\.\s*strokeWidth\s*=(?!=)\s*([-+]?\s*(?:\d|\.\d)[\w.]*)',
+);
+
+/// The magnitude of the number a [value] starts with (`-.5` -> 0.5), or null.
+double? _leadingNumber(String value) {
+  final m = RegExp(r'^[-+]?\s*(\d+(?:\.\d+)?|\.\d+)').firstMatch(value.trim());
+  return m == null ? null : double.tryParse(m.group(1)!);
+}
 
 /// Raw layout and paint numbers in [scanned]: a number literal where a value
 /// comes from `BuildContext` (`context.w/h/sp/r`) or a design token.
+///
+/// Partial by design — a lexical scan over the constructors and arguments
+/// listed here, not a type check: an identifier that holds a raw `double`
+/// (`final w = 100.0; Container(width: w)`) is not followed. What it names is
+/// what a review would flag first.
 List<SourceFinding> rawLayoutNumbersIn(DartSource scanned) {
   final code = scanned.code;
   final out = <SourceFinding>[];
@@ -407,6 +642,16 @@ List<SourceFinding> rawLayoutNumbersIn(DartSource scanned) {
     for (final arg in _argumentsOf(code, m.end - 1)) {
       if (!_isRawNumber(_valueOf(arg.text))) continue;
       out.add(SourceFinding(scanned.lineOf(arg.start), name));
+    }
+  }
+
+  for (final m in _offset.allMatches(code)) {
+    for (final arg in _argumentsOf(code, m.end - 1)) {
+      final value = _valueOf(arg.text);
+      if (!_isRawNumber(value)) continue;
+      final magnitude = _leadingNumber(value);
+      if (magnitude != null && magnitude <= 1) continue; // a fraction
+      out.add(SourceFinding(scanned.lineOf(arg.start), 'Offset'));
     }
   }
 
@@ -423,9 +668,30 @@ List<SourceFinding> rawLayoutNumbersIn(DartSource scanned) {
     }
   }
 
+  for (final m in _magnitudeWidget.allMatches(code)) {
+    final widget = m.group(1)!;
+    final names = _magnitudeArguments[widget]!;
+    for (final arg in _argumentsOf(code, m.end - 1)) {
+      final named = RegExp(
+        r'^\s*(\w+)\s*:(.*)$',
+        dotAll: true,
+      ).firstMatch(arg.text);
+      if (named == null || !names.contains(named.group(1))) continue;
+      if (!_isRawNumber(named.group(2)!)) continue;
+      out.add(
+        SourceFinding(scanned.lineOf(arg.start), '$widget(${named.group(1)}:)'),
+      );
+    }
+  }
+
   for (final m in _numericNamed.allMatches(code)) {
     if (_isZero.hasMatch(m.group(2)!.trim())) continue;
     out.add(SourceFinding(scanned.lineOf(m.start), '${m.group(1)}:'));
+  }
+
+  for (final m in _strokeWidthAssignment.allMatches(code)) {
+    if (_isZero.hasMatch(m.group(1)!.trim())) continue;
+    out.add(SourceFinding(scanned.lineOf(m.start), '.strokeWidth ='));
   }
   return out;
 }
@@ -434,17 +700,22 @@ List<SourceFinding> rawLayoutNumbersIn(DartSource scanned) {
 // Which files
 // ---------------------------------------------------------------------------
 
-/// Whether [rel] (repo-relative, POSIX) is hand-written Dart in a package's
-/// `lib/` under `platform/` or `modules/` — where R19 and R20 apply. Test
-/// code is a different `lib`-less folder; tools have their own output rule.
+/// Whether [rel] (repo-relative, POSIX) is Dart in a package's `lib/` under
+/// `platform/` or `modules/`, or in an app's `lib/` (`apps/<id>/lib`) — where
+/// R19 and R20 apply, the same scope as R17 and R18. An app is not exempt from
+/// "never `print`" (RULE-65) or "no raw doubles in layout" (RULE-30): the
+/// analyzer's `avoid_print` covers `print` only, and nothing else reads an
+/// app's widgets. Test code is a different `lib`-less folder; tools have their
+/// own output rule.
 bool isProductLib(String rel) {
   if (!rel.endsWith('.dart')) return false;
   final segments = rel.split('/');
   if (segments.length < 3) return false;
-  if (segments.first != 'platform' && segments.first != 'modules') {
-    return false;
-  }
-  return segments.contains('lib');
+  return switch (segments.first) {
+    'platform' || 'modules' => segments.contains('lib'),
+    'apps' => segments[2] == 'lib',
+    _ => false,
+  };
 }
 
 /// Whether [rel] lives under a `styles/` or `utils/` folder, where constants

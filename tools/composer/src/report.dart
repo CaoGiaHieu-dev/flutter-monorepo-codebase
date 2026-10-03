@@ -86,6 +86,10 @@ const List<CodedLine> kComposerChecks = [
     'V16',
     'every DI group has a `why`, and the groups the template names (core, notifications, shell, ui, domain, data, feature, other) keep that relative order',
   ),
+  CodedLine(
+    'V17',
+    'the repository root is the only workspace node: no other pubspec.yaml has a top-level `workspace:` key (RULE-16)',
+  ),
 ];
 
 /// The problem codes the kernel (`validate`, P) and the shell

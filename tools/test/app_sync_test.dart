@@ -477,11 +477,11 @@ void main() {
     });
 
     test(
-      'every check V1 to V16 is listed once, and composer implements it',
+      'every check V1 to V17 is listed once, and composer implements it',
       () {
         expect(
           [for (final check in kComposerChecks) check.id],
-          [for (var i = 1; i <= 16; i++) 'V$i'],
+          [for (var i = 1; i <= 17; i++) 'V$i'],
         );
         final implementation =
             read('tools/composer/src/checks.dart') +

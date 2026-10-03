@@ -104,12 +104,20 @@ void main() {
             inInclusiveRange(1, lines.length),
             reason: '${contract.id}: $path:$line',
           );
+          final type = contract.type.toString();
+          final namedAt = [
+            for (final (index, text) in lines.indexed)
+              if (text.contains(type)) index + 1,
+          ];
           expect(
             lines[line - 1],
-            contains(contract.type.toString()),
+            contains(type),
             reason:
-                '${contract.id}: $path:$line is not a lookup of '
-                '${contract.type} — the catalog has drifted from the code',
+                '${contract.id}: $path:$line is not a lookup of $type — the '
+                'catalog has drifted from the code. The file names $type at '
+                '${namedAt.isEmpty ? 'no line' : 'line ${namedAt.join(', ')}'}'
+                '; update this row\'s `consumer` in shell_contracts.dart '
+                'in the same change that moved it.',
           );
         }
       }

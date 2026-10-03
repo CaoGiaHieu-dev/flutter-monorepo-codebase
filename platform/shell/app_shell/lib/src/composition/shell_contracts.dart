@@ -130,7 +130,7 @@ const List<ShellContract<Object>> kShellContracts = [
     cardinality: ContractCardinality.one,
     consumer:
         'platform/shell/app_shell/lib/src/root_app.dart:48, '
-        'platform/shell/app_shell/lib/src/bootstrap.dart:202',
+        'platform/shell/app_shell/lib/src/bootstrap.dart:189',
     whenAbsent: 'boot throws "AppRouter is not registered"',
   ),
   ShellContract<DeeplinkProvider>(
@@ -237,7 +237,7 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'splash',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:197',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:184',
     whenAbsent: 'the native splash is kept through boot',
   ),
   ShellContract<IAppTreeWrapper>(
@@ -258,7 +258,7 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'error_reporter',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:345',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:383',
     whenAbsent: 'errors are printed and sent nowhere (RULE-67)',
   ),
   ShellContract<IAnalytics>(

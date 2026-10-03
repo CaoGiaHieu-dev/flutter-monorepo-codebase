@@ -2,9 +2,12 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../composer/src/catalog.dart';
+import '../shared/contract_scan.dart';
 import '../unused_checker/monorepo_helper.dart';
 import '../unused_checker/output_formatter.dart';
 import 'dart_source.dart';
+import 'platform_forks.dart';
 
 /// Mechanical enforcement of the architecture rules in the rule registry,
 /// `docs/en/reference/01_rules.md` (RULE-NN ids).
@@ -35,7 +38,7 @@ const _approvedUpwardEdges = <String, String>{
 ///
 /// Matched by basename rather than path so it keeps working wherever apps
 /// live. Injectable generates `injection.config.dart` beside it, which
-/// `_isGenerated` already skips.
+/// `isGeneratedSource` already skips.
 const _compositionRoot = 'injection.dart';
 
 /// A package belonging to a product module rather than to the platform.
@@ -174,21 +177,6 @@ const _sdkPackages = <String>{
   'integration_test',
 };
 
-/// Generated output. `.g.dart` / `.freezed.dart` are conventional; the
-/// `firebase_options_*` files are emitted by the FlutterFire CLI and are
-/// gitignored, so they carry no repo-authored constants.
-bool _isGenerated(String posixPath) {
-  final name = p.posix.basename(posixPath);
-  return name.endsWith('.g.dart') ||
-      name.endsWith('.freezed.dart') ||
-      name.endsWith('.config.dart') ||
-      name.endsWith('.module.dart') ||
-      name.endsWith('.mocks.dart') ||
-      name.startsWith('firebase_options_') ||
-      posixPath.contains('/gen/') ||
-      posixPath.contains('/generated/');
-}
-
 class Violation {
   Violation(this.rule, this.location, this.message);
 
@@ -233,17 +221,6 @@ List<_PackageRef> _packageRefsIn(String content) {
     refs.add(_PackageRef(m.group(1)!, line));
   }
   return refs;
-}
-
-List<String> _dartFilesUnderLib(String packageRoot) {
-  final libDir = Directory(p.posix.join(packageRoot, 'lib'));
-  if (!libDir.existsSync()) return const [];
-  final out = <String>[];
-  for (final e in libDir.listSync(recursive: true, followLinks: false)) {
-    if (e is! File || p.extension(e.path) != '.dart') continue;
-    out.add(p.posix.normalize(e.path.replaceAll(r'\', '/')));
-  }
-  return out;
 }
 
 /// The architectural layer a package belongs to, derived from its **name**.
@@ -298,44 +275,12 @@ String _stripComment(String line) {
   return i == -1 ? line : line.substring(0, i);
 }
 
-/// A type declared at the top level of a file — `class`, `mixin` or the Dart 3
-/// class modifiers. Used to enumerate what `core_di` publishes.
-final _typeDeclaration = RegExp(
-  r'^\s*(?:abstract\s+|sealed\s+|final\s+|base\s+|interface\s+|mixin\s+)*'
-  r'(?:class|mixin)\s+([A-Z]\w*)',
-  multiLine: true,
-);
-
-/// A type named as a supertype or as an Injectable binding target:
-/// `implements X`, `extends X`, `with X`, `@LazySingleton(as: X)`.
-///
-/// Comma lists are captured whole (`implements A, B`) and split by the caller,
-/// which is what makes a dual-registering controller like `AuthProvider` —
-/// `implements IAuthSessionState, IAuthRefreshListenable` — register both.
-final _supertypeRef = RegExp(
-  r'(?:implements|extends|with|as:)\s*([A-Z]\w*(?:\s*,\s*[A-Z]\w*)*)',
-);
-
 /// A DI lookup that throws when the type is unregistered.
 ///
 /// `getItOrNull<` and `getAllOrEmpty<` do not match: the literal `getIt<` /
 /// `getAll<` requires the `<` immediately after, and those two identifiers
 /// carry more characters before theirs.
 final _throwingLookup = RegExp(r'\bget(?:It|All)<([A-Z]\w*)>');
-
-/// Every type `core_di` declares.
-Set<String> _typesDeclaredIn(String packageRoot) {
-  final out = <String>{};
-  for (final file in _dartFilesUnderLib(packageRoot)) {
-    if (_isGenerated(file)) continue;
-    for (final m in _typeDeclaration.allMatches(
-      File(file).readAsStringSync(),
-    )) {
-      out.add(m.group(1)!);
-    }
-  }
-  return out;
-}
 
 /// The module a package belongs to — `auth` for `modules/auth/data` — or
 /// `null` for a package outside `modules/`.
@@ -349,33 +294,87 @@ String? _moduleOf(MonorepoPackage pkg) {
   return (i == -1 || i + 1 >= segments.length) ? null : segments[i + 1];
 }
 
-/// Maps each contract type to the modules whose packages implement it.
+/// R16: the shell catalog (`kShellContracts` in `platform_app_shell`) names
+/// every contract the shell looks up optionally.
 ///
-/// A contract implemented only inside `modules/` is a contract whose
-/// registration disappears with that module — which is exactly the set R8
-/// governs. That includes a data-layer implementer: `IAuthSessionGateway`
-/// lives in `data_auth`, and a throwing lookup of it crashes a build
-/// without auth just as surely as one of a feature's contract. A contract
-/// implemented in the app shell (`IThemeStorage`) is always present, so it
-/// is deliberately not in this map and never trips the rule.
-Map<String, Set<String>> _moduleImplementers(
-  Iterable<MonorepoPackage> packages,
+/// An app declares, per catalog row, that it provides the contract or does
+/// without it and why (`capabilities:`, RULE-81). That only holds if the
+/// catalog is complete, so the rule goes the other way round: a `platform/`
+/// package that resolves a `core_di` or module-API contract with
+/// `getItOrNull<X>` / `getAllOrEmpty<X>` — and X is implemented only inside a
+/// module, so it vanishes with that module, or by nobody at all, so an app
+/// has to bring it — needs a `ShellContract<X>` row. And every row must name a
+/// type some package declares, so a rename cannot leave a row nothing
+/// satisfies.
+///
+/// Skipped in a workspace with no `platform_app_shell` or no catalog file.
+List<Violation> _catalogViolations(
+  String root,
+  Map<String, MonorepoPackage> packages,
   Set<String> contractTypes,
+  Map<String, Set<String>> removableContracts,
 ) {
-  final out = <String, Set<String>>{};
-  for (final pkg in packages) {
-    final module = _moduleOf(pkg);
-    if (module == null) continue;
-    for (final file in _dartFilesUnderLib(pkg.rootPath)) {
-      if (_isGenerated(file)) continue;
-      final content = File(file).readAsStringSync();
-      for (final m in _supertypeRef.allMatches(content)) {
-        for (final raw in m.group(1)!.split(',')) {
-          final name = raw.trim();
-          if (contractTypes.contains(name)) {
-            (out[name] ??= <String>{}).add(module);
-          }
+  final shell = packages['platform_app_shell'];
+  if (shell == null) return const [];
+  final catalogFile = p.posix.join(shell.rootPath, kCatalogFile);
+  if (!File(catalogFile).existsSync()) return const [];
+  final catalogRel = p.posix.relative(catalogFile, from: root);
+
+  final ShellCatalog catalog;
+  try {
+    catalog = parseCatalogSource(File(catalogFile).readAsStringSync());
+  } on FormatException catch (e) {
+    return [
+      Violation(
+        'R16',
+        catalogRel,
+        'the shell contract catalog cannot be read: ${e.message}',
+      ),
+    ];
+  }
+
+  final out = <Violation>[];
+  final catalogued = {for (final row in catalog.entries) row.type};
+
+  final declared = <String>{
+    for (final pkg in packages.values) ...typesDeclaredIn(pkg.rootPath),
+  };
+  for (final row in catalog.entries) {
+    if (declared.contains(row.type)) continue;
+    out.add(
+      Violation(
+        'R16',
+        catalogRel,
+        '`ShellContract<${row.type}>` (`${row.id}`) names a type no package '
+            'declares. A renamed or deleted contract left its row behind: '
+            'rename the row, or delete it and the `capabilities:` entry that '
+            'declares it in each app_manifest.yaml.',
+      ),
+    );
+  }
+
+  for (final pkg in packages.values) {
+    final group = _platformGroupOf(pkg, root);
+    if (group == null || group == 'invalid') continue;
+    for (final file in dartFilesUnderLib(pkg.rootPath)) {
+      if (isGeneratedSource(file)) continue;
+      for (final lookup in optionalLookupsIn(File(file).readAsStringSync())) {
+        final type = lookup.type;
+        if (!contractTypes.contains(type) || catalogued.contains(type)) {
+          continue;
         }
+        final owners = removableContracts[type];
+        out.add(
+          Violation(
+            'R16',
+            '${p.posix.relative(file, from: root)}:${lookup.line}',
+            'the shell resolves `$type` optionally but `kShellContracts` has '
+                'no row for it. ${owners == null ? 'No package registers it, so an app brings it' : 'It is implemented only in modules/${owners.join(', modules/')}'}'
+                ' — add `ShellContract<$type>(...)` to $catalogRel so each '
+                'app declares it under `capabilities:` (RULE-81), or resolve '
+                'it somewhere that is not the shell.',
+          ),
+        );
       }
     }
   }
@@ -469,25 +468,30 @@ void main(List<String> args) {
   // module API package (`<module>_api`) declares — `AuthNavigator` is as
   // removable as a `core_di` contract only `feature_auth` implements.
   final contractTypes = <String>{
-    if (coreDi != null) ..._typesDeclaredIn(coreDi.rootPath),
+    if (coreDi != null) ...typesDeclaredIn(coreDi.rootPath),
     for (final pkg in packages.values)
-      if (_apiPackages.contains(pkg.name)) ..._typesDeclaredIn(pkg.rootPath),
+      if (_apiPackages.contains(pkg.name)) ...typesDeclaredIn(pkg.rootPath),
   };
-  final removableContracts = _moduleImplementers(
-    packages.values,
-    contractTypes,
+  final removableContracts = ownersImplementing([
+    for (final pkg in packages.values) ScanUnit(_moduleOf(pkg), pkg.rootPath),
+  ], contractTypes);
+
+  // R16 reads the same contracts: a shell lookup that is not in the catalog is
+  // a contract no app is asked to decide about.
+  blocking.addAll(
+    _catalogViolations(root, packages, contractTypes, removableContracts),
   );
 
   for (final pkg in packages.values) {
     final layer = _layerOf(pkg);
-    final files = _dartFilesUnderLib(pkg.rootPath);
+    final files = dartFilesUnderLib(pkg.rootPath);
     // Parsed from YAML by MonorepoHelper — a hand-rolled line scanner
     // silently drops entries after a blank line inside the block.
     final declared = pkg.dependencies;
 
     // --- R1 / R3: forbidden edges, by import ------------------------------
     for (final file in files) {
-      if (_isGenerated(file)) continue;
+      if (isGeneratedSource(file)) continue;
       final content = File(file).readAsStringSync();
       final rel = p.posix.relative(file, from: root);
 
@@ -685,7 +689,7 @@ void main(List<String> args) {
 
     // --- R4: shared constants belong in utils/ ----------------------------
     for (final file in files) {
-      if (_isGenerated(file)) continue;
+      if (isGeneratedSource(file)) continue;
       // Design-token exception: core_base_ui keeps its tokens in styles/,
       // which names the intent better than a generic utils/ bucket.
       if (file.contains('/utils/') || file.contains('/styles/')) continue;
@@ -757,7 +761,7 @@ void main(List<String> args) {
         }
       }
       for (final file in files) {
-        if (_isGenerated(file)) continue;
+        if (isGeneratedSource(file)) continue;
         final content = File(file).readAsStringSync();
         for (final ref in _packageRefsIn(content)) {
           if (_flutterBound.contains(ref.package)) {
@@ -782,7 +786,7 @@ void main(List<String> args) {
     // invisible to `flutter analyze` because the lookup type-checks fine; it
     // surfaces at runtime, on whichever screen happens to call it.
     for (final file in files) {
-      if (_isGenerated(file)) continue;
+      if (isGeneratedSource(file)) continue;
       final lines = File(file).readAsStringSync().split('\n');
       for (var i = 0; i < lines.length; i++) {
         final code = _stripComment(lines[i]);
@@ -821,7 +825,7 @@ void main(List<String> args) {
     // module unremovable while every document claimed otherwise.
     if (_layerOf(pkg) == 'app') {
       for (final file in files) {
-        if (_isGenerated(file)) continue;
+        if (isGeneratedSource(file)) continue;
         final rel = p.posix.relative(file, from: root);
         if (p.posix.basename(file) == _compositionRoot) continue;
 
@@ -1005,6 +1009,11 @@ List<Violation> _hygieneViolations(String root) {
   final out = <Violation>[];
   final files = _workingTreeFiles(root);
 
+  // R17's own list: an exception with no reason is not an exception.
+  for (final problem in allowListProblems(kPlatformForkAllowList)) {
+    out.add(Violation('R17', 'tools/arch_check/platform_forks.dart', problem));
+  }
+
   for (final rel in files) {
     final segments = p.posix.split(rel);
 
@@ -1054,6 +1063,39 @@ List<Violation> _hygieneViolations(String root) {
               'silencing it.',
         ),
       );
+    }
+
+    // --- R17: platform forks are an app decision --------------------------
+    if (isForkScanned(rel)) {
+      final sites = forkSitesIn(scanned);
+      final reason = kPlatformForkAllowList[rel];
+      if (reason == null) {
+        for (final site in sites) {
+          out.add(
+            Violation(
+              'R17',
+              '$rel:${site.line}',
+              '`${site.text}` forks on the platform outside the allow-list. '
+                  'What an app does on a platform is declared in its '
+                  'manifest and read from `PlatformFacts` (RULE-82); the only '
+                  'place that asks the Flutter runtime is '
+                  '`resolveAppPlatform()`. If this is an OS API that does not '
+                  'exist everywhere, add the file to `kPlatformForkAllowList` '
+                  'in tools/arch_check/platform_forks.dart with the reason.',
+            ),
+          );
+        }
+      } else if (sites.isEmpty) {
+        out.add(
+          Violation(
+            'R17',
+            rel,
+            'allow-listed for platform forks ($reason), but the file no '
+                'longer forks. Remove the entry from `kPlatformForkAllowList` '
+                'in tools/arch_check/platform_forks.dart.',
+          ),
+        );
+      }
     }
 
     // --- R15: the I prefix is reserved for interfaces --------------------
@@ -1130,6 +1172,8 @@ void _report(
     'R13': 'No analyzer suppressions in hand-written Dart',
     'R14': 'Data source folders are data_sources/',
     'R15': 'The I prefix is reserved for interfaces',
+    'R16': 'The shell contract catalog is complete',
+    'R17': 'Platform forks are an app decision',
   };
 
   if (warnings.isNotEmpty) {
@@ -1305,7 +1349,28 @@ RULES CHECKED
       or make it abstract; longer acronyms are written as words in Dart
       (`IosConfig`), which does not match.
 
-  R12, R13 and R15 read every file in the working tree that git does not
+  R16 The shell contract catalog is complete
+      `platform_app_shell` keeps one table of what the shell resolves from
+      dependency injection (`kShellContracts`); each app declares every
+      optional row under `capabilities:` as provided, or absent with a reason
+      (RULE-81). So (a) every `core_di` or module-API contract that a platform/
+      package resolves with `getItOrNull<X>` / `getAllOrEmpty<X>` — and that is
+      implemented only inside a module, or by nobody — needs a
+      `ShellContract<X>` row, and (b) every row's type must be declared by some
+      package. Adding a shell lookup without cataloguing it fails here, so the
+      catalog cannot rot. Skipped when there is no platform_app_shell catalog.
+
+  R17 Platform forks are an app decision
+      `Platform.isX`, `Platform.operatingSystem`, `kIsWeb`,
+      `defaultTargetPlatform` and `TargetPlatform.` in hand-written Dart under
+      platform/*/lib, modules/*/lib and apps/*/lib (comments and strings
+      blanked) may appear only in the files of `kPlatformForkAllowList`
+      (tools/arch_check/platform_forks.dart), each with a reason: the one
+      policy fork `resolveAppPlatform()`, and OS-API availability sites. An
+      entry with no reason, or for a file that no longer forks, is itself a
+      violation (RULE-82).
+
+  R12, R13, R15 and R17 read every file in the working tree that git does not
   ignore (tracked files and new ones about to be added; modules checked out
   as submodules included). Outside a git checkout every file is read.
 

@@ -412,7 +412,7 @@ Future<void> _removeBundle({
       'modules may still provide;',
     );
     stdout.writeln(
-      '  # the DI smoke test names any of them that lost its last provider — '
+      '  # verify names any of them that lost its last provider (check V3) — '
       'declare it `{ state: absent, reason: ... }`.',
     );
   }

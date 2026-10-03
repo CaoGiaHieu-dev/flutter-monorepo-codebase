@@ -42,15 +42,15 @@ Modules: foo (domain, feature).
 The DI smoke test boots every flavor, so a missing registration fails it with "<Type> is not registered".
 
 ### 4. What the shell resolves from this app (d)
-| Capability | Contract | Need | State | If absent |
-|:--|:--|:--|:--|:--|
-| `language_storage` | `ILanguageStorage` | **required** | registered by the shell's own packages | boot throws |
-| `session_state` | `ISessionState` | optional | provided | the app is treated as signed out |
-| `session_gateway` | `ISessionGateway` | optional | provided | requests carry no bearer token and nothing refreshes it |
-| `splash` | `IAppSplashScreen` | optional | provided | the native splash is kept |
-| `routes` | `IFeatureRouteModule` | optional | provided | the router has no stack routes |
+| Capability | Contract | Need | State | Implemented by | If absent |
+|:--|:--|:--|:--|:--|:--|
+| `language_storage` | `ILanguageStorage` | **required** | registered by the shell's own packages | core_common | boot throws |
+| `session_state` | `ISessionState` | optional | provided | feature_foo | the app is treated as signed out |
+| `session_gateway` | `ISessionGateway` | optional | provided | feature_foo | requests carry no bearer token and nothing refreshes it |
+| `splash` | `IAppSplashScreen` | optional | provided | feature_foo | the native splash is kept |
+| `routes` | `IFeatureRouteModule` | optional | provided | feature_foo | the router has no stack routes |
 
-The shell's catalog is `kShellContracts` in `platform_app_shell`; a required row is registered by a shell package, an optional one by an app or a module, and `checkAppContract` holds this table to the graph the app actually builds. `ISessionStatusStream` has no row: only a module looks it up.
+The shell's catalog is `kShellContracts` in `platform_app_shell`; a required row is registered by a shell package, an optional one by an app or a module, and `checkAppContract` holds this table to the graph the app actually builds. `ISessionStatusStream` has no row: only a module looks it up. "Implemented by" is a static scan of the composed packages and this app's own source for a registration of the exact type (`composer verify` holds it to the state above, check V3); a hand-written `getIt.register…` is invisible to it, which is why `checkAppContract` stays the authority.
 
 ### 5. Behaviour values (profile)
 Typed Dart in `lib/app/app_profile.dart`, below the generated facts. A section left out is the template default, and every section type documents its defaults and ranges: `display:` (`DisplayProfile` — the design artboard, the scale policy of each window class, the OS font-size cap, split-screen mode, the phone threshold), `router:` (`RouterProfile` — when the entry location is used, the fallback location), `locale:` (`LocaleProfile` — the languages offered, the fallback and first-launch language), `theme:` (`ThemeProfile` — the mode a first launch opens in, the palette overrides) and `network:` (`NetworkProfile` — the default HTTP client's timeouts, extra headers and redirect policy).

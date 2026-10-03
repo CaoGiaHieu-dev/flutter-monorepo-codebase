@@ -21,6 +21,13 @@ import 'package:yaml/yaml.dart';
 /// code generation, so the enums below are *spelled* here and a tools test
 /// (`app_sync_test.dart`) keeps them equal to the kernel's.
 
+/// The `.env` file each flavor reads, by the repository's convention.
+const Map<String, String> kEnvFiles = {
+  'dev': 'env.dev',
+  'staging': 'env.stg',
+  'prod': 'env.prod',
+};
+
 /// `Flavor` in `platform_kernel`, in declaration order.
 const List<String> kFlavorNames = ['dev', 'staging', 'prod'];
 

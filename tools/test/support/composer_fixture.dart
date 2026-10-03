@@ -7,6 +7,12 @@
 // carries in its own `platform_app_shell/lib/src/composition/
 // shell_contracts.dart` (composer reads the catalog from the workspace, as
 // it reads every package). The pieces are separate so a test can break one.
+//
+// The declaration is also true of the source: `core_common` registers the one
+// required contract, `feature_foo` registers what `session` and `routes` say
+// are provided, nothing registers `splash` (declared absent), the entry point
+// passes the profile and the smoke test calls `checkAppContract` — so `verify`
+// (V3, V12) is green until a test breaks one of them.
 
 /// Repo-relative path of the fixture's catalog source.
 const String kFixtureCatalogPath =
@@ -119,6 +125,94 @@ String demoManifest({
     'modules:\n'
     '$modules';
 
+/// The entry point of the `demo` app: boots through the shell with its profile.
+const String kFixtureMain = '''
+import 'package:platform_app_shell/platform_app_shell.dart';
+
+import 'app/app_profile.dart';
+import 'di/injection.dart';
+
+void main() => runShellApp(
+  profile: appProfile,
+  configureDependencies: configureDependencies,
+);
+''';
+
+/// The `demo` app's DI smoke test: boots a flavor and holds the contract.
+const String kFixtureSmokeTest = '''
+import 'package:flutter_test/flutter_test.dart';
+import 'package:platform_app_shell/platform_app_shell.dart';
+
+import '../lib/app/app_profile.dart';
+
+void main() {
+  test('the declared contract holds', () {
+    final report = checkAppContract(
+      appProfile,
+      flavor: Flavor.dev,
+      platform: AppPlatform.android,
+    );
+    expect(report.problems, isEmpty, reason: report.explain());
+  });
+}
+''';
+
+/// What `core_common` registers: the fixture catalog's one required contract.
+const String kFixtureCoreRegistrations = '''
+import 'package:injectable/injectable.dart';
+
+@Singleton(as: ILanguageStorage)
+class LanguageStorageImpl implements ILanguageStorage {}
+''';
+
+/// What `feature_foo` registers: both members of the `session` bundle (through
+/// a module, as `feature_auth` does) and the `routes` contract.
+const String kFixtureFeatureRegistrations = '''
+import 'package:injectable/injectable.dart';
+
+@module
+abstract class FooSessionModule {
+  @lazySingleton
+  ISessionState bindState(FooSession session) => session;
+
+  @lazySingleton
+  ISessionGateway bindGateway(FooSession session) => session;
+}
+
+@LazySingleton(as: IFeatureRouteModule)
+class FooRoutes implements IFeatureRouteModule {}
+''';
+
+/// A splash screen `feature_foo` can register, for a test whose app declares
+/// `splash: provided`.
+const String kFixtureSplashRegistration = '''
+import 'package:injectable/injectable.dart';
+
+@LazySingleton(as: IAppSplashScreen)
+class FooSplash implements IAppSplashScreen {}
+''';
+
+/// The app's own per-flavor `FirebaseOptions`, what `core_notifications` asks
+/// an app that composes it to register (V10).
+const String kFixtureFirebaseModule = '''
+import 'package:injectable/injectable.dart';
+
+@module
+abstract class FirebaseModule {
+  @lazySingleton
+  @Environment('dev')
+  FirebaseOptions get dev => throw UnimplementedError();
+
+  @lazySingleton
+  @Environment('staging')
+  FirebaseOptions get staging => throw UnimplementedError();
+
+  @lazySingleton
+  @Environment('prod')
+  FirebaseOptions get prod => throw UnimplementedError();
+}
+''';
+
 /// A package's DI module — what makes `composer` import it in `injection.dart`.
 String diModule() =>
     "import 'package:injectable/injectable.dart';\n\n"
@@ -162,10 +256,14 @@ Map<String, String> demoWorkspaceFiles({
       '\n'
       '<!-- composer:managed:report — generated from app_manifest.yaml -->\n'
       '<!-- composer:end:report -->\n',
+  'apps/demo/lib/main.dart': kFixtureMain,
+  'apps/demo/test/di_smoke_test.dart': kFixtureSmokeTest,
   // `runner: committed` for android needs the folder.
   'apps/demo/android/README.txt': 'runner\n',
   'platform/foundation/common/pubspec.yaml': 'name: core_common\n',
   'platform/foundation/common/lib/di/module.dart': diModule(),
+  'platform/foundation/common/lib/src/language_storage.dart':
+      kFixtureCoreRegistrations,
   'platform/shell/app_shell/pubspec.yaml': 'name: platform_app_shell\n',
   kFixtureCatalogPath: kFixtureCatalog,
   'modules/foo/domain/pubspec.yaml': 'name: domain_foo\n',
@@ -176,5 +274,7 @@ Map<String, String> demoWorkspaceFiles({
       '  domain_foo:\n'
       '    path: ../domain\n',
   'modules/foo/feature/lib/di/module.dart': diModule(),
+  'modules/foo/feature/lib/src/registrations.dart':
+      kFixtureFeatureRegistrations,
   ...extra,
 };

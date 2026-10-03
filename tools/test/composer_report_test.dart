@@ -81,6 +81,8 @@ void main() {
         'apps/demo/ios/README.txt': 'runner\n',
         'platform/infra/notifications/pubspec.yaml': notificationsPubspec,
         'platform/infra/notifications/lib/di/module.dart': diModule(),
+        'modules/foo/feature/lib/src/splash.dart': kFixtureSplashRegistration,
+        'apps/demo/lib/firebase/firebase_module.dart': kFixtureFirebaseModule,
       },
     ),
   );

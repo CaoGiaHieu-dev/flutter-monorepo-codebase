@@ -10,6 +10,7 @@ import 'src/checks.dart';
 import 'src/facts_emit.dart';
 import 'src/manifest_v2.dart';
 import 'src/package_facts.dart';
+import 'src/provisions.dart';
 import 'src/report.dart';
 
 /// Composes an app from its `app_manifest.yaml`.
@@ -40,6 +41,12 @@ import 'src/report.dart';
 /// `report` region of the app's `README.md` and, in `injection.dart`, the
 /// `configureDependencies` entry point. `src/manifest_v2.dart` holds the
 /// schema, `src/checks.dart` the checks `verify` adds.
+///
+/// `verify` also holds the declaration to the source (`checkComposition`,
+/// `checkPackagePlatforms`): `capabilities:` against what the composed packages
+/// register (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10),
+/// env files (V11) and the entry point and smoke test (V12). The registration
+/// scan is `tools/shared/contract_scan.dart`, the one `arch_check` shares.
 ///
 /// `sync` skips a module that is not on disk and says so loudly; `--strict`
 /// makes that an error. CI runs `--strict`, which is what stops a release
@@ -158,15 +165,39 @@ void _run(
     exit(1);
   }
 
+  // What the source registers: read once, by the same scanner arch_check's R8
+  // uses, for V3, V10 and the report's "implemented by" column.
+  final provisions = command == 'list'
+      ? const ProvisionIndex.empty()
+      : ProvisionIndex.scan(root, packages);
+
   switch (command) {
     case 'list':
       _list(apps, packages, appFilter);
     case 'describe':
-      _describeApps(root, apps, packages, catalog!, appFilter);
+      _describeApps(root, apps, packages, catalog!, provisions, appFilter);
     case 'sync':
-      _sync(root, apps, packages, catalog!, appFilter, strict, dryRun: false);
+      _sync(
+        root,
+        apps,
+        packages,
+        catalog!,
+        provisions,
+        appFilter,
+        strict,
+        dryRun: false,
+      );
     case 'verify':
-      _sync(root, apps, packages, catalog!, appFilter, true, dryRun: true);
+      _sync(
+        root,
+        apps,
+        packages,
+        catalog!,
+        provisions,
+        appFilter,
+        true,
+        dryRun: true,
+      );
   }
 }
 
@@ -1079,6 +1110,7 @@ AppView _view(
   Resolved r,
   Map<String, String> packages,
   ShellCatalog catalog,
+  ProvisionIndex provisions,
 ) {
   final byName = {for (final g in app.groups) g.name: g};
   final problems = <String>[];
@@ -1136,6 +1168,7 @@ AppView _view(
     composed: r.allPackages.toSet(),
     packageFacts: facts,
     catalog: catalog,
+    provisions: provisions,
   );
 }
 
@@ -1146,6 +1179,7 @@ void _describeApps(
   List<AppManifest> apps,
   Map<String, String> packages,
   ShellCatalog catalog,
+  ProvisionIndex provisions,
   String? appFilter,
 ) {
   final selected = appFilter == null
@@ -1160,7 +1194,9 @@ void _describeApps(
   }
   for (final app in selected) {
     final r = _resolve(app, packages, <String>[]);
-    stdout.write(renderReport(_view(root, app, r, packages, catalog)));
+    stdout.write(
+      renderReport(_view(root, app, r, packages, catalog, provisions)),
+    );
     if (app != selected.last) stdout.writeln();
   }
 }
@@ -1170,6 +1206,7 @@ void _sync(
   List<AppManifest> apps,
   Map<String, String> packages,
   ShellCatalog catalog,
+  ProvisionIndex provisions,
   String? appFilter,
   bool strict, {
   required bool dryRun,
@@ -1253,6 +1290,10 @@ void _sync(
   // leaving the other regions rewritten around it.
   final regions = <_Region>[];
   final switchProblems = <String>[];
+  // What only the source can say (V3, V10, V11, V12): `verify` fails on them,
+  // `sync` says so and still writes — the generated files do not depend on
+  // them, and a half-finished edit must stay possible to regenerate.
+  final sourceProblems = <String>[];
   for (final app in selected) {
     final r = _resolve(app, packages, <String>[]);
 
@@ -1273,8 +1314,10 @@ void _sync(
 
     // What the app declares, as const Dart the shell reads at boot, and as
     // the page a newcomer reads first.
-    final view = _view(root, app, r, packages, catalog);
+    final view = _view(root, app, r, packages, catalog, provisions);
     switchProblems.addAll(checkPlatformSwitches(view));
+    switchProblems.addAll(checkPackagePlatforms(view));
+    sourceProblems.addAll(checkComposition(view, root: root));
     regions
       ..add(
         _Region(
@@ -1313,8 +1356,9 @@ void _sync(
     ),
   );
 
-  // What a platform switches on has to be something the app composes
-  // (V8). Refused before anything is written, like a malformed manifest.
+  // What a platform switches on has to be something the app composes and the
+  // composed packages run on (V7, V8). Refused before anything is written,
+  // like a malformed manifest.
   if (switchProblems.isNotEmpty) {
     for (final problem in switchProblems) {
       OutputFormatter.printError(problem);
@@ -1367,7 +1411,17 @@ void _sync(
       OutputFormatter.printError('  $line');
     }
     if (stranded.isNotEmpty) _explainStranded(OutputFormatter.printError);
-    if (drift.isEmpty && stranded.isEmpty) {
+    for (final problem in sourceProblems) {
+      OutputFormatter.printError(problem);
+    }
+    if (sourceProblems.isNotEmpty) {
+      OutputFormatter.printError(
+        '${sourceProblems.length} problem(s) between app_manifest.yaml and '
+        'the source (V3, V10, V11, V12). Fix the line each one names; '
+        '`sync` does not change them.',
+      );
+    }
+    if (drift.isEmpty && stranded.isEmpty && sourceProblems.isEmpty) {
       OutputFormatter.printSuccess('Generated artifacts are up to date.');
     } else {
       for (final d in drift) {
@@ -1389,6 +1443,15 @@ void _sync(
       OutputFormatter.printWarning('  $line');
     }
     if (stranded.isNotEmpty) _explainStranded(OutputFormatter.printWarning);
+    for (final problem in sourceProblems) {
+      OutputFormatter.printWarning(problem);
+    }
+    if (sourceProblems.isNotEmpty) {
+      OutputFormatter.printWarning(
+        '${sourceProblems.length} problem(s) between app_manifest.yaml and '
+        'the source: `composer verify` fails until each is fixed.',
+      );
+    }
     OutputFormatter.printSuccess(
       '${selected.length} app(s) composed, '
       '${ordered.length} workspace members.',
@@ -1645,6 +1708,21 @@ THE DECLARATION
   and `di_groups[].why` say what the app is. Every optional contract the shell
   resolves is `provided` or `{ state: absent, reason }`: absence is a decision.
   `app.kind` is gone. `describe --catalog` prints every key.
+
+WHAT VERIFY HOLDS THE DECLARATION TO
+  V3   `capabilities:` equals what the composed packages and the app's own
+       lib/ register (both directions; every required contract has an
+       implementer)
+  V7   every composed package that declares `platforms:` supports every
+       platform the app declares
+  V10  what a composed package needs the app to register (`FirebaseOptions`,
+       per flavor) is registered under the app's lib/
+  V11  the env files that exist hold exactly the keys `env:` declares
+  V12  the entry point passes `profile:`; test/di_smoke_test.dart exists and
+       calls checkAppContract
+  V7 refuses before anything is written, in `sync` too. V3, V10, V11 and V12
+  fail `verify`; `sync` prints them as warnings and still writes. The scan
+  reads source, not the graph: `checkAppContract` stays the authority.
 
 MODULE LAYERS
   `modules: - { id: <m>, layers: [api, domain, data, feature] }`. `domain`,

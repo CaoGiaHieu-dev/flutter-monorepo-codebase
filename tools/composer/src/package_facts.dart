@@ -44,9 +44,13 @@ class PackageFacts {
     required this.name,
     required this.platforms,
     required this.appProvides,
+    this.pubspec = '',
   });
 
   final String name;
+
+  /// Repo-relative path of the package's `pubspec.yaml`.
+  final String pubspec;
 
   /// The platforms the package works on, in canonical order; null when the
   /// package declares no restriction.
@@ -75,7 +79,12 @@ PackageFacts readPackageFacts(
     doc = null; // reported by the caller as invalid YAML
   }
   if (doc is! YamlMap) {
-    return PackageFacts(name: name, platforms: null, appProvides: const []);
+    return PackageFacts(
+      name: name,
+      platforms: null,
+      appProvides: const [],
+      pubspec: rel,
+    );
   }
 
   List<String>? platforms;
@@ -142,5 +151,10 @@ PackageFacts readPackageFacts(
     }
   }
 
-  return PackageFacts(name: name, platforms: platforms, appProvides: provides);
+  return PackageFacts(
+    name: name,
+    platforms: platforms,
+    appProvides: provides,
+    pubspec: rel,
+  );
 }

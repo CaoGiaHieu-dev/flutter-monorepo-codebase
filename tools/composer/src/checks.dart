@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import '../../arch_check/dart_source.dart';
 import 'catalog.dart';
@@ -396,6 +397,8 @@ String _origin(AppView view, PackageFacts facts) {
 /// | V15 | the `productFlavors` of a committed Android runner and the flavor schemes of a committed iOS runner are the flavors the manifest declares |
 /// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
 ///
+/// | V17 | no member pubspec other than the root's has a top-level `workspace:` key ([checkNestedWorkspaces]) |
+///
 /// [root] is the repository root the app's files are read from.
 List<String> checkComposition(AppView view, {required String root}) {
   final problems = <String>[];
@@ -410,6 +413,43 @@ List<String> checkComposition(AppView view, {required String root}) {
   _groupOrder((key, problem) => bad(manifest, key, problem), view);
   _entryAndSmokeTest(view, root, bad);
   return problems;
+}
+
+/// V17 (RULE-16): the repository root is the only workspace node.
+///
+/// A member pubspec with its own `workspace:` list starts a second workspace
+/// inside the first: pub then resolves its subtree on its own, so the shared
+/// lockfile and the one version catalog no longer cover it, and the composed
+/// `workspace:` list stops being the whole story. [packages] maps package name
+/// -> directory for every pubspec found under [root]; the root's own is skipped.
+/// One `<file>: workspace: <problem>` line per offender, sorted.
+List<String> checkNestedWorkspaces(
+  Map<String, String> packages, {
+  required String root,
+}) {
+  final problems = <String>[];
+  final normalizedRoot = p.posix.normalize(root.replaceAll(r'\', '/'));
+  for (final dir in packages.values) {
+    final normalized = p.posix.normalize(dir.replaceAll(r'\', '/'));
+    if (normalized == normalizedRoot) continue;
+    final file = File(p.join(normalized, 'pubspec.yaml'));
+    if (!file.existsSync()) continue;
+    Object? doc;
+    try {
+      doc = loadYaml(file.readAsStringSync());
+    } on YamlException {
+      continue; // reported where the package set is built
+    }
+    if (doc is! YamlMap || !doc.containsKey('workspace')) continue;
+    final rel = p.posix.relative(normalized, from: normalizedRoot);
+    problems.add(
+      '$rel/pubspec.yaml: workspace: a member pubspec declares its own '
+      '`workspace:` list, a nested workspace node (RULE-16) — remove the key; '
+      'the repository root `pubspec.yaml` is the only workspace node, and '
+      'every member says `resolution: workspace`',
+    );
+  }
+  return problems..sort();
 }
 
 /// V3.

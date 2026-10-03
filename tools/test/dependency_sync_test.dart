@@ -87,4 +87,74 @@ void main() {
     expect(run, exitsWith(1));
     expect(run.output, contains('pubspec_dependencies.yaml'));
   });
+
+  group('RULE-74: a hosted dependency the catalog does not pin', () {
+    test('a dependency missing from the catalog exits 1 naming it', () async {
+      final run = await check(
+        catalog: catalog,
+        memberPubspec:
+            'name: core_foo\n'
+            'dependencies:\n'
+            '  path: ^1.9.1\n'
+            '  rogue_pkg: ^2.0.0\n',
+      );
+      expect(run, exitsWith(1));
+      expect(
+        run.output,
+        contains(
+          'Not in the catalog: [platform/foo/pubspec.yaml] '
+          'dependencies.rogue_pkg',
+        ),
+      );
+      expect(run.output, contains('RULE-74'));
+    });
+
+    test('a dev_dependency missing from the catalog exits 1', () async {
+      final run = await check(
+        catalog: catalog,
+        memberPubspec:
+            'name: core_foo\n'
+            'dev_dependencies:\n'
+            '  rogue_tool: ^1.0.0\n',
+      );
+      expect(run, exitsWith(1));
+      expect(
+        run.output,
+        contains('[platform/foo/pubspec.yaml] dev_dependencies.rogue_tool'),
+      );
+    });
+
+    test('a hosted map source and a bare `any` are caught too', () async {
+      final run = await check(
+        catalog: catalog,
+        memberPubspec:
+            'name: core_foo\n'
+            'dependencies:\n'
+            '  a_pkg:\n'
+            '    hosted: https://pub.example.com\n'
+            '    version: ^1.0.0\n'
+            '  b_pkg: any\n',
+      );
+      expect(run, exitsWith(1));
+      expect(run.output, contains('dependencies.a_pkg'));
+      expect(run.output, contains('dependencies.b_pkg'));
+    });
+
+    test('sdk, path and git sources are not the catalog\'s business', () async {
+      final run = await check(
+        catalog: catalog,
+        memberPubspec:
+            'name: core_foo\n'
+            'dependencies:\n'
+            '  flutter:\n'
+            '    sdk: flutter\n'
+            '  local_pkg:\n'
+            '    path: ../local\n'
+            '  git_pkg:\n'
+            '    git:\n'
+            '      url: https://example.com/git_pkg.git\n',
+      );
+      expect(run, exitsWith(0));
+    });
+  });
 }

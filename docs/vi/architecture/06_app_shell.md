@@ -25,7 +25,10 @@ apps/mobile/                         điểm lắp ráp
 └── env.dev  env.stg                 giá trị theo flavor (env.prod bạn tự tạo)
 
 platform/shell/app_shell/lib/              dùng chung cho mọi app
-├── bootstrap.dart                   runShellApp — error hook, DI, splash, init
+├── bootstrap.dart                   runShellApp — error hook, kiểm tra profile, DI, splash, init
+├── shell_hooks.dart                 ShellHooks — code của app tại các điểm cố định của quá trình boot
+├── boot/boot_error_app.dart         màn hình hiện ra khi boot bị dừng
+├── composition/                     shell_contracts.dart (catalog), composition_check.dart
 ├── main_scope.dart                  splash → init → chuyển sang root
 ├── di/module.dart                   @InjectableInit.microPackage — AppRouter, AppProvider, DeeplinkProvider
 └── presentation/
@@ -46,6 +49,13 @@ platform/shell/adapters/lib/               adapter hạ tầng của shell (plat
     ├── app_boot_storage.dart        cờ khởi động    → StorageValue<bool>
     ├── network_config_impl.dart     NetworkConfig
     └── utils/                       storage key do adapter sở hữu
+
+platform/foundation/kernel/lib/src/profile/   những gì một app khai báo (platform_kernel)
+├── app_profile.dart                 AppProfile + validate (P01–P05)
+├── app_facts.dart                   AppFacts — platform, flavor, env key, capability, SSL pinning
+├── platform_facts.dart              PlatformFacts — những gì một platform bật cho app
+├── ssl_pinning.dart                 SslPinning, SslPinningPolicy
+└── register_app_profile.dart        registerAppProfile — gắn từng phần theo đúng type của nó
 ```
 
 ### App thứ hai: `apps/admin`
@@ -55,6 +65,8 @@ platform/shell/adapters/lib/               adapter hạ tầng của shell (plat
 ---
 
 ## 2. Vòng đời khởi động
+
+Sơ đồ dưới đây là quá trình khởi động của một app chỉ truyền cho `runShellApp` `configureDependencies` của nó và không gì khác — đúng như `apps/mobile` và `apps/admin` đang làm hiện nay. App nào truyền thêm `AppProfile` sẽ có thêm ba bước bao quanh quá trình này, mô tả ở mục [Với hồ sơ app](#với-hồ-sơ-app).
 
 ```mermaid
 sequenceDiagram
@@ -98,10 +110,103 @@ Trình tự này nằm trong `runShellApp()` ([`platform/shell/app_shell/lib/src
 
 1. **`runZonedGuarded`** bọc toàn bộ để lỗi bất đồng bộ không bắt được vẫn được báo cáo thay vì mất tăm.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — bắt buộc trước mọi lời gọi plugin — rồi **`installShellErrorHooks`**, dồn mọi lỗi không bắt được về một chỗ (xem [Lỗi và crash reporting](#lỗi-và-crash-reporting) bên dưới). Nó chạy trước `configureDependencies`, nên lỗi DI cũng được báo cáo.
-3. **`await configureDependencies()`** chạy *trước* `MainScope`. Đến lúc widget đầu tiên build, cả container đã phân giải xong.
+3. **`await configureDependencies()`** chạy *trước* `MainScope`. Đến lúc widget đầu tiên build, cả container đã phân giải xong. Với app profile, bước validate và đăng ký mô tả [bên dưới](#với-hồ-sơ-app) chạy trước, còn bước kiểm tra contract chạy ngay sau.
 4. **`AppInitializer.initBeforeRunApp()`** cấu hình logger và cài `HttpOverrides.global` — certificate pinning, hoặc bypass khi build debug + flavor `dev` — một cách đồng bộ, trước khi có bất kỳ widget nào. Không thể đợi tới `initService`: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó (`AuthProvider` của auth, khôi phục phiên bằng một lần refresh token) có thể mở kết nối đầu tiên khi `initService` còn đang chạy, và `IOHttpClientAdapter` của Dio giữ lại `HttpClient` nó tạo đầu tiên — một client không pin sẽ phục vụ cả phiên. Lời gọi này idempotent; `AppInitializer.init` gọi lại và lần thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` giữ thứ tự này. Trên **web** nó không cài gì và ghi log, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ — ở đó không có `HttpClient` nào để pin (xem [hiện trạng web của tầng core](02_core.md)).
 5. **`MainScope`** được dựng với ba thứ: hiển thị splash widget nào (nếu có), widget gốc, và `initService` — ở đây là `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, lo phần còn lại: `OperationGlobalConfig`, URL reflection của GoRouter, `AppInfoHelper`, trao route observer cho `RouteAwareWidget`, hướng màn hình và system UI.
 6. **`mainScope.run()`** rẽ nhánh tuỳ theo có truyền splash widget Dart hay không.
+
+### Với hồ sơ app
+
+Cả hai app mẫu gọi `runShellApp` chỉ với `configureDependencies`, nên việc một app *là gì* — chạy trên nền tảng nào, cần những `--dart-define` nào, cung cấp những contract tuỳ chọn nào, có pin chứng chỉ hay không — từ trước đến nay chỉ được ngầm hiểu qua các module nó ghép vào và qua các hằng số trong package dùng chung. Giờ `runShellApp` còn nhận thêm `AppProfile` và `ShellHooks`, cả hai đều tuỳ chọn, để app tự nói ra điều đó:
+
+```dart
+void runShellApp({
+  required Future<void> Function() configureDependencies,
+  AppProfile? profile,
+  ShellHooks hooks = const ShellHooks(),
+  ShellErrorCallback? onError,
+})
+```
+
+`AppProfile` ([`lib/src/profile/` của `platform_kernel`](../../../platform/foundation/kernel/lib/src/profile/)) bọc `AppFacts`: `id` và `name` của app; các `flavors`; các `platforms` nó chạy trên, mỗi platform kèm một `PlatformFacts` (runner, chế độ splash, chính sách hướng màn hình, deep link, push, cửa sổ desktop); các key `--dart-define` nó đọc (`EnvRule`, kèm các flavor bắt buộc có key đó); một khai báo `capabilities` cho mọi contract tuỳ chọn mà shell resolve — `CapabilityExpectation.provided()`, hoặc `.absent(reason)`; và một quyết định certificate pinning cho mỗi flavor — `SslPinning.pinned(leaf, backup)` hoặc `SslPinning.disabled(reason)`. Facts là những gì một gate phải đọc được trước khi có bất kỳ code nào được biên dịch, nên chúng được thiết kế để sinh ra từ `app_manifest.yaml`. Hiện chưa có gì sinh chúng và chưa app mẫu nào truyền profile: app tự dựng bằng tay, và `profile == null` chính là quá trình khởi động trong sơ đồ ở trên.
+
+Với profile, quá trình khởi động có thêm ba bước bao quanh những bước app nào cũng đã có:
+
+1. **Validate, trước DI.** `AppProfile.validate` — Dart thuần — chạy cho platform (`resolveAppPlatform()` trong `core_common`, chỗ rẽ nhánh duy nhất theo `kIsWeb` / `defaultTargetPlatform`) và flavor của bản build này. Bất kỳ vấn đề nào cũng dừng boot ở màn hình boot-error, và `configureDependencies` không bao giờ được gọi: khởi động trên một platform mà manifest không khai báo từng chỉ cho ra một cửa sổ trống, không có lỗi nào.
+2. **Đăng ký, vẫn trước DI.** `registerAppProfile` gắn `AppProfile`, `PlatformFacts` của platform đang chạy và `SslPinningPolicy`, mỗi thứ theo đúng type của nó (RULE-14), để một eager singleton được dựng trong lúc graph khởi tạo có thể inject chúng. Tiếp theo `ShellHooks.beforeDependencies` chạy.
+3. **Kiểm tra, sau DI.** `checkAppContract` resolve mọi dòng của catalog bên dưới và đối chiếu khai báo `capabilities` của app với những gì graph đã đăng ký.
+
+| Mã | `AppProfile.validate` dừng boot khi |
+|:--|:--|
+| `P01` | platform không được khai báo dưới `platforms` |
+| `P02` | flavor không được khai báo dưới `flavors` |
+| `P03` | một `--dart-define` bắt buộc ở flavor này đang rỗng (chỉ kiểm ở bản build non-debug — `flutter run` thường không cần file env) |
+| `P04` | flavor chưa có quyết định pinning và platform có thể pin TLS (Android, iOS) |
+| `P05` | platform khai báo `window` mà không hook nào áp dụng nó — `ShellHooks` chưa có window hook, nên một `window` đã khai báo luôn làm dừng boot |
+
+| Mã | `checkAppContract` tìm thấy, sau DI |
+|:--|:--|
+| `C01` | một contract bắt buộc chưa được đăng ký |
+| `C02` | một contract khai báo `provided` nhưng không có đăng ký nào |
+| `C03` | một contract khai báo `absent` nhưng lại được đăng ký |
+| `C04` | các thành viên của một bundle (`session`) được khai báo khác nhau |
+| `C05` | không đóng góp route nào và tab nào — app không có màn hình |
+| `C06` | hai `INavDestinationModule` dùng chung một `order` (RULE-24) |
+| `C07` | `AppRouter.router` không lắp ráp được |
+| `C08` | `DioFailureClassifier` chưa được móc vào `ErrorHandler` |
+| `C09` | một contract tuỳ chọn hoàn toàn không có khai báo |
+
+Mỗi vấn đề là một `ProfileProblem`: một `code`, một `Description:` nêu tên file và key trong manifest, và một `Action:` có thể dán nguyên xi khi đó là một dòng YAML hay một lệnh. **Nơi nó hiện ra tuỳ thuộc vào bản build.** Ở flavor dev hoặc staging, hoặc bản build debug hay profile, màn hình boot-error (`BootErrorApp` — một app tối giản không cần DI, router hay theme provider, vì chưa cái nào tồn tại) liệt kê đầy đủ mọi vấn đề, và một sai lệch phát hiện sau DI cũng dừng boot theo cách đó. Ở bản release production, vấn đề phát hiện trước DI chỉ hiện một thông báo chung, còn sai lệch phát hiện sau DI được log mức `ERROR` và báo cáo là non-fatal (`onNonFatalError`, rồi `IErrorReporter`) trong khi app vẫn khởi động — một module đã bị gỡ vẫn phải chạy được (RULE-05). Hiện chưa có gì chặn sai lệch này trước khi merge: việc đó cần một smoke test gọi `checkAppContract`, mà test của các app mẫu chưa gọi.
+
+`--dart-define=ALLOW_UNDECLARED_PLATFORM=true` là cách để lập trình viên chạy thử nhanh trên một platform manifest không liệt kê: `P01` trở thành một cảnh báo được log và platform đó nhận `PlatformFacts.today()` — hành vi template từng có trước khi app có thể khai báo bất cứ điều gì. Nó không bỏ qua cho một flavor chưa khai báo.
+
+Với profile, splash Dart được chọn theo `splash` mà platform đã khai báo thay vì theo `Platform.isIOS` ([bên dưới](#hai-đường-splash)). Truyền `hooks.beforeDependencies` hoặc `hooks.afterBoot` mà không có profile sẽ ném `ArgumentError`: chúng nhận một `AppRuntime` (`profile`, `flavor`, `platform`, `isDebug`), mà ở đó không có cái nào.
+
+### Shell resolve những gì từ một app
+
+App phải có những contract nào được đăng ký, và được phép bỏ qua những contract nào? Một bảng trả lời tất cả: `kShellContracts` ([`shell_contracts.dart`](../../../platform/shell/app_shell/lib/src/composition/shell_contracts.dart)), 22 dòng — 8 bắt buộc, 14 tuỳ chọn. Mỗi dòng là một `ShellContract`: một `id` ổn định, shell có cần nó hay không, shell gom bao nhiêu implementation, shell làm gì khi không có gì được đăng ký, và `consumer`, tức `path:line` của mọi lời gọi tra cứu. `shell_contracts_test.dart` đọc từng dòng đó và fail khi một dòng không còn nhắc đúng contract của nó, nên sửa một file phía trên một lời tra cứu đã có trong catalog nghĩa là phải cập nhật dòng của nó trong cùng thay đổi. Mọi lời tra cứu vẫn là `getItOrNull` / `getAllOrEmpty` kèm fallback (RULE-12), đó là điều giúp một app ghép thiếu module đóng góp vẫn boot được. Điều catalog thêm vào là *khai báo* của app: một contract tuỳ chọn hoặc là `provided`, hoặc là `absent` kèm lý do, và `checkAppContract` đối chiếu nó với graph.
+
+Các dòng **bắt buộc** do chính các package của shell đăng ký — nhóm DI `shell` và `ui` — nên app chỉ cần ghép các nhóm đó. Các dòng **tuỳ chọn** là những gì một app hoặc một module đóng góp:
+
+| `id` | Contract | Mức cần | Nếu không có gì đăng ký |
+|:--|:--|:--|:--|
+| `language_storage` | `ILanguageStorage` | bắt buộc | boot ném "ILanguageStorage is not registered" |
+| `theme_storage` | `IThemeStorage` | bắt buộc | boot ném "IThemeStorage is not registered" |
+| `boot_storage` | `AppBootStorage` | bắt buộc | quy tắc lần khởi động đầu không chạy được |
+| `ssl_pinning` | `SslPinningConfig` | bắt buộc | certificate pinning bị bỏ qua và một ERROR được log; phải bind riêng đúng type của nó, không bao giờ qua supertype (RULE-14) |
+| `app_router` | `AppRouter` | bắt buộc | boot ném "AppRouter is not registered" |
+| `deeplink_provider` | `DeeplinkProvider` | bắt buộc | boot ném "DeeplinkProvider is not registered" |
+| `theme_provider` | `ThemeProvider` | bắt buộc | boot ném "ThemeProvider is not registered" |
+| `language_provider` | `LanguageProvider` | bắt buộc | boot ném "LanguageProvider is not registered" |
+| `session_state` | `ISessionState` | tuỳ chọn, bundle `session` | navigation wrapper coi app là chưa đăng nhập, mọi deep link đều được điều hướng, và mất phiên là no-op |
+| `session_gateway` | `ISessionGateway` | tuỳ chọn, bundle `session` | request không mang bearer token và không gì làm mới nó |
+| `session_refresh` | `ISessionRefreshListenable` | tuỳ chọn, bundle `session` | router không bao giờ phân giải lại location khi phiên đổi |
+| `sign_in` | `ISignInLocation` | tuỳ chọn, bundle `session` | shell không bao giờ chuyển người dùng chưa đăng nhập đi đâu |
+| `routes` | `IFeatureRouteModule` | tuỳ chọn, gom nhiều | router không có route nào trên ngăn xếp |
+| `tabs` | `INavDestinationModule` | tuỳ chọn, gom nhiều | router mở một route giữ chỗ (`/_empty_dashboard`) |
+| `dashboard` | `IDashboardRouteModule` | tuỳ chọn | các destination hiển thị không có khung chrome |
+| `entry` | `IAppEntryLocation` | tuỳ chọn | không có điểm vào lần đầu; boot đi thẳng tới bước kiểm tra đăng nhập |
+| `post_sign_in` | `IPostSignInLocation` | tuỳ chọn | sau khi đăng nhập router mở fallback của nó, tab đầu tiên |
+| `splash` | `IAppSplashScreen` | tuỳ chọn | splash native được giữ suốt quá trình boot |
+| `tree_wrappers` | `IAppTreeWrapper` | tuỳ chọn, gom nhiều | cây widget được dựng không có wrapper |
+| `localization` | `IFeatureLocalization` | tuỳ chọn, gom nhiều | chỉ chuỗi của chính `core_base_ui` được dịch |
+| `error_reporter` | `IErrorReporter` | tuỳ chọn | lỗi được in ra và không gửi đi đâu (RULE-67) |
+| `analytics` | `IAnalytics` | tuỳ chọn | không có sự kiện màn hình nào được gửi |
+
+Một contract *gom nhiều* có thể có bao nhiêu implementation tuỳ ý (`getAllOrEmpty`). Một *bundle* được khai báo như một khối: `session` là `provided` hoặc `absent` cho cả bốn thành viên cùng lúc (`C04` khi chúng khác nhau). `ISessionStatusStream` không nằm trong catalog — chỉ `feature_home` tra cứu nó, và các lời tra cứu riêng của một module là việc của module đó. Bảng này là bản sao của hằng số Dart; khi hai bên lệch nhau thì code là chuẩn, và `shell_contracts_test.dart` giữ số dòng.
+
+### Các hook
+
+`ShellHooks` ([`shell_hooks.dart`](../../../platform/shell/app_shell/lib/src/shell_hooks.dart)) là code của app tại các điểm cố định của quá trình boot. Mọi hook đều tuỳ chọn và cả đối tượng là `const`, nên app giữ một `const ShellHooks` và truyền vào `runShellApp(hooks: …)`:
+
+| Hook | Chạy | Dùng để |
+|:--|:--|:--|
+| `onError` | khi một lỗi thoát khỏi zone, framework hoặc engine | kênh lỗi fatal; tham số `onError:` cũ của `runShellApp` vẫn được tôn trọng, và truyền cả hai sẽ assert |
+| `onNonFatalError` | khi `ErrorHandler` không phân loại được một failure | kênh non-fatal (xem [Lỗi và crash reporting](#lỗi-và-crash-reporting)) |
+| `beforeDependencies(AppRuntime)` | sau error hook và việc đăng ký profile, trước DI | thiết lập mà graph cần có sẵn — `Sentry.init`, `Firebase.initializeApp`; nó không resolve được gì từ DI, vì DI chưa tồn tại |
+| `afterBoot(AppRuntime)` | sau DI và `AppInitializer.init`, vẫn đang sau splash | resolve được mọi thứ graph đã đăng ký; giữ cho ngắn, splash vẫn hiện cho tới khi nó xong |
+
+Một hook ném lỗi sẽ được báo cáo qua các error hook như mọi lỗi khác trong zone của app, và dừng boot tại điểm nó chạy. Hook là *code*: một giá trị vừa với manifest (platform, flavor, capability) hoặc facts của profile thì thuộc về đó, nơi một gate đọc được.
 
 ### Lỗi và crash reporting
 
@@ -113,11 +218,11 @@ Có ba loại lỗi lọt qua mọi thứ khác, và shell móc vào cả ba:
 | `FlutterError.onError` | lỗi framework bắt được: build, layout, paint, giải mã ảnh, gesture |
 | `PlatformDispatcher.instance.onError` | lỗi thoát ra tới engine — callback của platform channel, timer nằm ngoài zone |
 
-Cả ba đổ về cùng một chỗ. Handler của zone và hook của dispatcher ném lại qua `FlutterError.reportError`; hook `FlutterError.onError` trước hết gọi handler đã có trước nó — mặc định là `FlutterError.presentError`, bản dump đỏ trên console ở debug — rồi báo lỗi **một lần**: tới callback `onError` (tuỳ chọn) của app, rồi tới `getItOrNull<IErrorReporter>()` với `fatal: true`. Hook của dispatcher trả về `true`: lỗi đã được xử lý, engine không log thêm lần nữa.
+Cả ba đổ về cùng một chỗ. Handler của zone và hook của dispatcher ném lại qua `FlutterError.reportError`; hook `FlutterError.onError` trước hết gọi handler đã có trước nó — mặc định là `FlutterError.presentError`, bản dump đỏ trên console ở debug — rồi báo lỗi **một lần**: tới callback fatal (tuỳ chọn) của app (`ShellHooks.onError`, hoặc tham số `onError:` cũ của `runShellApp`), rồi tới `getItOrNull<IErrorReporter>()` với `fatal: true`. Hook của dispatcher trả về `true`: lỗi đã được xử lý, engine không log thêm lần nữa.
 
 `IErrorReporter` và `IAnalytics` là các contract tuỳ chọn trong `core_di` ([`src/observability/`](../../../platform/foundation/contracts/lib/src/observability/)). Template không implement cái nào, nên cả hai lookup trả `null` và không gửi gì đi. Reporter được resolve lúc lỗi xảy ra, không phải lúc boot, nên reporter do `configureDependencies` đăng ký vẫn được dùng, và lỗi do *chính* `configureDependencies` ném ra vẫn tới được `onError`. Reporter hay callback nào tự throw sẽ bị nuốt — không bao giờ bị báo cáo qua chính nó.
 
-Còn một đường thứ ba, non-fatal. `ErrorHandler` (`platform_kernel`) chuyển mọi exception của repository thành `AppFailure`; những cái nó không phân loại được — một `TypeError` trong `fromJson`, một exception của plugin — thành lỗi chung "Unknown error occurred" và thường là bug. Shell trỏ `ErrorHandler.onUnclassifiedError` tới reporter với `fatal: false`, nên những lỗi đó được ghi lại trong khi người dùng vẫn nhận một failure đã được xử lý. Failure đã phân loại (mất mạng, 401, timeout) không được báo cáo.
+Còn một đường thứ ba, non-fatal. `ErrorHandler` (`platform_kernel`) chuyển mọi exception của repository thành `AppFailure`; những cái nó không phân loại được — một `TypeError` trong `fromJson`, một exception của plugin — thành lỗi chung "Unknown error occurred" và thường là bug. Shell trỏ `ErrorHandler.onUnclassifiedError` tới `ShellHooks.onNonFatalError` rồi tới reporter với `fatal: false`, nên những lỗi đó được ghi lại trong khi người dùng vẫn nhận một failure đã được xử lý. Failure đã phân loại (mất mạng, 401, timeout) không được báo cáo.
 
 **Gắn Crashlytics hay Sentry** chỉ là một lần đăng ký trong app — trong `lib/` của chính nó, cạnh `firebase/firebase_module.dart`, hoặc trong một package mà app ghép vào. Không phải sửa code shell:
 
@@ -150,7 +255,11 @@ Với Sentry, `recordError` gọi `Sentry.captureException(error, stackTrace: st
 `runShellApp` chọn splash theo nền tảng, và lấy nó từ module nào đã đăng ký `IAppSplashScreen` — ở app mẫu là `feature_splash`:
 
 ```dart
-final usesDartSplash = kIsWeb || !Platform.isIOS;
+final usesDartSplash = runtime != null
+    ? (getItOrNull<PlatformFacts>() ?? const PlatformFacts.today())
+              .splash ==
+          SplashMode.dart
+    : kIsWeb || !Platform.isIOS;
 // ...
 splashScreen: usesDartSplash
     ? getItOrNull<IAppSplashScreen>()?.build()
@@ -161,6 +270,8 @@ splashScreen: usesDartSplash
 |:--|:--|:--|
 | iOS | `null` | Splash native được **giữ lại** suốt quá trình init rồi mới gỡ. Không có splash Dart nào được vẽ. |
 | Android, Web, desktop | `IAppSplashScreen.build()` | Splash native gỡ ngay lập tức; splash đã đăng ký được vẽ thay thế, rồi mờ dần sang `RootApp` qua `AnimatedSwitcher`. Không ghép module splash nào thì giá trị là `null` và đi theo đường của iOS. |
+
+Bảng trên là lựa chọn khi không có app profile (`runtime` ở trên là `null`). Khi có, `PlatformFacts.splash` mà platform đang chạy đã khai báo sẽ quyết định: `SplashMode.dart` dựng splash đã đăng ký, `SplashMode.native` giữ splash native — nhờ đó app có thể nói rằng Android giữ splash native còn iOS hiện splash Dart.
 
 Cả hai đường đều `await Future.wait([initService(), Future.delayed(_minimumDelay)])`, với `_minimumDelay` là 2 giây. Độ trễ này là **sàn**, không phải cộng thêm — init nhanh vẫn phải chờ để splash không bị nháy.
 

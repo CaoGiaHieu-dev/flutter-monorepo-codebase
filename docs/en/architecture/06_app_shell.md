@@ -43,9 +43,7 @@ platform/shell/app_shell/lib/              shared by every app
     └── widgets/                     NavigatorWrapperWidget, UndefinedRouteWidget
 
 platform/shell/adapters/lib/               the shell's infrastructure adapters (platform_shell_adapters)
-├── di/
-│   ├── module.dart                  @InjectableInit.microPackage — first in the `shell` DI group
-│   └── network_binding_module.dart  SslPinningConfig binding
+├── di/module.dart                   @InjectableInit.microPackage — first in the `shell` DI group
 └── src/
     ├── theme_storage_impl.dart      IThemeStorage    → StorageValue<ThemeMode>
     ├── language_storage_impl.dart   ILanguageStorage → StorageValue<String>
@@ -78,9 +76,9 @@ sequenceDiagram
     autonumber
     participant M as runShellApp()
     participant V as AppProfile.validate()
+    participant P as AppInitializer.initBeforeRunApp()
     participant DI as configureDependencies()
     participant C as checkAppContract()
-    participant P as AppInitializer.initBeforeRunApp()
     participant S as MainScope.run()
     participant N as FlutterNativeSplash
     participant I as AppInitializer.init()
@@ -90,14 +88,14 @@ sequenceDiagram
     M->>M: WidgetsFlutterBinding.ensureInitialized()
     M->>V: the platform and flavor of this build
     Note over V: P01–P05, pure Dart, before any DI —<br/>a problem shows the boot-error screen and stops
-    M->>M: registerAppProfile(...) + ShellHooks
-    M->>DI: beforeDependencies, then await configureDependencies()
+    M->>M: registerAppProfile(...) + ShellHooks, then beforeDependencies
+    M->>P: logger + HttpOverrides.global (pinning)
+    Note over P: synchronous, reads only the profile, before DI —<br/>nothing the graph builds can open an unpinned connection
+    M->>DI: await configureDependencies()
     Note over DI: every module registered<br/>before any UI exists
     DI-->>M: container ready
     M->>C: the declared capabilities against the graph
-    Note over C: C01–C09 — a dev or staging flavor, or a debug<br/>build, stops; a production release logs and goes on
-    M->>P: logger + HttpOverrides.global (pinning)
-    Note over P: synchronous, before any widget —<br/>the splash's tree wrappers may already open a connection
+    Note over C: C01–C12, and the router is assembled here (C07) —<br/>a dev or staging flavor, or a debug build, stops;<br/>a production release logs and goes on
     M->>S: MainScope(splashScreen, root, initService).run()
 
     alt splashScreen == null (iOS, or no splash composed)
@@ -113,7 +111,7 @@ sequenceDiagram
         S->>R: widget.value = root  (AnimatedSwitcher fade)
     end
 
-    R->>R: AppRouter.router built lazily on first access
+    R->>R: AppRouter.router already assembled by checkAppContract (C07)
 ```
 
 ### Step by step
@@ -124,9 +122,9 @@ The sequence lives in `runShellApp()` ([`platform/shell/app_shell/lib/src/bootst
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call — then **`installShellErrorHooks`**, which routes every uncaught error to one place (see [Errors and crash reporting](#errors-and-crash-reporting) below). It runs before `configureDependencies`, so a DI failure is reported too.
 3. **Validate, before DI.** `AppProfile.validate` runs for the platform and flavor this build is. Any problem stops the boot at the boot-error screen and `configureDependencies` is never called ([The app profile](#the-app-profile)).
 4. **Register, still before DI.** `registerAppProfile` binds the profile and its sections, and the shell binds the app's `ShellHooks`, each under its exact type. `hooks.beforeDependencies` runs next.
-5. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
-6. **Check, after DI.** `checkAppContract` holds the app's `capabilities:` declaration to what the graph registered.
-7. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning as the manifest decided it for this flavor, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/shell/app_shell/test/boot_order_test.dart` holds the order. Pinning applies only where the platform can do it (Android, iOS): on the **web** the browser validates certificates and there is no `HttpClient` to pin, and on desktop the pinning plugin has no implementation — both log one `INFO` line saying so (see [the core layer's web status](02_core.md)).
+5. **`AppInitializer.initBeforeRunApp(profile:, platform:, flavor:)`** configures the logger and installs `HttpOverrides.global` — certificate pinning as the manifest decided it for this flavor, or the debug + `dev`-flavor bypass — synchronously, still before DI. It reads only the profile, so it needs no registration, and it cannot wait for `initService` or even for DI: anything the graph builds (an eager singleton, a contract implementation `checkAppContract` resolves, the controller of a feature's `IAppTreeWrapper` on the splash — auth's `AuthProvider` restoring the session with a token refresh) can open the first connection, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/shell/app_shell/test/boot_order_test.dart` holds the order. Pinning applies only where the platform can do it (Android, iOS): on the **web** the browser validates certificates and there is no `HttpClient` to pin, and on desktop the pinning plugin has no implementation — both log one `INFO` line saying so (see [the core layer's web status](02_core.md)).
+6. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
+7. **Check, after DI.** `checkAppContract` holds the app's `capabilities:` declaration to what the graph registered, and assembles the router (`C07`), so a malformed route or a `fallbackPath` no module registers (`C11`) stops the boot here rather than on the first frame.
 8. **`MainScope`** is constructed with the splash widget (if the platform's declared `splash` is `dart` and a module registered one), the root widget, the app's `DisplayProfile` and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver, …)`, which does the rest: GoRouter's URL reflection, `AppInfoHelper`, handing the route observer to `RouteAwareWidget`, and orientation and system UI under the platform's declared `orientation` — followed by `ShellHooks.configureWindow` (on a platform that declares a `window`) and `ShellHooks.afterBoot`.
 9. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
 
@@ -145,7 +143,7 @@ void runShellApp({
 })
 ```
 
-`registerAppProfile` binds `AppProfile`, `AppPlatform` (the platform of this run), that platform's `PlatformFacts`, the `SslPinningPolicy` and the `RouterProfile`, `LocaleProfile`, `ThemeProfile` and `NetworkProfile` sections, each under its own exact type (RULE-14). It runs before `configureDependencies`, so a class the graph builds can take a section as an optional constructor parameter — an eager singleton included, which can never hit RULE-13 — and a class built by hand in a test falls back to the same defaults. The boot adds three steps around the ones every app already had:
+`registerAppProfile` binds `AppProfile`, `AppPlatform` (the platform of this run), that platform's `PlatformFacts`, the `SslPinningPolicy` and the `RouterProfile`, `LocaleProfile`, `ThemeProfile` and `NetworkProfile` sections, each under its own exact type (RULE-14). It runs before `configureDependencies`, so a class the graph builds can take a section as an optional constructor parameter — an eager singleton included, which can never hit RULE-13 — and a class built by hand in a test falls back to the same defaults. The boot adds these steps around the ones every app already had (the numbered list in [Step by step](#step-by-step) has the full order, including the pinning step between 2 and 3):
 
 1. **Validate, before DI.** `AppProfile.validate` — pure Dart — runs for the platform (`resolveAppPlatform()` in `core_common`, the one policy fork on `kIsWeb` / `defaultTargetPlatform`) and the flavor this build is. Any problem stops the boot at the boot-error screen, and `configureDependencies` is never called: starting on a platform the manifest does not declare used to be a blank window with no error.
 2. **Register, still before DI.** `registerAppProfile` as above, then the shell binds the app's `ShellHooks` and an `AppRuntime` (`profile`, `flavor`, `platform`, `isDebug`) the hooks and the router read. `ShellHooks.beforeDependencies` runs next.
@@ -155,7 +153,7 @@ void runShellApp({
 |:--|:--|
 | `P01` | the platform is not declared under `platforms` |
 | `P02` | the flavor is not declared under `flavors` |
-| `P03` | a `--dart-define` required in this flavor is empty (checked in a non-debug build only — a plain `flutter run` needs no env file) |
+| `P03` | a `--dart-define` required in this flavor is empty (checked in a non-debug build only — a plain `flutter run` needs no env file). Declare a key `required_in` only when a build without it is unusable (`BASE_URL` in prod: there is no API); a key the shell has a fallback for, like `APP_NAME`, is not required |
 | `P04` | the flavor has no pinning decision and the platform can pin TLS (Android, iOS) |
 | `P05` | the platform declares a `window` and the app passes no `ShellHooks.configureWindow` |
 
@@ -170,6 +168,9 @@ void runShellApp({
 | `C07` | `AppRouter.router` fails to assemble |
 | `C08` | `DioFailureClassifier` is not hooked into `ErrorHandler` |
 | `C09` | an optional contract has no declaration at all |
+| `C10` | resolving a registered contract throws — its constructor or factory fails |
+| `C11` | `RouterProfile.fallbackPath` is not a route the assembled router registers (it would open the not-found page) |
+| `C12` | two or more navigation tabs and no `IDashboardRouteModule` — no chrome to switch between them |
 
 Every problem is a `ProfileProblem`: a `code`, a `Description:` that names the manifest file and key, and an `Action:` that is paste-ready where it is a line of YAML or a command. **Where it is shown depends on the build.** In a dev or staging flavor, or a debug or profile build, the boot-error screen (`BootErrorApp` — a minimal app that needs no DI, router or theme provider, none of which exists yet) lists every problem in full, and a mismatch found after DI stops the boot the same way. In a production release a problem found before DI shows only a generic message, and a mismatch found after DI is logged at `ERROR` and reported as non-fatal (`onNonFatalError`, then `IErrorReporter`) while the app starts anyway — a removed module must still run (RULE-05). The release never meets a mismatch first: each app's smoke test calls `checkAppContract` for every flavor (RULE-63), so CI fails the PR before a release exists.
 
@@ -179,7 +180,7 @@ The Dart splash is chosen by the platform's declared `splash` rather than by `Pl
 
 ### What the shell resolves from an app
 
-Which contracts must an app have registered, and which may it go without? One table answers it: `kShellContracts` ([`shell_contracts.dart`](../../../platform/shell/app_shell/lib/src/composition/shell_contracts.dart)), 22 rows — 8 required, 14 optional. Each row is a `ShellContract`: a stable `id`, whether the shell needs it, how many implementations it collects, what the shell does when nothing is registered, and `consumer`, the `path:line` of every lookup. `shell_contracts_test.dart` reads each of those lines and fails when one no longer names its contract, so editing a file above a catalogued lookup means updating its row in the same change, and `arch_check` R16 fails a shell lookup that has no row. Every lookup is still `getItOrNull` / `getAllOrEmpty` with a fallback (RULE-12), which is what lets an app composed without a contributing module boot. What the catalog adds is the app's *declaration*: an optional contract is either `provided` or `absent` with a reason (RULE-81), and `checkAppContract` and `composer verify` hold it to the code.
+Which contracts must an app have registered, and which may it go without? One table answers it: `SHELL_CONTRACTS` ([`shell_contract_constants.dart`](../../../platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart); the `ShellContract` type is in [`shell_contracts.dart`](../../../platform/shell/app_shell/lib/src/composition/shell_contracts.dart)), 21 rows — 7 required, 14 optional. Each row is a `ShellContract`: a stable `id`, whether the shell needs it, how many implementations it collects, what the shell does when nothing is registered, and `consumer`, the file of every lookup. `shell_contracts_test.dart` reads each of those files and fails when one no longer looks its contract up (`getIt<T>`, `getItOrNull<T>`, `getAllOrEmpty<T>` or an injected field), so moving a lookup to another file means updating its row in the same change — a line number is not cited, so an edit above a lookup costs nothing — and `arch_check` R16 fails a shell lookup that has no row. Every lookup is still `getItOrNull` / `getAllOrEmpty` with a fallback (RULE-12), which is what lets an app composed without a contributing module boot. What the catalog adds is the app's *declaration*: an optional contract is either `provided` or `absent` with a reason (RULE-81), and `checkAppContract` and `composer verify` hold it to the code.
 
 The **required** rows are registered by the shell's own packages — the `shell` and `ui` DI groups — so an app only composes those groups. The **optional** rows are what an app or a module contributes:
 
@@ -188,7 +189,6 @@ The **required** rows are registered by the shell's own packages — the `shell`
 | `language_storage` | `ILanguageStorage` | required | boot throws "ILanguageStorage is not registered" |
 | `theme_storage` | `IThemeStorage` | required | boot throws "IThemeStorage is not registered" |
 | `boot_storage` | `AppBootStorage` | required | the first-launch rule cannot run |
-| `ssl_pinning` | `SslPinningConfig` | required | certificate pinning is skipped and an ERROR is logged; it must be bound in its own right, never as a supertype (RULE-14) |
 | `app_router` | `AppRouter` | required | boot throws "AppRouter is not registered" |
 | `deeplink_provider` | `DeeplinkProvider` | required | boot throws "DeeplinkProvider is not registered" |
 | `theme_provider` | `ThemeProvider` | required | boot throws "ThemeProvider is not registered" |
@@ -199,7 +199,7 @@ The **required** rows are registered by the shell's own packages — the `shell`
 | `sign_in` | `ISignInLocation` | optional, bundle `session` | the shell never redirects a signed-out user |
 | `routes` | `IFeatureRouteModule` | optional, collected | the router has no stack routes |
 | `tabs` | `INavDestinationModule` | optional, collected | the router opens one placeholder route (`/_empty_dashboard`) |
-| `dashboard` | `IDashboardRouteModule` | optional | the destinations render without any chrome |
+| `dashboard` | `IDashboardRouteModule` | optional | the destinations render without any chrome — with two or more tabs none after the first can be reached (`C12`) |
 | `entry` | `IAppEntryLocation` | optional | there is no first-launch entry; boot goes to the sign-in check |
 | `post_sign_in` | `IPostSignInLocation` | optional | after sign-in the router opens its fallback, the first tab |
 | `splash` | `IAppSplashScreen` | optional | the native splash is kept through boot |
@@ -343,7 +343,7 @@ Resolution order in the generated `injection.config.dart`:
 | 1 | `_coreModules` | `core_common`, `core_network` (registers `DioFailureClassifier` into `ErrorHandler` here), `core_storage`, `core_database`, `core_di` |
 | – | the app's own `lib/` | `FirebaseModule` — per-flavour `FirebaseOptions` ([`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)) |
 | 2 | `_notificationsModules` | `core_notifications` — its eager `PushNotificationService` injects those `FirebaseOptions`, so it must come after them |
-| 3 | `_shellModules` | `platform_shell_adapters` — `ILanguageStorage`, `IThemeStorage`, `AppBootStorage`, `NetworkConfig`, `SslPinningConfig`; then `platform_app_shell` — `AppRouter`, `DeeplinkProvider` |
+| 3 | `_shellModules` | `platform_shell_adapters` — `ILanguageStorage`, `IThemeStorage`, `AppBootStorage`, `NetworkConfig`; then `platform_app_shell` — `AppRouter`, `DeeplinkProvider` |
 | 4 | `_uiModules` | `core_base_ui` |
 | 5 | `_domainModules` → `_dataModules` → `_featureModules` → `_otherModules` | `domain_core`, then each module's domain package; `data_core`, then each module's data package; each module's feature package; provider / bloc state management |
 
@@ -401,7 +401,7 @@ A package that opens a database runs after everything that contributes a migrati
 
 Or let a test read them: each app's `test/di_smoke_test.dart` runs its generated `configureDependencies()` for every flavor, with the plugins replaced by test doubles (storage in memory, a temp directory for `path_provider`, FlutterFire's Firebase core test API and stubbed messaging / local-notification channels in `apps/mobile`), then builds every lazy singleton and calls `checkAppContract` for it: every required contract, every optional one declared `provided` or `absent` in the manifest, a screen, unique tab orders and an `AppRouter.router` that assembles. CI's Gate 3 runs it like any package test. Swapping `shell` and `ui` makes it fail with exactly the boot error below.
 
-Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers (through `platform_shell_adapters`). The smoke test also requires `AppBootStorage`, `NetworkConfig` and `SslPinningConfig`, and that `core_network`'s `DioFailureClassifier` registered itself with `ErrorHandler` during the `core` group. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `ISessionGateway` at call time instead, and has no cross-module constructor dependency.)
+Real example: `core_base_ui`'s `ThemeProvider` injects `IThemeStorage`, which the `shell` group registers (through `platform_shell_adapters`). The smoke test also requires `AppBootStorage` and `NetworkConfig`, and that `core_network`'s `DioFailureClassifier` registered itself with `ErrorHandler` during the `core` group. That is why `shell` is listed before `ui` in every app's `di_groups` — reverse them and boot throws. (`NetworkConfigImpl` used to be the example here, injecting `AuthLocalDataSource` from a later module. It now resolves `ISessionGateway` at call time instead, and has no cross-module constructor dependency.)
 
 A worked example of the direction that is safe. `ThemeStorageImpl` is an eager `@Singleton(as: IThemeStorage)` in the `shell` group. Its only constructor dependency is `StorageManager`, which `core_storage` registered in group 1 — the correct direction. If it also injected, say, `AuthLocalDataSource` from `data_auth` (group 6), boot would throw on every launch. The fix is one word — make it `@LazySingleton` — or, better, not to depend on a module at all.
 
@@ -426,13 +426,13 @@ class NetworkConfigImpl implements NetworkConfig {
 late final GoRouter router = GoRouter( … );
 ```
 
-The `GoRouter` — and the `getAllOrEmpty<IFeatureRouteModule>()` calls inside it — is not evaluated until something first reads `.router`. By then every feature module has registered. Had `router` been a plain field, the router would be assembled during step 2 and would collect **zero** feature routes.
+The `GoRouter` — and the `getAllOrEmpty<IFeatureRouteModule>()` calls inside it — is not evaluated until something first reads `.router` — `checkAppContract`, right after DI (`C07`). By then every feature module has registered. Had `router` been a plain field, the router would be assembled during step 2 and would collect **zero** feature routes.
 
 ---
 
 ## 4. Shell adapters
 
-The shell implements the contracts that core packages declare but cannot satisfy themselves. The implementations live in their own package, `platform_shell_adapters` (`platform/shell/adapters/`), registered first in the `shell` DI group. Each owns its own `StorageValue` and keeps its keys in `platform/shell/adapters/lib/src/utils/`. `NetworkConfigImpl` shows `core_ui_kit`'s `RetryDialog` on a timeout — the one reason the package depends on the ui group. Three of the adapters read the app's profile through an optional constructor parameter: `NetworkConfigImpl` the `SslPinningPolicy` and the `LocaleProfile`, `LanguageStorageImpl` the `LocaleProfile` (the language a first launch opens in), `ThemeStorageImpl` the `ThemeProfile` (the mode nothing stored falls back to).
+The shell implements the contracts that core packages declare but cannot satisfy themselves. The implementations live in their own package, `platform_shell_adapters` (`platform/shell/adapters/`), registered first in the `shell` DI group. Each owns its own `StorageValue` and keeps its keys in `platform/shell/adapters/lib/src/utils/`. `NetworkConfigImpl` shows `core_ui_kit`'s `RetryDialog` on a timeout — the one reason the package depends on the ui group. Three of the adapters read the app's profile through an optional constructor parameter: `NetworkConfigImpl` the `LocaleProfile`, `LanguageStorageImpl` the `LocaleProfile` (the language a first launch opens in), `ThemeStorageImpl` the `ThemeProfile` (the mode nothing stored falls back to).
 
 | File | Implements | Owns | Registration |
 |:--|:--|:--|:--|
@@ -440,25 +440,10 @@ The shell implements the contracts that core packages declare but cannot satisfy
 | `language_storage_impl.dart` | `ILanguageStorage` | `locale` (pref) | same |
 | `app_boot_storage.dart` | — | `viewed_onboard` (pref) | `@singleton` + `@PostConstruct(preResolve: true)` |
 | `network_config_impl.dart` | `NetworkConfig` | — | `@LazySingleton(as: NetworkConfig)` |
-| `network_binding_module.dart` | binds `SslPinningConfig` | — | `@module` |
 
-### Why `SslPinningConfig` needs a separate binding
+### Pinning is not an adapter
 
-`NetworkConfig implements SslPinningConfig`, but **GetIt resolves by exact registered type and does not walk the supertype chain**. Register only `as: NetworkConfig` and `getItOrNull<SslPinningConfig>()` returns `null`, so `AppInitializer` skips pinning entirely — silently, on every flavor.
-
-The second type therefore needs its own module binding, the same dual-registration pattern `feature_auth` uses for `ISessionStatusStream`:
-
-```dart
-@module
-abstract class NetworkBindingModule {
-  @lazySingleton
-  SslPinningConfig bindSslPinningConfig(NetworkConfig config) => config;
-}
-```
-
-The parameter is typed `NetworkConfig`, so the upcast is compiler-checked — no `as` cast.
-
-What the binding hands out is the app's own decision: `NetworkConfigImpl.sslPinningHashes` is `SslPinningPolicy.hashesFor(flavor)`, the pins (or the empty list of a `disabled` flavor) the manifest declares under `flavors.<f>.ssl_pinning` — never a constant in this package.
+`NetworkConfig` carries no pin. The decision is the app's — `flavors.<f>.ssl_pinning` in the manifest, carried by `SslPinningPolicy` — and `AppInitializer.initBeforeRunApp` installs it from the profile before DI starts, so it needs neither a registration nor a binding and cannot be lost to a missing one ([`08_networking.md` § 10](../guides/08_networking.md#10-turn-on-ssl-pinning)). The `SslPinningConfig` supertype and its `@module` binding were removed for that reason: there is one pin source, the profile.
 
 ---
 

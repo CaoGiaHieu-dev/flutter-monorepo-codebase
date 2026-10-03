@@ -69,23 +69,23 @@ Deferring is safe whenever every consumer is itself lazy — nothing resolves it
 ## ⚠️ Trap 2 — GetIt does not resolve supertypes
 
 GetIt looks up the **exact** type a binding was registered under; it never walks the
-supertype chain. Registering `@LazySingleton(as: NetworkConfig)` therefore leaves
-`getItOrNull<SslPinningConfig>()` returning `null` even though `NetworkConfig implements
-SslPinningConfig` — and certificate pinning then silently no-ops.
+supertype chain. Registering `@lazySingleton` on `AuthProvider` therefore leaves
+`getItOrNull<ISessionState>()` returning `null` even though `AuthProvider implements
+ISessionState` — and the shell then treats every user as signed out.
 
-Bind the second type explicitly with a `@module` (`platform/shell/adapters/lib/di/network_binding_module.dart`):
+Bind the second type explicitly with a `@module` (`modules/auth/feature/lib/di/module.dart`):
 
 ```dart
 @module
-abstract class NetworkBindingModule {
+abstract class AuthDiModule {
   @lazySingleton
-  SslPinningConfig bindSslPinningConfig(NetworkConfig config) => config;
+  ISessionState bindISessionState(AuthProvider provider) => provider;
 }
 ```
 
-Typing the parameter as `NetworkConfig` makes the upcast compiler-checked — no `as` needed.
-The same dual-registration pattern binds `ISessionStatusStream`, `ISessionState` and
-`ISessionRefreshListenable` in `modules/auth/feature/lib/di/module.dart`.
+Typing the parameter as `AuthProvider` makes the upcast compiler-checked — no `as` needed.
+The same dual-registration pattern binds `ISessionStatusStream` and
+`ISessionRefreshListenable` in that file.
 
 ### Third-party SDKs go through `@module` too
 
@@ -225,7 +225,7 @@ A new per-app value is a profile section or a manifest key, never a constant in 
 
 ### Step 3b: Declare what the app registers for the shell
 
-If the package registers a contract the shell catalogues (`kShellContracts`: a splash, tabs, routes,
+If the package registers a contract the shell catalogues (`SHELL_CONTRACTS`: a splash, tabs, routes,
 a session, an entry location, an `IErrorReporter`, `IAnalytics`, …), every app that composes it
 declares the contract `provided` under `capabilities:` in `app_manifest.yaml`, and `absent` with a
 reason where it does not (RULE-81). `composer verify` (V3) names the key and prints the line to paste;

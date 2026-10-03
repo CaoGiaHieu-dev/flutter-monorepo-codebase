@@ -396,7 +396,7 @@ Future<void> configureDependencies({String? environment}) async {
 > boots the real graph in CI (Gate 3) and catches it.
 >
 > **RULE-14** — GetIt does not resolve supertypes: bind a second interface through an `@module`
-> (see `platform/shell/adapters/lib/di/network_binding_module.dart`).
+> (see `modules/auth/feature/lib/di/module.dart`).
 
 ---
 

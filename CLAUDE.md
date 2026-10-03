@@ -171,7 +171,7 @@ observe     IErrorReporter · IAnalytics                      (register one in t
 ```
 
 What an app does with each row is declared in its manifest `capabilities:` (RULE-81); the table of rows is
-`kShellContracts` — `composer describe --catalog` prints it.
+`SHELL_CONTRACTS` (21 rows) — `composer describe --catalog` prints it.
 
 A module's contracts *for other features* (its navigator, action handlers) live in its own
 `modules/<id>/api` package (`auth_api`, `home_api`) — RULE-04, RULE-22, RULE-25.

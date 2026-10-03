@@ -426,7 +426,7 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
 - [ ] Env file for the target flavor exists (`apps/mobile/env.prod` for prod — see [§6](#6-flavors-and-env-files))
 - [ ] `Config.yaml` complete; credential JSON/`.p8` files present at the configured paths
 - [ ] `flutter analyze` clean and package tests pass — `pr_quality_check.yml` gates this on PRs, but the release pipelines do not (see [`01_cicd.md`](01_cicd.md#6-the-quality-gate))
-- [ ] `sslPinningHashes` populated if this build faces production traffic — it defaults to `const []`, which disables pinning entirely
+- [ ] `flavors.prod.ssl_pinning` in the app's manifest holds real pins if this build faces production traffic — the template apps declare `disabled` with a reason, which leaves traffic unpinned
 - [ ] Changelog written
 - [ ] Build number does not collide with an existing release
 

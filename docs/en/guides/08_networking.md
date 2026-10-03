@@ -273,9 +273,9 @@ flavors:
     ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
 ```
 
-`composer verify` refuses a flavor with no decision where a declared platform can pin (Android, iOS), a pin that is not the base64 of 32 bytes and fewer than two pins (V9). The decision reaches the client as `SslPinningPolicy`, which `NetworkConfigImpl.sslPinningHashes` reads. Where pinning cannot apply — the web, where the browser owns TLS, and desktop, where the pinning plugin has no implementation — the app logs one `INFO` line and the key is refused as dead.
+`composer verify` refuses a flavor with no decision where a declared platform can pin (Android, iOS), a pin that is not the base64 of 32 bytes and fewer than two pins (V9). The decision reaches the client as the app's `SslPinningPolicy` (`AppFacts.sslPinning`), which `AppInitializer.initBeforeRunApp` reads before DI starts and installs as the global `HttpOverrides` — it is the only pin source, so there is nothing to register or bind. Where pinning cannot apply — the web, where the browser owns TLS, and desktop, where the pinning plugin has no implementation — the app logs one `INFO` line and the key is refused as dead.
 
-Pinning also needs `SslPinningConfig` bound in its own right, which `platform/shell/adapters/lib/di/network_binding_module.dart` already does (RULE-14). Keep that binding: without it pinning is skipped on every flavor, production included ([`../architecture/06_app_shell.md` § 4](../architecture/06_app_shell.md#why-sslpinningconfig-needs-a-separate-binding)). When pinning is installed, and which builds bypass it: [`../architecture/02_core.md` § 6](../architecture/02_core.md#when-pinning-is-installed-and-when-it-is-skipped).
+Pinning needs no DI binding: `AppInitializer` reads the profile, never the graph, so a pin decision cannot be lost to a missing registration. When pinning is installed, and which builds bypass it: [`../architecture/02_core.md` § 6](../architecture/02_core.md#when-pinning-is-installed-and-when-it-is-skipped).
 
 ---
 
@@ -288,7 +288,7 @@ cd platform/infra/network && flutter test                # the interceptor tests
 cd apps/mobile && flutter test test/di_smoke_test.dart   # your data source resolves; DioFailureClassifier is registered
 ```
 
-Test a repository against a fake data source, as `modules/auth/data/test/` does, rather than against a live server. On a device, a debug build logs every request and response through `LoggingInterceptor` (tag `NetworkConstants.CLIENT_LOG_TAG`), with credentials redacted. When pinning is off or unregistered, the log shows an `ERROR` tagged `Security`.
+Test a repository against a fake data source, as `modules/auth/data/test/` does, rather than against a live server. On a device, a debug build logs every request and response through `LoggingInterceptor` (tag `NetworkConstants.CLIENT_LOG_TAG`), with credentials redacted. When a flavor has no pin decision the log shows an `ERROR` tagged `Security`, and a `disabled` one a `WARNING` with its declared reason.
 
 Review checklist:
 
@@ -298,7 +298,7 @@ Review checklist:
 - [ ] Login, refresh, and any call whose `401` is not "session expired" set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] `NetworkConfig` impl stays `@LazySingleton` (never eager)
 - [ ] `flavors.prod.ssl_pinning` (and staging) decided in the manifest — ≥2 pins, or `disabled` with a reason — before shipping
-- [ ] `SslPinningConfig` bound explicitly in a `@module` — check `platform_shell_adapters`' generated `lib/di/module.module.dart`
+- [ ] `composer verify` is clean (V9 holds the pin decision) and `cd platform/foundation/common && flutter test test/pin_policy_matrix_test.dart` passes
 - [ ] No credential ever logged verbatim
 
 ## Troubleshooting
@@ -311,7 +311,7 @@ Review checklist:
 | A `401` reaches the UI although the backend supports refresh | No `ISessionGateway` is registered, so no refresh interceptor is installed | Implement and register one (step 9) |
 | The user is signed out after a network blip | `refreshToken()` returned `null` for a transient error | Throw for "no answer" and return `null` only for a refusal (step 9) |
 | The server ignores the locale | It reads `Accept-Language`; the client sends the non-standard `language` header | Read `language` on the server |
-| `ERROR` log: `SSL pinning skipped` | A boot without an app profile, or `SslPinningConfig` is not bound | Pass the profile (`runShellApp`), decide the flavor in the manifest and keep the binding (step 10) |
+| `ERROR` log: `SSL pinning has no decision for flavor …` | The flavor has no `ssl_pinning` entry in the manifest (V9 and the boot check `P04` refuse that where a platform can pin) | Declare `pins:` or `disabled` with a reason under `flavors.<f>.ssl_pinning` and run `composer sync` (step 10) |
 | `WARNING` log: `SSL pinning is disabled for flavor …` | The flavor's decision is `disabled` — the declared reason is in the log | Declare `pins:` (step 10) when the flavor should pin |
 | Two packages register the same named client and boot throws | A name can be registered once per container | Move the registration into `platform/infra/network/lib/di/network_module.dart` (step 7) |
 

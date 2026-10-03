@@ -55,7 +55,7 @@ flavors:                       # closed set: dev | staging | prod
 
 env:
   BASE_URL: { required_in: [prod] }
-  APP_NAME: { required_in: [staging, prod] }
+  APP_NAME: { }                # optional: the title falls back to app.name
 
 platforms:
   windows: { runner: scaffold }
@@ -147,7 +147,7 @@ Type `const ShellHooks(` and the IDE lists the seven hooks, each documented with
 
 ## 6. Contracts: what the shell asks of an app
 
-The shell resolves 22 contracts through one catalog (`kShellContracts`): 8 **required** rows the shell's own packages register — an app composes the `shell` and `ui` groups and gets them — and 14 **optional** rows an app or a module contributes. An app declares each optional row, and `describe --catalog` lists them with what the shell does without each:
+The shell resolves its contracts through one catalog, `SHELL_CONTRACTS` (`platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart`): **required** rows the shell's own packages register — an app composes the `shell` and `ui` groups and gets them — and **optional** rows an app or a module contributes (7 and 14 today; `describe --catalog` prints the live table, which is the count to trust). An app declares each optional row, and `describe --catalog` lists them with what the shell does without each:
 
 ```yaml
 capabilities:
@@ -166,6 +166,8 @@ class CrashlyticsErrorReporter implements IErrorReporter { … }
 
 After that, declare it `provided`. Declaring a contract the code does not register, or registering one the manifest says is absent, fails at three places: `composer verify` (V3, statically, naming the file), the smoke test (`checkAppContract`, from the graph the app builds) and boot in a debug build.
 
+Tabs have one more rule. An app that composes **two or more** `INavDestinationModule`s needs a `dashboard` (`IDashboardRouteModule`, the sample is `feature_dashboard`): it draws the chrome that switches between tabs, and without it only the first tab is reachable. `checkAppContract` says so (`C12`) in the smoke test and in a debug boot. One tab renders fine without a dashboard (`apps/admin`). To add the dashboard: `- { id: dashboard, layers: [feature] }` under `modules:`, `dashboard: provided` under `capabilities:`, then `composer sync`.
+
 What an app must register for a package it composes — `FirebaseOptions` for `core_notifications`, one per flavor — is listed in the report under *This app must provide*, and V10 fails if it is missing. Native settings (`google-services.json`, `aps-environment`) are documented there and not checked.
 
 ## 7. Recipes
@@ -176,7 +178,7 @@ What an app must register for a package it composes — `FirebaseOptions` for `c
 2. Declare it, runner still to be created: `platforms.<p>: { runner: scaffold }`, then `dart tools/composer/composer.dart sync --app <id>`.
 3. Create the runner once, with the line the report prints, e.g. `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .`, and change the declaration to `runner: committed`. A declared `committed` runner needs its folder, a `scaffold` one must not have it (V6).
 4. Set what the platform enables, if the default is not right: `push`, `deep_links`, `orientation`, and for a desktop platform `window: { initial: [1440, 900], min: [1024, 700] }`, which needs the `configureWindow` hook (`P05` otherwise). A platform that switches push or deep links off logs one line naming the key and initialises nothing.
-5. Run `composer verify` and the smoke test. On the web there is no `--flavor` option: pass `--dart-define=FLUTTER_APP_FLAVOR=<flavor>`.
+5. Run `composer verify` and the smoke test. On the web there is no `--flavor` option: pass `--dart-define=APP_FLAVOR=<flavor>` — the Flutter tool refuses the framework's own `FLUTTER_APP_FLAVOR`, and the shell reads `APP_FLAVOR` on the web only.
 
 ### Pin certificates
 
@@ -236,6 +238,8 @@ Then, from the repository root: `flutter pub get`, `dart run build_runner build 
 | V12 | the entry point passes `profile:`; `test/di_smoke_test.dart` exists and calls `checkAppContract` |
 | V13 | the generated regions — `facts`, `report`, `imports`, `modules` — equal regeneration |
 | V14 | no reason is empty, `TODO` or `TBD` |
+| V15 | the `productFlavors` of a committed Android runner and the flavor schemes of a committed iOS runner are the flavors the manifest declares |
+| V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order (`core` → `notifications` → `shell` → `ui` → `domain` → `data` → `feature` → `other`) |
 
 Read a message from left to right: `<file>: <key>: <problem> — <the fix>`. The scan behind V3 and V10 reads source, not the graph — a hand-written `getIt.register…` is invisible to it — so `checkAppContract` stays the authority. V3, V10, V11 and V12 fail `verify` while `sync` only warns and still writes, so a half-finished edit can be regenerated; V7 and V8 refuse in both.
 

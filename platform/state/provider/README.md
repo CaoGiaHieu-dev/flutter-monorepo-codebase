@@ -21,53 +21,40 @@ It removes the boilerplate of moving between Loading, Success and Error while ca
 
 ## 🚀 1. Automation through `executeOperation`
 
-A ViewModel does not toggle loading or map results by hand. It delegates that to `executeOperation`, built into `BaseProvider`:
+A ViewModel does not toggle loading or map results by hand. It delegates that to `executeOperation`, a protected method of `BaseProvider` (the sample is `AuthProvider`):
 
 ```dart
-import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
-import 'package:injectable/injectable.dart';
-import 'package:provider_state_management/provider_state_management.dart';
+// modules/auth/feature/lib/src/provider/auth_provider.dart (abridged)
+Future<void> login(String email, String password) async {
+  await executeOperation(
+    OperationConfig(
+      operation: () =>
+          _loginUseCase(LoginParams(email: email, password: password)),
+      onSuccess: (user) async {
+        DynamicLogger.log('Login successful for user: ${user?.name}');
+      },
+      // Map a Domain failure to the feature's error state.
+      errorStateBuilder: mapAuthFailure,
+    ),
+  );
+}
 
-import 'auth_error_state.dart';
-
-@injectable
-class LoginProvider extends BaseProvider<UserEntity> {
-  LoginProvider(this._loginUseCase);
-
-  final LoginUseCase _loginUseCase;
-
-  Future<void> login(String email, String password) async {
-    await executeOperation(
-      OperationConfig(
-        operation: () =>
-            _loginUseCase(LoginParams(email: email, password: password)),
-        // Defaults to true. Switches to `loading` only while the provider has
-        // NO data yet — with data present the view keeps it instead of
-        // flashing a spinner over it.
-        showLoading: true,
-        onSuccess: (user) async {
-          // Handle success (e.g. logging, analytics).
-        },
-        // (Optional) map a Domain failure to a UI error (Custom Error State).
-        errorStateBuilder: (failure) => failure.whenOrNull(
-          // ErrorHandler: HTTP 401/403 → AuthFailure, other 4xx/5xx → ServerFailure.
-          auth: (message, code, data) => code == 401
-              ? const AuthErrorState.invalidCredentials()
-              : AuthErrorState.serverError(message: message, code: code),
-          server: (message, code, data) => code == 404
-              ? const AuthErrorState.userNotFound()
-              : AuthErrorState.serverError(message: message, code: code),
-        ),
-      ),
-    );
-  }
+/// ErrorHandler: HTTP 401/403 arrives as an AuthFailure, every other 4xx/5xx
+/// as a ServerFailure; a network failure has no HTTP status.
+static ErrorState? mapAuthFailure(AppFailure<dynamic> failure) {
+  return switch (failure) {
+    AuthFailure(code: 401) => const AuthErrorState.invalidCredentials(),
+    ServerFailure(code: 404) => const AuthErrorState.userNotFound(),
+    _ => AuthErrorState.failed(code: failure.code),
+  };
 }
 ```
 
 Behaviour worth knowing (`platform/state/provider/lib/src/management/operation_executor.dart`):
 
+- **Loading** → `showLoading` (default `true`) switches to `loading` only while the provider has no data yet — with data present the view keeps it instead of flashing a spinner over it.
 - **Success** → `ViewState.success()` with the data. When the result type `R` differs from the provider's state type `T`, pass `convert:` to `executeOperation`.
-- **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))` with `message = failure.message`. This emission is **forced**, so two identical failures in a row (the user taps Retry while still offline) both reach listeners.
+- **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))` with `message = failure.message` (an English diagnostic for logs, not user text — show a translated sentence, RULE-34). This emission is **forced**, so two identical failures in a row (the user taps Retry while still offline) both reach listeners.
 - **`none` / `cancel`** → the state is left untouched — including a `loading` state `showLoading` just set.
 - `executeOperation` does **not** try-catch: it handles `Result.failure`, while an exception thrown by `operation` propagates to the caller. Catching exceptions is the job of `BaseRepository.execute()` in the Data layer.
 - A local `onSuccess` / `onFailure` **replaces** the global callback installed through `OperationGlobalConfig.instance.setup(...)` for that call; the global `onStart` / `onFinish` always run.
@@ -137,36 +124,26 @@ Use **`ProviderStateListener`** (or `MultiProviderStateListener` with a list of 
 - `listenWhen: (previous, current) => …` filters further; `onStateChanged` fires before the specific callbacks; `onLoading` and `onLoadingMore` also exist.
 
 ```dart
+// modules/auth/feature/lib/src/pages/login_page.dart (abridged)
+void _onLoginFailed(BuildContext context, ErrorState? error, String? _) {
+  if (error == const AuthErrorState.invalidCredentials()) {
+    _passwordController.clear();
+  }
+}
+
 @override
 Widget build(BuildContext context) {
   return ProviderStateListener<AuthProvider, UserEntity>(
-    // Catch and show feature-specific business errors
-    onError: (context, error, message) {
-      final l10n = context.l10n; // core_base_ui's global strings
-      if (error is AuthErrorState) {
-        error.maybeWhen(
-          invalidCredentials: () =>
-              AppOverlay.showToast(content: l10n.invalidCredentials),
-          serverError: (serverMessage, code) =>
-              AppOverlay.showToast(content: serverMessage),
-          orElse: () =>
-              AppOverlay.showToast(content: message ?? l10n.somethingWentWrong),
-        );
-      } else {
-        AppOverlay.showToast(content: message ?? l10n.somethingWentWrong);
-      }
-    },
-    // Fires on success. Do not navigate here: the app shell listens to the
-    // session and changes route itself (see feature_auth's LoginPage).
-    onSuccess: (context, user) {
-      AppOverlay.showToast(content: context.l10nAuth.welcomeBack);
-    },
+    onError: _onLoginFailed,
     child: Scaffold(
       body: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
-          return MyLoginForm(
+        builder: (context, authProvider, _) {
+          return AuthFormWidget(
+            emailController: _emailController,
+            passwordController: _passwordController,
+            submitButtonText: context.l10nAuth.signIn,
             isLoading: authProvider.isLoading,
-            onSubmit: (email, password) => authProvider.login(email, password),
+            onSubmit: _onLoginPressed,
           );
         },
       ),
@@ -175,7 +152,7 @@ Widget build(BuildContext context) {
 }
 ```
 
-> In this template `AuthProvider` is a global singleton, and the app shell (`NavigatorWrapperWidget`) **already** toasts sign-in failures through `ISessionState`. The snippet illustrates the API; applied verbatim to `AuthProvider` it would toast twice.
+> The page only clears the password field: the app shell (`NavigatorWrapperWidget`) **already** shows every sign-in failure as a translated toast, through `ISessionState`, so a toast here would repeat it. For a toast of your own, call `AppOverlay.showToast(content: ...)` with a translated string.
 
 ---
 
@@ -185,6 +162,7 @@ When a call fails, the Domain layer returns an `AppFailure`. The UI layer should
 
 **`auth_error_state.dart` with Freezed** (the real file: `modules/auth/feature/lib/src/provider/auth_error_state.dart`):
 ```dart
+// modules/auth/feature/lib/src/provider/auth_error_state.dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
@@ -195,11 +173,13 @@ abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
+
   const factory AuthErrorState.userNotFound() = _UserNotFound;
-  const factory AuthErrorState.serverError({
-    required String message,
-    int? code,
-  }) = _ServerError;
+
+  /// Anything else — offline, a timeout, a 5xx, a locked account (403).
+  /// [code] is the failure's `ErrorCodes` / HTTP status, which picks the
+  /// translated sentence.
+  const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```
 
@@ -212,6 +192,7 @@ abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
 When `NewsProvider` must reload whenever the user changes language, recreate it at the routing layer, keyed by the value it depends on. `LanguageProvider` belongs to `core_base_ui` and is mounted at the app root (`AppMaterialWrapper`), so any feature may read it:
 
 ```dart
+// Illustrative: there is no NewsRoute or NewsProvider in this repository.
 @TypedGoRoute<NewsRoute>(path: NewsPath.NEWS)
 class NewsRoute extends GoRouteDataCustom with $NewsRoute {
   const NewsRoute();

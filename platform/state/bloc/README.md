@@ -32,6 +32,8 @@ The barrel `package:bloc_state_management/bloc_state_management.dart` re-exports
 
 Combine it with pattern matching (`when` / `maybeWhen`) on the Freezed state for a type-safe UI. `BlocViewState`'s variants are private, so use `when` / `maybeWhen` / `whenOrNull` on it rather than a `switch`.
 
+> The `LoginBloc` snippets on this page are illustrative: this template's login screen uses Provider. The BLoC sample is `HomeProfileBloc` (§ 4), and the module generator's BLoC template shows `emitResult`.
+
 **Declaring a Bloc with `BlocViewState` (simple example):**
 ```dart
 import 'package:bloc_state_management/bloc_state_management.dart';
@@ -120,7 +122,7 @@ Widget build(BuildContext context) {
           getItOrNull<HomeNavigator>()?.toHome(context);
         },
         error: (failure) {
-          AppOverlay.showToast(content: failure.message);
+          AppOverlay.showToast(content: context.l10n.failureMessage(failure.code));
         },
         orElse: () {},
       );
@@ -196,7 +198,7 @@ class LoginBloc extends BaseBloc<LoginEvent, LoginState> {
   ///
   /// `ErrorHandler` turns HTTP 401/403 into an `AuthFailure` and a
   /// connection error / timeout into a `NetworkFailure`.
-  static LoginError _toLoginError(AppFailure failure) => switch (failure) {
+  static LoginError _toLoginError(AppFailure<dynamic> failure) => switch (failure) {
     AuthFailure() || ValidationFailure() => LoginError.invalidCredentials,
     NetworkFailure() => LoginError.network,
     _ => LoginError.unknown,

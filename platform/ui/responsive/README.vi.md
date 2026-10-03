@@ -25,22 +25,20 @@ Toàn bộ việc scale đi qua `BuildContext`. Đây không phải quy ước v
 
 ## 🚀 1. Khởi tạo
 
-Đã được wire sẵn ở `platform/shell/app_shell/lib/src/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Cấu hình thật của app (đã lược bớt comment) — không truyền `designSize`, nên mặc định của package, artboard điện thoại `375x812`, là artboard duy nhất trong repository:
+Đã được wire sẵn ở `platform/shell/app_shell/lib/src/main_scope.dart`. Feature **không bao giờ** tự mount `ResponsiveInit` của riêng mình. Thứ nó truyền vào là `DisplayProfile` của app (`AppProfile.display`, đặt trong `lib/app/app_profile.dart` của app): artboard, chính sách scale của từng window class và chế độ split-screen. Mặc định của template là artboard điện thoại `375x812`, class `expanded` vẽ 1:1 (`ScaleBounds.fixed()`), mọi class khác chỉ co lại:
 
 ```dart
-// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build (comments trimmed)
 return ResponsiveInit(
-  // No `designSize`: the 375x812 default is the app's artboard.
-  // …
-  profiles: const {
-    // …
-    WindowSizeClass.expanded: ResponsiveProfile(
-      scaleBounds: ScaleBounds.fixed(),
-      textScaleBounds: ScaleBounds.fixed(),
-    ),
+  designSize: Size(display.designSize.width, display.designSize.height),
+  profiles: {
+    for (final entry in display.scale.entries)
+      WindowSizeClass.values.byName(entry.key.name): _profileOf(
+        entry.value,
+      ),
   },
   // Keeps height scaling sane when the app is a short split-screen pane.
-  splitScreenMode: true,
+  splitScreenMode: display.splitScreenMode,
   child: child,
 );
 ```
@@ -169,6 +167,6 @@ Việc assert là chủ đích. Âm thầm fallback về giá trị chưa scale 
 
 ## 🤖 6. Được máy kiểm tra
 
-`dart tools/arch_check/check.dart` — rule **R7**, Gate 1 của `pr_quality_check.yml` — quét mọi file có nhắc tới `core_responsive` (thực tế: import nó) trong `lib/` và **chặn merge** (exit 1) khi gặp bất kỳ bare sizing extension nào (`16.w`, `(x).sp`, …), in ra `file:line`. Rule này không phụ thuộc vào review.
+`dart tools/arch_check/check.dart` — Gate 1 của `pr_quality_check.yml` — **chặn merge** (exit 1), in ra `file:line`, với hai thứ (RULE-30): **R7**, bất kỳ bare sizing extension nào (`16.w`, `(x).sp`, …) hoặc một extension trên `num` khiến chúng compile được, trong mọi file viết tay dưới `lib/` của mọi package; và **R20**, một số thô trong constructor layout hoặc paint (`SizedBox(height: 16)`, `EdgeInsets.all(8)`, `fontSize: 14`) nằm ngoài `styles/` và `utils/` của package. R20 chỉ đọc theo từ vựng: số thô đi qua biến hoặc widget không nằm trong danh sách thì để review.
 
 Test của package nằm ở `platform/ui/responsive/test/`.

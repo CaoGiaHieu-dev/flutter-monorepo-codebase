@@ -152,7 +152,7 @@ Use this checklist to self-review your code.
 - [ ] **Pure Domain layer**: Does the Domain layer import `flutter`, `dart:ui`, `dio`, `retrofit` or any `core_*` package? (Forbidden.)
 
 ### 🧬 Per layer
-- **Core**: No direct `SharedPreferences` (go through `core_storage`'s `StorageManager` + `StorageValue<T>`). `platform/*` must NOT depend on `feature_*`, `data_*` or `domain_*` — except the three approved edges to `domain_core` (arch_check R1).
+- **Core**: No direct `SharedPreferences` (go through `core_storage`'s `StorageManager` + `StorageValue<T>`). `platform/*` must NOT depend on a package under `modules/`, nor on `domain_core` / `data_core` beyond the four approved edges (arch_check R1, RULE-01).
 - **Domain**: An `Entity` stays pure (no `statusCode`, `message`). A `Repository` returns `Future<Result<T>>`.
 - **Data**: A `RepositoryImpl` `implements` the Domain interface and wraps every call in `BaseRepository`'s `execute()` / `executeSync()` (`data_core`).
 - **Presentation**: A `Provider` must NOT hold UI controllers. Async calls go through `executeOperation`.

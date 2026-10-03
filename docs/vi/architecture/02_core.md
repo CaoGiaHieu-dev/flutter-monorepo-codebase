@@ -52,7 +52,7 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 | App profile | `profile/` | Các kiểu một app dùng để tự mô tả với shell — `AppProfile`, `AppFacts`, `AppPlatform`, `PlatformFacts`, `SslPinningPolicy`, và các section tinh chỉnh có kiểu (`DisplayProfile`, `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile`); `registerAppProfile` đưa chúng vào locator. Ý nghĩa từng trường: [`06_app_shell.md`](06_app_shell.md#hồ-sơ-app), [`13_app_composition`](../guides/13_app_composition.md) |
 | Helper | `helpers/` | `TypeHelper`, `ValidationHelper` |
 | Extension cho String | `string_extension.dart` | `StringExtension` (`capitalize`, `isValidEmail`, `truncate`, …) và `StringPriceExtension` — không có định dạng `DateTime` hay `num`: ngày, giờ và tiền tệ phụ thuộc locale, nên hãy định dạng bằng `DateFormat` / `NumberFormat` của `intl` với locale hiện tại |
-| Hằng số | `utils/` | `EnvConstants` (`BASE_URL`, `WEB_DOMAIN`, `APP_NAME`), `ErrorCodes`, `ProfileConstants` (các define `ALLOW_UNDECLARED_PLATFORM` và `APP_FLAVOR`) |
+| Hằng số | `utils/` | `EnvConstants` (`BASE_URL`, `APP_NAME`), `ErrorCodes`, `ProfileConstants` (các define `ALLOW_UNDECLARED_PLATFORM` và `APP_FLAVOR`) |
 
 **`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ (`src/kernel.dart`) nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên; và `core_di`, cho `IAnalytics` tuỳ chọn mà `RouteAwareWidget` báo lượt xem màn hình tới. Nó không phụ thuộc gì trong nhóm `ui`.
 

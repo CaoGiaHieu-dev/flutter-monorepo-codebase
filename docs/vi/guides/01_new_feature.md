@@ -95,7 +95,7 @@ Nếu một bước thất bại, generator khôi phục mọi file dùng chung 
 
 ## 3. Làm quen với package
 
-Generator sinh ra cây thư mục dưới đây cho một feature Provider với route kiểu stack, cùng các file sinh tự động `module.module.dart`, `*.g.dart` và `gen/`. `widgets/` được tạo **rỗng**. Git không theo dõi thư mục rỗng, nên nó biến mất khỏi commit hay bản clone mới cho tới khi widget con đầu tiên được đặt vào.
+Generator sinh ra cây thư mục dưới đây cho một feature Provider với route kiểu stack, cùng các file sinh tự động `module.module.dart`, `*.g.dart` và `gen/`. Generator không tạo thư mục `widgets/`: bước barrel xoá các thư mục rỗng, nên hãy tạo `lib/src/widgets/` cùng với widget con đầu tiên của bạn.
 
 ```
 modules/profile/feature/
@@ -113,7 +113,7 @@ modules/profile/feature/
 │       ├── routing/              profile_route_module.dart (route có kiểu), rồi
 │       │                         profile_feature_route_module.dart hoặc profile_nav_destination.dart
 │       ├── utils/                profile_path.dart — hằng số thuộc sở hữu của package này
-│       └── widgets/              widget con *Widget / *Card (được tạo rỗng)
+│       └── widgets/              widget con *Widget / *Card (tạo khi cần)
 ├── pubspec.yaml
 └── test/                         profile_page_test.dart, profile_provider_test.dart
 ```
@@ -403,7 +403,7 @@ App phải chạy được khi xoá bất kỳ feature nào (RULE-05). Gỡ theo
 
 1. Dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó
 2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root
-3. Thư mục `modules/<tên>/feature/`
+3. Các thư mục package của module — `modules/<tên>/<layer>/` cho từng tầng nó có (`api`, `domain`, `data`, `feature`), rồi `modules/<tên>/`. `composer verify` báo lỗi với package còn trên đĩa mà không app nào ghép. Module chỉ là một feature thì chỉ có `modules/<tên>/feature/`
 4. `flutter pub get && dart run build_runner build --workspace`
 
 **Với module mẫu, hãy để tool làm.** `remove_sample.dart` thực hiện các bước trên. Quan trọng hơn, nó cho bạn biết điều mà danh sách thủ công ở trên không thể:

@@ -159,7 +159,7 @@ android {
   test('the app id is read from app: id: past comments and other keys', () {
     final ws = TempWorkspace.create({
       'apps/x/app_manifest.yaml':
-          '# comment\napp:\n  # the id\n  kind: flutter\n  id: phone\n'
+          '# comment\napp:\n  # the id\n  name: Phone\n  id: phone\n'
           'modules:\n  - { id: not_this }\n',
       'apps/x/lib/firebase/firebase_module.dart': module,
     });

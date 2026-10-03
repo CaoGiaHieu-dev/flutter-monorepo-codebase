@@ -161,11 +161,19 @@ packages:
 # Removal bundles
 # ---------------------------------------------------------------------------
 # A "feature" is never just its feature package. Each bundle lists everything
-# that travels with it. `breaks` records samples that stop working when this
-# bundle is removed — the part no document covered before.
+# that travels with it. `capabilities` lists the optional shell contracts
+# (ids of `kShellContracts`, or a bundle id such as `session`) the bundle is
+# the only provider of; `shared_capabilities` the ones it shares with another
+# module, which an app's DI smoke test (`checkAppContract`) names after the
+# removal if the last provider went. `breaks` records samples that stop
+# working when this bundle is removed — the part no document covered before.
 
 bundles:
   auth:
+    # The contracts this bundle is the *only* provider of: `remove_sample --apply`
+    # flips each of them in every app's `capabilities:` to `absent`.
+    capabilities: [session, tree_wrappers]
+    shared_capabilities: [routes, localization]
     # auth_api is KEPT while feature_onboarding / feature_settings import it
     # (remove_sample says so, and the manifests keep `{ id: auth, layers:
     # [api] }`); its two contracts then have no implementation. The session
@@ -183,6 +191,8 @@ bundles:
       - "feature_settings -> auth_api IAuthActionHandler (auth_api kept; getItOrNull; the logout row is hidden)"
 
   home:
+    capabilities: [post_sign_in]
+    shared_capabilities: [tabs]
     # home_api is KEPT while feature_onboarding imports it.
     packages: [feature_home, home_api]
     breaks: []
@@ -194,10 +204,13 @@ bundles:
       AppRouter falls back to an empty branch rather than crashing.
 
   settings:
+    shared_capabilities: [tabs, localization]
     packages: [feature_settings]
     breaks: []
 
   onboarding:
+    capabilities: [entry]
+    shared_capabilities: [routes]
     packages: [feature_onboarding]
     breaks: []
     note: >-
@@ -215,6 +228,7 @@ bundles:
       fixture first if you want to keep that coverage.
 
   dashboard:
+    capabilities: [dashboard]
     packages: [feature_dashboard]
     orphaned_contracts:
       - platform/foundation/contracts/lib/src/routing/i_dashboard_route_module.dart
@@ -224,6 +238,8 @@ bundles:
       navigationShell. apps/admin runs this way.
 
   splash:
+    capabilities: [splash]
+    shared_capabilities: [localization]
     packages: [feature_splash]
     orphaned_contracts:
       - platform/foundation/contracts/lib/src/app/i_app_splash_screen.dart

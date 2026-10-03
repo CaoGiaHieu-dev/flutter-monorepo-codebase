@@ -18,7 +18,8 @@ tools/
 ├── arch_check/                      # 🛡️ Enforces the layering rules (CI Gate 1)
 │   └── check.dart                   # R1-R15: dependency direction, pure-Dart domain, feature boundaries, scaling through context…
 ├── composer/                        # 🧩 Composes apps from app_manifest.yaml (CI Gate 0)
-│   ├── composer.dart                # sync / verify / list — generates the workspace list, app dependencies, injection.dart
+│   ├── composer.dart                # sync / verify / list / describe — generates the workspace list, app dependencies, injection.dart, facts, report
+│   ├── src/                         # manifest_v2 (schema), catalog, package_facts, facts_emit, report, checks, platform_notes
 │   └── bootstrap.dart               # Partial checkout: prunes absent members so `pub get` resolves (no package imports)
 ├── docs_check/                      # 📚 Every path the docs name must exist (CI Gate 5)
 │   ├── check.dart
@@ -175,6 +176,12 @@ dart tools/sample_cleanup/remove_sample.dart auth --verbose
 
 The dry-run also prints which other samples would break and where — information the manual
 feature-removal guide cannot give you.
+
+`--apply` also edits each app's `app_manifest.yaml` `capabilities:` block: a contract the bundle was
+the only provider of (`capabilities:` in the bundle, e.g. `splash` for the splash sample) flips from
+`provided` to `{ state: absent, reason: "sample <bundle> removed" }`, so `composer verify` stays
+green after `composer sync`. Contracts the bundle shared with another module (`shared_capabilities:`)
+are named in the next steps; an app's DI smoke test names any that lost their last provider.
 
 Both the dry-run and `--apply` count the documentation references (`docs/`, `.claude/`, every
 `*.md`) to paths about to be deleted. They are informational: after the removal,
@@ -439,6 +446,8 @@ R5 is the mirror image of `unused_checker`: that tool finds dependencies *declar
 ```bash
 dart tools/composer/composer.dart list              # every app and its composition
 dart tools/composer/composer.dart list --app admin  # one app only
+dart tools/composer/composer.dart describe --app mobile # the app report (what the README report region holds)
+dart tools/composer/composer.dart describe --catalog    # every manifest key, the shell contract catalog, the derived defaults
 dart tools/composer/composer.dart sync --app mobile # regenerate
 dart tools/composer/composer.dart verify            # CI gate 0 — fails on drift
 dart tools/composer/bootstrap.dart                  # partial checkout only — run before `flutter pub get`
@@ -447,6 +456,8 @@ dart tools/composer/bootstrap.dart                  # partial checkout only — 
 `--app <id>` narrows `list`, `sync` and `verify` alike; the root `workspace:` list is still computed from every app. An unknown flag, or `--app` without an id, exits `64`. A pubspec or manifest that is not valid YAML — usually a duplicate key — is refused by name, `file:line` and parser message, exit `1`, instead of crashing the tool.
 
 Every `app_manifest.yaml` is also **validated before any command runs**; each problem is printed as `apps/<id>/app_manifest.yaml: <key>: <problem>` (e.g. `di_groups[0].phase: expected \`before\` or \`after\`, got a string (\`befor\`)`), and the tool exits `1` having written nothing. Refused: a manifest that is empty or not a map; an unknown key at any level (`module:` for `modules:`); a missing or empty `di_groups`; a group without a `name` (a Dart identifier, unique per manifest) or with a `phase` other than `before`/`after`, or a `before` group after an `after` one; `packages` that is not a list; a `from_modules` that is not `domain`/`data`/`feature`, or a layer collected by two groups; a group with neither `packages` nor `from_modules`; a module that is not `{ id, layers }`, a duplicate module id, empty `layers`, a layer outside `domain`/`data`/`feature` or not collected by any group's `from_modules`; a package composed twice (by two groups, or by a group and `extra_dependencies`); and two manifests with the same `app.id`. Each of these used to crash with a stack trace or — worse — exit `0` having generated an `injection.dart` without the modules it silently dropped.
+
+**An app declares itself in its manifest.** Besides the composition (`di_groups`, `modules`), `app_manifest.yaml` says what the app *is*: `app.name`, `flavors` (and, for each flavor a platform can pin TLS on, an `ssl_pinning` decision — `pins` or `disabled` with a reason), `env` keys (`required_in` flavors, or `native_only`), `platforms` (each with `runner: committed | scaffold` and an optional `splash`), `capabilities` (every optional contract of the shell's catalog is `provided`, or `{ state: absent, reason }` — absence is a decision) and a `why` per DI group. `app.kind` is gone: it had no consumer, and composer refuses it with the removal message. `describe --catalog` prints every key with its default, what refuses it and the file that reads it. `sync` turns the declaration into const Dart in the `facts` region of `lib/app/app_profile.dart`, into the report in the `report` region of the app's `README.md`, and moves `configureDependencies` into the `modules` region of `injection.dart`, so the whole file is generated. `verify` refuses an incomplete declaration (`<file>: <key>: <problem>`, the line to paste where there is one) and any of the three regions that differs from regeneration; a package may carry `platforms:` and `composition.app_provides` in its own `pubspec.yaml`, which the report reads.
 
 Three things had to agree and were maintained by hand: the root `workspace:` list, an app's path dependencies, and its `lib/di/injection.dart`. Adding a module meant editing all three in step, and getting it wrong fails at boot with `"<Type> is not registered"` — invisible to `flutter analyze`.
 
@@ -460,7 +471,7 @@ Packages are resolved by **name**, discovered by scanning for `pubspec.yaml`. No
 
 `--strict` (implied by `verify`) turns "a manifest names a module that is not on disk" from a warning into an error. Without it, `sync` composes what it can find — which is what lets a developer work with only their own module checked out.
 
-Both `sync` and `verify` also **refuse**, exit `1`, when a file they generate into — the root `pubspec.yaml`, an app's `pubspec.yaml` or `lib/di/injection.dart` — is missing, or has lost a region's `composer:managed:<region>` / `composer:end:<region>` marker. They name the file and the marker, and `sync` writes nothing. A missing marker used to be a warning followed by "up to date": deleting one and hand-editing what it had guarded passed Gate 0.
+Both `sync` and `verify` also **refuse**, exit `1`, when a file they generate into — the root `pubspec.yaml`, an app's `pubspec.yaml`, `lib/di/injection.dart`, `lib/app/app_profile.dart` or `README.md` — is missing, or has lost a region's `composer:managed:<region>` / `composer:end:<region>` marker. They name the file and the marker, and `sync` writes nothing. A missing marker used to be a warning followed by "up to date": deleting one and hand-editing what it had guarded passed Gate 0.
 
 Both also **refuse** an app pubspec that declares a managed package by hand outside the markers. Pub rejects a duplicate key, so that one mistake stops the whole workspace resolving — and it is exactly the mistake composer itself once made.
 

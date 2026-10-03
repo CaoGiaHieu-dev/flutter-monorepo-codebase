@@ -142,4 +142,99 @@ void main() {
       isNot(contains('id: a,')),
     );
   });
+
+  group('capabilities the bundle alone provided', () {
+    TempWorkspace withCapabilities() {
+      final ws = workspace(bImportsApi: false);
+      ws.write({
+        'tools/sample_manifest.yaml':
+            'packages:\n'
+            '  a_api: { kind: sample, path: modules/a/api }\n'
+            '  domain_a: { kind: sample, path: modules/a/domain }\n'
+            '  feature_a: { kind: sample, path: modules/a/feature }\n'
+            '  feature_b: { kind: sample, path: modules/b/feature }\n'
+            'bundles:\n'
+            '  a:\n'
+            '    packages: [feature_a, domain_a, a_api]\n'
+            '    capabilities: [splash, session]\n'
+            '    shared_capabilities: [routes]\n'
+            '  b:\n'
+            '    packages: [feature_b]\n',
+        'apps/demo/app_manifest.yaml':
+            'app:\n'
+            '  id: demo\n'
+            'capabilities:\n'
+            '  session: provided # the sign-in bundle\n'
+            '  splash: provided\n'
+            '  routes: provided\n'
+            '  analytics: { state: absent, reason: "no backend" }\n'
+            'modules:\n'
+            '  - { id: a, layers: [api, domain, feature] }\n'
+            '  - { id: b, layers: [feature] }\n'
+            'splash: provided\n',
+      });
+      return ws;
+    }
+
+    test('the dry run shows the flip', () async {
+      final dry = await run(withCapabilities(), ['a']);
+      expect(dry, exitsWith(0));
+      expect(
+        dry.output,
+        contains(
+          '+ session: { state: absent, reason: "sample a removed" }',
+        ),
+      );
+      expect(
+        dry.output,
+        contains('+ splash: { state: absent, reason: "sample a removed" }'),
+      );
+    });
+
+    test(
+      '--apply flips them, and only them, to absent with a reason',
+      () async {
+        final ws = withCapabilities();
+        final apply = await run(ws, ['a', '--apply']);
+        expect(apply, exitsWith(0));
+
+        final manifest = ws.read('apps/demo/app_manifest.yaml');
+        expect(
+          manifest,
+          contains(
+            '  session: { state: absent, reason: "sample a removed" }\n',
+          ),
+        );
+        expect(
+          manifest,
+          contains('  splash: { state: absent, reason: "sample a removed" }\n'),
+        );
+        // The old comment described the old state; a shared contract and an
+        // existing absence are left alone, and so is a `splash:` outside the
+        // `capabilities:` block.
+        expect(manifest, isNot(contains('the sign-in bundle')));
+        expect(manifest, contains('  routes: provided\n'));
+        expect(
+          manifest,
+          contains('  analytics: { state: absent, reason: "no backend" }\n'),
+        );
+        expect(manifest, contains('\nsplash: provided\n'));
+      },
+    );
+
+    test('says which contracts the bundle shares', () async {
+      final apply = await run(withCapabilities(), ['a', '--apply']);
+      expect(apply.output, contains('also names routes'));
+      expect(apply.output, contains('composer.dart verify'));
+    });
+
+    test('a bundle that lists none changes no capability', () async {
+      final ws = withCapabilities();
+      expect(await run(ws, ['b', '--apply']), exitsWith(0));
+      expect(
+        ws.read('apps/demo/app_manifest.yaml'),
+        contains('  splash: provided\n'),
+      );
+    });
+  });
 }

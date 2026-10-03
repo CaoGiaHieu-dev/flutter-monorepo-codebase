@@ -1,12 +1,15 @@
 import 'package:test/test.dart';
 
+import 'support/composer_fixture.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/composer/composer.dart` — CI Gate 0 (`composer verify`).
 ///
-/// The fixture is one app (`demo`) composing one module (`foo`, domain +
-/// feature) on top of `core_common`, with every managed region present but
-/// empty. `sync` fills them; `verify` must then agree.
+/// The fixture (`support/composer_fixture.dart`) is one app (`demo`) composing
+/// one module (`foo`, domain + feature) on top of `core_common`, with every
+/// managed region present but empty. `sync` fills them; `verify` must then
+/// agree. The manifest-v2 declaration has its own tests
+/// (`composer_manifest_v2_test.dart`).
 void main() {
   late CompiledTool tool;
 
@@ -20,57 +23,10 @@ void main() {
   String manifest({
     String phase = 'before',
     String modules = '  - { id: foo, layers: [domain, feature] }\n',
-  }) =>
-      'app:\n'
-      '  id: demo\n'
-      'di_groups:\n'
-      '  - name: core\n'
-      '    phase: $phase\n'
-      '    packages: [core_common]\n'
-      '  - name: domain\n'
-      '    phase: after\n'
-      '    from_modules: domain\n'
-      '  - name: feature\n'
-      '    phase: after\n'
-      '    from_modules: feature\n'
-      'modules:\n'
-      '$modules';
+  }) => demoManifest(phase: phase, modules: modules);
 
-  String diModule() =>
-      "import 'package:injectable/injectable.dart';\n\n"
-      '@InjectableInit.microPackage()\n'
-      'void initMicroPackage() {}\n';
-
-  TempWorkspace workspace({String? appManifest}) => TempWorkspace.create({
-    'pubspec.yaml':
-        'name: ws\n'
-        'workspace:\n'
-        '  # composer:managed:workspace — generated from app_manifest.yaml\n'
-        '  # composer:end:workspace\n',
-    manifestPath: appManifest ?? manifest(),
-    'apps/demo/pubspec.yaml':
-        'name: demo_app\n'
-        'resolution: workspace\n'
-        'dependencies:\n'
-        '  # composer:managed:deps — generated from app_manifest.yaml\n'
-        '  # composer:end:deps\n',
-    'apps/demo/lib/di/injection.dart':
-        '// composer:managed:imports — generated from app_manifest.yaml\n'
-        '// composer:end:imports\n'
-        '\n'
-        '// composer:managed:modules — generated from app_manifest.yaml\n'
-        '// composer:end:modules\n',
-    'platform/foundation/common/pubspec.yaml': 'name: core_common\n',
-    'platform/foundation/common/lib/di/module.dart': diModule(),
-    'modules/foo/domain/pubspec.yaml': 'name: domain_foo\n',
-    'modules/foo/domain/lib/di/module.dart': diModule(),
-    'modules/foo/feature/pubspec.yaml':
-        'name: feature_foo\n'
-        'dependencies:\n'
-        '  domain_foo:\n'
-        '    path: ../domain\n',
-    'modules/foo/feature/lib/di/module.dart': diModule(),
-  });
+  TempWorkspace workspace({String? appManifest}) =>
+      TempWorkspace.create(demoWorkspaceFiles(manifest: appManifest));
 
   Future<ToolRun> run(TempWorkspace ws, List<String> args) =>
       tool.run(args, workingDirectory: ws.root);

@@ -9,6 +9,14 @@ environment:
 
 resolution: workspace
 
+# Read by `composer` (the app report): drift/native uses dart:ffi, so there is no web.
+platforms:
+  android:
+  ios:
+  macos:
+  windows:
+  linux:
+
 dependencies:
   flutter:
     sdk: flutter

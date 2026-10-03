@@ -176,4 +176,62 @@ void main() {
       await settleAndTearDown(tester);
     });
   });
+
+  group('registered for the graph', () {
+    /// Boots a valid app with [hooks]; returns the [ShellHooks] the graph
+    /// found in `getIt` while it was being built.
+    Future<ShellHooks?> bootWith(WidgetTester tester, ShellHooks hooks) async {
+      ShellHooks? seenInDi;
+      var diRan = false;
+
+      runShellApp(
+        profile: testProfile(),
+        hooks: hooks,
+        configureDependencies: () async {
+          seenInDi = getItOrNull<ShellHooks>();
+          getIt.enableRegisteringMultipleInstancesOfOneType();
+          registerRequiredShell();
+          getIt.registerSingleton<IFeatureRouteModule>(aRoute());
+          diRan = true;
+        },
+      );
+      await pumpUntil(tester, () => diRan);
+      await settleAndTearDown(tester);
+      return seenInDi;
+    }
+
+    testWidgets('a class the graph builds reads the app\'s hooks', (
+      tester,
+    ) async {
+      const hooks = ShellHooks(onError: _ignore);
+
+      expect(await bootWith(tester, hooks), same(hooks));
+      expect(getIt<ShellHooks>(), same(hooks));
+    });
+
+    testWidgets('the default hook set is registered too', (tester) async {
+      expect(await bootWith(tester, const ShellHooks()), isNotNull);
+    });
+
+    testWidgets('a different set an earlier boot left is replaced', (
+      tester,
+    ) async {
+      const earlier = ShellHooks(onError: _ignore);
+      const hooks = ShellHooks(onNonFatalError: _ignore);
+      getIt.registerSingleton<ShellHooks>(earlier);
+
+      expect(await bootWith(tester, hooks), same(hooks));
+      expect(getIt<ShellHooks>(), same(hooks));
+    });
+
+    testWidgets('the same set again is left alone', (tester) async {
+      const hooks = ShellHooks(onError: _ignore);
+      getIt.registerSingleton<ShellHooks>(hooks);
+
+      expect(await bootWith(tester, hooks), same(hooks));
+      expect(getIt.getAll<ShellHooks>(), hasLength(1));
+    });
+  });
 }
+
+void _ignore(Object error, StackTrace stack) {}

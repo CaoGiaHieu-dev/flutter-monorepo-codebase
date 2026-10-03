@@ -1,5 +1,6 @@
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
 
@@ -77,25 +78,29 @@ void main() {
       final log = <String>[];
       AppProfile? seenInDi;
       PlatformFacts? factsSeenInDi;
+      ShellHooks? hooksSeenInDi;
       final profile = testProfile(
         capabilities: declare(provided: const {'routes', 'splash'}),
+      );
+      final hooks = ShellHooks(
+        beforeDependencies: (runtime) async {
+          log.add('beforeDependencies:${runtime.platform.name}');
+          expect(runtime.profile, same(profile));
+          expect(runtime.isDebug, isTrue);
+          expect(getIt.isRegistered<AppProfile>(), isTrue);
+          expect(getIt.isRegistered<ShellHooks>(), isTrue);
+        },
+        afterBoot: (runtime) async => log.add('afterBoot'),
       );
 
       runShellApp(
         profile: profile,
-        hooks: ShellHooks(
-          beforeDependencies: (runtime) async {
-            log.add('beforeDependencies:${runtime.platform.name}');
-            expect(runtime.profile, same(profile));
-            expect(runtime.isDebug, isTrue);
-            expect(getIt.isRegistered<AppProfile>(), isTrue);
-          },
-          afterBoot: (runtime) async => log.add('afterBoot'),
-        ),
+        hooks: hooks,
         configureDependencies: () async {
           log.add('configureDependencies');
           seenInDi = getItOrNull<AppProfile>();
           factsSeenInDi = getItOrNull<PlatformFacts>();
+          hooksSeenInDi = getItOrNull<ShellHooks>();
           getIt.enableRegisteringMultipleInstancesOfOneType();
           registerRequiredShell();
           getIt
@@ -111,6 +116,7 @@ void main() {
         'afterBoot',
       ]);
       expect(seenInDi, same(profile));
+      expect(hooksSeenInDi, same(hooks));
       expect(
         factsSeenInDi,
         same(profile.facts.platformFor(AppPlatform.android)),
@@ -182,6 +188,113 @@ void main() {
     });
   });
 
+  group('handleCompositionReport', () {
+    late List<({int level, String message})> logged;
+
+    setUp(() {
+      logged = [];
+      DynamicLogger.configure(
+        logHandler: (
+          message, {
+          error,
+          level = 0,
+          name = '',
+          sequenceNumber,
+          stackTrace,
+          time,
+          zone,
+        }) => logged.add((level: level, message: message)),
+      );
+      getIt.enableRegisteringMultipleInstancesOfOneType();
+      registerRequiredShell();
+      getIt.registerSingleton<IFeatureRouteModule>(aRoute());
+    });
+    tearDown(DynamicLogger.reset);
+
+    /// What `checkAppContract` says of this graph for an app that declares
+    /// the splash `provided`, which nothing registers: one `C02`.
+    CompositionReport mismatch(Flavor flavor) => checkAppContract(
+      testProfile(capabilities: declare(provided: const {'routes', 'splash'})),
+      flavor: flavor,
+      platform: AppPlatform.android,
+    );
+
+    testWidgets('a clean report goes on without a word', (tester) async {
+      final report = checkAppContract(
+        testProfile(),
+        flavor: Flavor.prod,
+        platform: AppPlatform.android,
+      );
+
+      expect(report.isClean, isTrue);
+      expect(handleCompositionReport(report, isRelease: true), isTrue);
+      await tester.pump();
+
+      expect(find.byType(BootErrorApp), findsNothing);
+      expect(logged, isEmpty);
+    });
+
+    testWidgets('a production release logs it, reports it as non-fatal and '
+        'goes on', (tester) async {
+      final reporter = FakeReporter();
+      getIt.registerSingleton<IErrorReporter>(reporter);
+      final seen = <Object>[];
+
+      final goesOn = handleCompositionReport(
+        mismatch(Flavor.prod),
+        isRelease: true,
+        onNonFatalError: (error, _) => seen.add(error),
+      );
+      await tester.pump();
+
+      expect(goesOn, isTrue, reason: 'RULE-05: the app must still run');
+      expect(find.byType(BootErrorApp), findsNothing);
+      expect(logged, hasLength(1));
+      expect(logged.single.level, 1000, reason: 'an ERROR');
+      expect(logged.single.message, contains('[C02]'));
+      expect(seen, hasLength(1));
+      expect(seen.single, isA<StateError>());
+      expect('${seen.single}', contains('[C02]'));
+      expect(reporter.recorded, hasLength(1));
+      expect(reporter.recorded.single.fatal, isFalse);
+    });
+
+    for (final flavor in [Flavor.dev, Flavor.staging]) {
+      testWidgets('a ${flavor.name} release still stops with the details', (
+        tester,
+      ) async {
+        final reporter = FakeReporter();
+        getIt.registerSingleton<IErrorReporter>(reporter);
+
+        final goesOn = handleCompositionReport(
+          mismatch(flavor),
+          isRelease: true,
+        );
+        await tester.pump();
+
+        expect(goesOn, isFalse);
+        expect(find.byType(BootErrorApp), findsOneWidget);
+        expect(find.textContaining('[C02]'), findsOneWidget);
+        expect(logged, isEmpty);
+        expect(reporter.recorded, isEmpty);
+      });
+    }
+
+    testWidgets('a debug or profile build of the prod flavor stops too', (
+      tester,
+    ) async {
+      final goesOn = handleCompositionReport(
+        mismatch(Flavor.prod),
+        isRelease: false,
+      );
+      await tester.pump();
+
+      expect(goesOn, isFalse);
+      expect(find.byType(BootErrorApp), findsOneWidget);
+      expect(find.textContaining('`capabilities.splash`'), findsOneWidget);
+    });
+  });
+
   group('without a profile', () {
     testWidgets('the boot is the one every app had: no profile, same DI', (
       tester,
@@ -206,6 +319,7 @@ void main() {
       expect(splashBuilt, isTrue);
       expect(getIt.isRegistered<AppProfile>(), isFalse);
       expect(getIt.isRegistered<PlatformFacts>(), isFalse);
+      expect(getIt.isRegistered<ShellHooks>(), isFalse);
       expect(find.byType(BootErrorApp), findsNothing);
       expect(errors, isEmpty);
 

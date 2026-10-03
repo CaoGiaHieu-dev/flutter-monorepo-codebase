@@ -51,15 +51,16 @@ import 'shell_hooks.dart';
 ///    undeclared-platform problem into a logged warning, for a developer's
 ///    quick look.
 /// 2. The profile and its sections are registered ([registerAppProfile]),
-///    still before DI, so anything built while the graph initialises can read
-///    them.
+///    and so are the [hooks] (`getItOrNull<ShellHooks>()`), still before DI,
+///    so anything built while the graph initialises can read them.
 /// 3. **After DI**, [checkAppContract] holds the app's `capabilities:`
-///    declaration to what the graph registered. In a dev or staging flavor,
-///    or a debug or profile build, a mismatch stops the boot with the same
-///    screen; in a production release it is logged and reported as a
-///    non-fatal error and the app starts anyway — a removed module must
-///    still run (RULE-05), and the smoke test makes the mismatch unmergeable
-///    first.
+///    declaration to what the graph registered ([handleCompositionReport]).
+///    In a dev or staging flavor, or a debug or profile build, a mismatch
+///    stops the boot with the same screen; in a production release it is
+///    logged and reported as a non-fatal error and the app starts anyway — a
+///    removed module must still run (RULE-05). An app's DI smoke test should
+///    call [checkAppContract] on the graph it boots, so CI finds the mismatch
+///    before a release does.
 ///
 /// With a profile the Dart splash is chosen by the platform's declared
 /// `splash` rather than by `Platform.isIOS`.
@@ -139,6 +140,7 @@ void runShellApp({
         // Before DI: an eager singleton built while the graph initialises can
         // inject a section, and nothing registered later can shadow it.
         registerAppProfile(profile, platform: runtime.platform);
+        _registerHooks(hooks);
         await hooks.beforeDependencies?.call(runtime);
       }
 
@@ -150,26 +152,11 @@ void runShellApp({
           flavor: runtime.flavor,
           platform: runtime.platform,
         );
-        if (!report.isClean) {
-          if (showsBootDiagnostics(runtime.flavor)) {
-            runBootError(report.problems, detailed: true);
-            return;
-          }
-          // A production release never locks users out of a build whose only
-          // fault is a declaration out of date.
-          DynamicLogger.log(
-            report.explain(),
-            tag: 'Boot',
-            level: LogLevel.ERROR,
-          );
-          _report(
-            StateError(report.explain()),
-            StackTrace.current,
-            fatal: false,
-            reason: 'the app composition does not match its declaration',
-            onError: hooks.onNonFatalError,
-          );
-        }
+        final goesOn = handleCompositionReport(
+          report,
+          onNonFatalError: hooks.onNonFatalError,
+        );
+        if (!goesOn) return;
       }
 
       // Before anything is built. The splash below is already wrapped in every
@@ -264,6 +251,57 @@ const String _undeclaredPlatform = 'P01';
 @visibleForTesting
 bool showsBootDiagnostics(Flavor flavor, {bool isRelease = kReleaseMode}) =>
     !isRelease || flavor != Flavor.prod;
+
+/// What the boot does with what [checkAppContract] found after DI — and
+/// whether it goes on (`true`) or stops (`false`).
+///
+/// - A clean [report]: goes on, silently.
+/// - Where diagnostics are shown ([showsBootDiagnostics]): the boot stops at
+///   [runBootError]'s screen with every problem.
+/// - A production release: goes on. It never locks users out of a build whose
+///   only fault is a declaration out of date, so the report is logged to
+///   `DynamicLogger` as an ERROR and handed, as a non-fatal error, to
+///   [onNonFatalError] and the registered `IErrorReporter`.
+///
+/// [isRelease] stands in for `kReleaseMode`, a compile-time constant that a
+/// test cannot flip.
+@visibleForTesting
+bool handleCompositionReport(
+  CompositionReport report, {
+  ShellErrorCallback? onNonFatalError,
+  bool isRelease = kReleaseMode,
+}) {
+  if (report.isClean) return true;
+
+  if (showsBootDiagnostics(report.flavor, isRelease: isRelease)) {
+    runBootError(report.problems, detailed: true);
+    return false;
+  }
+
+  DynamicLogger.log(report.explain(), tag: 'Boot', level: LogLevel.ERROR);
+  _report(
+    StateError(report.explain()),
+    StackTrace.current,
+    fatal: false,
+    reason: 'the app composition does not match its declaration',
+    onError: onNonFatalError,
+  );
+  return true;
+}
+
+/// Binds [hooks] under its exact type before DI, so a class the graph builds
+/// can read them with `getItOrNull<ShellHooks>()`.
+///
+/// Idempotent, like [registerAppProfile]: the same set again changes nothing,
+/// and a different one replaces the earlier registration — a harness that
+/// boots several apps in one process starts each from its own hooks.
+void _registerHooks(ShellHooks hooks) {
+  if (getIt.isRegistered<ShellHooks>()) {
+    if (identical(getIt<ShellHooks>(), hooks)) return;
+    getIt.unregister<ShellHooks>();
+  }
+  getIt.registerSingleton<ShellHooks>(hooks);
+}
 
 const String _library = 'platform_app_shell';
 

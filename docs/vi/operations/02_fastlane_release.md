@@ -427,7 +427,7 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 - [ ] File env của flavor đích đã có (`apps/mobile/env.prod` cho prod — xem [§6](#6-flavor-và-file-env))
 - [ ] `Config.yaml` đầy đủ; các file JSON/`.p8` credential có mặt đúng đường dẫn đã cấu hình
 - [ ] `flutter analyze` sạch và test các package pass — `pr_quality_check.yml` chặn ở PR, nhưng các pipeline phát hành thì không (xem [`01_cicd.md`](01_cicd.md#6-quality-gate))
-- [ ] `sslPinningHashes` đã điền nếu bản build này chạy với traffic production — mặc định nó là `const []`, tức tắt hoàn toàn pinning
+- [ ] `flavors.prod.ssl_pinning` trong manifest của app chứa pin thật nếu bản build này chạy với traffic production — các app mẫu khai `disabled` kèm lý do, tức traffic không được pin
 - [ ] Đã viết changelog
 - [ ] Build number không trùng với bản release đã có
 

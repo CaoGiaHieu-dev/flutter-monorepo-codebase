@@ -73,7 +73,7 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 - Chỉ các vùng giữa `composer:managed:<region>` và `composer:end:<region>` là được sinh ra; không bao giờ sửa tay chúng (RULE-16).
 - Một lần `sync` không strict mà bỏ qua module thiếu sẽ in khối `PARTIAL COMPOSITION` kèm dòng `git checkout --` để khôi phục các file.
 - App thứ ba là một lệnh, và hai file bạn sửa sau đó là manifest cùng `lib/app/app_profile.dart` của nó: [`../guides/13_app_composition.md` § 8](../guides/13_app_composition.md#8-app-thứ-ba-bằng-một-lệnh).
-- Kiểm tra manifest, các check V1–V14, cách tìm package và layer `api`: [chi tiết](../../../tools/README.vi.md#composer).
+- Kiểm tra manifest, các check V1–V16, cách tìm package và layer `api`: [chi tiết](../../../tools/README.vi.md#composer).
 
 ### `bootstrap` — trước khi composer chạy được
 

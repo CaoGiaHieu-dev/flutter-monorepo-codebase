@@ -181,7 +181,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-`order` là khoá sắp xếp tăng dần, không phải index, và phải duy nhất giữa các tab. `destination` trả về một `NavDestination` trung lập, nên cùng một đóng góp hiển thị được thành mục của bottom bar hay của rail. `feature_dashboard` dựng chrome đó từ mọi tab đã đăng ký, và bỏ hẳn chrome khi có ít hơn hai tab ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-chỉ-là-chrome)). Vì sao chrome đổi theo lớp kích thước cửa sổ: [`11_design_system.md` § 7](11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
+`order` là khoá sắp xếp tăng dần, không phải index, và phải duy nhất giữa các tab. `destination` trả về một `NavDestination` trung lập, nên cùng một đóng góp hiển thị được thành mục của bottom bar hay của rail. `feature_dashboard` dựng chrome đó từ mọi tab đã đăng ký, và bỏ hẳn chrome khi có ít hơn hai tab ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-chỉ-là-chrome)). Một app ghép hai tab trở lên phải ghép cả `feature_dashboard` và khai `dashboard: provided`, nếu không chỉ tab đầu truy cập được — `checkAppContract` làm smoke test fail với `C12` ([`13_app_composition.md` § 6](13_app_composition.md#6-contract-shell-đòi-gì-ở-một-app)). Vì sao chrome đổi theo lớp kích thước cửa sổ: [`11_design_system.md` § 7](11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
 
 ## 6. Cho feature khác điều hướng tới màn hình của bạn
 

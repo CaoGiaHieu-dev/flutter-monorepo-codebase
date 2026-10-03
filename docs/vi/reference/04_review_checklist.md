@@ -88,7 +88,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # phải rỗng
 - [ ] **RULE-45** — chủ sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`, không bao giờ `@injectable`
 - [ ] **RULE-46** — bảng và DAO mới nằm trong database riêng của package sở hữu
 - [ ] **RULE-47** — thay đổi schema đã tăng `schemaVersion` và đăng ký `IDatabaseMigration<YourDatabase>`; lệnh mở mang `@Order(1)`
-- [ ] **RULE-48** — thay đổi chạm tới networking giữ `SslPinningConfig` được bind và nói rõ `sslPinningHashes` đã được điền hay chưa
+- [ ] **RULE-48** — thay đổi chạm tới networking giữ nguyên quyết định `ssl_pinning` của từng flavor trong `app_manifest.yaml` (pin, hoặc `disabled` kèm lý do) và nói rõ các pin đã được điền hay chưa
 
 ---
 

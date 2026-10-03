@@ -30,27 +30,26 @@ Có hai thứ khác nhau nằm trong `core_base_ui`, và nhầm lẫn giữa ch�
 | `AppRadius` | `styles/app_radius.dart` | bo góc, kèm `BorderRadius` dựng sẵn |
 | `AppTextStyles` | `styles/app_text_styles.dart` | typography, lấy từ theme đang hoạt động |
 | `AppGradients` | `styles/app_gradients.dart` | gradient, lấy từ theme đang hoạt động |
-| `AppShadows` | `styles/app_shadows.dart` | shadow đổ bóng (không theo theme — xem §9) |
-| `ThemeSystemInterface` | `theme/theme_system_interface.dart` | **hợp đồng**: có những ô màu nào |
-| `ThemeSystemExtension` | `theme/theme_system_extensions.dart` | **giá trị**: bảng màu light và dark |
-| `ThemeProvider` | `theme/theme_provider.dart` | dựng `ThemeData`, quản lý chuyển light/dark |
-| `ContextExtension` | `extensions/context_extension.dart` | các accessor `context.colors` / `context.bodyMediumStyle` |
+| `AppShadows` | `styles/app_shadows.dart` | shadow đổ bóng, tô màu bằng token `shadow` của palette (không phụ thuộc context — xem §9) |
+| `ThemeSystemExtension` | `theme/theme_system_extensions.dart` | bảng màu: có những token màu nào cùng giá trị `light` / `dark` của chúng, `toColorScheme`, `withOverrides` |
+| `ThemeProvider` | `theme/theme_provider.dart` | dựng `ThemeData` từ bảng màu, quản lý chuyển light/dark |
+| `ContextExtension` | `extensions/context_extension.dart` | ba accessor: `context.colors` (bảng màu), `context.colorScheme`, `context.l10n` |
 
 > [!NOTE]
-> **Token là ngoại lệ đã được duyệt của luật "hằng số phải nằm trong `utils/`".** Chúng ở lại `styles/` vì đây là *API công khai* của design system, được mọi feature import trực tiếp, và vì `styles/` mô tả đúng bản chất hơn hẳn cái tên chung chung `utils/`. Đừng "sửa" chỗ này ở lần dọn dẹp sau — xem [`../reference/01_rules.md`](../reference/01_rules.md).
+> **Token là ngoại lệ đã được duyệt của luật "hằng số phải nằm trong `utils/`".** Chúng ở lại `styles/` vì đây là *API công khai* của design system, được mọi feature import trực tiếp, và vì `styles/` mô tả đúng bản chất hơn hẳn cái tên chung chung `utils/`. Đừng "sửa" chỗ này ở lần dọn dẹp sau (RULE-09, [`../reference/01_rules.md`](../reference/01_rules.md)).
 
 ### Tra nhanh
 
 | Tôi muốn đổi… | Sửa file |
 |---|---|
 | Một màu thương hiệu | `theme/theme_system_extensions.dart` → cả `light` **và** `dark` |
-| Thêm một ô màu mới | `theme/theme_system_interface.dart`, rồi cả hai bảng màu + `lerp` |
+| Thêm một ô màu mới | `theme/theme_system_extensions.dart`: field, constructor, `copyWith`, `lerp`, cả hai bảng màu (§2) |
 | Font chữ | `pubspec.yaml` → `flutter: fonts:` + `theme/theme_provider.dart` → `applyFont` |
-| Một cỡ chữ trong thang | `theme/theme_provider.dart` → khối `copyWith` |
+| Một cỡ chữ trong thang | `theme/theme_provider.dart` → khối `copyWith` của `textTheme` |
 | Một bước spacing | `styles/app_spacing.dart` → hằng số `raw*` |
 | Một mức bo góc | `styles/app_radius.dart` → hằng số `raw*` |
-| Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
-| Một shadow | `styles/app_shadows.dart` |
+| Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` (§9) |
+| Một shadow | `styles/app_shadows.dart`; màu của nó là token `shadow` của palette |
 | Khung thiết kế gốc | `DisplayProfile.designSize` của app, trong `apps/<id>/lib/app/app_profile.dart` (§6) |
 | Một lớp cửa sổ được scale tới đâu (bound, profile) | `DisplayProfile.scale` của app, trong `apps/<id>/lib/app/app_profile.dart` — shell biến nó thành các profile của `ResponsiveInit` trong `platform/shell/app_shell/lib/src/main_scope.dart` (§6) |
 | Layout trên tablet, máy gập hay chia đôi màn hình | chính page đó — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
@@ -62,12 +61,11 @@ Màu được cung cấp dưới dạng [`ThemeExtension`](https://api.flutter.d
 
 ### Xác định có cần ô màu mới không
 
-Mở [`theme/theme_system_interface.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart). File này khai báo mọi ô màu mà app có thể yêu cầu:
+Mở [`theme/theme_system_extensions.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart). `ThemeSystemExtension` khai báo mọi màu mà app có thể yêu cầu, mỗi token một `final Color`:
 
 ```dart
 // platform/ui/design_system/lib/src/theme/theme_system_extensions.dart
-abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
-    extends ThemeExtension<T> {
+class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
   // Core colors
   final Color primary;
   final Color primaryContainer;
@@ -84,43 +82,45 @@ abstract class ThemeSystemInterface<T extends ThemeExtension<T>>
   final Color textSecondary;
   final Color textDisabled;
   final Color textInverse;
-  // …
+  // …viền, màu trạng thái, shadow, scrim, hai danh sách gradient
 }
 ```
 
-**Chỉ đổi màu?** Nhảy sang *Sửa giá trị* — các ô đã có sẵn.
+**Chỉ đổi màu?** Nhảy sang *Sửa giá trị* — các token đã có sẵn.
 
-**Thêm ô mới** (ví dụ `brandAccent`)? Bạn phải sửa ba chỗ, theo đúng thứ tự:
+**Thêm token mới** (ví dụ `brandAccent`)? Hãy sửa các chỗ sau, đều trong `theme_system_extensions.dart`:
 
-1. `theme_system_interface.dart` — thêm field `final Color brandAccent;` và mục `required this.brandAccent` trong constructor.
-2. `theme_system_extensions.dart` — thêm `required super.brandAccent` vào constructor, thêm dòng `brandAccent: Color.lerp(brandAccent, other.brandAccent, t)!` bên trong `lerp`, và thêm giá trị vào **cả** `light` lẫn `dark`.
-3. Hết. `context.colors.brandAccent` dùng được ngay, vì `context.colors` trả về chính đối tượng extension.
+1. Field `final Color brandAccent;` và mục `required this.brandAccent` trong constructor.
+2. Một tham số và một dòng `brandAccent` trong `copyWith`, và dòng `brandAccent: Color.lerp(brandAccent, other.brandAccent, t)!` trong `lerp`.
+3. Một giá trị trong **cả** `light` lẫn `dark`.
+
+Khi đó `context.colors.brandAccent` dùng được ngay, vì `context.colors` trả về chính đối tượng extension. Hai việc tiếp theo là tuỳ chọn: ánh xạ nó sang một ô `ColorScheme` trong `toColorScheme` khi các component Material cần đọc nó, và, khi app được phép ghi đè nó, thêm nó vào `PaletteToken` (`platform/foundation/kernel/lib/src/profile/theme_profile.dart`) và vào `copyWith` trong `withOverrides`.
 
 > [!WARNING]
-> Quên dòng trong `lerp` vẫn biên dịch bình thường nhưng làm hỏng *hiệu ứng chuyển* theme — màu mới sẽ nhảy giật thay vì chuyển mượt khi người dùng đổi light/dark.
+> Quên dòng trong `lerp` vẫn biên dịch bình thường nhưng làm hỏng *hiệu ứng chuyển* theme — màu mới sẽ nhảy giật thay vì chuyển mượt khi người dùng đổi light/dark. Thiếu dòng trong `copyWith` thì token lặng lẽ bị rơi khỏi phần ghi đè của app.
 
 ### Sửa giá trị
 
-Cả hai bảng màu là static field thuần trong [`theme/theme_system_extensions.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart):
+Cả hai bảng màu là field `static final` trong [`theme/theme_system_extensions.dart`](../../../platform/ui/design_system/lib/src/theme/theme_system_extensions.dart):
 
 ```dart
 // platform/ui/design_system/lib/src/theme/theme_system_extensions.dart
-/// Light theme extension
-static ThemeSystemExtension light = ThemeSystemExtension(
-  primary: const Color(0xff0A7E8C),
-  primaryContainer: const Color(0xff8B5CF6),
-  background: const Color(0xffF8FAFC),
-  surface: const Color(0xffFFFFFF),
-  textPrimary: const Color(0xff0F172A),
+/// Light theme palette.
+static final ThemeSystemExtension light = const ThemeSystemExtension(
+  primary: Color(0xff0A7E8C),
+  primaryContainer: Color(0xff8B5CF6),
+  background: Color(0xffF8FAFC),
+  surface: Color(0xffFFFFFF),
+  textPrimary: Color(0xff0F172A),
   // …
 );
 
-/// Dark theme extension
-static ThemeSystemExtension dark = ThemeSystemExtension(
-  primary: const Color(0xff22D3EE),
-  background: const Color(0xff0B0F19),
-  surface: const Color(0xff151F32),
-  textPrimary: const Color(0xffF8FAFC),
+/// Dark theme palette.
+static final ThemeSystemExtension dark = const ThemeSystemExtension(
+  primary: Color(0xff22D3EE),
+  background: Color(0xff0B0F19),
+  surface: Color(0xff151F32),
+  textPrimary: Color(0xffF8FAFC),
   // …
 );
 ```
@@ -137,9 +137,9 @@ theme: ThemeProfile(
 ),
 ```
 
-17 token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) ghi đè được; `ThemeProvider` dựng cả hai palette một lần, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn hai gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`.
+Mọi token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) đều ghi đè được; `ThemeProvider` dựng cả hai palette một lần (`withOverrides`) và suy ra `ColorScheme` cùng extension từ kết quả, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn hai gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`. Chạy `composer sync` sau khi sửa để báo cáo trong README của app liệt kê section đó là đã đặt ([`13_app_composition.md`](13_app_composition.md)).
 
-Chỉ có một ô màu tồn tại vì màn hình mẫu: `liquidOnboardingColors`, gradient của splash (`AppGradients.liquidOnboarding`). Khi xoá sample splash, hãy xoá luôn ô đó khỏi interface, cả hai bảng màu và `AppGradients` thay vì để lại màu chết.
+Chỉ có một token tồn tại vì màn hình mẫu: `liquidOnboardingColors`, gradient của splash (`AppGradients.liquidOnboarding`). Khi xoá sample splash, hãy xoá luôn token đó khỏi extension (field, `copyWith`, `lerp`, cả hai bảng màu, `withOverrides`) và khỏi `AppGradients` thay vì để lại màu chết.
 
 ### Đọc màu trong widget
 
@@ -155,7 +155,7 @@ Container(
 ```
 
 > [!NOTE]
-> `context.colors` và `context.primary` **không** giống nhau. `context.colors.*` đọc từ `ThemeSystemExtension` của bạn; còn các getter trần (`context.primary`, `context.surface`, …) đọc từ `ColorScheme` của Material. Chỉ hai trong số đó được nối vào bảng màu của bạn — `ThemeProvider` copy `primary` và `surface` sang `ColorScheme`. Với màu thương hiệu, hãy ưu tiên `context.colors.*`.
+> `context.colors` đọc `ThemeSystemExtension`; `context.colorScheme` đọc `ColorScheme` của Material. Hai bên khớp nhau: `ThemeSystemExtension.toColorScheme` dựng mọi ô của scheme từ một token palette, nên không màu `ColorScheme.light()` mặc định nào lọt ra màn hình. Hãy ưu tiên `context.colors.*`, vì nó gọi đúng tên token bạn muốn; chỉ dùng `colorScheme` khi cần nói chuyện với một component Material bằng chính thuật ngữ của nó.
 
 ## 3. Đổi font chữ
 
@@ -193,13 +193,11 @@ final geometry = Typography.material2021().englishLike;
 TextTheme applyFont(TextTheme colors) =>
     geometry.merge(colors).apply(fontFamily: FontFamily.plusJakartaSans);
 
-final defaultTheme = switch (mode) {
-  ThemeMode.dark => applyFont(ThemeData.dark().textTheme),
-  ThemeMode.light => applyFont(ThemeData.light().textTheme),
-  ThemeMode.system => applyFont(
-    ThemeData.from(colorScheme: colorScheme).textTheme,
-  ),
-};
+final defaultTheme = applyFont(
+  brightness == Brightness.dark
+      ? ThemeData.dark().textTheme
+      : ThemeData.light().textTheme,
+);
 ```
 
 **Vì sao đóng gói, không dùng `google_fonts`.** `google_fonts` đăng ký mỗi *độ đậm* thành một family riêng, nên một style đổi độ đậm về sau — `copyWith(fontWeight: FontWeight.bold)`, như tiêu đề app bar và các sample đang làm — vẫn giữ file nét thường và engine tự giả lập nét đậm. Một family với mỗi độ đậm một file cho phép Flutter chọn đúng mặt chữ cho bất kỳ `fontWeight` nào. Cách này cũng chạy offline và không tải gì lúc runtime. Giấy phép đi kèm file font: `assets/fonts/plus_jakarta_sans/OFL.txt`, được `registerBaseUiLicenses()` (gọi trong `runShellApp`) đăng ký với `LicenseRegistry`, nên hiện trên `showLicensePage`.
@@ -215,7 +213,7 @@ Cỡ chữ lấy từ `Typography.material2021().englishLike` — thang chữ Ma
 double? scaleFont(double? size) => size == null ? null : context.sp(size);
 ```
 
-Dùng `sp`, nên chữ đi theo `textScaleBounds` của app ([§6](#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ)). Với mặc định `ScaleBounds.downOnly()`, chữ thu nhỏ trên cửa sổ hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế; lớp cửa sổ nào có `ResponsiveProfile` cho phép phóng to thì chữ cũng to theo. Với cấu hình của app này, chữ đúng bằng cỡ thiết kế trên mọi cửa sổ rộng từ 375 trở lên — điện thoại, tablet hay desktop.
+Dùng `sp`, nên chữ đi theo các bound scale chữ của app ([§6](#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ)). Với mặc định `ScaleBounds.downOnly()`, chữ thu nhỏ trên cửa sổ hẹp hơn thiết kế rộng 375 và không bao giờ lớn hơn cỡ thiết kế; lớp cửa sổ nào có chính sách `DisplayProfile.scale` cho phép phóng to thì chữ cũng to theo. Với mặc định của template, chữ đúng bằng cỡ thiết kế trên mọi cửa sổ rộng từ 375 trở lên — điện thoại, tablet hay desktop.
 
 Đó chính là lý do `ThemeProvider.currentTheme`, `lightTheme` và `darkTheme` đều nhận `BuildContext` — không có context thì không scale được. Chúng được gọi từ bên trong builder của `Consumer2` ở `platform/shell/app_shell/lib/src/app_material_wrapper.dart`, nơi có sẵn context.
 
@@ -224,7 +222,7 @@ Dùng `sp`, nên chữ đi theo `textScaleBounds` của app ([§6](#6-đặt-ch�
 ```dart
 // platform/ui/design_system/lib/src/styles/app_text_styles.dart
 static TextStyle bodyMediumStyle(BuildContext context) =>
-    context.bodyMediumStyle;
+    _textTheme(context).bodyMedium!; // _textTheme = Theme.of(context).textTheme
 ```
 
 > [!CAUTION]
@@ -263,10 +261,10 @@ static const double rawMd = 8;
 
 | Extension | Scale theo | Dùng cho |
 |---|---|---|
-| `context.w(x)` | tỉ lệ **chiều rộng** cửa sổ, kẹp bởi `scaleBounds` | padding, margin, khoảng cách ngang, chiều rộng |
-| `context.h(x)` | tỉ lệ **chiều cao** cửa sổ, kẹp bởi `scaleBounds` | khoảng cách dọc, chiều cao cố định |
+| `context.w(x)` | tỉ lệ **chiều rộng** cửa sổ, kẹp bởi bound scale layout | padding, margin, khoảng cách ngang, chiều rộng |
+| `context.h(x)` | tỉ lệ **chiều cao** cửa sổ, kẹp bởi bound scale layout | khoảng cách dọc, chiều cao cố định |
 | `context.r(x)` | **min** của hệ số rộng và cao | bo góc, hình tròn, mọi thứ phải giữ được độ tròn |
-| `context.sp(x)` | tỉ lệ chữ, kẹp bởi `textScaleBounds` | chỉ dùng cho cỡ chữ |
+| `context.sp(x)` | tỉ lệ chữ, kẹp bởi bound scale chữ | chỉ dùng cho cỡ chữ |
 | `context.spMin(x)` | `sp`, chặn trên bằng giá trị thiết kế | chữ phải giữ đúng cỡ thiết kế kể cả ở nơi một profile (hay `fontSizeResolver`) cho chữ to ra — với bound mặc định thì nó bằng `sp` |
 
 `r` cố ý lấy hệ số nhỏ hơn trong hai hệ số — scale bo góc theo một trục duy nhất sẽ biến hình tròn thành hình elip trên máy quá cao hoặc quá rộng.
@@ -302,19 +300,22 @@ context.horizontalSpace(X)          // → SizedBox(width: w(X))
 
 Mọi thứ ở trên đều scale *tương đối so với một khung tham chiếu*: kích thước màn hình mà designer đã thiết kế trên đó.
 
+Khung này là `DisplayProfile.designSize` của app, một `SizeSpec` trong `apps/<id>/lib/app/app_profile.dart`. Giá trị của template là khung iPhone X, 375×812 — cùng con số với `ResponsiveConstants.DEFAULT_DESIGN_WIDTH` / `DEFAULT_DESIGN_HEIGHT` trong `core_responsive`:
+
 ```dart
-// platform/foundation/common/lib/src/config/app_config.dart
-/// Design size used for responsive UI calculations
-/// Based on iPhone X dimensions (375x812)
-static Size get design => const Size(375, 812);
+// apps/<id>/lib/app/app_profile.dart
+const AppProfile appProfile = AppProfile(
+  facts: appFacts,
+  display: DisplayProfile(designSize: SizeSpec(390, 844)),
+);
 ```
 
-Giá trị này được truyền cho `ResponsiveInit` đúng một lần, ở ngoài cùng cây widget — `_ResponsiveWrapper` trong `platform/shell/app_shell/lib/src/main_scope.dart` bọc mọi thứ, kể cả `AppMaterialWrapper`; lời gọi đầy đủ nằm ở §6. Đây là khung mà **mọi lớp cửa sổ** quy chiếu về, trừ khi một profile chỉ định khung riêng: `context.w(16)` nghĩa là "16 logical pixel trên khung rộng 375".
+`MainScope` trao profile cho một `_ResponsiveWrapper` (private) trong `platform/shell/app_shell/lib/src/main_scope.dart`, nơi gọi `ResponsiveInit` đúng một lần ở ngoài cùng cây widget, bọc mọi thứ kể cả `AppMaterialWrapper`; lời gọi đầy đủ nằm ở §6. Khung này là thứ mà **mọi lớp cửa sổ** quy chiếu về, trừ khi một profile chỉ định khung riêng: `context.w(16)` nghĩa là "16 logical pixel trên khung rộng 375".
 
 > [!CAUTION]
-> **Đổi `designSize` là scale lại toàn bộ app cùng lúc.** Mọi lời gọi `context.w/h/r/sp` đều quy chiếu về nó, và cửa sổ nào hẹp hơn hoặc thấp hơn khung sẽ thu nhỏ thiết kế theo đúng tỉ lệ đó — đổi từ 375×812 sang 390×844 là mọi thứ trên điện thoại rộng 375 đều nhỏ đi. Chỉ đổi khi nguồn thiết kế gốc thực sự thay đổi, rồi rà lại app trên máy nhỏ, máy cao và tablet.
+> **Đổi `designSize` là scale lại toàn bộ app cùng lúc.** Mọi lời gọi `context.w/h/r/sp` đều quy chiếu về nó, và cửa sổ nào hẹp hơn hoặc thấp hơn khung sẽ thu nhỏ thiết kế theo đúng tỉ lệ đó — đổi từ 375×812 sang 390×844 là mọi thứ trên điện thoại rộng 375 đều nhỏ đi. Chỉ đổi khi nguồn thiết kế gốc thực sự thay đổi, rồi rà lại app trên máy nhỏ, máy cao và tablet. Sau khi sửa profile, chạy `composer sync`.
 
-Cả hai cạnh của `designSize` — và của `designSize` trong mọi profile — phải dương: một cạnh bằng 0 là chia cho 0. `ResponsiveInit` assert điều đó cho mọi profile khi build, và `ResponsiveMetrics` kiểm lại khi scale. Một cửa sổ chưa có diện tích (Android báo 0×0 ở frame đầu tiên) được coi như chính khung thiết kế, hệ số 1, chứ không phải 0 — để frame đó không bị layout với mọi giá trị co về không. `ScaleBounds.clamp` cũng coi hệ số NaN là 1, rồi mới clamp.
+Cả hai cạnh của `designSize` phải dương: `SizeSpec` từ chối giá trị khác, nên một giá trị sai làm `flutter analyze` fail ngay chỗ viết nó (`const_eval_throws_exception`); `ResponsiveInit` và `ResponsiveMetrics` assert lại điều đó cho mọi profile của `core_responsive`. Một cửa sổ chưa có diện tích (Android báo 0×0 ở frame đầu tiên) được coi như chính khung thiết kế, hệ số 1, chứ không phải 0 — để frame đó không bị layout với mọi giá trị co về không. `ScaleBounds.clamp` cũng coi hệ số NaN là 1, rồi mới clamp.
 
 ## 6. Đặt chính sách scale theo từng lớp cửa sổ
 
@@ -325,13 +326,13 @@ Hệ số scale là tỉ lệ giữa cửa sổ và khung thiết kế trên m�
 | `ScaleBounds.downOnly()` — **mặc định** | 0 – 1 | Thu nhỏ trên cửa sổ nhỏ hơn khung, vẽ 1:1 trên cửa sổ lớn hơn. Chỗ dư dành cho layout (§7), không phải cho pixel to hơn |
 | `ScaleBounds(max: 1.2)` | 0 – 1,2 | Phóng to có chặn, phải opt-in. Thêm `min:` để ngừng thu nhỏ ở mức chữ không còn đọc được hay nút không còn bấm được |
 | `ScaleBounds.fixed()` | 1 – 1 | Luôn đúng cỡ thiết kế — cho lớp cửa sổ được dàn bằng logical pixel thật |
-| `ScaleBounds.unbounded()` | 0 – ∞ | Tỉ lệ thô, hành vi trước khi có bound. Hiếm khi đúng cho app chạy trên nhiều dạng thiết bị |
+| `ScaleBounds.unbounded()` | 0 – ∞ | Tỉ lệ thô, không kẹp. Hiếm khi đúng cho app chạy trên nhiều dạng thiết bị |
 
-Layout và chữ được kẹp **riêng rẽ**: `scaleBounds` kẹp `w` và `h` (cùng `r` / `dg` / `dm` dựng từ chúng), `textScaleBounds` kẹp hệ số đứng sau `sp`. Tablet đủ chỗ cho lề rộng hơn từ rất lâu trước khi đủ chỗ cho chữ nội dung to hơn.
+Layout và chữ được kẹp **riêng rẽ**: `scaleBounds` kẹp `w` và `h` (cùng `r` / `dg` / `dm` dựng từ chúng), `textScaleBounds` kẹp hệ số đứng sau `sp`. Tablet đủ chỗ cho lề rộng hơn từ rất lâu trước khi đủ chỗ cho chữ nội dung to hơn. App không đặt trực tiếp hai thứ này: `DisplayProfile.scale` của nó đặt (xem dưới).
 
 Một **`ResponsiveProfile`** ghi đè khung thiết kế, cả hai bound và `minTextAdapt` cho một `WindowSizeClass` (§7); trường nào để `null` thì kế thừa giá trị cấp trên. Profile được áp dụng là profile gắn với lớp của cửa sổ, nếu không có thì của lớp **nhỏ hơn** gần nhất có profile, nếu vẫn không có thì không profile nào — nên một profile đặt ở `expanded` cũng phủ luôn `large` và `extraLarge` cho tới khi chúng khai profile riêng, giống cách một media query `min-width` lan lên các cỡ lớn hơn.
 
-Đây là toàn bộ cấu hình của app — một `DisplayProfile` trong `lib/app/app_profile.dart` của app, viết rõ ra với mặc định của template (bỏ nó đi bạn vẫn nhận đúng như vậy):
+Đây là toàn bộ cấu hình của app — một `DisplayProfile` trong `lib/app/app_profile.dart` của app, viết rõ ra với mặc định của template (bỏ nó đi bạn vẫn nhận đúng như vậy; `phoneMaxShortestSide` và `textScaleMax` là hai trường không hiện ở đây, §3 và §7):
 
 ```dart
 // apps/<id>/lib/app/app_profile.dart
@@ -345,8 +346,9 @@ const AppProfile appProfile = AppProfile(
     // up — a tablet or a desktop window draws it 1:1 and gives the extra room
     // to the layout (see `AdaptiveLayout`). Tablets in landscape, unfolded
     // foldables and desktop windows are laid out in real logical pixels.
-    // (Phones never get here: the shell locks phone-sized displays to portrait
-    // — see `AppInitializer.preferredOrientationsFor`.) Without this, a laptop
+    // (Phones never get here: unless the manifest says otherwise the shell
+    // locks phone-sized displays to portrait — see
+    // `AppInitializer.preferredOrientationsFor`.) Without this, a laptop
     // window shorter than the 812-tall phone artboard would still shrink every
     // vertical gap and radius.
     scale: {WindowClass.expanded: ScalePolicy.fixed()},
@@ -356,7 +358,7 @@ const AppProfile appProfile = AppProfile(
 );
 ```
 
-`MainScope(display:)` trao nó cho `_ResponsiveWrapper` (private), nơi biến từng `ScalePolicy` thành một `ResponsiveProfile` của `core_responsive` — `fixed()` thành `ScaleBounds.fixed()`, `downOnly()` thành `ScaleBounds.downOnly()`, `bounded(max:, textMax:)` thành `ScaleBounds(max:)` — và `WindowClass` là cách kernel viết `WindowSizeClass` (một test giữ hai bên bằng nhau). Nên phần dưới đây mô tả tham số của `core_responsive`, còn cột *App này* nói profile đặt gì.
+`MainScope(display:)` trao nó cho `_ResponsiveWrapper` (private), nơi biến từng `ScalePolicy` thành một `ResponsiveProfile` của `core_responsive` — `fixed()` thành `ScaleBounds.fixed()` cho layout và chữ, `downOnly()` thành `ScaleBounds.downOnly()`, `bounded(max:, textMax:)` thành `ScaleBounds(max:)` cho layout và `ScaleBounds(max: textMax ?? max)` cho chữ (`max` null thì giữ ở 1) — và `WindowClass` là cách kernel viết `WindowSizeClass` (một test giữ hai bên bằng nhau). Nên phần dưới đây mô tả tham số của `core_responsive`, còn cột *App này* nói profile đặt gì.
 
 Kết quả, theo từng cửa sổ:
 
@@ -369,14 +371,14 @@ Kết quả, theo từng cửa sổ:
 
 | Tham số | Mặc định | App này | Ý nghĩa |
 |---|---|---|---|
-| `designSize` | 360×690 | `DisplayProfile.designSize` (375×812) | Khung mà mọi lớp quy chiếu về, trừ khi profile của lớp đó chỉ định khung khác |
+| `designSize` | 375×812 | `DisplayProfile.designSize` (375×812) | Khung mà mọi lớp quy chiếu về, trừ khi profile của lớp đó chỉ định khung khác |
 | `scaleBounds` | `ScaleBounds.downOnly()` | mặc định | Khoảng của các hệ số layout: `w`, `h`, và `r` / `dg` / `dm` dựng từ chúng |
 | `textScaleBounds` | `ScaleBounds.downOnly()` | mặc định | Khoảng của hệ số chữ đứng sau `sp`. Độc lập với `scaleBounds` |
 | `profiles` | `{}` | `DisplayProfile.scale`: `expanded` → `fixed` / `fixed` | `Map<WindowSizeClass, ResponsiveProfile>`: `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` theo từng lớp (`null` là kế thừa). Ưu tiên đúng lớp, không có thì lớp nhỏ hơn gần nhất |
-| `breakpoints` | `ResponsiveBreakpoints.material3()` | mặc định | Nơi mỗi lớp cửa sổ bắt đầu (§7). Cả profile lẫn `context.windowSizeClass` đều phân lớp theo nó |
-| `minTextAdapt` | `false` | mặc định | `true` scale chữ theo tỉ lệ **nhỏ hơn** giữa rộng và cao thay vì theo rộng — chữ không phình trên cửa sổ rộng mà thấp, nhưng nhỏ đi khi xoay ngang |
+| `breakpoints` | `ResponsiveBreakpoints.material3()` | `DisplayProfile` không lộ ra | Nơi mỗi lớp cửa sổ bắt đầu (§7). Cả profile lẫn `context.windowSizeClass` đều phân lớp theo nó |
+| `minTextAdapt` | `false` | `DisplayProfile` không lộ ra | `true` scale chữ theo tỉ lệ **nhỏ hơn** giữa rộng và cao thay vì theo rộng — chữ không phình trên cửa sổ rộng mà thấp, nhưng nhỏ đi khi xoay ngang |
 | `splitScreenMode` | `false` | `true` | Chặn dưới chiều cao dùng để scale dọc ở `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), để một ô chia đôi màn hình thấp không làm mọi `h` sụp xuống |
-| `fontSizeResolver` | `null` | không đặt | Thay **hoàn toàn** cách scale chữ, và kết quả **không bao giờ bị kẹp** — không `textScaleBounds`, không profile, không `minTextAdapt`. Đọc `metrics.effectiveTextScaleBounds` bên trong nó nếu muốn tôn trọng bound |
+| `fontSizeResolver` | `null` | `DisplayProfile` không lộ ra | Thay **hoàn toàn** cách scale chữ, và kết quả **không bao giờ bị kẹp** — không `textScaleBounds`, không profile, không `minTextAdapt`. Đọc `metrics.effectiveTextScaleBounds` bên trong nó nếu muốn tôn trọng bound |
 
 **Opt-in phóng to** là một profile cho mỗi lớp được phép to ra, kèm mức chặn:
 
@@ -410,7 +412,7 @@ Khi làm vậy, hãy kiểm tra hai điều. Lớp được phóng to gặp lớ
 | `large` | 1200 – 1599 | Tablet lớn nằm ngang; cửa sổ desktop |
 | `extraLarge` | ≥ 1600 | Cửa sổ desktop lớn |
 
-Điện thoại xoay ngang thuộc `medium` hoặc `expanded` theo chiều rộng — dù app này không bao giờ hiện trường hợp đó: `AppInitializer` khoá dọc màn hình cỡ điện thoại (cạnh ngắn dưới 600) và để màn hình lớn hơn xoay tự do (`AppInitializer.preferredOrientationsFor`). Nếu bỏ khoá đó, `context.windowHeightClass` phân biệt được điện thoại xoay ngang: `WindowHeightClass.compact` dưới 480, `medium` 480–899, `expanded` từ 900.
+Điện thoại xoay ngang thuộc `medium` hoặc `expanded` theo chiều rộng — dù template không bao giờ hiện trường hợp đó: mặc định (`orientation: phones_portrait` theo từng platform trong `app_manifest.yaml`) `AppInitializer` khoá dọc màn hình cỡ điện thoại (cạnh ngắn dưới `DisplayProfile.phoneMaxShortestSide`, 600) và để màn hình lớn hơn xoay tự do (`AppInitializer.preferredOrientationsFor`). Nếu bỏ khoá đó (`orientation: free`), `context.windowHeightClass` phân biệt được điện thoại xoay ngang: `WindowHeightClass.compact` dưới 480, `medium` 480–899, `expanded` từ 900.
 
 Các ranh giới là một `ResponsiveBreakpoints` — mặc định `const ResponsiveBreakpoints.material3()`, giá trị nằm ở `ResponsiveConstants.BREAKPOINT_*`. Truyền bộ khác vào `ResponsiveInit(breakpoints:)` thì profile scale, `context.windowSizeClass` và mọi widget bên dưới cùng dịch theo. So sánh lớp bằng `isAtLeast` / `isSmallerThan`, đừng so với chiều rộng thô.
 
@@ -501,8 +503,9 @@ if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
 }
 
 final extended = sizeClass.isAtLeast(WindowSizeClass.large);
-// The rail sits at the start edge — the right in RTL — so only its outer
-// side pads for the insets.
+// The rail sits at the start edge: the left in LTR, the right in RTL
+// (a `Row` follows the text direction). It pads for the insets on its
+// outer side only; the side facing the content is the content's to pad.
 final isRtl = Directionality.of(context) == TextDirection.rtl;
 return Scaffold(
   body: Row(
@@ -532,7 +535,7 @@ Giả sử bạn muốn có `AppElevation`. Hãy theo đúng khuôn mà các cla
 
 ```dart
 import 'package:core_responsive/core_responsive.dart';
-import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Thang elevation, quy đổi qua extension trên BuildContext.
 class AppElevation {
@@ -553,9 +556,9 @@ class AppElevation {
 dart tools/barrel_generator/generate.dart platform/ui/design_system/lib
 ```
 
-`styles/styles.dart` là file tự sinh — tuyệt đối không sửa tay; generator sẽ xoá mọi dòng `export` viết thủ công ở lần chạy sau.
+Package chỉ có một barrel, `lib/core_base_ui.dart`, và generator liệt kê mọi file dưới `lib/` vào đó — tuyệt đối không sửa tay (RULE-75); một dòng `export` thêm tay sẽ biến mất ở lần chạy sau. Bên trong package, file mới được import theo chính đường dẫn của nó, không qua barrel.
 
-**Bước 3** — dùng thôi. Barrel công khai của `core_base_ui` vốn đã re-export `styles/`, nên mọi feature dùng được ngay:
+**Bước 3** — dùng thôi. Khi barrel đã liệt kê nó, mọi feature import `package:core_base_ui/core_base_ui.dart` đều dùng được:
 
 ```dart
 Material(elevation: AppElevation.raised(context), child: …)
@@ -579,13 +582,15 @@ static LinearGradient primaryGradient(BuildContext context) {
 
 Muốn đổi gradient, hãy sửa **danh sách màu** trong bảng màu (`primaryGradientColors`, `liquidOnboardingColors`), không sửa widget.
 
-`AppShadows` là ngoại lệ — nó hardcode màu đen kèm alpha và **không** theo theme:
+`AppShadows` là ngoại lệ — getter của nó không nhận `BuildContext`. Màu shadow là token `shadow` của palette (đen ở cả hai palette), đọc từ `ThemeSystemExtension.light`, và mỗi cỡ áp alpha riêng của nó:
 
 ```dart
 // platform/ui/design_system/lib/src/styles/app_shadows.dart
+static Color get _color => ThemeSystemExtension.light.shadow;
+
 static List<BoxShadow> get sm => [
   BoxShadow(
-    color: Colors.black.withValues(alpha: 0.05),
+    color: _color.withValues(alpha: 0.05),
     blurRadius: 4,
     offset: const Offset(0, 2),
   ),
@@ -593,7 +598,7 @@ static List<BoxShadow> get sm => [
 ```
 
 > [!NOTE]
-> Trên bảng màu tối, shadow đen gần như vô hình. Nếu sản phẩm của bạn dựa nhiều vào đổ bóng ở chế độ dark, hãy đưa màu shadow vào `ThemeSystemInterface` (bước 2) và cho các getter này nhận `BuildContext` như các class token khác. Template cố ý để đơn giản.
+> Trên bảng màu tối, shadow đen gần như vô hình. Nếu sản phẩm của bạn dựa nhiều vào đổ bóng ở chế độ dark, hãy cho `ThemeSystemExtension.dark.shadow` một giá trị riêng và cho các getter này nhận `BuildContext` (`context.colors.shadow`) như các class token khác — cho tới lúc đó cả hai palette dùng chung một màu. `shadow` không phải một `PaletteToken`, nên profile của app không ghi đè được nó.
 
 ---
 
@@ -603,37 +608,37 @@ static List<BoxShadow> get sm => [
 dart run build_runner build --workspace                 # sau khi đổi font: FontFamily có thêm hằng số mới
 dart tools/barrel_generator/generate.dart platform/ui/design_system/lib   # sau khi thêm một file token
 flutter analyze                                         # No issues found!
-dart tools/arch_check/check.dart                        # R7: không có extension kích thước trần
+dart tools/arch_check/check.dart                        # R7 / R20: không có extension kích thước trần, không có số thô trong layout
 cd platform/ui/design_system && flutter test
 cd platform/ui/responsive && flutter test
 ```
 
 Rồi nhìn vào app: hot-restart, đổi qua lại sáng và tối, và thay đổi kích thước cửa sổ. Kiểm tra trên điện thoại nhỏ, điện thoại cao, tablet ở cả hai hướng và một ô chia đôi màn hình. Đổi `designSize` hay một bound scale là mọi màn hình cùng dịch chuyển.
 
-Checklist review — luật nào do máy giữ đều được ghi rõ ở từng mục, vì điều đó quyết định bạn tin được bao nhiêu vào việc review bắt lỗi:
+Checklist review — máy giữ phần nào của mỗi luật được ghi ở dòng registry của luật đó, trong [`../reference/01_rules.md`](../reference/01_rules.md); đây là những mục review vẫn phải kiểm tra:
 
-- [ ] **RULE-33** · Không hard-code `Color`, `fontSize`, con số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` thay vì nhét thẳng giá trị. *Do review giữ* — [vì sao](../architecture/02_core.md#vì-sao-luật-về-màu-và-font-size-do-review-giữ).
-- [ ] **RULE-30** · Mọi kích thước đều scale. `SizedBox(height: 24)` trần là bug; hãy viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`. *`arch_check` R7 giữ phần extension trần (`24.h`); phần số double thô do review giữ.*
-- [ ] **RULE-31** · Widget scale hằng số của chính nó, không bao giờ scale tham số. Widget `core_ui_kit` nhận giá trị mà người gọi đã scale, nên `context.w(widget.width)` là bug scale hai lần. Còn padding và radius *của chính nó* thì phải scale. `custom_input_field.dart` thể hiện cả hai trong một dòng: `widget.paddingBottom ?? context.h(10)`. *Do review giữ.*
-- [ ] **RULE-31** · Không có giá trị đã scale nào bị scale lại. `context.w(AppSpacing.lg(context))` scale hai lần. `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` cũng vậy: `ThemeProvider` đã scale mọi bậc, nên ghi đè là vứt bỏ thang đo và ghim cứng một con số. Hãy chọn một bậc khác. *Do review giữ.*
+- [ ] **RULE-33** · Không hard-code `Color`, `fontSize`, con số spacing hay `BorderRadius` trong widget. Thiếu token? Thêm vào `core_base_ui` thay vì nhét thẳng giá trị. Màu do review giữ — [vì sao](../architecture/02_core.md#màu-do-review-giữ).
+- [ ] **RULE-30** · Mọi kích thước đều scale. `SizedBox(height: 24)` trần là bug; hãy viết `SizedBox(height: context.h(24))` hoặc `context.verticalSpace(24)`.
+- [ ] **RULE-31** · Widget scale hằng số của chính nó, không bao giờ scale tham số. Widget `core_ui_kit` nhận giá trị mà người gọi đã scale, nên `context.w(widget.width)` là bug scale hai lần. Còn giá trị mặc định *của chính nó* thì phải scale. `custom_input_field.dart` thể hiện cả hai trong một biểu thức: `widget.paddingBottom ?? context.h(SharedUiConstants.INPUT_COUNTER_OFFSET_X)`.
+- [ ] **RULE-31** · Không có giá trị đã scale nào bị scale lại. `context.w(AppSpacing.lg(context))` scale hai lần. `AppTextStyles.bodyMediumStyle(context).copyWith(fontSize: ...)` cũng vậy: `ThemeProvider` đã scale mọi bậc, nên ghi đè là vứt bỏ thang đo và ghim cứng một con số. Hãy chọn một bậc khác.
 - [ ] **RULE-33** · Một thang đo được chỉnh bằng cách sửa hằng số `raw*`, không sửa accessor.
-- [ ] **RULE-30** · Không nơi nào chờ kích thước to ra trên tablet. Mặc định mọi hệ số dừng ở 1:1; chỗ dư dành cho layout (bước 7). Phóng to là opt-in theo từng lớp cửa sổ, có chặn (bước 6). *Do mặc định của `ResponsiveInit` giữ.*
-- [ ] **RULE-32** · Layout được chọn theo lớp kích thước cửa sổ — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — không bao giờ theo đời máy, `Platform.isIOS` hay phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ: Split View, màn hình ngoài, cửa sổ desktop bị resize. *Do review giữ.*
+- [ ] **RULE-30** · Không nơi nào chờ kích thước to ra trên tablet. Mặc định mọi hệ số dừng ở 1:1; chỗ dư dành cho layout (§7). Phóng to là opt-in theo từng lớp cửa sổ, có chặn (§6).
+- [ ] **RULE-32** · Layout được chọn theo lớp kích thước cửa sổ — `context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout` — không bao giờ theo đời máy, `Platform.isIOS` hay phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ: Split View, màn hình ngoài, cửa sổ desktop bị resize.
 
 ## Xử lý sự cố
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |:--|:--|:--|
-| Màu mới giật cục thay vì chuyển mượt khi đổi theme | Ô màu mới chưa có dòng trong `lerp` | Thêm nó vào `lerp` (bước 2) |
-| Chế độ tối vẫn hiện bảng màu mẫu | Mới chỉ sửa `light` | Sửa cả `dark` (bước 2) |
-| Chữ đậm trông nhoè | Font không kèm file đậm, nên engine tự giả lập | Đóng gói mỗi độ đậm một file trong cùng một family (bước 3) |
-| `FontFamily.<name>` không tồn tại | Chưa chạy `build_runner` sau khi đổi font trong `pubspec.yaml` | `dart run build_runner build --workspace` (bước 3) |
-| Chữ bị scale hai lần | Áp `context.sp` lên style lấy từ `AppTextStyles` | Dùng style nguyên trạng (bước 3) |
-| Mọi thứ co lại trên điện thoại rộng 375 | `designSize` đã bị đổi | Đổi lại, hoặc chấp nhận mọi giá trị giờ tính theo khung mới (bước 5) |
-| Layout nhảy giữa chiều rộng 839 và 840 px | Hai lớp cửa sổ kề nhau có profile scale khác nhau | Là điều dự kiến khi cho một lớp phóng to; kiểm tra cả hai phía ranh giới (bước 6) |
-| `AdaptiveSplitView` bỏ qua bản lề máy gập | View không trải hết cửa sổ dọc theo nếp gập | Cho view làm toàn bộ body của route (bước 7) |
-| Class token mới không hiện ra với feature | Chưa sinh lại barrel | Chạy barrel generator cho `platform/ui/design_system/lib` (bước 8) |
-| Shadow đen không thấy được ở chế độ tối | `AppShadows` không theo theme | Đưa màu shadow vào bảng màu (bước 9) |
+| Màu mới giật cục thay vì chuyển mượt khi đổi theme | Token mới chưa có dòng trong `lerp` | Thêm nó vào `lerp` (§2) |
+| Chế độ tối vẫn hiện bảng màu mẫu | Mới chỉ sửa `light` | Sửa cả `dark` (§2) |
+| Chữ đậm trông nhoè | Font không kèm file đậm, nên engine tự giả lập | Đóng gói mỗi độ đậm một file trong cùng một family (§3) |
+| `FontFamily.<name>` không tồn tại | Chưa chạy `build_runner` sau khi đổi font trong `pubspec.yaml` | `dart run build_runner build --workspace` (§3) |
+| Chữ bị scale hai lần | Áp `context.sp` lên style lấy từ `AppTextStyles` | Dùng style nguyên trạng (§3) |
+| Mọi thứ co lại trên điện thoại rộng 375 | `designSize` đã bị đổi | Đổi lại, hoặc chấp nhận mọi giá trị giờ tính theo khung mới (§5) |
+| Layout nhảy giữa chiều rộng 839 và 840 px | Hai lớp cửa sổ kề nhau có profile scale khác nhau | Là điều dự kiến khi cho một lớp phóng to; kiểm tra cả hai phía ranh giới (§6) |
+| `AdaptiveSplitView` bỏ qua bản lề máy gập | View không trải hết cửa sổ dọc theo nếp gập | Cho view làm toàn bộ body của route (§7) |
+| Class token mới không hiện ra với feature | Chưa sinh lại barrel | Chạy barrel generator cho `platform/ui/design_system/lib` (§8) |
+| Shadow đen không thấy được ở chế độ tối | `AppShadows` không phụ thuộc context và cả hai palette dùng chung một màu `shadow` | Cho `dark.shadow` một giá trị riêng và cho các getter nhận `BuildContext` (§9) |
 
 ## Liên quan
 

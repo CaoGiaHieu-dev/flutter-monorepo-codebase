@@ -30,7 +30,7 @@ Hãy nghĩ tới mô hình 1 trước: nó rẻ nhất.
 
 **Dùng khi** hai feature thực hiện cùng một thao tác nghiệp vụ. **Không dùng khi** thứ bạn cần là state UI chứ không phải logic nghiệp vụ.
 
-Cả hai feature inject cùng một use case từ package domain. Không bên nào biết bên kia tồn tại:
+Cả hai feature inject cùng một use case từ package domain. Không bên nào biết bên kia tồn tại (minh hoạ — `feature_checkout` không có trong template):
 
 ```dart
 // Trong controller của bất kỳ feature nào
@@ -95,8 +95,13 @@ class AuthStatusStreamImpl implements ISessionStatusStream {
   void updateAuthStatus(UserEntity? user) {
     final principal = toPrincipal(user);
     _currentUser = principal;
-    _controller.add(principal);
+    if (!_controller.isClosed) _controller.add(principal);
   }
+
+  /// Closes the stream; listeners receive `done`. GetIt calls it when the
+  /// singleton is disposed (`getIt.reset()`, a test's tear-down).
+  @disposeMethod
+  Future<void> dispose() => _controller.close();
 
   /// The one place `UserEntity` is narrowed for the outside world.
   static SessionPrincipal? toPrincipal(UserEntity? user) {
@@ -121,12 +126,15 @@ void initMicroPackage() {}
 
 @module
 abstract class AuthDiModule {
+  /// Neutral auth-state stream other features listen to.
   @singleton
-  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
+      impl;
+  // … ISessionState và ISessionRefreshListenable bind AuthProvider theo cách tương tự
 }
 ```
 
-Bên sở hữu inject `AuthStatusStreamImpl` và ghi qua `updateAuthStatus`. Mọi bên khác đọc đúng instance đó qua interface chỉ-đọc (RULE-14).
+Bên sở hữu inject `AuthStatusStreamImpl` và ghi qua `updateAuthStatus`. Mọi bên khác đọc đúng instance đó qua interface chỉ-đọc. GetIt resolve theo đúng kiểu đã đăng ký, nên mỗi interface mà bên sở hữu implement đều có một binding riêng — đó là RULE-14, và là lý do cùng module này còn bind `ISessionState` và `ISessionRefreshListenable` cho `AuthProvider`.
 
 ### Tiêu thụ từ feature khác
 
@@ -164,7 +172,7 @@ Một tham số constructor bắt buộc cũng compile được y như vậy —
 
 > [!CAUTION]
 > Luôn huỷ subscription trong `close()` / `dispose()`. Stream broadcast sẽ vô tư giữ sống một
-> controller đã bị huỷ.
+> controller đã bị huỷ. Bên sở hữu cũng đóng controller của chính nó theo cách đó (`@disposeMethod`).
 
 ## 5. Lưu tuỳ chọn UI mà không qua Domain (mô hình 4)
 
@@ -197,7 +205,7 @@ Implementation nằm ở shell adapters, `platform/shell/adapters/lib/src/theme_
 
 **Dùng khi** feature A phải render một widget mà chỉ feature B biết cách dựng nội dung. **Không dùng khi** widget đó là UI dùng chung — thứ đó thuộc về `core_ui_kit`.
 
-Khai hợp đồng builder trong package API của module sở hữu (feature A thêm `profile_api` vào `dependencies:` của nó):
+Khai hợp đồng builder trong package API của module sở hữu (feature A thêm `profile_api` vào `dependencies:` của nó). Minh hoạ — template không có module `profile`; `modules/<id>/api` được tạo như [`12_module_isolation.md` § 4](12_module_isolation.md#4-tạo-package-api-cho-module) mô tả:
 
 ```dart
 // modules/profile/api/lib/src/builders/i_profile_card_builder.dart
@@ -225,7 +233,9 @@ Interface — code thật từ package API của module auth, [`modules/auth/api
 import 'package:flutter/widgets.dart';
 
 abstract class IAuthActionHandler {
-  void logout(BuildContext context);
+  /// Signs the user out; completes once the stored session is cleared. The
+  /// app shell navigates to sign-in on its own — the caller does not.
+  Future<void> logout(BuildContext context);
 }
 ```
 
@@ -242,13 +252,12 @@ import '../provider/auth_provider.dart';
 @Injectable(as: IAuthActionHandler)
 class AuthActionHandlerImpl implements IAuthActionHandler {
   @override
-  void logout(BuildContext context) {
-    context.read<AuthProvider>().logout();
-  }
+  Future<void> logout(BuildContext context) =>
+      context.read<AuthProvider>().logout();
 }
 ```
 
-`feature_settings` gọi `getItOrNull<IAuthActionHandler>()?.logout(context)`. Nó không hề biết logout là một lời gọi Provider, hay `AuthProvider` có tồn tại.
+`feature_settings` resolve `getItOrNull<IAuthActionHandler>()` và chỉ hiện dòng logout khi kết quả khác null (`modules/settings/feature/lib/src/pages/settings_page.dart`). Nó không hề biết logout là một lời gọi Provider, hay `AuthProvider` có tồn tại.
 
 Các handler nằm trong thư mục `handlers/` của feature sở hữu và đặt tên `*ActionHandlerImpl` (RULE-78).
 
@@ -286,6 +295,7 @@ builder: (context, state, navigationShell) {
         context,
         state,
         navigationShell,
+        destinations,
       ) ??
       navigationShell;
 },
@@ -294,11 +304,11 @@ builder: (context, state, navigationShell) {
 Bản thân `navigationShell` là widget hiển thị nhánh hiện tại. Vì vậy một app không compose `feature_dashboard` vẫn render các destination — chỉ là không có chrome. Một `SizedBox` rỗng ở đây sẽ mở app đó ra một màn hình trắng.
 
 > [!NOTE]
-> Việc `apps/mobile/lib/di/injection.dart` gọi tên các package feature là tham chiếu cứng có chủ đích duy
-> nhất của composition root — nơi lắp ráp buộc phải biết nó lắp cái gì. Không file nào khác trong
+> Việc `apps/<id>/lib/di/injection.dart` gọi tên các package module là tham chiếu cứng có chủ đích duy
+> nhất của composition root — nơi lắp ráp buộc phải biết nó lắp cái gì, và composer sinh file này (RULE-05). Không file nào khác trong
 > app import module (R10), và shell dùng chung ở `platform/shell/app_shell/` thì không thể (R1); tất cả phần còn lại chạm tới feature qua hợp đồng ở
 > `core_di` cùng fallback `getAllOrEmpty` / `getItOrNull`. Các import `core_ui_kit` trong shell
-> không phải ngoại lệ — đó là package core, không phải feature gỡ được.
+> không phải ngoại lệ — đó là package platform, không phải feature gỡ được.
 
 ---
 
@@ -306,11 +316,11 @@ Bản thân `navigationShell` là widget hiển thị nhánh hiện tại. Vì v
 
 ```bash
 dart tools/arch_check/check.dart     # ✅ … R3 (import feature/API), R8 (tra cứu tuỳ chọn), R10 (import trong app)
-grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # chỉ có kết quả trong injection.dart / injection.config.dart
+grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # chỉ có kết quả trong lib/di/injection.dart (file sinh tự động)
 cd apps/mobile && flutter test test/di_smoke_test.dart            # hợp đồng resolve được từ graph thật
 ```
 
-Sau đó chứng minh việc gỡ hoạt động: bỏ module sở hữu khỏi một manifest bằng `dart tools/sample_cleanup/remove_sample.dart <bundle>` (chạy thử, với module mẫu) hoặc sửa manifest trên một nhánh nháp, rồi chạy `flutter analyze` cùng smoke test. Bên tiêu thụ vẫn phải compile và khởi động được.
+Sau đó chứng minh việc gỡ hoạt động: bỏ module sở hữu khỏi các manifest (`dart tools/sample_cleanup/remove_sample.dart <bundle>` là chạy thử cho module mẫu; `--apply` để gỡ thật, hoặc sửa các manifest trên một nhánh nháp rồi chạy `composer sync`), sau đó `flutter pub get`, `build_runner`, `flutter analyze` và smoke test. Bên tiêu thụ vẫn phải compile và khởi động được, và `capabilities:` của mỗi app vẫn phải khớp với thứ app compose (RULE-81).
 
 Checklist review:
 
@@ -325,16 +335,16 @@ Checklist review:
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |:--|:--|:--|
-| `arch_check` R3 fail vì một import feature | Feature A import feature B hoặc `data_*` | Phụ thuộc `b_api` (hoặc hợp đồng ở `core_di`) thay vào đó (bước 1) |
-| `arch_check` R8 fail | Hợp đồng do module sở hữu được resolve bằng `getIt` / `getAll` bên ngoài module đó | Dùng `getItOrNull` / `getAllOrEmpty` kèm fallback (bước 8) |
-| App crash lúc boot sau khi gỡ một feature | Một `getIt<T>()` trần hoặc một tham số constructor bắt buộc cần kiểu đã bị gỡ | Resolve nó một cách tuỳ chọn, ở route, dưới dạng factory param (bước 4) |
-| Bên tiêu thụ không thấy state cho tới lần thay đổi kế tiếp | Nó đăng ký vào stream broadcast sau sự kiện cuối | Đọc `currentUser` trước, rồi mới lắng nghe (bước 4) |
-| Mọi bên tiêu thụ giờ phụ thuộc `domain_auth` | Hợp đồng `core_di` gọi tên một entity domain | Cho hợp đồng một value type riêng, như `SessionPrincipal` (bước 4) |
-| Màn hình đã huỷ vẫn tiếp tục phản ứng | Subscription chưa bao giờ được huỷ | Huỷ nó trong `close()` / `dispose()` (bước 4) |
+| `arch_check` R3 fail vì một import feature | Feature A import feature B hoặc `data_*` | Phụ thuộc `b_api` (hoặc hợp đồng ở `core_di`) thay vào đó (§1) |
+| `arch_check` R8 fail | Hợp đồng do module sở hữu được resolve bằng `getIt` / `getAll` bên ngoài module đó | Dùng `getItOrNull` / `getAllOrEmpty` kèm fallback (§8) |
+| App crash lúc boot sau khi gỡ một feature | Một `getIt<T>()` trần hoặc một tham số constructor bắt buộc cần kiểu đã bị gỡ | Resolve nó một cách tuỳ chọn, ở route, dưới dạng factory param (§4) |
+| Bên tiêu thụ không thấy state cho tới lần thay đổi kế tiếp | Nó đăng ký vào stream broadcast sau sự kiện cuối | Đọc `currentUser` trước, rồi mới lắng nghe (§4) |
+| Mọi bên tiêu thụ giờ phụ thuộc `domain_auth` | Hợp đồng `core_di` gọi tên một entity domain | Cho hợp đồng một value type riêng, như `SessionPrincipal` (§4) |
+| Màn hình đã huỷ vẫn tiếp tục phản ứng | Subscription chưa bao giờ được huỷ | Huỷ nó trong `close()` / `dispose()` (§4) |
 
 ## Liên quan
 
-- Luật: RULE-04 (không import feature → feature), RULE-08 (`core_di` trung lập với sản phẩm), RULE-12 (tra cứu tuỳ chọn), RULE-25 (sáu mô hình), RULE-54 (state qua stream trung lập) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Luật: RULE-04 (không import feature → feature), RULE-08 (`core_di` trung lập với sản phẩm), RULE-12 (tra cứu tuỳ chọn), RULE-14 (mỗi interface một binding), RULE-25 (sáu mô hình), RULE-54 (state qua stream trung lập) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/05_features.md` § 9](../architecture/05_features.md#9-giao-tiếp-giữa-các-feature--vì-sao-có-hình-dạng-này) — vì sao hợp đồng có hình dạng này, và các anti-pattern
 - [`04_routing.md`](04_routing.md) — Navigator interface và hợp đồng route
 - [`05_di.md`](05_di.md) — phạm vi đăng ký, bind `@module`, thứ tự nạp

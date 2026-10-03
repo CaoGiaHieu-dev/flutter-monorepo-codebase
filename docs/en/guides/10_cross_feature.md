@@ -29,7 +29,7 @@ Reach for model 1 first: it is the cheapest.
 
 **Use when** two features perform the same business operation. **Don't use when** the thing you need is UI state rather than business logic.
 
-Both features inject the same use case from the domain package. Neither knows the other exists:
+Both features inject the same use case from the domain package. Neither knows the other exists (illustrative — `feature_checkout` is not in the template):
 
 ```dart
 // In any feature's controller
@@ -94,8 +94,13 @@ class AuthStatusStreamImpl implements ISessionStatusStream {
   void updateAuthStatus(UserEntity? user) {
     final principal = toPrincipal(user);
     _currentUser = principal;
-    _controller.add(principal);
+    if (!_controller.isClosed) _controller.add(principal);
   }
+
+  /// Closes the stream; listeners receive `done`. GetIt calls it when the
+  /// singleton is disposed (`getIt.reset()`, a test's tear-down).
+  @disposeMethod
+  Future<void> dispose() => _controller.close();
 
   /// The one place `UserEntity` is narrowed for the outside world.
   static SessionPrincipal? toPrincipal(UserEntity? user) {
@@ -120,12 +125,15 @@ void initMicroPackage() {}
 
 @module
 abstract class AuthDiModule {
+  /// Neutral auth-state stream other features listen to.
   @singleton
-  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) => impl;
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
+      impl;
+  // … ISessionState and ISessionRefreshListenable bind AuthProvider the same way
 }
 ```
 
-The owner injects `AuthStatusStreamImpl` and writes through `updateAuthStatus`. Everyone else reads the same instance through the read-only interface (RULE-14).
+The owner injects `AuthStatusStreamImpl` and writes through `updateAuthStatus`. Everyone else reads the same instance through the read-only interface. GetIt resolves the exact registered type, so each interface the owner implements gets its own binding — that is RULE-14, and the reason the same module also binds `ISessionState` and `ISessionRefreshListenable` to `AuthProvider`.
 
 ### Consume it from another feature
 
@@ -163,7 +171,7 @@ A required constructor parameter would compile just as well — and then DI coul
 
 > [!CAUTION]
 > Always cancel the subscription in `close()` / `dispose()`. A broadcast stream will happily keep a
-> disposed controller alive.
+> disposed controller alive. The owner closes its own controller the same way (`@disposeMethod`).
 
 ## 5. Persist a UI preference without Domain (model 4)
 
@@ -196,7 +204,7 @@ The implementation lives in the shell adapters, `platform/shell/adapters/lib/src
 
 **Use when** feature A must render a widget whose content only feature B knows how to build. **Don't use when** the widget is generic UI — that belongs in `core_ui_kit`.
 
-Declare the builder contract in the owning module's API package (feature A adds `profile_api` to its `dependencies:`):
+Declare the builder contract in the owning module's API package (feature A adds `profile_api` to its `dependencies:`). Illustrative — the template has no `profile` module; `modules/<id>/api` is created as [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package) describes:
 
 ```dart
 // modules/profile/api/lib/src/builders/i_profile_card_builder.dart
@@ -224,7 +232,9 @@ The interface — real code from the auth module's API package, [`modules/auth/a
 import 'package:flutter/widgets.dart';
 
 abstract class IAuthActionHandler {
-  void logout(BuildContext context);
+  /// Signs the user out; completes once the stored session is cleared. The
+  /// app shell navigates to sign-in on its own — the caller does not.
+  Future<void> logout(BuildContext context);
 }
 ```
 
@@ -241,13 +251,12 @@ import '../provider/auth_provider.dart';
 @Injectable(as: IAuthActionHandler)
 class AuthActionHandlerImpl implements IAuthActionHandler {
   @override
-  void logout(BuildContext context) {
-    context.read<AuthProvider>().logout();
-  }
+  Future<void> logout(BuildContext context) =>
+      context.read<AuthProvider>().logout();
 }
 ```
 
-`feature_settings` calls `getItOrNull<IAuthActionHandler>()?.logout(context)`. It never learns that logout is a Provider call, or that `AuthProvider` exists.
+`feature_settings` resolves `getItOrNull<IAuthActionHandler>()` and offers the logout row only when it is non-null (`modules/settings/feature/lib/src/pages/settings_page.dart`). It never learns that logout is a Provider call, or that `AuthProvider` exists.
 
 Handler implementations live in the owning feature's `handlers/` directory and are named `*ActionHandlerImpl` (RULE-78).
 
@@ -285,6 +294,7 @@ builder: (context, state, navigationShell) {
         context,
         state,
         navigationShell,
+        destinations,
       ) ??
       navigationShell;
 },
@@ -293,11 +303,11 @@ builder: (context, state, navigationShell) {
 `navigationShell` is itself the widget showing the current branch. So an app composed without `feature_dashboard` still renders its destinations — just without chrome. An empty `SizedBox` here would open that app on a blank screen.
 
 > [!NOTE]
-> `apps/mobile/lib/di/injection.dart` naming feature packages is the composition root's one intentional
-> hard reference — it must name what it composes. No other app file imports a module (R10), and the
+> `apps/<id>/lib/di/injection.dart` naming module packages is the composition root's one intentional
+> hard reference — it must name what it composes, and composer generates it (RULE-05). No other app file imports a module (R10), and the
 > shared shell in `platform/shell/app_shell/` cannot (R1); everything else reaches features through `core_di` contracts with
 > `getAllOrEmpty` / `getItOrNull` fallbacks. The `core_ui_kit` imports in the shell are not
-> exceptions — that is a core package, not a removable feature.
+> exceptions — that is a platform package, not a removable feature.
 
 ---
 
@@ -305,11 +315,11 @@ builder: (context, state, navigationShell) {
 
 ```bash
 dart tools/arch_check/check.dart     # ✅ … R3 (feature/API imports), R8 (optional lookups), R10 (app imports)
-grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # hits only in injection.dart / injection.config.dart
+grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # hits only in lib/di/injection.dart (generated)
 cd apps/mobile && flutter test test/di_smoke_test.dart            # contracts resolve from the real graph
 ```
 
-Then prove the removal works: drop the owning module from a manifest with `dart tools/sample_cleanup/remove_sample.dart <bundle>` (a dry run, for a sample) or by editing the manifest in a scratch branch, and run `flutter analyze` plus the smoke test. The consumer must still compile and boot.
+Then prove the removal works: drop the owning module from the manifests (`dart tools/sample_cleanup/remove_sample.dart <bundle>` is a dry run for a sample; `--apply` removes it, or edit the manifests in a scratch branch and run `composer sync`), then `flutter pub get`, `build_runner`, `flutter analyze` and the smoke test. The consumer must still compile and boot, and each app's `capabilities:` must still match what it composes (RULE-81).
 
 Review checklist:
 
@@ -324,16 +334,16 @@ Review checklist:
 
 | Symptom | Cause | Fix |
 |:--|:--|:--|
-| `arch_check` R3 fails on a feature import | Feature A imports feature B or `data_*` | Depend on `b_api` (or a `core_di` contract) instead (step 1) |
-| `arch_check` R8 fails | A module-owned contract is resolved with `getIt` / `getAll` outside its module | Use `getItOrNull` / `getAllOrEmpty` with a fallback (step 8) |
-| The app crashes at boot after a feature was removed | A bare `getIt<T>()` or a required constructor parameter needs the removed type | Resolve it optionally, at the route, as a factory param (step 4) |
-| A consumer sees no state until the next change | It subscribed to a broadcast stream after the last event | Read `currentUser` first, then listen (step 4) |
-| Every consumer now depends on `domain_auth` | The `core_di` contract names a domain entity | Give the contract its own value type, like `SessionPrincipal` (step 4) |
-| A disposed screen keeps reacting | The subscription was never cancelled | Cancel it in `close()` / `dispose()` (step 4) |
+| `arch_check` R3 fails on a feature import | Feature A imports feature B or `data_*` | Depend on `b_api` (or a `core_di` contract) instead (§1) |
+| `arch_check` R8 fails | A module-owned contract is resolved with `getIt` / `getAll` outside its module | Use `getItOrNull` / `getAllOrEmpty` with a fallback (§8) |
+| The app crashes at boot after a feature was removed | A bare `getIt<T>()` or a required constructor parameter needs the removed type | Resolve it optionally, at the route, as a factory param (§4) |
+| A consumer sees no state until the next change | It subscribed to a broadcast stream after the last event | Read `currentUser` first, then listen (§4) |
+| Every consumer now depends on `domain_auth` | The `core_di` contract names a domain entity | Give the contract its own value type, like `SessionPrincipal` (§4) |
+| A disposed screen keeps reacting | The subscription was never cancelled | Cancel it in `close()` / `dispose()` (§4) |
 
 ## Related
 
-- Rules: RULE-04 (no feature → feature import), RULE-08 (`core_di` is product-neutral), RULE-12 (optional lookups), RULE-25 (the six models), RULE-54 (state through neutral streams) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Rules: RULE-04 (no feature → feature import), RULE-08 (`core_di` is product-neutral), RULE-12 (optional lookups), RULE-14 (one binding per interface), RULE-25 (the six models), RULE-54 (state through neutral streams) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/05_features.md` § 9](../architecture/05_features.md#9-cross-feature-communication--why-it-is-shaped-this-way) — why the contracts look this way, and the anti-patterns
 - [`04_routing.md`](04_routing.md) — Navigator interfaces and route contracts
 - [`05_di.md`](05_di.md) — registration scopes, `@module` bindings, ordering

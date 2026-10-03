@@ -74,14 +74,14 @@ modules:
 
 | Section | Says | Read by |
 |:--|:--|:--|
-| `app` | the id (the folder, the package `<id>_app`, every `--app`), the display name, the entry point | `describe`, `verify` (V12), the boot-error screen |
+| `app` | the id (the folder, the package `<id>_app`, every `--app`), the display name, the entry point | the boot check (the id), the `MaterialApp` title (the name; `APP_NAME` overrides it per flavor), `describe`, `verify` (V12) |
 | `flavors` | which of `dev`, `staging`, `prod` the app is built as; each may carry an `ssl_pinning` decision | the facts, `validate` (`P02`), the smoke test |
 | `env` | the `--dart-define` keys the app reads, and the flavors that require each; `native_only: true` for a key only Gradle or Xcode reads | `validate` (`P03`), V11 |
 | `platforms` | where the app runs, and per platform: `runner`, `splash`, `push`, `deep_links`, `orientation`, `window` | the facts, `validate` (`P01`, `P05`), V5–V8 |
 | `capabilities` | `provided`, or `absent` with a reason, for every optional contract the shell resolves | `checkAppContract`, V2–V4, V14 |
 | `di_groups`, `modules`, `extra_dependencies` | what the app composes, in what order and why | `sync`, `injection.dart`, the app's path dependencies |
 
-A key exists only together with the code that reads it: a tools test fails when a key names a consumer that does not mention it. `app.kind`, which nothing read, is gone for that reason, and `composer` refuses it with the instruction to delete the line.
+A key exists only together with the code that reads it: a tools test fails when a key names a consumer that does not mention it. `composer` refuses `app.kind`, which nothing reads, with the instruction to delete the line.
 
 Where a platform leaves `splash`, `push`, `deep_links` or `orientation` out, the generated facts carry a derived default, and the report says which: `splash` is native on iOS and, elsewhere, Dart when capability `splash` is provided; `push` is on when `core_notifications` is composed and supports the platform (never on the web — no service worker ships); `deep_links` is on; `orientation` is `phones_portrait` (displays under the phone threshold locked to portrait). The facts always carry every field explicitly, so an app never depends on a Dart default.
 
@@ -94,7 +94,7 @@ Where a platform leaves `splash`, `push`, `deep_links` or `orientation` out, the
 | `display` | `DisplayProfile` | design artboard, scale policy per window class, split-screen mode, the OS font-size cap, the phone threshold | 375×812, `expanded` drawn 1:1, `textScaleMax: 2.0` (a `const` assert refuses less than 2.0 and more than 4.0), phone threshold 600 |
 | `router` | `RouterProfile` | when the entry location is used (`firstLaunch`, `always`, `never`), the fallback location | first launch only, first tab |
 | `locale` | `LocaleProfile` | the languages offered (`supported`; null = every ARB the template ships), the fallback and the first-launch language | every shipped language, `en`, the device's language |
-| `theme` | `ThemeProfile` | the theme mode a first launch opens in, palette overrides by `PaletteToken` (17 tokens, ARGB) | system mode, the template palettes |
+| `theme` | `ThemeProfile` | the theme mode a first launch opens in, palette overrides by `PaletteToken` (ARGB) | system mode, the template palettes |
 | `network` | `NetworkProfile` | the default HTTP client's connect, receive and send timeouts, extra headers, redirects | 20 s each, no extra headers, no redirects |
 
 ```dart
@@ -123,7 +123,7 @@ const AppProfile appProfile = AppProfile(
 
 What a section cannot say is refused where it can be: `DisplayProfile(textScaleMax: 1.5)` does not compile (`const_eval_throws_exception` — RULE-38), a `NetworkProfile` header named `authorization`, `cookie`, `set-cookie`, `proxy-authorization` or `content-type` makes the default client throw at boot (RULE-66), and a `LocaleProfile` that offers no shipped language or whose fallback it does not offer throws at boot naming the field. The palette's `shadow` and `scrim`, and the two gradients, are not overridable: the gradients derive from `primary`, `primaryContainer`, `info` and `error`.
 
-Every default is pinned by a test, and each app's `test/app_profile_test.dart` is where you assert what you changed, so a later edit that moves it is visible.
+After editing the profile run `composer sync`: the README report's § 5 prints the sections the app sets, and `verify` (V13) re-reads the file to keep it current. Each app's `test/app_profile_test.dart` is where you assert what you changed, so a later edit that moves it is visible. What each section means for a screen: [`09_localization_theming.md`](09_localization_theming.md) (`locale`, `theme`) and [`11_design_system.md`](11_design_system.md) (`display`, `theme`).
 
 ## 5. Hooks
 
@@ -147,7 +147,7 @@ Type `const ShellHooks(` and the IDE lists the seven hooks, each documented with
 
 ## 6. Contracts: what the shell asks of an app
 
-The shell resolves its contracts through one catalog, `SHELL_CONTRACTS` (`platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart`): **required** rows the shell's own packages register — an app composes the `shell` and `ui` groups and gets them — and **optional** rows an app or a module contributes (7 and 14 today; `describe --catalog` prints the live table, which is the count to trust). An app declares each optional row, and `describe --catalog` lists them with what the shell does without each:
+The shell resolves its contracts through one catalog, `SHELL_CONTRACTS` (`platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart`): **required** rows the shell's own packages register — an app composes the `shell` and `ui` groups and gets them — and **optional** rows an app or a module contributes (`describe --catalog` prints the live table). An app declares each optional row, and `describe --catalog` lists them with what the shell does without each:
 
 ```yaml
 capabilities:
@@ -164,7 +164,7 @@ Absence is a decision with a reason: `composer verify` refuses an empty, `TODO` 
 class CrashlyticsErrorReporter implements IErrorReporter { … }
 ```
 
-After that, declare it `provided`. Declaring a contract the code does not register, or registering one the manifest says is absent, fails at three places: `composer verify` (V3, statically, naming the file), the smoke test (`checkAppContract`, from the graph the app builds) and boot in a debug build.
+After that, declare it `provided`. Declaring a contract the code does not register, or registering one the manifest says is absent, fails at three places: `composer verify` (V3, statically, naming the file), the smoke test (`checkAppContract`, from the graph the app builds) and the boot of a dev or staging flavor or a debug build, which `checkAppContract` runs after DI.
 
 Tabs have one more rule. An app that composes **two or more** `INavDestinationModule`s needs a `dashboard` (`IDashboardRouteModule`, the sample is `feature_dashboard`): it draws the chrome that switches between tabs, and without it only the first tab is reachable. `checkAppContract` says so (`C12`) in the smoke test and in a debug boot. One tab renders fine without a dashboard (`apps/admin`). To add the dashboard: `- { id: dashboard, layers: [feature] }` under `modules:`, `dashboard: provided` under `capabilities:`, then `composer sync`.
 
@@ -220,28 +220,9 @@ Then, from the repository root: `flutter pub get`, `dart run build_runner build 
 
 ## 9. What Gate 0 checks
 
-`composer verify` regenerates every generated file and fails on drift, and holds the declaration to the source. `describe --catalog` prints this list too.
+`composer verify` regenerates every generated file and fails on drift (V13), and holds the declaration to the source: the vocabularies and ranges (V1, V14), the capability states against what the composed packages and the app register (V2–V4), the platform switches against what the app composes and what each package supports (V5–V8), the pin decision per flavor (V9), what a composed package needs the app to register (V10), the env files (V11), the entry point and the smoke test (V12), the native runners (V6, V15), the DI group order (V16) and the single workspace node (V17, RULE-16). `dart tools/composer/composer.dart describe --catalog` prints the live list of checks; this guide does not copy it.
 
-| Check | Holds |
-|:-:|:--|
-| V1 | closed vocabularies, types and ranges; an unknown key; `app.kind` (removed) |
-| V2 | every optional contract has a declared state; no unknown id — the message prints the line to paste |
-| V3 | the declaration equals the code, both directions: `provided` needs a registration in a composed package or the app's own `lib/`, `absent` needs none; every required contract has an implementer |
-| V4 | the members of a bundle share one state |
-| V5 | `splash: dart` needs capability `splash` provided |
-| V6 | `runner: committed` needs the platform folder, `scaffold` needs it absent |
-| V7 | every package the app links — composed, or reached through `dependencies:` — that declares `platforms:` supports every platform the app declares |
-| V8 | `push: true` needs `core_notifications` composed and supporting the platform; `window` only on a desktop platform |
-| V9 | a pin decision per flavor where a declared platform can pin, none where none can; pins well-formed |
-| V10 | what a composed package needs the app to register (`FirebaseOptions` per flavor) is registered under the app's `lib/` |
-| V11 | the env files that exist hold exactly the keys `env:` declares |
-| V12 | the entry point passes `profile:`; `test/di_smoke_test.dart` exists and calls `checkAppContract` |
-| V13 | the generated regions — `facts`, `report`, `imports`, `modules` — equal regeneration |
-| V14 | no reason is empty, `TODO` or `TBD` |
-| V15 | the `productFlavors` of a committed Android runner and the flavor schemes of a committed iOS runner are the flavors the manifest declares |
-| V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order (`core` → `notifications` → `shell` → `ui` → `domain` → `data` → `feature` → `other`) |
-
-Read a message from left to right: `<file>: <key>: <problem> — <the fix>`. The scan behind V3 and V10 reads source, not the graph — a hand-written `getIt.register…` is invisible to it — so `checkAppContract` stays the authority. V3, V10, V11 and V12 fail `verify` while `sync` only warns and still writes, so a half-finished edit can be regenerated; V7 and V8 refuse in both.
+Read a message from left to right: `<file>: <key>: <problem> — <the fix>`. The scan behind V3 and V10 reads source, not the graph — a hand-written `getIt.register…` is invisible to it — so `checkAppContract` stays the authority. V3, V10, V11, V12 and V17 fail `verify` while `sync` only warns and still writes, so a half-finished edit can be regenerated; V7 and V8 refuse in both, before anything is written.
 
 ## 10. What stays locked, and one DI caveat
 

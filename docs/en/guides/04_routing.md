@@ -27,7 +27,7 @@ All contracts live in `platform/foundation/contracts/lib/src/routing/`.
 
 Use `INavDestinationModule` **only** for a real bottom-nav destination that needs its own persistent back stack. A screen you merely push onto the stack belongs in `IFeatureRouteModule` (RULE-24).
 
-What the **app** — not a feature — decides about the router is declared in `apps/<id>/`: `RouterProfile` in `lib/app/app_profile.dart` (`entry`: `firstLaunch` by default, `always` or `never`; `fallbackPath`: the first tab by default) and, in `lib/app/app_hooks.dart`, `ShellHooks.navigatorObservers` and `ShellHooks.redirect` — one app-wide guard; a module's own guard still goes in its `GoRouteData.redirect`. Deep links are per platform: `platforms.<p>.deep_links` in the manifest is on by default, and a platform that turns it off logs one line naming the key ([`13_app_composition.md`](13_app_composition.md)).
+What the **app** — not a feature — decides about the router is declared in `apps/<id>/`: `RouterProfile` (from `platform_kernel`) in `lib/app/app_profile.dart` (`entry`: `EntryPolicy.firstLaunch` by default, `always` or `never`; `fallbackPath`: the first tab by default) and, in `lib/app/app_hooks.dart`, `ShellHooks.navigatorObservers` and `ShellHooks.redirect` — one app-wide guard; a module's own guard still goes in its `GoRouteData.redirect`. Deep links are per platform: `platforms.<p>.deep_links` in the manifest is on by default, and a platform that turns it off logs one line naming the key ([`13_app_composition.md`](13_app_composition.md)).
 
 ## 2. Add the path constant
 
@@ -45,30 +45,60 @@ class AuthPath {
 Routes are declared with annotations and generated into `*_route_module.g.dart`. `modules/auth/feature/lib/src/routing/auth_route_module.dart`:
 
 ```dart
-@TypedShellRoute<AuthShellRoute>(
-  routes: [TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)],
-)
-class AuthShellRoute extends ShellRouteData {
-  const AuthShellRoute();
-
-  static final $navigatorKey = NavigatorKeys.nested('auth');
-  static final $parentNavigatorKey = NavigatorKeys.appKey;
-
-  @override
-  Widget builder(BuildContext context, GoRouterState state, Widget navigator) {
-    return navigator;
-  }
-}
-
+/// SAMPLE — a feature contributing a top-level route.
+///
+/// The login screen sits on the app navigator, above the dashboard's tabs,
+/// so it names [NavigatorKeys.appKey] as its parent. Add sibling screens as
+/// further `@TypedGoRoute` classes here and list them in
+/// `AuthFeatureRouteModule.routes`.
+///
+/// Controllers are instantiated at the route, not inside the page — RULE-21.
+/// Here `AuthProvider` is a global `@lazySingleton` mounted by
+/// `AuthTreeWrapper`, so this route builds the page directly. A screen-scoped
+/// controller would wrap it in
+/// `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.
+@TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
+
+  static final $parentNavigatorKey = NavigatorKeys.appKey;
+
   @override
   Widget build(BuildContext context, GoRouterState state) => const LoginPage();
 }
 ```
 
-Add sibling routes as further `TypedGoRoute` entries in `routes:`. They share the shell's nested Navigator, so they share one back stack. The generated `$authShellRoute` is what the feature hands back from `IFeatureRouteModule.routes` (step 5).
+A stack route sits on the app navigator, above the dashboard's tabs, so it names `NavigatorKeys.appKey` as its `$parentNavigatorKey`. A tab's route (`HomeRoute`) names none: the shell mounts it in the tab's own `StatefulShellBranch`. Add sibling screens as further `@TypedGoRoute` classes in the same file and list their generated `$…Route` getters in the feature's `IFeatureRouteModule.routes` (step 5).
+
+### Pass route parameters
+
+A path parameter is a `:name` segment in the path constant; a query parameter is any other constructor field. `go_router_builder` matches both to the route class's constructor fields by name and parses them to their Dart type. In `lib/src/utils/profile_path.dart`:
+
+```dart
+static const String DETAIL = '/profile/:id';
+```
+
+In the route file:
+
+```dart
+@TypedGoRoute<ProfileDetailRoute>(path: ProfilePath.DETAIL)
+class ProfileDetailRoute extends GoRouteDataCustom with $ProfileDetailRoute {
+  const ProfileDetailRoute({required this.id, this.tab});
+
+  final String id; // path parameter — `/profile/42`
+  final int? tab; // query parameter — `/profile/42?tab=2`
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return ChangeNotifierProvider(
+      create: (_) => getIt<ProfileDetailProvider>(param1: id),
+      child: ProfileDetailPage(initialTab: tab ?? 0),
+    );
+  }
+}
+```
+
+Navigate with the typed class — `const ProfileDetailRoute(id: '42', tab: 2).go(context)` — never by building the string. The controller takes the id as a factory parameter, `ProfileDetailProvider(@factoryParam this._id)`, passed from the route as above (RULE-11, RULE-21). A factory with a **non-nullable** `@factoryParam` is the one kind the DI smoke test cannot build without its screen: list its type in `_factoriesNeedingArguments` in `apps/<id>/test/di_smoke_test.dart`, with the reason (`F01`, [`05_di.md`](05_di.md)). Another feature reaches the screen through a navigator method that takes the parameter — `void toProfileDetail(BuildContext context, {required String id})` in `profile_api` (step 6).
 
 ## 4. Create the controller in the route
 
@@ -131,7 +161,11 @@ class OnboardingFeatureRouteModule implements IFeatureRouteModule {
   @override
   List<RouteBase> get routes => [$onboardingRoute];
 }
+```
 
+Where the first launch starts is a separate contract, registered next to it — `onboarding_app_entry_location.dart`:
+
+```dart
 @LazySingleton(as: IAppEntryLocation)
 class OnboardingAppEntryLocation implements IAppEntryLocation {
   @override
@@ -145,14 +179,9 @@ Use unique paths and avoid overlapping catch-alls: sibling order between modules
 
 ```dart
 abstract class INavDestinationModule {
-  int get order;                    // 0 = first tab
-  String get path;                  // canonical path, used for fallbacks
-  List<RouteBase> get routes;       // mounted in one StatefulShellBranch
-  // Re-tap on the active tab. Concrete, not abstract: the default body only
-  // logs — override it for "scroll to top / pop to root".
-  void onRestore() {
-    DynamicLogger.log('onRestore $runtimeType', level: LogLevel.INFO);
-  }
+  int get order; // ascending sort key, 0 = first tab
+  String get path; // canonical path, used for fallbacks
+  List<RouteBase> get routes; // mounted in one StatefulShellBranch
   NavDestination destination(BuildContext context);
 }
 ```
@@ -180,7 +209,43 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-`order` is an ascending sort key, not an index, and must be unique across tabs. `destination` returns a neutral `NavDestination`, so the same contribution renders as a bottom-bar item or a rail item. `feature_dashboard` builds that chrome from every registered tab and drops it when fewer than two are registered ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-is-chrome-only)). An app that composes two or more tabs must compose `feature_dashboard` too and declare `dashboard: provided`, or only the first tab is reachable — `checkAppContract` fails the smoke test with `C12` ([`13_app_composition.md` § 6](13_app_composition.md#6-contracts-what-the-shell-asks-of-an-app)). Why the chrome switches on window size class: [`11_design_system.md` § 7](11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
+`order` is an ascending sort key, not an index, and must be unique across tabs. `destination` returns a neutral `NavDestination` (`label`, `icon`, optional `selectedIcon`), so the same contribution renders as a bottom-bar item or a rail item. `feature_dashboard` builds that chrome from every registered tab and drops it when fewer than two are registered ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-is-chrome-only)); re-tapping the current tab returns its branch to the first page. An app that composes two or more tabs must compose `feature_dashboard` too and declare `dashboard: provided`, or only the first tab is reachable — `checkAppContract` fails the smoke test with `C12` ([`13_app_composition.md` § 6](13_app_composition.md#6-contracts-what-the-shell-asks-of-an-app)). Why the chrome switches on window size class: [`11_design_system.md` § 7](11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
+
+### The dashboard chrome — `IDashboardRouteModule`
+
+Only `feature_dashboard` implements this contract. The shell sorts the registered tabs by `order` once and hands that same list to the dashboard, so destination `i` is branch `i` of `navigationShell`; render the list, do not collect the tabs again:
+
+```dart
+abstract class IDashboardRouteModule {
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  );
+}
+```
+
+```dart
+// modules/dashboard/feature/lib/src/routing/dashboard_route_module_impl.dart
+@Singleton(as: IDashboardRouteModule)
+class DashboardRouteModuleImpl implements IDashboardRouteModule {
+  @override
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  ) {
+    return DashboardPage(
+      navigationShell: navigationShell,
+      destinations: destinations,
+    );
+  }
+}
+```
+
+Without it the destinations still render, just without chrome.
 
 ## 6. Let other features navigate to your screen
 
@@ -196,7 +261,7 @@ abstract class AuthNavigator {
 
 One method per route the feature owns — and only routes it owns.
 
-A **new** file in the API package is invisible to every consumer until the barrel exports it. `package:auth_api/auth_api.dart` re-exports `src/navigators/navigators.dart`, which is generated. Regenerate it; never hand-add the `export`, because the generator deletes hand-written lines (RULE-75). A module with no API package yet gets one first: [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package).
+A **new** file in the API package is invisible to every consumer until the package barrel, `package:auth_api/auth_api.dart`, exports it. The barrel is generated: regenerate it, never hand-add the `export`, because the generator replaces every export it finds (RULE-75). A module with no API package yet gets one first: `dart tools/module_generator/generate.dart 6 <name>` writes the package and the navigator stub, and implements it in the module's feature if that exists ([`01_new_feature.md`](01_new_feature.md) § 7; layout and what `arch_check` holds it to: [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package)).
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/auth/api/lib
@@ -250,7 +315,15 @@ class NavigatorKeys {
 }
 ```
 
-Ask for a key with `NavigatorKeys.nested('<id>')` **only** when a module genuinely needs its own nested navigator — its own back stack. The shell route and its child routes must use the same id, as `AuthShellRoute` and `LoginRoute` do in step 3. Destinations inside `StatefulShellRoute` get a branch navigator from GoRouter and need none. Why the keys live in `core_di`: [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#why-navigatorkeys-live-in-core_di).
+Two keys are fixed: `appKey`, the navigator of the shell route that wraps every in-app route (a stack route names it as its `$parentNavigatorKey`, as `LoginRoute` does in step 3), and `rootKey`, the root navigator, for a full-screen route that must escape the shell. Ask for `NavigatorKeys.nested('<id>')` **only** when a module genuinely needs its own nested navigator — its own back stack. The shell route and its child routes must name the same id:
+
+```dart
+class CheckoutShellRoute extends ShellRouteData {
+  static final $navigatorKey = NavigatorKeys.nested('checkout');
+}
+```
+
+Destinations inside `StatefulShellRoute` get a branch navigator from GoRouter and need none. Why the keys live in `core_di`: [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#why-navigatorkeys-live-in-core_di).
 
 ## 8. Generate the routes and export the files
 
@@ -294,7 +367,7 @@ One scheme per flavor, so dev, staging and prod installed side by side never com
 - `resValue("string", "DEEP_LINK_SCHEME", …)` in each `productFlavors` entry of `apps/mobile/android/app/build.gradle.kts`;
 - the `DEEP_LINK_SCHEME` build setting of each Runner configuration in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*).
 
-Rename all six together when you rename the app.
+Rename the Android and the iOS values together when you rename the app.
 
 `WEB_DOMAIN` comes from the flavor's env file (`apps/mobile/env.dev`, …). The committed env files leave it empty.
 

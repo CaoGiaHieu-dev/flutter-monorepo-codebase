@@ -66,9 +66,11 @@ cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 
 Run `sync` for **every app** — do not narrow it with `--app mobile`. The root `workspace:` list is always rebuilt from all apps and drops what is not on disk, but `--app mobile` leaves `apps/admin/pubspec.yaml` untouched, still declaring path dependencies on the missing modules (`settings`, say) — and `flutter pub get` then fails to resolve the workspace.
 
-The app runs. It has no home screen, no settings, no dashboard — and it boots, because every shell lookup for a module-owned contract is `getItOrNull` or `getAllOrEmpty` (`arch_check` R8), and no shell file imports a module (`arch_check` R10 in the app, R1 in `platform_app_shell`).
+`sync` prints one warning per declared package that is not on disk, and — because the manifests still declare `tabs`, `dashboard`, `entry` and the like as `provided` while the modules that register them are absent — a warning per capability that nothing composed now registers (V3), ending *"`composer verify` fails until each is fixed"*. In a partial checkout that is expected: `sync` still writes. Do not edit the manifest to silence it.
 
-`dart tools/composer/composer.dart verify` **fails** in a partial checkout, and should: it implies `--strict`, so a module declared in a manifest but absent from disk is an error (*"N declared package(s) missing from disk"*). That is the check CI Gate 0 runs, on a runner with every submodule. Locally, `flutter analyze` is the check that means something.
+The app runs. In an auth-only checkout it has no home screen, no settings, no dashboard — and it boots, because every shell lookup for a module-owned contract is `getItOrNull` or `getAllOrEmpty` (`arch_check` R8), and no shell file imports a module (`arch_check` R10 in the app, R1 in `platform_app_shell`).
+
+`dart tools/composer/composer.dart verify` **fails** in a partial checkout, and should: it implies `--strict`, so a module declared in a manifest but absent from disk is an error (*"N declared package(s) missing from disk"*, exit 1). That is the check CI Gate 0 runs, on a runner with every submodule. The app's DI smoke test fails the same way, by design — it holds the graph to the manifest's `capabilities:` (RULE-81), and a capability declared `provided` has no implementer. Locally, `flutter analyze` is the check that means something.
 
 Other teams' code is not merely unbuilt — it is **not on the disk**, and `modules/home` is an empty directory rather than source: `.gitmodules` records only its path and URL, and the pinned commit is a gitlink entry in the superproject's tree.
 
@@ -85,28 +87,25 @@ Without `--app` that is every app — up to nine files with `mobile` and `admin`
 
 In a partial checkout it writes a partial composition into them. That is correct locally and wrong to commit: it would drop the other modules from the app for everyone.
 
-`sync` says so, names the files, and prints the restore command:
+`sync` says so, names the files it just rewrote, and prints the restore command. After `bootstrap` has already pruned the root `pubspec.yaml` and the two app pubspecs, an auth-only checkout prints:
 
 ```
-⚠️ PARTIAL COMPOSITION — 7 declared package(s) are not on disk.
+⚠️ PARTIAL COMPOSITION — 8 declared package(s) are not on disk.
   What was just written composes only what is present, which is exactly right
   for working on one module. It is wrong to commit: it would drop the other
   modules from the app for everyone.
 
   Files changed:
-    apps/mobile/pubspec.yaml
-    apps/mobile/lib/di/injection.dart
-    apps/admin/pubspec.yaml
     apps/admin/lib/di/injection.dart
-    apps/mobile/README.md
     apps/admin/README.md
-    pubspec.yaml
+    apps/mobile/lib/di/injection.dart
+    apps/mobile/README.md
 
   Restore them before you commit:
-    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart apps/mobile/README.md apps/admin/README.md pubspec.yaml
+    git checkout -- apps/admin/lib/di/injection.dart apps/admin/README.md apps/mobile/lib/di/injection.dart apps/mobile/README.md
 ```
 
-After `bootstrap`, the two pubspecs and the root `pubspec.yaml` already hold the pruned regions, so `sync` finds nothing to change there and names only the other files it rewrote. `bootstrap` printed its own restore line for the pubspecs; `git status` shows every one of them. Before you commit, restore each:
+`sync` names only what *it* changed; `bootstrap` printed its own restore line for the pubspecs, and `git status` shows every one of them. Before you commit, restore each:
 
 ```bash
 git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
@@ -123,28 +122,28 @@ That is the safety net worth understanding: the local state is allowed to be par
 
 ## 4. Create a module API package
 
-`core_di` holds only contracts the platform itself needs, named for what it needs — a session (`ISessionState`), a location (`ISignInLocation`, `IPostSignInLocation`). A contract that exists so *one feature can reach another module* belongs to that module: its API package, `modules/<id>/api`, named `<id>_api`. The samples ship two — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) and `home_api` (`HomeNavigator`). No generator type builds one; it is three files.
+`core_di` holds only contracts the platform itself needs, named for what it needs — a session (`ISessionState`), a location (`ISignInLocation`, `IPostSignInLocation`). A contract that exists so *one feature can reach another module* belongs to that module: its API package, `modules/<id>/api`, named `<id>_api`. The samples ship two — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) and `home_api` (`HomeNavigator`).
+
+The module generator builds one (type 6):
 
 ```bash
-# modules/payment/api/pubspec.yaml — name: payment_api, resolution: workspace,
-#   dependencies: flutter (for BuildContext) and, only if needed, core_di.
-# modules/payment/api/lib/src/navigators/payment_navigator.dart — the interface.
-# Then: list the layer, compose, and generate the barrel.
-#   apps/<id>/app_manifest.yaml:  - { id: payment, layers: [api, domain, data, feature] }
-dart tools/composer/composer.dart sync
-flutter pub get
-dart tools/barrel_generator/generate.dart modules/payment/api/lib
+# payment_api at modules/payment/api: a PaymentNavigator stub, no DI module.
+# Adds `layers: [api, …]` to every app_manifest.yaml (or only --apps ids), runs
+# composer sync, pub get and the barrel generator. If feature_payment exists
+# with its route, it also gets payment_api in its dependencies: and a
+# PaymentNavigatorImpl in routing/.
+dart tools/module_generator/generate.dart 6 payment
 ```
 
-Then implement it in the owning feature (`@Singleton(as: PaymentNavigator)` in `routing/`, with `payment_api` in its `dependencies:`) and add `payment_api` to each consumer's `dependencies:`. Consumers resolve it with `getItOrNull`.
+Add `payment_api` to each consumer's `dependencies:`, and implement further contracts (an action handler, a builder) in the owning feature, with `payment_api` in its `dependencies:`. Consumers resolve every one with `getItOrNull`. A new file in the API package reaches consumers only through the package barrel — regenerate it with `dart tools/barrel_generator/generate.dart modules/payment/api/lib` (RULE-75).
 
 What `arch_check` holds you to:
 
-- **R3** — the API package depends on `platform/foundation/*` and Flutter/pub packages only: not its own module's domain/data/feature, not another module or its API, not another platform group. A feature may import another module's API, never its feature or data package.
+- **R3** — the API package depends on `platform/foundation/*` and Flutter/pub packages only: not its own module's domain/data/feature, not another module or its API, not another platform group. A feature may import another module's API, never its feature, data or domain package; a data package imports no other module's API.
 - **R8** — a type declared in an API package and implemented only under `modules/` is resolved with `getItOrNull` outside its module.
 - **R1 / R10** — no platform package and no app file (bar `injection.dart`) imports it.
 
-The `api` layer needs no `di_groups` entry: `composer` makes it a workspace member, never an app dependency or an `injection.dart` line. In a partial checkout (step 2) a module you import an API from must be checked out too — its API package lives inside it. `remove_sample <id>` keeps an API package that another package still imports, reports who, and leaves the manifest entry as `{ id: <id>, layers: [api] }`; run it again once nothing imports the package.
+The `api` layer needs no `di_groups` entry: `composer` makes it a workspace member, never an app dependency or an `injection.dart` line. In a partial checkout (§2) a module you import an API from must be checked out too — its API package lives inside it. `remove_sample <id>` keeps an API package that another package still imports, reports who, and leaves the manifest entry as `{ id: <id>, layers: [api] }`; run it again once nothing imports the package.
 
 ---
 
@@ -161,18 +160,18 @@ dart tools/composer/composer.dart verify    # ✅ Generated artifacts are up to 
 dart tools/arch_check/check.dart            # R1, R3, R8, R10 hold
 ```
 
-`composer verify` **fails** in a partial checkout by design (*"N declared package(s) missing from disk"*). Run it on a full checkout, or leave it to CI Gate 0.
+`composer verify` **fails** in a partial checkout by design (*"N declared package(s) missing from disk"*, exit 1). Run it on a full checkout, or leave it to CI Gate 0.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |:--|:--|:--|
-| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | The committed composition names a module that is not on disk | `dart tools/composer/bootstrap.dart`, then `pub get` and `composer sync` (step 2) |
-| `bootstrap` exits 1 and writes nothing | A present module has a hand-written path dependency on an absent one | Initialise that submodule too (step 2) |
-| `pub get` still fails after `sync` | `sync` ran with `--app mobile`, leaving `apps/admin/pubspec.yaml` pointing at missing modules | Run `sync` for every app (step 2) |
-| CI Gate 0 fails on your PR | A partial composition was committed | Restore the composition files and push again (step 3) |
+| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | The committed composition names a module that is not on disk | `dart tools/composer/bootstrap.dart`, then `pub get` and `composer sync` (§2) |
+| `bootstrap` exits 1 and writes nothing | A present module has a hand-written path dependency on an absent one | Initialise that submodule too (§2) |
+| `pub get` still fails after `sync` | `sync` ran with `--app mobile`, leaving `apps/admin/pubspec.yaml` pointing at missing modules | Run `sync` for every app (§2) |
+| CI Gate 0 fails on your PR | A partial composition was committed | Restore the composition files and push again (§3) |
 | `composer verify` fails locally | You are in a partial checkout | Expected; run it on a full checkout (*Verify*) |
-| A consumer cannot see a type from `<id>_api` | The API package's barrel does not export it, or the module is not checked out | Run the barrel generator; initialise the module (step 4) |
+| A consumer cannot see a type from `<id>_api` | The API package's barrel does not export it, or the module is not checked out | Run the barrel generator; initialise the module (§4) |
 
 ## Related
 

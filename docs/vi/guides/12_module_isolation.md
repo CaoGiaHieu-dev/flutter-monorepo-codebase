@@ -67,9 +67,11 @@ cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 
 Hãy chạy `sync` cho **mọi app** — đừng thu hẹp bằng `--app mobile`. Danh sách `workspace:` ở root luôn được dựng lại từ tất cả app và bỏ đi những gì không có trên đĩa, nhưng `--app mobile` để nguyên `apps/admin/pubspec.yaml`, vẫn khai path dependency tới các module đang thiếu (chẳng hạn `settings`) — và khi đó `flutter pub get` không resolve được workspace.
 
-App chạy. Nó không có màn hình home, không settings, không dashboard — và vẫn boot được, vì mọi lần shell tra cứu một hợp đồng do module sở hữu đều là `getItOrNull` hoặc `getAllOrEmpty` (`arch_check` R8), và không file nào của shell import một module (`arch_check` R10 trong app, R1 trong `platform_app_shell`).
+`sync` in một cảnh báo cho mỗi package được khai mà không có trên đĩa, và — vì các manifest vẫn khai `tabs`, `dashboard`, `entry` v.v. là `provided` trong khi các module đăng ký chúng đang vắng mặt — một cảnh báo cho mỗi capability mà không package nào đang compose còn đăng ký (V3), kết thúc bằng *"`composer verify` fails until each is fixed"*. Trên bản checkout từng phần, điều đó là bình thường: `sync` vẫn ghi. Đừng sửa manifest để làm im cảnh báo.
 
-`dart tools/composer/composer.dart verify` **fail** trên bản checkout từng phần, và đúng là phải thế: nó ngầm bật `--strict`, nên một module được khai trong manifest mà không có trên đĩa là lỗi (*"N declared package(s) missing from disk"*). Đó là kiểm tra mà CI Gate 0 chạy, trên runner có đủ mọi submodule. Ở máy local, `flutter analyze` mới là kiểm tra có ý nghĩa.
+App chạy. Trên bản checkout chỉ có auth, nó không có màn hình home, không settings, không dashboard — và vẫn boot được, vì mọi lần shell tra cứu một hợp đồng do module sở hữu đều là `getItOrNull` hoặc `getAllOrEmpty` (`arch_check` R8), và không file nào của shell import một module (`arch_check` R10 trong app, R1 trong `platform_app_shell`).
+
+`dart tools/composer/composer.dart verify` **fail** trên bản checkout từng phần, và đúng là phải thế: nó ngầm bật `--strict`, nên một module được khai trong manifest mà không có trên đĩa là lỗi (*"N declared package(s) missing from disk"*, exit 1). Đó là kiểm tra mà CI Gate 0 chạy, trên runner có đủ mọi submodule. DI smoke test của app cũng fail theo cùng cách, do thiết kế — nó giữ graph khớp với `capabilities:` của manifest (RULE-81), mà một capability khai `provided` lại không có bên implement. Ở máy local, `flutter analyze` mới là kiểm tra có ý nghĩa.
 
 Code của team khác không chỉ là "không được build" — nó **không nằm trên đĩa**, và `modules/home` chỉ là một thư mục rỗng chứ không phải source: `.gitmodules` chỉ ghi path và URL của nó, còn commit được chốt là một mục gitlink trong cây của superproject.
 
@@ -86,28 +88,25 @@ Không truyền `--app` thì là mọi app — tối đa chín file khi có `mob
 
 Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thiếu module. Điều đó đúng ở local và sai khi commit: nó sẽ xoá các module khác khỏi app của tất cả mọi người.
 
-`sync` nói thẳng điều đó, gọi tên các file, và in ra lệnh khôi phục:
+`sync` nói thẳng điều đó, gọi tên các file nó vừa ghi lại, và in ra lệnh khôi phục. Sau khi `bootstrap` đã cắt bớt `pubspec.yaml` ở root và hai pubspec của app, một bản checkout chỉ có auth in ra:
 
 ```
-⚠️ PARTIAL COMPOSITION — 7 declared package(s) are not on disk.
+⚠️ PARTIAL COMPOSITION — 8 declared package(s) are not on disk.
   What was just written composes only what is present, which is exactly right
   for working on one module. It is wrong to commit: it would drop the other
   modules from the app for everyone.
 
   Files changed:
-    apps/mobile/pubspec.yaml
-    apps/mobile/lib/di/injection.dart
-    apps/admin/pubspec.yaml
     apps/admin/lib/di/injection.dart
-    apps/mobile/README.md
     apps/admin/README.md
-    pubspec.yaml
+    apps/mobile/lib/di/injection.dart
+    apps/mobile/README.md
 
   Restore them before you commit:
-    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart apps/mobile/README.md apps/admin/README.md pubspec.yaml
+    git checkout -- apps/admin/lib/di/injection.dart apps/admin/README.md apps/mobile/lib/di/injection.dart apps/mobile/README.md
 ```
 
-Sau `bootstrap`, hai pubspec của app và `pubspec.yaml` ở root đã chứa sẵn các vùng đã được cắt bớt, nên `sync` không thấy gì cần đổi ở đó và chỉ gọi tên các file khác mà nó đã ghi lại. `bootstrap` đã in dòng khôi phục riêng cho các pubspec; `git status` cho thấy đủ từng file. Trước khi commit, hãy khôi phục từng file:
+`sync` chỉ gọi tên những gì *nó* đã đổi; `bootstrap` đã in dòng khôi phục riêng cho các pubspec, và `git status` cho thấy đủ từng file. Trước khi commit, hãy khôi phục từng file:
 
 ```bash
 git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
@@ -124,28 +123,28 @@ Và nếu vẫn lỡ commit, **CI Gate 0 sẽ fail**. `composer verify` sinh l�
 
 ## 4. Tạo package API cho module
 
-`core_di` chỉ giữ những hợp đồng mà chính platform cần, đặt tên theo thứ nó cần — một phiên đăng nhập (`ISessionState`), một vị trí (`ISignInLocation`, `IPostSignInLocation`). Một hợp đồng tồn tại để *một feature chạm tới module khác* thuộc về module đó: package API của nó, `modules/<id>/api`, tên `<id>_api`. Các sample có hai — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) và `home_api` (`HomeNavigator`). Không có loại generator nào tạo nó; nó chỉ gồm ba file.
+`core_di` chỉ giữ những hợp đồng mà chính platform cần, đặt tên theo thứ nó cần — một phiên đăng nhập (`ISessionState`), một vị trí (`ISignInLocation`, `IPostSignInLocation`). Một hợp đồng tồn tại để *một feature chạm tới module khác* thuộc về module đó: package API của nó, `modules/<id>/api`, tên `<id>_api`. Các sample có hai — `auth_api` (`AuthNavigator`, `IAuthActionHandler`) và `home_api` (`HomeNavigator`).
+
+Module generator tạo được nó (loại 6):
 
 ```bash
-# modules/payment/api/pubspec.yaml — name: payment_api, resolution: workspace,
-#   dependencies: flutter (để có BuildContext) và, chỉ khi cần, core_di.
-# modules/payment/api/lib/src/navigators/payment_navigator.dart — interface.
-# Sau đó: khai báo layer, compose, và sinh barrel.
-#   apps/<id>/app_manifest.yaml:  - { id: payment, layers: [api, domain, data, feature] }
-dart tools/composer/composer.dart sync
-flutter pub get
-dart tools/barrel_generator/generate.dart modules/payment/api/lib
+# payment_api tại modules/payment/api: một stub PaymentNavigator, không có DI module.
+# Thêm `layers: [api, …]` vào mọi app_manifest.yaml (hoặc chỉ các id trong --apps), chạy
+# composer sync, pub get và barrel generator. Nếu feature_payment tồn tại cùng route
+# của nó, nó cũng được thêm payment_api vào dependencies: và một PaymentNavigatorImpl
+# trong routing/.
+dart tools/module_generator/generate.dart 6 payment
 ```
 
-Rồi implement nó trong feature sở hữu (`@Singleton(as: PaymentNavigator)` trong `routing/`, với `payment_api` trong `dependencies:` của nó) và thêm `payment_api` vào `dependencies:` của từng nơi dùng. Nơi dùng resolve nó bằng `getItOrNull`.
+Thêm `payment_api` vào `dependencies:` của từng nơi dùng, và implement các hợp đồng khác (action handler, builder) trong feature sở hữu, với `payment_api` trong `dependencies:` của nó. Nơi dùng resolve mọi hợp đồng đó bằng `getItOrNull`. File mới trong package API chỉ đến được nơi dùng qua barrel của package — hãy sinh lại nó bằng `dart tools/barrel_generator/generate.dart modules/payment/api/lib` (RULE-75).
 
 Những gì `arch_check` giữ bạn tuân theo:
 
-- **R3** — package API chỉ phụ thuộc `platform/foundation/*` và package Flutter/pub: không phụ thuộc domain/data/feature của chính module nó, không phụ thuộc module khác hay API của module khác, không phụ thuộc group platform khác. Một feature được import API của module khác, không bao giờ import package feature hay data của nó.
+- **R3** — package API chỉ phụ thuộc `platform/foundation/*` và package Flutter/pub: không phụ thuộc domain/data/feature của chính module nó, không phụ thuộc module khác hay API của module khác, không phụ thuộc group platform khác. Một feature được import API của module khác, không bao giờ import package feature, data hay domain của nó; một package data không import API của module nào khác.
 - **R8** — một type khai báo trong package API và chỉ được implement dưới `modules/` phải resolve bằng `getItOrNull` bên ngoài module của nó.
 - **R1 / R10** — không package platform nào và không file app nào (trừ `injection.dart`) import nó.
 
-Layer `api` không cần mục `di_groups`: `composer` biến nó thành workspace member, không bao giờ thành dependency của app hay một dòng trong `injection.dart`. Trong bản checkout từng phần (bước 2), module mà bạn import API của nó cũng phải được checkout — package API nằm bên trong nó. `remove_sample <id>` giữ lại package API mà package khác vẫn import, báo ai đang import, và để mục manifest thành `{ id: <id>, layers: [api] }`; chạy lại khi không còn ai import package đó.
+Layer `api` không cần mục `di_groups`: `composer` biến nó thành workspace member, không bao giờ thành dependency của app hay một dòng trong `injection.dart`. Trong bản checkout từng phần (§2), module mà bạn import API của nó cũng phải được checkout — package API nằm bên trong nó. `remove_sample <id>` giữ lại package API mà package khác vẫn import, báo ai đang import, và để mục manifest thành `{ id: <id>, layers: [api] }`; chạy lại khi không còn ai import package đó.
 
 ---
 
@@ -162,18 +161,18 @@ dart tools/composer/composer.dart verify    # ✅ Generated artifacts are up to 
 dart tools/arch_check/check.dart            # R1, R3, R8, R10 đều đạt
 ```
 
-`composer verify` **fail** trên bản checkout từng phần là do thiết kế (*"N declared package(s) missing from disk"*). Hãy chạy nó trên bản checkout đầy đủ, hoặc để CI Gate 0 lo.
+`composer verify` **fail** trên bản checkout từng phần là do thiết kế (*"N declared package(s) missing from disk"*, exit 1). Hãy chạy nó trên bản checkout đầy đủ, hoặc để CI Gate 0 lo.
 
 ## Xử lý sự cố
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |:--|:--|:--|
-| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | Phần lắp ráp đã commit nêu một module không có trên đĩa | `dart tools/composer/bootstrap.dart`, rồi `pub get` và `composer sync` (bước 2) |
-| `bootstrap` thoát với mã 1 và không ghi gì | Một module đang có khai path dependency viết tay tới một module vắng mặt | Init thêm submodule đó (bước 2) |
-| `pub get` vẫn lỗi sau `sync` | `sync` chạy với `--app mobile`, để `apps/admin/pubspec.yaml` vẫn trỏ tới các module thiếu | Chạy `sync` cho mọi app (bước 2) |
-| CI Gate 0 fail trên PR của bạn | Một phần lắp ráp từng phần đã bị commit | Khôi phục các file composition rồi push lại (bước 3) |
+| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | Phần lắp ráp đã commit nêu một module không có trên đĩa | `dart tools/composer/bootstrap.dart`, rồi `pub get` và `composer sync` (§2) |
+| `bootstrap` thoát với mã 1 và không ghi gì | Một module đang có khai path dependency viết tay tới một module vắng mặt | Init thêm submodule đó (§2) |
+| `pub get` vẫn lỗi sau `sync` | `sync` chạy với `--app mobile`, để `apps/admin/pubspec.yaml` vẫn trỏ tới các module thiếu | Chạy `sync` cho mọi app (§2) |
+| CI Gate 0 fail trên PR của bạn | Một phần lắp ráp từng phần đã bị commit | Khôi phục các file composition rồi push lại (§3) |
 | `composer verify` fail ở máy local | Bạn đang ở bản checkout từng phần | Đúng như dự kiến; hãy chạy nó trên bản checkout đầy đủ (*Kiểm tra*) |
-| Bên tiêu thụ không thấy một kiểu từ `<id>_api` | Barrel của package API chưa export nó, hoặc module chưa được checkout | Chạy barrel generator; init module đó (bước 4) |
+| Bên tiêu thụ không thấy một kiểu từ `<id>_api` | Barrel của package API chưa export nó, hoặc module chưa được checkout | Chạy barrel generator; init module đó (§4) |
 
 ## Liên quan
 

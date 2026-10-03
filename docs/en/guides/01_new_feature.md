@@ -28,13 +28,13 @@ The five positional arguments are read by [`tools/module_generator/src/input_act
 
 | Position | Value | Meaning |
 | :-- | :-- | :-- |
-| 1 | `1` | Module type — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
+| 1 | `1` | Module type — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom, `6` API (`modules/<name>/api`, package `<name>_api`; step 7) |
 | 2 | `profile` | Module name (snake_case). Package becomes `feature_profile` at `modules/profile/feature` |
-| 3 | `""` | Custom package prefix — only used when type is `5` (`<prefix>_<name>` at `platform/<group>/<name>`). Pass `""` for types 1–4 |
+| 3 | `""` | Custom package prefix — only used when type is `5` (`<prefix>_<name>` at `platform/<group>/<name>`). Pass `""` for every other type |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` none |
 | 5 | `1` | Route contribution — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` none |
 
-Run it with no arguments on a terminal to get an interactive prompt instead. Without a terminal, a missing argument exits 64 rather than guessing. `--help` prints the usage.
+Run it with no arguments on a terminal to get an interactive prompt instead. Without a terminal, a missing argument exits 64 rather than guessing. `--help` prints the usage. Types 4 and 5 take `--group <group>` (default `infra`) to pick the `platform/` group folder; a feature does not.
 
 An optional `--apps <id,id>` after the positional arguments composes the module into those apps only. The ids are the `app.id`s from `apps/*/app_manifest.yaml`, e.g. `--apps mobile`. Without it the module joins every app. An unknown id exits 64 before anything is written.
 
@@ -56,14 +56,15 @@ An optional `--apps <id,id>` after the positional arguments composes the module 
 
 **Automatic** (see [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart)):
 
-1. Creates the directory tree and `pubspec.yaml`.
-2. Writes `lib/di/module.dart` with `@InjectableInit.microPackage()`.
-3. Adds the module to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — unless `--apps` names a subset.
-   - Then it runs `dart tools/composer/composer.dart sync` itself. That regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`.
+1. Creates the directory tree, `pubspec.yaml`, `lib/di/module.dart` (`@InjectableInit.microPackage()`), the l10n scaffold (§6), the page, the controller and the route templates.
+2. Adds the module to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — unless `--apps` names a subset.
+3. Runs `dart tools/composer/composer.dart sync` itself. That regenerates the root `pubspec.yaml` `workspace:` list and, for each app, its path dependencies, `injection.dart` and the `report` region of its `README.md`.
    - Nothing to run by hand — but see the note below if the module does not belong in every app.
    - If the module registers a contract the shell catalogues (a splash, tabs, a session, a reporter), each app that composes it must declare that contract `provided` in `capabilities:`: the generator prints the reminder, and `composer verify` names the key and the line to paste ([`13_app_composition.md`](13_app_composition.md) § 6). `remove_sample` flips the sole-provider ones back to `absent` for you.
-4. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator, `build_runner build --workspace`, then `dart fix --apply`.
-5. Writes tests that pass as generated: `test/profile_page_test.dart` and `test/profile_provider_test.dart` (`test/<name>_bloc_test.dart` for BLoC, no controller test for SM `3`). The page test pumps the page under `ResponsiveInit` and its localizations, with the controller provided the way the route provides it. CI Gate 3 runs them.
+4. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator, `build_runner build --workspace`, the barrel generator again (it also exports what codegen wrote), then `dart fix --apply`.
+5. Writes tests that pass as generated: `test/profile_page_test.dart` and `test/profile_provider_test.dart` (`test/<name>_bloc_test.dart` for BLoC, no controller test for SM `3`). The page test pumps the page under `ResponsiveInit` and its localizations, with the controller provided the way the route provides it, on a phone-sized and a tablet-sized window. CI Gate 3 runs them.
+
+If a step fails, the generator restores every shared file it edited, removes the half-built package and regenerates the untracked generated files, then exits 1.
 
 > [!IMPORTANT]
 > **Without `--apps`, every app composes the new module — `apps/admin` included.** `apps/admin` is deliberately a subset (auth + settings). For a module meant for `mobile` only, say so when generating:
@@ -84,38 +85,40 @@ An optional `--apps <id,id>` after the positional arguments composes the module 
 
 1. Fill in the `TypedGoRoute` / navigator in `lib/src/routing/`.
 2. Populate the route module stub (`routes`, and for a tab also `order`, `path`, `destination`).
-3. Item 3 still mentions a navigator contract in `core_di`. Navigators now live in the module's API package instead (step 7, RULE-22); run the barrel generator for that package.
-4. Re-run `build_runner`, then **full restart** the app — hot reload does not pick up new DI registrations.
+3. Other modules reach this one through a navigator in the module's API package. If `profile_api` does not exist yet, `dart tools/module_generator/generate.dart 6 profile` creates it and implements it in this feature; if it does, the generator has already written `lib/src/routing/profile_navigator_impl.dart` (step 7).
+4. Translate `assets/language/vi.arb` — it starts as a copy of the English text.
+5. Re-run `build_runner`, then **full restart** the app — hot reload does not pick up new DI registrations.
 
 > [!NOTE]
 > FVM is auto-detected (`useFvm` in `tools/shared/toolchain.dart`, RULE-73). The tool prefixes its commands with `fvm ` only when both a config file (`.fvmrc` or `.fvm/fvm_config.json`) and a working `fvm --version` are present. Otherwise it calls the global `dart` / `flutter`. See [`../getting-started/03_daily_workflow.md`](../getting-started/03_daily_workflow.md).
 
 ## 3. Find your way around the package
 
-The generator produces this tree, plus the generated `gen/`, `*.g.dart` and `module.module.dart` files. `widgets/` is created **empty**. Git does not track an empty directory, so it disappears from a commit or a fresh clone until your first sub-widget lands in it.
+The generator produces this tree for a Provider feature with a stack route, plus the generated `module.module.dart`, `*.g.dart` and `gen/` files. `widgets/` is created **empty**. Git does not track an empty directory, so it disappears from a commit or a fresh clone until your first sub-widget lands in it.
 
 ```
 modules/profile/feature/
-├── assets/language/          en.arb, vi.arb  — feature-scoped translations
-├── l10n.yaml                 gen-l10n config (output class, output dir)
+├── assets/language/              en.arb, vi.arb  — feature-scoped translations
+├── l10n.yaml                     gen-l10n config (output class, output dir)
 ├── lib/
-│   ├── di/
-│   │   ├── module.dart       @InjectableInit.microPackage()
-│   │   └── localization.dart IFeatureLocalization implementation
-│   ├── feature_profile.dart  public barrel
+│   ├── di/module.dart            @InjectableInit.microPackage()
+│   ├── feature_profile.dart      the package barrel (generated, exports every file below)
 │   └── src/
-│       ├── pages/            *Page / *Screen widgets
-│       ├── widgets/          *Widget / *Card sub-widgets (created empty)
-│       ├── provider/         controllers (Provider) — `bloc/` if you chose BLoC
-│       ├── routing/          route modules + navigator impl
-│       ├── extensions/       l10n extension
-│       ├── gen/language/     generated localisations (do not edit)
-│       └── utils/            constants owned by this package
-└── pubspec.yaml
+│       ├── extensions/           l10n_profile_extension.dart — context.l10nProfile
+│       ├── gen/language/         gen-l10n output (do not edit)
+│       ├── localization/         profile_localization_impl.dart — IFeatureLocalization
+│       ├── pages/                profile_page.dart — *Page / *Screen widgets
+│       ├── provider/             profile_provider.dart — `bloc/` (bloc, event, state) if you chose BLoC
+│       ├── routing/              profile_route_module.dart (the typed route), then
+│       │                         profile_feature_route_module.dart or profile_nav_destination.dart
+│       ├── utils/                profile_path.dart — constants owned by this package
+│       └── widgets/              *Widget / *Card sub-widgets (created empty)
+├── pubspec.yaml
+└── test/                         profile_page_test.dart, profile_provider_test.dart
 ```
 
 > [!NOTE]
-> The controller directory is **singular** — `src/provider/` (as in `feature_auth`) or `src/bloc/` (as in `feature_home`). A plural `providers/` / `blocs/` folder is a naming violation (RULE-78); see [`../reference/02_naming.md`](../reference/02_naming.md).
+> The controller directory is **singular** — `src/provider/` (as in `feature_auth`) or `src/bloc/` (as in `feature_home`). A plural `providers/` / `blocs/` folder is a naming violation; see [`../reference/02_naming.md`](../reference/02_naming.md).
 
 The path constants are already there: the generator writes them to `lib/src/utils/<name>_path.dart`, and everything else references them (RULE-09). **Edit the generated file** to change or add a path; do not create a second one:
 
@@ -144,7 +147,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../bloc/home_profile_bloc.dart';
-import '../pages/pages.dart';
+import '../pages/home_page.dart';
 import '../utils/home_path.dart';
 
 part 'home_route_module.g.dart';
@@ -177,10 +180,15 @@ import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_home_extension.dart';
 import '../utils/home_path.dart';
 import 'home_route_module.dart';
 
+/// SAMPLE — a module contributing one primary navigation destination.
+///
+/// It describes the destination ([NavDestination]) rather than building a
+/// widget, so the same module works in an app that renders a bottom bar, a
+/// rail or a sidebar.
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
@@ -201,7 +209,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-`order` decides the tab's position and **must be unique** across all registered tabs. `AppRouter` sorts by it to build the `StatefulShellBranch` list.
+`order` decides the tab's position and **must be unique** across all registered tabs. `AppRouter` sorts by it to build the `StatefulShellBranch` list. The generated stub picks 10 above the highest `order` that exists, so generated tabs never tie.
 
 ### Option B — a pushed stack (`IFeatureRouteModule`)
 
@@ -217,7 +225,7 @@ import 'auth_route_module.dart';
 @LazySingleton(as: IFeatureRouteModule)
 class AuthFeatureRouteModule implements IFeatureRouteModule {
   @override
-  List<RouteBase> get routes => [$authShellRoute];
+  List<RouteBase> get routes => [$loginRoute];
 }
 ```
 
@@ -253,7 +261,7 @@ return ChangeNotifierProvider(
 > [!CAUTION]
 > **Never wrap the controller again inside the Page.** `BlocProvider` / `ChangeNotifierProvider` already lives at the route. A second wrapper creates a *second instance*: the page reads state that nothing writes to, and the first instance leaks. This is the single most common bug in this codebase's pattern.
 
-Screen-scoped controllers are `@injectable`: a factory, disposed with the route. Only app-wide controllers — `AuthProvider`, `ThemeProvider`, `LanguageProvider` — are `@lazySingleton`. Registering a screen controller as a singleton leaks it for the process lifetime (RULE-10). Details in [`05_di.md`](05_di.md).
+Screen-scoped controllers are `@injectable`: a factory, disposed with the route. Only app-wide controllers — `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider` — are `@lazySingleton`. Registering a screen controller as a singleton leaks it for the process lifetime (RULE-10). Details in [`05_di.md`](05_di.md).
 
 ## 6. Edit the translations
 
@@ -296,15 +304,17 @@ extension ContextHomeExtension on BuildContext {
 }
 ```
 
-The DI registration of the delegate — generated as `lib/di/localization.dart`, like this real code from [`modules/home/feature/lib/src/localization/home_localization_impl.dart`](../../../modules/home/feature/lib/src/localization/home_localization_impl.dart):
+The DI registration of the delegate — generated as `lib/src/localization/profile_localization_impl.dart`, like this real code from [`modules/home/feature/lib/src/localization/home_localization_impl.dart`](../../../modules/home/feature/lib/src/localization/home_localization_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 
-import '../feature_home.dart';
+import '../extensions/l10n_home_extension.dart';
 
+/// Hands this feature's translations to the app shell, which collects every
+/// `IFeatureLocalization` into `MaterialApp.localizationsDelegates`.
 @Injectable(as: IFeatureLocalization)
 class HomeLocalizationImpl implements IFeatureLocalization {
   @override
@@ -313,7 +323,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-The app shell's [`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/src/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`. So **do not edit `root_app.dart`** (or the wrapper).
+The app shell's [`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/src/app_material_wrapper.dart) collects every registered `IFeatureLocalization` with `getAllOrEmpty`. So **do not edit `root_app.dart`** (or the wrapper). For the text of a failed operation, `AppFailure.message` is an English diagnostic and is never shown (RULE-34): start from `context.l10n.failureMessage(failure.code)`, which `core_base_ui` words by the failure's code, and add an ARB key of your own only where the screen can say something more specific ([`03_state_management.md`](03_state_management.md) § 8).
 
 Regenerate after editing any `.arb`:
 
@@ -326,7 +336,15 @@ cd modules/profile/feature && flutter gen-l10n
 
 ## 7. Expose a navigator to other features
 
-Other features must never import `feature_profile` (RULE-04). Declare the contract in your module's **API package**, `modules/<name>/api` — here `profile_api`, with foundation and Flutter dependencies only (`arch_check` R3). How to create one: [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package). Callers depend on `profile_api`, never on `feature_profile`; `core_di` holds no module's navigator (RULE-22):
+Other features must never import `feature_profile` (RULE-04). The contract goes in your module's **API package**, `modules/<name>/api` — here `profile_api`, which may depend on the foundation and Flutter only (`arch_check` R3). Callers depend on `profile_api`, never on `feature_profile`; `core_di` holds no module's navigator (RULE-22). Type `6` of the generator writes it:
+
+```bash
+dart tools/module_generator/generate.dart 6 profile                 # add --apps mobile to match the feature
+```
+
+It creates the package `profile_api` — a `pubspec.yaml` with Flutter as its only dependency, `lib/src/navigators/profile_navigator.dart` and the barrel `lib/profile_api.dart` — and lists the `api` layer in the manifests. When `feature_profile` already exists with its generated route, the same run adds `profile_api` to the feature's `dependencies:` and writes the implementation, `lib/src/routing/profile_navigator_impl.dart`; generated in the other order, `generate.dart 1 profile` wires an existing `profile_api` the same way. An API package has no DI module and needs no `di_groups` entry. How an API package is laid out and what `arch_check` holds it to: [`12_module_isolation.md` § 4](12_module_isolation.md#4-create-a-module-api-package).
+
+The generated contract, which has the same shape as [`home_navigator.dart`](../../../modules/home/api/lib/src/navigators/home_navigator.dart) in `home_api`:
 
 ```dart
 // modules/profile/api/lib/src/navigators/profile_navigator.dart
@@ -337,40 +355,40 @@ abstract class ProfileNavigator {
 }
 ```
 
-That is exactly the shape of [`home_navigator.dart`](../../../modules/home/api/lib/src/navigators/home_navigator.dart) in `home_api`.
-
-Implement it inside your own `routing/` — real code from [`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
+and its implementation inside your own `routing/`:
 
 ```dart
-import 'package:home_api/home_api.dart';
+// modules/profile/feature/lib/src/routing/profile_navigator_impl.dart
+import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:profile_api/profile_api.dart';
 
-import 'home_route_module.dart';
+import 'profile_route_module.dart';
 
-@Singleton(as: HomeNavigator)
-class HomeNavigatorImpl implements HomeNavigator {
+@LazySingleton(as: ProfileNavigator)
+class ProfileNavigatorImpl implements ProfileNavigator {
   @override
-  void toHome(BuildContext context) => const HomeRoute().go(context);
+  void toProfile(BuildContext context) => const ProfileRoute().go(context);
 }
 ```
 
-Callers in other packages use `getItOrNull<ProfileNavigator>()?.toProfile(context)` (RULE-12, `arch_check` R8). Never a hardcoded path, never `context.go('/profile')`. Always pass `BuildContext` from the calling widget rather than reading it from `NavigatorKeys` (RULE-23).
+Add one method per route the module owns, in both files, and keep them in step. Callers in other packages declare `profile_api` in their `dependencies:` and use `getItOrNull<ProfileNavigator>()?.toProfile(context)` (RULE-12, `arch_check` R8). Never a hardcoded path, never `context.go('/profile')`. Always pass `BuildContext` from the calling widget rather than reading it from `NavigatorKeys` (RULE-23).
 
 ## 8. Regenerate and restart
 
+The generator already ran `build_runner` and the barrel generator. Run them again after you add, rename or delete a file or change an annotation:
+
 ```bash
-# 1. Export the new ProfileNavigator from its API package's barrel (§7 added a file to modules/profile/api/lib)
+# 1. Re-export the files you added — in every package you touched, the API package included
 dart tools/barrel_generator/generate.dart modules/profile/api/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 # 2. Regenerate DI / routes — injectable must see ProfileNavigator through `package:profile_api/profile_api.dart`
 dart run build_runner build --workspace
-# 3. Re-export your feature's new files (and the generated ones) from its barrel
-dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
 
 > [!IMPORTANT]
-> Skip step 1 and `flutter analyze` reports `Undefined name 'ProfileNavigator'` in the navigator impl and its generated registration. The API package's barrel is generated, so a file added under `modules/profile/api/lib/src/` is invisible to other packages until the barrel generator runs for `modules/profile/api/lib`. The same holds for any package you add a file to: rerun the barrel generator for its `lib/` (RULE-75).
+> Add a method's file to `modules/profile/api/lib/src/` without step 1 and `flutter analyze` reports `Undefined name` in every consumer. Each package has one generated barrel, and a file under `lib/src/` is invisible to other packages until the barrel generator runs for that package's `lib/`. The same holds for any package you add a file to (RULE-75).
 
 Then **full restart** the app (not hot reload), so the new DI graph is built.
 
@@ -398,14 +416,14 @@ The tutorial's *Clean up* section walks the manual path once, for a module that 
 >
 > | Consumer | How it couples | Result |
 > |---|---|---|
-> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<ISessionStatusStream>()` passed as a **factory param** | Home shows the signed-out state |
-> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` (from `auth_api`, which `remove_sample` keeps while it is imported) | The logout row is simply hidden |
+> | `feature_home` (`HomeRoute.build`) | `getItOrNull<ISessionStatusStream>()` passed as a **factory param** | Home shows the signed-out state |
+> | `feature_settings` (`SettingsPage`) | `getItOrNull<IAuthActionHandler>()` (from `auth_api`, which `remove_sample` keeps while it is imported) | The logout row is simply hidden |
 > | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` (from `auth_api`, likewise kept) | The button goes to Home instead (`HomeNavigator`); with neither composed it does nothing |
 >
 > The dry-run prints every coupling it knows — `breaks` and `safe_couplings` in `tools/sample_manifest.yaml` — plus the API packages it keeps because another package still imports them. Read it before deleting anything.
 
 > [!NOTE]
-> `injection.dart` naming feature packages is the composition root's **one intentional hard reference** — a composition root must name what it composes. It is also the only one, and a machine holds that: `arch_check` R10 fails any other file in an app that imports a module, and the shared shell in `platform/shell/app_shell/` is a `platform/` package, which R1 forbids from importing one at all. The shell does import `core_ui_kit`, which is fine — that is a core package, not a removable feature.
+> `injection.dart` naming feature packages is the composition root's **one intentional hard reference** — a composition root must name what it composes. It is also the only one, and a machine holds that: `arch_check` R10 fails any other file in an app that imports a module, and the shared shell in `platform/shell/app_shell/` is a `platform/` package, which R1 forbids from importing one at all. The shell does import `core_ui_kit`, which is fine — that is a platform package, not a removable feature.
 
 ---
 
@@ -416,7 +434,7 @@ flutter analyze                                           # No issues found!
 dart tools/arch_check/check.dart                          # ✅ All architecture rules hold across N packages.
 dart tools/composer/composer.dart verify                  # ✅ Generated artifacts are up to date.
 cd modules/profile/feature && flutter test && cd -        # All tests passed!
-cd apps/mobile && flutter test test/di_smoke_test.dart    # All tests passed! — the new registrations resolve
+cd apps/mobile && flutter test test/di_smoke_test.dart    # All tests passed! — every lazy singleton and factory builds
 dart tools/unused_checker/check_unused_packages.dart      # ✅ Success! No unused packages found …
 ```
 

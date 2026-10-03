@@ -6,7 +6,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
 import 'provider/deeplink_provider.dart';
-import 'utils/app_shell_ui_constants.dart';
 
 /// A wrapper around [MaterialApp] and [MaterialApp.router] to avoid code duplication
 /// of common configurations like title, debugShowCheckedModeBanner, and showPerformanceOverlay.
@@ -25,6 +24,7 @@ class AppMaterialWrapper extends StatelessWidget {
     super.key,
     required this.home,
     this.builder,
+    this.display = const DisplayProfile(),
   }) : isRouter = false,
        routeInformationProvider = null,
        routeInformationParser = null,
@@ -39,11 +39,16 @@ class AppMaterialWrapper extends StatelessWidget {
     required this.routeInformationParser,
     required this.routerDelegate,
     required this.backButtonDispatcher,
+    this.display = const DisplayProfile(),
   }) : isRouter = true,
        home = null;
 
   /// Whether this wrapper uses [MaterialApp.router] or a standard [MaterialApp].
   final bool isRouter;
+
+  /// The app's display settings; [DisplayProfile.textScaleMax] is the OS
+  /// font-size cap.
+  final DisplayProfile display;
 
   /// The widget to be displayed as the home screen (for standard [MaterialApp]).
   final Widget? home;
@@ -54,17 +59,24 @@ class AppMaterialWrapper extends StatelessWidget {
   /// [_textScaleBuilder].
   final Widget Function(BuildContext, Widget?)? builder;
 
-  /// Honours the user's OS font size up to
-  /// [AppShellUiConstants.MAX_TEXT_SCALE_FACTOR], around [builder]'s output
-  /// — so the splash, every page and every overlay the builder installs
-  /// (toasts, dialogs) share one cap.
+  /// Honours the user's OS font size up to [DisplayProfile.textScaleMax]
+  /// (200 % unless the app allows more), around [builder]'s output — so the
+  /// splash, every page and every overlay the builder installs (toasts,
+  /// dialogs) share one cap.
+  ///
+  /// 200 % is the "resize text up to 200%" of WCAG 2.2 SC 1.4.4 and the top of
+  /// Android 14's font-size slider; iOS accessibility sizes go past 3x, where
+  /// a phone screen holds a handful of words per line. Below the cap the
+  /// user's setting passes through untouched — non-linear scalers included —
+  /// and nothing clamps the lower end, so a smaller-than-default setting is
+  /// respected too.
   ///
   /// It does not compound with `core_responsive`: `context.sp` sizes a
   /// `TextStyle` for the window and never reads the text scaler, which
   /// `Text` applies on top, once, when it lays out.
   Widget _textScaleBuilder(BuildContext context, Widget? child) {
     return MediaQuery.withClampedTextScaling(
-      maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR,
+      maxScaleFactor: display.textScaleMax,
       child: builder?.call(context, child) ?? child ?? const SizedBox.shrink(),
     );
   }

@@ -37,12 +37,18 @@ import 'navigation/app_router.dart';
 /// }
 /// ```
 class RootApp extends StatelessWidget {
-  /// Creates the root application widget
-  const RootApp({super.key});
+  /// Creates the root application widget. [display] is the app's
+  /// `DisplayProfile` (its OS font-size cap reaches the `MaterialApp`); the
+  /// template defaults when none is given.
+  const RootApp({super.key, this.display = const DisplayProfile()});
+
+  /// The app's display settings.
+  final DisplayProfile display;
 
   @override
   Widget build(BuildContext context) {
     return AppMaterialWrapper.router(
+      display: display,
       // Navigation configuration using GoRouter
       routeInformationProvider:
           getIt<AppRouter>().router.routeInformationProvider,

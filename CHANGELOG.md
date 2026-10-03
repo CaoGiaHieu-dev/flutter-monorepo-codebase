@@ -71,6 +71,16 @@ with the architecture rules enforced by CI instead of review alone.
   and `describe --catalog` every key. Both apps pass `profile: appProfile` and `hooks: appHooks`,
   and their DI smoke tests hold `checkAppContract` and `validate` for every declared flavor and
   platform. `remove_sample` flips the capabilities a removed bundle alone provided to `absent`.
+- App-owned values on the shell side (the apps layer, step 3 of 6): an app can now say how the
+  shell sizes and routes it, and what each platform enables. `AppProfile` gains `display`
+  (`DisplayProfile`: design artboard, scale policy per window class, split-screen mode, the OS
+  font-size cap — a compile error below 200 %, RULE-38 — and the phone threshold) and `router`
+  (`RouterProfile`: `EntryPolicy` and a fallback path). The manifest gains
+  `platforms.<p>.push`, `.deep_links`, `.orientation` (`phones_portrait | free | portrait |
+  landscape`) and `.window` (`{ initial, min }`, desktop only), checked by `composer verify` (V8).
+  `ShellHooks` gains `navigatorObservers`, `redirect` and `configureWindow`. Every default is
+  today's behaviour; a platform that switches push or deep links off logs one INFO line naming the
+  manifest key, and a declared `window` with no `configureWindow` hook stops the boot (`P05`).
 
 ### Changed
 
@@ -84,6 +94,13 @@ with the architecture rules enforced by CI instead of review alone.
   (`NetworkConfigImpl` reads it from the manifest, desktop and web log INFO instead of an ERROR);
   in a production release a mismatch between an app's `capabilities` and what it registers is
   logged and reported, never thrown.
+- **Breaking, for forks of the template** (apps layer, step 3): `AppShellUiConstants` (its only
+  member, `MAX_TEXT_SCALE_FACTOR`) is gone — the cap is `DisplayProfile.textScaleMax`;
+  `AppInitializer.preferredOrientationsFor` takes an optional `policy` and phone threshold;
+  `PushNotificationService` and `DeeplinkProvider` take the platform's `PlatformFacts`, `AppRouter`
+  a `RouterProfile` (all optional, defaulting to today's behaviour); `core_notifications` now
+  depends on `platform_kernel`. `registerAppProfile` also registers `AppPlatform` and
+  `RouterProfile`; `runShellApp` registers the `AppRuntime` beside the `ShellHooks`.
 - Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is now the
   single rule registry — 65 rules with stable ids `RULE-01`…`RULE-79`, each with its reason, what
   enforces it (`arch_check` R1–R15, analyzer, a test, a CI gate, `composer verify`, `docs_check` or

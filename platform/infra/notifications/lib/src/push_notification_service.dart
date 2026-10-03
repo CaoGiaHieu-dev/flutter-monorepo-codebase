@@ -8,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:injectable/injectable.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 import 'utils/notification_constants.dart';
 
@@ -76,6 +77,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// the initial message); the FCM token fetch runs in the background. Read the
 /// token from [tokenStream], not [fcmToken], right after boot.
 ///
+/// An app can switch push off for a platform (`platforms.<p>.push: false` in
+/// its manifest, handed over as [PlatformFacts.push]): [init] then logs one
+/// INFO line naming the key and initialises nothing — no Firebase, no
+/// channels, no listeners — and every other method does nothing. The service
+/// stays registered, so a caller needs no platform check of its own.
+///
 /// **It never asks for notification permission by itself.** A prompt at DI
 /// time — the first launch, before the user has seen a screen — is the one
 /// most users refuse. Call [requestPermission] where the app can explain why
@@ -114,15 +121,27 @@ class PushNotificationService {
   /// Firebase Options for initialization.
   final FirebaseOptions _firebaseOptions;
 
+  /// What the app declared for this platform; [PlatformFacts.push] switches
+  /// the whole service on or off.
+  final PlatformFacts _platform;
+
+  /// Whether the app switched push off for this platform.
+  bool get _off => !_platform.push;
+
   /// The initial message received when the app is launched.
   RemoteMessage? _initialMessage;
 
   /// FCM subscriptions opened by [init], cancelled by [dispose].
   final _subscriptions = <StreamSubscription<Object?>>[];
 
-  /// Constructor. Receives optional [FirebaseOptions] via DI.
-  /// The initialization logic is handled automatically in [init].
-  PushNotificationService(this._firebaseOptions);
+  /// Constructor. Receives the app's [FirebaseOptions] and the facts of the
+  /// platform it runs on (`registerAppProfile` registers them before DI
+  /// starts) via DI. The initialization logic is handled automatically in
+  /// [init].
+  PushNotificationService(
+    this._firebaseOptions, [
+    this._platform = const PlatformFacts.today(),
+  ]);
 
   /// Stream getter for the data stream.
   Stream<Map<String, dynamic>> get dataStream => _dataStreamController.stream;
@@ -169,6 +188,15 @@ class PushNotificationService {
   /// [requestPermission]). Automatically called during DI setup.
   @PostConstruct(preResolve: true)
   Future<void> init() async {
+    if (_off) {
+      DynamicLogger.log(
+        'Push notifications are off: ${platformSwitchKey('push')} is false, '
+        'so Firebase Messaging is not initialised.',
+        tag: 'PushNotificationService.init',
+        level: LogLevel.INFO,
+      );
+      return;
+    }
     await _initializeFirebase();
     await _setupFlutterNotifications();
     _setNotificationListeners();
@@ -188,6 +216,7 @@ class PushNotificationService {
   /// Call it from the app at a moment the user understands; nothing in the
   /// platform calls it. Never throws: a failure is logged.
   Future<void> requestPermission() async {
+    if (_off) return;
     try {
       final settings = await _firebaseMessaging.requestPermission(
         alert: true,
@@ -425,6 +454,7 @@ class PushNotificationService {
     RemoteMessage message, {
     bool force = false,
   }) async {
+    if (_off) return;
     RemoteNotification? notification = message.notification;
     if (notification == null) return;
 
@@ -518,6 +548,7 @@ class PushNotificationService {
 
   /// Subscribes to a topic.
   Future<void> subscribeToTopic(String topic) async {
+    if (_off) return;
     await _firebaseMessaging.subscribeToTopic(topic);
     DynamicLogger.log(
       'Subscribed to topic: $topic',
@@ -527,6 +558,7 @@ class PushNotificationService {
 
   /// Unsubscribes from a topic.
   Future<void> unsubscribeFromTopic(String topic) async {
+    if (_off) return;
     await _firebaseMessaging.unsubscribeFromTopic(topic);
     DynamicLogger.log(
       'Unsubscribed from topic: $topic',
@@ -557,6 +589,7 @@ class PushNotificationService {
 
   /// Revokes the FCM token.
   Future<void> revokeToken() async {
+    if (_off) return;
     await _firebaseMessaging.deleteToken();
     DynamicLogger.log(
       'FCM token revoked',
@@ -566,6 +599,7 @@ class PushNotificationService {
 
   /// Registers the FCM token.
   Future<void> registerToken() async {
+    if (_off) return;
     _fcmToken = await _firebaseMessaging.getToken().catchError((
       Object e,
       StackTrace s,

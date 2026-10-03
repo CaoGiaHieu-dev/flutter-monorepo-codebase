@@ -5,16 +5,20 @@ import '../utils/profile_constants.dart';
 import 'app_platform.dart';
 import 'app_profile.dart';
 import 'platform_facts.dart';
+import 'router_profile.dart';
 import 'ssl_pinning.dart';
 
 /// Registers [profile], and each section a consumer reads, under its own exact
 /// type.
 ///
 /// GetIt resolves the exact registered type, never a supertype (RULE-14), so
-/// each section is bound in its own right: [AppProfile], [PlatformFacts] —
-/// the facts of [platform], the platform this run is on — and
-/// [SslPinningPolicy]. A DI-built class then takes the section it needs as a
-/// constructor parameter, optional with a `const` default.
+/// each section is bound in its own right: [AppProfile], [AppPlatform] and
+/// [PlatformFacts] — the platform this run is on and its declared facts —
+/// [SslPinningPolicy] and [RouterProfile]. A DI-built class then takes the
+/// section it needs as a constructor parameter, optional with a `const`
+/// default. (`DisplayProfile` is not registered: `MainScope` and
+/// `AppMaterialWrapper` are not DI-built, and `runShellApp` hands each its
+/// section.)
 ///
 /// `runShellApp` calls this *before* the generated `configureDependencies`:
 /// an eager singleton built while the graph initialises can inject a section,
@@ -56,8 +60,10 @@ void registerAppProfile(
 
   final target = locator ?? getIt;
   _register<AppProfile>(target, profile);
+  _register<AppPlatform>(target, platform);
   _register<PlatformFacts>(target, declared ?? const PlatformFacts.today());
   _register<SslPinningPolicy>(target, profile.facts.sslPinning);
+  _register<RouterProfile>(target, profile.router);
 }
 
 /// Binds [instance] under exactly `T`, replacing an earlier different one.

@@ -33,9 +33,14 @@ enum OrientationPolicy {
   landscape,
 }
 
-/// A width × height in logical pixels.
+/// A width × height in logical pixels. Both sides are positive: a size with no
+/// area is refused where it is written, as a compile error in a `const`.
 final class SizeSpec {
-  const SizeSpec(this.width, this.height);
+  const SizeSpec(this.width, this.height)
+    : assert(
+        width > 0 && height > 0,
+        'a size needs a positive width and height',
+      );
 
   final double width;
   final double height;

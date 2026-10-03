@@ -34,6 +34,5 @@ export 'src/navigation/app_router.dart';
 export 'src/provider/deeplink_provider.dart';
 export 'src/root_app.dart';
 export 'src/shell_hooks.dart';
-export 'src/utils/app_shell_ui_constants.dart';
 export 'src/widgets/navigator_wrapper_widget.dart';
 export 'src/widgets/undefined_route_widget.dart';

@@ -56,7 +56,7 @@ flavors:                       # tập đóng: dev | staging | prod
 
 env:
   BASE_URL: { required_in: [prod] }
-  APP_NAME: { required_in: [staging, prod] }
+  APP_NAME: { }                # tuỳ chọn: tiêu đề rơi về app.name
 
 platforms:
   windows: { runner: scaffold }
@@ -148,7 +148,7 @@ Gõ `const ShellHooks(` là IDE liệt kê bảy hook, mỗi hook được ghi r
 
 ## 6. Contract: shell đòi gì ở một app
 
-Shell resolve 22 contract qua một catalog duy nhất (`kShellContracts`): 8 dòng **bắt buộc** do chính các package của shell đăng ký — app ghép nhóm `shell` và `ui` là có — và 14 dòng **tuỳ chọn** do app hoặc module đóng góp. App khai từng dòng tuỳ chọn, và `describe --catalog` liệt kê chúng cùng việc shell làm khi thiếu từng dòng:
+Shell resolve các contract qua một catalog duy nhất, `SHELL_CONTRACTS` (`platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart`): các dòng **bắt buộc** do chính các package của shell đăng ký — app ghép nhóm `shell` và `ui` là có — và các dòng **tuỳ chọn** do app hoặc module đóng góp (hiện là 7 và 14; `describe --catalog` in bảng thật, đó là con số đáng tin). App khai từng dòng tuỳ chọn, và `describe --catalog` liệt kê chúng cùng việc shell làm khi thiếu từng dòng:
 
 ```yaml
 capabilities:
@@ -167,6 +167,8 @@ class CrashlyticsErrorReporter implements IErrorReporter { … }
 
 Sau đó, khai nó là `provided`. Khai một contract mà code không đăng ký, hoặc đăng ký một contract mà manifest nói là `absent`, đều fail ở ba nơi: `composer verify` (V3, tĩnh, nêu tên file), smoke test (`checkAppContract`, từ graph app dựng) và boot ở bản debug.
 
+Tab có thêm một quy tắc. Một app ghép **hai** `INavDestinationModule` trở lên cần một `dashboard` (`IDashboardRouteModule`, mẫu là `feature_dashboard`): nó vẽ khung chrome để chuyển giữa các tab, và thiếu nó thì chỉ tab đầu truy cập được. `checkAppContract` báo điều đó (`C12`) trong smoke test và ở lần boot debug. Một tab thì chạy tốt không cần dashboard (`apps/admin`). Để thêm dashboard: `- { id: dashboard, layers: [feature] }` dưới `modules:`, `dashboard: provided` dưới `capabilities:`, rồi `composer sync`.
+
 Thứ app phải đăng ký cho một package nó ghép — `FirebaseOptions` cho `core_notifications`, mỗi flavor một cái — được liệt kê trong báo cáo ở mục *This app must provide*, và V10 fail nếu thiếu. Thiết lập native (`google-services.json`, `aps-environment`) được ghi ở đó và không được kiểm tra.
 
 ## 7. Công thức
@@ -177,7 +179,7 @@ Thứ app phải đăng ký cho một package nó ghép — `FirebaseOptions` ch
 2. Khai nó, runner còn chờ được tạo: `platforms.<p>: { runner: scaffold }`, rồi `dart tools/composer/composer.dart sync --app <id>`.
 3. Tạo runner một lần, bằng dòng lệnh báo cáo in ra, ví dụ `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .`, rồi đổi khai báo thành `runner: committed`. Runner khai `committed` cần có thư mục của nó, runner `scaffold` thì không được có (V6).
 4. Đặt thứ platform bật, nếu mặc định chưa đúng: `push`, `deep_links`, `orientation`, và với platform desktop là `window: { initial: [1440, 900], min: [1024, 700] }`, cần hook `configureWindow` (không có thì `P05`). Một platform tắt push hay deep link sẽ log một dòng nêu tên key và không khởi tạo gì.
-5. Chạy `composer verify` và smoke test. Trên web không có tuỳ chọn `--flavor`: truyền `--dart-define=FLUTTER_APP_FLAVOR=<flavor>`.
+5. Chạy `composer verify` và smoke test. Trên web không có tuỳ chọn `--flavor`: truyền `--dart-define=APP_FLAVOR=<flavor>` — công cụ Flutter từ chối `FLUTTER_APP_FLAVOR`, tên riêng của framework, và shell chỉ đọc `APP_FLAVOR` trên web.
 
 ### Pin chứng chỉ
 
@@ -237,6 +239,8 @@ Sau đó, từ gốc repo: `flutter pub get`, `dart run build_runner build --wor
 | V12 | điểm vào truyền `profile:`; `test/di_smoke_test.dart` tồn tại và gọi `checkAppContract` |
 | V13 | các vùng được sinh — `facts`, `report`, `imports`, `modules` — bằng với kết quả sinh lại |
 | V14 | không lý do nào rỗng, `TODO` hay `TBD` |
+| V15 | các `productFlavors` của runner Android đã commit và các flavor scheme của runner iOS đã commit chính là các flavor mà manifest khai |
+| V16 | mọi nhóm DI nói `why` nó nằm ở đó, và các nhóm mà template đặt tên theo đúng thứ tự chuẩn (`core` → `notifications` → `shell` → `ui` → `domain` → `data` → `feature` → `other`) |
 
 Đọc một thông báo từ trái sang phải: `<file>: <key>: <vấn đề> — <cách sửa>`. Phép quét đằng sau V3 và V10 đọc mã nguồn, không đọc graph — một `getIt.register…` viết tay vô hình với nó — nên `checkAppContract` vẫn là thẩm quyền cuối. V3, V10, V11 và V12 làm `verify` fail trong khi `sync` chỉ cảnh báo và vẫn ghi, để một chỉnh sửa dở dang vẫn sinh lại được; V7 và V8 từ chối ở cả hai.
 

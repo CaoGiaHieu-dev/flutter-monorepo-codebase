@@ -65,7 +65,6 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
-| Config | `src/config/` | `SslPinningConfig` |
 | Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
 | Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`). `ErrorClassifier` + `ErrorHandler.registerClassifier` cho phép package sở hữu một kiểu exception tự ánh xạ nó — `core_network` đăng ký `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` là một callback thường cho những exception nó không phân loại được — app shell trỏ nó tới `IErrorReporter` tuỳ chọn ([`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting)) |
 | Extension | `src/extensions/` | `bool`, `Enum`, `List`, `String` — không có định dạng `DateTime` hay `num`: ngày, giờ và tiền tệ phụ thuộc locale, nên hãy định dạng bằng `DateFormat` / `NumberFormat` của `intl` với locale hiện tại |
@@ -321,7 +320,7 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Client | `src/api_client.dart` | `ApiClient.createClient()` — factory Dio, lắp chuỗi interceptor |
-| Hợp đồng | `src/network_config.dart` | `NetworkConfig` — `getToken`, `getLocale`, `onRetryCallback`, `onRefreshToken`, `onRefreshFailed`, `sslPinningHashes` |
+| Hợp đồng | `src/network_config.dart` | `NetworkConfig` — `getToken`, `getLocale`, `onRetryCallback`, `onRefreshToken`, `onRefreshFailed` |
 | Interceptor | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handler | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler` |
 | Constants | `src/utils/network_constants.dart` | Timeout, tên header, tiền tố `Bearer`, extra key, log tag |
@@ -332,7 +331,7 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 `NetworkConfig` được hiện thực **ở package adapter của app shell** (`platform_shell_adapters`), không phải ở đây — đó chính là điều giữ cho `core_network` không dính bất kỳ phụ thuộc storage nào. Hai callback refresh mặc định `null`, nên client không có endpoint refresh sẽ đơn giản trả `401` nguyên vẹn cho nơi gọi.
 
 > [!CAUTION]
-> **SSL pinning chỉ tốt bằng quyết định mà một app đưa ra.** `NetworkConfigImpl.sslPinningHashes` trả về các pin mà manifest của app khai cho flavor (`flavors.<f>.ssl_pinning`), và các app mẫu khai `disabled` kèm lý do cho staging và prod — nên pinning tắt ở đó, và `AppInitializer` ghi lý do ở mức `WARNING` trong mỗi lần mở trên Android hay iOS không bỏ qua kiểm tra (mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor, được coi như `prod` về TLS). Lỗ hổng hiện rõ chứ không im lặng, và nó vẫn là lỗ hổng cho tới khi một app khai pin. Xem [hướng dẫn networking](../guides/08_networking.md#10-bật-ssl-pinning).
+> **SSL pinning chỉ tốt bằng quyết định mà một app đưa ra.** Các pin là quyết định trong manifest của app cho flavor (`flavors.<f>.ssl_pinning`, do `SslPinningPolicy` mang và `AppInitializer` đọc — `NetworkConfig` không dính vào), và các app mẫu khai `disabled` kèm lý do cho staging và prod — nên pinning tắt ở đó, và `AppInitializer` ghi lý do ở mức `WARNING` trong mỗi lần mở trên Android hay iOS không bỏ qua kiểm tra (mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor, được coi như `prod` về TLS). Lỗ hổng hiện rõ chứ không im lặng, và nó vẫn là lỗ hổng cho tới khi một app khai pin. Xem [hướng dẫn networking](../guides/08_networking.md#10-bật-ssl-pinning).
 
 Cách khai một service, cho request bỏ qua một bước, thêm client thứ hai hay bật pinning: [`../guides/08_networking.md`](../guides/08_networking.md). Phần dưới đây mô tả những gì diễn ra bên trong client.
 
@@ -479,7 +478,7 @@ Body cũng được che, ở mọi độ sâu: giá trị dưới `password`, `t
 
 ```dart
 // platform/infra/network/lib/src/network_config.dart
-abstract class NetworkConfig implements SslPinningConfig {
+abstract class NetworkConfig {
   String? Function() get getToken;
   String? Function() get getLocale;
 
@@ -490,9 +489,6 @@ abstract class NetworkConfig implements SslPinningConfig {
 
   Future<String?> Function()? get onRefreshToken => null;
   Future<void> Function()? get onRefreshFailed => null;
-
-  @override
-  List<String> get sslPinningHashes;
 }
 ```
 
@@ -658,9 +654,9 @@ switch (profile.facts.sslPinning.decisionFor(flavor)) {
 }
 ```
 
-Nơi pinning áp dụng được hay không là một sự thật của platform (`AppPlatform.canPinTls`: Android và iOS). Trên **web** trình duyệt tự xác thực chứng chỉ và Dio dùng adapter của trình duyệt, nên không cài gì và một dòng `INFO` nói rõ điều đó; trên **desktop** plugin pinning không có implementation, nên một dòng `INFO` ghi "not applicable" — trước đây nó log `ERROR` ở mỗi lần mở, và cài client pinning ở đó sẽ đẩy mọi lời gọi HTTPS qua một plugin không có phần desktop. Một lời gọi `AppInitializer` không có app profile (host dựng tay, một test) giữ hành vi cũ: pin `SslPinningConfig.sslPinningHashes` khi có hash, log `ERROR` khi không có hoặc config chưa đăng ký.
+Nơi pinning áp dụng được hay không là một sự thật của platform (`AppPlatform.canPinTls`: Android và iOS). Trên **web** trình duyệt tự xác thực chứng chỉ và Dio dùng adapter của trình duyệt, nên không cài gì và một dòng `INFO` nói rõ điều đó; trên **desktop** plugin pinning không có implementation, nên một dòng `INFO` ghi "not applicable" — trước đây nó log `ERROR` ở mỗi lần mở, và cài client pinning ở đó sẽ đẩy mọi lời gọi HTTPS qua một plugin không có phần desktop. `profile`, `platform` và `flavor` là tham số bắt buộc của `initBeforeRunApp` và `init`: initializer không bao giờ đoán nó chạy ở đâu hay là flavor nào (RULE-82), và không có chế độ không-profile với nguồn pin riêng.
 
-`_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi ngay sau `configureDependencies()` và **trước** khi `MainScope` dựng splash. Thời điểm là mấu chốt: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó — auth khôi phục phiên bằng một lần refresh token — có thể gửi request đầu tiên ngay lập tức, và `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`. Override cài muộn hơn, trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
+`_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi sau các bước kiểm tra profile và hook `beforeDependencies`, và **trước** `configureDependencies()` — nó chỉ đọc profile nên không cần đăng ký gì. Thời điểm là mấu chốt: `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`, và mọi thứ đồ thị dựng ra đều có thể mở kết nối — một singleton eager khi DI khởi tạo, một implementation contract mà `checkAppContract` resolve ngay sau đó, một controller tạo trên splash (auth khôi phục phiên bằng một lần refresh token). Override cài muộn hơn, sau DI hay trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
 
 Kiểm tra certificate chỉ bị bỏ qua (phục vụ server tự ký cục bộ) **trong bản debug đã khai báo tường minh flavor `dev`** — `AppConfig.bypassesCertificateValidation`. Mọi trường hợp khác đi qua đường pinning: `staging`, `prod`, bản profile hay release của `dev`, và bản build **thiếu hoặc sai** flavor — được coi như `prod` và ghi log mức ERROR. Đây là cố ý fail closed: trước đây `AppConfig.appFlavor` lùi về `dev`, nên một bản build không có `--flavor` — kể cả release — chấp nhận mọi certificate. Bản thân `appFlavor` (môi trường DI) giờ lùi về `dev` ở bản debug và về `prod` ở các bản còn lại.
 

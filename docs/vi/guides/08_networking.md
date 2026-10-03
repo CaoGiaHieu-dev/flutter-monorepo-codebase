@@ -274,9 +274,9 @@ flavors:
     ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
 ```
 
-`composer verify` từ chối một flavor chưa có quyết định ở nơi một platform đã khai báo pin được (Android, iOS), một pin không phải base64 của 32 byte và ít hơn hai pin (V9). Quyết định tới client dưới dạng `SslPinningPolicy`, mà `NetworkConfigImpl.sslPinningHashes` đọc. Ở nơi pinning không thể áp dụng — web, nơi trình duyệt sở hữu TLS, và desktop, nơi plugin pinning không có implementation — app log một dòng `INFO` và key đó bị từ chối vì vô dụng.
+`composer verify` từ chối một flavor chưa có quyết định ở nơi một platform đã khai báo pin được (Android, iOS), một pin không phải base64 của 32 byte và ít hơn hai pin (V9). Quyết định tới client dưới dạng `SslPinningPolicy` của app (`AppFacts.sslPinning`), mà `AppInitializer.initBeforeRunApp` đọc trước khi DI bắt đầu và cài làm `HttpOverrides` toàn cục — đó là nguồn pin duy nhất, nên không có gì để đăng ký hay bind. Ở nơi pinning không thể áp dụng — web, nơi trình duyệt sở hữu TLS, và desktop, nơi plugin pinning không có implementation — app log một dòng `INFO` và key đó bị từ chối vì vô dụng.
 
-Pinning còn cần `SslPinningConfig` được bind riêng, việc mà `platform/shell/adapters/lib/di/network_binding_module.dart` đã làm (RULE-14). Hãy giữ binding đó: thiếu nó, pinning bị bỏ qua trên mọi flavor, kể cả production ([`../architecture/06_app_shell.md` § 4](../architecture/06_app_shell.md#vì-sao-sslpinningconfig-cần-binding-riêng)). Pinning được cài lúc nào, và bản build nào bỏ qua nó: [`../architecture/02_core.md` § 6](../architecture/02_core.md#pinning-được-cài-lúc-nào-và-khi-nào-bị-bỏ-qua).
+Pinning không cần binding DI nào: `AppInitializer` đọc profile, không bao giờ đọc đồ thị, nên một quyết định pin không thể mất vì thiếu đăng ký. Pinning được cài lúc nào, và bản build nào bỏ qua nó: [`../architecture/02_core.md` § 6](../architecture/02_core.md#pinning-được-cài-lúc-nào-và-khi-nào-bị-bỏ-qua).
 
 ---
 
@@ -289,7 +289,7 @@ cd platform/infra/network && flutter test                # các test của inter
 cd apps/mobile && flutter test test/di_smoke_test.dart   # data source của bạn resolve được; DioFailureClassifier đã đăng ký
 ```
 
-Hãy test repository với một data source giả, như `modules/auth/data/test/` làm, thay vì với server thật. Trên thiết bị, bản debug log mọi request và response qua `LoggingInterceptor` (tag `NetworkConstants.CLIENT_LOG_TAG`), với thông tin đăng nhập đã được che. Khi pinning tắt hoặc chưa đăng ký, log hiện một dòng `ERROR` gắn tag `Security`.
+Hãy test repository với một data source giả, như `modules/auth/data/test/` làm, thay vì với server thật. Trên thiết bị, bản debug log mọi request và response qua `LoggingInterceptor` (tag `NetworkConstants.CLIENT_LOG_TAG`), với thông tin đăng nhập đã được che. Khi một flavor chưa có quyết định pin, log hiện một dòng `ERROR` gắn tag `Security`, còn flavor `disabled` hiện một dòng `WARNING` kèm lý do đã khai.
 
 Checklist review:
 
@@ -299,7 +299,7 @@ Checklist review:
 - [ ] Login, refresh, và mọi call có `401` không mang nghĩa "hết phiên" thì set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] Impl `NetworkConfig` giữ `@LazySingleton` (không bao giờ eager)
 - [ ] `flavors.prod.ssl_pinning` (và staging) đã được quyết định trong manifest — ≥2 pin, hoặc `disabled` kèm lý do — trước khi phát hành
-- [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra file sinh ra `lib/di/module.module.dart` của `platform_shell_adapters`
+- [ ] `composer verify` sạch (V9 giữ quyết định pin) và `cd platform/foundation/common && flutter test test/pin_policy_matrix_test.dart` pass
 - [ ] Không log nguyên văn bất kỳ thông tin đăng nhập nào
 
 ## Xử lý sự cố
@@ -312,7 +312,7 @@ Checklist review:
 | `401` tới UI dù backend hỗ trợ refresh | Chưa có `ISessionGateway` nào được đăng ký, nên không có interceptor refresh | Implement và đăng ký một gateway (bước 9) |
 | Người dùng bị đăng xuất sau một lần mạng chập chờn | `refreshToken()` trả `null` cho một lỗi tạm thời | Ném lỗi khi "không có câu trả lời", chỉ trả `null` khi bị từ chối (bước 9) |
 | Server không nhận locale | Server đọc `Accept-Language`; client gửi header không chuẩn `language` | Đọc header `language` ở phía server |
-| Log `ERROR`: `SSL pinning skipped` | Boot không có app profile, hoặc `SslPinningConfig` chưa được bind | Truyền profile (`runShellApp`), quyết định cho flavor trong manifest và giữ binding (bước 10) |
+| Log `ERROR`: `SSL pinning has no decision for flavor …` | Flavor chưa có mục `ssl_pinning` trong manifest (V9 và kiểm tra boot `P04` từ chối điều đó ở nơi một platform pin được) | Khai `pins:` hoặc `disabled` kèm lý do dưới `flavors.<f>.ssl_pinning` rồi chạy `composer sync` (bước 10) |
 | Log `WARNING`: `SSL pinning is disabled for flavor …` | Quyết định của flavor là `disabled` — lý do đã khai nằm trong log | Khai `pins:` (bước 10) khi flavor cần pin |
 | Hai package đăng ký cùng một client có tên và boot ném lỗi | Mỗi tên chỉ đăng ký được một lần trong container | Chuyển phần đăng ký vào `platform/infra/network/lib/di/network_module.dart` (bước 7) |
 

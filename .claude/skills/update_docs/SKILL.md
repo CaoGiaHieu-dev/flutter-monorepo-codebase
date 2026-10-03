@@ -51,7 +51,7 @@ In [`docs/en/reference/01_rules.md`](../../../docs/en/reference/01_rules.md) § 
    a rule becomes machine-checked, update **Enforced by** in the same PR.
 3. Put the why, the exceptions and the history in the section below or in the right guide and link it from **Details**.
 4. Mirror the row in `docs/vi/reference/01_rules.md`. If the rule is among the most violated, add its one-liner to the
-   top-rules table of `CLAUDE.md` and `.agents/AGENTS.md` — as an id and one line, not a paraphrase.
+   top-rules table of `CLAUDE.md` — as an id and one line, not a paraphrase (`.agents/AGENTS.md` holds no rules; it points at `CLAUDE.md`).
 
 `docs_check` fails on a `RULE-NN` the registry does not define, a duplicate id, or a vi registry whose ids differ.
 

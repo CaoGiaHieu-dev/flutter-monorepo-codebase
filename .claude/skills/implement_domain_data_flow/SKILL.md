@@ -247,12 +247,20 @@ Write every third-party entry with an empty value (`dio:`); versions live only i
 `pubspec.lock` change that results. Add a dependency **as your code starts importing it**: `arch_check`
 R5 fails an import that is not declared, `check_unused_packages` a declaration nothing imports.
 
+The data package's models and repository import `domain_<name>` types (the entity, `I<Name>Repository`) through
+the domain barrel, which is stale after Steps 1-3 — so regenerate the domain and data barrels **before**
+`build_runner`, then the data barrel once more after it (the generated files are exported too):
+
 ```bash
 dart tools/dependency_sync.dart
+dart tools/barrel_generator/generate.dart modules/<module>/domain/lib
+dart tools/barrel_generator/generate.dart modules/<module>/data/lib
 dart run build_runner build --workspace
+dart tools/barrel_generator/generate.dart modules/<module>/data/lib
 ```
 
-Barrels: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator) says when to regenerate them.
+Skipped, `flutter analyze` reports `non_type_as_type_argument` on the entity in the models and repository
+implementation. [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator) states the general order.
 
 ### Step 9: Consume it
 
@@ -261,7 +269,9 @@ the use case through its controller's constructor, and never imports `data_produ
 R3). `executeOperation` unwraps the `Result` for Provider
 (`OperationConfig(operation: () => _useCase(const NoParams()))`), `emitResult` for a BLoC — see
 [`implement_provider_ui`](../implement_provider_ui/SKILL.md) and [`implement_bloc_ui`](../implement_bloc_ui/SKILL.md).
-Then rerun `build_runner`: the controller's constructor, and so its DI registration, changed.
+Then rerun `build_runner`: the controller's constructor, and so its DI registration, changed. Regenerate
+the domain barrel before it if the feature imports a type you added in this flow, and the feature barrel after
+(`dart tools/barrel_generator/generate.dart modules/<module>/feature/lib`).
 
 ### Step 10: Tests
 
@@ -269,6 +279,8 @@ Then rerun `build_runner`: the controller's constructor, and so its DI registrat
   `<name>_page_test.dart` build the controller with no argument and stop compiling. Rebuild it from the
   use case over a **hand-written fake** of `IProductRepository` (RULE-61), as
   `modules/auth/feature/test/auth_provider_test.dart` does.
+  The page test's generated `expect(find.text(title), findsNWidgets(2))` counts the placeholder body too: once
+  the real body replaces it, assert the title once in the app bar and the fake's data instead.
 - Repository: a fake data source — one test maps models to entities, one where the data source throws and
   the repository returns a `Failure`.
 

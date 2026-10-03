@@ -82,7 +82,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   `DisposeGuard`, `DefaultLoadingWidget` / `DefaultEmptyWidget` in `provider_state_management`.
 - Bilingual documentation hub (`docs/en`, `docs/vi`) grouped as getting-started, architecture, guides,
   reference and operations, with a rule registry (68 rules, `RULE-01`…`RULE-82`); English + Vietnamese
-  READMEs for the state-management, responsive, ui_kit and tooling packages; eleven agent skills under
+  READMEs for the state-management, responsive, ui_kit and tooling packages; agent skills under
   `.claude/skills/`; `docs_check` (paths, en↔vi parity, RULE-ID citations, translation stamps).
 - Tests across the platform, module and app packages and for the gate tools in `tools/test/`; the Plus
   Jakarta Sans font bundled so bold text uses the bold face.
@@ -164,7 +164,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is the single rule
   registry — every rule once, with its reason, what enforces it and a command to verify it; every other
   document cites ids, and `docs_check` fails on an undefined id. `CLAUDE.md` is a short agent brief and
-  `.agents/AGENTS.md` a pointer; skills moved to `.claude/skills/` and merged into eleven; the
+  `.agents/AGENTS.md` a pointer; skills moved to `.claude/skills/` and merged; the
   documentation contract is `CONTRIBUTING.md` § 5.
 
 ### Removed

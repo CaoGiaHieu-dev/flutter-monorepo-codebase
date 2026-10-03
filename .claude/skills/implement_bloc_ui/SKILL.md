@@ -190,9 +190,18 @@ and read them through `context.l10n<Name>`. Steps: [`localize_feature`](../local
 Once the bloc takes a use case, the generated tests (`<Name>Bloc()` with no argument) stop compiling and the
 page test shows a bloc that never settles. Build the bloc from the use case over a **hand-written fake**
 repository (RULE-61), as `modules/home/feature/test/home_profile_bloc_test.dart` builds its bloc from a fake
-stream:
+stream. The fake keeps its data `const`, so the expected state is a `const` too (without it,
+`prefer_const_constructors` fails the 0-issues gate):
 
 ```dart
+class FakeProductRepository implements IProductRepository {
+  static const products = [ProductEntity(id: 1, name: 'Pen', price: 2)];
+
+  @override
+  Future<Result<List<ProductEntity>>> getProducts() async =>
+      const Result.success(products);
+}
+
 test('started emits loading, then success', () async {
   final bloc = ProductBloc(GetProductsUseCase(FakeProductRepository()));
   addTearDown(bloc.close);
@@ -203,13 +212,18 @@ test('started emits loading, then success', () async {
     bloc.stream,
     emitsInOrder([
       const BlocViewState<List<ProductEntity>>.loading(),
-      BlocViewState<List<ProductEntity>>.success(FakeProductRepository.products),
+      const BlocViewState<List<ProductEntity>>.success(
+        FakeProductRepository.products,
+      ),
     ]),
   );
 });
 ```
 
 The page test provides a bloc built the same way, above the page under `ResponsiveInit`, as `Route.build` does.
+Change its assertions too: the generated `expect(find.text(title), findsNWidgets(2))` counts the title in the
+app bar **and** in the placeholder body, so it fails once the success body shows your data. Assert the app bar
+title once and the fake's data instead (`expect(find.text('Pen'), findsOneWidget)`).
 
 ## Related
 

@@ -13,6 +13,7 @@ import 'support/tool_harness.dart';
 /// | V10 | what a composed package needs the app to register (`FirebaseOptions`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares |
 /// | V12 | the entry point passes the profile; the DI smoke test exists and calls `checkAppContract` |
+/// | V17 | no member pubspec but the root's has a top-level `workspace:` key (RULE-16) |
 ///
 /// Each has a clean fixture and a violating one. The workspace is the `demo`
 /// fixture of `support/composer_fixture.dart`, whose declaration is true of its
@@ -56,6 +57,47 @@ void main() {
       expect(result.output, contains(part));
     }
   }
+
+  group('V17 the root is the only workspace node', () {
+    test('a member without a `workspace:` key passes', () async {
+      expect(await syncAndVerify(demo()), exitsWith(0));
+    });
+
+    test('a member that declares `workspace:` names its pubspec', () async {
+      final ws = demo(
+        extra: {
+          'modules/foo/domain/pubspec.yaml':
+              'name: domain_foo\n'
+              'workspace:\n'
+              '  - nested\n',
+        },
+      );
+      expectRefused(await syncAndVerify(ws), [
+        'modules/foo/domain/pubspec.yaml: workspace: a member pubspec '
+            'declares its own `workspace:` list',
+        'RULE-16',
+      ]);
+    });
+
+    test('`sync` warns and still writes; `verify` is what fails', () async {
+      final ws = demo(
+        extra: {
+          'apps/demo/pubspec.yaml':
+              'name: demo_app\n'
+              'workspace: [x]\n'
+              'dependencies:\n'
+              '  # composer:managed:deps — generated from app_manifest.yaml\n'
+              '  # composer:end:deps\n',
+        },
+      );
+      final synced = await run(ws, ['sync']);
+      expect(synced, exitsWith(0));
+      expect(synced.output, contains('apps/demo/pubspec.yaml: workspace:'));
+      expectRefused(await run(ws, ['verify']), [
+        'apps/demo/pubspec.yaml: workspace:',
+      ]);
+    });
+  });
 
   group('V3 capabilities equal the code', () {
     test('a declaration that is true of the source passes', () async {

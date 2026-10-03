@@ -1444,8 +1444,8 @@ void _sync(
   // leaving the other regions rewritten around it.
   final regions = <_Region>[];
   final switchProblems = <String>[];
-  // What only the source can say (V3, V10, V11, V12): `verify` fails on them,
-  // `sync` says so and still writes — the generated files do not depend on
+  // What only the source can say (V3, V10, V11, V12, V17): `verify` fails on
+  // them, `sync` says so and still writes — the generated files do not depend on
   // them, and a half-finished edit must stay possible to regenerate.
   final sourceProblems = <String>[];
   for (final app in selected) {
@@ -1490,6 +1490,9 @@ void _sync(
         ),
       );
   }
+
+  // V17: the repository root is the only workspace node (RULE-16).
+  sourceProblems.addAll(checkNestedWorkspaces(packages, root: root));
 
   // The tooling package is a workspace member but belongs to no app, so no
   // manifest names it. Matched by directory, since its package name
@@ -1571,7 +1574,7 @@ void _sync(
     if (sourceProblems.isNotEmpty) {
       OutputFormatter.printError(
         '${sourceProblems.length} problem(s) between app_manifest.yaml and '
-        'the source (V3, V10, V11, V12). Fix the line each one names; '
+        'the source (V3, V10, V11, V12, V17). Fix the line each one names; '
         '`sync` does not change them.',
       );
     }
@@ -1886,8 +1889,10 @@ WHAT VERIFY HOLDS THE DECLARATION TO
   V11  the env files that exist hold exactly the keys `env:` declares
   V12  the entry point passes `profile:`; test/di_smoke_test.dart exists and
        calls checkAppContract
-  V7 refuses before anything is written, in `sync` too. V3, V10, V11 and V12
-  fail `verify`; `sync` prints them as warnings and still writes. The scan
+  V17  no member pubspec but the root's has a top-level `workspace:` key
+       (a nested workspace node, RULE-16)
+  V7 refuses before anything is written, in `sync` too. V3, V10, V11, V12 and
+  V17 fail `verify`; `sync` prints them as warnings and still writes. The scan
   reads source, not the graph: `checkAppContract` stays the authority.
 
 MODULE LAYERS

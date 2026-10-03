@@ -12,6 +12,10 @@ Dependency Sync — aligns every workspace pubspec with pubspec_dependencies.yam
 USAGE
   dart tools/dependency_sync.dart           rewrite drifted versions, then pub get
   dart tools/dependency_sync.dart --check   report drift only; exit 1 on any (CI Gate 4)
+
+EXIT 1 also when a member pubspec declares a hosted dependency or
+dev_dependency that pubspec_dependencies.yaml does not pin (RULE-74); the
+message names the member and the package. sdk / path / git sources are exempt.
 ''');
     exit(0);
   }
@@ -111,6 +115,10 @@ USAGE
   int totalSynced = 0;
   int totalMismatches = 0;
   int totalRepairedPaths = 0;
+  // `[pubspec] section.package` for every hosted dependency the catalog does
+  // not pin (RULE-74): a version that lives only in a member pubspec is the
+  // drift the catalog exists to prevent, and nothing else would notice it.
+  final uncataloged = <String>[];
 
   for (final pubspec in pubspecs) {
     final relativePath = pubspec.pkgPath == '.'
@@ -161,6 +169,10 @@ USAGE
         }
 
         final targetVersion = catalog[depName];
+        if (targetVersion == null && _isHosted(value)) {
+          uncataloged.add('[$relativePath] $section.$depName');
+          continue;
+        }
         // A map value is a `path:` / `git:` / `sdk:` / `hosted:` source —
         // not a version, and not the catalog's to overwrite.
         if (targetVersion == null || value is! YamlScalar) continue;
@@ -211,6 +223,21 @@ USAGE
   stdout.writeln(
     '================================================================',
   );
+  if (uncataloged.isNotEmpty) {
+    for (final entry in uncataloged) {
+      stderr.writeln('❌ Not in the catalog: $entry');
+    }
+    stderr.writeln(
+      '❌ ${uncataloged.length} hosted dependenc'
+      '${uncataloged.length == 1 ? 'y is' : 'ies are'} absent from '
+      'pubspec_dependencies.yaml (RULE-74).',
+    );
+    stderr.writeln(
+      '💡 Add each package to pubspec_dependencies.yaml with its version '
+      'constraint, then run `dart tools/dependency_sync.dart`.',
+    );
+    exit(1);
+  }
   if (isCheckMode) {
     if (totalMismatches > 0) {
       stderr.writeln(
@@ -377,6 +404,17 @@ String _describe(Object? value) => switch (value) {
   Map() => 'a map',
   _ => 'a ${value.runtimeType}',
 };
+
+/// Whether a dependency entry resolves from pub.dev (or another hosted
+/// server): a bare version (or nothing), or a map that names `hosted:` /
+/// `version:` without a `path:` / `git:` / `sdk:` source.
+bool _isHosted(YamlNode value) {
+  if (value is YamlScalar) return true;
+  if (value is! YamlMap) return false;
+  const otherSources = ['path', 'git', 'sdk'];
+  if (otherSources.any(value.containsKey)) return false;
+  return value.containsKey('hosted') || value.containsKey('version');
+}
 
 /// A workspace pubspec, parsed.
 class _Pubspec {

@@ -41,7 +41,7 @@ flavors: # closed set: dev | staging | prod
 
 env: # the keys of the env.<flavor> files; checked here, validated again at boot
   BASE_URL: { required_in: [prod] }
-  APP_NAME: { required_in: [staging, prod] }
+  APP_NAME: { } # optional: AppConfig.titleFor falls back to `app.name`; BASE_URL stays required in prod, where a build without it has no API
 
 platforms: # a platform missing here is a platform this app does not run on; `scaffold` = run `flutter create` for it (README §2 prints the line), then declare `committed`
 {{#platforms}}

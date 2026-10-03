@@ -18,7 +18,7 @@ flavors:
 
 env:
   BASE_URL: { required_in: [prod] }
-  APP_NAME: { required_in: [staging, prod] }
+  APP_NAME: { } # optional: AppConfig.titleFor falls back to `app.name`
 
 platforms: # no runner is committed yet: `scaffold` says so and the report prints the flutter create line
   windows: { runner: scaffold }

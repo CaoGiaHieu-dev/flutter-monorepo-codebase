@@ -21,6 +21,16 @@ List<String> _codes(CompositionReport report) =>
 ProfileProblem _problem(CompositionReport report, String code) =>
     report.problems.singleWhere((p) => p.code == code);
 
+class _FakeDashboard implements IDashboardRouteModule {
+  @override
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  ) => navigationShell;
+}
+
 class _ExplodingTab extends FakeDestination {
   _ExplodingTab() : super(path: '/boom', routes: const []);
 
@@ -288,6 +298,7 @@ void main() {
     test('names the order that is shared (RULE-24)', () {
       registerRequiredShell();
       getIt
+        ..registerSingleton<IDashboardRouteModule>(_FakeDashboard())
         ..registerSingleton<INavDestinationModule>(
           FakeDestination(path: '/a', routes: aRoute('/a').routes, order: 2),
         )
@@ -299,7 +310,9 @@ void main() {
         );
 
       final report = _check(
-        testProfile(capabilities: declare(provided: const {'tabs'})),
+        testProfile(
+          capabilities: declare(provided: const {'tabs', 'dashboard'}),
+        ),
       );
 
       expect(_codes(report), ['C06']);
@@ -308,6 +321,28 @@ void main() {
     });
 
     test('distinct orders are fine', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IDashboardRouteModule>(_FakeDashboard())
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(path: '/a', routes: aRoute('/a').routes, order: 0),
+        )
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(path: '/b', routes: aRoute('/b').routes, order: 1),
+        );
+
+      final report = _check(
+        testProfile(
+          capabilities: declare(provided: const {'tabs', 'dashboard'}),
+        ),
+      );
+
+      expect(report.problems, isEmpty);
+    });
+  });
+
+  group('C12 two tabs and no dashboard', () {
+    test('names the tabs and the module that gives them chrome', () {
       registerRequiredShell();
       getIt
         ..registerSingleton<INavDestinationModule>(
@@ -319,6 +354,44 @@ void main() {
 
       final report = _check(
         testProfile(capabilities: declare(provided: const {'tabs'})),
+      );
+
+      expect(_codes(report), ['C12']);
+      expect(
+        _problem(report, 'C12').description,
+        allOf(contains('2 navigation tabs'), contains('FakeDestination')),
+      );
+      expect(_problem(report, 'C12').action, contains('feature_dashboard'));
+    });
+
+    test('one tab renders without chrome, and that is fine', () {
+      registerRequiredShell();
+      getIt.registerSingleton<INavDestinationModule>(
+        FakeDestination(path: '/a', routes: aRoute('/a').routes),
+      );
+
+      final report = _check(
+        testProfile(capabilities: declare(provided: const {'tabs'})),
+      );
+
+      expect(report.problems, isEmpty);
+    });
+
+    test('a dashboard gives two tabs their chrome', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IDashboardRouteModule>(_FakeDashboard())
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(path: '/a', routes: aRoute('/a').routes, order: 0),
+        )
+        ..registerSingleton<INavDestinationModule>(
+          FakeDestination(path: '/b', routes: aRoute('/b').routes, order: 1),
+        );
+
+      final report = _check(
+        testProfile(
+          capabilities: declare(provided: const {'tabs', 'dashboard'}),
+        ),
       );
 
       expect(report.problems, isEmpty);
@@ -368,6 +441,56 @@ void main() {
       getIt.registerSingleton<IFeatureRouteModule>(aRoute());
 
       expect(_codes(_check(testProfile())), ['C01', 'C01']);
+    });
+  });
+
+  group('C11 the fallback path is not a registered route', () {
+    test('a typo is reported with the path and where to fix it', () {
+      registerRequiredShell();
+      getIt.registerSingleton<IFeatureRouteModule>(aRoute('/home'));
+
+      final report = _check(
+        testProfile(router: const RouterProfile(fallbackPath: '/hom')),
+      );
+
+      expect(_codes(report), ['C11']);
+      expect(
+        _problem(report, 'C11').description,
+        contains('`RouterProfile.fallbackPath` is `/hom`'),
+      );
+      expect(
+        _problem(report, 'C11').action,
+        contains('apps/test_app/lib/app/app_profile.dart'),
+      );
+    });
+
+    test('a path a module registers is fine, nested ones included', () {
+      registerRequiredShell();
+      getIt.registerSingleton<IFeatureRouteModule>(
+        FakeFeatureRoutes([
+          GoRoute(
+            path: '/home',
+            builder: (_, _) => const Text('home'),
+            routes: [
+              GoRoute(path: 'detail', builder: (_, _) => const Text('d')),
+            ],
+          ),
+        ]),
+      );
+
+      for (final path in const ['/home', '/home/detail']) {
+        final report = _check(
+          testProfile(router: RouterProfile(fallbackPath: path)),
+        );
+        expect(report.problems, isEmpty, reason: path);
+      }
+    });
+
+    test('no fallback path is nothing to check', () {
+      registerRequiredShell();
+      getIt.registerSingleton<IFeatureRouteModule>(aRoute('/home'));
+
+      expect(_check(testProfile()).problems, isEmpty);
     });
   });
 

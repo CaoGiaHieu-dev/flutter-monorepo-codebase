@@ -78,8 +78,10 @@ AppProfile testProfile({
   Map<String, CapabilityExpectation>? capabilities,
   SslPinningPolicy? sslPinning,
   DisplayProfile display = const DisplayProfile(),
+  RouterProfile router = const RouterProfile(),
 }) => AppProfile(
   display: display,
+  router: router,
   facts: AppFacts(
     id: 'test_app',
     name: 'Test App',

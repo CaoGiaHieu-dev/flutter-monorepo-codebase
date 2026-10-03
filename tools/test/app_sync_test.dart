@@ -171,7 +171,7 @@ void main() {
       'every row says where it is looked up and what happens without it',
       () {
         for (final e in catalog.entries) {
-          expect(e.consumer, contains(':'), reason: e.id);
+          expect(e.consumer, endsWith('.dart'), reason: e.id);
           expect(e.whenAbsent, isNotEmpty, reason: e.id);
         }
       },
@@ -184,6 +184,72 @@ void main() {
       );
       expect(catalog.optionalKeys, isNot(contains('session_state')));
       expect(catalog.declarableKeys, contains('session_state'));
+    });
+  });
+
+  group('the docs quote the catalog as it is', () {
+    // docs_check proves a path exists, never that an identifier or a count
+    // does: the catalog was once quoted as `kShellContracts`, 22 rows, 8
+    // required, after it had become `SHELL_CONTRACTS`, 21 rows, 7 required.
+    final catalog = parseCatalogSource(
+      read(
+        'platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart',
+      ),
+    );
+
+    /// Every hand-written Markdown file that may quote the catalog; the
+    /// history log records what was true when it was written, so it is out.
+    final docs =
+        <String>[
+          for (final entity in Directory(repoRoot).listSync(recursive: true))
+            if (entity is File && entity.path.endsWith('.md'))
+              p.relative(entity.path, from: repoRoot),
+        ].where((path) {
+          final parts = p.split(path);
+          return !path.startsWith(p.join('docs', 'history')) &&
+              !parts.any(
+                (part) =>
+                    part == 'build' ||
+                    part == '.dart_tool' ||
+                    part == 'node_modules' ||
+                    part.startsWith('.') &&
+                        part != '.claude' &&
+                        part != '.agents' &&
+                        part != '.github',
+              );
+        }).toList();
+
+    test('nobody names a catalog constant that does not exist', () {
+      final stale = [
+        for (final path in docs)
+          if (read(path).contains('kShellContracts')) path,
+      ];
+      expect(stale, isEmpty, reason: 'say `SHELL_CONTRACTS`: $stale');
+    });
+
+    test('a quoted row count is the real one', () {
+      final counts = <RegExp, int>{
+        RegExp(r'(\d+)-row (?:contract )?catalog'): catalog.entries.length,
+        RegExp(r'(\d+) rows? —'): catalog.entries.length,
+        RegExp(r'(\d+) (?:\*\*)?required(?:\*\*)? rows'):
+            catalog.requiredRows.length,
+        RegExp(r'(\d+) dòng (?:\*\*)?bắt buộc'): catalog.requiredRows.length,
+        RegExp(r'(\d+) (?:\*\*)?optional(?:\*\*)? rows'):
+            catalog.optional.length,
+        RegExp(r'(\d+) dòng (?:\*\*)?tuỳ chọn'): catalog.optional.length,
+      };
+      final wrong = <String>[];
+      for (final path in docs) {
+        final text = read(path);
+        for (final MapEntry(key: pattern, value: real) in counts.entries) {
+          for (final m in pattern.allMatches(text)) {
+            if (int.parse(m.group(1)!) != real) {
+              wrong.add('$path: "${m.group(0)}" (the catalog has $real)');
+            }
+          }
+        }
+      }
+      expect(wrong, isEmpty);
     });
   });
 

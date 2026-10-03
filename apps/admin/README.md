@@ -40,7 +40,7 @@ Name shown to users (the MaterialApp title: task switcher and browser tab): `Cod
 | Env key | Read by | Required in |
 |:--|:--|:--|
 | `BASE_URL` | Dart (`String.fromEnvironment`) | prod |
-| `APP_NAME` | Dart (`String.fromEnvironment`) | staging, prod |
+| `APP_NAME` | Dart (`String.fromEnvironment`) | — |
 
 ### 2. Platforms (c) — effective values, `value (source)`
 | Platform | Runner | Splash | Push | Deep links | Orientation | TLS pinning | Window |
@@ -106,7 +106,7 @@ Modules: auth (api, domain, data, feature) · settings (feature).
 | `sign_in` | `ISignInLocation` | optional | provided | feature_auth | the shell never redirects a signed-out user |
 | `routes` | `IFeatureRouteModule` | optional | provided | feature_auth | the router has no stack routes |
 | `tabs` | `INavDestinationModule` | optional | provided | feature_settings | the router opens one placeholder route (`/_empty_dashboard`) |
-| `dashboard` | `IDashboardRouteModule` | optional | **absent** — one tab: destinations render without chrome | — | the destinations render without any chrome |
+| `dashboard` | `IDashboardRouteModule` | optional | **absent** — one tab: destinations render without chrome | — | the destinations render without any chrome (with two or more tabs none after the first can be reached: C12) |
 | `entry` | `IAppEntryLocation` | optional | **absent** — no onboarding: boot goes straight to the sign-in check | — | there is no first-launch entry; boot goes to the sign-in check |
 | `post_sign_in` | `IPostSignInLocation` | optional | **absent** — no home module: after sign-in the router's first tab (settings) opens | — | after sign-in the router opens its fallback, the first tab |
 | `splash` | `IAppSplashScreen` | optional | **absent** — native splash is kept through boot | — | the native splash is kept through boot |

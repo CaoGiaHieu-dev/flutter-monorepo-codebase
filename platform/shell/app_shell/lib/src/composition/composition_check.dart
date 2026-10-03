@@ -23,7 +23,11 @@ import 'shell_contracts.dart';
 /// - `C07` `AppRouter.router` fails to assemble;
 /// - `C08` `DioFailureClassifier` is not registered exactly once;
 /// - `C09` an optional contract has no declaration at all;
-/// - `C10` a registration's constructor throws when the contract is resolved.
+/// - `C10` a registration's constructor throws when the contract is resolved;
+/// - `C11` `RouterProfile.fallbackPath` is not a route the assembled router
+///   registers;
+/// - `C12` two or more navigation tabs and no `IDashboardRouteModule`: no
+///   chrome to switch between them.
 ///
 /// Resolving a contract builds its lazy registration, and the router is
 /// assembled eagerly (`C07`), so this runs app code. What it throws never
@@ -156,7 +160,7 @@ CompositionReport checkAppContract(
 
   problems
     ..addAll(_bundleDisagreements(profile, manifest, sync))
-    ..addAll(_structure(failed));
+    ..addAll(_structure(failed, profile));
 
   return CompositionReport(
     appId: id,
@@ -204,10 +208,13 @@ Iterable<ProfileProblem> _bundleDisagreements(
   }
 }
 
-/// `C05`–`C08`: what both smoke tests used to check by hand. A contract in
-/// [failed] already threw while it was resolved (`C10`): what depends on it is
-/// skipped rather than reported twice.
-Iterable<ProfileProblem> _structure(Set<Type> failed) sync* {
+/// `C05`–`C08` and `C11`: what both smoke tests used to check by hand. A
+/// contract in [failed] already threw while it was resolved (`C10`): what
+/// depends on it is skipped rather than reported twice.
+Iterable<ProfileProblem> _structure(
+  Set<Type> failed,
+  AppProfile profile,
+) sync* {
   final routes = failed.contains(IFeatureRouteModule)
       ? null
       : getAllOrEmpty<IFeatureRouteModule>().toList();
@@ -227,6 +234,25 @@ Iterable<ProfileProblem> _structure(Set<Type> failed) sync* {
     );
   }
 
+  if (tabs != null &&
+      tabs.length >= 2 &&
+      !failed.contains(IDashboardRouteModule) &&
+      getItOrNull<IDashboardRouteModule>() == null) {
+    yield ProfileProblem(
+      code: 'C12',
+      description:
+          'The app composes ${tabs.length} navigation tabs '
+          '(${_names(tabs)}) and no `IDashboardRouteModule`. Without a '
+          'dashboard the destinations render with no navigation chrome, so '
+          'every tab after the first is unreachable from the UI.',
+      action:
+          'Compose the module that registers `IDashboardRouteModule` (the '
+          'sample is `feature_dashboard`) and declare `dashboard: provided`, '
+          'or compose one tab only — then run '
+          '`dart tools/composer/composer.dart sync --app ${profile.facts.id}`.',
+    );
+  }
+
   final byOrder = <int, List<INavDestinationModule>>{};
   for (final tab in tabs ?? const <INavDestinationModule>[]) {
     byOrder.putIfAbsent(tab.order, () => []).add(tab);
@@ -242,6 +268,7 @@ Iterable<ProfileProblem> _structure(Set<Type> failed) sync* {
     );
   }
 
+  ProfileProblem? fallbackProblem;
   if (!failed.contains(AppRouter)) {
     try {
       final router = getItOrNull<AppRouter>();
@@ -249,6 +276,24 @@ Iterable<ProfileProblem> _structure(Set<Type> failed) sync* {
       // malformed tree (duplicate or missing paths) while it is built.
       if (router != null && router.router.configuration.routes.isEmpty) {
         throw StateError('the router has no routes');
+      }
+      final fallback = profile.router.fallbackPath;
+      if (router != null &&
+          fallback != null &&
+          router.router.configuration.findMatch(Uri.parse(fallback)).isError) {
+        fallbackProblem = ProfileProblem(
+          code: 'C11',
+          description:
+              '`RouterProfile.fallbackPath` is `$fallback`, but the router '
+              'registers no route at that path. It is where a signed-in user '
+              'lands and where "go home" goes, so the app would open on its '
+              'not-found page.',
+          action:
+              'Set `router: RouterProfile(fallbackPath: ...)` in '
+              'apps/${profile.facts.id}/lib/app/app_profile.dart to a path '
+              'a composed module registers, or remove it to use the first '
+              'tab.',
+        );
       }
     } catch (error) {
       yield ProfileProblem(
@@ -260,6 +305,7 @@ Iterable<ProfileProblem> _structure(Set<Type> failed) sync* {
       );
     }
   }
+  if (fallbackProblem != null) yield fallbackProblem;
 
   final classifiers = ErrorHandler.classifiers
       .whereType<DioFailureClassifier>()

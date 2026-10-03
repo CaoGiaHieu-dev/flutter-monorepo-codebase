@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dynamic_logger/dynamic_logger.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
@@ -37,22 +36,22 @@ class AppInitializer {
   /// [profile].
   ///
   /// Certificate pinning follows the app's declared decision for the [flavor]
-  /// this run is built as (default [AppConfig.appFlavor]): `flavors.<f>.
+  /// this run is built as (`AppConfig.appFlavor`): `flavors.<f>.
   /// ssl_pinning` in the manifest, carried by [AppFacts.sslPinning]
   /// ([SslPinningPolicy]). Pinned installs the pinning client with exactly
   /// those hashes, disabled logs its reason, and a platform that cannot pin
   /// TLS (`AppPlatform.canPinTls`: the web, where the browser owns TLS, and
   /// the desktop, where the pinning plugin has no implementation) says so once
   /// instead of installing or complaining. [platform] is the platform this run
-  /// is on; left out, the web is told apart from every other platform by
-  /// [kIsWeb] only.
+  /// is on (`resolveAppPlatform()`, the one place that reads the runtime): the
+  /// caller says where it runs, this class never guesses.
   ///
   /// Idempotent: [init] calls it too, for a host that never called it, and a
   /// second call installs nothing.
   static void initBeforeRunApp({
     required AppProfile profile,
-    AppPlatform? platform,
-    Flavor? flavor,
+    required AppPlatform platform,
+    required Flavor flavor,
   }) {
     if (_ranBeforeRunApp) return;
     _ranBeforeRunApp = true;
@@ -62,30 +61,19 @@ class AppInitializer {
 
     // Certificate handling: pinning, or — debug + explicit dev flavor only —
     // a bypass for local self-signed servers.
-    _setupHttpOverrides(
-      profile,
-      platform ?? (_isWeb ? AppPlatform.web : null),
-      flavor ?? AppConfig.appFlavor,
-    );
+    _setupHttpOverrides(profile, platform, flavor);
   }
 
   /// Lets a test run [initBeforeRunApp] again.
   @visibleForTesting
   static void debugResetBeforeRunApp() => _ranBeforeRunApp = false;
 
-  /// Stands in for [kIsWeb] in a test, which always runs on the VM. `null`
-  /// (the default) reads the real constant.
-  @visibleForTesting
-  static bool? debugIsWebOverride;
-
-  static bool get _isWeb => debugIsWebOverride ?? kIsWeb;
-
   /// Performs all required startup initializations.
   static Future<void> init({
     required AppProfile profile,
+    required AppPlatform platform,
+    required Flavor flavor,
     RouteObserver<ModalRoute<void>>? routeObserver,
-    AppPlatform? platform,
-    Flavor? flavor,
   }) async {
     // Logger + HttpOverrides. Normally already done by `runShellApp`, before
     // the splash was built; a no-op then.
@@ -118,7 +106,7 @@ class AppInitializer {
 
   static void _setupHttpOverrides(
     AppProfile profile,
-    AppPlatform? platform,
+    AppPlatform platform,
     Flavor flavor,
   ) {
     // On the web the browser owns TLS: `dart:io`'s `HttpOverrides` compiles
@@ -177,7 +165,7 @@ class AppInitializer {
     // nothing to pin with, so say so once rather than log an ERROR about a
     // misconfiguration the app cannot fix — and never route every HTTPS call
     // through a client that cannot serve it.
-    if (platform != null && !platform.canPinTls) {
+    if (!platform.canPinTls) {
       DynamicLogger.log(
         'SSL pinning is not applicable on ${platform.name}: the pinning '
         'plugin has no implementation here. TLS is validated by the platform.',
@@ -223,13 +211,17 @@ class AppInitializer {
 
   static Future<void> _configureSystemSettings(
     AppProfile profile,
-    AppPlatform? platform,
+    AppPlatform platform,
   ) async {
-    final facts = platform == null ? null : profile.facts.platformFor(platform);
+    // An undeclared platform (`P01`, only reachable with
+    // ALLOW_UNDECLARED_PLATFORM) runs on the template defaults, as the boot
+    // does everywhere else.
+    final facts =
+        profile.facts.platformFor(platform) ?? const PlatformFacts.today();
     await SystemChrome.setPreferredOrientations(
       preferredOrientationsFor(
         _shortestSideAtLaunch(),
-        policy: facts?.orientation ?? OrientationPolicy.phonesPortrait,
+        policy: facts.orientation,
         phoneMaxShortestSide: profile.display.phoneMaxShortestSide,
       ),
     );

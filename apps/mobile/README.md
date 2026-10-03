@@ -41,7 +41,7 @@ Name shown to users (the MaterialApp title: task switcher and browser tab): `Cod
 | Env key | Read by | Required in |
 |:--|:--|:--|
 | `BASE_URL` | Dart (`String.fromEnvironment`) | prod |
-| `APP_NAME` | Dart (`String.fromEnvironment`) | staging, prod |
+| `APP_NAME` | Dart (`String.fromEnvironment`) | — |
 | `WEB_DOMAIN` | native only (Gradle / Xcode) — no Dart reader | — |
 | `APP_LINK_MODE` | native only (Gradle / Xcode) — no Dart reader | — |
 
@@ -92,7 +92,7 @@ The DI smoke test boots every flavor, so a missing registration fails it with "<
 | `sign_in` | `ISignInLocation` | optional | provided | feature_auth | the shell never redirects a signed-out user |
 | `routes` | `IFeatureRouteModule` | optional | provided | feature_auth, feature_onboarding | the router has no stack routes |
 | `tabs` | `INavDestinationModule` | optional | provided | feature_home, feature_settings | the router opens one placeholder route (`/_empty_dashboard`) |
-| `dashboard` | `IDashboardRouteModule` | optional | provided | feature_dashboard | the destinations render without any chrome |
+| `dashboard` | `IDashboardRouteModule` | optional | provided | feature_dashboard | the destinations render without any chrome (with two or more tabs none after the first can be reached: C12) |
 | `entry` | `IAppEntryLocation` | optional | provided | feature_onboarding | there is no first-launch entry; boot goes to the sign-in check |
 | `post_sign_in` | `IPostSignInLocation` | optional | provided | feature_home | after sign-in the router opens its fallback, the first tab |
 | `splash` | `IAppSplashScreen` | optional | provided | feature_splash | the native splash is kept through boot |

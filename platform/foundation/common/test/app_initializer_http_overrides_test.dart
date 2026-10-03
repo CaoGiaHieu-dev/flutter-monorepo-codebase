@@ -40,7 +40,6 @@ void main() {
     HttpOverrides.global = null;
     await getIt.reset();
     AppInitializer.debugResetBeforeRunApp();
-    AppInitializer.debugIsWebOverride = null;
   });
 
   test('installs the pinning HttpOverrides synchronously', () {
@@ -89,12 +88,12 @@ void main() {
   });
 
   test('installs nothing on the web, even with pins declared', () {
-    AppInitializer.debugIsWebOverride = true;
     final sentinel = _Sentinel();
     HttpOverrides.global = sentinel;
 
     AppInitializer.initBeforeRunApp(
       profile: _profile(decision: _pinned),
+      platform: AppPlatform.web,
       flavor: Flavor.prod,
     );
 

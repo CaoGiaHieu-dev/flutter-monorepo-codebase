@@ -70,7 +70,6 @@ const AppFacts appFacts = AppFacts(
     EnvRule(
       key: 'APP_NAME',
       value: String.fromEnvironment('APP_NAME'),
-      requiredIn: {Flavor.staging, Flavor.prod},
     ),
   ],
   capabilities: {

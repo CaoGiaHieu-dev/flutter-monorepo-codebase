@@ -52,9 +52,11 @@ final class ShellContract<T extends Object> {
   /// `null` when the contract is declared under its own [id].
   final String? bundle;
 
-  /// Where the shell looks it up: `path:line`, comma-separated when there are
-  /// several. Shown in the app report; a test holds each line to the contract
-  /// it names.
+  /// Where the shell looks it up: the repo-relative path of each file,
+  /// comma-separated when there are several. Shown in the app report; a test
+  /// holds each file to a `getIt` / `getItOrNull` / `getAllOrEmpty` lookup (or
+  /// an injected field) of the contract it names. Files, not lines: a line
+  /// number rots with the next edit above it.
   final String consumer;
 
   /// What the shell does when nothing is registered, in a sentence — shown

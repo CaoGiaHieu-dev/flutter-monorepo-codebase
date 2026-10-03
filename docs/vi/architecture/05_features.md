@@ -222,7 +222,7 @@ Widget trong `core_ui_kit` không bao giờ scale lại một giá trị đượ
 | Phạm vi | Annotation | Dùng cho |
 |:---|:---|:---|
 | **Theo màn hình** | `@injectable` (factory) | ViewModel / BLoC gắn với một màn hình |
-| **Toàn app** | `@lazySingleton` | `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider` |
+| **Toàn app** | `@lazySingleton` | `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider` |
 
 > [!CAUTION]
 > **Tuyệt đối không đăng ký controller theo màn hình dưới dạng singleton.** GetIt sẽ giữ instance vĩnh viễn, khiến state rò rỉ giữa các lần vào màn hình và object không bao giờ được dispose.

@@ -458,7 +458,7 @@ Bắn event bằng `context.read<HomeProfileBloc>().add(const HomeProfileEvent.r
 | Loại controller | Annotation | Vì sao |
 |---|---|---|
 | VM / BLoC gắn màn hình | `@injectable` (factory) | Mỗi màn hình một instance mới; huỷ khi pop route |
-| Controller toàn app | `@lazySingleton` | Sống hết vòng đời process (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider`) |
+| Controller toàn app | `@lazySingleton` | Sống hết vòng đời process (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`) |
 
 Controller gắn màn hình không bao giờ là singleton (RULE-10). GetIt sẽ giữ nó vĩnh viễn: pop màn hình là rò rỉ bộ nhớ, và lần vào sau thấy state cũ.
 

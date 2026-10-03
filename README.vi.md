@@ -113,12 +113,15 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
 │   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
 │   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
-│       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
+│       ├── app_manifest.yaml      # App là gì (flavor, env, platform, capability) và nó ghép gì
+│       ├── README.md              # Lộ trình đọc + báo cáo được sinh về những gì app khai báo
 │       ├── lib/
-│       │   ├── main.dart          # Một dòng: runShellApp(configureDependencies: …)
+│       │   ├── main.dart          # Một lời gọi: runShellApp(profile:, hooks:, configureDependencies:)
+│       │   ├── app/               # app_profile.dart (facts được sinh + tinh chỉnh có kiểu), app_hooks.dart
 │       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
 │       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
 │       ├── android/  ios/         # Project native — chạy và build từ apps/mobile/
+│       ├── test/                  # DI smoke test (checkAppContract cho từng flavor), profile test
 │       ├── env.dev  env.stg       # File env theo flavor (env.prod: tự tạo)
 │       ├── fastlane/              # Lane phát hành
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
@@ -157,10 +160,10 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
-│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R15 — Cổng PR 1
+│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R17 — Cổng PR 1
 │   ├── barrel_generator/          # Sinh lại barrel file cho lib/ của một package
 │   ├── code_review/               # Review mã nguồn bằng Gemini AI
-│   ├── composer/                  # sync/verify app theo app_manifest.yaml — Cổng PR 0
+│   ├── composer/                  # sync/verify/describe/new app từ app_manifest.yaml — Cổng PR 0
 │   ├── docs_check/                # Mọi đường dẫn repo mà docs nhắc tới đều tồn tại — Cổng PR 5
 │   ├── firebase/                  # Cấu hình Firebase theo flavor cho một app
 │   ├── module_generator/          # Sinh package Feature/Domain/Data/Core/Custom
@@ -546,6 +549,7 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 | [10. Giao tiếp xuyên feature](docs/vi/guides/10_cross_feature.md) | Sáu mô hình được cho phép |
 | [11. Design System](docs/vi/guides/11_design_system.md) | Màu, font, spacing, bo góc; scale và layout thích ứng |
 | [12. Cô lập module](docs/vi/guides/12_module_isolation.md) | Tách một module ra repository riêng; checkout một phần |
+| [13. Ghép app](docs/vi/guides/13_app_composition.md) | Một app khai báo gì theo từng platform, cấu hình nó ra sao, app thứ ba bằng một lệnh |
 
 ### 📐 Tra Cứu — *tìm nhanh*
 | Tài liệu | Chứa |

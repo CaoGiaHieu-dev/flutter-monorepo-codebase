@@ -9,7 +9,7 @@ Use this skill when requested to: "register a new Service/Repository in DI", "in
 
 **Guide:** [`docs/en/guides/05_di.md`](../../../docs/en/guides/05_di.md).
 **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-06, RULE-10, RULE-11, RULE-12,
-RULE-13, RULE-14, RULE-15, RULE-16, RULE-45, RULE-47, RULE-63.
+RULE-13, RULE-14, RULE-15, RULE-16, RULE-45, RULE-47, RULE-63, RULE-80, RULE-81.
 
 ---
 
@@ -51,6 +51,9 @@ Deferring is safe whenever every consumer is itself lazy — nothing resolves it
 > cd apps/mobile && flutter test test/di_smoke_test.dart
 > cd apps/admin && flutter test test/di_smoke_test.dart
 > ```
+> The smoke test also calls `checkAppContract`: it holds the graph to the app's `capabilities:`, so a
+> contract registered but declared `absent` (or declared `provided` and not registered) fails it too
+> (C02 / C03) — see step 3b below.
 > If you added a plugin that DI touches (`@preResolve`, `@PostConstruct(preResolve: true)`), add its
 > test double there. To **diagnose** a failure, read the generated files after `build_runner`:
 > `apps/mobile/lib/di/injection.config.dart` holds only the **module order** (one
@@ -185,6 +188,10 @@ Then regenerate:
 dart tools/composer/composer.dart sync --app <id>
 ```
 
+`injection.dart` is generated **in full** — the imports, the module lists and the
+`configureDependencies()` entry point (with `enableRegisteringMultipleInstancesOfOneType()`) — so a
+third app cannot write it wrong and a hand edit is drift (`composer verify`).
+
 **Do not** put `core_base_ui` in `core` (its providers inject the shell's storage adapters) or
 `core_notifications` in `core` (it injects the app's `FirebaseOptions`) — both break RULE-13 and the
 smoke test catches it. Never hand-edit the generated regions (RULE-16).
@@ -194,7 +201,39 @@ App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
 its own micro-package module, first in the `shell` group (before `platform_app_shell`) — early in `after` (after `notifications` where an app has one), so they exist **before**
 `_uiModules` run.
 
-### Step 3b: Ordering when a module opens a database
+### Step 3a: A type that reads the app's profile
+
+`runShellApp` registers the app's `AppProfile` and each section — `PlatformFacts`,
+`SslPinningPolicy`, `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile` — **by exact
+type, before `getIt.init`** (RULE-14). A DI-built class takes the section it needs as an *optional*
+constructor parameter with a `const` default equal to the template's behaviour: injectable still
+injects it, and a class built by hand in a test falls back to the same default. Because the
+registration comes first, even an eager `@Singleton` can inject one without breaking RULE-13.
+
+```dart
+@lazySingleton
+class MyAdapter {
+  MyAdapter([this._network = const NetworkProfile()]);
+  final NetworkProfile _network;
+}
+```
+
+A new per-app value is a profile section or a manifest key, never a constant in a `platform/` package
+(RULE-80) — see the `configure_app` skill. Replacing a shell-owned type by registering your own is
+**unsupported**: GetIt keeps the *first* registration of a type, so it only works for types in the
+`after` groups and silently loses to the `before` groups.
+
+### Step 3b: Declare what the app registers for the shell
+
+If the package registers a contract the shell catalogues (`kShellContracts`: a splash, tabs, routes,
+a session, an entry location, an `IErrorReporter`, `IAnalytics`, …), every app that composes it
+declares the contract `provided` under `capabilities:` in `app_manifest.yaml`, and `absent` with a
+reason where it does not (RULE-81). `composer verify` (V3) names the key and prints the line to paste;
+`dart tools/composer/composer.dart describe --app <id>` shows who implements each contract. A class
+under an app's own `lib/app/` (a crash reporter, say) counts. What a composed package needs the app to
+register — `FirebaseOptions` per flavor for `core_notifications` — is checked by V10.
+
+### Step 3c: Ordering when a module opens a database
 
 A module that opens a database with `@preResolve` runs its collected `IDatabaseMigration`
 steps **during its own initialisation**, so every step must be registered before the open.
@@ -229,5 +268,6 @@ dart tools/unused_checker/check_unused_packages.dart  # the reverse: declared bu
 
 - `docs/{en,vi}/guides/05_di.md` — the full DI guide
 - `docs/{en,vi}/architecture/06_app_shell.md` — boot sequence and module assembly
+- `docs/{en,vi}/guides/13_app_composition.md` — what an app declares; `configure_app` skill
 - `implement_package_storage` — why storage owners must be singletons
 - `implement_package_database` — why a package's database open is `@Order(1) @preResolve`, and typed migration registrations

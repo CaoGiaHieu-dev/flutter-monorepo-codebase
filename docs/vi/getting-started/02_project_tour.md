@@ -14,13 +14,16 @@ flutter-monorepo-codebase/
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
 │   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
 │   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
-│       ├── app_manifest.yaml      # App này ghép những module nào, và thứ tự nhóm DI
+│       ├── app_manifest.yaml      # App là gì (flavor, env, platform, capability) và nó ghép gì
+│       ├── README.md              # Lộ trình đọc + báo cáo được sinh: app, trong mười phút
 │       ├── lib/
-│       │   ├── main.dart          # Một dòng: runShellApp(configureDependencies: …)
+│       │   ├── main.dart          # Một lời gọi: runShellApp(profile:, hooks:, configureDependencies:)
+│       │   ├── app/               # app_profile.dart (facts được sinh + tinh chỉnh có kiểu), app_hooks.dart
 │       │   ├── di/injection.dart  # Do composer sinh từ manifest — không bao giờ sửa tay
 │       │   └── firebase/          # FirebaseOptions của app này (file options bị git-ignore)
 │       ├── android/  ios/         # Project native — build APK từ apps/mobile/, không phải từ gốc
 │       ├── fastlane/              # Lane phát hành
+│       ├── test/                  # di_smoke_test.dart, app_profile_test.dart
 │       ├── env.dev  env.stg       # File env theo flavor (env.prod KHÔNG có trong repo)
 │       └── pubspec.yaml           # Path dep giữa các marker composer:managed là do máy sinh
 │
@@ -84,7 +87,7 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
 | `platform_kernel` | `platform/foundation/kernel` | Dart thuần, không Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-export `AppFailure` từ `domain_core`), exception, enum, extension cho kiểu nguyên thuỷ, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
-| `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `AppProvider`, `DeeplinkProvider`. Không import module nào |
+| `platform_app_shell` | `platform/shell/app_shell` | Shell mà mọi app ghép vào: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `DeeplinkProvider`, catalog contract và `ShellHooks`. Không import module nào |
 | `platform_shell_adapters` | `platform/shell/adapters` | Các adapter hạ tầng của shell: storage adapter cho theme/ngôn ngữ/cờ boot và `NetworkConfigImpl` (+ binding `SslPinningConfig`). Không import module nào |
 | `core_common` | `platform/foundation/common` | Nửa gắn với Flutter: `AppConfig`, `AppInitializer`, mixin, `GoRouteDataCustom`, formatter. Re-export `platform_kernel`, nơi chứa `ErrorHandler`, enum, extension, `EnvConstants` |
 | `core_di` | `platform/foundation/contracts` | **Trạm DI**, chỉ hợp đồng trung lập với sản phẩm: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `IDashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, các hợp đồng session (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. Navigator / action handler của một module nằm trong package `modules/<id>/api` của chính nó |

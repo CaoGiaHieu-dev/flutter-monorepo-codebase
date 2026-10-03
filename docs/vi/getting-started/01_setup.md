@@ -280,6 +280,7 @@ class EnvConstants {
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
 
+Một app đọc những key nào, và flavor nào phải có chúng khác rỗng, được khai trong `app_manifest.yaml` của app, dưới `env:` (`BASE_URL: { required_in: [prod] }`, `APP_NAME: { required_in: [staging, prod] }`; `native_only: true` cho key chỉ Gradle hay Xcode đọc). Một bản build staging hoặc prod non-debug có key bắt buộc đang rỗng sẽ dừng ở màn hình boot-error (`P03`) thay vì chạy mà không có mạng và với tiêu đề trống, và `composer verify` kiểm tra rằng các file env đang có chứa đúng các key đã khai (V11). Chính các flavor cũng được khai ở đó (`flavors:`), cùng quyết định pinning của từng app ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
 ---
 
 ## 6. Chạy app
@@ -294,7 +295,7 @@ Cả `flutter run` lẫn `flutter build` đều phải gọi **từ `apps/mobile
 > Muốn thêm một nền tảng còn thiếu cho một app, chạy `flutter create --platforms=linux .` (hoặc
 > `macos`, `windows`) **bên trong thư mục của app đó** — không bao giờ ở gốc workspace — rồi xoá
 > `test/widget_test.dart` và `analysis_options.yaml` mà lệnh này sinh ra, như README đó giải thích.
-> Repo này chỉ cấu hình `--flavor` cho Android và iOS; bỏ cờ này khi chạy desktop.
+> Chạy desktop vẫn nhận `--flavor`, dù repo này chỉ cấu hình flavor ở phía native cho Android và iOS; còn **web** hoàn toàn không có tuỳ chọn `--flavor` — hãy truyền `--dart-define=FLUTTER_APP_FLAVOR=<flavor>` ở đó. Một app khai các platform nó chạy trong manifest (`platforms:`), và `describe --app <id>` in đúng dòng `flutter create` cho từng platform còn chờ được tạo.
 
 ### Từ dòng lệnh
 

@@ -27,6 +27,8 @@ All contracts live in `platform/foundation/contracts/lib/src/routing/`.
 
 Use `INavDestinationModule` **only** for a real bottom-nav destination that needs its own persistent back stack. A screen you merely push onto the stack belongs in `IFeatureRouteModule` (RULE-24).
 
+What the **app** — not a feature — decides about the router is declared in `apps/<id>/`: `RouterProfile` in `lib/app/app_profile.dart` (`entry`: `firstLaunch` by default, `always` or `never`; `fallbackPath`: the first tab by default) and, in `lib/app/app_hooks.dart`, `ShellHooks.navigatorObservers` and `ShellHooks.redirect` — one app-wide guard; a module's own guard still goes in its `GoRouteData.redirect`. Deep links are per platform: `platforms.<p>.deep_links` in the manifest is on by default, and a platform that turns it off logs one line naming the key ([`13_app_composition.md`](13_app_composition.md)).
+
 ## 2. Add the path constant
 
 Path constants live in the feature's `src/utils/` folder, not in `routing/` (RULE-09). `modules/auth/feature/lib/src/utils/auth_path.dart`:
@@ -415,6 +417,7 @@ Review checklist:
 
 - Rules: RULE-04 (no feature → feature import), RULE-12 (optional lookups), RULE-20 (never edit `app_router.dart`), RULE-21 (controller at the route), RULE-22 (navigators in `<id>_api`), RULE-23 (`BuildContext` from the caller), RULE-24 (tabs vs pushed screens) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#5-router-assembly) — router assembly, entry vs fallback location, graceful degradation
+- [`13_app_composition.md`](13_app_composition.md) — `RouterProfile`, the routing hooks and the per-platform deep-link switch
 - [`03_state_management.md`](03_state_management.md) — controller lifecycle
 - [`05_di.md`](05_di.md) — how contracts get registered and collected
 - [`10_cross_feature.md`](10_cross_feature.md) — the other cross-feature models

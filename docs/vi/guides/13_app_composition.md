@@ -1,0 +1,281 @@
+# Ghép và cấu hình một app
+
+## Mục tiêu
+
+Bạn đọc một app và biết nó ghép gì, đăng ký gì, mỗi platform bật gì và nó được phép can thiệp vào đâu. Bạn đổi bất kỳ điều gì trong số đó ở đúng một file sở hữu nó, thêm một platform, một capability, một pin, một ngôn ngữ hay một hook, và tạo app thứ ba bằng một lệnh.
+
+## Điều kiện cần
+
+- Một bản checkout đầy đủ build được — [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
+- **Shell khởi động thế nào và resolve gì từ một app** — validate, đăng ký, DI, kiểm tra; catalog contract; các hook — [`../architecture/06_app_shell.md` § 2](../architecture/06_app_shell.md#2-vòng-đời-khởi-động). Guide này là phần cách làm; trang kia là phần vì sao.
+- Các luật mà guide này phục vụ: RULE-80 (mọi thứ riêng của app được khai trong `apps/<id>/`), RULE-81 (mọi contract tuỳ chọn có một trạng thái được khai), RULE-82 (khác biệt giữa các platform là quyết định của app) — [`../reference/01_rules.md` § 21](../reference/01_rules.md#21-app-và-composition).
+
+---
+
+## 1. Đọc một app trong mười phút
+
+Mỗi `apps/<id>/` mang theo lộ trình đọc của riêng nó, và điểm dừng đầu tiên được sinh từ manifest, nên không thể lệch với nó:
+
+1. **`README.md`, vùng report** — app là gì: danh tính và flavor, các platform và thứ mỗi platform bật (mỗi ô ghi `giá trị (nguồn)`: `manifest`, `default` hoặc `derived: lý do`), composition theo thứ tự boot kèm lý do của từng nhóm, những gì shell resolve từ app (dòng bắt buộc, dòng tuỳ chọn, package nào hiện thực từng dòng, chuyện gì xảy ra nếu một dòng vắng mặt), và các quyết định cần xem lại trước khi phát hành.
+2. **`app_manifest.yaml`** — phần khai báo, và composition: app *là* gì và nó *ghép* gì.
+3. **`lib/app/app_profile.dart`** — vùng `facts` được sinh (manifest dưới dạng const Dart) và `appProfile` viết tay, tức shell *cư xử* ra sao với app này.
+4. **`lib/app/app_hooks.dart`** — code app chạy tại các điểm cố định của quá trình boot.
+
+```bash
+dart tools/composer/composer.dart describe --app <id>   # báo cáo ra stdout (đúng nội dung vùng trong README)
+dart tools/composer/composer.dart describe --catalog    # mọi key của manifest, catalog contract của shell, các mặc định suy ra
+dart tools/composer/composer.dart list                  # mọi app: flavor, platform, nhóm DI
+```
+
+`describe --catalog` là tài liệu tham khảo về key: bảng key manifest nó in ra chính là bảng mà parser dùng để kiểm tra, nên guide này không chép lại và không thể lỗi thời so với nó.
+
+## 2. Bốn kênh, một nguyên tắc
+
+| Kênh | Chứa | Nằm ở |
+|:--|:--|:--|
+| Manifest | sự thật mà tool phải thấy trước khi code biên dịch: danh tính, flavor (và quyết định SSL pin của từng flavor), key env, platform và thứ mỗi platform bật, capability, composition | `app_manifest.yaml`, được sinh vào vùng `facts` của `lib/app/app_profile.dart` |
+| Profile | shell cư xử thế nào: display, router, locale, theme, giới hạn mạng | `lib/app/app_profile.dart`, bên dưới vùng được sinh |
+| Hook | code tại các điểm cố định của quá trình boot | `lib/app/app_hooks.dart` |
+| Contract | interface của `core_di` mà app hoặc module đăng ký và shell resolve | module, và `lib/app/*.dart` cho những gì app tự hiện thực |
+
+**Nguyên tắc:** manifest nói app **là** gì và chạy ở đâu; profile nói shell **cư xử** ra sao; hook là **code**. Mọi thứ theo từng platform nằm trong manifest, nên ma trận platform hiệu lực suy ra được và được in ra. Mọi thứ là một con số tinh chỉnh là Dart có kiểu, nên không có bộ máy YAML nào chen giữa bạn và một giá trị. Chọn kênh bằng cách hỏi một gate có phải đọc nó trước khi code biên dịch không (manifest), nó là một giá trị (profile) hay là hành vi (hook).
+
+## 3. Manifest
+
+```yaml
+app:
+  id: admin
+  name: Codebase Admin
+  entrypoint: lib/main.dart
+
+flavors:                       # tập đóng: dev | staging | prod
+  dev:
+  staging:
+  prod:                        # ssl_pinning chỉ ở nơi một platform đã khai báo có thể pin
+
+env:
+  BASE_URL: { required_in: [prod] }
+  APP_NAME: { required_in: [staging, prod] }
+
+platforms:
+  windows: { runner: scaffold }
+  web:     { runner: scaffold }
+
+capabilities:
+  session: provided
+  splash:  { state: absent, reason: "native splash is kept through boot" }
+  # … mỗi contract tuỳ chọn của catalog một dòng
+
+di_groups: [ … ]               # có thứ tự; `why:` ghi lại lý do của vị trí
+modules:
+  - { id: auth,     layers: [api, domain, data, feature] }
+  - { id: settings, layers: [feature] }
+```
+
+| Mục | Nói gì | Được đọc bởi |
+|:--|:--|:--|
+| `app` | id (thư mục, package `<id>_app`, mọi `--app`), tên hiển thị, điểm vào | `describe`, `verify` (V12), màn hình boot-error |
+| `flavors` | app được build thành những flavor nào trong `dev`, `staging`, `prod`; mỗi flavor có thể mang một quyết định `ssl_pinning` | facts, `validate` (`P02`), smoke test |
+| `env` | các key `--dart-define` app đọc, và các flavor bắt buộc có từng key; `native_only: true` cho key chỉ Gradle hay Xcode đọc | `validate` (`P03`), V11 |
+| `platforms` | app chạy ở đâu, và theo từng platform: `runner`, `splash`, `push`, `deep_links`, `orientation`, `window` | facts, `validate` (`P01`, `P05`), V5–V8 |
+| `capabilities` | `provided`, hoặc `absent` kèm lý do, cho mọi contract tuỳ chọn mà shell resolve | `checkAppContract`, V2–V4, V14 |
+| `di_groups`, `modules`, `extra_dependencies` | app ghép gì, theo thứ tự nào và vì sao | `sync`, `injection.dart`, path dependency của app |
+
+Một key chỉ tồn tại cùng với code đọc nó: một test của tools fail khi một key nêu tên một consumer mà consumer đó không nhắc tới. `app.kind`, thứ không có gì đọc, đã bị bỏ vì lý do đó, và `composer` từ chối nó kèm chỉ dẫn xoá dòng ấy.
+
+Khi một platform bỏ `splash`, `push`, `deep_links` hay `orientation`, facts được sinh mang một mặc định suy ra, và báo cáo nói rõ nó từ đâu: `splash` là native trên iOS và, ở nơi khác, là Dart khi capability `splash` là `provided`; `push` bật khi `core_notifications` được ghép và hỗ trợ platform (không bao giờ trên web — không có service worker nào được chuyển kèm); `deep_links` bật; `orientation` là `phones_portrait` (màn hình dưới ngưỡng điện thoại bị khoá dọc). Facts luôn mang tường minh mọi trường, nên một app không bao giờ phụ thuộc vào một mặc định trong Dart.
+
+## 4. Profile
+
+`lib/app/app_profile.dart` chứa vùng `facts` được sinh và, bên dưới nó, profile viết tay. Mỗi phần là một `const` có kiểu với mặc định bằng đúng hành vi của template, và phần nào bạn bỏ qua là mặc định đó. Chính type ghi rõ khoảng giá trị của nó; bảng này chỉ nói nhìn ở đâu và mặc định là gì.
+
+| Phần | Type | Tinh chỉnh | Mặc định |
+|:--|:--|:--|:--|
+| `display` | `DisplayProfile` | khung thiết kế, chính sách scale theo từng lớp cửa sổ, chế độ chia đôi màn hình, trần cỡ chữ của hệ điều hành, ngưỡng điện thoại | 375×812, `expanded` vẽ 1:1, `textScaleMax: 2.0` (một `const` assert từ chối giá trị dưới 2.0 và trên 4.0), ngưỡng điện thoại 600 |
+| `router` | `RouterProfile` | khi nào dùng entry location (`firstLaunch`, `always`, `never`), vị trí fallback | chỉ lần chạy đầu, tab đầu tiên |
+| `locale` | `LocaleProfile` | các ngôn ngữ cung cấp (`supported`; null = mọi ARB template chuyển kèm), ngôn ngữ fallback và ngôn ngữ lần chạy đầu | mọi ngôn ngữ đã có, `en`, ngôn ngữ của thiết bị |
+| `theme` | `ThemeProfile` | chế độ theme lần chạy đầu mở ra, ghi đè palette theo `PaletteToken` (17 token, ARGB) | chế độ theo hệ thống, palette của template |
+| `network` | `NetworkProfile` | timeout connect, receive và send của HTTP client mặc định, header thêm, redirect | mỗi loại 20 giây, không header thêm, không redirect |
+
+```dart
+const AppProfile appProfile = AppProfile(
+  facts: appFacts,
+  display: DisplayProfile(
+    designSize: SizeSpec(1440, 900),
+    textScaleMax: 2.5,
+    scale: {
+      WindowClass.expanded: ScalePolicy.fixed(),
+      WindowClass.large: ScalePolicy.fixed(),
+    },
+  ),
+  locale: LocaleProfile(supported: ['vi'], fallback: 'vi', initial: 'vi'),
+  theme: ThemeProfile(
+    mode: ThemeModeSetting.dark,
+    dark: {PaletteToken.primary: 0xFFF97316},
+  ),
+  network: NetworkProfile(
+    connectTimeout: Duration(seconds: 5),
+    receiveTimeout: Duration(seconds: 60),
+    headers: {'x-client': 'reports'},
+  ),
+);
+```
+
+Điều một phần không được phép nói thì bị từ chối ở nơi có thể: `DisplayProfile(textScaleMax: 1.5)` không biên dịch được (`const_eval_throws_exception` — RULE-38), một header của `NetworkProfile` tên `authorization`, `cookie`, `set-cookie`, `proxy-authorization` hoặc `content-type` làm client mặc định ném lỗi lúc boot (RULE-66), và một `LocaleProfile` không cung cấp ngôn ngữ nào đã có hoặc có fallback mà nó không cung cấp thì ném lỗi lúc boot, nêu tên trường. `shadow` và `scrim` của palette, cùng hai gradient, không ghi đè được: gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`.
+
+Mọi mặc định đều được một test ghim lại, và `test/app_profile_test.dart` của mỗi app là nơi bạn khẳng định điều mình đã đổi, để một lần sửa sau làm nó dịch chuyển sẽ thấy rõ.
+
+## 5. Hook
+
+```dart
+// lib/app/app_hooks.dart
+const ShellHooks appHooks = ShellHooks(
+  beforeDependencies: _initCrashReporting, // hàm top-level: const
+  configureWindow: _sizeTheWindow,
+);
+
+Future<void> _initCrashReporting(AppRuntime runtime) async {
+  // ví dụ SentryFlutter.init — chạy trước DI; chưa resolve được gì.
+}
+
+Future<void> _sizeTheWindow(AppRuntime runtime, WindowFacts window) async {
+  // Áp window.initial / window.min bằng plugin cửa sổ của chính app.
+}
+```
+
+Gõ `const ShellHooks(` là IDE liệt kê bảy hook, mỗi hook được ghi rõ chạy khi nào và không được làm gì: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (bảng nằm trong [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#các-hook)). Một hook ném lỗi được báo cáo như mọi lỗi trong zone của app và dừng boot tại nơi nó chạy. Template không chuyển kèm plugin cửa sổ nào (RULE-74: catalog chỉ có thêm khi một app dùng tới), nên app nào muốn đặt kích thước cửa sổ desktop thì tự thêm plugin vào dependency của mình.
+
+## 6. Contract: shell đòi gì ở một app
+
+Shell resolve 22 contract qua một catalog duy nhất (`kShellContracts`): 8 dòng **bắt buộc** do chính các package của shell đăng ký — app ghép nhóm `shell` và `ui` là có — và 14 dòng **tuỳ chọn** do app hoặc module đóng góp. App khai từng dòng tuỳ chọn, và `describe --catalog` liệt kê chúng cùng việc shell làm khi thiếu từng dòng:
+
+```yaml
+capabilities:
+  session: provided      # một bundle: ISessionState, ISessionGateway, ISessionRefreshListenable, ISignInLocation
+  error_reporter:
+    state: absent
+    reason: "no crash backend chosen: errors are printed and sent nowhere (RULE-67)"
+```
+
+Sự vắng mặt là một quyết định kèm lý do: `composer verify` từ chối lý do rỗng, `TODO` hoặc `TBD` (V14), và báo cáo liệt kê một `error_reporter` hay `analytics` đang `absent` ở mục *các quyết định cần xem lại trước khi phát hành*. Một contract mà app tự hiện thực — một crash reporter — là một class dưới `lib/app/`:
+
+```dart
+@LazySingleton(as: IErrorReporter)
+class CrashlyticsErrorReporter implements IErrorReporter { … }
+```
+
+Sau đó, khai nó là `provided`. Khai một contract mà code không đăng ký, hoặc đăng ký một contract mà manifest nói là `absent`, đều fail ở ba nơi: `composer verify` (V3, tĩnh, nêu tên file), smoke test (`checkAppContract`, từ graph app dựng) và boot ở bản debug.
+
+Thứ app phải đăng ký cho một package nó ghép — `FirebaseOptions` cho `core_notifications`, mỗi flavor một cái — được liệt kê trong báo cáo ở mục *This app must provide*, và V10 fail nếu thiếu. Thiết lập native (`google-services.json`, `aps-environment`) được ghi ở đó và không được kiểm tra.
+
+## 7. Công thức
+
+### Thêm một platform
+
+1. Xem cái gì chặn nó: mục *Not targeted — and what blocks it* của báo cáo nêu tên mọi package đã ghép mà `platforms:` trong pubspec không liệt kê nó (`core_database` không có web, `core_notifications` không có Windows hay Linux).
+2. Khai nó, runner còn chờ được tạo: `platforms.<p>: { runner: scaffold }`, rồi `dart tools/composer/composer.dart sync --app <id>`.
+3. Tạo runner một lần, bằng dòng lệnh báo cáo in ra, ví dụ `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .`, rồi đổi khai báo thành `runner: committed`. Runner khai `committed` cần có thư mục của nó, runner `scaffold` thì không được có (V6).
+4. Đặt thứ platform bật, nếu mặc định chưa đúng: `push`, `deep_links`, `orientation`, và với platform desktop là `window: { initial: [1440, 900], min: [1024, 700] }`, cần hook `configureWindow` (không có thì `P05`). Một platform tắt push hay deep link sẽ log một dòng nêu tên key và không khởi tạo gì.
+5. Chạy `composer verify` và smoke test. Trên web không có tuỳ chọn `--flavor`: truyền `--dart-define=FLUTTER_APP_FLAVOR=<flavor>`.
+
+### Pin chứng chỉ
+
+Pinning chỉ chạy trên Android và iOS — trên web trình duyệt sở hữu TLS, và plugin pinning không có implementation cho desktop — nên key chỉ bắt buộc ở nơi một platform đã khai báo pin được, và bị từ chối ở nơi không platform nào pin được. Thay quyết định của staging hoặc prod trong manifest:
+
+```yaml
+flavors:
+  prod:
+    ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+```
+
+Ít nhất hai pin, mỗi pin là base64 của 32 byte (V9). Cách tính: [`08_networking.md` § 10](08_networking.md#10-bật-ssl-pinning). Một flavor cố ý không pin thì ghi `ssl_pinning: { disabled: "lý do" }`, và báo cáo liệt kê nó ở mục các quyết định cần xem lại.
+
+### Thêm hoặc gỡ một module
+
+Thêm dòng vào `modules:` rồi chạy `sync`. Nếu module đăng ký một contract có trong catalog, `verify` giờ sẽ nói ra — *declared absent but ISessionState is registered at …* — và bạn khai nó là `provided`. Gỡ một module thì `verify` nêu tên key vừa mất nơi cung cấp và in dòng `absent` để dán. `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` làm cả hai lần đổi cho các nơi cung cấp duy nhất và tự chạy `sync`.
+
+### Cung cấp ngôn ngữ khác, đổi palette hay giới hạn
+
+Đặt `locale`, `theme` hoặc `network` trong `appProfile` (mục 4). Một ngôn ngữ mới là một ARB trong `core_base_ui` và trong từng feature ([`09_localization_theming.md`](09_localization_theming.md)); app không nêu danh sách `supported` thì cung cấp mọi ngôn ngữ đã có, app nêu một danh sách thì giữ danh sách đó. Một `LocaleProfile.fallback` mà danh sách không chứa sẽ bị từ chối lúc boot.
+
+### Thêm một hook
+
+Thêm trường vào `appHooks` (mục 5). Một giá trị vừa với manifest hoặc profile thì thuộc về đó, nơi một gate đọc được.
+
+## 8. App thứ ba bằng một lệnh
+
+```bash
+dart tools/composer/composer.dart new reports --name "Codebase Reports" --platforms web,windows --modules auth,settings
+```
+
+Lệnh render `tools/composer/app_template/` vào `apps/<id>/`: manifest, `pubspec.yaml`, một `README.md` có lộ trình đọc, `lib/main.dart`, `lib/app/app_profile.dart` và `app_hooks.dart`, `lib/di/injection.dart`, một smoke test và một profile test, `env.dev` và `.gitignore`. Nó suy ra `capabilities:` từ những gì các module được yêu cầu đăng ký — `provided` ở nơi có thứ đăng ký contract, còn lại là `absent` kèm việc shell làm khi thiếu nó làm lý do, không bao giờ là `TODO` — rồi chạy `sync` và `verify`, nên app qua Gate 0 ngay.
+
+- Nó từ chối, và không ghi gì, với một id đã là một app, một platform mà module được yêu cầu chặn (`--platforms web` với module mở một database), một module hay platform lạ, hoặc một tên sẽ làm hỏng các file nó được ghi vào.
+- Nó **không bao giờ chạy `flutter create`**: mỗi platform là `runner: scaffold`, và lệnh in ra dòng cần chạy khi bạn muốn có runner.
+- Nó không ghép `core_notifications` (push cần `FirebaseOptions` và một nhóm `notifications` — hãy theo mẫu của `apps/mobile`), và một app liên kết `core_database` thì chép các test double trong smoke test của `apps/mobile`.
+
+Sau đó, từ gốc repo: `flutter pub get`, `dart run build_runner build --workspace`, `cd apps/<id> && flutter test`. Hai file bạn sửa để app khác đi là `apps/<id>/app_manifest.yaml` và `apps/<id>/lib/app/app_profile.dart`; không có gì dưới `platform/`, `modules/` hay app khác bị đổi.
+
+## 9. Gate 0 kiểm tra những gì
+
+`composer verify` sinh lại mọi file được sinh và fail khi có sai lệch, đồng thời đối chiếu khai báo với mã nguồn. `describe --catalog` cũng in danh sách này.
+
+| Kiểm tra | Giữ |
+|:-:|:--|
+| V1 | từ vựng đóng, kiểu và khoảng giá trị; key lạ; `app.kind` (đã bỏ) |
+| V2 | mọi contract tuỳ chọn có một trạng thái được khai; không có id lạ — thông báo in dòng để dán |
+| V3 | khai báo khớp code, cả hai chiều: `provided` cần một đăng ký trong package đã ghép hoặc `lib/` của chính app, `absent` thì không được có; mọi contract bắt buộc có nơi hiện thực |
+| V4 | các thành viên của một bundle chung một trạng thái |
+| V5 | `splash: dart` cần capability `splash` là `provided` |
+| V6 | `runner: committed` cần thư mục platform, `scaffold` cần nó vắng mặt |
+| V7 | mọi package app liên kết — đã ghép, hoặc với tới qua `dependencies:` — mà khai `platforms:` đều hỗ trợ mọi platform app khai |
+| V8 | `push: true` cần `core_notifications` được ghép và hỗ trợ platform; `window` chỉ trên platform desktop |
+| V9 | một quyết định pin cho mỗi flavor ở nơi một platform đã khai báo pin được, không có ở nơi không platform nào pin được; pin đúng định dạng |
+| V10 | thứ một package đã ghép cần app tự đăng ký (`FirebaseOptions` theo flavor) đã được đăng ký dưới `lib/` của app |
+| V11 | các file env đang có chứa đúng các key mà `env:` khai |
+| V12 | điểm vào truyền `profile:`; `test/di_smoke_test.dart` tồn tại và gọi `checkAppContract` |
+| V13 | các vùng được sinh — `facts`, `report`, `imports`, `modules` — bằng với kết quả sinh lại |
+| V14 | không lý do nào rỗng, `TODO` hay `TBD` |
+
+Đọc một thông báo từ trái sang phải: `<file>: <key>: <vấn đề> — <cách sửa>`. Phép quét đằng sau V3 và V10 đọc mã nguồn, không đọc graph — một `getIt.register…` viết tay vô hình với nó — nên `checkAppContract` vẫn là thẩm quyền cuối. V3, V10, V11 và V12 làm `verify` fail trong khi `sync` chỉ cảnh báo và vẫn ghi, để một chỉnh sửa dở dang vẫn sinh lại được; V7 và V8 từ chối ở cả hai.
+
+## 10. Thứ còn bị khoá, và một lưu ý về DI
+
+Muốn đổi những thứ này phải sửa package dùng chung, cho mọi app: breakpoint, component theme, page transition, chuỗi interceptor và chính sách retry mặc định của `Dio`, trang 404, màu shadow và scrim, channel và icon của push, allow-list của deep link, giới hạn của logger, overlay system-UI và tuỳ chọn secure-storage. Mục cuối của báo cáo liệt kê chúng.
+
+Thay một type do shell sở hữu bằng thứ tự đăng ký là không được hỗ trợ. `enableRegisteringMultipleInstancesOfOneType()` — được sinh vào `configureDependencies` — khiến GetIt giữ đăng ký **đầu tiên** của một type, nên đăng ký của app thắng một type đăng ký ở nhóm `after` và thua một type ở nhóm `before`, nơi bản gốc eager vẫn chạy. Profile và hook là các điểm gắn xoá đi lý do người ta từng nhờ tới nó.
+
+---
+
+## Kiểm tra
+
+```bash
+dart tools/composer/composer.dart verify                 # Gate 0 — khai báo, các vùng sinh ra, mã nguồn
+dart tools/composer/composer.dart describe --app <id>    # báo cáo đọc lên đúng như bạn muốn
+dart tools/arch_check/check.dart                         # R16 (catalog đầy đủ), R17 (nhánh theo platform)
+cd apps/<id> && flutter test                             # smoke test (checkAppContract cho từng flavor) và profile test
+```
+
+## Xử lý sự cố
+
+| Triệu chứng | Nguyên nhân | Cách sửa |
+|:--|:--|:--|
+| `verify`: `declared provided but no composed package or apps/<id>/lib registers …` | Một module đã bị gỡ, hoặc chưa từng được ghép, trong khi manifest nói `provided` | Thêm module, hoặc khai contract là `absent` kèm lý do (thông báo in sẵn dòng cần dán) |
+| `verify`: `declared absent but … is registered at <file>:<line>` | Một package đã ghép đăng ký nó | Khai nó là `provided`, hoặc thôi ghép thứ đăng ký nó |
+| `verify`: `out of date: … (facts)` | Manifest đã đổi, hoặc vùng được sinh bị sửa tay | `dart tools/composer/composer.dart sync --app <id>`; không bao giờ sửa vùng `composer:managed` (RULE-16) |
+| `verify`: `flavors.prod.ssl_pinning: decide …` | Một flavor của app có platform Android hoặc iOS chưa có quyết định pin | `pins: [...]` hoặc `disabled: "lý do"` (ở trên) |
+| `verify`: `<package> does not support <platform>` | Một package đã ghép, hoặc package nó liên kết, thiếu platform đó | Chỉ khai các platform mà mọi package được liên kết hỗ trợ, hoặc thôi phụ thuộc vào nó |
+| Boot dừng: *`<id>` is running on `<platform>`, which its manifest does not declare* | Platform không nằm dưới `platforms:` | Khai nó (ở trên), chạy trên một platform đã khai, hoặc `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` để chạy thử nhanh |
+| Boot dừng: `P03` trên bản release | Một `--dart-define` bắt buộc đang rỗng | Truyền `--dart-define-from-file=env.<flavor>` |
+| Boot dừng trên platform desktop: `P05` | `window` được khai báo mà không đặt hook `configureWindow` | Thêm hook (mục 5), hoặc bỏ `window` |
+| Smoke test: `C02` / `C03` | Graph không khớp với khai báo | Test nêu tên contract — sửa manifest hoặc composition |
+| `new` từ chối | Id đã tồn tại, hoặc một platform bị module chặn | Thông báo nêu rõ cái nào; không có gì được ghi |
+| `flutter analyze`: `const_eval_throws_exception` ở một `DisplayProfile` | `textScaleMax` dưới 2.0, hoặc một `SizeSpec` có cạnh không dương | Dùng 2.0 trở lên (RULE-38) |
+
+## Liên quan
+
+- Luật: RULE-80, RULE-81, RULE-82, RULE-16 (vùng được sinh), RULE-48 (pinning), RULE-63 (smoke test), RULE-67 (reporter) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) — quá trình boot, catalog và các hook, và vì sao
+- [`05_di.md`](05_di.md) — đăng ký một type và ghép một package
+- [`../reference/03_tooling.md`](../reference/03_tooling.md) — `composer`, `arch_check` R16/R17 và các tool khác
+- Skill: `.claude/skills/configure_app`

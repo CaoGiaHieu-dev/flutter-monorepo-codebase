@@ -51,8 +51,8 @@ Có hai thứ khác nhau nằm trong `core_base_ui`, và nhầm lẫn giữa ch�
 | Một mức bo góc | `styles/app_radius.dart` → hằng số `raw*` |
 | Một gradient | danh sách màu trong `theme/theme_system_extensions.dart` |
 | Một shadow | `styles/app_shadows.dart` |
-| Khung thiết kế gốc | `platform/foundation/common/lib/src/config/app_config.dart` → `design` |
-| Một lớp cửa sổ được scale tới đâu (bound, profile, breakpoint) | `platform/shell/app_shell/lib/src/main_scope.dart` → `ResponsiveInit` (§6) |
+| Khung thiết kế gốc | `DisplayProfile.designSize` của app, trong `apps/<id>/lib/app/app_profile.dart` (§6) |
+| Một lớp cửa sổ được scale tới đâu (bound, profile) | `DisplayProfile.scale` của app, trong `apps/<id>/lib/app/app_profile.dart` — shell biến nó thành các profile của `ResponsiveInit` trong `platform/shell/app_shell/lib/src/main_scope.dart` (§6) |
 | Layout trên tablet, máy gập hay chia đôi màn hình | chính page đó — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
 | Thêm hẳn một class token mới | file mới trong `styles/`, rồi chạy barrel generator |
 
@@ -126,6 +126,18 @@ static ThemeSystemExtension dark = ThemeSystemExtension(
 ```
 
 Đổi mã hex, lưu, hot-restart. **Luôn sửa cả hai** — chỉ sửa light sẽ để chế độ dark giữ nguyên bảng màu mẫu.
+
+Cách đó sửa bảng màu của **template**, cho mọi app. Muốn cho **một** app nhận diện riêng, hãy ghi đè token trong profile của nó — `lib/app/app_profile.dart`, không sửa gì dưới `platform/`:
+
+```dart
+theme: ThemeProfile(
+  mode: ThemeModeSetting.dark,                       // chế độ lần chạy đầu mở ra
+  light: {PaletteToken.primary: 0xFF1D4ED8},
+  dark: {PaletteToken.primary: 0xFF60A5FA},
+),
+```
+
+17 token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) ghi đè được; `ThemeProvider` dựng cả hai palette một lần, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn hai gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`.
 
 Chỉ có một ô màu tồn tại vì màn hình mẫu: `liquidOnboardingColors`, gradient của splash (`AppGradients.liquidOnboarding`). Khi xoá sample splash, hãy xoá luôn ô đó khỏi interface, cả hai bảng màu và `AppGradients` thay vì để lại màu chết.
 
@@ -220,7 +232,7 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 
 ### Cỡ chữ của người dùng là một hệ số thứ hai, tách biệt
 
-`context.sp` khớp thiết kế với **cửa sổ**; nó không bao giờ đọc `MediaQuery.textScaler`. Cỡ chữ hệ điều hành của **người dùng** được chính `Text` áp thêm lên trên, lúc layout, và app shell cho nó đi qua tối đa 2x (`AppShellUiConstants.MAX_TEXT_SCALE_FACTOR`, do `AppMaterialWrapper` áp bằng `MediaQuery.withClampedTextScaling`). Hai hệ số độc lập, mỗi cái áp đúng một lần — không phải scale hai lần. Đừng triệt tiêu nó bằng `MediaQuery.withNoTextScaling` hay `textScaler: TextScaler.noScaling` trên một style: như vậy là trượt tiêu chí phóng chữ 200% của WCAG. Thứ text scale *không* làm lớn lên là một hộp đặt kích thước bằng `context.h`/`context.w`, nên hãy cho khung chứa chữ padding hoặc `minHeight` thay vì chiều cao cố định. Chi tiết: [`06_app_shell.md`](../architecture/06_app_shell.md#cỡ-chữ-của-hệ-điều-hành-được-tôn-trọng-tối-đa-2x).
+`context.sp` khớp thiết kế với **cửa sổ**; nó không bao giờ đọc `MediaQuery.textScaler`. Cỡ chữ hệ điều hành của **người dùng** được chính `Text` áp thêm lên trên, lúc layout, và app shell mặc định cho nó đi qua tối đa 2x (`DisplayProfile.textScaleMax`, do `AppMaterialWrapper` áp bằng `MediaQuery.withClampedTextScaling`; app có thể cho phép tới 4x và một `const` assert từ chối giá trị dưới 2x). Hai hệ số độc lập, mỗi cái áp đúng một lần — không phải scale hai lần. Đừng triệt tiêu nó bằng `MediaQuery.withNoTextScaling` hay `textScaler: TextScaler.noScaling` trên một style: như vậy là trượt tiêu chí phóng chữ 200% của WCAG. Thứ text scale *không* làm lớn lên là một hộp đặt kích thước bằng `context.h`/`context.w`, nên hãy cho khung chứa chữ padding hoặc `minHeight` thay vì chiều cao cố định. Chi tiết: [`06_app_shell.md`](../architecture/06_app_shell.md#cỡ-chữ-của-hệ-điều-hành-được-tôn-trọng-tối-đa-2x).
 
 ## 4. Đổi thang spacing và bo góc
 
@@ -319,36 +331,32 @@ Layout và chữ được kẹp **riêng rẽ**: `scaleBounds` kẹp `w` và `h`
 
 Một **`ResponsiveProfile`** ghi đè khung thiết kế, cả hai bound và `minTextAdapt` cho một `WindowSizeClass` (§7); trường nào để `null` thì kế thừa giá trị cấp trên. Profile được áp dụng là profile gắn với lớp của cửa sổ, nếu không có thì của lớp **nhỏ hơn** gần nhất có profile, nếu vẫn không có thì không profile nào — nên một profile đặt ở `expanded` cũng phủ luôn `large` và `extraLarge` cho tới khi chúng khai profile riêng, giống cách một media query `min-width` lan lên các cỡ lớn hơn.
 
-Đây là toàn bộ cấu hình của app:
+Đây là toàn bộ cấu hình của app — một `DisplayProfile` trong `lib/app/app_profile.dart` của app, viết rõ ra với mặc định của template (bỏ nó đi bạn vẫn nhận đúng như vậy):
 
 ```dart
-// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
-return ResponsiveInit(
-  // The phone artboard every window class starts from.
-  designSize: AppConfig.design,
-  // Left at their defaults, `scaleBounds` and `textScaleBounds` are
-  // `ScaleBounds.downOnly()`: a phone narrower than the artboard scales
-  // the design down to fit, and nothing ever scales up — a tablet or a
-  // desktop window draws it 1:1 and gives the extra room to the layout
-  // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
-  // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
-  profiles: const {
-    // Tablets in landscape, unfolded foldables and desktop windows are
-    // laid out in real logical pixels. (Phones never get here: the
-    // shell locks phone-sized displays to portrait — see
-    // `AppInitializer.preferredOrientationsFor`.) Without this, a laptop window
-    // shorter than the 812-tall phone artboard would still shrink every
+// apps/<id>/lib/app/app_profile.dart
+const AppProfile appProfile = AppProfile(
+  facts: appFacts,
+  display: DisplayProfile(
+    // The phone artboard every window class starts from.
+    designSize: SizeSpec(375, 812),
+    // A class that is not listed is `ScalePolicy.downOnly()`: a phone narrower
+    // than the artboard scales the design down to fit, and nothing ever scales
+    // up — a tablet or a desktop window draws it 1:1 and gives the extra room
+    // to the layout (see `AdaptiveLayout`). Tablets in landscape, unfolded
+    // foldables and desktop windows are laid out in real logical pixels.
+    // (Phones never get here: the shell locks phone-sized displays to portrait
+    // — see `AppInitializer.preferredOrientationsFor`.) Without this, a laptop
+    // window shorter than the 812-tall phone artboard would still shrink every
     // vertical gap and radius.
-    WindowSizeClass.expanded: ResponsiveProfile(
-      scaleBounds: ScaleBounds.fixed(),
-      textScaleBounds: ScaleBounds.fixed(),
-    ),
-  },
-  // Keeps height scaling sane when the app is a short split-screen pane.
-  splitScreenMode: true,
-  child: child,
+    scale: {WindowClass.expanded: ScalePolicy.fixed()},
+    // Keeps height scaling sane when the app is a short split-screen pane.
+    splitScreenMode: true,
+  ),
 );
 ```
+
+`MainScope(display:)` trao nó cho `_ResponsiveWrapper` (private), nơi biến từng `ScalePolicy` thành một `ResponsiveProfile` của `core_responsive` — `fixed()` thành `ScaleBounds.fixed()`, `downOnly()` thành `ScaleBounds.downOnly()`, `bounded(max:, textMax:)` thành `ScaleBounds(max:)` — và `WindowClass` là cách kernel viết `WindowSizeClass` (một test giữ hai bên bằng nhau). Nên phần dưới đây mô tả tham số của `core_responsive`, còn cột *App này* nói profile đặt gì.
 
 Kết quả, theo từng cửa sổ:
 
@@ -361,10 +369,10 @@ Kết quả, theo từng cửa sổ:
 
 | Tham số | Mặc định | App này | Ý nghĩa |
 |---|---|---|---|
-| `designSize` | 360×690 | `AppConfig.design` (375×812) | Khung mà mọi lớp quy chiếu về, trừ khi profile của lớp đó chỉ định khung khác |
+| `designSize` | 360×690 | `DisplayProfile.designSize` (375×812) | Khung mà mọi lớp quy chiếu về, trừ khi profile của lớp đó chỉ định khung khác |
 | `scaleBounds` | `ScaleBounds.downOnly()` | mặc định | Khoảng của các hệ số layout: `w`, `h`, và `r` / `dg` / `dm` dựng từ chúng |
 | `textScaleBounds` | `ScaleBounds.downOnly()` | mặc định | Khoảng của hệ số chữ đứng sau `sp`. Độc lập với `scaleBounds` |
-| `profiles` | `{}` | `expanded` → `fixed` / `fixed` | `Map<WindowSizeClass, ResponsiveProfile>`: `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` theo từng lớp (`null` là kế thừa). Ưu tiên đúng lớp, không có thì lớp nhỏ hơn gần nhất |
+| `profiles` | `{}` | `DisplayProfile.scale`: `expanded` → `fixed` / `fixed` | `Map<WindowSizeClass, ResponsiveProfile>`: `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` theo từng lớp (`null` là kế thừa). Ưu tiên đúng lớp, không có thì lớp nhỏ hơn gần nhất |
 | `breakpoints` | `ResponsiveBreakpoints.material3()` | mặc định | Nơi mỗi lớp cửa sổ bắt đầu (§7). Cả profile lẫn `context.windowSizeClass` đều phân lớp theo nó |
 | `minTextAdapt` | `false` | mặc định | `true` scale chữ theo tỉ lệ **nhỏ hơn** giữa rộng và cao thay vì theo rộng — chữ không phình trên cửa sổ rộng mà thấp, nhưng nhỏ đi khi xoay ngang |
 | `splitScreenMode` | `false` | `true` | Chặn dưới chiều cao dùng để scale dọc ở `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), để một ô chia đôi màn hình thấp không làm mọi `h` sụp xuống |
@@ -374,10 +382,8 @@ Kết quả, theo từng cửa sổ:
 
 ```dart
 // Illustrative — not in the template: medium windows may grow 20 %, text 10 %.
-WindowSizeClass.medium: ResponsiveProfile(
-  scaleBounds: ScaleBounds(max: 1.2),
-  textScaleBounds: ScaleBounds(max: 1.1),
-),
+// In DisplayProfile(scale: {...}) next to the `expanded` entry.
+WindowClass.medium: ScalePolicy.bounded(max: 1.2, textMax: 1.1),
 ```
 
 Khi làm vậy, hãy kiểm tra hai điều. Lớp được phóng to gặp lớp kế bên bằng một **bước nhảy thấy được**: cạnh profile `expanded` kiểu `fixed` của app này, ví dụ trên dàn layout ở 1,2× khi rộng 839 và ở 1× khi rộng 840. Và một profile có `designSize` rộng hơn chiều rộng đầu tiên của lớp đó (600 với `medium`, 840 với `expanded`) sẽ khiến mọi thứ nhỏ đi ngay khi cửa sổ bước vào lớp; khung không rộng hơn thì bắt đầu ở tỉ lệ từ 1 trở lên, mà `downOnly` vẽ 1:1 ở cả hai phía ranh giới.

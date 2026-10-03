@@ -75,7 +75,7 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình — chỉ khoá dọc trên màn hình cỡ điện thoại, system UI) |
+| Config | `src/config/` | `AppConfig` (flavor, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình — chỉ khoá dọc trên màn hình cỡ điện thoại, system UI) |
 | Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget` |
 | Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
@@ -332,30 +332,35 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 `NetworkConfig` được hiện thực **ở package adapter của app shell** (`platform_shell_adapters`), không phải ở đây — đó chính là điều giữ cho `core_network` không dính bất kỳ phụ thuộc storage nào. Hai callback refresh mặc định `null`, nên client không có endpoint refresh sẽ đơn giản trả `401` nguyên vẹn cho nơi gọi.
 
 > [!CAUTION]
-> **SSL pinning chỉ tốt bằng danh sách hash của nó.** `sslPinningHashes` hiện trả `const []`, tức pinning đang tắt. `AppInitializer` ghi log mức `ERROR` mỗi khi danh sách rỗng hoặc config chưa đăng ký trên bất kỳ bản build nào không bỏ qua kiểm tra certificate — tức mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor (được coi như `prod` về TLS), nên lỗ hổng này hiện rõ chứ không im lặng — nhưng nó vẫn là lỗ hổng cho tới khi bạn điền hash vào. Xem [hướng dẫn networking](../guides/08_networking.md).
+> **SSL pinning chỉ tốt bằng quyết định mà một app đưa ra.** `NetworkConfigImpl.sslPinningHashes` trả về các pin mà manifest của app khai cho flavor (`flavors.<f>.ssl_pinning`), và các app mẫu khai `disabled` kèm lý do cho staging và prod — nên pinning tắt ở đó, và `AppInitializer` ghi lý do ở mức `WARNING` trong mỗi lần mở trên Android hay iOS không bỏ qua kiểm tra (mọi bản trừ bản debug đã khai báo tường minh `--flavor dev`, kể cả bản thiếu hoặc sai flavor, được coi như `prod` về TLS). Lỗ hổng hiện rõ chứ không im lặng, và nó vẫn là lỗ hổng cho tới khi một app khai pin. Xem [hướng dẫn networking](../guides/08_networking.md#10-bật-ssl-pinning).
 
 Cách khai một service, cho request bỏ qua một bước, thêm client thứ hai hay bật pinning: [`../guides/08_networking.md`](../guides/08_networking.md). Phần dưới đây mô tả những gì diễn ra bên trong client.
 
 ### Cấu hình mặc định của `ApiClient`
 
-`core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (xem bên dưới), do app shell implement.
+`core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (xem bên dưới), do app shell implement, và những gì một app tinh chỉnh — timeout, header thêm, redirect — qua `NetworkProfile` của nó, được đăng ký trước khi graph dựng, nên `Dio` mặc định mà nhóm `core` tạo ra đã mang sẵn.
 
 ```dart
 // platform/infra/network/lib/src/api_client.dart
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
+  final NetworkProfile _profile;
 
-  ApiClient(this._config);
+  // The profile is optional: a client built by hand takes the template defaults.
+  ApiClient(this._config, [this._profile = const NetworkProfile(), …]);
 
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
     baseUrl: EnvConstants.BASE_URL,
-    connectTimeout: NetworkConstants.CONNECT_TIMEOUT,
-    receiveTimeout: NetworkConstants.RECEIVE_TIMEOUT,
-    sendTimeout: NetworkConstants.SEND_TIMEOUT,
-    followRedirects: false,
-    headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
+    connectTimeout: _profile.connectTimeout, // 20 s unless the app sets it
+    receiveTimeout: _profile.receiveTimeout,
+    sendTimeout: _profile.sendTimeout,
+    followRedirects: _profile.followRedirects,
+    headers: {
+      ..._profile.headers,
+      HttpHeaders.contentTypeHeader: ContentType.json.value,
+    },
   );
 ```
 
@@ -639,25 +644,21 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 
 ### Pinning được cài lúc nào, và khi nào bị bỏ qua
 
-Khi danh sách hash rỗng, initializer **không im lặng bỏ qua**:
+Khi pinning được cài, manifest của app đã quyết định nó, theo từng flavor, và initializer áp dụng quyết định đó — nó không bao giờ im lặng bỏ qua:
 
 ```dart
 // platform/foundation/common/lib/src/config/app_initializer.dart
-if (hashes != null && hashes.isNotEmpty) {
-  HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
-} else {
-  // Never fail silently here: without pinning the app still talks to the
-  // server over plain TLS, so a proxy with a trusted root can read every
-  // request. Surfacing it keeps a misconfiguration from shipping unnoticed.
-  DynamicLogger.log(
-    config == null
-        ? 'SSL pinning skipped: no SslPinningConfig registered in GetIt. ...'
-        : 'SSL pinning skipped: sslPinningHashes is empty. ...',
-    tag: 'Security',
-    level: LogLevel.ERROR,
-  );
+switch (profile.facts.sslPinning.decisionFor(flavor)) {
+  case PinnedSsl(:final hashes):
+    HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
+  case DisabledSsl(:final reason):
+    // WARNING: "SSL pinning is disabled for flavor <f>: <reason>. Traffic is NOT pinned."
+  case null:
+    // ERROR naming flavors.<f>.ssl_pinning — unreachable once `validate` (P04) passed
 }
 ```
+
+Nơi pinning áp dụng được hay không là một sự thật của platform (`AppPlatform.canPinTls`: Android và iOS). Trên **web** trình duyệt tự xác thực chứng chỉ và Dio dùng adapter của trình duyệt, nên không cài gì và một dòng `INFO` nói rõ điều đó; trên **desktop** plugin pinning không có implementation, nên một dòng `INFO` ghi "not applicable" — trước đây nó log `ERROR` ở mỗi lần mở, và cài client pinning ở đó sẽ đẩy mọi lời gọi HTTPS qua một plugin không có phần desktop. Một lời gọi `AppInitializer` không có app profile (host dựng tay, một test) giữ hành vi cũ: pin `SslPinningConfig.sslPinningHashes` khi có hash, log `ERROR` khi không có hoặc config chưa đăng ký.
 
 `_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi ngay sau `configureDependencies()` và **trước** khi `MainScope` dựng splash. Thời điểm là mấu chốt: splash đã được bọc trong `IAppTreeWrapper` của mọi feature, nên một controller tạo ở đó — auth khôi phục phiên bằng một lần refresh token — có thể gửi request đầu tiên ngay lập tức, và `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`. Override cài muộn hơn, trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
 
@@ -1118,7 +1119,7 @@ Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`
 Các lỗ hổng đã biết, chưa sửa ở đây:
 
 - `apps/mobile` cần database cho web trước khi biên dịch được: `WasmDatabase` của drift (asset `sqlite3.wasm` + drift worker), mở qua conditional import trong connection factory của `core_database`.
-- `MainScope` gọi `FlutterNativeSplash.remove()` trên mọi nền tảng; trên web lệnh này ném `PlatformException(… removeSplashFromWeb …)` nếu `flutter_native_splash` chưa sinh asset web cho app. Lỗi không được bắt nhưng không làm sập app — app vẫn khởi động — và nó tới crash reporter ở mỗi lần mở trên web.
+- `MainScope` bỏ qua `FlutterNativeSplash.remove()` trên web, vì chưa app nào ở đây sinh asset splash cho web và lời gọi sẽ ném `PlatformException(… removeSplashFromWeb …)`.
 - `AppInfoHelper.getDeviceInfo` / `getDeviceString` / `platformName` rẽ nhánh theo `Platform.isAndroid`, vốn **ném lỗi** trên web. Không gì gọi chúng lúc boot; màn hình nào gọi thì phải chặn bằng `kIsWeb` trước.
 - `core_notifications` (chỉ `apps/mobile`) khởi tạo Firebase bằng options theo flavor của app, vốn không mô tả web app nào.
 

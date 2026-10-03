@@ -170,6 +170,8 @@ abstract class RegisterModule {
 | `useDefaultInterceptors` | `false` sẽ bỏ qua toàn bộ chuỗi mặc định — dùng cho client public/không cần auth |
 | `options` | Thay thế hoàn toàn `_defaultOptions` (được `copyWith` nên không làm hỏng state dùng chung) |
 
+Thứ `_defaultOptions` chứa là việc của **app** đặt: timeout connect, receive và send (mỗi loại 20 giây), header thêm và chính sách redirect đến từ `NetworkProfile` của nó (`network:` trong `apps/<id>/lib/app/app_profile.dart`), được đăng ký trước khi graph dựng, nên `Dio` mặc định mang chúng. Một header làm hỏng interceptor auth hoặc làm lộ credential — `authorization`, `cookie`, `set-cookie`, `proxy-authorization`, `content-type` — làm `ApiClient` ném lỗi lúc boot (RULE-66). Base URL vẫn là một define của env (`BASE_URL`, theo từng flavor), và base URL thứ hai là `createClient(baseUrl:)`.
+
 Client thứ hai với luật riêng được đăng ký theo cùng cách, dưới một **tên**, để không thay thế client mặc định. Trong repo không có gì đăng ký nó. Đây là khuôn để chép — ví dụ một API public không có header auth, không refresh, không dialog retry:
 
 ```dart
@@ -251,7 +253,7 @@ Sau đó đánh dấu lời gọi login và refresh bằng `EXTRA_CAN_REFRESH_TO
 ## 10. Bật SSL pinning
 
 > [!WARNING]
-> **Pinning hiện đang TẮT.** `sslPinningHashes` trả về `const []`, và list rỗng nghĩa là pinning bị vô hiệu hoá hoàn toàn. Chừng nào chưa điền vào, app chấp nhận **mọi** certificate mà thiết bị tin tưởng — kể cả cert do proxy chèn vào.
+> **Pinning TẮT cho tới khi một app bật nó.** Các app mẫu khai `ssl_pinning: { disabled: … }` cho staging và prod — một quyết định được nêu rõ, được liệt kê trong báo cáo của từng app ở mục *các quyết định cần xem lại* — nên chúng chấp nhận **mọi** certificate mà thiết bị tin tưởng, kể cả cert do proxy chèn vào.
 
 Lấy hash SPKI SHA-256 của từng key:
 
@@ -263,7 +265,16 @@ openssl s_client -servername <host> -connect <host>:443 </dev/null \
   | openssl enc -base64
 ```
 
-Pin **ít nhất hai** key — leaf cộng một key dự phòng — để khi xoay vòng certificate không khoá chết toàn bộ client đã cài. Trả chúng về từ `sslPinningHashes` trong `platform/shell/adapters/lib/src/network_config_impl.dart` (RULE-48).
+Pin **ít nhất hai** key — leaf cộng một key dự phòng — để khi xoay vòng certificate không khoá chết toàn bộ client đã cài. Pin là quyết định của app, theo từng flavor, được khai trong manifest (RULE-48, RULE-80); không sửa gì dưới `platform/`:
+
+```yaml
+# apps/<id>/app_manifest.yaml
+flavors:
+  prod:
+    ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+```
+
+`composer verify` từ chối một flavor chưa có quyết định ở nơi một platform đã khai báo pin được (Android, iOS), một pin không phải base64 của 32 byte và ít hơn hai pin (V9). Quyết định tới client dưới dạng `SslPinningPolicy`, mà `NetworkConfigImpl.sslPinningHashes` đọc. Ở nơi pinning không thể áp dụng — web, nơi trình duyệt sở hữu TLS, và desktop, nơi plugin pinning không có implementation — app log một dòng `INFO` và key đó bị từ chối vì vô dụng.
 
 Pinning còn cần `SslPinningConfig` được bind riêng, việc mà `platform/shell/adapters/lib/di/network_binding_module.dart` đã làm (RULE-14). Hãy giữ binding đó: thiếu nó, pinning bị bỏ qua trên mọi flavor, kể cả production ([`../architecture/06_app_shell.md` § 4](../architecture/06_app_shell.md#vì-sao-sslpinningconfig-cần-binding-riêng)). Pinning được cài lúc nào, và bản build nào bỏ qua nó: [`../architecture/02_core.md` § 6](../architecture/02_core.md#pinning-được-cài-lúc-nào-và-khi-nào-bị-bỏ-qua).
 
@@ -287,7 +298,7 @@ Checklist review:
 - [ ] Request không được mang token thì set `EXTRA_NEED_AUTHENTICATION = false`
 - [ ] Login, refresh, và mọi call có `401` không mang nghĩa "hết phiên" thì set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] Impl `NetworkConfig` giữ `@LazySingleton` (không bao giờ eager)
-- [ ] `sslPinningHashes` đã điền ≥2 pin trước khi phát hành
+- [ ] `flavors.prod.ssl_pinning` (và staging) đã được quyết định trong manifest — ≥2 pin, hoặc `disabled` kèm lý do — trước khi phát hành
 - [ ] `SslPinningConfig` được bind tường minh trong `@module` — kiểm tra file sinh ra `lib/di/module.module.dart` của `platform_shell_adapters`
 - [ ] Không log nguyên văn bất kỳ thông tin đăng nhập nào
 
@@ -301,7 +312,8 @@ Checklist review:
 | `401` tới UI dù backend hỗ trợ refresh | Chưa có `ISessionGateway` nào được đăng ký, nên không có interceptor refresh | Implement và đăng ký một gateway (bước 9) |
 | Người dùng bị đăng xuất sau một lần mạng chập chờn | `refreshToken()` trả `null` cho một lỗi tạm thời | Ném lỗi khi "không có câu trả lời", chỉ trả `null` khi bị từ chối (bước 9) |
 | Server không nhận locale | Server đọc `Accept-Language`; client gửi header không chuẩn `language` | Đọc header `language` ở phía server |
-| Log `ERROR`: `SSL pinning skipped` | `sslPinningHashes` rỗng, hoặc `SslPinningConfig` chưa được bind | Điền hash và giữ binding (bước 10) |
+| Log `ERROR`: `SSL pinning skipped` | Boot không có app profile, hoặc `SslPinningConfig` chưa được bind | Truyền profile (`runShellApp`), quyết định cho flavor trong manifest và giữ binding (bước 10) |
+| Log `WARNING`: `SSL pinning is disabled for flavor …` | Quyết định của flavor là `disabled` — lý do đã khai nằm trong log | Khai `pins:` (bước 10) khi flavor cần pin |
 | Hai package đăng ký cùng một client có tên và boot ném lỗi | Mỗi tên chỉ đăng ký được một lần trong container | Chuyển phần đăng ký vào `platform/infra/network/lib/di/network_module.dart` (bước 7) |
 
 ## Liên quan

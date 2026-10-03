@@ -50,13 +50,13 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
-| RULE-10 | Controller của màn hình (Provider, Bloc, Cubit) là factory `@injectable`; chỉ controller toàn app (`ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider`, `AuthProvider`) là `@lazySingleton` | GetIt không bao giờ giải phóng singleton — lần vào sau dùng lại state cũ | review | review | [§10](#10-vòng-đời-controller) |
+| RULE-10 | Controller của màn hình (Provider, Bloc, Cubit) là factory `@injectable`; chỉ controller toàn app (`ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`, `AuthProvider`) là `@lazySingleton` | GetIt không bao giờ giải phóng singleton — lần vào sau dùng lại state cũ | review | review | [§10](#10-vòng-đời-controller) |
 | RULE-11 | Chỉ inject qua constructor — không `getIt<T>()` trong ViewModel, Bloc, Repository hay UseCase | Dependency hiện rõ và thay được bằng fake viết tay | review | review | [guides/05_di §7](../guides/05_di.md) |
 | RULE-12 | Contract chỉ được implement dưới `modules/` phải resolve bằng `getItOrNull` / `getAllOrEmpty` + fallback bên ngoài module của nó — không bao giờ `getIt` / `getAll` | `getAll<T>()` ném lỗi khi không có đăng ký; gỡ module là boot sập | arch_check R8 | `dart tools/arch_check/check.dart` | [§6](#6-ranh-giới-feature-và-khả-năng-gỡ-bỏ) |
 | RULE-13 | `@Singleton` eager không bao giờ phụ thuộc type do nhóm DI chạy sau đăng ký — dùng `@LazySingleton`; `shell` chạy trước `ui`, `notifications` sau phần đăng ký của chính app | GetIt ném `"<Type> is not registered"` lúc boot, và `flutter analyze` không thấy | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§5](#5-thứ-tự-đăng-ký-di) |
 | RULE-14 | Interface thứ hai trên cùng một implementation được bind qua `@module` (`SslPinningConfig ← NetworkConfig`) | GetIt resolve đúng type, không bao giờ supertype — pinning lặng lẽ không chạy | test (`apps/*/test/di_smoke_test.dart`), review | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§15](#15-giao-tiếp-giữa-các-feature) |
 | RULE-15 | Mỗi package khai `@InjectableInit.microPackage()` ở `lib/di/module.dart` không đối số (ngoại lệ duy nhất: `ignoreUnregisteredTypesInPackages` của `core_notifications`); không có module domain/data nguyên khối | Module theo package là thứ composer ghép và việc gỡ bỏ xoá đi | review | review | [guides/05_di §8](../guides/05_di.md) |
-| RULE-16 | Composition đến từ `apps/<id>/app_manifest.yaml` qua `composer sync`: không bao giờ sửa tay vùng `composer:managed` (`workspace:` ở gốc, path dependency của app, `injection.dart`); mọi member khai `resolution: workspace` và gốc là nút workspace duy nhất | Composition sinh ra không thể lệch khỏi manifest | composer verify (CI gate 0) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-và-barrel) |
+| RULE-16 | Composition đến từ `apps/<id>/app_manifest.yaml` qua `composer sync`: không bao giờ sửa tay vùng `composer:managed` (`workspace:` ở gốc, path dependency của app, `injection.dart` — toàn bộ file, vùng `facts` của `lib/app/app_profile.dart`, vùng `report` của `README.md` của app); mọi member khai `resolution: workspace` và gốc là nút workspace duy nhất | Composition và facts sinh ra không thể lệch khỏi manifest | composer verify (CI gate 0) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-và-barrel) |
 
 ### 20–29 · Routing, điều hướng và ranh giới feature
 
@@ -81,7 +81,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-35 | Khoá ARB là `lowerCamelCase` | `gen-l10n` chép khoá thành tên getter, và code sinh ra không được phân tích | review | review | [§13](#13-đa-ngôn-ngữ-và-asset) |
 | RULE-36 | Mỗi dialog và bottom sheet là một widget class riêng (`*_dialog.dart` → `…Dialog`, `*_bottom_sheet.dart` → `…BottomSheet`), không bao giờ là cây widget inline trong builder của `showDialog` / `showModalBottomSheet` | Tái sử dụng, test và review được | review | review | [§14](#14-dialog-và-bottom-sheet) |
 | RULE-37 | Asset riêng của feature nằm trong `assets/` của feature đó; `core_base_ui` chỉ giữ asset và chuỗi toàn cục, và không có widget | Kho asset toàn cục buộc mọi feature vào nhau | review | `dart tools/unused_checker/check_unused_assets.dart` | [§13](#13-đa-ngôn-ngữ-và-asset) |
-| RULE-38 | Chữ theo cỡ chữ của hệ điều hành: không bao giờ `withNoTextScaling` hay `TooltipVisibility(visible: false)` (shell giới hạn ở 2.0), không bao giờ khung chữ cao cố định; nút chỉ có icon mang `tooltip`, ảnh có nghĩa mang `semanticLabel` | Người nhìn kém và người dùng trình đọc màn hình | test (`platform/shell/app_shell/test/accessibility_test.dart`), review | `cd platform/shell/app_shell && flutter test test/accessibility_test.dart` | [§19](#19-khả-năng-truy-cập) |
+| RULE-38 | Chữ theo cỡ chữ của hệ điều hành: không bao giờ `withNoTextScaling` hay `TooltipVisibility(visible: false)` (shell giới hạn ở `DisplayProfile.textScaleMax` — 2.0 trừ khi app đặt khác, và không bao giờ dưới 2.0), không bao giờ khung chữ cao cố định; nút chỉ có icon mang `tooltip`, ảnh có nghĩa mang `semanticLabel` | Người nhìn kém và người dùng trình đọc màn hình | test (`platform/shell/app_shell/test/accessibility_test.dart`), review | `cd platform/shell/app_shell && flutter test test/accessibility_test.dart` | [§19](#19-khả-năng-truy-cập) |
 | RULE-39 | Vùng chạm tối thiểu 48 × 48 dp (`kMinInteractiveDimension`); cạnh đầu/cuối dòng dùng `edgeInsetsDirectional`, không phải `left` / `right` vật lý | Khả năng truy cập vận động; ngôn ngữ viết phải sang trái | review | review | [§19](#19-khả-năng-truy-cập) |
 
 ### 40–49 · Domain, data, storage, database và network
@@ -96,7 +96,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-45 | Chủ sở hữu storage là singleton (`@singleton` / `@lazySingleton` / `@Singleton(as:)`) kèm `@PostConstruct(preResolve: true)` — không bao giờ `@injectable` | Factory phát ra cache rỗng, getter lặng lẽ trả `null` | review | review | [§4](#4-storage-do-package-sở-hữu) |
 | RULE-46 | Package cần SQL khai database Drift của riêng mình (bảng, DAO là `part of` nó) trên nền `core_database`; không có `AppDatabase` dùng chung | Drift gắn bảng lúc biên dịch — database dùng chung sở hữu mọi bảng | review | review | [guides/07_database](../guides/07_database.md) |
 | RULE-47 | Migration được đăng ký có kiểu theo database của nó — `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` — và lệnh mở `@preResolve` của database mang `@Order(1)` | Đăng ký không kiểu không bao giờ được gom; bước migrate lặng lẽ không chạy | review | review | [guides/07_database §4](../guides/07_database.md) |
-| RULE-48 | SSL pinning cần `SslPinningConfig` được bind riêng (RULE-14) **và** `sslPinningHashes` khác rỗng (leaf + dự phòng); việc bỏ qua chứng chỉ chỉ có trong bản debug `--flavor dev` | Thiếu một trong hai là pinning lặng lẽ tắt | test (`apps/*/test/di_smoke_test.dart` — binding), review (hash) | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [guides/08_networking §5](../guides/08_networking.md) |
+| RULE-48 | SSL pinning là một quyết định tường minh theo từng flavor trong `app_manifest.yaml` (`flavors.<f>.ssl_pinning`: ít nhất hai pin — leaf + dự phòng — hoặc `disabled` kèm lý do) **và** `SslPinningConfig` được bind riêng (RULE-14); việc bỏ qua chứng chỉ chỉ có trong bản debug `--flavor dev` | Thiếu quyết định hay thiếu binding đều khiến pinning lặng lẽ tắt | composer verify (V9), analyzer (các const assert của `SslPinning`), test (`apps/*/test/di_smoke_test.dart` — binding) | `dart tools/composer/composer.dart verify` · `cd apps/mobile && flutter test test/di_smoke_test.dart` | [guides/08_networking §5](../guides/08_networking.md) |
 | RULE-49 | Entity dùng Freezed với `const Class._()`; use case là `@injectable`, làm một việc và trả `Result<T>` | Một bề mặt domain bất biến và đồng nhất | review | review | [§7](#7-domain-là-pure-dart) |
 
 ### 50–59 · Quản lý state
@@ -116,11 +116,11 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-60 | Test nằm trong `test/` của chính package; package Flutter dùng `flutter_test`, package Dart thuần (`domain_core`, `tools`) dùng `package:test` | CI Gate 3 tự tìm mọi thư mục `test/` | CI gate 3 | `cd <package> && flutter test` | [§17](#17-kiểm-thử) |
 | RULE-61 | Fake được viết tay — không mockito, không mocktail | Không codegen cho test; fake chính là lời mô tả contract | review | `grep -rnE "mockito\|mocktail" --include=pubspec.yaml .` (rỗng) | [§17](#17-kiểm-thử) |
 | RULE-62 | Widget test có scale phải bọc widget được test trong `ResponsiveInit` | `ResponsiveScope.of` assert thay vì lặng lẽ dùng giá trị chưa scale | test (widget test fail ở assert) | `cd <package> && flutter test` | [§17](#17-kiểm-thử) |
-| RULE-63 | Mỗi app giữ `test/di_smoke_test.dart`, boot đồ thị DI thật cho mọi flavor; plugin được chạm tới trong lúc DI (`@preResolve`, `@PostConstruct(preResolve: true)`) có test double ở đó | Nó bắt lỗi thứ tự DI và đăng ký thiếu trước khi thiết bị gặp | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test` | [§17](#17-kiểm-thử) |
+| RULE-63 | Mỗi app giữ `test/di_smoke_test.dart`, boot đồ thị DI thật cho mọi flavor mà manifest khai và đối chiếu nó với khai báo của app (`checkAppContract`; `validate` cho mọi platform và flavor đã khai); plugin được chạm tới trong lúc DI (`@preResolve`, `@PostConstruct(preResolve: true)`) có test double ở đó | Nó bắt lỗi thứ tự DI và đăng ký thiếu trước khi thiết bị gặp | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test` | [§17](#17-kiểm-thử) |
 | RULE-64 | Thay đổi một gate tool (`arch_check`, `composer`, `docs_check`, `dependency_sync`, barrel generator, …) phải thêm vào `tools/test/` ca kiểm lẽ ra đã bắt được bug | Gate không có test mục ruỗng âm thầm | CI gate 1 (`tools/test`) | `cd tools && dart test` | [§17](#17-kiểm-thử) |
 | RULE-65 | Chẩn đoán lúc chạy đi qua `dynamic_logger` (`DynamicLogger.log`), không bao giờ `print`; CLI tool ghi bằng `stdout.writeln` / `stderr.writeln` | `print` lọt vào log bản release và không lọc được | analyzer (avoid_print) | `flutter analyze` | [§18](#18-logging-báo-lỗi-và-bí-mật) |
 | RULE-66 | Bí mật không bao giờ được commit (env prod, keystore, API key nằm trong gitignore) và không bao giờ bị log (header `Authorization` / `Cookie` và trường thông tin đăng nhập bị che; log network chỉ bật khi `kDebugMode`) | Lịch sử git và log thiết bị bị rò rỉ | review | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
-| RULE-67 | Báo crash và lỗi được cắm vào bằng cách đăng ký một `IErrorReporter` (và tuỳ chọn `IAnalytics`) trong app — không bao giờ tự gán `FlutterError.onError` / `PlatformDispatcher.instance.onError` | Hook của shell nối chuỗi mọi handler; ghi đè một cái là mất phần còn lại | review | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
+| RULE-67 | Báo crash và lỗi được cắm vào bằng cách đăng ký một `IErrorReporter` (và tuỳ chọn `IAnalytics`) trong app — không bao giờ tự gán `FlutterError.onError` / `PlatformDispatcher.instance.onError`; app đã đăng ký một cái thì khai nó là `provided` trong `capabilities:` (RULE-81) | Hook của shell nối chuỗi mọi handler; ghi đè một cái là mất phần còn lại | review | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
 
 ### 70–79 · Công cụ, vệ sinh repo và tài liệu
 
@@ -136,6 +136,14 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-77 | Analyze sạch không phải là build: thay đổi DI, dependency hay chuyển chỗ type kết thúc bằng một lần build APK debug, và type mà code sinh ra dùng được import từ nhà thật của nó, không bao giờ qua re-export giới hạn bằng `show` | Analysis bỏ qua code sinh ra | CI gate build | `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` | [§20](#20-workspace-codegen-và-barrel) |
 | RULE-78 | File, class và package theo bảng đặt tên (`_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `i_<name>_repository`, `_repository_impl`, tiền tố tầng `core_` / `domain_` / `data_` / `feature_`); tiền tố `I` đánh dấu interface, không bao giờ là class cụ thể | Tên nói lên file là gì | arch_check R15 (tiền tố `I`), review | `dart tools/arch_check/check.dart` | [02_naming](02_naming.md) |
 | RULE-79 | Docs thay đổi cùng PR với code, ở `docs/en` **và** `docs/vi` với cùng hình dạng; mọi đường dẫn repo được nhắc tới đều tồn tại; một luật được phát biểu một lần — ở đây — và nơi khác trích `RULE-NN` | Docs lệch dạy sai pattern | docs_check (CI gate 5), review | `dart tools/docs_check/check.dart` | [CONTRIBUTING § 5](../../../CONTRIBUTING.md#5-documentation-contract) |
+
+### 80–89 · App và composition
+
+| ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
+|---|---|---|---|---|---|
+| RULE-80 | Mọi thứ riêng của từng app được khai trong `apps/<id>/`: platform, flavor, env và capability trong `app_manifest.yaml`; hành vi của shell trong `lib/app/app_profile.dart`; code trong `lib/app/app_hooks.dart`. Một package platform không bao giờ hardcode giá trị mà một app có thể muốn khác (design size, trần text-scale, locale, pin, timeout, orientation, vị trí fallback, công tắc splash / push / deep link) | App thứ hai phải khác được mà không sửa `platform/` | composer verify (khai báo và facts sinh ra), test (`apps/*/test/app_profile_test.dart`), review | `dart tools/composer/composer.dart verify` | [§21](#21-app-và-composition) |
+| RULE-81 | Mọi contract tuỳ chọn trong catalog của shell (`kShellContracts`) có một trạng thái được khai trong `capabilities:` của từng app — `provided`, hoặc `absent` kèm lý do — và khai báo đó được đối chiếu với code ở Gate 0, trong smoke test và lúc boot | Sự vắng mặt phải là một quyết định, không phải tai nạn | composer verify (V2–V4, V14), arch_check R16, test (`apps/*/test/di_smoke_test.dart`) | `dart tools/composer/composer.dart verify` · `dart tools/arch_check/check.dart` | [§21](#21-app-và-composition) |
+| RULE-82 | Khác biệt giữa các platform là quyết định của app, đọc từ `PlatformFacts`; `Platform.is*`, `kIsWeb`, `defaultTargetPlatform` và `TargetPlatform.*` chỉ xuất hiện trong `resolveAppPlatform()` và một số ít chỗ được allow-list vì phụ thuộc API của hệ điều hành | Một nơi duy nhất để canh đúng nhánh web; app khai được platform bật thứ gì | arch_check R17 | `dart tools/arch_check/check.dart` | [§21](#21-app-và-composition) |
 
 ### Thêm hoặc sửa một luật
 
@@ -695,8 +703,8 @@ Ba test gánh luật ở nơi khác trong file này:
 
 | Test | Giữ |
 |---|---|
-| `apps/mobile/test/di_smoke_test.dart`, `apps/admin/test/di_smoke_test.dart` | Boot đồ thị DI sinh ra thật của app cho `dev`, `staging` và `prod` với mọi plugin thay bằng test double, dựng mọi lazy singleton, và resolve mọi contract của shell cùng `AppRouter.router` — bằng chứng lúc chạy cho RULE-13, RULE-14, RULE-24 (`order` duy nhất) và RULE-48 (nửa binding) |
-| `platform/shell/app_shell/test/accessibility_test.dart` | Nút chỉ có icon giữ tooltip làm nhãn ngữ nghĩa; cỡ chữ của hệ điều hành đi qua tới `MAX_TEXT_SCALE_FACTOR` (RULE-38) |
+| `apps/<id>/test/di_smoke_test.dart` (mọi app) | Boot đồ thị DI sinh ra thật của app cho `dev`, `staging` và `prod` với mọi plugin thay bằng test double, dựng mọi lazy singleton, và đối chiếu đồ thị với `capabilities:` của app (`checkAppContract`: mọi contract bắt buộc, mọi `provided` / `absent` đã khai, có màn hình, `order` duy nhất, `AppRouter.router` ráp được) — bằng chứng lúc chạy cho RULE-13, RULE-14, RULE-24 (`order` duy nhất), RULE-48 (nửa binding) và RULE-81 |
+| `platform/shell/app_shell/test/accessibility_test.dart` | Nút chỉ có icon giữ tooltip làm nhãn ngữ nghĩa; cỡ chữ của hệ điều hành đi qua tới `DisplayProfile.textScaleMax` (RULE-38) |
 | `tools/test/` | Mọi gate tool, mỗi ca trong một workspace dùng xong bỏ ở thư mục tạm (RULE-64); CI chạy nó ngay sau Gate 1, và Gate 3 bỏ qua `tools/` |
 
 Plugin mà đồ thị DI chạm tới trong lúc khởi tạo — một factory `@preResolve`, một `@PostConstruct(preResolve: true)` — cần test double được thêm vào smoke test, nếu không chúng fail với `MissingPluginException` của plugin đó.
@@ -734,7 +742,7 @@ Bảng đăng ký: RULE-38 · RULE-39 · RULE-30 (inset theo hướng).
 
 **Luật.**
 
-- **Chữ theo cỡ chữ của hệ điều hành.** Shell bọc mọi `builder` trong `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)` (2.0). Không bao giờ `MediaQuery.withNoTextScaling`, không bao giờ `TooltipVisibility(visible: false)` — nó tước nhãn của icon button khỏi semantics; `tooltipTheme` của theme (`triggerMode: manual`) đã chặn popup khi nhấn giữ.
+- **Chữ theo cỡ chữ của hệ điều hành.** Shell bọc mọi `builder` trong `MediaQuery.withClampedTextScaling(maxScaleFactor: display.textScaleMax)` — `DisplayProfile.textScaleMax` là 2.0 trừ khi app đặt khác, và một `const` assert từ chối mọi giá trị dưới 2.0. Không bao giờ `MediaQuery.withNoTextScaling`, không bao giờ `TooltipVisibility(visible: false)` — nó tước nhãn của icon button khỏi semantics; `tooltipTheme` của theme (`triggerMode: manual`) đã chặn popup khi nhấn giữ.
 - **Khung chứa chữ lớn theo chữ.** Đừng đặt chiều cao cố định `context.h(...)` cho khung chứa chữ; để nó tự co theo nội dung, hoặc thu nhỏ bằng `TextScaleDown`.
 - **Mọi thứ tương tác được đều có tên.** `IconButton` chỉ có icon mang `tooltip` (nó trở thành nhãn ngữ nghĩa); ảnh có nghĩa truyền `semanticLabel` (`CustomCacheNetworkImage` làm vậy); ảnh trang trí để `null`.
 - **Vùng chạm tối thiểu 48 × 48 dp** (`kMinInteractiveDimension`) — thu nhỏ phần nhìn, không thu vùng chạm.
@@ -755,7 +763,7 @@ cd modules/auth/feature && flutter test test/login_page_text_scale_test.dart
 
 Bảng đăng ký: RULE-16 · RULE-75 · RULE-76 · RULE-77.
 
-**Composition được sinh ra.** Mỗi `apps/<id>/app_manifest.yaml` là mô tả duy nhất được sửa tay của một app. `dart tools/composer/composer.dart sync` ghi ba thứ từ nó, mỗi thứ nằm giữa marker `composer:managed`: danh sách `workspace:` ở gốc, path dependency của app trong `pubspec.yaml` của nó, và `lib/di/injection.dart` của nó. `composer verify` là Gate 0 và fail khi có bất kỳ sai lệch nào. Module generator thêm module mới vào mọi manifest (hoặc chỉ các app nêu bằng `--apps`) và tự chạy `sync`. Workspace phẳng: `resolution: workspace` ở mọi member, không có nút workspace trung gian.
+**Composition được sinh ra.** Mỗi `apps/<id>/app_manifest.yaml` là mô tả duy nhất được sửa tay của một app. `dart tools/composer/composer.dart sync` ghi năm thứ từ nó, mỗi thứ nằm giữa marker `composer:managed`: danh sách `workspace:` ở gốc, path dependency của app trong `pubspec.yaml` của nó, `lib/di/injection.dart` của nó (các import, danh sách module và điểm vào `configureDependencies` — file không còn code viết tay), vùng `facts` của `lib/app/app_profile.dart` (khai báo dưới dạng const Dart) và vùng `report` trong `README.md` của app. `composer verify` là Gate 0 và fail khi có bất kỳ sai lệch nào, đồng thời đối chiếu khai báo với mã nguồn ([§21](#21-app-và-composition)). Module generator thêm module mới vào mọi manifest (hoặc chỉ các app nêu bằng `--apps`) và tự chạy `sync`; `composer new` tạo cả một app. Workspace phẳng: `resolution: workspace` ở mọi member, không có nút workspace trung gian.
 
 **Barrel.** `dart tools/barrel_generator/generate.dart <package>/lib` viết lại barrel của package từ những gì có trên đĩa. Nó **xoá** mọi dòng bắt đầu bằng `export '` rồi phát lại danh sách đã sắp xếp của nó, nên export thêm tay sẽ lặng lẽ biến mất — hãy đặt re-export có chủ đích trong một file nguồn bình thường (`platform/foundation/kernel/lib/src/error/failures.dart` đúng là vậy). Nó cũng export các file sinh ra đang có trên đĩa (`module.module.dart`, `lib/src/gen/**`; `src.dart` của `core_base_ui` export `gen/gen.dart`), nên lần chạy cuối phải đến **sau** gen-l10n và build_runner — đúng thứ tự `tools/workspace_setup/configure.dart` dùng.
 
@@ -776,6 +784,42 @@ Build APK cần các file `firebase_options_<flavor>.dart` và `google-services.
 
 ---
 
+## 21. App và composition
+
+Bảng đăng ký: RULE-80 · RULE-81 · RULE-82 · RULE-16.
+
+**Luật.** Một app nói mình là gì ở bốn nơi, và không nơi nào khác:
+
+| Kênh | Chứa | Nằm ở | Được giữ bởi |
+|---|---|---|---|
+| Manifest | Sự thật mà một tool phải thấy trước khi code biên dịch: danh tính, flavor (kèm quyết định SSL pin của từng flavor), key env, platform và thứ mỗi platform bật, capability, composition | `apps/<id>/app_manifest.yaml`, sinh vào vùng `facts` của `lib/app/app_profile.dart` | `composer verify` (Gate 0), `checkAppContract`, boot |
+| Profile | Shell cư xử thế nào: display, router, locale, theme, giới hạn mạng — có kiểu, `const`, mặc định của template | `lib/app/app_profile.dart`, phần bên dưới vùng sinh ra | analyzer (const assert), `apps/<id>/test/app_profile_test.dart` |
+| Hook | Code chạy ở những điểm cố định của quá trình boot (`ShellHooks`) | `lib/app/app_hooks.dart` | analyzer |
+| Contract | Interface của `core_di` mà app hoặc module đăng ký, được resolve qua catalog của shell | module, `lib/app/*.dart` | `composer verify` (V3), `checkAppContract`, boot |
+
+Chia thế nào trong một câu: manifest nói app **là** gì và chạy ở đâu, profile nói shell **cư xử** ra sao, hook là **code**. Package platform giữ cơ chế và một mặc định có tài liệu, bằng đúng hành vi của template (RULE-80); nó không bao giờ sở hữu giá trị mà một app có thể muốn khác.
+
+Shell resolve mọi contract tuỳ chọn qua một catalog duy nhất, `kShellContracts` trong `platform_app_shell` (8 dòng bắt buộc do chính các package của shell đăng ký, 14 dòng tuỳ chọn do app hoặc module đóng góp). App khai từng dòng tuỳ chọn là `provided` hoặc `{ state: absent, reason }` (RULE-81): `composer verify` từ chối dòng chưa khai (V2), khai báo mà code mâu thuẫn ở cả hai chiều (V3), bundle mà các thành viên bất đồng (V4) và lý do rỗng hoặc `TODO` (V14); `checkAppContract` đối chiếu cùng khai báo đó với đồ thị app thực sự dựng, trong smoke test của từng app và lúc boot; `arch_check` R16 giữ cho chính catalog luôn đầy đủ, nên thêm một lookup của shell mà không đưa vào catalog sẽ fail Gate 1.
+
+**Vì sao.** Trước đây một app chỉ khai composition và không gì khác. Mọi quyết định riêng của app là một hằng số trong package dùng chung, một nhánh `Platform.is*` trong một trong năm file, hoặc một file native — và không có gì nói app phải đăng ký gì, mỗi platform bật gì hay app được phép can thiệp vào đâu. App thứ hai không thể khác mà không sửa `platform/`.
+
+**Khác biệt giữa các platform** là quyết định của app (RULE-82): `platforms.<p>` trong manifest khai app chạy ở đâu và mỗi platform bật gì (splash, push, deep link, orientation, window), shell mỗi lần chạy đọc đúng một `PlatformFacts`, và nhánh chính sách duy nhất dựa trên `kIsWeb` / `defaultTargetPlatform` là `resolveAppPlatform()`. Một nhánh mới phải được biện minh trong `kPlatformForkAllowList` (`tools/arch_check/platform_forks.dart`) kèm lý do, nếu không R17 fail.
+
+**Thứ còn bị khoá** — muốn đổi phải sửa package dùng chung, cho mọi app: breakpoint, component theme, page transition, chuỗi interceptor và chính sách retry mặc định của `Dio`, trang 404, màu shadow và scrim, channel và icon của push, allow-list của deep link, giới hạn của logger, overlay system-UI, tuỳ chọn secure-storage. Thay một type do shell sở hữu bằng thứ tự đăng ký là không được hỗ trợ: GetIt giữ đăng ký đầu tiên của một type.
+
+**Kiểm chứng**
+
+```bash
+dart tools/composer/composer.dart verify               # Gate 0 — khai báo, các vùng sinh ra, mã nguồn
+dart tools/composer/composer.dart describe --app <id>  # báo cáo: app khai gì và shell resolve gì từ nó
+dart tools/arch_check/check.dart                       # R16 (catalog đầy đủ), R17 (nhánh theo platform)
+cd apps/<id> && flutter test test/di_smoke_test.dart   # checkAppContract cho mọi flavor
+```
+
+Cách đọc một app, thêm platform, capability, pin, locale hay hook, và toàn bộ danh sách kiểm tra của Gate 0: [`../guides/13_app_composition.md`](../guides/13_app_composition.md).
+
+---
+
 ## Bảng tra luật → lệnh
 
 | Kiểm tra | Lệnh |
@@ -793,8 +837,10 @@ Build APK cần các file `firebase_options_<flavor>.dart` và `google-services.
 | Chiều giữa các nhóm platform | `dart tools/arch_check/check.dart` (R11) |
 | Package API của module chỉ phụ thuộc foundation; feature import API của module khác, không bao giờ feature của nó | `dart tools/arch_check/check.dart` (R3) |
 | Không `.ps1`, không tắt lint, không `datasources/`, không class cụ thể `I*` | `dart tools/arch_check/check.dart` (R12–R15) |
+| Mọi lookup của shell nằm trong catalog; nhánh theo platform được allow-list kèm lý do | `dart tools/arch_check/check.dart` (R16, R17) |
 | Domain thuần | `grep -rn "package:flutter" modules/*/domain/lib` |
 | Composition khớp manifest | `dart tools/composer/composer.dart verify` |
+| Một app khai gì và shell resolve gì từ nó | `dart tools/composer/composer.dart describe --app <id>` |
 | Đường dẫn trong docs và tương đồng en ↔ vi | `dart tools/docs_check/check.dart` |
 | Code sinh ra biên dịch được | `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` |
 

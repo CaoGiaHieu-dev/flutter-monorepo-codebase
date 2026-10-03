@@ -50,8 +50,8 @@ Two different things live in `core_base_ui`, and mixing them up is the most comm
 | A corner radius | `styles/app_radius.dart` → the `raw*` constant |
 | A gradient | the colour list in `theme/theme_system_extensions.dart` |
 | A shadow | `styles/app_shadows.dart` |
-| The design canvas | `platform/foundation/common/lib/src/config/app_config.dart` → `design` |
-| How far a window class may scale (bounds, profiles, breakpoints) | `platform/shell/app_shell/lib/src/main_scope.dart` → `ResponsiveInit` (§6) |
+| The design canvas | the app's `DisplayProfile.designSize`, in `apps/<id>/lib/app/app_profile.dart` (§6) |
+| How far a window class may scale (bounds, profiles) | the app's `DisplayProfile.scale`, in `apps/<id>/lib/app/app_profile.dart` — the shell turns it into `ResponsiveInit` profiles in `platform/shell/app_shell/lib/src/main_scope.dart` (§6) |
 | The layout on a tablet, foldable or split screen | the page — `context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent` (§7) |
 | Add a whole new token class | new file in `styles/`, then run the barrel generator |
 
@@ -125,6 +125,18 @@ static ThemeSystemExtension dark = ThemeSystemExtension(
 ```
 
 Change the hex values, save, hot-restart. **Always edit both** — a light-only change leaves dark mode on the sample palette.
+
+That edits the **template** palette, for every app. To give **one** app its own brand, override tokens in its profile instead — `lib/app/app_profile.dart`, no edit under `platform/`:
+
+```dart
+theme: ThemeProfile(
+  mode: ThemeModeSetting.dark,                       // what a first launch opens in
+  light: {PaletteToken.primary: 0xFF1D4ED8},
+  dark: {PaletteToken.primary: 0xFF60A5FA},
+),
+```
+
+The 17 colour tokens of `PaletteToken` (`primary`, `background`, the text colours, `success`, `error` …) are overridable; `ThemeProvider` builds both palettes once, so `context.colors.primary`, `Theme.of(context).colorScheme.primary` and the gradients agree. `shadow` and `scrim` are not overridable — `AppShadows` is context-free and a scrim is black with alpha on purpose — and the two gradients derive from `primary`, `primaryContainer`, `info` and `error`.
 
 One slot exists only for a sample screen: `liquidOnboardingColors`, the splash gradient (`AppGradients.liquidOnboarding`). Delete the splash sample and remove that slot from the interface, both palettes and `AppGradients` rather than leaving a dead colour behind.
 
@@ -219,7 +231,7 @@ static TextStyle bodyMediumStyle(BuildContext context) =>
 
 ### The user's font size is a second, separate factor
 
-`context.sp` fits the design to the **window**; it never reads `MediaQuery.textScaler`. The **user's** OS font size is applied on top by `Text` itself, at layout, and the app shell passes it through up to 2x (`AppShellUiConstants.MAX_TEXT_SCALE_FACTOR`, applied by `AppMaterialWrapper` with `MediaQuery.withClampedTextScaling`). Two independent factors, each applied once — not a double scale. Do not cancel it with `MediaQuery.withNoTextScaling` or a `textScaler: TextScaler.noScaling` on a style: that fails WCAG's 200% text resize. What the text scale does *not* grow is a box sized with `context.h`/`context.w`, so give text containers padding or a `minHeight` rather than a fixed height. Details: [`06_app_shell.md`](../architecture/06_app_shell.md#the-os-font-size-is-honoured-up-to-2x).
+`context.sp` fits the design to the **window**; it never reads `MediaQuery.textScaler`. The **user's** OS font size is applied on top by `Text` itself, at layout, and the app shell passes it through up to 2x by default (`DisplayProfile.textScaleMax`, applied by `AppMaterialWrapper` with `MediaQuery.withClampedTextScaling`; an app may allow up to 4x and a `const` assert refuses less than 2x). Two independent factors, each applied once — not a double scale. Do not cancel it with `MediaQuery.withNoTextScaling` or a `textScaler: TextScaler.noScaling` on a style: that fails WCAG's 200% text resize. What the text scale does *not* grow is a box sized with `context.h`/`context.w`, so give text containers padding or a `minHeight` rather than a fixed height. Details: [`06_app_shell.md`](../architecture/06_app_shell.md#the-os-font-size-is-honoured-up-to-2x).
 
 ## 4. Change the spacing and radius scales
 
@@ -318,36 +330,32 @@ Layout and text are bounded **separately**: `scaleBounds` clamps `w` and `h` (an
 
 A **`ResponsiveProfile`** overrides the artboard, both bounds and `minTextAdapt` for one `WindowSizeClass` (§7); a field left `null` inherits the top-level value. The profile that applies is the one keyed by the window's class, else the one keyed by the nearest **smaller** class, else none — so a profile at `expanded` also covers `large` and `extraLarge` until they declare their own, the way a `min-width` media query cascades.
 
-This is the app's whole configuration:
+This is the app's whole configuration — a `DisplayProfile` in the app's `lib/app/app_profile.dart`, spelled out here with the template's defaults (leave it out and you get exactly this):
 
 ```dart
-// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
-return ResponsiveInit(
-  // The phone artboard every window class starts from.
-  designSize: AppConfig.design,
-  // Left at their defaults, `scaleBounds` and `textScaleBounds` are
-  // `ScaleBounds.downOnly()`: a phone narrower than the artboard scales
-  // the design down to fit, and nothing ever scales up — a tablet or a
-  // desktop window draws it 1:1 and gives the extra room to the layout
-  // (see `AdaptiveLayout`). To let a class grow, opt in with a bound:
-  // `ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))`.
-  profiles: const {
-    // Tablets in landscape, unfolded foldables and desktop windows are
-    // laid out in real logical pixels. (Phones never get here: the
-    // shell locks phone-sized displays to portrait — see
-    // `AppInitializer.preferredOrientationsFor`.) Without this, a laptop window
-    // shorter than the 812-tall phone artboard would still shrink every
+// apps/<id>/lib/app/app_profile.dart
+const AppProfile appProfile = AppProfile(
+  facts: appFacts,
+  display: DisplayProfile(
+    // The phone artboard every window class starts from.
+    designSize: SizeSpec(375, 812),
+    // A class that is not listed is `ScalePolicy.downOnly()`: a phone narrower
+    // than the artboard scales the design down to fit, and nothing ever scales
+    // up — a tablet or a desktop window draws it 1:1 and gives the extra room
+    // to the layout (see `AdaptiveLayout`). Tablets in landscape, unfolded
+    // foldables and desktop windows are laid out in real logical pixels.
+    // (Phones never get here: the shell locks phone-sized displays to portrait
+    // — see `AppInitializer.preferredOrientationsFor`.) Without this, a laptop
+    // window shorter than the 812-tall phone artboard would still shrink every
     // vertical gap and radius.
-    WindowSizeClass.expanded: ResponsiveProfile(
-      scaleBounds: ScaleBounds.fixed(),
-      textScaleBounds: ScaleBounds.fixed(),
-    ),
-  },
-  // Keeps height scaling sane when the app is a short split-screen pane.
-  splitScreenMode: true,
-  child: child,
+    scale: {WindowClass.expanded: ScalePolicy.fixed()},
+    // Keeps height scaling sane when the app is a short split-screen pane.
+    splitScreenMode: true,
+  ),
 );
 ```
+
+`MainScope(display:)` hands it to a private `_ResponsiveWrapper`, which maps each `ScalePolicy` to a `core_responsive` `ResponsiveProfile` — `fixed()` to `ScaleBounds.fixed()`, `downOnly()` to `ScaleBounds.downOnly()`, `bounded(max:, textMax:)` to `ScaleBounds(max:)` — and `WindowClass` is the kernel's spelling of `WindowSizeClass` (a test keeps them equal). So what follows describes `core_responsive`'s parameters, and the *This app* column says what the profile sets.
 
 What that gives, window by window:
 
@@ -360,10 +368,10 @@ What that gives, window by window:
 
 | Parameter | Default | This app | What it does |
 |---|---|---|---|
-| `designSize` | 360×690 | `AppConfig.design` (375×812) | The artboard every class measures against, unless its profile names another |
+| `designSize` | 360×690 | `DisplayProfile.designSize` (375×812) | The artboard every class measures against, unless its profile names another |
 | `scaleBounds` | `ScaleBounds.downOnly()` | default | Range of the layout factors: `w`, `h`, and the `r` / `dg` / `dm` built from them |
 | `textScaleBounds` | `ScaleBounds.downOnly()` | default | Range of the text factor behind `sp`. Independent of `scaleBounds` |
-| `profiles` | `{}` | `expanded` → `fixed` / `fixed` | `Map<WindowSizeClass, ResponsiveProfile>`: per-class `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` (`null` inherits). Exact class first, else the nearest smaller one |
+| `profiles` | `{}` | `DisplayProfile.scale`: `expanded` → `fixed` / `fixed` | `Map<WindowSizeClass, ResponsiveProfile>`: per-class `designSize`, `scaleBounds`, `textScaleBounds`, `minTextAdapt` (`null` inherits). Exact class first, else the nearest smaller one |
 | `breakpoints` | `ResponsiveBreakpoints.material3()` | default | Where each window size class begins (§7). The profiles and `context.windowSizeClass` both classify with it |
 | `minTextAdapt` | `false` | default | `true` scales text by the **smaller** of the width and height ratios instead of the width — no ballooning on a wide, short window, but smaller text in landscape |
 | `splitScreenMode` | `false` | `true` | Floors the height used for vertical scaling at `ResponsiveConstants.SPLIT_SCREEN_MIN_HEIGHT` (700), so a short split-screen pane does not collapse every `h` |
@@ -373,10 +381,8 @@ What that gives, window by window:
 
 ```dart
 // Illustrative — not in the template: medium windows may grow 20 %, text 10 %.
-WindowSizeClass.medium: ResponsiveProfile(
-  scaleBounds: ScaleBounds(max: 1.2),
-  textScaleBounds: ScaleBounds(max: 1.1),
-),
+// In DisplayProfile(scale: {...}) next to the `expanded` entry.
+WindowClass.medium: ScalePolicy.bounded(max: 1.2, textMax: 1.1),
 ```
 
 Check two things when you do. A class that grows meets its neighbour in a **visible step**: next to this app's `fixed` expanded profile, the example lays out at 1.2× at 839 wide and at 1× at 840. And a profile `designSize` wider than the first width of its class (600 for `medium`, 840 for `expanded`) makes everything shrink the moment the window enters that class; one no wider starts at a ratio of 1 or more, which `downOnly` draws 1:1 on both sides of the boundary.

@@ -169,6 +169,8 @@ abstract class RegisterModule {
 | `useDefaultInterceptors` | `false` skips the whole default chain — use for a public/unauthenticated client |
 | `options` | Replaces `_defaultOptions` wholesale (it is `copyWith`-ed, so shared state is not mutated) |
 
+What `_defaultOptions` holds is the **app's** to set: the connect, receive and send timeouts (20 s each), extra headers and the redirect policy come from its `NetworkProfile` (`network:` in `apps/<id>/lib/app/app_profile.dart`), registered before the graph is built, so the default `Dio` carries them. A header that would defeat the auth interceptors or leak a credential — `authorization`, `cookie`, `set-cookie`, `proxy-authorization`, `content-type` — makes `ApiClient` throw at boot (RULE-66). The base URL stays an env define (`BASE_URL`, per flavor), and a second base URL is `createClient(baseUrl:)`.
+
 A second client with its own rules is registered the same way, under a **name**, so it does not replace the default one. Nothing in the repo registers this. It is the shape to copy — for example, a public API with no auth header, no refresh and no retry dialog:
 
 ```dart
@@ -250,7 +252,7 @@ Then mark the login and refresh calls `EXTRA_CAN_REFRESH_TOKEN: false` (step 6).
 ## 10. Turn on SSL pinning
 
 > [!WARNING]
-> **Pinning is currently OFF.** `sslPinningHashes` returns `const []`, and an empty list disables pinning entirely. Until you fill it in, the app accepts any certificate the device trusts — including one injected by an intercepting proxy.
+> **Pinning is OFF until an app turns it on.** The template apps declare `ssl_pinning: { disabled: … }` for staging and prod — a stated decision, listed in each app's report under *decisions to revisit* — so they accept any certificate the device trusts, including one injected by an intercepting proxy.
 
 Get the SPKI SHA-256 hash of each key:
 
@@ -262,7 +264,16 @@ openssl s_client -servername <host> -connect <host>:443 </dev/null \
   | openssl enc -base64
 ```
 
-Pin **at least two** keys — the leaf plus a backup — so certificate rotation does not lock every installed client out of the API. Return them from `sslPinningHashes` in `platform/shell/adapters/lib/src/network_config_impl.dart` (RULE-48).
+Pin **at least two** keys — the leaf plus a backup — so certificate rotation does not lock every installed client out of the API. Pins are an app decision, per flavor, declared in the manifest (RULE-48, RULE-80); nothing in `platform/` is edited:
+
+```yaml
+# apps/<id>/app_manifest.yaml
+flavors:
+  prod:
+    ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+```
+
+`composer verify` refuses a flavor with no decision where a declared platform can pin (Android, iOS), a pin that is not the base64 of 32 bytes and fewer than two pins (V9). The decision reaches the client as `SslPinningPolicy`, which `NetworkConfigImpl.sslPinningHashes` reads. Where pinning cannot apply — the web, where the browser owns TLS, and desktop, where the pinning plugin has no implementation — the app logs one `INFO` line and the key is refused as dead.
 
 Pinning also needs `SslPinningConfig` bound in its own right, which `platform/shell/adapters/lib/di/network_binding_module.dart` already does (RULE-14). Keep that binding: without it pinning is skipped on every flavor, production included ([`../architecture/06_app_shell.md` § 4](../architecture/06_app_shell.md#why-sslpinningconfig-needs-a-separate-binding)). When pinning is installed, and which builds bypass it: [`../architecture/02_core.md` § 6](../architecture/02_core.md#when-pinning-is-installed-and-when-it-is-skipped).
 
@@ -286,7 +297,7 @@ Review checklist:
 - [ ] Requests that must not carry a token set `EXTRA_NEED_AUTHENTICATION = false`
 - [ ] Login, refresh, and any call whose `401` is not "session expired" set `EXTRA_CAN_REFRESH_TOKEN = false`
 - [ ] `NetworkConfig` impl stays `@LazySingleton` (never eager)
-- [ ] `sslPinningHashes` populated with ≥2 pins before shipping
+- [ ] `flavors.prod.ssl_pinning` (and staging) decided in the manifest — ≥2 pins, or `disabled` with a reason — before shipping
 - [ ] `SslPinningConfig` bound explicitly in a `@module` — check `platform_shell_adapters`' generated `lib/di/module.module.dart`
 - [ ] No credential ever logged verbatim
 
@@ -300,7 +311,8 @@ Review checklist:
 | A `401` reaches the UI although the backend supports refresh | No `ISessionGateway` is registered, so no refresh interceptor is installed | Implement and register one (step 9) |
 | The user is signed out after a network blip | `refreshToken()` returned `null` for a transient error | Throw for "no answer" and return `null` only for a refusal (step 9) |
 | The server ignores the locale | It reads `Accept-Language`; the client sends the non-standard `language` header | Read `language` on the server |
-| `ERROR` log: `SSL pinning skipped` | `sslPinningHashes` is empty, or `SslPinningConfig` is not bound | Fill the hashes and keep the binding (step 10) |
+| `ERROR` log: `SSL pinning skipped` | A boot without an app profile, or `SslPinningConfig` is not bound | Pass the profile (`runShellApp`), decide the flavor in the manifest and keep the binding (step 10) |
+| `WARNING` log: `SSL pinning is disabled for flavor …` | The flavor's decision is `disabled` — the declared reason is in the log | Declare `pins:` (step 10) when the flavor should pin |
 | Two packages register the same named client and boot throws | A name can be registered once per container | Move the registration into `platform/infra/network/lib/di/network_module.dart` (step 7) |
 
 ## Related

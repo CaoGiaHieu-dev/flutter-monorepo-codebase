@@ -107,7 +107,7 @@ Create `ja.arb` in `platform/ui/design_system/assets/language/` with `"@@locale"
 }
 ```
 
-`core_base_ui`'s `AppLocalizations.supportedLocales` is what the app offers: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`) all read it. `gen-l10n` builds it from the ARB files present, so the new file is what adds the locale.
+What the app offers is its `LanguageSet`: `LocaleProfile.supported` (`locale:` in the app's `lib/app/app_profile.dart`; null means every language `core_base_ui` ships) intersected with `AppLocalizations.supportedLocales`, which `gen-l10n` builds from the ARB files present. `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), `LanguageProvider`'s stored-locale check, the `language` header of every request and the Settings picker (`modules/settings/feature/lib/src/pages/settings_page.dart`, in the profile's order) all read it. So the new ARB file adds the locale to every app that names no `supported` list; an app that lists its languages keeps its list. `LocaleProfile(supported: ['vi'], fallback: 'vi', initial: 'vi')` makes a Vietnamese-only app (`initial` is what a first launch opens in; a stored choice wins). A profile that offers no shipped language, or a `fallback` it does not offer, throws at boot naming the field. The wrapper wires `material_ui`'s own localization delegates, so a locale needs its ARBs and nothing more for the Material strings.
 
 ### Name the language in the picker
 

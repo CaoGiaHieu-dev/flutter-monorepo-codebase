@@ -79,8 +79,9 @@ Other teams' code is not merely unbuilt — it is **not on the disk**, and `modu
 - the root `pubspec.yaml` `workspace:` list
 - `apps/<id>/pubspec.yaml` path dependencies, for each app it syncs
 - `apps/<id>/lib/di/injection.dart`, likewise
+- the `report` region of `apps/<id>/README.md` — it lists what the app composes — and, when a derived default moves, the `facts` region of `apps/<id>/lib/app/app_profile.dart`
 
-Without `--app` that is every app — five files with `mobile` and `admin`.
+Without `--app` that is every app — up to nine files with `mobile` and `admin`.
 
 In a partial checkout it writes a partial composition into them. That is correct locally and wrong to commit: it would drop the other modules from the app for everyone.
 
@@ -97,17 +98,21 @@ In a partial checkout it writes a partial composition into them. That is correct
     apps/mobile/lib/di/injection.dart
     apps/admin/pubspec.yaml
     apps/admin/lib/di/injection.dart
+    apps/mobile/README.md
+    apps/admin/README.md
     pubspec.yaml
 
   Restore them before you commit:
-    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart pubspec.yaml
+    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart apps/mobile/README.md apps/admin/README.md pubspec.yaml
 ```
 
-After `bootstrap`, the two pubspecs and the root `pubspec.yaml` already hold the pruned regions, so `sync` finds nothing to change there and names only the two `injection.dart` files. `bootstrap` printed its own restore line for the pubspecs; `git status` shows all five. Before you commit, restore every one of them:
+After `bootstrap`, the two pubspecs and the root `pubspec.yaml` already hold the pruned regions, so `sync` finds nothing to change there and names only the other files it rewrote. `bootstrap` printed its own restore line for the pubspecs; `git status` shows every one of them. Before you commit, restore each:
 
 ```bash
 git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
-  apps/mobile/lib/di/injection.dart apps/admin/lib/di/injection.dart
+  apps/mobile/lib/di/injection.dart apps/admin/lib/di/injection.dart \
+  apps/mobile/README.md apps/admin/README.md \
+  apps/mobile/lib/app/app_profile.dart apps/admin/lib/app/app_profile.dart
 ```
 
 `pubspec.lock` is not among them: workspace members are not recorded in it, and pruning one changes it only when that member was the last user of some external package — check `git status` for it too.
@@ -165,7 +170,7 @@ dart tools/arch_check/check.dart            # R1, R3, R8, R10 hold
 | `flutter pub get`: *No workspace packages matching `modules/home/feature`* | The committed composition names a module that is not on disk | `dart tools/composer/bootstrap.dart`, then `pub get` and `composer sync` (step 2) |
 | `bootstrap` exits 1 and writes nothing | A present module has a hand-written path dependency on an absent one | Initialise that submodule too (step 2) |
 | `pub get` still fails after `sync` | `sync` ran with `--app mobile`, leaving `apps/admin/pubspec.yaml` pointing at missing modules | Run `sync` for every app (step 2) |
-| CI Gate 0 fails on your PR | A partial composition was committed | Restore the five files and push again (step 3) |
+| CI Gate 0 fails on your PR | A partial composition was committed | Restore the composition files and push again (step 3) |
 | `composer verify` fails locally | You are in a partial checkout | Expected; run it on a full checkout (*Verify*) |
 | A consumer cannot see a type from `<id>_api` | The API package's barrel does not export it, or the module is not checked out | Run the barrel generator; initialise the module (step 4) |
 

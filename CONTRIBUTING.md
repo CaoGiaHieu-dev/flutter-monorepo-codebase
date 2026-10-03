@@ -42,7 +42,7 @@ in its order. Run them from the repository root after `configure.dart`:
 ```bash
 flutter pub get --enforce-lockfile                   # CI fails if pubspec.lock is stale
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R15
+dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R17
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
 flutter analyze                                      # Gate 2 — static analysis
 # Gate 3 — flutter test in every package that has a test/ directory
@@ -67,8 +67,14 @@ generated file. The debug APK build is what catches a broken `.freezed.dart` or
 
 Each is a registry row — read it there; this list only says where people trip.
 
-- **Composer-managed regions are generated** (RULE-16). Edit `apps/<id>/app_manifest.yaml`, run
-  `dart tools/composer/composer.dart sync`; `tools/module_generator/generate.dart` does it for you.
+- **Composer-managed regions are generated** (RULE-16): the root `workspace:` list, each app's path
+  dependencies, all of `lib/di/injection.dart`, the `facts` region of `lib/app/app_profile.dart` and
+  the `report` region of the app's `README.md`. Edit `apps/<id>/app_manifest.yaml`, run
+  `dart tools/composer/composer.dart sync`; `tools/module_generator/generate.dart` does it for you,
+  and `composer new` creates a whole app.
+- **Per-app values are declared in the app** (RULE-80, RULE-81, RULE-82): the manifest, the profile,
+  the hooks — never a constant in `platform/` or a new platform fork. Guide:
+  [`13_app_composition.md`](docs/en/guides/13_app_composition.md).
 - **Versions live in the catalog** (RULE-74). The workspace `pubspec.lock` is committed — commit its
   changes with the PR that caused them.
 - **Generated files** (RULE-76). Not committed: `*.g.dart`, `*.freezed.dart`, `*.config.dart`,

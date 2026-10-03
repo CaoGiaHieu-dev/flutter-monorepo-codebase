@@ -80,8 +80,9 @@ Code của team khác không chỉ là "không được build" — nó **không 
 - danh sách `workspace:` trong `pubspec.yaml` gốc
 - path dependency trong `apps/<id>/pubspec.yaml`, cho mỗi app được sync
 - `apps/<id>/lib/di/injection.dart`, cũng vậy
+- vùng `report` của `apps/<id>/README.md` — nó liệt kê app ghép những gì — và, khi một giá trị mặc định suy ra thay đổi, vùng `facts` của `apps/<id>/lib/app/app_profile.dart`
 
-Không truyền `--app` thì là mọi app — năm file khi có `mobile` và `admin`.
+Không truyền `--app` thì là mọi app — tối đa chín file khi có `mobile` và `admin`.
 
 Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thiếu module. Điều đó đúng ở local và sai khi commit: nó sẽ xoá các module khác khỏi app của tất cả mọi người.
 
@@ -98,17 +99,21 @@ Trên bản checkout từng phần, nó ghi vào đó một phép lắp ráp thi
     apps/mobile/lib/di/injection.dart
     apps/admin/pubspec.yaml
     apps/admin/lib/di/injection.dart
+    apps/mobile/README.md
+    apps/admin/README.md
     pubspec.yaml
 
   Restore them before you commit:
-    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart pubspec.yaml
+    git checkout -- apps/mobile/pubspec.yaml apps/mobile/lib/di/injection.dart apps/admin/pubspec.yaml apps/admin/lib/di/injection.dart apps/mobile/README.md apps/admin/README.md pubspec.yaml
 ```
 
-Sau `bootstrap`, hai pubspec của app và `pubspec.yaml` ở root đã chứa sẵn các vùng đã được cắt bớt, nên `sync` không thấy gì cần đổi ở đó và chỉ gọi tên hai file `injection.dart`. `bootstrap` đã in dòng khôi phục riêng cho các pubspec; `git status` cho thấy đủ cả năm file. Trước khi commit, hãy khôi phục toàn bộ:
+Sau `bootstrap`, hai pubspec của app và `pubspec.yaml` ở root đã chứa sẵn các vùng đã được cắt bớt, nên `sync` không thấy gì cần đổi ở đó và chỉ gọi tên các file khác mà nó đã ghi lại. `bootstrap` đã in dòng khôi phục riêng cho các pubspec; `git status` cho thấy đủ từng file. Trước khi commit, hãy khôi phục từng file:
 
 ```bash
 git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
-  apps/mobile/lib/di/injection.dart apps/admin/lib/di/injection.dart
+  apps/mobile/lib/di/injection.dart apps/admin/lib/di/injection.dart \
+  apps/mobile/README.md apps/admin/README.md \
+  apps/mobile/lib/app/app_profile.dart apps/admin/lib/app/app_profile.dart
 ```
 
 `pubspec.lock` không nằm trong số đó: các member của workspace không được ghi vào nó, và bỏ một member chỉ làm nó đổi khi member đó là nơi cuối cùng dùng một package bên ngoài nào đó — hãy xem cả nó trong `git status`.
@@ -166,7 +171,7 @@ dart tools/arch_check/check.dart            # R1, R3, R8, R10 đều đạt
 | `flutter pub get`: *No workspace packages matching `modules/home/feature`* | Phần lắp ráp đã commit nêu một module không có trên đĩa | `dart tools/composer/bootstrap.dart`, rồi `pub get` và `composer sync` (bước 2) |
 | `bootstrap` thoát với mã 1 và không ghi gì | Một module đang có khai path dependency viết tay tới một module vắng mặt | Init thêm submodule đó (bước 2) |
 | `pub get` vẫn lỗi sau `sync` | `sync` chạy với `--app mobile`, để `apps/admin/pubspec.yaml` vẫn trỏ tới các module thiếu | Chạy `sync` cho mọi app (bước 2) |
-| CI Gate 0 fail trên PR của bạn | Một phần lắp ráp từng phần đã bị commit | Khôi phục năm file rồi push lại (bước 3) |
+| CI Gate 0 fail trên PR của bạn | Một phần lắp ráp từng phần đã bị commit | Khôi phục các file composition rồi push lại (bước 3) |
 | `composer verify` fail ở máy local | Bạn đang ở bản checkout từng phần | Đúng như dự kiến; hãy chạy nó trên bản checkout đầy đủ (*Kiểm tra*) |
 | Bên tiêu thụ không thấy một kiểu từ `<id>_api` | Barrel của package API chưa export nó, hoặc module chưa được checkout | Chạy barrel generator; init module đó (bước 4) |
 

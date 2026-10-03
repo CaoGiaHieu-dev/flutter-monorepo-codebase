@@ -24,7 +24,10 @@ apps/mobile/                         the composition root
 └── env.dev  env.stg                 flavor values (env.prod is yours to create)
 
 platform/shell/app_shell/lib/              shared by every app
-├── bootstrap.dart                   runShellApp — error hooks, DI, splash, init
+├── bootstrap.dart                   runShellApp — error hooks, profile checks, DI, splash, init
+├── shell_hooks.dart                 ShellHooks — the app's code at fixed points of the boot
+├── boot/boot_error_app.dart         the screen a stopped boot shows
+├── composition/                     shell_contracts.dart (the catalog), composition_check.dart
 ├── main_scope.dart                  splash → init → root transition
 ├── di/module.dart                   @InjectableInit.microPackage — AppRouter, AppProvider, DeeplinkProvider
 └── presentation/
@@ -45,6 +48,13 @@ platform/shell/adapters/lib/               the shell's infrastructure adapters (
     ├── app_boot_storage.dart        boot flags       → StorageValue<bool>
     ├── network_config_impl.dart     NetworkConfig
     └── utils/                       storage keys owned by the adapters
+
+platform/foundation/kernel/lib/src/profile/   what an app declares (platform_kernel)
+├── app_profile.dart                 AppProfile + validate (P01–P05)
+├── app_facts.dart                   AppFacts — platforms, flavors, env keys, capabilities, SSL pinning
+├── platform_facts.dart              PlatformFacts — what one platform enables for the app
+├── ssl_pinning.dart                 SslPinning, SslPinningPolicy
+└── register_app_profile.dart        registerAppProfile — binds each section under its exact type
 ```
 
 ### A second app: `apps/admin`
@@ -54,6 +64,8 @@ platform/shell/adapters/lib/               the shell's infrastructure adapters (
 ---
 
 ## 2. Boot lifecycle
+
+The diagram is the boot of an app that passes `runShellApp` its `configureDependencies` and nothing else — what `apps/mobile` and `apps/admin` do today. An app that also passes an `AppProfile` gets three more steps around it, described under [With an app profile](#with-an-app-profile).
 
 ```mermaid
 sequenceDiagram
@@ -97,10 +109,103 @@ The sequence lives in `runShellApp()` ([`platform/shell/app_shell/lib/src/bootst
 
 1. **`runZonedGuarded`** wraps everything so uncaught async errors are reported rather than lost.
 2. **`WidgetsFlutterBinding.ensureInitialized()`** — required before any plugin call — then **`installShellErrorHooks`**, which routes every uncaught error to one place (see [Errors and crash reporting](#errors-and-crash-reporting) below). It runs before `configureDependencies`, so a DI failure is reported too.
-3. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved.
+3. **`await configureDependencies()`** runs *before* `MainScope`. By the time any widget builds, the whole container is resolved. With an app profile, the validation and registration described [below](#with-an-app-profile) come first, and the contract check right after.
 4. **`AppInitializer.initBeforeRunApp()`** configures the logger and installs `HttpOverrides.global` — certificate pinning, or the debug + `dev`-flavor bypass — synchronously, before any widget exists. It cannot wait for `initService`: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there (auth's `AuthProvider`, restoring the session with a token refresh) can open its first connection while `initService` is still pending, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first — an unpinned one would serve the whole session. The call is idempotent; `AppInitializer.init` makes it again and installs nothing the second time. `platform/shell/app_shell/test/boot_order_test.dart` holds the order. On the **web** it installs nothing and logs, at `INFO`, that the browser validates certificates — there is no `HttpClient` there to pin (see [the core layer's web status](02_core.md)).
 5. **`MainScope`** is constructed with three things: which splash widget to show (if any), the root widget, and `initService` — here `AppInitializer.init(routeObserver: getIt<AppRouter>().routeObserver)`, which does the rest: `OperationGlobalConfig`, GoRouter's URL reflection, `AppInfoHelper`, handing the route observer to `RouteAwareWidget`, orientation and system UI.
 6. **`mainScope.run()`** branches on whether a Dart splash widget was supplied.
+
+### With an app profile
+
+Both sample apps call `runShellApp` with `configureDependencies` and nothing else, so what an app *is* — what it runs on, which `--dart-define`s it needs, which optional contracts it provides, whether it pins certificates — has been implied by the modules it composes and by constants in shared packages. `runShellApp` now also takes an `AppProfile` and a `ShellHooks`, both optional, so an app can say it:
+
+```dart
+void runShellApp({
+  required Future<void> Function() configureDependencies,
+  AppProfile? profile,
+  ShellHooks hooks = const ShellHooks(),
+  ShellErrorCallback? onError,
+})
+```
+
+An `AppProfile` ([`platform_kernel`'s `lib/src/profile/`](../../../platform/foundation/kernel/lib/src/profile/)) wraps `AppFacts`: the app's `id` and `name`; its `flavors`; the `platforms` it runs on, each with a `PlatformFacts` (runner, splash mode, orientation policy, deep links, push, desktop window); the `--dart-define` keys it reads (`EnvRule`, with the flavors that require each); a `capabilities` declaration for every optional contract the shell resolves — `CapabilityExpectation.provided()`, or `.absent(reason)`; and one certificate-pinning decision per flavor — `SslPinning.pinned(leaf, backup)` or `SslPinning.disabled(reason)`. Facts are what a gate has to read before any code compiles, so they are built to be generated from `app_manifest.yaml`. Nothing generates them yet and neither sample app passes a profile: an app builds one by hand, and `profile == null` is exactly the boot in the diagram above.
+
+With a profile the boot adds three steps around the ones every app already had:
+
+1. **Validate, before DI.** `AppProfile.validate` — pure Dart — runs for the platform (`resolveAppPlatform()` in `core_common`, the one fork on `kIsWeb` / `defaultTargetPlatform`) and the flavor this build is. Any problem stops the boot at the boot-error screen, and `configureDependencies` is never called: starting on a platform the manifest does not declare used to be a blank window with no error.
+2. **Register, still before DI.** `registerAppProfile` binds `AppProfile`, the running platform's `PlatformFacts` and the `SslPinningPolicy`, each under its own exact type (RULE-14), so an eager singleton built while the graph initialises can inject one. `ShellHooks.beforeDependencies` runs next.
+3. **Check, after DI.** `checkAppContract` resolves every row of the catalog below and holds the app's `capabilities` declaration to what the graph registered.
+
+| Code | `AppProfile.validate` stops the boot when |
+|:--|:--|
+| `P01` | the platform is not declared under `platforms` |
+| `P02` | the flavor is not declared under `flavors` |
+| `P03` | a `--dart-define` required in this flavor is empty (checked in a non-debug build only — a plain `flutter run` needs no env file) |
+| `P04` | the flavor has no pinning decision and the platform can pin TLS (Android, iOS) |
+| `P05` | the platform declares a `window` and no hook applies it — `ShellHooks` has no window hook yet, so a declared window always stops the boot |
+
+| Code | `checkAppContract` finds, after DI |
+|:--|:--|
+| `C01` | a required contract is not registered |
+| `C02` | a contract declared `provided` has no registration |
+| `C03` | a contract declared `absent` is registered |
+| `C04` | the members of a bundle (`session`) are declared differently |
+| `C05` | no route and no tab are contributed — the app has no screen |
+| `C06` | two `INavDestinationModule`s share an `order` (RULE-24) |
+| `C07` | `AppRouter.router` fails to assemble |
+| `C08` | `DioFailureClassifier` is not hooked into `ErrorHandler` |
+| `C09` | an optional contract has no declaration at all |
+
+Every problem is a `ProfileProblem`: a `code`, a `Description:` that names the manifest file and key, and an `Action:` that is paste-ready where it is a line of YAML or a command. **Where it is shown depends on the build.** In a dev or staging flavor, or a debug or profile build, the boot-error screen (`BootErrorApp` — a minimal app that needs no DI, router or theme provider, none of which exists yet) lists every problem in full, and a mismatch found after DI stops the boot the same way. In a production release a problem found before DI shows only a generic message, and a mismatch found after DI is logged at `ERROR` and reported as non-fatal (`onNonFatalError`, then `IErrorReporter`) while the app starts anyway — a removed module must still run (RULE-05). Nothing yet holds the mismatch out of a release before merge: that takes a smoke test that calls `checkAppContract`, and the sample apps' tests do not.
+
+`--dart-define=ALLOW_UNDECLARED_PLATFORM=true` is a developer's quick look on a platform the manifest does not list: `P01` becomes a logged warning and the platform gets `PlatformFacts.today()` — the behaviour the template had before apps could declare anything. It does not excuse an undeclared flavor.
+
+With a profile the Dart splash is chosen by the platform's declared `splash` rather than by `Platform.isIOS` ([below](#the-two-splash-paths)). Passing `hooks.beforeDependencies` or `hooks.afterBoot` without a profile throws `ArgumentError`: they receive an `AppRuntime` (`profile`, `flavor`, `platform`, `isDebug`), and there is none.
+
+### What the shell resolves from an app
+
+Which contracts must an app have registered, and which may it go without? One table answers it: `kShellContracts` ([`shell_contracts.dart`](../../../platform/shell/app_shell/lib/src/composition/shell_contracts.dart)), 22 rows — 8 required, 14 optional. Each row is a `ShellContract`: a stable `id`, whether the shell needs it, how many implementations it collects, what the shell does when nothing is registered, and `consumer`, the `path:line` of every lookup. `shell_contracts_test.dart` reads each of those lines and fails when one no longer names its contract, so editing a file above a catalogued lookup means updating its row in the same change. Every lookup is still `getItOrNull` / `getAllOrEmpty` with a fallback (RULE-12), which is what lets an app composed without a contributing module boot. What the catalog adds is the app's *declaration*: an optional contract is either `provided` or `absent` with a reason, and `checkAppContract` holds it to the graph.
+
+The **required** rows are registered by the shell's own packages — the `shell` and `ui` DI groups — so an app only composes those groups. The **optional** rows are what an app or a module contributes:
+
+| `id` | Contract | Need | If nothing registers it |
+|:--|:--|:--|:--|
+| `language_storage` | `ILanguageStorage` | required | boot throws "ILanguageStorage is not registered" |
+| `theme_storage` | `IThemeStorage` | required | boot throws "IThemeStorage is not registered" |
+| `boot_storage` | `AppBootStorage` | required | the first-launch rule cannot run |
+| `ssl_pinning` | `SslPinningConfig` | required | certificate pinning is skipped and an ERROR is logged; it must be bound in its own right, never as a supertype (RULE-14) |
+| `app_router` | `AppRouter` | required | boot throws "AppRouter is not registered" |
+| `deeplink_provider` | `DeeplinkProvider` | required | boot throws "DeeplinkProvider is not registered" |
+| `theme_provider` | `ThemeProvider` | required | boot throws "ThemeProvider is not registered" |
+| `language_provider` | `LanguageProvider` | required | boot throws "LanguageProvider is not registered" |
+| `session_state` | `ISessionState` | optional, bundle `session` | the navigation wrapper treats the app as signed out, every deep link is routed, and a lost session is a no-op |
+| `session_gateway` | `ISessionGateway` | optional, bundle `session` | requests carry no bearer token and nothing refreshes it |
+| `session_refresh` | `ISessionRefreshListenable` | optional, bundle `session` | the router never re-resolves its location on a session change |
+| `sign_in` | `ISignInLocation` | optional, bundle `session` | the shell never redirects a signed-out user |
+| `routes` | `IFeatureRouteModule` | optional, collected | the router has no stack routes |
+| `tabs` | `INavDestinationModule` | optional, collected | the router opens one placeholder route (`/_empty_dashboard`) |
+| `dashboard` | `IDashboardRouteModule` | optional | the destinations render without any chrome |
+| `entry` | `IAppEntryLocation` | optional | there is no first-launch entry; boot goes to the sign-in check |
+| `post_sign_in` | `IPostSignInLocation` | optional | after sign-in the router opens its fallback, the first tab |
+| `splash` | `IAppSplashScreen` | optional | the native splash is kept through boot |
+| `tree_wrappers` | `IAppTreeWrapper` | optional, collected | the widget tree is built unwrapped |
+| `localization` | `IFeatureLocalization` | optional, collected | only `core_base_ui`'s own strings are translated |
+| `error_reporter` | `IErrorReporter` | optional | errors are printed and sent nowhere (RULE-67) |
+| `analytics` | `IAnalytics` | optional | no screen events are sent |
+
+A *collected* contract may have any number of implementations (`getAllOrEmpty`). A *bundle* is declared as one: `session` is `provided` or `absent` for all four members at once (`C04` when they disagree). `ISessionStatusStream` is not in the catalog — only `feature_home` looks it up, and a module's own lookups are its business. The table is a copy of the Dart constant; when they disagree the code wins, and `shell_contracts_test.dart` holds the row counts.
+
+### Hooks
+
+`ShellHooks` ([`shell_hooks.dart`](../../../platform/shell/app_shell/lib/src/shell_hooks.dart)) is the app's code at fixed points of the boot. Every hook is optional and the whole object is `const`, so an app holds one `const ShellHooks` and passes it as `runShellApp(hooks: …)`:
+
+| Hook | Runs | For |
+|:--|:--|:--|
+| `onError` | when an error escapes the zone, the framework or the engine | the fatal channel; the older `onError:` parameter of `runShellApp` is still honoured, and passing both asserts |
+| `onNonFatalError` | when `ErrorHandler` cannot classify a failure | the non-fatal channel (see [Errors and crash reporting](#errors-and-crash-reporting)) |
+| `beforeDependencies(AppRuntime)` | after the error hooks and the profile registration, before DI | setup the graph needs in place — `Sentry.init`, `Firebase.initializeApp`; it cannot resolve anything from DI, which does not exist yet |
+| `afterBoot(AppRuntime)` | after DI and `AppInitializer.init`, still behind the splash | everything the graph registered can be resolved; keep it short, the splash stays up until it completes |
+
+A hook that throws is reported through the error hooks like any error in the app zone, and stops the boot at the point it ran. A hook is *code*: a value that fits the manifest (platforms, flavors, capabilities) or the profile's facts belongs there instead, where a gate can read it.
 
 ### Errors and crash reporting
 
@@ -112,11 +217,11 @@ Three kinds of error escape everything else, and the shell hooks all three:
 | `FlutterError.onError` | errors the framework catches: build, layout, paint, image decoding, gestures |
 | `PlatformDispatcher.instance.onError` | errors escaping to the engine — a platform-channel callback, a timer outside the zone |
 
-They all end in the same place. The zone handler and the dispatcher hook re-raise through `FlutterError.reportError`; the `FlutterError.onError` hook first calls the handler that was there before it — by default `FlutterError.presentError`, the red console dump in debug — and then reports the error **once**: to the app's optional `onError` callback, then to `getItOrNull<IErrorReporter>()` with `fatal: true`. The dispatcher hook returns `true`: the error is handled, the engine does not log it a second time.
+They all end in the same place. The zone handler and the dispatcher hook re-raise through `FlutterError.reportError`; the `FlutterError.onError` hook first calls the handler that was there before it — by default `FlutterError.presentError`, the red console dump in debug — and then reports the error **once**: to the app's optional fatal callback (`ShellHooks.onError`, or the older `onError:` parameter of `runShellApp`), then to `getItOrNull<IErrorReporter>()` with `fatal: true`. The dispatcher hook returns `true`: the error is handled, the engine does not log it a second time.
 
 `IErrorReporter` and `IAnalytics` are optional `core_di` contracts ([`src/observability/`](../../../platform/foundation/contracts/lib/src/observability/)). Nothing in the template implements them, so both lookups return `null` and nothing is sent. The reporter is resolved when an error arrives, not at boot, so one registered by `configureDependencies` is picked up, and an error thrown *by* `configureDependencies` still reaches `onError`. A reporter or callback that throws is swallowed — it is never reported through itself.
 
-A third path is non-fatal. `ErrorHandler` (`platform_kernel`) maps every repository exception to an `AppFailure`; the ones it cannot classify — a `TypeError` in a `fromJson`, a plugin exception — become the generic "Unknown error occurred" and are usually bugs. The shell points `ErrorHandler.onUnclassifiedError` at the reporter with `fatal: false`, so those are recorded while the user still gets a handled failure. Classified failures (no connection, 401, timeouts) are not reported.
+A third path is non-fatal. `ErrorHandler` (`platform_kernel`) maps every repository exception to an `AppFailure`; the ones it cannot classify — a `TypeError` in a `fromJson`, a plugin exception — become the generic "Unknown error occurred" and are usually bugs. The shell points `ErrorHandler.onUnclassifiedError` at `ShellHooks.onNonFatalError` and then at the reporter with `fatal: false`, so those are recorded while the user still gets a handled failure. Classified failures (no connection, 401, timeouts) are not reported.
 
 **Plugging in Crashlytics or Sentry** is one registration in the app — its own `lib/`, next to `firebase/firebase_module.dart`, or a package the app composes. No shell code changes:
 
@@ -149,7 +254,11 @@ For Sentry, `recordError` calls `Sentry.captureException(error, stackTrace: stac
 `runShellApp` chooses the splash per platform, and takes it from whichever module registered `IAppSplashScreen` — in the sample, `feature_splash`:
 
 ```dart
-final usesDartSplash = kIsWeb || !Platform.isIOS;
+final usesDartSplash = runtime != null
+    ? (getItOrNull<PlatformFacts>() ?? const PlatformFacts.today())
+              .splash ==
+          SplashMode.dart
+    : kIsWeb || !Platform.isIOS;
 // ...
 splashScreen: usesDartSplash
     ? getItOrNull<IAppSplashScreen>()?.build()
@@ -160,6 +269,8 @@ splashScreen: usesDartSplash
 |:--|:--|:--|
 | iOS | `null` | Native splash is **preserved** across init, then removed once work finishes. No Dart splash is ever rendered. |
 | Android, Web, desktop | `IAppSplashScreen.build()` | Native splash is removed immediately; the registered splash renders instead and cross-fades into `RootApp` via `AnimatedSwitcher`. With no splash module composed it is `null` and the iOS path applies. |
+
+That table is the choice without an app profile (`runtime` is `null` above). With one, the running platform's declared `PlatformFacts.splash` decides: `SplashMode.dart` builds the registered splash, `SplashMode.native` keeps the native one — so an app can say that Android keeps its native splash or that iOS shows a Dart one.
 
 Both paths await `Future.wait([initService(), Future.delayed(_minimumDelay)])`, where `_minimumDelay` is 2 seconds. The delay is a **floor**, not an addition — fast initialisation still waits so the splash does not flicker.
 

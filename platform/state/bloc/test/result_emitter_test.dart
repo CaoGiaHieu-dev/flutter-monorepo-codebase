@@ -26,7 +26,7 @@ class _CountBloc extends BaseBloc<Object, BlocViewState<int>>
   _CountBloc({BlocViewState<int> initial = const BlocViewState.initial()})
     : super(initial) {
     on<_Load>(
-      (event, emit) => emitResult(
+      (event, emit) async => emitResult(
         emit,
         event.run,
         showLoading: event.showLoading,
@@ -50,7 +50,7 @@ class _CountBloc extends BaseBloc<Object, BlocViewState<int>>
 class _NullableBloc extends BaseBloc<Object, BlocViewState<int?>>
     with BlocResultMixin<int?> {
   _NullableBloc() : super(const BlocViewState.initial()) {
-    on<_NullableLoad>((event, emit) => emitResult(emit, event.run));
+    on<_NullableLoad>((event, emit) async => emitResult(emit, event.run));
   }
 }
 

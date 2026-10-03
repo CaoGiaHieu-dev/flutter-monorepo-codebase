@@ -23,7 +23,7 @@ import 'bloc_view_state.dart';
 ///   Future<void> _onRequested(
 ///     _OrdersRequested event,
 ///     Emitter<BlocViewState<List<Order>>> emit,
-///   ) => emitResult(emit, () => _getOrders(const NoParams()));
+///   ) async => emitResult(emit, () => _getOrders(const NoParams()));
 /// }
 /// ```
 ///

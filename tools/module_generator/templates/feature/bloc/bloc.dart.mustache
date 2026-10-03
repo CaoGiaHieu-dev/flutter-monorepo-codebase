@@ -27,7 +27,7 @@ class {{pascalNameInput}}Bloc
   Future<void> _onStarted(
     _{{pascalNameInput}}Started event,
     Emitter<BlocViewState<{{pascalNameInput}}StateData>> emit,
-  ) => emitResult(
+  ) async => emitResult(
     emit,
     () async => const Result.success({{pascalNameInput}}StateData()),
   );

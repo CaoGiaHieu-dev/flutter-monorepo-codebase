@@ -277,7 +277,7 @@ dart tools/barrel_generator/generate.dart --help
 ```
 
 Không truyền đường dẫn thì dùng `lib`. Chạy **sau** `gen-l10n` / `build_runner`: barrel export cả
-file sinh ra đang có trên đĩa. Dòng `export` viết tay trong barrel bị thay thế. `dart format` chạy
+file sinh ra đang có trên đĩa. Mọi directive `export` trong barrel bị thay thế, bất kể viết thế nào. File lib chỉ chứa export của các file cùng package (directory barrel) bị xoá. `dart format` chạy
 qua toolchain của repo (FVM nếu có). Exit 64 khi đường dẫn không tồn tại (chỉ hỏi lại đường dẫn khi
 chạy không tham số trên terminal) hoặc gặp cờ lạ, 1 khi sinh hoặc format thất bại.
 
@@ -694,7 +694,7 @@ Bỏ qua `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_opt
 > [!CAUTION]
 **Cổng barrel-drift trong CI (RULE-75).** Sau `configure.dart` — bước sinh lại barrel của mọi package khi codegen đã chạy — `pr_quality_check.yml` làm job quality fail khi `git diff --exit-code -- '*.dart'` có thay đổi, hoặc khi generator ghi ra một file `.dart` mà git không theo dõi. Vì vậy cả barrel cũ (thêm, đổi tên hoặc xoá file mà không chạy lại generator) lẫn `export` thêm tay (generator xoá nó) đều làm PR fail; cách sửa là chạy generator cho package đó rồi commit kết quả.
 
-> Nó **xoá mọi dòng `export` viết tay** trong barrel trước khi sinh lại. Cần re-export thứ gì từ package khác thì đặt `export` vào một file nguồn bình thường rồi để barrel nhặt file đó lên.
+> Nó **xoá mọi directive `export`** trong barrel trước khi sinh lại — tìm bằng lexer, nên nháy kép, `export'x'` và mệnh đề `show` / `hide` xuống nhiều dòng cũng bị xoá. Nó còn xoá **directory barrel**: file lib mà nội dung chỉ là `export` các file cùng package, có hoặc không có header của generator (kể cả `lib/src/sub/sub.dart` viết tay chứa `export 'q.dart';`), nên "mỗi package một barrel" vẫn đúng sau khi sinh lại rồi commit. File re-export package khác (`export 'package:x/x.dart';`, như `kernel.dart` của `core_common`) thì không phải: nó ở lại và barrel export nó như file thường. Cần re-export thứ gì từ package khác thì đặt `export` vào một file nguồn bình thường rồi để barrel nhặt file đó lên.
 
 ### `dependency_sync`
 
@@ -857,7 +857,7 @@ Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp
 | `unused_checker_test.dart` | `check_unused_packages`: khai báo không được import bị báo (exit `2`), import chỉ trong test vẫn tính, mỗi ngoại lệ không cần import chỉ đúng khi có lý do của nó (`l10n.yaml`, `json_serializable`, `flutter_gen`); `check_unused_file`: file chỉ được barrel của chính nó export bị báo, gọi tên một khai báo là dùng file đó, file DI và routing là entry point |
 | `firebase_stubs_test.dart` | Stub của `--stub-firebase`: một file Dart cho mỗi flavor được import, một `google-services.json` cho mỗi product flavor Gradle với package name có hậu tố (không lấy `signingConfigs`), file thật được giữ, app không dùng Firebase hay plugin thì bỏ qua; `configure.dart` không chạm tới import `package:` nào |
 | `coverage_report_test.dart` | Parse lcov (bỏ file sinh ra, mỗi dòng đếm một lần), bảng và dòng tổng, job summary, `--min` / `--min-package`, exit `1` khi không có `lcov.info`, `64` khi tham số sai |
-| `barrel_generator_test.dart` | Dấu `/` ở cuối đường dẫn; thư mục `web/` bên trong `lib/` được export, `web/` nền tảng nằm cạnh thì không; export viết tay bị thay |
+| `barrel_generator_test.dart` | Dấu `/` ở cuối đường dẫn; thư mục `web/` bên trong `lib/` được export, `web/` nền tảng nằm cạnh thì không; mọi export thêm tay bị thay, bất kể cách viết (nháy kép, `export'x'`, mệnh đề `show` / `hide` xuống dòng, export có điều kiện; export trong comment được giữ), chạy lần hai không đổi gì; directory barrel viết tay (chỉ export tương đối, nháy nào cũng được, không header) bị xoá và các file của nó được export, còn re-export package khác thì ở lại như file thường |
 | `bootstrap_test.dart` | `--dry-run` báo member workspace và dependency của app bị thiếu mà không ghi gì; bỏ `--dry-run` thì các vùng managed bị cắt |
 | `remove_sample_test.dart` | Package API mà module khác import được giữ lại (dry-run nêu tên, `--apply` giữ thư mục và mục workspace, viết lại manifest thành `layers: [api]`), chạy lần hai khi không còn ai import thì xoá nó, package API không ai import thì đi cùng module |
 

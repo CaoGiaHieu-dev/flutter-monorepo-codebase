@@ -281,7 +281,7 @@ dart tools/barrel_generator/generate.dart --help
 ```
 
 Without a path it uses `lib`. Run it **after** `gen-l10n` / `build_runner`: barrels also export the
-generated files on disk. Hand-written `export` lines in a barrel are replaced. `dart format` runs
+generated files on disk. Every `export` directive in a barrel is replaced, however it is written. A lib file holding nothing but exports of files in the same package (a directory barrel) is deleted. `dart format` runs
 through the repo's toolchain (FVM when present). Exits 64 when the path does not exist (it prompts
 for another only when run with no argument on a terminal) or on a flag, 1 when generation or
 formatting fails.
@@ -701,7 +701,7 @@ Skips `.g.dart`, `.freezed.dart`, `.mocks.dart`, `*_test.dart`, `firebase_option
 > [!CAUTION]
 **CI barrel-drift gate (RULE-75).** After `configure.dart` — which regenerates every package's barrel once codegen has run — `pr_quality_check.yml` fails the quality job when `git diff --exit-code -- '*.dart'` shows a change, or when the generator wrote a `.dart` file git does not track. A stale barrel (a file added, renamed or deleted without re-running the generator) and a hand-added `export` (the generator deletes it) therefore both fail the PR; the fix is to run the generator for the package and commit the result.
 
-> It **removes every hand-written `export` line** from a barrel before regenerating. If you need to re-export something from another package, put the `export` in a regular source file and let the barrel pick that file up.
+> It **removes every `export` directive** from a barrel before regenerating — found by the lexer, so double quotes, `export'x'` and a `show` / `hide` clause across lines go too. It also deletes a **directory barrel**: a lib file whose only content is `export` of files in the same package, with or without the generator's header (a hand-written `lib/src/sub/sub.dart` of `export 'q.dart';` included), so "one barrel per package" holds after a regenerate-and-commit as well. A file that re-exports another package (`export 'package:x/x.dart';`, like `core_common`'s `kernel.dart`) is not one: it stays and the barrel exports it as an ordinary file. If you need to re-export something from another package, put the `export` in a regular source file and let the barrel pick that file up.
 
 ### `dependency_sync`
 
@@ -864,7 +864,7 @@ Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` �
 | `unused_checker_test.dart` | `check_unused_packages`: an unimported declaration is reported (exit `2`), a test-only import counts, each import-less allowance holds only with its reason (`l10n.yaml`, `json_serializable`, `flutter_gen`); `check_unused_file`: a file only its own barrel exports is reported, naming a declaration uses its file, DI and routing files are entry points |
 | `firebase_stubs_test.dart` | `--stub-firebase`'s stubs: one Dart file per imported flavor, one `google-services.json` per Gradle product flavor with the suffixed package name (not `signingConfigs`), real files kept, apps without Firebase or the plugin skipped; `configure.dart` reaches no `package:` import |
 | `coverage_report_test.dart` | lcov parsing (generated files dropped, a line counted once), the table and total, the job summary, `--min` / `--min-package`, exit `1` with no `lcov.info`, `64` on bad arguments |
-| `barrel_generator_test.dart` | A trailing slash on the path; a `web/` directory inside `lib/` is exported, the platform `web/` beside it is not; hand-written exports are replaced |
+| `barrel_generator_test.dart` | A trailing slash on the path; a `web/` directory inside `lib/` is exported, the platform `web/` beside it is not; every hand-added export is replaced, whatever its spelling (double quotes, `export'x'`, a wrapped `show` / `hide` clause, a conditional export; one in a comment is kept), a second run changes nothing; a hand-written directory barrel (relative exports only, either quote style, no header) is deleted and its files exported, while a re-export of another package stays a regular file |
 | `bootstrap_test.dart` | `--dry-run` reports a missing workspace member and app dependency and writes nothing; without it the managed regions are pruned |
 | `remove_sample_test.dart` | An API package another module imports is kept (dry run names it, `--apply` keeps its directory and workspace entry and rewrites the manifest to `layers: [api]`), a second run once nothing imports it deletes it, an unimported one goes with its module |
 

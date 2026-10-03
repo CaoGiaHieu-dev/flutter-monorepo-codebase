@@ -1713,7 +1713,8 @@ WHAT VERIFY HOLDS THE DECLARATION TO
   V3   `capabilities:` equals what the composed packages and the app's own
        lib/ register (both directions; every required contract has an
        implementer)
-  V7   every composed package that declares `platforms:` supports every
+  V7   every package the app links (composed, or reached through the
+       `dependencies:` of one) that declares `platforms:` supports every
        platform the app declares
   V10  what a composed package needs the app to register (`FirebaseOptions`,
        per flavor) is registered under the app's lib/

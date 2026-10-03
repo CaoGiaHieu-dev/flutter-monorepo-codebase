@@ -1013,6 +1013,23 @@ List<Violation> _hygieneViolations(String root) {
   for (final problem in allowListProblems(kPlatformForkAllowList)) {
     out.add(Violation('R17', 'tools/arch_check/platform_forks.dart', problem));
   }
+  // An entry whose file is gone (renamed, deleted) is as dead as one whose file
+  // stopped forking. Only in the tree that owns the list: a fixture or a
+  // partial checkout has none of these files and is not asked for them.
+  if (File(p.join(root, 'tools/arch_check/platform_forks.dart')).existsSync()) {
+    for (final rel in kPlatformForkAllowList.keys) {
+      if (File(p.join(root, rel)).existsSync()) continue;
+      out.add(
+        Violation(
+          'R17',
+          rel,
+          'allow-listed for platform forks, but the file does not exist. '
+              'Remove or rename the entry in `kPlatformForkAllowList` in '
+              'tools/arch_check/platform_forks.dart.',
+        ),
+      );
+    }
+  }
 
   for (final rel in files) {
     final segments = p.posix.split(rel);
@@ -1367,8 +1384,8 @@ RULES CHECKED
       blanked) may appear only in the files of `kPlatformForkAllowList`
       (tools/arch_check/platform_forks.dart), each with a reason: the one
       policy fork `resolveAppPlatform()`, and OS-API availability sites. An
-      entry with no reason, or for a file that no longer forks, is itself a
-      violation (RULE-82).
+      entry with no reason, or for a file that no longer forks or exists, is
+      itself a violation (RULE-82).
 
   R12, R13, R15 and R17 read every file in the working tree that git does not
   ignore (tracked files and new ones about to be added; modules checked out

@@ -45,6 +45,7 @@ class PackageFacts {
     required this.platforms,
     required this.appProvides,
     this.pubspec = '',
+    this.dependencies = const [],
   });
 
   final String name;
@@ -57,6 +58,11 @@ class PackageFacts {
   final List<String>? platforms;
 
   final List<AppProvides> appProvides;
+
+  /// The package names under `dependencies:` (not `dev_dependencies:`: those
+  /// are not linked into an app's build). V7 follows them so a package
+  /// reached only through another one is held to the same platforms.
+  final List<String> dependencies;
 
   /// Whether the package works on [platform].
   bool supports(String platform) =>
@@ -86,6 +92,14 @@ PackageFacts readPackageFacts(
       pubspec: rel,
     );
   }
+
+  final deps = doc['dependencies'];
+  final dependencies = deps is YamlMap
+      ? [
+          for (final key in deps.keys)
+            if (key is String) key,
+        ]
+      : const <String>[];
 
   List<String>? platforms;
   final raw = doc['platforms'];
@@ -156,5 +170,6 @@ PackageFacts readPackageFacts(
     platforms: platforms,
     appProvides: provides,
     pubspec: rel,
+    dependencies: dependencies,
   );
 }

@@ -289,6 +289,48 @@ void main() {
       ]);
     });
 
+    test('a package reached only through another one is held to it too, '
+        'and the message names the chain', () async {
+      final ws = demo(
+        manifest: demoManifest(
+          platforms:
+              'platforms:\n'
+              '  android: { runner: committed }\n'
+              '  web: { runner: scaffold }\n',
+          flavors: kFlavors,
+        ),
+        extra: {
+          ...database(),
+          // `core_database` is not composed (no di_group names it): only
+          // `domain_foo` links it, through `dependencies:`.
+          'modules/foo/domain/pubspec.yaml':
+              'name: domain_foo\ndependencies:\n  core_database: any\n',
+        },
+      );
+
+      expectRefused(await run(ws, ['verify']), [
+        'platforms.web: core_database does not support web',
+        'the app links it through domain_foo -> core_database',
+      ]);
+    });
+
+    test('a dev dependency is not linked into the app, so it is not '
+        'followed', () async {
+      final ws = demo(
+        manifest: demoManifest(
+          platforms: 'platforms:\n  web: { runner: scaffold }\n',
+          flavors: 'flavors:\n  dev:\n  staging:\n  prod:\n',
+        ),
+        without: {'apps/demo/android/README.txt'},
+        extra: {
+          ...database(),
+          'modules/foo/domain/pubspec.yaml':
+              'name: domain_foo\ndev_dependencies:\n  core_database: any\n',
+        },
+      );
+      expect(await syncAndVerify(ws), exitsWith(0));
+    });
+
     test('a package that declares no platforms is not restricted', () async {
       final ws = demo(
         manifest: demoManifest(

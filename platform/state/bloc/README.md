@@ -54,7 +54,7 @@ class LoginBloc extends BaseBloc<LoginEvent, BlocViewState<UserEntity>>
   Future<void> _onSubmitted(
     _LoginSubmitted event,
     Emitter<BlocViewState<UserEntity>> emit,
-  ) => emitResult(
+  ) async => emitResult(
     emit,
     () => _loginUseCase(
       LoginParams(email: event.email, password: event.password),

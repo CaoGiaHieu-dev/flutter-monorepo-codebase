@@ -239,10 +239,13 @@ String renderReport(AppView view) {
     'A section left out is the template default, and every section type '
     'documents its defaults and ranges: `display:` (`DisplayProfile` — the '
     'design artboard, the scale policy of each window class, the OS '
-    'font-size cap, split-screen mode, the phone threshold) and `router:` '
+    'font-size cap, split-screen mode, the phone threshold), `router:` '
     '(`RouterProfile` — when the entry location is used, the fallback '
-    'location). Locale, theme and network limits are still shell defaults '
-    '(see the locked list below).',
+    'location), `locale:` (`LocaleProfile` — the languages offered, the '
+    'fallback and first-launch language), `theme:` (`ThemeProfile` — the mode '
+    'a first launch opens in, the palette overrides) and `network:` '
+    '(`NetworkProfile` — the default HTTP client\'s timeouts, extra headers '
+    'and redirect policy).',
   );
   line();
 
@@ -288,8 +291,8 @@ String renderReport(AppView view) {
   line();
   line(
     '**Locked** — changing one means editing the shared package, for every '
-    'app: supported locales, the palette, request timeouts and headers, '
-    'breakpoints, component themes, page transitions, the default '
+    'app: the shadow and scrim colours, breakpoints, component themes, page '
+    'transitions, the default '
     'interceptor chain, the 404 page, push channel and icon, deep-link '
     'allow-lists, logger limits, system UI overlay, secure-storage options. '
     'Replacing a shell-owned type by registration order is unsupported: the '

@@ -8,8 +8,14 @@ import 'utils/language_storage_keys.dart';
 
 @Singleton(as: ILanguageStorage)
 class LanguageStorageImpl implements ILanguageStorage {
-  LanguageStorageImpl(this._storageManager);
+  /// [profile] is the app's `LocaleProfile`: its `initial` language is what a
+  /// first launch opens in, before the user picks one.
+  LanguageStorageImpl(
+    this._storageManager, [
+    this._profile = const LocaleProfile(),
+  ]);
   final StorageManager _storageManager;
+  final LocaleProfile _profile;
 
   late final _locale = StorageValue<String>(
     _storageManager.getStorage(StorageType.pref),
@@ -24,8 +30,10 @@ class LanguageStorageImpl implements ILanguageStorage {
   @override
   Locale getLanguage() {
     final localString = _locale.value;
-    if (localString == null) return AppConfig.defaultLanguage;
-    return Locale(localString);
+    if (localString != null) return Locale(localString);
+    // Nothing chosen yet: the app's initial language, else the device's.
+    final initial = _profile.initial;
+    return initial == null ? AppConfig.defaultLanguage : Locale(initial);
   }
 
   @override

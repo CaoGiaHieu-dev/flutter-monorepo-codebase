@@ -127,6 +127,7 @@ class AppMaterialWrapper extends StatelessWidget {
                   theme: themeProvider.currentTheme(context),
                   darkTheme: themeProvider.darkTheme(context),
                   locale: languageProvider.locale,
+                  languages: languageProvider.languageSet,
                 ),
               ),
             ),
@@ -141,6 +142,7 @@ class AppMaterialWrapper extends StatelessWidget {
     required ThemeData theme,
     required ThemeData darkTheme,
     required Locale locale,
+    required LanguageSet languages,
   }) {
     final title = AppConfig.title;
     const debugShowCheckedModeBanner = false;
@@ -154,7 +156,7 @@ class AppMaterialWrapper extends StatelessWidget {
       ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
       ...AppLocalizations.localizationsDelegates,
     ];
-    final supportedLocales = AppLanguages.supported;
+    final supportedLocales = languages.supported;
 
     if (isRouter) {
       return MaterialApp.router(
@@ -172,7 +174,8 @@ class AppMaterialWrapper extends StatelessWidget {
         routeInformationParser: routeInformationParser,
         routerDelegate: routerDelegate,
         backButtonDispatcher: backButtonDispatcher,
-        localeResolutionCallback: _resolveLocale,
+        localeResolutionCallback: (deviceLocale, _) =>
+            languages.resolve(deviceLocale),
       );
     }
 
@@ -188,12 +191,8 @@ class AppMaterialWrapper extends StatelessWidget {
       localizationsDelegates: delegates,
       supportedLocales: supportedLocales,
       builder: _textScaleBuilder,
-      localeResolutionCallback: _resolveLocale,
+      localeResolutionCallback: (deviceLocale, _) =>
+          languages.resolve(deviceLocale),
     );
   }
-
-  /// A device locale matched by language code, else [AppLanguages.fallback]
-  /// — the same rule `LanguageProvider` applies to a stored locale.
-  static Locale _resolveLocale(Locale? deviceLocale, Iterable<Locale> _) =>
-      AppLanguages.resolve(deviceLocale);
 }

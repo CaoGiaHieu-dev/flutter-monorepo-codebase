@@ -94,15 +94,15 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/ui/design_system/lib/src/language/language_provider.dart:15, '
-        'platform/shell/adapters/lib/src/network_config_impl.dart:41',
+        'platform/ui/design_system/lib/src/language/language_provider.dart:19, '
+        'platform/shell/adapters/lib/src/network_config_impl.dart:43',
     whenAbsent: 'boot throws "ILanguageStorage is not registered"',
   ),
   ShellContract<IThemeStorage>(
     id: 'theme_storage',
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/ui/design_system/lib/src/theme/theme_provider.dart:25',
+    consumer: 'platform/ui/design_system/lib/src/theme/theme_provider.dart:26',
     whenAbsent: 'boot throws "IThemeStorage is not registered"',
   ),
   ShellContract<AppBootStorage>(
@@ -165,7 +165,7 @@ const List<ShellContract<Object>> kShellContracts = [
     consumer:
         'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:40, '
         'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart:74, '
-        'platform/shell/adapters/lib/src/network_config_impl.dart:94',
+        'platform/shell/adapters/lib/src/network_config_impl.dart:97',
     whenAbsent:
         'the navigation wrapper treats the app as signed out, every deep '
         'link is routed, and a lost session is a no-op',
@@ -175,7 +175,7 @@ const List<ShellContract<Object>> kShellContracts = [
     bundle: 'session',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/adapters/lib/src/network_config_impl.dart:45',
+    consumer: 'platform/shell/adapters/lib/src/network_config_impl.dart:48',
     whenAbsent: 'requests carry no bearer token and nothing refreshes it',
   ),
   ShellContract<ISessionRefreshListenable>(
@@ -252,7 +252,7 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'localization',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.many,
-    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:154',
+    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:152',
     whenAbsent: 'only core_base_ui\'s own strings are translated',
   ),
   ShellContract<IErrorReporter>(

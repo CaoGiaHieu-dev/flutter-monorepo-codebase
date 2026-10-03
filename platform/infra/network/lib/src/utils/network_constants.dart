@@ -1,19 +1,13 @@
 /// Constants owned exclusively by `core_network`.
 ///
 /// Kept inside this package — not in `platform_kernel` — so transport-level
-/// details (timeouts, header names, request-extra flags, log tags) stay
-/// invisible to features and other layers.
+/// details (header names, request-extra flags, log tags) stay invisible to
+/// features and other layers. What an app tunes — the timeouts, extra headers
+/// and redirect policy — is the `NetworkProfile` in `platform_kernel`; the
+/// fallback language is its `LocaleProfile`.
 class NetworkConstants {
   /// Private constructor to prevent instantiation of this class.
   NetworkConstants._();
-
-  // ---------------------------------------------------------------------------
-  // Timeouts
-  // ---------------------------------------------------------------------------
-
-  static const Duration CONNECT_TIMEOUT = Duration(seconds: 20);
-  static const Duration RECEIVE_TIMEOUT = Duration(seconds: 20);
-  static const Duration SEND_TIMEOUT = Duration(seconds: 20);
 
   // ---------------------------------------------------------------------------
   // Headers
@@ -27,18 +21,6 @@ class NetworkConstants {
 
   /// Scheme prefix for the bearer token in the `Authorization` header.
   static const String BEARER_PREFIX = 'Bearer';
-
-  // ---------------------------------------------------------------------------
-  // Locale fallback
-  // ---------------------------------------------------------------------------
-
-  /// Language code sent when the `NetworkConfig` supplies none.
-  ///
-  /// The same language as `core_base_ui`'s `AppLanguages.fallback` — this
-  /// package cannot import it (infra never depends on ui), so keep the two
-  /// equal. The shell's `NetworkConfig` always supplies a resolved code, so
-  /// in an app this applies only to a client built without one.
-  static const String DEFAULT_LANGUAGE_CODE = 'en';
 
   // ---------------------------------------------------------------------------
   // RequestOptions.extra flags

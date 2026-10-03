@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:platform_kernel/platform_kernel.dart' show PaletteToken;
 
 /// The app's colour palette, carried on [ThemeData.extensions] and read with
 /// `context.colors`.
@@ -8,8 +9,10 @@ import 'package:material_ui/material_ui.dart';
 /// [ThemeSystemExtension.toColorScheme]), so `context.colors.primary` and
 /// `Theme.of(context).colorScheme.primary` always agree.
 ///
-/// [light] and [dark] are the two palettes; to rebrand, change their values.
-/// A new token is a field here, a line in [copyWith], [lerp] and both
+/// [light] and [dark] are the template's two palettes. An app rebrands through
+/// its `ThemeProfile`: `ThemeProvider` applies the app's overrides once with
+/// [withOverrides] and builds both the [ColorScheme] and the extension from
+/// the result, so the two cannot disagree. A new token is a field here, a line in [copyWith], [lerp] and both
 /// palettes — the analyzer points at each place a required argument is
 /// missing.
 @immutable
@@ -148,14 +151,50 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
     ],
   );
 
-  /// The palette for [mode]; [ThemeMode.system] reads as light, since this
-  /// has no platform brightness to resolve it against.
-  static ThemeSystemExtension withMode(ThemeMode mode) {
-    return switch (mode) {
-      ThemeMode.system => light,
-      ThemeMode.light => light,
-      ThemeMode.dark => dark,
-    };
+  /// This palette with [overrides] applied — an app's `ThemeProfile.light` or
+  /// `.dark`. [PaletteToken]s not listed keep their value; no overrides
+  /// returns this palette itself.
+  ///
+  /// The two gradients are never set directly, they follow the tokens they are
+  /// made of, as both template palettes already do:
+  /// `primaryGradientColors` is `[primary, primaryContainer]` and
+  /// `liquidOnboardingColors` is `[info, primaryContainer, error]` — so a new
+  /// `primary` reaches `context.colors.primary`, the [ColorScheme] and the
+  /// gradient alike. `shadow` and `scrim` are not tokens an app can override.
+  ThemeSystemExtension withOverrides(Map<PaletteToken, int> overrides) {
+    if (overrides.isEmpty) return this;
+    Color? override(PaletteToken token) {
+      final argb = overrides[token];
+      return argb == null ? null : Color(argb);
+    }
+
+    final recolored = copyWith(
+      primary: override(PaletteToken.primary),
+      primaryContainer: override(PaletteToken.primaryContainer),
+      secondary: override(PaletteToken.secondary),
+      secondaryContainer: override(PaletteToken.secondaryContainer),
+      background: override(PaletteToken.background),
+      surface: override(PaletteToken.surface),
+      surfaceVariant: override(PaletteToken.surfaceVariant),
+      textPrimary: override(PaletteToken.textPrimary),
+      textSecondary: override(PaletteToken.textSecondary),
+      textDisabled: override(PaletteToken.textDisabled),
+      textInverse: override(PaletteToken.textInverse),
+      border: override(PaletteToken.border),
+      divider: override(PaletteToken.divider),
+      success: override(PaletteToken.success),
+      error: override(PaletteToken.error),
+      warning: override(PaletteToken.warning),
+      info: override(PaletteToken.info),
+    );
+    return recolored.copyWith(
+      primaryGradientColors: [recolored.primary, recolored.primaryContainer],
+      liquidOnboardingColors: [
+        recolored.info,
+        recolored.primaryContainer,
+        recolored.error,
+      ],
+    );
   }
 
   /// Material's [ColorScheme] built from this palette, for [brightness].

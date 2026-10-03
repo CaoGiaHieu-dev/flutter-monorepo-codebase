@@ -2,8 +2,11 @@ import '../flavor.dart';
 import 'app_facts.dart';
 import 'app_platform.dart';
 import 'display_profile.dart';
+import 'locale_profile.dart';
+import 'network_profile.dart';
 import 'profile_problem.dart';
 import 'router_profile.dart';
+import 'theme_profile.dart';
 
 /// Everything an app tells the shell about itself.
 ///
@@ -21,6 +24,9 @@ final class AppProfile {
     required this.facts,
     this.display = const DisplayProfile(),
     this.router = const RouterProfile(),
+    this.locale = const LocaleProfile(),
+    this.theme = const ThemeProfile(),
+    this.network = const NetworkProfile(),
   });
 
   /// What the app is and where it runs. Generated from the manifest.
@@ -31,6 +37,16 @@ final class AppProfile {
 
   /// Where the router starts and where it falls back to.
   final RouterProfile router;
+
+  /// The languages the app offers, its fallback and its first-launch language.
+  final LocaleProfile locale;
+
+  /// The theme mode the app opens in and its palette overrides.
+  final ThemeProfile theme;
+
+  /// The timeouts, extra headers and redirect policy of the default HTTP
+  /// client.
+  final NetworkProfile network;
 
   /// The problems with starting this app on [platform] in [flavor] — pure and
   /// pre-DI, so the shell can stop before any dependency is built.

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:core_network/core_network.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:platform_kernel/platform_kernel.dart';
 
 void main() {
   group('AuthInterceptor', () {
@@ -89,7 +90,7 @@ void main() {
 
       expect(
         options.headers['language'],
-        NetworkConstants.DEFAULT_LANGUAGE_CODE.toUpperCase(),
+        const LocaleProfile().fallback.toUpperCase(),
       );
     });
   });

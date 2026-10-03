@@ -27,7 +27,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final languages = context.read<LanguageProvider>();
     final picked = await languageButtonKey.showDropDown<Locale>(
       context,
-      options: AppLocalizations.supportedLocales,
+      options: languages.languageSet.supported,
       builder: (context, item) => Text(item.languageName(context)),
     );
     if (picked != null) languages.setLocale(picked);

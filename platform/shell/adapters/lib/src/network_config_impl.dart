@@ -7,9 +7,10 @@ import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Concrete implementation of NetworkConfig, shared by every app. What differs
-/// per app — the certificate pinning decision of each flavor — comes from the
-/// app's [SslPinningPolicy] (`flavors.<f>.ssl_pinning` in its manifest), which
-/// `runShellApp` registers before the graph is built.
+/// per app comes from the sections `runShellApp` registers before the graph is
+/// built: the certificate pinning decision of each flavor — the app's
+/// [SslPinningPolicy] (`flavors.<f>.ssl_pinning` in its manifest) — and the
+/// languages it offers, its [LocaleProfile].
 ///
 /// This fulfills dependencies of core_network, using core_ui_kit's
 /// `RetryDialog` for the retry prompt — the only reason
@@ -36,10 +37,12 @@ class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(
     this._languageStorage, [
     this._pinning = const SslPinningPolicy.none(),
-  ]);
+    LocaleProfile locale = const LocaleProfile(),
+  ]) : _languages = LanguageSet(locale);
 
   final ILanguageStorage _languageStorage;
   final SslPinningPolicy _pinning;
+  final LanguageSet _languages;
 
   /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
@@ -59,12 +62,12 @@ class NetworkConfigImpl implements NetworkConfig {
       () => _session?.readToken();
 
   /// The app's language, resolved like `LanguageProvider` resolves it — a
-  /// stored choice, else the device's language when supported, else
-  /// `AppLanguages.fallback` — so the server always gets a language the app
-  /// ships.
+  /// stored choice, else the app's initial or the device's language when
+  /// supported, else the profile's fallback — so the server always gets a
+  /// language the app offers.
   @override
   String? Function() get getLocale =>
-      () => AppLanguages.resolve(_languageStorage.getLanguage()).languageCode;
+      () => _languages.resolve(_languageStorage.getLanguage()).languageCode;
 
   /// Returning null here is load-bearing: `ApiClient` adds
   /// `RefreshTokenInterceptor` **only** when this is non-null. With no auth

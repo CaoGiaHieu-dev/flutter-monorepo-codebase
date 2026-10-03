@@ -15,11 +15,32 @@ import 'network_config.dart';
 import 'utils/network_constants.dart';
 
 /// ApiClient is responsible for creating and configuring Dio HTTP clients.
+///
+/// What an app tunes comes from its [NetworkProfile] (timeouts, extra headers,
+/// redirects) and [LocaleProfile] (the language sent when the config supplies
+/// none) — `runShellApp` registers both before the graph is built, so the
+/// default `Dio` the `core` group builds already carries them. A client built
+/// by hand takes the template defaults.
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
+  final NetworkProfile _profile;
+  final LocaleProfile _locale;
 
-  ApiClient(this._config) {
+  ApiClient(
+    this._config, [
+    this._profile = const NetworkProfile(),
+    this._locale = const LocaleProfile(),
+  ]) {
+    final refused = _profile.refusedHeaders;
+    if (refused.isNotEmpty) {
+      throw ArgumentError.value(
+        refused.join(', '),
+        'NetworkProfile.headers',
+        'a credential or shell-owned header cannot be set by the app '
+            '(RULE-66); the session owner supplies Authorization',
+      );
+    }
     // Already registered by DI (the classifier is an eager singleton of this
     // package's module); repeated here, idempotently, for a client built
     // outside DI, whose DioExceptions must still classify.
@@ -29,11 +50,14 @@ class ApiClient {
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
     baseUrl: EnvConstants.BASE_URL,
-    connectTimeout: NetworkConstants.CONNECT_TIMEOUT,
-    receiveTimeout: NetworkConstants.RECEIVE_TIMEOUT,
-    sendTimeout: NetworkConstants.SEND_TIMEOUT,
-    followRedirects: false,
-    headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
+    connectTimeout: _profile.connectTimeout,
+    receiveTimeout: _profile.receiveTimeout,
+    sendTimeout: _profile.sendTimeout,
+    followRedirects: _profile.followRedirects,
+    headers: {
+      ..._profile.headers,
+      HttpHeaders.contentTypeHeader: ContentType.json.value,
+    },
   );
 
   /// Creates a new Dio instance with the provided configuration.
@@ -66,6 +90,7 @@ class ApiClient {
         AuthInterceptor(
           getToken: _config.getToken,
           getLocale: _config.getLocale,
+          defaultLanguageCode: _locale.fallback,
         ),
       );
 

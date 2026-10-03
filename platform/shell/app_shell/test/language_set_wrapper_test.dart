@@ -16,8 +16,9 @@ void main() {
 
   Future<MaterialApp> pumpApp(
     WidgetTester tester,
-    LocaleProfile profile,
-  ) async {
+    LocaleProfile profile, {
+    Widget home = const SizedBox.shrink(),
+  }) async {
     final router = AppRouter();
     getIt
       ..registerSingleton<ThemeProvider>(ThemeProvider(FakeThemeStorage()))
@@ -27,9 +28,7 @@ void main() {
       ..registerSingleton<AppRouter>(router)
       ..registerSingleton<DeeplinkProvider>(FakeDeeplinkProvider(router));
     await tester.pumpWidget(
-      const ResponsiveInit(
-        child: AppMaterialWrapper(home: SizedBox.shrink()),
-      ),
+      ResponsiveInit(child: AppMaterialWrapper(home: home)),
     );
     await tester.pumpAndSettle();
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
@@ -67,6 +66,28 @@ void main() {
     expect(
       app.localeResolutionCallback!(const Locale('vi', 'VN'), const []),
       const Locale('en'),
+    );
+  });
+
+  testWidgets('a Vietnamese app gets Vietnamese Material strings, not a '
+      'missing-delegate error', (tester) async {
+    String? ok;
+    await pumpApp(
+      tester,
+      const LocaleProfile(supported: ['vi'], fallback: 'vi'),
+      home: Builder(
+        builder: (context) {
+          ok = MaterialLocalizations.of(context).okButtonLabel;
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(ok, 'OK');
+    expect(
+      Localizations.localeOf(tester.element(find.byType(SizedBox).first)),
+      const Locale('vi'),
     );
   });
 }

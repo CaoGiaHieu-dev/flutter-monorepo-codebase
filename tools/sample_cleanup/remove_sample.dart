@@ -263,11 +263,15 @@ Future<void> _removeBundle({
   // --- 2. Shared file edits ------------------------------------------------
   stdout.writeln('');
   stdout.writeln('Shared files to edit:');
+  final capabilities = [
+    for (final id in (bundle['capabilities'] as YamlList?) ?? const []) '$id',
+  ];
   final edits = _planSharedEdits(
     pkgNames,
     packages,
     bundleName: bundleName,
     keepApiLayer: kept.isNotEmpty,
+    capabilities: capabilities,
   );
   if (edits.isEmpty) {
     stdout.writeln('  (no matching lines)');
@@ -384,6 +388,18 @@ Future<void> _removeBundle({
   stdout.writeln('');
   stdout.writeln('Done. Next steps:');
   stdout.writeln('  dart tools/composer/composer.dart sync');
+  stdout.writeln('  dart tools/composer/composer.dart verify');
+  final shared = (bundle['shared_capabilities'] as YamlList?) ?? const [];
+  if (shared.isNotEmpty) {
+    stdout.writeln(
+      '  # `capabilities:` also names ${shared.join(', ')}, which other '
+      'modules may still provide;',
+    );
+    stdout.writeln(
+      '  # the DI smoke test names any of them that lost its last provider — '
+      'declare it `{ state: absent, reason: ... }`.',
+    );
+  }
   stdout.writeln('  flutter pub get');
   stdout.writeln('  dart run build_runner build --workspace');
   stdout.writeln('  flutter analyze');
@@ -705,11 +721,19 @@ class _FileEdit {
 /// Line-oriented rather than YAML/AST-aware on purpose: these files carry
 /// comments and grouping that a re-serialise would flatten, and the module
 /// generator already edits them the same way.
+///
+/// In an `app_manifest.yaml`, every id of [capabilities] the app declares
+/// `provided` flips to `{ state: absent, reason: "sample <bundle> removed" }`:
+/// the bundle was the only thing registering that contract, so leaving it
+/// `provided` would turn `composer verify` red. Contracts the removed bundle
+/// shares with another module are not flipped (the other module may still
+/// register them) — an app's DI smoke test names any that lost their last provider.
 List<_FileEdit> _planSharedEdits(
   List<String> pkgNames,
   YamlMap packages, {
   required String bundleName,
   bool keepApiLayer = false,
+  List<String> capabilities = const [],
 }) {
   final edits = <_FileEdit>[];
 
@@ -727,10 +751,32 @@ List<_FileEdit> _planSharedEdits(
     final keep = <String>[];
     final removed = <String>[];
     final added = <String>[];
+    final isManifest = file.endsWith('app_manifest.yaml');
+    var inCapabilities = false;
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       var drop = false;
+
+      // app_manifest.yaml, `capabilities:` block: `  splash: provided`.
+      if (isManifest) {
+        if (RegExp(r'^\S').hasMatch(line)) {
+          inCapabilities = line.startsWith('capabilities:');
+        } else if (inCapabilities) {
+          final provided = RegExp(
+            r'^(\s+)(\w+):\s*provided\s*(#.*)?$',
+          ).firstMatch(line);
+          if (provided != null && capabilities.contains(provided.group(2))) {
+            final flipped =
+                '${provided.group(1)}${provided.group(2)}: { state: absent, '
+                'reason: "sample $bundleName removed" }';
+            removed.add(line);
+            added.add(flipped);
+            keep.add(flipped);
+            continue;
+          }
+        }
+      }
 
       for (final name in pkgNames) {
         // injection.dart: `import 'package:feature_auth/di/module.module.dart';`

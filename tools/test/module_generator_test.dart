@@ -23,7 +23,7 @@ void main() {
   const mobile = '''
 app:
   id: mobile
-  kind: flutter
+  name: Mobile
 
 di_groups:
   - name: core

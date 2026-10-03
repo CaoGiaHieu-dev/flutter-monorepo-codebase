@@ -1,16 +1,18 @@
-# Composition manifest for the `mobile` app.
+# Declaration + composition for the `mobile` app. After README.md, the file to read.
 #
-# This is the single source of truth for *what this app is made of*. Three
-# artifacts are generated from it, each between `composer:managed` markers:
+#   dart tools/composer/composer.dart sync --app mobile     regenerates, all committed, all drift-checked by `verify`:
+#     README.md                  region `report`   what this app is, derived from this file and the composed packages
+#     lib/app/app_profile.dart   region `facts`    this file as const Dart the shell reads at boot
+#     lib/di/injection.dart      regions `imports`, `modules`   DI order and the configureDependencies entry point
+#     pubspec.yaml (deps) and the root workspace list   as before
+#   dart tools/composer/composer.dart describe --app mobile   prints the report;  `describe --catalog` prints every key below
 #
-#   1. the root `pubspec.yaml` `workspace:` list
-#   2. this app's path dependencies in `pubspec.yaml`
-#   3. this app's `lib/di/injection.dart`
-#
-#   dart tools/composer/composer.dart sync --app mobile
-#
-# Everything outside those markers stays hand-written — external dependencies,
-# flavors, asset declarations.
+#   app / flavors / env        (b) identity, flavors (and the SSL pin decision each carries), environment values
+#   platforms                  (c) where it runs, and what each platform enables
+#   capabilities               (d) what the shell may use from this app — absence is a decision, with a reason
+#   di_groups / modules        (a) what is composed, in what order, and why
+#   lib/app/app_profile.dart   how the shell behaves (typed Dart)
+#   lib/app/app_hooks.dart     (e) the typed extension points (code)
 #
 # Packages are resolved by *name*, discovered by scanning for `pubspec.yaml`.
 # Nothing here encodes a directory, so moving packages around does not edit
@@ -18,8 +20,45 @@
 
 app:
   id: mobile
-  kind: flutter
+  name: Codebase
   entrypoint: lib/main.dart
+
+flavors: # closed set: dev | staging | prod
+  dev: # ssl_pinning default: disabled — local servers use self-signed certificates
+  staging:
+    ssl_pinning:
+      { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned — docs/en/guides/08_networking.md § 10" }
+  prod:
+    # A real decision:  ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+    ssl_pinning:
+      { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned — docs/en/guides/08_networking.md § 10" }
+
+env: # the keys of the env.<flavor> files; checked here, validated again at boot
+  BASE_URL: { required_in: [prod] }
+  APP_NAME: { required_in: [staging, prod] }
+  WEB_DOMAIN: { native_only: true } # read by Gradle / Xcode only — no Dart reader
+  APP_LINK_MODE: { native_only: true }
+
+platforms: # a platform missing here is a platform this app does not run on
+  android: { runner: committed } # splash, push, deep links, orientation: derived or default — README §2 shows the effective values
+  ios: { runner: committed }
+
+capabilities: # the optional contracts the shell resolves; `composer describe --catalog` lists them
+  session: provided # bundle: ISessionState + ISessionGateway + ISessionRefreshListenable + ISignInLocation
+  routes: provided
+  tabs: provided
+  dashboard: provided
+  entry: provided # onboarding on first launch
+  post_sign_in: provided # home
+  splash: provided
+  tree_wrappers: provided
+  localization: provided
+  error_reporter:
+    {
+      state: absent,
+      reason: "no crash backend chosen: errors are printed and sent nowhere — implement IErrorReporter in lib/app/, then declare it provided (RULE-67)",
+    }
+  analytics: { state: absent, reason: "no analytics backend chosen: no screen events" }
 
 # ---------------------------------------------------------------------------
 # DI groups — ORDERED, and the order is load-bearing.
@@ -30,7 +69,7 @@ app:
 # `flutter analyze` cannot see — RULE-13; test/di_smoke_test.dart catches it.
 #
 # `phase: before` maps to `externalPackageModulesBefore`, `after` to
-# `externalPackageModulesAfter`.
+# `externalPackageModulesAfter`. `why` records the reason for the slot.
 # ---------------------------------------------------------------------------
 di_groups:
   - name: core
@@ -39,52 +78,35 @@ di_groups:
       - core_common
       - core_network
       - core_storage
-      # Registers nothing: `core_database` is mechanism only and owns no
-      # database. Each package that persists data declares its own.
       - core_database
       - core_di
+    why: "mechanism only, registered before anything the app or a module adds. core_database registers nothing: each package that persists data declares its own database"
 
-  # Push notifications. Not in `core`, because `PushNotificationService` is an
-  # eager `@singleton` that injects `FirebaseOptions` — and those are
-  # registered by this app's own `lib/firebase/firebase_module.dart`, i.e.
-  # *between* the two phases. From `before` it would resolve them before they
-  # exist and throw "FirebaseOptions is not registered" at boot. An app that
-  # does not use push notifications drops this group and the module with it.
   - name: notifications
     phase: after
     packages: [core_notifications]
+    why: "PushNotificationService is eager and injects FirebaseOptions, which lib/firebase/ registers between the two phases — it cannot sit in core. An app without push drops this group"
 
-  # The shared app shell. These used to be app-local registrations, which
-  # injectable runs *between* the two phases — so this group opens `after`
-  # (behind `notifications` only, which registers nothing it needs), the same
-  # slot. Order inside the group is load-bearing too:
-  #   1. platform_shell_adapters — storage adapters, AppBootStorage,
-  #      NetworkConfig (+ SslPinningConfig). Needs StorageManager (`core`).
-  #   2. platform_app_shell — router, DeeplinkProvider.
-  # `ui` depends on it: ThemeProvider / LanguageProvider inject the storage
-  # adapters registered here.
   - name: shell
     phase: after
     packages: [platform_shell_adapters, platform_app_shell]
+    why: "adapters first (storage adapters, AppBootStorage, NetworkConfig + SslPinningConfig), then router and deep links. ui depends on it"
 
-  # Depends on ILanguageStorage / IThemeStorage, registered by `shell` above.
   - name: ui
     phase: after
     packages: [core_base_ui]
+    why: "ThemeProvider and LanguageProvider inject IThemeStorage / ILanguageStorage registered by shell (RULE-13)"
 
   - name: domain
     phase: after
     packages: [domain_core]
     from_modules: domain
 
-  # A module that opens a database with `@preResolve` runs its collected
-  # `IDatabaseMigration` steps during its own initialisation, so anything
-  # contributing a step must appear before it. `data_cache` opens CacheDatabase
-  # here, which means a migration contributed by a *feature* would be missed.
   - name: data
     phase: after
     packages: [data_core]
     from_modules: data
+    why: "a module that opens a database with @preResolve runs the migrations contributed before it, so contributors precede it"
 
   - name: feature
     phase: after
@@ -102,10 +124,9 @@ di_groups:
 # `layers` picks which of a module's packages are included. `api` is the
 # module's contracts package (`<id>_api`) other features may import: a
 # workspace member only — no DI group collects it and this app does not
-# depend on it. A module absent
-# from disk is skipped with a warning by `sync`, and is an error under
-# `sync --strict` — which is what CI runs, so a release can never silently
-# ship without one.
+# depend on it. A module absent from disk is skipped with a warning by `sync`,
+# and is an error under `sync --strict` — which is what CI runs, so a release
+# can never silently ship without one.
 # ---------------------------------------------------------------------------
 modules:
   - { id: auth, layers: [api, domain, data, feature] }

@@ -1,17 +1,15 @@
 import 'dart:io';
 
 import 'package:core_common/core_common.dart';
-import 'package:core_di/core_di.dart';
-import 'package:core_network/core_network.dart';
 import 'package:drift/drift.dart' show GeneratedDatabase;
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_app/app/app_profile.dart';
 import 'package:mobile_app/di/injection.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
-import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Boots this app's real, generated DI graph — the one `main.dart` runs.
@@ -37,6 +35,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// R10): it checks what the shell resolves, however the manifest composes
 /// the app. Like the app itself it compiles against
 /// `lib/firebase/firebase_options_*.dart` (gitignored; CI writes stubs).
+///
+/// For every flavor the manifest declares, the graph is booted with the app's
+/// profile registered, as `runShellApp` does, and then held to what
+/// `app_manifest.yaml` declares: `checkAppContract` compares each optional
+/// contract's `provided` / `absent` with what the graph registered, and
+/// asserts the required ones, a screen, unique tab orders and a router that
+/// assembles (RULE-63, RULE-81).
+///
+/// A VM test reports Android and never the web, so the platform is named
+/// explicitly instead of read from the device.
+const _platform = AppPlatform.android;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   TestFirebaseCoreHostApi.setUp(_FirebaseCoreHost());
@@ -98,11 +108,13 @@ void main() {
     documents.deleteSync(recursive: true);
   });
 
-  for (final environment in const ['dev', 'staging', 'prod']) {
+  for (final flavor in appFacts.flavors) {
     test(
-      'the $environment graph boots and every lazy singleton builds',
+      'the ${flavor.name} graph boots, every lazy singleton builds and the '
+      'declaration matches it',
       () async {
-        await configureDependencies(environment: environment);
+        registerAppProfile(appProfile, platform: _platform);
+        await configureDependencies(environment: flavor.name);
 
         // Every `@lazySingleton` in the graph, built now instead of on first
         // use — a missing dependency throws here rather than on some screen.
@@ -111,10 +123,31 @@ void main() {
         );
         expect(singletons, isNotEmpty);
 
-        _expectShellContractsResolve();
+        final report = checkAppContract(
+          appProfile,
+          flavor: flavor,
+          platform: _platform,
+        );
+        expect(report.problems, isEmpty, reason: report.explain());
       },
     );
   }
+
+  test('every declared platform and flavor is a valid way to start', () {
+    for (final platform in appFacts.platforms.keys) {
+      for (final flavor in appFacts.flavors) {
+        expect(
+          appProfile.validate(
+            platform: platform,
+            flavor: flavor,
+            checkEnv: false,
+          ),
+          isEmpty,
+          reason: '${platform.name} / ${flavor.name}',
+        );
+      }
+    }
+  });
 }
 
 /// Firebase core's host side, as a real one behaves on a fresh install: no
@@ -139,59 +172,4 @@ class _FirebaseCoreHost implements TestFirebaseCoreHostApi {
   @override
   Future<CoreFirebaseOptions> optionsFromResource() =>
       throw UnsupportedError('the app always passes its options');
-}
-
-/// What the app shell looks up at boot and while routing, resolved exactly
-/// the way the shell does — optional contributions through
-/// `getAllOrEmpty` / `getItOrNull`, so an absent module is fine but a
-/// registered one that cannot be built fails.
-void _expectShellContractsResolve() {
-  final routes = getAllOrEmpty<IFeatureRouteModule>().toList();
-  final tabs = getAllOrEmpty<INavDestinationModule>().toList();
-  expect(
-    [...routes, ...tabs],
-    isNotEmpty,
-    reason: 'an app with no route module and no nav tab has no screen',
-  );
-  expect(
-    tabs.map((t) => t.order).toSet(),
-    hasLength(tabs.length),
-    reason: 'INavDestinationModule.order is the tab sort key — keep it unique',
-  );
-  getAllOrEmpty<IFeatureLocalization>().toList();
-  getAllOrEmpty<IAppTreeWrapper>().toList();
-
-  getItOrNull<IAppSplashScreen>();
-  getItOrNull<IAppEntryLocation>();
-  getItOrNull<IDashboardRouteModule>();
-  getItOrNull<ISessionRefreshListenable>();
-  getItOrNull<ISessionState>();
-  getItOrNull<ISessionGateway>();
-  getItOrNull<ISessionStatusStream>();
-  getItOrNull<ISignInLocation>();
-  getItOrNull<IPostSignInLocation>();
-  getItOrNull<IErrorReporter>();
-  getItOrNull<IAnalytics>();
-
-  // Registered by the shell itself (`platform_shell_adapters`): required,
-  // not optional.
-  getIt<ILanguageStorage>();
-  getIt<IThemeStorage>();
-  getIt<AppBootStorage>();
-  getIt<NetworkConfig>();
-  getIt<SslPinningConfig>();
-
-  // `core_network` hooks its Dio classifier into the kernel's ErrorHandler
-  // while the `core` group initialises — before any client exists — so a
-  // DioException never degrades to the generic "unknown error".
-  expect(
-    ErrorHandler.classifiers.whereType<DioFailureClassifier>(),
-    hasLength(1),
-    reason: 'DioFailureClassifier must register itself during DI',
-  );
-
-  // Assembles the GoRouter from every contribution above; GoRouter asserts
-  // on a malformed tree (duplicate or missing paths) while it is built.
-  final router = getIt<AppRouter>().router;
-  expect(router.configuration.routes, isNotEmpty);
 }

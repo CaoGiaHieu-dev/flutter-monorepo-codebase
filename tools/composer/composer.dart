@@ -5,6 +5,12 @@ import 'package:yaml/yaml.dart';
 
 import '../shared/workspace.dart';
 import '../unused_checker/output_formatter.dart';
+import 'src/catalog.dart';
+import 'src/checks.dart';
+import 'src/facts_emit.dart';
+import 'src/manifest_v2.dart';
+import 'src/package_facts.dart';
+import 'src/report.dart';
 
 /// Composes an app from its `app_manifest.yaml`.
 ///
@@ -25,7 +31,15 @@ import '../unused_checker/output_formatter.dart';
 /// dart tools/composer/composer.dart sync [--app <id>] [--strict]
 /// dart tools/composer/composer.dart verify
 /// dart tools/composer/composer.dart list
+/// dart tools/composer/composer.dart describe [--app <id>] [--catalog]
 /// ```
+///
+/// The manifest also **declares** the app — its name, flavors (and the pinning
+/// decision each carries), environment keys, platforms and capabilities — and
+/// `sync` turns that into the `facts` region of `lib/app/app_profile.dart`, the
+/// `report` region of the app's `README.md` and, in `injection.dart`, the
+/// `configureDependencies` entry point. `src/manifest_v2.dart` holds the
+/// schema, `src/checks.dart` the checks `verify` adds.
 ///
 /// `sync` skips a module that is not on disk and says so loudly; `--strict`
 /// makes that an error. CI runs `--strict`, which is what stops a release
@@ -46,7 +60,7 @@ void main(List<String> args) {
   }
 
   final command = args.first;
-  if (!const {'list', 'sync', 'verify'}.contains(command)) {
+  if (!const {'list', 'sync', 'verify', 'describe'}.contains(command)) {
     OutputFormatter.printError('Unknown command `$command`.');
     _printHelp(stderr);
     exit(64);
@@ -55,11 +69,14 @@ void main(List<String> args) {
   // Every argument after the command must be one this tool knows. An
   // unknown flag used to be ignored, so `sync --stritc` ran a lenient sync.
   var strict = false;
+  var catalogOnly = false;
   String? appFilter;
   for (var i = 1; i < args.length; i++) {
     switch (args[i]) {
       case '--strict':
         strict = true;
+      case '--catalog':
+        catalogOnly = true;
       case '--app':
         if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
           OutputFormatter.printError('`--app` needs an app id.');
@@ -78,7 +95,7 @@ void main(List<String> args) {
   );
 
   try {
-    _run(command, root, appFilter, strict);
+    _run(command, root, appFilter, strict, catalogOnly: catalogOnly);
   } on YamlException catch (e) {
     // A pubspec or manifest that is not valid YAML — a duplicate key is the
     // usual one. A pubspec, pub rejects too, so nothing resolves until it is
@@ -98,9 +115,33 @@ void main(List<String> args) {
   }
 }
 
-void _run(String command, String root, String? appFilter, bool strict) {
+void _run(
+  String command,
+  String root,
+  String? appFilter,
+  bool strict, {
+  required bool catalogOnly,
+}) {
   final packages = _discoverPackages(root);
-  final apps = _discoverApps(root);
+  final catalogProblems = <String>[];
+  final catalog = readCatalog(packages, why: catalogProblems.add);
+
+  if (catalogOnly && command != 'describe') {
+    OutputFormatter.printError('`--catalog` belongs to `describe`.');
+    exit(64);
+  }
+  if (command == 'describe' && catalogOnly) {
+    if (catalog == null) {
+      for (final problem in catalogProblems) {
+        OutputFormatter.printError(problem);
+      }
+      exit(1);
+    }
+    stdout.write(renderCatalog(catalog));
+    return;
+  }
+
+  final apps = _discoverApps(root, packages, catalog, catalogProblems);
 
   if (apps.isEmpty) {
     OutputFormatter.printError(
@@ -120,10 +161,12 @@ void _run(String command, String root, String? appFilter, bool strict) {
   switch (command) {
     case 'list':
       _list(apps, packages, appFilter);
+    case 'describe':
+      _describeApps(root, apps, packages, catalog!, appFilter);
     case 'sync':
-      _sync(root, apps, packages, appFilter, strict, dryRun: false);
+      _sync(root, apps, packages, catalog!, appFilter, strict, dryRun: false);
     case 'verify':
-      _sync(root, apps, packages, appFilter, true, dryRun: true);
+      _sync(root, apps, packages, catalog!, appFilter, true, dryRun: true);
   }
 }
 
@@ -228,7 +271,13 @@ Set<String> _closure(Iterable<String> seeds, Map<String, String> packages) {
 
 /// One `di_groups` entry of a manifest, validated.
 class DiGroup {
-  const DiGroup(this.name, this.phase, this.packages, this.fromModules);
+  const DiGroup(
+    this.name,
+    this.phase,
+    this.packages,
+    this.fromModules, {
+    this.why,
+  });
 
   final String name;
 
@@ -238,6 +287,9 @@ class DiGroup {
 
   /// The module layer this group collects, if any.
   final String? fromModules;
+
+  /// Why the group sits where it does — shown in the app report.
+  final String? why;
 }
 
 /// One `modules` entry of a manifest, validated.
@@ -256,7 +308,7 @@ class ModuleRef {
 class AppManifest {
   AppManifest({
     required this.id,
-    required this.kind,
+    required this.declaration,
     required this.dir,
     required this.groups,
     required this.modules,
@@ -264,7 +316,10 @@ class AppManifest {
   });
 
   final String id;
-  final String kind;
+
+  /// What the app is and where it runs: name, flavors, env, platforms,
+  /// capabilities.
+  final AppDeclaration declaration;
   final String dir;
   final List<DiGroup> groups;
   final List<ModuleRef> modules;
@@ -277,7 +332,12 @@ class AppManifest {
 /// any manifest is malformed or two share an app id. Runs before any command,
 /// so nothing is listed or written from a manifest that does not say what it
 /// was meant to.
-List<AppManifest> _discoverApps(String root) {
+List<AppManifest> _discoverApps(
+  String root,
+  Map<String, String> packages,
+  ShellCatalog? catalog,
+  List<String> catalogProblems,
+) {
   final out = <AppManifest>[];
   final problems = <String>[];
   final idOwner = <String, String>{};
@@ -297,6 +357,21 @@ List<AppManifest> _discoverApps(String root) {
       problems,
     );
     if (app == null) continue;
+    if (catalog == null) {
+      for (final problem in catalogProblems) {
+        if (!problems.contains(problem)) problems.add(problem);
+      }
+    } else {
+      problems.addAll(
+        checkDeclaration(
+          rel: rel,
+          decl: app.declaration,
+          catalog: catalog,
+          appDir: app.dir,
+          appRel: p.posix.relative(app.dir, from: root),
+        ),
+      );
+    }
     final other = idOwner[app.id];
     if (other != null) {
       problems.add(
@@ -324,9 +399,21 @@ List<AppManifest> _discoverApps(String root) {
   return out;
 }
 
-const _topLevelKeys = {'app', 'di_groups', 'modules', 'extra_dependencies'};
-const _appKeys = {'id', 'kind', 'entrypoint'};
-const _groupKeys = {'name', 'phase', 'packages', 'from_modules'};
+const _topLevelKeys = {
+  'app',
+  'flavors',
+  'env',
+  'platforms',
+  'capabilities',
+  'di_groups',
+  'modules',
+  'extra_dependencies',
+};
+
+/// `kind` is listed so the generic unknown-key message does not fire for it:
+/// the declaration parser refuses it with its own, more useful one.
+const _appKeys = {'id', 'name', 'kind', 'entrypoint'};
+const _groupKeys = {'name', 'phase', 'packages', 'from_modules', 'why'};
 const _moduleKeys = {'id', 'layers'};
 const _phases = ['before', 'after'];
 const _layers = ['api', 'domain', 'data', 'feature'];
@@ -346,17 +433,6 @@ final _packageName = RegExp(r'^[a-z_][a-z0-9_]*$');
 
 /// A group name becomes `_<name>Modules` in `injection.dart`.
 final _identifier = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
-
-/// `a string (`x`)`, `a list`, `nothing` — for "expected X, got Y".
-String _describe(Object? value) => switch (value) {
-  null => 'nothing',
-  String() => 'a string (`$value`)',
-  bool() => 'a boolean (`$value`)',
-  num() => 'a number (`$value`)',
-  YamlList() || List() => 'a list',
-  YamlMap() || Map() => 'a map',
-  _ => 'a ${value.runtimeType}',
-};
 
 /// Reads [doc] (manifest [rel], in [dir]) into an [AppManifest], adding one
 /// `<rel>: <key>: <problem>` line to [problems] per defect. Returns null when
@@ -380,7 +456,7 @@ AppManifest? _parseManifest(
     bad(
       '(root)',
       'expected a map with `app`, `di_groups` and `modules`, got '
-          '${doc == null ? 'an empty file' : _describe(doc)}',
+          '${doc == null ? 'an empty file' : describeValue(doc)}',
     );
     return null;
   }
@@ -397,7 +473,7 @@ AppManifest? _parseManifest(
   String? requiredString(YamlMap map, String key, String path) {
     final value = map[key];
     if (value is String && value.trim().isNotEmpty) return value;
-    bad(path, 'expected a non-empty string, got ${_describe(value)}');
+    bad(path, 'expected a non-empty string, got ${describeValue(value)}');
     return null;
   }
 
@@ -406,7 +482,10 @@ AppManifest? _parseManifest(
   List<String> packageList(Object? value, String path) {
     if (value == null) return const [];
     if (value is! YamlList) {
-      bad(path, 'expected a list of package names, got ${_describe(value)}');
+      bad(
+        path,
+        'expected a list of package names, got ${describeValue(value)}',
+      );
       return const [];
     }
     final out = <String>[];
@@ -415,7 +494,7 @@ AppManifest? _parseManifest(
       if (pkg is String && _packageName.hasMatch(pkg)) {
         out.add(pkg);
       } else {
-        bad('$path[$i]', 'expected a package name, got ${_describe(pkg)}');
+        bad('$path[$i]', 'expected a package name, got ${describeValue(pkg)}');
       }
     }
     return out;
@@ -423,10 +502,12 @@ AppManifest? _parseManifest(
 
   // -- app ------------------------------------------------------------------
   String? id;
-  var kind = 'flutter';
   final app = doc['app'];
   if (app is! YamlMap) {
-    bad('app', 'expected a map with `id`, got ${_describe(app)}');
+    bad(
+      'app',
+      'expected a map with `id` and `name`, got ${describeValue(app)}',
+    );
   } else {
     for (final key in app.keys) {
       if (!_appKeys.contains(key)) {
@@ -434,13 +515,12 @@ AppManifest? _parseManifest(
       }
     }
     id = requiredString(app, 'id', 'app.id');
-    if (app['kind'] != null) {
-      kind = requiredString(app, 'kind', 'app.kind') ?? kind;
-    }
-    if (app['entrypoint'] != null) {
-      requiredString(app, 'entrypoint', 'app.entrypoint');
-    }
   }
+
+  // -- the declaration: app.name / entrypoint, flavors, env, platforms,
+  // capabilities. `app.kind` is refused here; the checks that need the
+  // catalog or the disk run in `checks.dart`.
+  final declaration = parseDeclaration(doc, bad);
 
   // Which group already holds each package: a package composed twice is a
   // duplicate key in the app's generated `dependencies:`.
@@ -463,7 +543,7 @@ AppManifest? _parseManifest(
     bad(
       'di_groups',
       'expected a non-empty list of groups (`- name: <n>`, `phase: before|'
-          'after`), got ${rawGroups is YamlList ? 'an empty list' : _describe(rawGroups)}',
+          'after`), got ${rawGroups is YamlList ? 'an empty list' : describeValue(rawGroups)}',
     );
   } else {
     final names = <String>{};
@@ -474,7 +554,7 @@ AppManifest? _parseManifest(
       if (g is! YamlMap) {
         bad(
           path,
-          'expected a map with `name` and `phase`, got ${_describe(g)}',
+          'expected a map with `name` and `phase`, got ${describeValue(g)}',
         );
         continue;
       }
@@ -506,7 +586,7 @@ AppManifest? _parseManifest(
       if (phase is! String || !_phases.contains(phase)) {
         bad(
           '$path.phase',
-          'expected `before` or `after`, got ${_describe(phase)}',
+          'expected `before` or `after`, got ${describeValue(phase)}',
         );
       } else if (phase == 'after') {
         sawAfter = true;
@@ -530,7 +610,7 @@ AppManifest? _parseManifest(
         if (rawFrom is! String || !_layers.contains(rawFrom)) {
           bad(
             '$path.from_modules',
-            'expected one of ${_layers.join(', ')}, got ${_describe(rawFrom)}',
+            'expected one of ${_layers.join(', ')}, got ${describeValue(rawFrom)}',
           );
         } else if (collected.containsKey(rawFrom)) {
           bad(
@@ -552,8 +632,24 @@ AppManifest? _parseManifest(
         );
       }
 
+      final rawWhy = g['why'];
+      if (rawWhy != null && (rawWhy is! String || rawWhy.trim().isEmpty)) {
+        bad(
+          '$path.why',
+          'expected a non-empty string, got ${describeValue(rawWhy)}',
+        );
+      }
+
       if (name != null && phase is String) {
-        groups.add(DiGroup(name, phase, pkgs, from));
+        groups.add(
+          DiGroup(
+            name,
+            phase,
+            pkgs,
+            from,
+            why: rawWhy is String ? rawWhy : null,
+          ),
+        );
       }
     }
   }
@@ -569,7 +665,7 @@ AppManifest? _parseManifest(
     bad(
       'modules',
       'expected a list of `{ id: <name>, layers: [...] }`, got '
-          '${_describe(rawModules)}',
+          '${describeValue(rawModules)}',
     );
   } else if (rawModules is YamlList) {
     final ids = <String>{};
@@ -580,7 +676,7 @@ AppManifest? _parseManifest(
         bad(
           path,
           'expected `{ id: <name>, layers: [${_layers.join(', ')}] }`, got '
-          '${_describe(m)}',
+          '${describeValue(m)}',
         );
         continue;
       }
@@ -612,7 +708,7 @@ AppManifest? _parseManifest(
         bad(
           '$path.layers',
           'expected a non-empty list drawn from ${_layers.join(', ')}, got '
-              '${rawLayers is YamlList ? 'an empty list' : _describe(rawLayers)}',
+              '${rawLayers is YamlList ? 'an empty list' : describeValue(rawLayers)}',
         );
       } else {
         for (var j = 0; j < rawLayers.length; j++) {
@@ -620,7 +716,7 @@ AppManifest? _parseManifest(
           if (layer is! String || !_layers.contains(layer)) {
             bad(
               '$path.layers[$j]',
-              'expected one of ${_layers.join(', ')}, got ${_describe(layer)}',
+              'expected one of ${_layers.join(', ')}, got ${describeValue(layer)}',
             );
           } else if (layers.contains(layer)) {
             bad('$path.layers[$j]', '`$layer` is listed more than once');
@@ -647,10 +743,12 @@ AppManifest? _parseManifest(
     claim(extras[i], '`extra_dependencies`', 'extra_dependencies[$i]');
   }
 
-  if (problems.length != before || id == null) return null;
+  if (problems.length != before || id == null || declaration == null) {
+    return null;
+  }
   return AppManifest(
     id: id,
-    kind: kind,
+    declaration: declaration,
     dir: dir,
     groups: groups,
     modules: modules,
@@ -880,11 +978,40 @@ String _appDepsBody(
 
   buf.writeln('const _externalModulesBefore = [$before];');
   buf.writeln('const _externalModulesAfter = [\n$after\n];');
+  buf.write(_injectionTail);
   // Both regions are emitted exactly as `dart format` would leave them —
   // two-space list indent, a blank line after the last import — so a format
   // pass over the app cannot put the file out of step with `composer verify`.
   return (imports: '${imports.join('\n')}\n\n', modules: buf.toString());
 }
+
+/// The entry point every app's `injection.dart` ends with.
+///
+/// It used to be hand-written, copied from app to app and invisible to
+/// `composer verify`; now it is part of the `modules` region, so a hand edit is
+/// drift and a third app cannot get it wrong. `build_runner` generates
+/// `injection.config.dart` from the `@InjectableInit` annotation wherever it
+/// sits in the file.
+const _injectionTail = '''
+
+/// Boots the dependency graph: every module of `_externalModulesBefore`, then
+/// the `after` groups in manifest order, for [environment] — by default the
+/// flavor this build is.
+@InjectableInit(
+  externalPackageModulesBefore: _externalModulesBefore,
+  externalPackageModulesAfter: _externalModulesAfter,
+)
+Future<void> configureDependencies({String? environment}) async {
+  getIt.enableRegisteringMultipleInstancesOfOneType();
+  final env = environment ?? AppConfig.appFlavor.toValue();
+  await getIt.init(environment: env);
+}
+
+/// Reset all dependencies (useful for testing)
+Future<void> resetDependencies() async {
+  await getIt.reset();
+}
+''';
 
 // ---------------------------------------------------------------------------
 // Commands
@@ -912,7 +1039,15 @@ void _list(
   for (final app in selected) {
     final warnings = <String>[];
     final r = _resolve(app, packages, warnings);
-    stdout.writeln('  ${app.id}  (${app.kind})  ->  ${app.dir}');
+    stdout.writeln('  ${app.id}  (${app.declaration.name})  ->  ${app.dir}');
+    stdout.writeln(
+      '    ${'flavors'.padRight(6)} ${''.padRight(8)} '
+      '${app.declaration.flavors.keys.join(', ')}',
+    );
+    stdout.writeln(
+      '    ${'platf.'.padRight(6)} ${''.padRight(8)} '
+      '${app.declaration.platforms.map((p) => '${p.name} (${p.runner})').join(', ')}',
+    );
     for (final g in r.diGroups) {
       stdout.writeln(
         '    ${g.phase.padRight(6)} ${g.name.padRight(8)} '
@@ -933,10 +1068,108 @@ void _list(
   stdout.writeln('  ${packages.length} packages discovered.');
 }
 
+/// Everything the generators know about [app]: its declaration, the packages
+/// it composes and what each says about itself.
+///
+/// A package whose `platforms:` or `composition:` key is malformed is refused
+/// here, naming the pubspec, before anything is written.
+AppView _view(
+  String root,
+  AppManifest app,
+  Resolved r,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+) {
+  final byName = {for (final g in app.groups) g.name: g};
+  final problems = <String>[];
+  final facts = <String, PackageFacts>{};
+  for (final name in _closure([
+    ...r.allPackages,
+    ...r.workspaceOnly,
+  ], packages)) {
+    final dir = packages[name];
+    if (dir == null) continue;
+    facts[name] = readPackageFacts(
+      name,
+      dir,
+      p.posix.relative(p.posix.join(dir, 'pubspec.yaml'), from: root),
+      problems,
+    );
+  }
+  if (problems.isNotEmpty) {
+    for (final problem in problems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to compose: ${problems.length} problem(s) in a package '
+      'pubspec. Nothing was written.',
+    );
+    exit(1);
+  }
+
+  var pubspecName = '${app.id}_app';
+  final pubspec = File(p.posix.join(app.dir, 'pubspec.yaml'));
+  if (pubspec.existsSync()) {
+    try {
+      final name = (loadYaml(pubspec.readAsStringSync()) as YamlMap)['name'];
+      if (name is String) pubspecName = name;
+    } on Object {
+      // Reported by the caller as invalid YAML.
+    }
+  }
+
+  return AppView(
+    id: app.id,
+    dir: p.posix.relative(app.dir, from: root),
+    pubspecName: pubspecName,
+    declaration: app.declaration,
+    groups: [
+      for (final g in r.diGroups)
+        ViewGroup(
+          name: g.name,
+          phase: g.phase,
+          packages: g.packages,
+          why: byName[g.name]?.why,
+        ),
+    ],
+    modules: [for (final m in app.modules) ViewModule(m.id, m.layers)],
+    composed: r.allPackages.toSet(),
+    packageFacts: facts,
+    catalog: catalog,
+  );
+}
+
+/// `describe`: the app report on stdout — the text of the README's `report`
+/// region.
+void _describeApps(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  String? appFilter,
+) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+  for (final app in selected) {
+    final r = _resolve(app, packages, <String>[]);
+    stdout.write(renderReport(_view(root, app, r, packages, catalog)));
+    if (app != selected.last) stdout.writeln();
+  }
+}
+
 void _sync(
   String root,
   List<AppManifest> apps,
   Map<String, String> packages,
+  ShellCatalog catalog,
   String? appFilter,
   bool strict, {
   required bool dryRun,
@@ -1036,6 +1269,27 @@ void _sync(
     regions
       ..add(_Region(injectionPath, '//', 'imports', injection.imports))
       ..add(_Region(injectionPath, '//', 'modules', injection.modules));
+
+    // What the app declares, as const Dart the shell reads at boot, and as
+    // the page a newcomer reads first.
+    final view = _view(root, app, r, packages, catalog);
+    regions
+      ..add(
+        _Region(
+          p.posix.join(app.dir, 'lib', 'app', 'app_profile.dart'),
+          '//',
+          'facts',
+          emitFacts(view),
+        ),
+      )
+      ..add(
+        _Region(
+          p.posix.join(app.dir, 'README.md'),
+          '<!--',
+          'report',
+          '\n${renderReport(view)}\n',
+        ),
+      );
   }
 
   // The tooling package is a workspace member but belongs to no app, so no
@@ -1084,8 +1338,9 @@ void _sync(
   for (final region in regions) {
     (byFile[region.path] ??= []).add(region);
   }
+  final driftRegions = <String, List<String>>{};
   for (final entry in byFile.entries) {
-    _write(entry.key, entry.value, dryRun, drift, root);
+    _write(entry.key, entry.value, dryRun, drift, root, driftRegions);
   }
 
   for (final w in warnings.toSet()) {
@@ -1101,7 +1356,11 @@ void _sync(
       OutputFormatter.printSuccess('Generated artifacts are up to date.');
     } else {
       for (final d in drift) {
-        OutputFormatter.printError('  out of date: $d');
+        final changed = driftRegions[d] ?? const <String>[];
+        OutputFormatter.printError(
+          '  out of date: $d'
+          '${changed.isEmpty ? '' : ' (${changed.join(', ')})'}',
+        );
       }
       if (drift.isNotEmpty) {
         OutputFormatter.printError(
@@ -1299,6 +1558,7 @@ void _write(
   bool dryRun,
   List<String> drift,
   String root,
+  Map<String, List<String>> driftRegions,
 ) {
   final file = File(path);
   final rel = p.posix.relative(path, from: root);
@@ -1315,6 +1575,7 @@ void _write(
     if (next == null) {
       throw StateError('$rel lost its `${region.region}` markers mid-run');
     }
+    if (next != updated) (driftRegions[rel] ??= []).add(region.region);
     updated = next;
   }
   if (updated == current) return;
@@ -1333,25 +1594,42 @@ USAGE
   dart tools/composer/composer.dart <command> [options]
 
 COMMANDS
-  list              Show every app, its DI groups and anything missing.
+  list              Show every app, its flavors, platforms, DI groups and
+                    anything missing.
+  describe          Print an app's report — identity, platforms, composition,
+                    what the shell resolves from it — the text of the `report`
+                    region of its README.md. With --catalog: the manifest keys
+                    (type, default, what refuses and what reads each), the
+                    shell's contract catalog and the derived defaults.
   sync              Regenerate the managed regions of:
                       - the root pubspec.yaml `workspace:` list
                       - each app's path dependencies
-                      - each app's lib/di/injection.dart
+                      - each app's lib/di/injection.dart (`imports` and
+                        `modules`, which carries configureDependencies)
+                      - each app's lib/app/app_profile.dart (`facts`: the
+                        manifest's declaration as const Dart)
+                      - each app's README.md (`report`)
                     Writes nothing and exits 1 if any of those files, or a
                     region's composer:managed / composer:end marker, is
-                    missing.
+                    missing, or if a manifest declaration is refused.
   verify            Same resolution, writes nothing; exits 1 on drift — a
                     missing file or marker counts as drift — and on a package
                     under modules/ or platform/ that no app composes (sync
                     only warns about one). Also implies --strict. Use in CI.
 
 OPTIONS
-  --app <id>        Only this app (list, sync, verify). The root `workspace:`
-                    list is still computed from every app.
+  --app <id>        Only this app (list, describe, sync, verify). The root
+                    `workspace:` list is still computed from every app.
+  --catalog         With `describe`: the schema and catalog, not an app.
   --strict          A module declared in a manifest but absent from disk is an
                     error instead of a warning. CI runs with this, so a release
                     can never silently ship without a module.
+
+THE DECLARATION
+  `app.name`, `flavors` (+ `ssl_pinning`), `env`, `platforms`, `capabilities`
+  and `di_groups[].why` say what the app is. Every optional contract the shell
+  resolves is `provided` or `{ state: absent, reason }`: absence is a decision.
+  `app.kind` is gone. `describe --catalog` prints every key.
 
 MODULE LAYERS
   `modules: - { id: <m>, layers: [api, domain, data, feature] }`. `domain`,

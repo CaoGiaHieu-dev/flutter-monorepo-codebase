@@ -9,6 +9,22 @@ environment:
 
 resolution: workspace
 
+# Read by `composer` (`describe`, the app report); pub validates `platforms:` as a
+# map of platform names and ignores `composition:`. `platforms:` is
+# the intersection of what firebase_core, firebase_messaging and
+# flutter_local_notifications support; `app_provides` is what an app that
+# composes this package must register itself.
+platforms:
+  android:
+  ios:
+  macos:
+  web:
+composition:
+  app_provides:
+    FirebaseOptions:
+      per_flavor: true # an @Environment('<flavor>') registration for every declared flavor
+      hint: "apps/<id>/lib/firebase/firebase_module.dart, written by dart tools/firebase/firebase_config.dart. Native, not checked: google-services.json per Android flavor; aps-environment on iOS"
+
 dependencies:
   flutter:
     sdk: flutter

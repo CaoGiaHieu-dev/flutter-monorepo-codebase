@@ -18,7 +18,8 @@ tools/
 ├── arch_check/                      # 🛡️ Cưỡng chế luật phân tầng (Gate 1 của CI)
 │   └── check.dart                   # R1-R15: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context…
 ├── composer/                        # 🧩 Ghép app từ app_manifest.yaml (Gate 0 của CI)
-│   ├── composer.dart                # sync / verify / list — sinh workspace list, dependency của app, injection.dart
+│   ├── composer.dart                # sync / verify / list / describe — sinh workspace list, dependency của app, injection.dart, facts, report
+│   ├── src/                         # manifest_v2 (schema), catalog, package_facts, facts_emit, report, checks, platform_notes
 │   └── bootstrap.dart               # Checkout từng phần: bỏ member vắng mặt để `pub get` resolve được (không import package)
 ├── docs_check/                      # 📚 Mọi đường dẫn docs nhắc tới phải tồn tại (Gate 5 của CI)
 │   ├── check.dart
@@ -172,6 +173,12 @@ dart tools/sample_cleanup/remove_sample.dart auth --verbose
 
 Dry-run in ra cả những sample khác sẽ vỡ và vỡ ở đâu — thông tin mà hướng dẫn
 gỡ feature thủ công không có.
+
+`--apply` còn sửa khối `capabilities:` trong `app_manifest.yaml` của mỗi app: contract mà bundle là
+nơi cung cấp duy nhất (`capabilities:` trong bundle, ví dụ `splash` cho sample splash) chuyển từ
+`provided` sang `{ state: absent, reason: "sample <bundle> removed" }`, để `composer verify` vẫn
+xanh sau `composer sync`. Các contract bundle dùng chung với module khác (`shared_capabilities:`)
+được nêu trong các bước tiếp theo; DI smoke test của app sẽ chỉ ra contract nào mất nơi cung cấp cuối cùng.
 
 Cả dry-run lẫn `--apply` đều đếm các tham chiếu trong tài liệu (`docs/`, `.claude/`,
 mọi `*.md`) tới đường dẫn sắp bị xoá. Chúng chỉ mang tính thông tin: sau khi gỡ,
@@ -434,6 +441,8 @@ R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai
 ```bash
 dart tools/composer/composer.dart list              # liệt kê app và thành phần
 dart tools/composer/composer.dart list --app admin  # chỉ một app
+dart tools/composer/composer.dart describe --app mobile # báo cáo của app (nội dung vùng report trong README)
+dart tools/composer/composer.dart describe --catalog    # mọi key manifest, catalog contract của shell, các giá trị mặc định suy ra
 dart tools/composer/composer.dart sync --app mobile # sinh lại
 dart tools/composer/composer.dart verify            # gate 0 của CI — fail khi lệch
 dart tools/composer/bootstrap.dart                  # chỉ cho checkout từng phần — chạy trước `flutter pub get`
@@ -442,6 +451,8 @@ dart tools/composer/bootstrap.dart                  # chỉ cho checkout từng 
 `--app <id>` lọc như nhau cho `list`, `sync` và `verify`; danh sách `workspace:` ở root vẫn được tính từ mọi app. Cờ lạ, hoặc `--app` không kèm id, thoát với mã `64`. Một pubspec hay manifest không phải YAML hợp lệ — thường là do key trùng — bị từ chối kèm tên file, `file:dòng` và thông báo của parser, exit `1`, thay vì làm tool crash.
 
 Mọi `app_manifest.yaml` cũng được **kiểm tra trước khi bất kỳ lệnh nào chạy**; mỗi lỗi được in dạng `apps/<id>/app_manifest.yaml: <key>: <vấn đề>` (ví dụ `di_groups[0].phase: expected \`before\` or \`after\`, got a string (\`befor\`)`), và tool thoát `1` mà không ghi gì. Bị từ chối: manifest rỗng hoặc không phải map; key lạ ở bất kỳ cấp nào (`module:` thay cho `modules:`); `di_groups` thiếu hoặc rỗng; group không có `name` (một Dart identifier, duy nhất trong manifest) hoặc có `phase` khác `before`/`after`, hoặc group `before` đứng sau group `after`; `packages` không phải list; `from_modules` không thuộc `domain`/`data`/`feature`, hoặc một layer được hai group gom; group không có cả `packages` lẫn `from_modules`; module không có dạng `{ id, layers }`, module id trùng, `layers` rỗng, layer ngoài `domain`/`data`/`feature` hoặc không được `from_modules` của group nào gom; một package được ghép hai lần (bởi hai group, hoặc bởi một group và `extra_dependencies`); và hai manifest trùng `app.id`. Trước đây mỗi trường hợp này hoặc crash kèm stack trace, hoặc — tệ hơn — thoát `0` với một `injection.dart` đã âm thầm bỏ mất module.
+
+**App tự khai báo trong manifest.** Ngoài phần thành phần (`di_groups`, `modules`), `app_manifest.yaml` nói app *là gì*: `app.name`, `flavors` (và, với mỗi flavor mà một platform có thể pin TLS, một quyết định `ssl_pinning` — `pins` hoặc `disabled` kèm lý do), các key `env` (`required_in` các flavor, hoặc `native_only`), `platforms` (mỗi platform có `runner: committed | scaffold` và `splash` tùy chọn), `capabilities` (mỗi contract tùy chọn trong catalog của shell là `provided`, hoặc `{ state: absent, reason }` — vắng mặt là một quyết định) và `why` cho mỗi DI group. `app.kind` đã bỏ: nó không có nơi dùng, và composer từ chối nó bằng thông báo gỡ bỏ. `describe --catalog` in mọi key kèm giá trị mặc định, thứ từ chối nó và file đọc nó. `sync` biến phần khai báo thành Dart const trong vùng `facts` của `lib/app/app_profile.dart`, thành báo cáo trong vùng `report` của `README.md` của app, và chuyển `configureDependencies` vào vùng `modules` của `injection.dart`, nên cả file đều được sinh. `verify` từ chối khai báo thiếu (`<file>: <key>: <vấn đề>`, kèm dòng để dán khi có) và bất kỳ vùng nào trong ba vùng đó khác với bản sinh lại; một package có thể mang `platforms:` và `composition.app_provides` trong `pubspec.yaml` của chính nó, báo cáo sẽ đọc chúng.
 
 Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `workspace:` ở root, dependency dạng path của app, và `lib/di/injection.dart` của nó. Thêm một module nghĩa là sửa cả ba cho khớp, và sai thì vỡ lúc boot với `"<Type> is not registered"` — thứ `flutter analyze` không thấy được.
 
@@ -455,7 +466,7 @@ Package được phân giải theo **tên**, tìm bằng cách quét `pubspec.ya
 
 `--strict` (tự động bật trong `verify`) biến "manifest khai một module không có trên đĩa" từ cảnh báo thành lỗi. Không có nó, `sync` ghép những gì tìm được — chính điều này cho phép một dev làm việc khi chỉ checkout module của mình.
 
-Cả `sync` lẫn `verify` còn **từ chối**, mã thoát `1`, khi một file mà chúng sinh vào — `pubspec.yaml` gốc, `pubspec.yaml` hoặc `lib/di/injection.dart` của một app — bị thiếu, hoặc đã mất marker `composer:managed:<region>` / `composer:end:<region>` của một vùng. Chúng nêu tên file và marker, và `sync` không ghi gì cả. Trước đây marker bị thiếu chỉ là một cảnh báo rồi báo "up to date": xoá một marker rồi sửa tay phần nó từng bảo vệ vẫn qua được Gate 0.
+Cả `sync` lẫn `verify` còn **từ chối**, mã thoát `1`, khi một file mà chúng sinh vào — `pubspec.yaml` gốc, `pubspec.yaml`, `lib/di/injection.dart`, `lib/app/app_profile.dart` hoặc `README.md` của một app — bị thiếu, hoặc đã mất marker `composer:managed:<region>` / `composer:end:<region>` của một vùng. Chúng nêu tên file và marker, và `sync` không ghi gì cả. Trước đây marker bị thiếu chỉ là một cảnh báo rồi báo "up to date": xoá một marker rồi sửa tay phần nó từng bảo vệ vẫn qua được Gate 0.
 
 Cả hai còn **từ chối** một pubspec của app khai báo tay một package do composer quản lý ở ngoài vùng marker. Pub từ chối key trùng, nên chỉ một lỗi đó là cả workspace ngừng resolve — và đó chính là lỗi composer từng tự gây ra.
 

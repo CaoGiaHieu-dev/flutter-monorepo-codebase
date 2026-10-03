@@ -1,27 +1,48 @@
-# Composition manifest for the `admin` app.
+# Declaration + composition for the `admin` app. See apps/mobile/app_manifest.yaml for how the file is organised.
 #
 # A second app composing a *different subset* of the same modules — the test
 # the composition design has to pass. It takes auth and settings, and none of
 # dashboard, splash, onboarding or home, so every `getItOrNull` /
 # `getAllOrEmpty` fallback in `platform_app_shell` has a real composition
-# relying on it:
-#
-#   no splash       -> native splash is kept through boot
-#   no onboarding   -> no entry location; boot goes straight to the login check
-#   no home         -> after sign-in the app goes to the router's fallback,
-#                      the first destination (settings)
-#   no dashboard    -> destinations render without chrome
-#
-# Generated from this file, between `composer:managed` markers:
-#
-#   dart tools/composer/composer.dart sync --app admin
-#
-# See apps/mobile/app_manifest.yaml for what each key means.
+# relying on it: the `capabilities` below say which, and why.
 
 app:
   id: admin
-  kind: flutter
+  name: Codebase Admin
   entrypoint: lib/main.dart
+
+flavors:
+  dev:
+  staging:
+  prod: # no ssl_pinning: no declared platform can pin (web: the browser owns TLS; desktop: the plugin has no implementation)
+
+env:
+  BASE_URL: { required_in: [prod] }
+  APP_NAME: { required_in: [staging, prod] }
+
+platforms: # no runner is committed yet: `scaffold` says so and the report prints the flutter create line
+  windows: { runner: scaffold }
+  macos: { runner: scaffold }
+  linux: { runner: scaffold }
+  web: { runner: scaffold } # derived, not written: splash native (capability absent), push off (core_notifications not composed), deep links on
+
+capabilities:
+  session: provided
+  routes: provided
+  tabs: provided
+  tree_wrappers: provided
+  localization: provided
+  dashboard: { state: absent, reason: "one tab: destinations render without chrome" }
+  entry: { state: absent, reason: "no onboarding: boot goes straight to the sign-in check" }
+  post_sign_in:
+    { state: absent, reason: "no home module: after sign-in the router's first tab (settings) opens" }
+  splash: { state: absent, reason: "native splash is kept through boot" }
+  error_reporter:
+    {
+      state: absent,
+      reason: "no crash backend chosen: errors are printed and sent nowhere (RULE-67)",
+    }
+  analytics: { state: absent, reason: "no analytics backend chosen: no screen events" }
 
 di_groups:
   - name: core
@@ -31,15 +52,12 @@ di_groups:
       - core_network
       - core_storage
       - core_di
+    why: "no core_database / core_notifications: this app opens no SQLite file and sends no push, so it needs no `notifications` group and no lib/firebase/"
 
-  # No `notifications` group: this app sends no push notifications, so it
-  # composes no `core_notifications` and needs no `lib/firebase/`.
-
-  # Adapters first (storage adapters, AppBootStorage, NetworkConfig), then
-  # the shell itself; `ui` injects the storage adapters.
   - name: shell
     phase: after
     packages: [platform_shell_adapters, platform_app_shell]
+    why: "adapters first (storage adapters, AppBootStorage, NetworkConfig), then the shell itself; ui injects the storage adapters"
 
   - name: ui
     phase: after

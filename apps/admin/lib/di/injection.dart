@@ -20,26 +20,24 @@ import 'injection.config.dart';
 
 // composer:end:imports
 
-/// Dependency injection for the `admin` app.
-///
-/// **The module lists below are generated.** They are derived from
-/// `apps/admin/app_manifest.yaml` by:
-///
-/// ```bash
-/// dart tools/composer/composer.dart sync --app admin
-/// ```
-///
-/// Keeping this file, this app's `pubspec.yaml` and the root `workspace:`
-/// list in step by hand is what composer replaced. Getting it wrong fails
-/// at boot with `"<Type> is not registered"` — which `flutter
-/// analyze` cannot see. Edit the manifest instead; `composer verify` fails CI if
-/// this file has drifted from it.
-///
-/// Group order is load-bearing and is declared in the manifest's `di_groups`:
-/// `configureDependencies()` initialises modules in exactly that sequence, and
-/// an eager `@Singleton` may only depend on a type registered by an earlier
-/// group (RULE-13 in docs/en/reference/01_rules.md; test/di_smoke_test.dart
-/// proves it).
+// Dependency injection for the `admin` app.
+//
+// **This whole file is generated** — the imports, the module lists and the
+// `configureDependencies` entry point below — from
+// `apps/admin/app_manifest.yaml` by:
+//
+//   dart tools/composer/composer.dart sync --app admin
+//
+// There is no hand-written code left in it, so there is nothing to keep in step
+// by hand: edit the manifest instead, and `composer verify` fails CI if this
+// file has drifted from it. Getting a module list wrong fails at boot with
+// `"<Type> is not registered"`, which `flutter analyze` cannot see.
+//
+// Group order is load-bearing and is declared in the manifest's `di_groups`:
+// `configureDependencies()` initialises modules in exactly that sequence, and
+// an eager `@Singleton` may only depend on a type registered by an earlier
+// group (RULE-13 in docs/en/reference/01_rules.md; test/di_smoke_test.dart
+// proves it).
 
 // composer:managed:modules — generated from app_manifest.yaml
 const _coreModules = [
@@ -87,8 +85,10 @@ const _externalModulesAfter = [
   ..._featureModules,
   ..._otherModules,
 ];
-// composer:end:modules
 
+/// Boots the dependency graph: every module of `_externalModulesBefore`, then
+/// the `after` groups in manifest order, for [environment] — by default the
+/// flavor this build is.
 @InjectableInit(
   externalPackageModulesBefore: _externalModulesBefore,
   externalPackageModulesAfter: _externalModulesAfter,
@@ -103,3 +103,4 @@ Future<void> configureDependencies({String? environment}) async {
 Future<void> resetDependencies() async {
   await getIt.reset();
 }
+// composer:end:modules

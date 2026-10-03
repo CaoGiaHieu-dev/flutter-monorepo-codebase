@@ -45,56 +45,58 @@ Read the arrows as *"may import"*. Note what is **absent**: nothing points *out 
 
 | Layer | Path | Responsibility | May import | Must **never** import |
 |:--|:--|:--|:--|:--|
-| **App** | `apps/<id>/` | Composition root: `app_manifest.yaml`, the generated `injection.dart`, a one-line `main.dart`, what identifies the app (Firebase options) | everything | — |
-| **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Boot sequence, router assembly, material wrapper, app state (`platform_app_shell`); `NetworkConfigImpl`, storage adapters, boot flag (`platform_shell_adapters`) — shared by every app | core packages | any module (`arch_check` R1) |
-| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, one state-management package, another module's `*_api` | `data_*`, another feature package |
-| **Module API** | `modules/*/api` | The contracts other features use to reach the module (`auth_api`: `AuthNavigator`, `IAuthActionHandler`) — interfaces only, implemented by the module's feature | `platform/foundation/*`, Flutter | its own module's domain/data/feature, any other module, any other platform group (`arch_check` R3) |
-| **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages | Flutter, Dio, Retrofit, Drift — **anything platform-specific** |
-| **Data** | `modules/*/data` | Repository implementations, DTOs, data sources | `domain_*`, `core_*` | `modules/*/feature` |
-| **Core** | `platform/<group>/*` | Networking, storage, database, design system, DI contracts | other `core_*`, plus the three exceptions below | `modules/*/feature`, `modules/*/data` |
+| **App** | `apps/<id>/` | Composition root: `app_manifest.yaml` (what the app is and which modules it composes), `lib/app/app_profile.dart` and `app_hooks.dart` (everything per-app, RULE-80), the generated `lib/di/injection.dart`, a short `main.dart` | platform packages; a module only from `lib/di/injection.dart` (RULE-05) | — |
+| **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Boot sequence, router assembly, material wrapper, app state (`platform_app_shell`); `NetworkConfigImpl`, storage adapters, boot flag (`platform_shell_adapters`) — shared by every app | platform packages of every group | any module (`arch_check` R1) |
+| **Feature** | `modules/*/feature` | Pages, widgets, UI state controllers | its own module's `domain_*` and `domain_core`; `core_di`, `core_common`, `platform_kernel`, `core_base_ui`, `core_ui_kit`, `core_responsive`; the state-management package it uses; another module's `<id>_api` | `data_*`, another feature package, another module's domain (RULE-04) |
+| **Module API** | `modules/*/api` | The contracts other features use to reach the module (`auth_api`: `AuthNavigator`, `IAuthActionHandler`) — interfaces only, implemented by the module's feature | `platform/foundation/*`, Flutter and pub packages | its own module's domain/data/feature, any other module, any other platform group (`arch_check` R3) |
+| **Domain** | `modules/*/domain` | Entities, use cases, repository contracts | `domain_core`, annotation-only packages (`freezed_annotation`, `injectable`) | Flutter, Dio, Retrofit, Drift, any `core_*` / `platform_*` package, `data_*`, `feature_*` (RULE-03) |
+| **Data** | `modules/*/data` | Repository implementations, models, data sources | its own module's `domain_*`, `domain_core`, `data_core`, the `core_*` infrastructure it needs | `feature_*`, another module's data / domain / API |
+| **Core** | `platform/<group>/*` | Networking, storage, database, design system, DI contracts | other `platform/` packages in the group direction (R11); `domain_core` only through the four approved edges below | anything under `modules/` (RULE-01) |
 
 Each layer has a dedicated page:
 [Core](02_core.md) · [Domain](03_domain.md) · [Data](04_data.md) · [Features](05_features.md) · [App Shell](06_app_shell.md).
 
 ### Inside `platform/`: six groups
 
-The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell and its infrastructure adapters). Only the folder changed — every package keeps its name. Dependencies point inward: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← everything in platform/`; no infra package depends on another, `ui` never on `state`, `infra` or `shell`, and nothing in `platform/` depends on `modules/`. The package graph follows it with no exception, and `arch_check` **R11** keeps it that way (the group is read from the folder; `dependencies:` only). What belongs in each group, and how the last three contrary edges were removed: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
+The core packages sit in six group folders by role: `foundation/` (kernel, DI contracts, Flutter-bound helpers), `layers/` (`domain_core`, `data_core`), `infra/` (network, storage, database, notifications), `ui/` (responsive, design system, widget library), `state/` (the Provider and BLoC bases) and `shell/` (the app shell and its infrastructure adapters). Dependencies point inward: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← everything in platform/`; no infra package depends on another, `ui` never on `state`, `infra` or `shell`, and nothing in `platform/` depends on `modules/`. `arch_check` **R11** holds the graph (the group is read from the folder; `dependencies:` only) — the allowed edges are the table in [the registry](../reference/01_rules.md#platform-group-direction-r11) (RULE-02). What belongs in each group: [02_core.md § 0](02_core.md#where-a-package-lives--the-six-groups).
 
 ### The Domain purity mandate
 
-`modules/*/domain` is **100% pure Dart**. No `package:flutter/...`, no `package:dio/...`, no `package:drift/...`. This is what makes the business layer unit-testable without a device or a widget tree.
+`modules/*/domain` is **pure Dart** (RULE-03, enforced by `arch_check` R2): no Flutter, no transport or persistence package, no platform package. This is what makes the business layer unit-testable on `package:test`, without a device or a widget tree.
 
 When domain logic needs something that *looks* UI-shaped — a colour, an icon, a screen size — it must be expressed as a primitive or an enum defined inside the domain package itself, and the feature layer decides how to render it.
 
 ### The approved exceptions
 
-Three infrastructure packages under `platform/` depend on `domain_core`. (`data_core` does too, but it is the data layer's foundation that happens to live under `platform/` — a data package depending on domain is the normal direction, not an exception.) All three are deliberate and documented; do not "clean them up". `tools/arch_check/check.dart` holds the same list, prints it on every run, and fails the build on a fourth.
+Four packages under `platform/` depend on `domain_core`. All four are deliberate and documented; do not "clean them up". `tools/arch_check/check.dart` holds the same list, prints it on every run, and fails the build on a fifth.
 
 Note every one of them points at `domain_core` — the innermost ring — and none at a *product* domain. That is the line: core may know what a `Result` or an `AppFailure` is, never what an account is.
 
 | Exception | Why it exists |
 |:--|:--|
-| `provider_state_management` → `domain_core` | `PaginatedViewWidget` is typed over `PaginatedEntity<T>`, and `executeOperation` unwraps `Result<T>` — both defined in `domain_core`. The state-management base exists precisely to consume those types. |
+| `provider_state_management` → `domain_core` | `executeOperation` unwraps `Result<T>` and reads `AppFailure` — both defined in `domain_core`. The state-management base exists precisely to consume those types. |
 | `bloc_state_management` → `domain_core` | `BlocViewState.error` carries an `AppFailure`, which is part of the `Result` contract and therefore lives in `domain_core`. |
-| `platform_kernel` → `domain_core` | `ErrorHandler.handleError()` produces an `AppFailure`. Its declaration sits with `Result<T>` in `domain_core`, and `core_common` re-exports the kernel wholesale so existing importers never noticed the move. |
+| `platform_kernel` → `domain_core` | `ErrorHandler.handleError()` produces an `AppFailure`. `AppFailure` is declared with `Result<T>` in `domain_core`. |
+| `data_core` → `domain_core` | `BaseRepository` returns `Result<T>` and `AppFailure`. Data depending on domain is the normal direction; both packages are platform layers. |
 
-Everything else in `platform/*` has **zero** local-package dependencies beyond other infrastructure packages (`platform_kernel`, `core_*`). `core_database`, notably, depends on no other workspace package at all.
+Every other platform edge follows the group direction (R11) and stays inside `platform/`. `core_database`, `core_di` and `core_responsive` depend on no other workspace package at all.
 
 ---
 
 ## 3. Why a Pub Workspace monorepo
 
-Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list — 31 members today (28 packages, two apps, and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build` for the whole tree.
+Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list, which `composer sync` generates from the app manifests — 31 members (16 platform packages, 12 module packages, two apps and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build --workspace` for the whole tree.
 
-**What you gain:** fast incremental compilation, no version drift between packages, refactors that cross package boundaries in a single commit, and physical enforcement of layering — a feature package *cannot* import `data_auth` if its `pubspec.yaml` does not declare it.
+**What you gain:** fast incremental compilation, no version drift between packages, refactors that cross package boundaries in a single commit, and layering that a gate can read — a feature package's `pubspec.yaml` and imports are scanned, and `arch_check` R3 fails the build when a feature declares or imports `data_auth`.
 
 > [!WARNING]
 > **The trade-off you must actively manage.** A Pub Workspace resolves one shared `package_config.json` for all members. That means a package can `import 'package:data_core/data_core.dart'` and **compile fine even if it never declared `data_core` in its own `pubspec.yaml`**.
 >
 > The code works today and breaks the moment anyone extracts that package or reorders the workspace. The two shapes to watch for are an import with no pubspec entry at all, and a production import whose entry sits under `dev_dependencies` — both compile inside the workspace and neither survives outside it.
 >
-> Declare every dependency you import, in the right section. Verify with:
+> Declare every dependency you import, in the right section (RULE-06). `arch_check` R5 catches the import with no `dependencies:` entry — a `dev_dependencies:` entry does not count — and `check_unused_packages` catches the reverse, a declaration nothing imports:
 > ```bash
+> dart tools/arch_check/check.dart
 > dart tools/unused_checker/check_unused_packages.dart
 > ```
 
@@ -110,14 +112,14 @@ team:
 |:--|:--|:--|
 | `platform/` | Infra | Every module depends on it, so a breaking change breaks everyone at once |
 | `platform/foundation/contracts/` | Infra + architects | Cross-module contracts — changing one is a negotiation, not a unilateral edit |
-| `modules/<name>/` | That module's team | All three layers together: the team changing the UI is the team changing the use case behind it |
+| `modules/<name>/` | That module's team | Every layer of the module together (`api`, `domain`, `data`, `feature`): the team changing the UI is the team changing the use case behind it |
 | `modules/<name>/api/` | That module's team + its consumers | The module's public surface — other features compile against it, so a change there is a cross-module change |
 | `apps/` | Tech leads | Which modules ship together, and in what order they initialise — a release decision |
 | `apps/*/app_manifest.yaml` | Tech leads + architects | The composition itself. Adding a module here changes what the product *is* |
 
-This is why a module is `modules/auth/{domain,data,feature}` rather than the auth rows of three
-sibling directories. CODEOWNERS matches **paths**; under a layer-first layout it has no way to say "the auth parts
-of the domain, data and features directories" — those are three unrelated paths that happen to
+This is why a module is `modules/auth/{api,domain,data,feature}` rather than the auth rows of
+four sibling directories. CODEOWNERS matches **paths**; under a layer-first layout it has no way to say "the auth parts
+of the domain, data and features directories" — those are unrelated paths that happen to
 share a last segment. One directory per bounded context makes ownership expressible, and a git
 submodule per module possible.
 
@@ -132,7 +134,7 @@ submodule per module possible.
 | Decision | Alternative rejected | Why |
 |:--|:--|:--|
 | **`Result<T>` instead of thrown exceptions** across layer boundaries | `throw` / `try-catch` at the call site | An exception is invisible in a function signature — the caller has no way to know it must handle failure. `Future<Result<UserEntity>>` puts the failure case *in the type*, so the compiler reminds you. The Data layer never lets an exception escape; `BaseRepository.execute()` converts it into `Result.failure(AppFailure)`. |
-| **Decentralized DI via micro-package modules** | One giant `injection.dart` listing every registration | Each package owns `lib/di/module.dart` with `@InjectableInit.microPackage()`. Adding a package means one line in an app's `app_manifest.yaml` (then `composer sync`), not editing a 500-line central file. Deleting a package removes its registrations with it. |
+| **Decentralized DI via micro-package modules** | One giant `injection.dart` listing every registration | Each package that registers anything owns a `lib/di/module.dart` with `@InjectableInit.microPackage()`. Adding a package means one line in an app's `app_manifest.yaml` (then `composer sync`), not editing a 500-line central file. Deleting a package removes its registrations with it. |
 | **Decentralized routing via DI contracts** | Hardcoding every `GoRoute` in `app_router.dart` | Features register [`IFeatureRouteModule`](../../../platform/foundation/contracts/lib/src/routing/i_feature_route_module.dart) / `INavDestinationModule`; `AppRouter` collects them with `getAllOrEmpty<T>()`. A feature can be deleted from the workspace without touching the app shell — the router simply collects one contribution fewer and falls back gracefully. |
 | **Package-owned storage keys** | A single shared "presets" object holding every key | A shared object hands *every* injector read/write access to *every* other feature's data. Each package declares its own `StorageValue` instances with its own keys in its own `utils/` folder. See [the storage guide](../guides/06_storage.md). |
 | **Package-owned database access** | One shared app-wide database injected everywhere | Same reasoning: a shared database object exposes every DAO to every injector, and forces whichever package declares it to own every table. Packages depend on [`IDatabaseHandle`](../../../platform/infra/database/lib/src/access/i_database_handle.dart) and receive only the accessor they ask for. See [the database guide](../guides/07_database.md). |
@@ -146,11 +148,9 @@ A team can check out only its own module and still build the app; how to do it i
 
 ### What makes it possible
 
-Nothing in this repository encodes where a package lives.
+No tool holds a list of packages. Each one finds them by scanning for `pubspec.yaml` (`tools/shared/workspace.dart`), and `arch_check` classifies a package by its folder — `modules/<id>/{api,domain,data,feature}` — and checks that the name matches it. So a module that is absent is simply not found.
 
-`composer` resolves packages **by name**, discovered by scanning for `pubspec.yaml`. `arch_check` derives a package's layer from its name. `MonorepoHelper` walks the tree. So a module that is absent is simply not found — no tool has a list to fall out of date.
-
-That is the whole mechanism. `composer sync` writes a composition from *what is on disk*, and a build composed of five modules is as valid as one composed of six.
+That is the whole mechanism. `composer sync` composes the modules a manifest names *that are on disk*, and a build composed of five modules is as valid as one composed of six. A module a manifest names but the checkout lacks is a warning (an error under `--strict`); `composer bootstrap` prunes it from the managed regions.
 
 The directory layout does the rest: `modules/<name>/` holds every layer of one bounded context, so a submodule boundary and an ownership boundary are the same line. (See [the ownership table](#4-who-owns-what).)
 

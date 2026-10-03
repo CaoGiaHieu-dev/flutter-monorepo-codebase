@@ -17,11 +17,12 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 
 | Được phụ thuộc | Vì sao |
 |:---|:---|
-| `domain_*` | Use case, entity, repository interface |
-| `core_di` | Hợp đồng Navigator / action handler / routing / stream |
+| `domain_<own>`, `domain_core` | Use case, entity và repository interface của chính module mình — không bao giờ domain của module khác |
+| `<id>_api` | Hợp đồng navigator và action handler mà một module cung cấp cho feature — của chính nó và của module khác (`auth_api`, `home_api`) |
+| `core_di` | Hợp đồng trung lập với sản phẩm: routing, session, location, localization, stream |
 | `core_common` | Hằng số, `ErrorHandler`, helper, các hàm `getIt` — và bản re-export `AppFailure` từ `domain_core` |
 | `core_base_ui` | Design token, theme, `ThemeProvider` / `LanguageProvider` |
-| `core_responsive` | Extension scale trên `BuildContext` (`context.w/h/r/sp`) — bắt buộc với mọi file có đặt kích thước widget; `context.adaptive`, `AdaptiveLayout` và các widget thích ứng khác cho màn hình có layout đổi theo cửa sổ |
+| `core_responsive` | `context.w/h/sp/r` — bắt buộc với mọi file có đặt kích thước widget (RULE-30); `context.adaptive`, `AdaptiveLayout` và các widget thích ứng khác cho màn hình có layout đổi theo cửa sổ |
 | `provider_state_management` **hoặc** `bloc_state_management` | Tuỳ hướng state feature chọn |
 | `core_ui_kit` | Widget dùng lại (là package **core**, không phải feature) |
 
@@ -29,10 +30,10 @@ Phép thử thực tế: *nếu cắt màn hình này khỏi sản phẩm, packa
 
 > [!CAUTION]
 > - **Không bao giờ import `data_*`.** Feature nói chuyện với interface của Domain; app shell mới là nơi bind implementation.
-> - **Không bao giờ import feature package khác.** Không có ngoại lệ — widget dùng chung lấy từ `core_ui_kit`, vốn nằm ở core. Nhu cầu liên feature phải đi qua hợp đồng ở `core_di` — xem [giao tiếp giữa các feature](../guides/10_cross_feature.md).
-> - **Không bao giờ sửa `platform/shell/app_shell/lib/src/navigation/app_router.dart`** để thêm route của bạn, và không sửa `root_app.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI.
+> - **Không bao giờ import feature package khác.** Không có ngoại lệ — widget dùng chung lấy từ `core_ui_kit`, vốn nằm ở core. Nhu cầu liên feature phải đi qua `<id>_api` của module sở hữu hoặc một hợp đồng trung lập ở `core_di` — xem [giao tiếp giữa các feature](../guides/10_cross_feature.md) (RULE-04).
+> - **Không bao giờ sửa `platform/shell/app_shell/lib/src/navigation/app_router.dart`** để thêm route của bạn, và không sửa `app_material_wrapper.dart` để thêm localization delegate. Cả hai đều được lắp ráp từ đóng góp qua DI (RULE-20, RULE-34).
 
-Pubspec đã cưỡng chế phần lớn điều này: phụ thuộc workspace duy nhất của `feature_dashboard` là `core_di`, `core_responsive` và `platform_kernel`, nên nó *về mặt vật lý không thể* import một feature khác.
+Pubspec đã cưỡng chế phần lớn điều này: phụ thuộc workspace duy nhất của `feature_dashboard` là `core_di` và `core_responsive`, nên nó *về mặt vật lý không thể* import một feature khác. `arch_check` R3 giữ phần còn lại.
 
 ---
 
@@ -42,23 +43,23 @@ Pubspec đã cưỡng chế phần lớn điều này: phụ thuộc workspace d
 modules/<name>/feature/
 ├── assets/
 │   └── language/            # en.arb, vi.arb
+├── l10n.yaml                # cấu hình gen-l10n
 ├── lib/
-│   ├── feature_<name>.dart  # barrel công khai
+│   ├── feature_<name>.dart  # barrel duy nhất của package, được sinh ra
 │   ├── di/
-│   │   ├── module.dart      # @InjectableInit.microPackage()
-│   │   ├── localization.dart# hiện thực IFeatureLocalization
-│   │   └── di.dart
+│   │   └── module.dart      # @InjectableInit.microPackage()
 │   └── src/
 │       ├── pages/           # *_page.dart — màn hình đầy đủ
 │       ├── widgets/         # *_widget.dart, *_card.dart — widget con
 │       ├── provider/  HOẶC  bloc/
-│       ├── routing/         # route module, NavigatorImpl
+│       ├── routing/         # route module, nav destination, NavigatorImpl, location
+│       ├── localization/    # <name>_localization_impl.dart — IFeatureLocalization
 │       ├── utils/           # <name>_path.dart + hằng số của package
-│       ├── handlers/        # tuỳ chọn — hiện thực I*ActionHandler
-│       ├── services/        # tuỳ chọn — hiện thực agnostic stream
 │       ├── extensions/      # extension l10n
-│       ├── gen/             # l10n sinh tự động — không sửa tay
-│       └── src.dart
+│       ├── handlers/        # tuỳ chọn — hiện thực I*ActionHandler
+│       ├── session/         # tuỳ chọn — ISessionStatusStream của bên sở hữu phiên
+│       ├── app/             # tuỳ chọn — IAppTreeWrapper / IAppSplashScreen
+│       └── gen/language/    # sinh bởi gen-l10n, bị git-ignore — không sửa tay
 └── pubspec.yaml
 ```
 
@@ -99,22 +100,39 @@ Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocaliza
 
 ## 4. `feature_dashboard` chỉ là chrome
 
-Dashboard sở hữu `Scaffold` và chrome điều hướng — `BottomNavigationBar` trên cửa sổ `compact`, `NavigationRail` từ `medium` trở lên, dạng mở rộng từ `large` trở lên — không gì khác. Nó dựng chúng từ những tab được đăng ký trong DI:
+Dashboard sở hữu `Scaffold` và chrome điều hướng — `BottomNavigationBar` trên cửa sổ `compact`, `NavigationRail` từ `medium` trở lên, dạng mở rộng từ `large` trở lên — không gì khác. Nó dựng chúng từ danh sách `destinations` mà router của shell trao cho `IDashboardRouteModule.builder`:
+
+```dart
+// modules/dashboard/feature/lib/src/routing/dashboard_route_module_impl.dart
+@Singleton(as: IDashboardRouteModule)
+class DashboardRouteModuleImpl implements IDashboardRouteModule {
+  @override
+  Widget builder(
+    BuildContext context,
+    GoRouterState state,
+    StatefulNavigationShell navigationShell,
+    List<INavDestinationModule> destinations,
+  ) {
+    return DashboardPage(
+      navigationShell: navigationShell,
+      destinations: destinations,
+    );
+  }
+}
+```
 
 ```dart
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart
 @override
 Widget build(BuildContext context) {
   final index = navigationShell.currentIndex;
-  final tabs = getAllOrEmpty<INavDestinationModule>().toList()
-    ..sort((a, b) => a.order.compareTo(b.order));
+  final tabs = destinations;
   if (tabs.length < 2) return Scaffold(body: navigationShell);
 
   final selected = index.clamp(0, tabs.length - 1);
-  void onSelect(int tabIndex) => _onTap(tabIndex, tabs[tabIndex].onRestore);
   // This is where a neutral [NavDestination] becomes one app's widget —
   // the same modules feed both forms below, unchanged.
-  final destinations = [for (final tab in tabs) tab.destination(context)];
+  final items = [for (final tab in tabs) tab.destination(context)];
 
   // A phone keeps the bottom bar (the shell locks phone-sized displays to
   // portrait). From a medium window up — a tablet in either orientation,
@@ -127,8 +145,8 @@ Widget build(BuildContext context) {
       body: navigationShell,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selected,
-        onTap: onSelect,
-        items: [for (final d in destinations) _itemOf(d)],
+        onTap: _onSelect,
+        items: [for (final d in items) _itemOf(d)],
       ),
     );
   }
@@ -146,12 +164,12 @@ Widget build(BuildContext context) {
           right: isRtl,
           child: NavigationRail(
             selectedIndex: selected,
-            onDestinationSelected: onSelect,
+            onDestinationSelected: _onSelect,
             extended: extended,
             labelType: extended
                 ? NavigationRailLabelType.none
                 : NavigationRailLabelType.all,
-            destinations: [for (final d in destinations) _railItemOf(d)],
+            destinations: [for (final d in items) _railItemOf(d)],
           ),
         ),
         Expanded(child: navigationShell),
@@ -161,15 +179,15 @@ Widget build(BuildContext context) {
 }
 ```
 
-Trong các package của workspace, `feature_dashboard` chỉ phụ thuộc `core_di`, `core_responsive` và `platform_kernel` — nó **về mặt vật lý không thể** import feature khác. Vì nó đọc `getAllOrEmpty`, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả.
+Trong các package của workspace, `feature_dashboard` chỉ phụ thuộc `core_di` và `core_responsive` — nó **về mặt vật lý không thể** import feature khác. Vì các tab đến từ DI, xoá `feature_home` sẽ mất tab Home mà app vẫn khởi động được. Khi có ít hơn hai tab thì không có bar hay rail nào cả; app nào ghép hai tab trở lên thì phải ghép cả dashboard, nếu không chỉ truy cập được tab đầu (`checkAppContract` `C12`, RULE-24).
 
-Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — tablet ở cả hai hướng, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. (Màn hình cỡ điện thoại bị `AppInitializer` khoá dọc lúc khởi động, nên luôn hiện bottom bar; bỏ khoá đó thì điện thoại xoay ngang sẽ nhận rail theo đúng quy tắc này.) Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
+Chrome được chọn theo **lớp kích thước cửa sổ**, không theo thiết bị — tablet ở cả hai hướng, iPad đang Split View và cửa sổ desktop đều nhận đúng chrome mà cửa sổ của nó đủ chỗ. (Với chính sách hướng mặc định `phones_portrait`, màn hình cỡ điện thoại bị `AppInitializer` khoá dọc lúc khởi động, nên luôn hiện bottom bar; với chính sách `free` thì điện thoại xoay ngang sẽ nhận rail theo đúng quy tắc này.) Đây là mẫu tham chiếu của template cho layout thích ứng; các widget và quy tắc nằm ở [design system §7](../guides/11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
 
 ### Dashboard KHÔNG được phép
 
 - Import `feature_home` / `feature_settings`, hoặc nhúng page của chúng
 - Sở hữu `HomePage` / `SettingsPage`, hay bất kỳ BLoC nghiệp vụ nào của tab
-- Hardcode danh sách destination thay vì đọc từ DI
+- Hardcode danh sách destination thay vì vẽ `destinations` mà builder nhận được — router của shell gom `INavDestinationModule` một lần, sắp theo `order`, nên chrome và các nhánh không thể lệch nhau
 - Tự đăng ký `INavDestinationModule` để tạo tab "giả"
 
 ### Đóng góp một tab
@@ -198,7 +216,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-`INavDestinationModule` còn cung cấp `onRestore()` dạng virtual — được gọi khi người dùng bấm vào chính tab đang mở (thao tác quen thuộc "cuộn lên đầu / pop về gốc"). Override nếu tab của bạn cần phản ứng.
+Bấm vào chính tab đang mở sẽ đưa branch đó về trang đầu của nó (`navigationShell.goBranch(index, initialLocation: …)` trong dashboard).
 
 Chỉ dùng `INavDestinationModule` cho **điểm đến chính của bottom-nav** cần `StatefulShellBranch` riêng. Màn hình push chồng lên một tab chỉ là route thường bên trong branch đó.
 
@@ -211,11 +229,11 @@ Thư viện widget dùng lại là **`core_ui_kit`** tại `platform/ui/ui_kit` 
 Điều quan trọng ở phía feature là nghĩa vụ của **bên gọi**:
 
 ```dart
-// widget nhận số thô; feature là nơi scale
-CustomButton(width: context.w(120), height: context.h(44))
+// widget nhận kích thước đã scale; bên gọi là nơi scale
+CustomButton.rectangle(minWidth: context.w(120), height: context.h(44), child: …)
 ```
 
-Widget trong `core_ui_kit` không bao giờ scale lại một giá trị được truyền vào — nó dùng nguyên giá trị nhận được, và chỉ scale các hằng số mặc định của chính nó qua `core_responsive`. Scale thêm một tham số bên trong widget sẽ làm nó bị scale hai lần, nên việc scale giá trị bạn truyền vào luôn được làm ở đây, ngay tại chỗ gọi — và luôn qua `BuildContext`, vì `core_responsive` **không có extension trên `num`**: `120.w` không biên dịch được.
+Widget trong `core_ui_kit` không bao giờ scale lại một giá trị được truyền vào — nó dùng nguyên giá trị nhận được, và chỉ scale các hằng số mặc định của chính nó qua `core_responsive`. Scale thêm một tham số bên trong widget sẽ làm nó bị scale hai lần, nên việc scale giá trị bạn truyền vào luôn được làm ở đây, ngay tại chỗ gọi (RULE-30, RULE-31). Không có extension trên `num` — `120.w` không biên dịch được, chỉ `context.w(120)` mới được.
 
 ## 6. Vòng đời UI controller
 
@@ -258,7 +276,7 @@ Controller toàn cục thì không cần bọc gì cả. `AuthProvider` là `@la
 ```dart
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
-  static final $parentNavigatorKey = NavigatorKeys.nested('auth');
+  static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
@@ -292,21 +310,9 @@ class HomeProfileBloc
 
 ## 7. Quy tắc đặt tên
 
-| Thành phần | Hậu tố file | Hậu tố class | Ví dụ |
-|:---|:---|:---|:---|
-| Màn hình | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `LoginPage` |
-| Widget con | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `AuthHeaderWidget` |
-| Controller Provider | `_provider.dart` | `Provider` | `AuthProvider` |
-| Controller BLoC | `_bloc.dart` | `Bloc` | `HomeProfileBloc` |
-| Cubit | `_cubit.dart` | `Cubit` | chỉ khi event không mang lại gì |
-| Navigator impl | `_navigator_impl.dart` | `NavigatorImpl` | `AuthNavigatorImpl` |
-| Action handler impl | `_action_handler_impl.dart` | `ActionHandlerImpl` | `AuthActionHandlerImpl` |
-| Dialog | `_dialog.dart` | `Dialog` | `ConfirmationDialog` |
-| Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | `HomeSettingsBottomSheet` |
+Hậu tố file và class cho page, widget, controller, navigator, handler, localization và route, mỗi loại kèm ví dụ thật trong cây thư mục: [đặt tên](../reference/02_naming.md).
 
-Dialog và bottom sheet **luôn luôn** là class widget riêng — không bao giờ là closure viết thẳng trong `showDialog(builder: …)`.
-
-Mọi văn bản hiển thị cho người dùng đều phải dịch; hardcode chuỗi là bị cấm. Xem [localization và theming](../guides/09_localization_theming.md).
+Dialog và bottom sheet **luôn luôn** là class widget riêng — không bao giờ là closure viết thẳng trong `showDialog(builder: …)` (RULE-36). Mọi văn bản hiển thị cho người dùng đều được dịch qua ARB của feature và `IFeatureLocalization`, còn key ARB là `lowerCamelCase` (RULE-34, RULE-35). Xem [localization và theming](../guides/09_localization_theming.md).
 
 ---
 
@@ -324,17 +330,18 @@ dart run build_runner build --workspace
 dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 ```
 
-Checklist:
+Checklist (mỗi dòng dẫn tới dòng registry phát biểu nó):
 
-- [ ] Có `resolution: workspace` trong pubspec; không có `data_*` và không có feature khác trong dependencies
-- [ ] Route đăng ký qua `IFeatureRouteModule` hoặc `INavDestinationModule` — không đụng `app_router.dart`
-- [ ] Localization đăng ký qua `IFeatureLocalization` — không đụng `root_app.dart`
-- [ ] Controller theo màn hình là `@injectable`, tạo ở route, không bọc lại trong page
-- [ ] Hằng số đường dẫn nằm ở `src/utils/<name>_path.dart`
-- [ ] Điều hướng liên feature đi qua Navigator interface ở `core_di`, `BuildContext` truyền từ bên gọi
-- [ ] Mọi kích thước đều scale qua `BuildContext` — `context.w()` / `context.h()` / `context.sp()` / `context.r()`
-- [ ] Layout đổi theo cửa sổ thì chọn theo lớp kích thước cửa sổ (`context.adaptive`, `AdaptiveLayout`) — không bao giờ theo thiết bị hay nền tảng
-- [ ] Asset riêng của feature nằm trong feature package, không nhét vào `core_base_ui`
+- [ ] Có `resolution: workspace` trong pubspec; không có `data_*`, không có feature khác và không có domain của module khác trong dependencies (RULE-04)
+- [ ] Route đăng ký qua `IFeatureRouteModule` hoặc `INavDestinationModule` — không đụng `app_router.dart` (RULE-20)
+- [ ] Localization đăng ký qua `IFeatureLocalization` — không đụng `app_material_wrapper.dart`; key ARB là `lowerCamelCase` (RULE-34, RULE-35)
+- [ ] Controller theo màn hình là `@injectable`, tạo ở route, không bọc lại trong page (RULE-10, RULE-21)
+- [ ] Hằng số đường dẫn nằm ở `src/utils/<name>_path.dart` (RULE-09)
+- [ ] Điều hướng sang module khác đi qua navigator của module đó trong `<id>_api` của nó, resolve bằng `getItOrNull`, `BuildContext` truyền từ bên gọi (RULE-22, RULE-23)
+- [ ] Mọi kích thước đều scale qua `context.w/h/sp/r` (RULE-30)
+- [ ] Layout đổi theo cửa sổ thì chọn theo lớp kích thước cửa sổ (`context.adaptive`, `AdaptiveLayout`) — không bao giờ theo thiết bị hay nền tảng (RULE-32)
+- [ ] Dialog và bottom sheet là class widget riêng (RULE-36)
+- [ ] Asset riêng của feature nằm trong feature package, không nhét vào `core_base_ui` (RULE-37)
 
 ---
 
@@ -342,7 +349,7 @@ Checklist:
 
 Các feature không bao giờ import lẫn nhau. Phần hướng dẫn — chọn mô hình nào trong sáu mô hình và nối dây ra sao — nằm ở [`../guides/10_cross_feature.md`](../guides/10_cross_feature.md). Mục này giải thích vì sao nó có hình dạng như vậy.
 
-Bảng đăng ký: RULE-04, RULE-08, RULE-12, RULE-25, RULE-54.
+Bảng đăng ký: RULE-04, RULE-08, RULE-12, RULE-22, RULE-25, RULE-54.
 
 ```
 feature_a  ──✗──>  feature_b        cấm tuyệt đối
@@ -359,6 +366,24 @@ phẩm — thứ mà chính platform cần, đặt tên theo nhu cầu đó (phi
 sau đăng nhập, routing), không bao giờ theo module cung cấp nó. Dù ở đâu, cả hai phía đều phụ
 thuộc hợp đồng, không phía nào phụ thuộc phía kia. Chính điều đó làm cho feature có thể gỡ ra
 được; `arch_check` R3 giữ các luật của package API.
+
+### Điều hướng liên module đi qua navigator của đích
+
+Một feature đưa người dùng vào màn hình của module khác thì gọi navigator của module đó (RULE-22): hợp đồng nằm trong `<id>_api` của đích, phần hiện thực nằm trong feature của đích, còn bên gọi resolve nó một cách tuỳ chọn và truyền `BuildContext` của chính mình (RULE-23):
+
+```dart
+// modules/onboarding/feature/lib/src/pages/onboarding_page.dart
+onPressed: () {
+  final auth = getItOrNull<AuthNavigator>();
+  if (auth != null) {
+    auth.toLogin(context);
+  } else {
+    getItOrNull<HomeNavigator>()?.toHome(context);
+  }
+},
+```
+
+App shell không gọi tên module nào: nó đưa người dùng chưa đăng nhập tới `ISignInLocation` và người đã đăng nhập tới `IPostSignInLocation` ([app shell § 6](06_app_shell.md)). Phần hướng dẫn là [routing § 6](../guides/04_routing.md#6-cho-feature-khác-điều-hướng-tới-màn-hình-của-bạn).
 
 ### Vì sao là `SessionPrincipal` chứ không phải `UserEntity`
 

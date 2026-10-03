@@ -46,56 +46,58 @@ Mũi tên đọc là *"được phép import"*. Hãy chú ý những mũi tên *
 
 | Tầng | Đường dẫn | Trách nhiệm | Được import | **Cấm** import |
 |:--|:--|:--|:--|:--|
-| **App** | `apps/<id>/` | Điểm lắp ráp: `app_manifest.yaml`, `injection.dart` được sinh, `main.dart` một dòng, thứ định danh app (Firebase options) | tất cả | — |
-| **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Trình tự boot, lắp ráp router, material wrapper, state cấp app (`platform_app_shell`); `NetworkConfigImpl`, storage adapter, cờ boot (`platform_shell_adapters`) — dùng chung cho mọi app | các package core | mọi module (`arch_check` R1) |
-| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, một package state-management, `*_api` của module khác | `data_*`, feature package khác |
-| **Module API** | `modules/*/api` | Các hợp đồng mà feature khác dùng để chạm tới module (`auth_api`: `AuthNavigator`, `IAuthActionHandler`) — chỉ có interface, do feature của module implement | `platform/foundation/*`, Flutter | domain/data/feature của chính module, mọi module khác, mọi nhóm platform khác (`arch_check` R3) |
-| **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation | Flutter, Dio, Retrofit, Drift — **mọi thứ gắn với nền tảng** |
-| **Data** | `modules/*/data` | Hiện thực repository, DTO, data source | `domain_*`, `core_*` | `modules/*/feature` |
-| **Core** | `platform/<group>/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | `core_*` khác, cộng ba ngoại lệ bên dưới | `modules/*/feature`, `modules/*/data` |
+| **App** | `apps/<id>/` | Điểm lắp ráp: `app_manifest.yaml` (app là gì và lắp những module nào), `lib/app/app_profile.dart` và `app_hooks.dart` (mọi thứ riêng của từng app, RULE-80), `lib/di/injection.dart` được sinh, một `main.dart` ngắn | các package platform; module chỉ từ `lib/di/injection.dart` (RULE-05) | — |
+| **App shell** | `platform/shell/app_shell/`, `platform/shell/adapters/` | Trình tự boot, lắp ráp router, material wrapper, state cấp app (`platform_app_shell`); `NetworkConfigImpl`, storage adapter, cờ boot (`platform_shell_adapters`) — dùng chung cho mọi app | các package platform của mọi nhóm | mọi module (`arch_check` R1) |
+| **Feature** | `modules/*/feature` | Trang, widget, controller state của UI | `domain_*` và `domain_core` của chính module; `core_di`, `core_common`, `platform_kernel`, `core_base_ui`, `core_ui_kit`, `core_responsive`; package state-management mà nó dùng; `<id>_api` của module khác | `data_*`, feature package khác, domain của module khác (RULE-04) |
+| **Module API** | `modules/*/api` | Các hợp đồng mà feature khác dùng để chạm tới module (`auth_api`: `AuthNavigator`, `IAuthActionHandler`) — chỉ có interface, do feature của module implement | `platform/foundation/*`, Flutter và các package pub | domain/data/feature của chính module, mọi module khác, mọi nhóm platform khác (`arch_check` R3) |
+| **Domain** | `modules/*/domain` | Entity, use case, hợp đồng repository | `domain_core`, các package chỉ chứa annotation (`freezed_annotation`, `injectable`) | Flutter, Dio, Retrofit, Drift, mọi package `core_*` / `platform_*`, `data_*`, `feature_*` (RULE-03) |
+| **Data** | `modules/*/data` | Hiện thực repository, model, data source | `domain_*` và `domain_core` của chính module, `data_core`, hạ tầng `core_*` mà nó cần | `feature_*`, data / domain / API của module khác |
+| **Core** | `platform/<group>/*` | Mạng, lưu trữ, database, design system, hợp đồng DI | các package `platform/` khác theo chiều giữa các nhóm (R11); `domain_core` chỉ qua bốn cạnh đã duyệt bên dưới | mọi thứ dưới `modules/` (RULE-01) |
 
 Mỗi tầng có trang riêng:
 [Core](02_core.md) · [Domain](03_domain.md) · [Data](04_data.md) · [Feature](05_features.md) · [App Shell](06_app_shell.md).
 
 ### Bên trong `platform/`: sáu nhóm
 
-Các package core nằm trong sáu thư mục nhóm theo vai trò: `foundation/` (kernel, hợp đồng DI, helper gắn với Flutter), `layers/` (`domain_core`, `data_core`), `infra/` (mạng, lưu trữ, database, notification), `ui/` (responsive, design system, thư viện widget), `state/` (lớp nền Provider và BLoC) và `shell/` (app shell và các adapter hạ tầng của nó). Chỉ thư mục thay đổi — mọi package giữ nguyên tên. Phụ thuộc trỏ vào trong: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← mọi thứ trong platform/`; không package infra nào phụ thuộc package infra khác, `ui` không bao giờ phụ thuộc `state`, `infra` hay `shell`, và không gì trong `platform/` phụ thuộc `modules/`. Đồ thị package tuân theo chiều này không có ngoại lệ, và `arch_check` **R11** giữ nó như vậy (nhóm được đọc từ thư mục; chỉ xét `dependencies:`). Nhóm nào chứa gì, và ba cạnh ngược chiều cuối cùng đã được gỡ ra sao: [02_core.md § 0](02_core.md#package-nằm-ở-đâu--sáu-nhóm).
+Các package core nằm trong sáu thư mục nhóm theo vai trò: `foundation/` (kernel, hợp đồng DI, helper gắn với Flutter), `layers/` (`domain_core`, `data_core`), `infra/` (mạng, lưu trữ, database, notification), `ui/` (responsive, design system, thư viện widget), `state/` (lớp nền Provider và BLoC) và `shell/` (app shell và các adapter hạ tầng của nó). Phụ thuộc trỏ vào trong: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← mọi thứ trong platform/`; không package infra nào phụ thuộc package infra khác, `ui` không bao giờ phụ thuộc `state`, `infra` hay `shell`, và không gì trong `platform/` phụ thuộc `modules/`. `arch_check` **R11** giữ đồ thị này (nhóm được đọc từ thư mục; chỉ xét `dependencies:`) — các cạnh được phép là bảng trong [registry](../reference/01_rules.md#chiều-giữa-các-nhóm-platform-r11) (RULE-02). Nhóm nào chứa gì: [02_core.md § 0](02_core.md#package-nằm-ở-đâu--sáu-nhóm).
 
 ### Yêu cầu Dart thuần của tầng Domain
 
-`modules/*/domain` là **Dart thuần 100%**. Không `package:flutter/...`, không `package:dio/...`, không `package:drift/...`. Chính điều này khiến tầng nghiệp vụ unit-test được mà không cần thiết bị hay cây widget.
+`modules/*/domain` là **Dart thuần** (RULE-03, do `arch_check` R2 cưỡng chế): không Flutter, không package transport hay persistence, không package platform. Chính điều này khiến tầng nghiệp vụ unit-test được trên `package:test`, không cần thiết bị hay cây widget.
 
 Khi domain cần thứ *trông giống* UI — màu sắc, icon, kích thước — phải quy về kiểu nguyên thuỷ hoặc enum khai ngay trong chính package domain đó, còn tầng feature mới quyết định vẽ nó ra sao.
 
 ### Các ngoại lệ đã được duyệt
 
-Có ba package hạ tầng dưới `platform/` phụ thuộc vào `domain_core`. (`data_core` cũng vậy, nhưng nó là nền của tầng data và chỉ tình cờ nằm dưới `platform/` — package data phụ thuộc domain là chiều bình thường, không phải ngoại lệ.) Cả ba đều có chủ đích và đã được ghi nhận; đừng "dọn dẹp" chúng. `tools/arch_check/check.dart` giữ đúng danh sách này, in ra ở mỗi lần chạy, và sẽ đánh hỏng build nếu xuất hiện cạnh thứ tư.
+Có bốn package dưới `platform/` phụ thuộc vào `domain_core`. Cả bốn đều có chủ đích và đã được ghi nhận; đừng "dọn dẹp" chúng. `tools/arch_check/check.dart` giữ đúng danh sách này, in ra ở mỗi lần chạy, và sẽ đánh hỏng build nếu xuất hiện cạnh thứ năm.
 
-Lưu ý cả ba đều trỏ tới `domain_core` — vòng trong cùng — chứ không trỏ tới một domain *sản phẩm* nào. Đó chính là ranh giới: core được phép biết `Result` hay `AppFailure` là gì, nhưng không bao giờ biết một tài khoản là gì.
+Lưu ý cả bốn đều trỏ tới `domain_core` — vòng trong cùng — chứ không trỏ tới một domain *sản phẩm* nào. Đó chính là ranh giới: core được phép biết `Result` hay `AppFailure` là gì, nhưng không bao giờ biết một tài khoản là gì.
 
 | Ngoại lệ | Vì sao tồn tại |
 |:--|:--|
-| `provider_state_management` → `domain_core` | `PaginatedViewWidget` định kiểu theo `PaginatedEntity<T>`, còn `executeOperation` bóc `Result<T>` — cả hai khai trong `domain_core`. Lớp nền state-management sinh ra chính là để tiêu thụ hai kiểu đó. |
+| `provider_state_management` → `domain_core` | `executeOperation` bóc `Result<T>` và đọc `AppFailure` — cả hai khai trong `domain_core`. Lớp nền state-management sinh ra chính là để tiêu thụ hai kiểu đó. |
 | `bloc_state_management` → `domain_core` | `BlocViewState.error` mang thẳng một `AppFailure`, vốn là một phần của hợp đồng `Result` nên nằm trong `domain_core`. |
-| `platform_kernel` → `domain_core` | `ErrorHandler.handleError()` sinh ra `AppFailure`. Khai báo của nó nằm cùng `Result<T>` trong `domain_core`; `core_common` re-export toàn bộ kernel nên các nơi đang import sẵn không hề bị ảnh hưởng. |
+| `platform_kernel` → `domain_core` | `ErrorHandler.handleError()` sinh ra `AppFailure`. `AppFailure` được khai cùng `Result<T>` trong `domain_core`. |
+| `data_core` → `domain_core` | `BaseRepository` trả về `Result<T>` và `AppFailure`. Data phụ thuộc domain là chiều bình thường; cả hai package đều là tầng platform. |
 
-Ngoài ba trường hợp trên, mọi package trong `platform/*` **không** phụ thuộc package cục bộ nào khác ngoài các package hạ tầng (`platform_kernel`, `core_*`). Riêng `core_database` không phụ thuộc bất kỳ package nào trong workspace.
+Mọi cạnh platform khác đều theo chiều giữa các nhóm (R11) và nằm gọn trong `platform/`. `core_database`, `core_di` và `core_responsive` không phụ thuộc bất kỳ package nào khác trong workspace.
 
 ---
 
 ## 3. Vì sao dùng Pub Workspace monorepo
 
-Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc — hiện có 31 thành viên (28 package, hai app, và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build` cho cả cây.
+Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc, do `composer sync` sinh ra từ các app manifest — có 31 thành viên (16 package platform, 12 package module, hai app và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build --workspace` cho cả cây.
 
-**Cái được:** biên dịch tăng dần nhanh, không lệch version giữa các package, refactor xuyên package gọn trong một commit, và ràng buộc phân tầng ở mức vật lý — một feature package *không thể* import `data_auth` nếu `pubspec.yaml` của nó không khai.
+**Cái được:** biên dịch tăng dần nhanh, không lệch version giữa các package, refactor xuyên package gọn trong một commit, và phân tầng mà một cổng kiểm tra đọc được — `pubspec.yaml` và import của feature package đều bị quét, và `arch_check` R3 đánh hỏng build khi một feature khai hoặc import `data_auth`.
 
 > [!WARNING]
 > **Cái giá bạn phải chủ động quản lý.** Pub Workspace dùng chung một `package_config.json` cho mọi thành viên. Nghĩa là một package có thể `import 'package:data_core/data_core.dart'` và **vẫn biên dịch bình thường dù chưa hề khai `data_core` trong `pubspec.yaml` của nó**.
 >
 > Code chạy được hôm nay, và vỡ ngay khi ai đó tách package ra hoặc đổi thứ tự workspace. Có hai hình dạng cần canh chừng: một `import` hoàn toàn không có mục tương ứng trong pubspec, và một import dùng cho production nhưng mục của nó lại nằm dưới `dev_dependencies` — cả hai đều biên dịch trót lọt bên trong workspace và không cái nào sống sót khi ra ngoài.
 >
-> Hãy khai đủ mọi dependency bạn import, đúng mục. Kiểm tra bằng:
+> Hãy khai đủ mọi dependency bạn import, đúng mục (RULE-06). `arch_check` R5 bắt import không có mục trong `dependencies:` — mục nằm ở `dev_dependencies:` không tính — còn `check_unused_packages` bắt chiều ngược lại, một khai báo không ai import:
 > ```bash
+> dart tools/arch_check/check.dart
 > dart tools/unused_checker/check_unused_packages.dart
 > ```
 
@@ -110,14 +112,14 @@ vậy để [`.github/CODEOWNERS`](../../../.github/CODEOWNERS) diễn đạt đ
 |:--|:--|:--|
 | `platform/` | Infra | Mọi module đều phụ thuộc, nên một thay đổi phá vỡ sẽ phá vỡ tất cả cùng lúc |
 | `platform/foundation/contracts/` | Infra + architect | Hợp đồng liên module — sửa một cái là một cuộc thương lượng, không phải chỉnh sửa đơn phương |
-| `modules/<name>/` | Team của module đó | Cả ba tầng đi cùng nhau: team sửa UI cũng chính là team sửa use case phía sau |
+| `modules/<name>/` | Team của module đó | Mọi tầng của module đi cùng nhau (`api`, `domain`, `data`, `feature`): team sửa UI cũng chính là team sửa use case phía sau |
 | `modules/<name>/api/` | Team của module + các bên dùng nó | Bề mặt công khai của module — feature khác biên dịch dựa trên nó, nên sửa nó là một thay đổi liên module |
 | `apps/` | Tech lead | Những module nào ship cùng nhau, và khởi tạo theo thứ tự nào — đó là quyết định phát hành |
 | `apps/*/app_manifest.yaml` | Tech lead + architect | Chính là bản thân phép lắp ráp. Thêm một module ở đây là thay đổi sản phẩm *là gì* |
 
-Đây là lý do một module nằm ở `modules/auth/{domain,data,feature}` thay vì là các dòng auth rải
-trong ba thư mục anh em. CODEOWNERS khớp theo **đường dẫn**; với bố cục chia theo tầng, nó không có cách nào nói "phần auth
-của thư mục domain, data và features" — đó là ba đường dẫn không liên quan, chỉ tình cờ trùng đoạn
+Đây là lý do một module nằm ở `modules/auth/{api,domain,data,feature}` thay vì là các dòng auth rải
+trong bốn thư mục anh em. CODEOWNERS khớp theo **đường dẫn**; với bố cục chia theo tầng, nó không có cách nào nói "phần auth
+của thư mục domain, data và features" — đó là những đường dẫn không liên quan, chỉ tình cờ trùng đoạn
 cuối. Mỗi bounded context một thư mục khiến quyền sở hữu diễn đạt được, và khiến mỗi module một git
 submodule trở nên khả thi.
 
@@ -132,7 +134,7 @@ submodule trở nên khả thi.
 | Quyết định | Phương án bị loại | Vì sao |
 |:--|:--|:--|
 | **Dùng `Result<T>` thay vì ném exception** qua ranh giới tầng | `throw` / `try-catch` tại nơi gọi | Exception vô hình trong chữ ký hàm — người gọi không có cách nào biết mình phải xử lý lỗi. `Future<Result<UserEntity>>` đưa nhánh lỗi *vào trong kiểu*, nên trình biên dịch nhắc bạn. Tầng Data không bao giờ để exception lọt ra; `BaseRepository.execute()` chuyển nó thành `Result.failure(AppFailure)`. |
-| **DI phi tập trung theo micro-package** | Một `injection.dart` khổng lồ liệt kê mọi đăng ký | Mỗi package tự giữ `lib/di/module.dart` với `@InjectableInit.microPackage()`. Thêm package chỉ là thêm một dòng vào `app_manifest.yaml` của app (rồi `composer sync`), không phải sửa file 500 dòng. Xoá package thì các đăng ký của nó biến mất theo. |
+| **DI phi tập trung theo micro-package** | Một `injection.dart` khổng lồ liệt kê mọi đăng ký | Mỗi package có đăng ký gì đều tự giữ một `lib/di/module.dart` với `@InjectableInit.microPackage()`. Thêm package chỉ là thêm một dòng vào `app_manifest.yaml` của app (rồi `composer sync`), không phải sửa file 500 dòng. Xoá package thì các đăng ký của nó biến mất theo. |
 | **Routing phi tập trung qua hợp đồng DI** | Hardcode mọi `GoRoute` trong `app_router.dart` | Feature đăng ký [`IFeatureRouteModule`](../../../platform/foundation/contracts/lib/src/routing/i_feature_route_module.dart) / `INavDestinationModule`; `AppRouter` gom bằng `getAllOrEmpty<T>()`. Xoá một feature khỏi workspace không cần đụng app shell — router chỉ gom thiếu một đóng góp và tự lùi về phương án dự phòng. |
 | **Storage key do package sở hữu** | Một object "presets" dùng chung chứa mọi key | Object dùng chung trao cho *mọi* nơi inject quyền đọc/ghi dữ liệu của *mọi* feature khác. Mỗi package tự khai `StorageValue` với key của mình trong thư mục `utils/` của chính nó. Xem [hướng dẫn storage](../guides/06_storage.md). |
 | **Truy cập database do package sở hữu** | Một database dùng chung cho cả app, inject khắp nơi | Cùng lý do: một database dùng chung phơi mọi DAO ra cho mọi nơi inject, và ép package nào khai báo nó phải sở hữu toàn bộ bảng. Package phụ thuộc [`IDatabaseHandle`](../../../platform/infra/database/lib/src/access/i_database_handle.dart) và chỉ nhận đúng accessor mình cần. Xem [hướng dẫn database](../guides/07_database.md). |
@@ -146,11 +148,9 @@ Một team có thể chỉ checkout đúng module của mình mà vẫn build đ
 
 ### Điều gì khiến chuyện này khả thi
 
-Không có gì trong repo này mã hoá vị trí của một package.
+Không tool nào giữ danh sách package. Mỗi tool tìm package bằng cách quét `pubspec.yaml` (`tools/shared/workspace.dart`), còn `arch_check` phân loại một package theo thư mục của nó — `modules/<id>/{api,domain,data,feature}` — và kiểm tra tên khớp với thư mục. Nên một module vắng mặt đơn giản là không được tìm thấy.
 
-`composer` phân giải package **theo tên**, tìm bằng cách quét `pubspec.yaml`. `arch_check` suy ra tầng của package từ tên. `MonorepoHelper` duyệt cây thư mục. Nên một module vắng mặt đơn giản là không được tìm thấy — không tool nào giữ một danh sách để rồi lạc hậu.
-
-Đó là toàn bộ cơ chế. `composer sync` viết ra một phép lắp ráp từ *những gì có trên đĩa*, và một bản build gồm năm module cũng hợp lệ như bản gồm sáu.
+Đó là toàn bộ cơ chế. `composer sync` lắp những module mà manifest nêu tên *và có trên đĩa*, và một bản build gồm năm module cũng hợp lệ như bản gồm sáu. Module mà manifest nêu nhưng bản checkout không có chỉ là một cảnh báo (thành lỗi khi dùng `--strict`); `composer bootstrap` cắt nó khỏi các vùng managed.
 
 Bố cục thư mục lo phần còn lại: `modules/<name>/` chứa mọi tầng của một bounded context, nên ranh giới submodule và ranh giới sở hữu là cùng một đường kẻ. (Xem [bảng quyền sở hữu](#4-ai-sở-hữu-cái-gì).)
 

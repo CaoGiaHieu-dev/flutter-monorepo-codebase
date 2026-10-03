@@ -11,7 +11,7 @@ Core là **hạ tầng**. Nó cung cấp cơ chế; nó không mã hoá nghiệp
 
 Ba luật áp dụng cho mọi thứ trong trang này — RULE-01, RULE-44 / RULE-46 (cơ chế, không phải chính sách) và RULE-09 trong [bảng đăng ký](../reference/01_rules.md#bảng-đăng-ký-luật).
 
-**Core không được phụ thuộc feature hay data.** Có ba ngoại lệ đã duyệt, liệt kê ở [phần tổng quan](01_overview.md#các-ngoại-lệ-đã-được-duyệt). `tools/arch_check/check.dart` cưỡng chế danh sách này ở mọi PR.
+**Core không được phụ thuộc feature hay data** (RULE-01). Bốn cạnh `→ domain_core` đã duyệt được liệt kê ở [phần tổng quan](01_overview.md#các-ngoại-lệ-đã-được-duyệt); `tools/arch_check/check.dart` cưỡng chế danh sách này ở mọi PR.
 
 **Core cấp cơ chế, không cấp chính sách.** `core_storage` cho bạn `StorageValue<T>`; nó không quyết định rằng tồn tại một key tên `token`. `core_database` cho bạn kết nối và hợp đồng migration; nó không biết ý nghĩa nghiệp vụ của bảng. Hễ một package core bắt đầu gọi tên một khái niệm domain cụ thể, cái tên đó thuộc về chỗ khác.
 
@@ -19,38 +19,20 @@ Ba luật áp dụng cho mọi thứ trong trang này — RULE-01, RULE-44 / RUL
 
 ### Package nằm ở đâu — sáu nhóm
 
-`platform/` được chia thành sáu thư mục nhóm theo vai trò. Chỉ có thư mục cho biết package thuộc nhóm nào — **tên** mọi package giữ nguyên (`core_di` vẫn là `core_di`, nay ở `platform/foundation/contracts`), nên import, `app_manifest.yaml` và tên phụ thuộc trong từng `pubspec.yaml` hoàn toàn không nhắc tới nhóm.
+`platform/` được chia thành sáu thư mục nhóm theo vai trò. Chỉ có thư mục cho biết package thuộc nhóm nào — **tên** package không mang nhóm (`core_di` nằm ở `platform/foundation/contracts`), nên import, `app_manifest.yaml` và tên phụ thuộc trong từng `pubspec.yaml` hoàn toàn không nhắc tới nhóm.
 
 | Nhóm | Thư mục | Package (thư mục) | Thứ thuộc về đây | Được phụ thuộc vào |
 |:--|:--|:--|:--|:--|
-| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | Nền mà mọi package khác dựng lên: service locator và xử lý lỗi, các hợp đồng DI giữa module, helper gắn với Flutter. Không I/O, không widget, không kiểu transport | foundation, `domain_core` |
+| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | Nền mà mọi package khác dựng lên: service locator, xử lý lỗi và các kiểu app-profile (Dart thuần); các hợp đồng DI giữa module; helper boot, vòng đời và routing gắn với Flutter. Không gọi tên kiểu Dio (HTTP client) nào | foundation, `domain_core` |
 | **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | Hợp đồng nền của tầng domain và data — `Result<T>`, `AppFailure`, `BaseEntity`, `BaseRepository` — mà `modules/*/domain` và `modules/*/data` mở rộng | `domain_core`: không gì. `data_core`: foundation, `domain_core` |
 | **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Cơ chế với ra ngoài tiến trình — HTTP, lưu trữ key–value, SQLite, push. Chỉ cơ chế: không key, bảng hay endpoint của module sản phẩm nào. Nhóm mặc định của `generate.dart 4` / `5` | foundation, layers — không bao giờ một package infra khác |
 | **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scale và layout thích ứng, design token, theme và chuỗi dùng chung, thư viện widget dùng chung | foundation, ui — không bao giờ state, infra hay shell |
 | **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | Lớp nền quản lý state, và các widget gắn với nó (`LoadMoreListView`); mỗi feature chọn một | foundation, layers, ui |
-| **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | Các adapter hạ tầng mà mọi app đăng ký (`NetworkConfigImpl`, storage adapter, `AppBootStorage`); app shell mà mọi app compose: boot, lắp ráp router, material wrapper, state cấp app | mọi nhóm platform (`app_shell → adapters`, không bao giờ ngược lại) |
+| **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | Các adapter hạ tầng mà mọi app đăng ký (`NetworkConfigImpl`, storage adapter, `AppBootStorage`); app shell mà mọi app compose: boot, kiểm tra composition, lắp ráp router, material wrapper, deep link | mọi nhóm platform (`app_shell → adapters`, không bao giờ ngược lại) |
 
-Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← toàn bộ platform/`. `platform_kernel → domain_core` là một phần của thiết kế, không phải ngoại lệ: `ErrorHandler` sinh ra `AppFailure` (cạnh R1 đã duyệt). Và, như cũ, không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` **R11** bắt buộc chiều giữa các nhóm: nó đọc nhóm của package từ thư mục (`platform/<group>/<package>`; package nằm ngoài thư mục nhóm hợp lệ tự nó là vi phạm) và đối chiếu mọi mục `dependencies:` là package platform với bảng trên. Dev dependency không bị kiểm — chúng không bao giờ được ship; test của `platform_app_shell` dùng `core_storage` cho fake. Một cạnh trỏ vào `domain_core` / `data_core` vẫn cần thêm danh sách đã duyệt của R1.
+Chiều phụ thuộc, mỗi mũi tên trỏ về phía bị phụ thuộc: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← toàn bộ platform/`. `platform_kernel → domain_core` là một trong bốn cạnh đã duyệt: `ErrorHandler` sinh ra `AppFailure`. Không gì dưới `platform/` phụ thuộc `modules/` (`arch_check` R1). `arch_check` **R11** bắt buộc chiều giữa các nhóm: nó đọc nhóm của package từ thư mục (`platform/<group>/<package>`; package nằm ngoài thư mục nhóm hợp lệ tự nó là vi phạm) và đối chiếu mọi mục `dependencies:` là package platform với bảng trên — bảng nhóm được phép nằm ở [bảng đăng ký](../reference/01_rules.md#chiều-giữa-các-nhóm-platform-r11) (RULE-02). Dev dependency không bị kiểm; test của `platform_app_shell` dùng `core_storage` cho fake. Một cạnh trỏ vào `domain_core` / `data_core` vẫn cần danh sách đã duyệt của R1.
 
-Đồ thị package tuân theo chiều này **không có ngoại lệ nào**. Ba cạnh từng đi ngược chiều; cả ba đều được gỡ bỏ, không phải được duyệt:
-
-- `core_common` (foundation) → `core_responsive` (ui). `BottomTransitionPage`, widget duy nhất scale qua nó, đã chuyển sang `core_ui_kit` (`navigation/`); khoá dọc cho màn hình cỡ điện thoại của `AppInitializer` so với một hằng số private 600 px (breakpoint `medium` của Material 3).
-- `core_ui_kit` (ui) → `provider_state_management` (state). `LoadMoreListView` / `LoadingMoreWidget` — hai widget duy nhất của kit gắn với `LoadMoreMixin` — đã chuyển vào `provider_state_management` (`src/base_view/loading_more_widget.dart`), package được phép phụ thuộc `ui`. Kit giờ không khai package quản lý state nào.
-- `platform_kernel` → `dio`. Phần ánh xạ Dio → `AppFailure` đã chuyển sang `core_network` thành `DioFailureClassifier`, được đăng ký vào `ErrorHandler` (§ 1, § 6).
-
-Hai cạnh nhẹ hơn cũng được gỡ theo: `core_storage` giờ lấy `TypeHelper` từ `platform_kernel` thay vì cả `core_common`, và `data_auth` không còn khai `flutter` mà nó không dùng.
-
-Đồ thị ở cấp nhóm (mũi tên = "phụ thuộc vào"; mọi cạnh package đều rơi vào một trong các dòng này):
-
-```text
-layers/domain  -> (nothing)
-foundation     -> foundation, layers/domain
-layers/data    -> foundation, layers/domain
-infra          -> foundation, layers/domain            (no infra -> infra)
-ui             -> foundation, ui
-state          -> foundation, layers/domain, ui
-shell          -> foundation, infra, ui, state, shell
-```
+Mọi cạnh package đều tuân theo chiều này, không có ngoại lệ: `BottomTransitionPage` (scale qua `core_responsive`) nằm ở `core_ui_kit`; các widget gắn với `LoadMoreMixin` (`LoadMoreListView`) nằm ở `provider_state_management`, nên kit không khai package quản lý state nào; và kernel không gọi tên kiểu Dio nào — `core_network` đóng góp `DioFailureClassifier` qua `ErrorHandler.registerClassifier` (§ 1, § 6).
 
 Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/generate.dart 4 <name>` đặt nó ở đó; truyền `--group <group>` cho nhóm khác.
 
@@ -60,24 +42,27 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 
 Đáy của ngăn xếp hạ tầng là hai package, tách theo đúng một câu hỏi: *có cần Flutter không?*
 
-**`platform_kernel`** là Dart thuần — không có `flutter` trong dependency, `arch_check` R9 cưỡng chế điều đó, và cũng không transport: nó không gọi tên kiểu nào của `dio`. Phụ thuộc workspace duy nhất của nó là `domain_core`, để lấy `AppFailure` mà `ErrorHandler` sinh ra. Hãy phụ thuộc thẳng vào nó, trừ khi bạn cần thứ gì gắn với Flutter.
+**`platform_kernel`** là Dart thuần — không có `flutter` trong dependency, `arch_check` R9 cưỡng chế điều đó, và cũng không transport: nó không gọi tên kiểu nào của `dio`. Phụ thuộc workspace duy nhất của nó là `domain_core`, để lấy `AppFailure` mà `ErrorHandler` sinh ra. Hãy phụ thuộc thẳng vào nó, trừ khi bạn cần thứ gì gắn với Flutter. Mọi thứ nằm trong `lib/src/`:
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
-| Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
-| Enum | `src/enums/` | enum dùng toàn app (`Flavor`, …) |
-| Lỗi | `src/error/` | `ErrorHandler.handleError()`, các kiểu exception, và một bản re-export của `AppFailure` (khai trong `domain_core`, nằm cạnh `Result<T>`). `ErrorClassifier` + `ErrorHandler.registerClassifier` cho phép package sở hữu một kiểu exception tự ánh xạ nó — `core_network` đăng ký `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` là một callback thường cho những exception nó không phân loại được — app shell trỏ nó tới `IErrorReporter` tuỳ chọn ([`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting)) |
-| Extension | `src/extensions/` | `bool`, `Enum`, `List`, `String` — không có định dạng `DateTime` hay `num`: ngày, giờ và tiền tệ phụ thuộc locale, nên hãy định dạng bằng `DateFormat` / `NumberFormat` của `intl` với locale hiện tại |
-| Utils **và constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+| Service locator | `service_locator.dart` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`, và typedef `ServiceLocator` cho code phải gọi tên locator mà không khai `get_it` |
+| Flavor | `flavor.dart` | `Flavor` (`dev`, `staging`, `prod`; `toValue()` là cách viết của `--flavor` / môi trường DI) |
+| Lỗi | `error/` | `ErrorHandler.handleError()` (không bao giờ throw), các kiểu `AppException`, và một bản re-export các kiểu failure khai trong `domain_core` cạnh `Result<T>`. `ErrorClassifier` + `ErrorHandler.registerClassifier` cho phép package sở hữu một kiểu exception tự ánh xạ nó — `core_network` đăng ký `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` là một callback thường cho những exception nó không phân loại được — app shell trỏ nó tới `IErrorReporter` tuỳ chọn ([`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting)) |
+| App profile | `profile/` | Các kiểu một app dùng để tự mô tả với shell — `AppProfile`, `AppFacts`, `AppPlatform`, `PlatformFacts`, `SslPinningPolicy`, và các section tinh chỉnh có kiểu (`DisplayProfile`, `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile`); `registerAppProfile` đưa chúng vào locator. Ý nghĩa từng trường: [`06_app_shell.md`](06_app_shell.md#hồ-sơ-app), [`13_app_composition`](../guides/13_app_composition.md) |
+| Helper | `helpers/` | `TypeHelper`, `ValidationHelper` |
+| Extension cho String | `string_extension.dart` | `StringExtension` (`capitalize`, `isValidEmail`, `truncate`, …) và `StringPriceExtension` — không có định dạng `DateTime` hay `num`: ngày, giờ và tiền tệ phụ thuộc locale, nên hãy định dạng bằng `DateFormat` / `NumberFormat` của `intl` với locale hiện tại |
+| Hằng số | `utils/` | `EnvConstants` (`BASE_URL`, `WEB_DOMAIN`, `APP_NAME`), `ErrorCodes`, `ProfileConstants` (các define `ALLOW_UNDECLARED_PLATFORM` và `APP_FLAVOR`) |
 
-**`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên; và `core_di`, cho `IAnalytics` tuỳ chọn mà `RouteAwareWidget` báo lượt xem màn hình tới. Nó không phụ thuộc gì trong nhóm `ui`: `BottomTransitionPage` giờ nằm ở `core_ui_kit`.
+**`core_common`** là nửa gắn với Flutter. Nó khai hai phụ thuộc workspace — `platform_kernel`, được nó re-export toàn bộ (`src/kernel.dart`) nên một import `package:core_common/core_common.dart` vẫn resolve được mọi thứ ở trên; và `core_di`, cho `IAnalytics` tuỳ chọn mà `RouteAwareWidget` báo lượt xem màn hình tới. Nó không phụ thuộc gì trong nhóm `ui`.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, base URL, locale mặc định), `AppInitializer` (HttpOverrides, log, hướng màn hình — chỉ khoá dọc trên màn hình cỡ điện thoại, system UI) |
-| Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
-| Trợ giúp routing | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget` |
-| Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
+| Config | `src/config/` | `AppConfig` (xác định flavor, quy tắc bỏ qua TLS, locale mặc định), `AppInitializer` (logger, `HttpOverrides`, chính sách hướng màn hình, `RouteAwareWidget.observer`), `resolveAppPlatform()` (chỗ duy nhất ánh xạ thiết bị đang chạy sang một `AppPlatform`) |
+| Mixin | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `DisposeGuard` |
+| Trợ giúp routing | `src/go_route_data_custom.dart` | `GoRouteDataCustom`, `RouteAwareWidget` |
+| Helper | `src/helpers/` | `AppUtils`, `EasyDebounce`, `AppInfoHelper` (thông tin package) |
+| Input formatter | `src/input_formatters.dart` | `NumberCurrencyFormatter`, `PhoneNumberFormatter` |
 
 ### Những gì *không* thuộc về đây, và vì sao
 
@@ -89,12 +74,12 @@ Package cơ chế mới đặt vào `infra` — `dart tools/module_generator/gen
 | Endpoint REST (`/user/login`, `/user/refresh-token`) | package data sở hữu chúng — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | Chúng chỉ thuộc về auth. Không thứ gì khác có lý do gọi tên chúng. |
 | Hằng số của một hệ thống con (tên event analytics, event socket như `TYPING` / `USER_JOINED`, key remote-config) | package hiện thực hệ thống con đó, nếu có | Event dành riêng cho chat mà nằm trong một package core là rò rỉ ranh giới, còn hằng số cho một hệ thống repo không hề có thì chỉ là gánh nặng chết. |
 
-Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — cả hai trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`) và `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — mã lỗi mà `ErrorHandler` và `BaseRepository` gán khi không có HTTP status, ví dụ `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, đều nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
+Ba file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn cục — tất cả trong `src/utils/` của `platform_kernel`: `EnvConstants` (giá trị `String.fromEnvironment`), `ProfileConstants` (các define build-time mà boot đọc) và `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — mọi mã lỗi phi-HTTP mà platform gán, chia theo dải: `1xxx` mạng (`NETWORK_ERROR`, `NO_INTERNET`, `CONNECTION_TIMEOUT`, `REQUEST_CANCELLED`, …), `2xxx` storage, `3xxx` validation, `4xxx` parsing, `5xxx` cache, `6xxx` dịch vụ ngoài, `7xxx` response envelope (`RESPONSE_REJECTED`, `EMPTY_RESPONSE`) và `UNKNOWN` 9999 — tất cả nằm ngoài dải HTTP nên một 5xx luôn là 5xx thật).
 
 > [!CAUTION]
 > Trước khi thêm một hằng số vào `core_common`, hãy tự hỏi: *có nhiều hơn một domain không liên quan cùng đọc nó không?* Nếu không, nó thuộc về `utils/` của package sở hữu.
 
-**Firebase options cũng không nằm ở đây.** Chúng gắn với một bundle ID, nên thuộc về một app: mỗi app dùng Firebase sở hữu `lib/firebase/firebase_module.dart` đăng ký `FirebaseOptions` theo từng flavor (của app mẫu là [`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)). Khi module đó còn nằm trong `core_common`, một app thứ hai sẽ thừa hưởng luôn định danh Firebase của app mobile.
+**Firebase options cũng không nằm ở đây.** Chúng gắn với một bundle ID, nên thuộc về một app: mỗi app dùng Firebase sở hữu `lib/firebase/firebase_module.dart` đăng ký `FirebaseOptions` theo từng flavor (của app mẫu là [`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)).
 
 ---
 
@@ -102,22 +87,25 @@ Hai file constants nằm ở đáy ngăn xếp, vì chúng thật sự toàn c�
 
 Chỉ chứa hợp đồng. Không hiện thực, không nghiệp vụ. Đây là vùng trung lập nơi platform gặp các module — và mọi hợp đồng ở đây đều **trung lập với sản phẩm**: đặt tên theo thứ platform cần (một phiên đăng nhập, một vị trí), không bao giờ theo module tình cờ cung cấp nó.
 
-| Nhóm hợp đồng | Đường dẫn | Mục đích |
+| Nhóm hợp đồng | Đường dẫn (dưới `lib/src/`) | Mục đích |
 |:--|:--|:--|
-| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (nơi shell đưa người dùng đã đăng xuất / đã đăng nhập tới), `IDashboardRouteModule`, `NavigatorKeys` |
-| Session | `src/session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (phía shell), `ISessionStatusStream` (phía feature: chia sẻ state giữa feature Provider và feature BLoC), `ISessionRefreshListenable`, `ISessionGateway` (transport) — do module nào sở hữu đăng nhập hiện thực |
-| Hợp đồng storage | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong package adapter của app shell (`platform_shell_adapters`) |
-| Localization | `src/i_feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
-| Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
+| Routing | `routing/` | `IFeatureRouteModule`, `INavDestinationModule` (cùng `NavDestination` của nó), `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (nơi shell đưa người dùng đã đăng xuất / đã đăng nhập tới), `IDashboardRouteModule`, `NavigatorKeys` — mỗi hợp đồng một file |
+| Session | `session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (phía shell), `ISessionStatusStream` (phía feature: chia sẻ state giữa feature Provider và feature BLoC), `ISessionRefreshListenable`, `ISessionGateway` (transport) — do module nào sở hữu đăng nhập hiện thực |
+| App | `app/` | `IAppSplashScreen` (splash bằng Dart), `IAppTreeWrapper` (bọc cây widget, có thứ tự) |
+| Hợp đồng storage | `i_theme_storage.dart`, `i_language_storage.dart` | `IThemeStorage`, `ILanguageStorage` — hiện thực trong package adapter của app shell (`platform_shell_adapters`) |
+| Localization | `i_feature_localization.dart` | `IFeatureLocalization` — mỗi feature tự đóng góp delegate |
+| Observability | `observability/` | `IErrorReporter`, `IAnalytics` — tuỳ chọn, do app implement (Crashlytics, Sentry, Firebase Analytics, …); xem [`06_app_shell.md`](06_app_shell.md#lỗi-và-crash-reporting) |
 
-**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing nằm trong `routing_interfaces.dart`. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
+App cung cấp những hợp đồng nào, và shell làm gì khi thiếu từng cái, là khai báo `capabilities:` của app (RULE-81) — [`06_app_shell.md`](06_app_shell.md#shell-resolve-những-gì-từ-một-app) liệt kê chúng.
+
+**`NavigatorKeys`** có file riêng, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), tách khỏi các interface routing. Nó phơi ra `rootKey`, `appKey`, và `nested(id)` cho module cần back stack riêng.
 
 Một `ShellRoute` và các route con phải dùng **cùng một** instance `GlobalKey`, nhưng shell do app shell dựng còn route con khai bên trong feature. Đặt key ở bên nào cũng tạo chu trình, nên Hub — nơi cả hai đều đã phụ thuộc — giữ nó.
 
 Key được *yêu cầu theo id* chứ không khai sẵn: `NavigatorKeys.nested('auth')` luôn trả về cùng một instance. Nhờ vậy DI Hub không gọi tên feature nào, và module cần back stack riêng không phải thêm gì vào đây.
 
 > [!NOTE]
-> `core_di` phụ thuộc `go_router`. Đây không phải rò rỉ: `IFeatureRouteModule` trả về `List<RouteBase>`, `INavDestinationModule` cũng trả về `List<RouteBase>`. Đây *chính là* hợp đồng routing nên buộc phải nói ngôn ngữ của GoRouter — nhưng `INavDestinationModule` mô tả điểm đến bằng `NavDestination` của chính Hub, không phải `BottomNavigationBarItem`, nên hợp đồng không cam kết vào thanh bottom bar. Trừu tượng thêm một lớp nữa chỉ tạo adapter vô ích.
+> `core_di` phụ thuộc `go_router`. Đây không phải rò rỉ: `IFeatureRouteModule` và `INavDestinationModule` đều trả về `List<RouteBase>`. Đây *chính là* hợp đồng routing nên buộc phải nói ngôn ngữ của GoRouter — nhưng `INavDestinationModule` mô tả điểm đến bằng `NavDestination` của chính Hub, không phải `BottomNavigationBarItem`, nên hợp đồng không cam kết vào thanh bottom bar. Trừu tượng thêm một lớp nữa chỉ tạo adapter vô ích.
 
 **Không thuộc về đây:** bất cứ thứ gì có phần hiện thực. Nếu bạn viết `class …Impl` trong `core_di`, nó đang nằm sai package. Cũng không phải hợp đồng tồn tại để một feature chạm tới *một module khác* — `AuthNavigator`, `IAuthActionHandler`, `HomeNavigator`: chúng nằm trong package API của module sở hữu (`modules/auth/api` → `auth_api`, `modules/home/api` → `home_api`), vốn chỉ được phụ thuộc foundation và Flutter (`arch_check` R3).
 
@@ -125,35 +113,36 @@ Key được *yêu cầu theo id* chứ không khai sẵn: `NavigatorKeys.nested
 
 ## 3. `core_base_ui` — design system
 
-Design token, theme, typography, asset toàn cục và bộ localization nền.
+Design token, theme, typography, asset toàn cục và bộ localization nền. Phụ thuộc `core_responsive`, `core_di`, `core_common` và `platform_kernel`.
 
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Design token | `src/styles/` | `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` |
-| Theme | `src/theme/` | `ThemeProvider`, `ThemeSystemExtension`, `ThemeSystemInterface` |
-| Ngôn ngữ | `src/language/` | `LanguageProvider` |
-| Extension | `src/extensions/` | `context.colors`, extension cho key/locale |
-| Sinh tự động | `src/gen/` | `Assets`, `AppLocalizations` (chuỗi toàn cục) |
-| Constants | `src/utils/base_ui_constants.dart` | Giá trị không phải token: thời lượng snackbar, kích thước dropdown, cỡ chữ app bar |
+| Theme | `src/theme/` | `ThemeProvider` (dựng `ThemeData` từ palette), `ThemeSystemExtension` (palette — các token màu gồm `shadow` và `scrim`; hai palette `light` / `dark`; `toColorScheme`; `withOverrides` cho `ThemeProfile` của app) |
+| Ngôn ngữ | `src/language/` | `LanguageProvider`, `LanguageSet` (các ngôn ngữ app cung cấp, lấy từ `LocaleProfile` của nó), `AppLanguages` (`supported`, `fallback`, `resolve`, `nameOf` — nơi thêm tên hiển thị của một ngôn ngữ) |
+| Extension | `src/extensions/` | `context.colors` / `context.colorScheme` / `context.l10n`, `GlobalKey.showDropDown`, `Locale.languageName`, `AppLocalizations.failureMessage(code)` (câu đã dịch của một failure, chọn theo code — không bao giờ theo `AppFailure.message`, RULE-34) |
+| Licenses | `src/licenses/` | `registerBaseUiLicenses()` — giấy phép của typeface |
+| Sinh tự động | `src/gen/` | `Assets` (logo SVG), `FontFamily`, `AppLocalizations` (chuỗi toàn cục) |
+| Constants | `src/utils/base_ui_constants.dart` | Giá trị không phải token: kích thước dropdown, cỡ chữ tiêu đề app bar, elevation khi cuộn dưới app bar, alpha chỉ báo navigation rail |
+
+Typeface và các chuỗi toàn cục nằm trong package này (`assets/fonts/`, `assets/language/`). Ảnh launcher icon và native splash là đầu vào của build, không phải asset lúc chạy: chúng nằm ở `assets/branding/` của repo, được `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở root đọc. Palette mà một app ghi đè được khai trong `ThemeProfile` của nó (`PaletteToken` → màu), không phải bằng cách sửa package này — [`11_design_system.md`](../guides/11_design_system.md).
 
 ### Zero Flutter widget — đã kiểm chứng
 
-Package này **không** chứa `StatelessWidget`, `StatefulWidget`, `State<…>` hay `InheritedWidget` nào. Điều này được kiểm tra, không phải mặc định tin. Widget dùng lại thuộc về [`core_ui_kit`](#4-core_ui_kit--widget-dùng-lại); `core_base_ui` chỉ cấp giá trị cho những widget đó tiêu thụ.
+Package này **không** chứa `StatelessWidget`, `StatefulWidget`, `State<…>` hay `InheritedWidget` nào trong `lib/`. Điều này được kiểm tra, không phải mặc định tin. Widget dùng lại thuộc về [`core_ui_kit`](#4-core_ui_kit--widget-dùng-lại); `core_base_ui` chỉ cấp giá trị cho những widget đó tiêu thụ.
 
 ### Vì sao design token ở lại `styles/` thay vì `utils/`
 
-Đây là ngoại lệ đã duyệt của luật "constants nằm trong `utils/`":
+Đây là ngoại lệ đã duyệt của luật "constants nằm trong `utils/`" (RULE-09):
 
 - Chúng là **API công khai**, được nhiều feature package import trực tiếp.
 - `styles/` mang ý nghĩa rõ ràng — "đây là design system". `utils/` đọc lên là "linh tinh", đúng tín hiệu sai cho những token mà cả app phải tuân theo.
 
 Các magic value *không phải* token thì nằm ở `src/utils/base_ui_constants.dart`. Ranh giới phân biệt: nếu một designer nhìn vào mà nhận ra, đó là token và ở lại `styles/`.
 
-### Vì sao luật về màu và font size do review giữ
+### Màu do review giữ
 
-Đã cân nhắc và cố ý để cho review. Một phép kiểm `Colors.<name>` sẽ phải cho qua những chỗ mà màu literal là *đúng* — `AppShadows`, vốn là file token, và mọi lớp phủ modal, nơi `ModalBarrier` của chính Flutter là màu đen cố định và một giá trị theo theme sẽ *làm sáng* màn hình ở chế độ tối. Trên cây code này là bảy chỗ được duyệt so với hai vi phạm thật, và một luật mà danh sách ngoại lệ dài hơn số phát hiện sẽ dạy người ta thói quen đọc lướt.
-
-Repo cũng cấm comment suppression, nên không có lối thoát trung thực nào cho các trường hợp hợp lệ. Vậy nên: review. Và đó chính là lý do ba bug dark-mode sống sót trong `core_ui_kit` cho tới khi có người đi soát — điều đáng nhớ khi bạn copy một widget ra khỏi đó.
+`arch_check` R20 từ chối một số thô trong các constructor layout và paint mà nó liệt kê (kể cả `fontSize:`) nằm ngoài `styles/` và `utils/`. Một màu hardcode thì không bị kiểm: luật lexical `Colors.<name>` không phân biệt được literal đúng với vi phạm, và RULE-71 cấm comment suppression mà một danh sách ngoại lệ sẽ cần. Vì vậy RULE-33 do review giữ — đọc `context.colors.*`, không bao giờ dùng literal. Hai giá trị trông như ngoại lệ thật ra là token: `scrim` (lớp phủ modal và loading, đen có alpha ở cả hai palette, vì một scrim đảo theo theme sẽ *làm sáng* màn hình ở chế độ tối) và `shadow` (thứ `AppShadows` dùng).
 
 ### `ThemeProvider` phản ứng khi OS đổi theme
 
@@ -163,14 +152,8 @@ Repo cũng cấm comment suppression, nên không có lối thoát trung thực 
 
 Observer được gỡ trong `dispose()`, và hàm này gắn `@disposeMethod` để GetIt gọi khi reset container — thiếu nó thì mỗi lần `resetDependencies()` trong test sẽ để lại một observer cũ còn đăng ký.
 
-Phần override, trong `platform/ui/design_system/lib/src/theme/theme_provider.dart`:
-
 ```dart
 // platform/ui/design_system/lib/src/theme/theme_provider.dart
-/// Called by the framework when the OS switches between Light and Dark.
-///
-/// Only [ThemeMode.system] derives its appearance from the platform, so an
-/// explicit light/dark choice is left untouched — no wasted rebuild.
 @override
 void didChangePlatformBrightness() {
   super.didChangePlatformBrightness();
@@ -181,16 +164,16 @@ void didChangePlatformBrightness() {
   // …and rebuild consumers, because `currentTheme` now resolves differently.
   notifyListeners();
 }
-```
 
-Việc dọn dẹp được nối vào DI:
-
-```dart
 @disposeMethod
 @override
 void dispose() {
   if (_isObservingPlatform) {
     WidgetsBinding.instance.removeObserver(this);
+    _isObservingPlatform = false;
+  }
+  super.dispose();
+}
 ```
 
 Giá trị đã lưu được đọc qua `IThemeStorage` — xem [`../guides/06_storage.md`](../guides/06_storage.md#9-chia-sẻ-giá-trị-qua-ranh-giới-package).
@@ -201,20 +184,31 @@ Giá trị đã lưu được đọc qua `IThemeStorage` — xem [`../guides/06_
 
 Thư viện widget dùng chung mà mọi feature đều có thể dùng. Nó là **core, không phải feature**: nằm tại `platform/ui/ui_kit` để `modules/*/feature/` chỉ còn chứa các mảng sản phẩm thực sự gỡ được.
 
-Cấu trúc phẳng (không có `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
+Mọi thứ nằm dưới `lib/src/`, sau barrel duy nhất của package (`lib/core_ui_kit.dart`):
 
-Nó phụ thuộc `core_common`, `core_base_ui` và `core_responsive` — không bao giờ phụ thuộc một package quản lý state, infra, một feature hay `data_*`. `navigation/` còn chứa `BottomTransitionPage`, một `Page` hiển thị route go_router dưới dạng modal bottom sheet (chuyển từ `core_common` sang đây vì bo góc của nó scale qua `core_responsive`).
+| Thư mục | Nội dung |
+|:--|:--|
+| `buttons/` | `CustomButton.rectangle` |
+| `inputs/` | `CustomInputField` |
+| `feedback/` | `LoadingWidget`, `EmptyWidget` |
+| `media/` | `CustomCacheNetworkImage` |
+| `layout/` | `TextScaleDown` |
+| `navigation/` | `BottomTransitionPage` — một `Page` hiển thị route go_router dưới dạng modal bottom sheet |
+| `dialogs/` | **`AppOverlay`**, hệ thống overlay duy nhất: dialog xếp hàng (`showDialog<T>` / `dismissDialog` / `clearDialogs`), toast và loading indicator, hiển thị không cần `BuildContext`; `OverlayDialogWidget` / `OverlayDialogState.closeDialog` làm nền cho dialog tự đóng (`RetryDialog` là một); `AppOverlayInitializer`, do app shell mount |
+| `utils/` | `SharedUiConstants` |
+
+Nó phụ thuộc `core_base_ui` và `core_responsive` — không bao giờ phụ thuộc một package quản lý state, infra, một feature hay `data_*`.
 
 > [!NOTE]
-> Phụ thuộc chạy **một chiều**: `state -> ui`. `provider_state_management` được phụ thuộc nhóm ui (`LoadMoreListView` của nó scale qua `core_responsive`); `core_ui_kit` không phụ thuộc package quản lý state nào. Vì vậy widget gắn với `LoadMoreMixin` hay `ViewState` nằm ở `provider_state_management`, không ở đây — đó là nơi `LoadMoreListView` / `LoadingMoreWidget` đã chuyển tới. `provider_state_management` cũng vẫn tự mang `DefaultLoadingWidget` / `DefaultEmptyWidget` thay vì mượn widget có thương hiệu từ đây.
+> Phụ thuộc chạy **một chiều**: `state -> ui`. `provider_state_management` được phụ thuộc nhóm ui (`LoadMoreListView` của nó scale qua `core_responsive`); `core_ui_kit` không phụ thuộc package quản lý state nào. Vì vậy widget gắn với `LoadMoreMixin` hay `ViewState` nằm ở `provider_state_management`, không ở đây. `provider_state_management` cũng tự mang `DefaultLoadingWidget` / `DefaultEmptyWidget` thay vì mượn widget có thương hiệu từ đây.
 
 ### Quy tắc UI-agnostic
 
-Widget dùng lại dùng tham số **đúng như nhận được** và không được tự scale chúng qua `core_responsive`. Scale là việc của bên gọi, nên khi giá trị đến nơi thì nó đã ở đơn vị pixel thiết bị — để ý `context.w(120)` ở phía gọi bên dưới. Widget vẫn scale hằng số **của chính nó**, nếu không thì nó chẳng responsive gì cả:
+RULE-31: widget dùng lại dùng tham số **đúng như nhận được** và không được tự scale chúng qua `core_responsive`. Scale là việc của bên gọi, nên khi giá trị đến nơi thì nó đã ở đơn vị pixel thiết bị — để ý `context.w(120)` ở phía gọi bên dưới. Widget vẫn scale hằng số **của chính nó**, nếu không thì nó chẳng responsive gì cả:
 
 ```dart
 // bên gọi scale
-CustomButton(width: context.w(120), height: context.h(44))
+CustomButton.rectangle(minWidth: context.w(120), height: context.h(44))
 
 // widget tự scale tham số của mình -- sai
 double _width(BuildContext context) => context.w(width);
@@ -223,7 +217,7 @@ double _width(BuildContext context) => context.w(width);
 Scale bên trong nghĩa là bên gọi nào đã scale sẽ bị scale hai lần, còn bên gọi muốn một giá trị pixel nguyên bản thì không cách nào lấy được.
 
 > [!WARNING]
-> **Luật này cấm điều gì.** Một `AppBar` trong `core_ui_kit` mang theo:
+> **Luật này cấm điều gì.** Một widget app bar mang theo:
 >
 > ```dart
 > @override
@@ -240,13 +234,16 @@ Giá trị mặc định của các widget này nằm ở `platform/ui/ui_kit/li
 class SharedUiConstants {
   SharedUiConstants._();
 
-  static const Duration DIALOG_TRANSITION_DURATION = Duration(milliseconds: 200);
+  static const Duration DIALOG_TRANSITION_DURATION = Duration(
+    milliseconds: 200,
+  );
   static const Duration TOAST_DURATION = Duration(seconds: 3);
-  static const Color DIALOG_BARRIER_COLOR = Color(0x80000000);
+  static const double BUTTON_HEIGHT = 48;
+  // … kích thước và alpha mặc định của các widget còn lại
 }
 ```
 
-Đây là giá trị mặc định, không phải chính sách — bên gọi cần giá trị khác thì truyền qua constructor.
+Đây là giá trị mặc định, không phải chính sách — bên gọi cần giá trị khác thì truyền qua constructor. Kích thước tính bằng design pixel; widget tự scale giá trị mặc định của mình.
 
 ---
 
@@ -256,7 +253,7 @@ Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kíc
 
 | Thành phần export | Đường dẫn | Mục đích |
 |:--|:--|:--|
-| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 360×690), `scaleBounds` và `textScaleBounds` (cùng mặc định `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (mặc định `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver`. Assert rằng `designSize` và `designSize` của mọi profile đều dương và hữu hạn |
+| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget`, gắn **một lần** phía trên `MaterialApp`. Tham số: `child` (bắt buộc), `designSize` (mặc định 375×812), `scaleBounds` và `textScaleBounds` (cùng mặc định `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (mặc định `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver`. Assert rằng `designSize` và `designSize` của mọi profile đều dương và hữu hạn |
 | `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` mang `ResponsiveMetrics`; `maybeOf(context)` trả nullable, `of(context)` assert khi thiếu |
 | `ResponsiveMetrics` | `src/responsive_metrics.dart` | Value object bất biến với các phép `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; cho thấy giá trị đã resolve `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, cùng `windowSizeClass`, `windowHeightClass`, `orientation`, và hàm static `isValidDesignSize(size)` |
 | `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` — kết quả không bị bound nào kẹp |
@@ -269,7 +266,7 @@ Cơ chế scale mà mọi widget trong app đều đi qua, cùng các lớp kíc
 | `AdaptiveSplitView` | `src/adaptive/adaptive_split_view.dart` | Master–detail: hai ô tại nếp gập, bản lề hoặc từ `splitAt`, một ô trong các trường hợp còn lại; `divider` tuỳ chọn được layout rộng đúng `dividerExtent` (mặc định 1). `primary` bị giới hạn để divider và `secondary` luôn vừa, và một `primaryWidth` không chừa gì cho `secondary` sẽ lùi về một ô. `AdaptiveSplitView.isSplit(context)` cho danh sách biết đang ở trường hợp nào |
 | `AdaptiveContent` | `src/adaptive/adaptive_content.dart` | Chặn nội dung ở chiều rộng dễ đọc (640, không scale) |
 | `FoldPosture` | `src/adaptive/fold_posture.dart` | `flat` / `book` / `tabletop` |
-| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690), `DESIGN_SCALE_FACTOR` (1), các giá trị `BREAKPOINT_*`; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `SPLIT_DIVIDER_EXTENT` (1), `CONTENT_MAX_WIDTH` (640) — nằm trong `src/utils/`, như hằng số của mọi package khác |
+| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (375), `DEFAULT_DESIGN_HEIGHT` (812), `DESIGN_SCALE_FACTOR` (1), các giá trị `BREAKPOINT_*` và `BREAKPOINT_HEIGHT_*`; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `SPLIT_DIVIDER_EXTENT` (1), `CONTENT_MAX_WIDTH` (640) — nằm trong `src/utils/`, như hằng số của mọi package khác |
 
 Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống: cửa sổ nhỏ hơn khung thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ 1:1 và để chỗ dư cho layout. Phóng to là opt-in, có chặn, theo từng lớp cửa sổ.
 
@@ -304,7 +301,7 @@ Mọi hệ số đều bị kẹp, và mặc định chỉ theo chiều xuống:
 > [!CAUTION]
 > **Cố ý không có extension trên `num`.** `16.w` **không biên dịch được**. Một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục — và widget đọc biến toàn cục thì không bao giờ biết metrics đã đổi. Bắt buộc phải có `BuildContext` chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được. Package không có instance toàn cục, không có hàm `init()` mệnh lệnh, không có trợ giúp `setWidth()` và không có cờ điều khiển rebuild — một khi metrics đã nằm trong `InheritedWidget` thì nhắm đúng widget để rebuild là việc của Flutter.
 
-Luật **R7** của `dart tools/arch_check/check.dart` chặn dạng bare — mẫu `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — trong mọi file có import `core_responsive`, và là Gate 1 của `pr_quality_check.yml`.
+RULE-30: luật **R7** của `dart tools/arch_check/check.dart` chặn dạng bare — một số literal hoặc một tổng trong ngoặc theo sau bởi `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` — trong mọi file `lib/` viết tay, cùng một `extension … on num` có thể làm nó biên dịch được; **R20** chặn một số thô trong các constructor layout và paint mà nó liệt kê. Cả hai là Gate 1 của `pr_quality_check.yml`.
 
 > [!NOTE]
 > Test widget nào có scale **phải** bọc widget cần test trong `ResponsiveInit`, nếu không `ResponsiveScope.of` sẽ assert. Test của bản thân package nằm tại `platform/ui/responsive/test/`.
@@ -320,13 +317,14 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 | Nhóm | Đường dẫn | Nội dung |
 |:--|:--|:--|
 | Client | `src/api_client.dart` | `ApiClient.createClient()` — factory Dio, lắp chuỗi interceptor |
+| DI module | `lib/di/network_module.dart` | `NetworkModule` — đăng ký `Dio` mặc định của app, do `ApiClient` dựng (`@lazySingleton`) |
 | Hợp đồng | `src/network_config.dart` | `NetworkConfig` — `getToken`, `getLocale`, `onRetryCallback`, `onRefreshToken`, `onRefreshFailed` |
 | Interceptor | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
-| Handler | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler` |
-| Constants | `src/utils/network_constants.dart` | Timeout, tên header, tiền tố `Bearer`, extra key, log tag |
-| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` 1003, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
+| Handler | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler`, và `RequestOptions.forReplay()` (`request_replay.dart`) |
+| Constants | `src/utils/network_constants.dart` | Tên header, tiền tố `Bearer`, cờ request `EXTRA_*`, log tag — timeout, header thêm và chính sách redirect là `NetworkProfile` của app |
+| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status — `ErrorCodes.HTTP_ERROR` khi không có, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
 
-`DioFailureClassifier` là cách `ErrorHandler` của kernel biết về Dio mà không import nó: một `@singleton` eager trong DI module của package này, có `@PostConstruct` gọi `ErrorHandler.registerClassifier`. Module chạy trong nhóm DI `core`, nên classifier được đăng ký trước khi có bất kỳ Dio client nào (tất cả đều lazy) và trước khi repository nào chạy; constructor của `ApiClient` đăng ký lại lần nữa, idempotent, cho client dựng ngoài DI. Unit test nào đẩy một repository tới `DioException` mà không qua DI thì gọi `DioFailureClassifier.ensureRegistered()` trước. DI smoke test của các app khẳng định việc đăng ký này.
+`DioFailureClassifier` là cách `ErrorHandler` của kernel biết về Dio mà không import nó: một `@singleton` eager có `@PostConstruct` gọi `ErrorHandler.registerClassifier`. Module của package này chạy trong nhóm DI `core`, nên classifier được đăng ký trước khi có bất kỳ Dio client nào (tất cả đều lazy) và trước khi repository nào chạy; constructor của `ApiClient` đăng ký lại lần nữa, idempotent, cho client dựng ngoài DI. Unit test nào đẩy một repository tới `DioException` mà không qua DI thì gọi `DioFailureClassifier.ensureRegistered()` trước. DI smoke test của các app khẳng định việc đăng ký này (`checkAppContract` C08).
 
 `NetworkConfig` được hiện thực **ở package adapter của app shell** (`platform_shell_adapters`), không phải ở đây — đó chính là điều giữ cho `core_network` không dính bất kỳ phụ thuộc storage nào. Hai callback refresh mặc định `null`, nên client không có endpoint refresh sẽ đơn giản trả `401` nguyên vẹn cho nơi gọi.
 
@@ -345,9 +343,17 @@ Cách khai một service, cho request bỏ qua một bước, thêm client thứ
 class ApiClient {
   final NetworkConfig _config;
   final NetworkProfile _profile;
+  final LocaleProfile _locale;
 
-  // The profile is optional: a client built by hand takes the template defaults.
-  ApiClient(this._config, [this._profile = const NetworkProfile(), …]);
+  // The profiles are optional: a client built by hand takes the template defaults.
+  ApiClient(
+    this._config, [
+    this._profile = const NetworkProfile(),
+    this._locale = const LocaleProfile(),
+  ]) {
+    // … throws when NetworkProfile.headers names a credential or shell-owned header (RULE-66)
+    DioFailureClassifier.ensureRegistered();
+  }
 
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
@@ -380,6 +386,7 @@ dio.interceptors.add(
   AuthInterceptor(
     getToken: _config.getToken,
     getLocale: _config.getLocale,
+    defaultLanguageCode: _locale.fallback,
   ),
 );
 
@@ -415,7 +422,7 @@ Auth chạy trước để token được gắn trước mọi thứ; refresh đ
 
 #### `AuthInterceptor`
 
-Gắn header `language` viết hoa (fallback về locale thiết bị, rồi về `vi`), và bearer token khi request cần auth:
+Gắn header `language` viết hoa — mã mà `NetworkConfig.getLocale` đã resolve, nếu không có thì `LocaleProfile.fallback` của app (mặc định `en`) — và bearer token khi request cần auth:
 
 ```dart
 // platform/infra/network/lib/src/interceptors/auth_interceptor.dart
@@ -455,7 +462,7 @@ Cả ba hook đều nằm sau `kDebugMode`, và header chứa thông tin đăng 
 
 ```dart
 // platform/infra/network/lib/src/interceptors/logging_interceptor.dart
-Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
+static Map<String, dynamic> redactHeaders(Map<String, dynamic> headers) {
   const redactedKeys = {
     HttpHeaders.authorizationHeader,
     HttpHeaders.cookieHeader,
@@ -500,23 +507,31 @@ Phần implement giao mỗi giá trị cho đúng chủ sở hữu của nó, th
 // platform/shell/adapters/lib/src/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
-  NetworkConfigImpl(this._languageStorage);
+  NetworkConfigImpl(
+    this._languageStorage, [
+    LocaleProfile locale = const LocaleProfile(),
+  ]) : _languages = LanguageSet(locale);
 
   final ILanguageStorage _languageStorage;
+  final LanguageSet _languages;
 
-  /// Null in a build that composes no auth module.
+  /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
 
-  @override
-  String? Function() get getToken => () => _session?.readToken();
+  /// Whether a session owner is composed — *without* resolving it:
+  /// resolving the gateway while `Dio` is being built closes a dependency
+  /// cycle.
+  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
 
+  @override
+  String? Function() get getToken =>
+      () => _session?.readToken();
+
+  /// The app's language, resolved like `LanguageProvider` resolves it, so the
+  /// server always gets a language the app offers.
   @override
   String? Function() get getLocale =>
-      () => _languageStorage.getLanguage().languageCode;
-
-  /// Whether an auth module is composed — without resolving it: resolving
-  /// the gateway while `Dio` is being built closes a dependency cycle.
-  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
+      () => _languages.resolve(_languageStorage.getLanguage()).languageCode;
 
   @override
   Future<String?> Function()? get onRefreshToken =>
@@ -544,7 +559,7 @@ Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();
   if (result.isSuccess) return _local.getUserToken();
   final failure = result.errorOrNull;
-  if (isTransient(failure)) {
+  if (isTransientFailure(failure)) {
     throw StateError(
       'Session renewal did not reach the server: '
       '${failure?.message}',
@@ -553,11 +568,10 @@ Future<String?> refreshToken() async {
   return null;
 }
 
+// modules/auth/data/lib/src/session/transient_failure.dart
 /// Whether [failure] says nothing about the session's validity — the
 /// renewal never got an answer — so the session must be kept.
-///
-/// Exposed for tests: this predicate decides whether a user is signed out.
-static bool isTransient(AppFailure? failure) {
+bool isTransientFailure(AppFailure<dynamic>? failure) {
   if (failure is NetworkFailure) return true;
   if (failure is! ServerFailure) return false;
   final code = failure.code;
@@ -608,7 +622,7 @@ Việc `await` lần retry là **cố ý**:
 return await _retryRequest(err, handler);
 ```
 
-Body dạng `FormData` được dựng lại trước khi replay, vì stream của form chỉ đọc được một lần.
+Body dạng `FormData` được dựng lại trước khi replay (`RequestOptions.forReplay()`), vì stream của form chỉ đọc được một lần.
 
 #### Ba lớp chống đệ quy vô hạn
 
@@ -654,114 +668,107 @@ switch (profile.facts.sslPinning.decisionFor(flavor)) {
 }
 ```
 
-Nơi pinning áp dụng được hay không là một sự thật của platform (`AppPlatform.canPinTls`: Android và iOS). Trên **web** trình duyệt tự xác thực chứng chỉ và Dio dùng adapter của trình duyệt, nên không cài gì và một dòng `INFO` nói rõ điều đó; trên **desktop** plugin pinning không có implementation, nên một dòng `INFO` ghi "not applicable" — trước đây nó log `ERROR` ở mỗi lần mở, và cài client pinning ở đó sẽ đẩy mọi lời gọi HTTPS qua một plugin không có phần desktop. `profile`, `platform` và `flavor` là tham số bắt buộc của `initBeforeRunApp` và `init`: initializer không bao giờ đoán nó chạy ở đâu hay là flavor nào (RULE-82), và không có chế độ không-profile với nguồn pin riêng.
+Nơi pinning áp dụng được hay không là một sự thật của platform (`AppPlatform.canPinTls`: Android và iOS). Trên **web** trình duyệt tự xác thực chứng chỉ và Dio dùng adapter của trình duyệt, nên không cài gì và một dòng `INFO` nói rõ điều đó; trên **desktop** plugin pinning không có implementation, nên một dòng `INFO` ghi "not applicable" thay vì cài một client sẽ đẩy mọi lời gọi HTTPS qua một plugin không có phần desktop. `profile`, `platform` và `flavor` là tham số bắt buộc của `initBeforeRunApp` và `init`: initializer không bao giờ đoán nó chạy ở đâu hay là flavor nào (RULE-82), và không có chế độ không-profile với nguồn pin riêng.
 
 `_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi sau các bước kiểm tra profile và hook `beforeDependencies`, và **trước** `configureDependencies()` — nó chỉ đọc profile nên không cần đăng ký gì. Thời điểm là mấu chốt: `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`, và mọi thứ đồ thị dựng ra đều có thể mở kết nối — một singleton eager khi DI khởi tạo, một implementation contract mà `checkAppContract` resolve ngay sau đó, một controller tạo trên splash (auth khôi phục phiên bằng một lần refresh token). Override cài muộn hơn, sau DI hay trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
 
-Kiểm tra certificate chỉ bị bỏ qua (phục vụ server tự ký cục bộ) **trong bản debug đã khai báo tường minh flavor `dev`** — `AppConfig.bypassesCertificateValidation`. Mọi trường hợp khác đi qua đường pinning: `staging`, `prod`, bản profile hay release của `dev`, và bản build **thiếu hoặc sai** flavor — được coi như `prod` và ghi log mức ERROR. Đây là cố ý fail closed: trước đây `AppConfig.appFlavor` lùi về `dev`, nên một bản build không có `--flavor` — kể cả release — chấp nhận mọi certificate. Bản thân `appFlavor` (môi trường DI) giờ lùi về `dev` ở bản debug và về `prod` ở các bản còn lại.
+Kiểm tra certificate chỉ bị bỏ qua (phục vụ server tự ký cục bộ) **trong bản debug đã khai báo tường minh flavor `dev`** — `AppConfig.bypassesCertificateValidation`. Mọi trường hợp khác đi qua đường pinning: `staging`, `prod`, bản profile hay release của `dev`, và bản build **thiếu hoặc sai** flavor — được coi như `prod` và ghi log mức ERROR. Đây là cố ý fail closed. `AppConfig.appFlavor` (môi trường DI) lùi về `dev` ở bản debug và về `prod` ở các bản còn lại, nhưng việc xử lý certificate đọc `AppConfig.declaredFlavor`, vốn là `null` trừ khi bản build nêu một flavor đã biết.
 
 ---
 
 ## 7. `core_storage` — lưu trữ key–value có mã hoá
 
-Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa preset nào.
+Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa preset nào. Phụ thuộc workspace duy nhất của nó là `platform_kernel` (`TypeHelper`).
 
 | Thành phần export | Mục đích |
 |:--|:--|
-| `StorageInterface` | Hợp đồng cho backend; đồng thời chứa các hàm AES và phần chặn key dành riêng |
-| `StorageManager` | `@singleton`; phân giải backend theo `StorageType`, khởi tạo backend secure trước rồi tới các backend khác qua `@PostConstruct(preResolve: true)` — secure đi trước vì lần mở đầu tiên nó xoá sạch namespace keystore, nơi cũng chứa master key của backend pref |
-| `StorageValue<T>` | Bọc phản ứng quanh một key — `ChangeNotifier` + `Stream` broadcast, cache trong RAM, tự ghi xuống đĩa khi set. Notify sau `dispose` là no-op (`isDisposed`). Phụ thuộc workspace duy nhất của package là `platform_kernel` (`TypeHelper`) |
+| `StorageInterface` | `abstract interface class` — hợp đồng cho backend (`init`, `read`, `write`, `delete`, `isValidKey`); không crypto, không `deleteAll` |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (có phần cứng hỗ trợ) |
-| `ObfuscatedString` / `ObfuscatedBytes` | Che dữ liệu trong RAM |
+| `EncryptedStorage` | Lớp nền của cả hai backend: các hàm AES-256-CBC (`encryptData` / `decryptData`), các hàm master key, phần chặn key dành riêng và các tuỳ chọn `flutter_secure_storage` được ghim |
+| `StorageManager` | `@singleton`; phân giải backend theo `StorageType`, khởi tạo backend secure trước rồi tới các backend khác qua `@PostConstruct(preResolve: true)` — secure đi trước vì lần mở đầu tiên nó xoá sạch namespace keystore, nơi cũng chứa master key của backend pref |
+| `StorageValue<T>` | Bọc phản ứng quanh một key — `ChangeNotifier` + `Stream` broadcast, cache trong RAM. `save(T)` và `remove()` trả `Future<void>` hoàn tất khi dữ liệu đã nằm trên đĩa; các lần ghi được **tuần tự hoá** (giá trị set sau cùng là giá trị còn lại trên đĩa) và một lần ghi lỗi được log, không bao giờ throw; setter `value` bắt đầu cùng lần ghi đó mà không chờ. Notify sau `dispose` là no-op (`isDisposed`) |
+| `StorageCodec` | Encode / decode / revive JSON của các giá trị mà `StorageValue` lưu |
+| `ObfuscatedBytes` | Che dữ liệu trong RAM (`fromString`, `reveal`, `revealString`, `dispose`) |
 | `PrefStorageImpl` / `SecureStorageImpl` | Nội bộ, phân giải qua `@Named('Pref')` / `@Named('Secure')` |
+| `StorageConstants` | Tên key dành riêng, kích thước master key, số lần thử lại (`src/utils/`) |
 
-`core_storage` cố ý khai báo **zero key**. Nó chỉ cấp bộ máy; mỗi package tự khai giá trị của mình.
-
-```dart
-// platform/infra/storage/lib/core_storage.dart
-/// Core Storage — encrypted key-value persistence layer.
-///
-/// Provides only the storage MECHANISM — no package/feature-specific keys
-/// or presets are defined here. Each consumer (data layer, app shell, ...)
-/// must declare its own [StorageValue] instances with its own keys via
-/// [StorageManager], so no other feature can see or touch its data.
-```
+`core_storage` cố ý khai báo **zero key**: nó chỉ cấp bộ máy, và mỗi package tự khai giá trị của mình.
 
 > [!NOTE]
 > Không có object preset dùng chung và không có sổ đăng ký key tập trung — không `StorageValuePresets`, không `StorageKeyConstants`. Một object gom key của mọi domain sẽ cho phép bất kỳ ai inject nó đọc và ghi dữ liệu của feature khác, nên cơ chế cố ý không cung cấp thứ đó để bạn với tay tới.
 
-### Hai lớp mã hoá, cộng thêm che RAM
+### Các lớp mã hoá, và che RAM
 
-**Lớp 1 — AES-256-CBC phần mềm, IV ngẫu nhiên mỗi lần ghi.** Cài đặt một lần trên `StorageInterface` nên cả hai backend đều thừa hưởng:
+**Lớp 1 — AES-256-CBC phần mềm, IV ngẫu nhiên mỗi lần ghi.** Cài đặt một lần trên `EncryptedStorage` nên cả hai backend đều thừa hưởng:
 
 ```dart
-// platform/infra/storage/lib/src/contracts/storage_interface.dart
-/// Encrypt [data] using AES-CBC with a random IV.
-///
-/// Returns `"iv_base64:ciphertext_base64"`.
+// platform/infra/storage/lib/src/impl/encrypted_storage.dart
 String encryptData(String data) {
-  final rawBytes = _obfuscatedMasterKey!.reveal();
-  final key = encrypter.Key(rawBytes);
-  final aes = encrypter.AES(key, mode: encrypter.AESMode.cbc);
-  final enc = encrypter.Encrypter(aes);
-
-  final iv = encrypter.IV.fromSecureRandom(16);
-  final encrypted = enc.encrypt(data, iv: iv);
-
-  // Zero out key buffers immediately
-  rawBytes.fillRange(0, rawBytes.length, 0);
-  key.bytes.fillRange(0, key.bytes.length, 0);
-
-  return '${iv.base64}:${encrypted.base64}';
+  return _withKey((enc) {
+    final iv = encrypter.IV.fromSecureRandom(StorageConstants.IV_BYTES);
+    return '${iv.base64}:${enc.encrypt(data, iv: iv).base64}';
+  });
 }
 ```
 
-IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần vẫn ra ciphertext khác nhau — người quan sát không thể biết giá trị có đổi hay không.
+IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần cho ra hai bản mã khác nhau — người quan sát không thể biết giá trị có đổi hay không. `_withKey` chỉ lộ master key trong khoảnh khắc gọi rồi xoá về 0 các buffer.
 
-**Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới key `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
+**Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới tên `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
 
 ```dart
 // platform/infra/storage/lib/src/impl/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
-  await _storage.write(key: _MASTER_KEY_ID, value: newKey); // lỗi thì ném lại
-  masterKey = newKey;
+  final newKey = EncryptedStorage.generateKey();
+  try {
+    await _storage.write(
+      key: StorageConstants.SECURE_MASTER_KEY_ID,
+      value: newKey,
+    );
+    masterKey = newKey;
+  } catch (e) {
+    // … đã ghi log
+    rethrow;
+  }
 }
 ```
 
-**Lớp 3 (ít nơi nhắc tới) — che trong RAM.** Cả master key lẫn giá trị đã cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Chúng bị XOR với mask ngẫu nhiên, và chỉ lộ ra đúng khoảnh khắc được dùng:
+**Che RAM.** Cả master key lẫn giá trị trong cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Cả hai bị XOR với một mask ngẫu nhiên và chỉ lộ ra đúng khoảnh khắc được dùng — `StorageValue` giữ giá trị trong RAM dưới dạng `ObfuscatedBytes`, và master key cũng được xử lý y hệt:
 
 ```dart
-// platform/infra/storage/lib/src/contracts/storage_interface.dart
-/// Container that obfuscates bytes in RAM using dynamic XOR masking.
+// platform/infra/storage/lib/src/obfuscated_bytes.dart
 class ObfuscatedBytes {
-  ObfuscatedBytes(Uint8List originalBytes)
-    : _mask = _generateRandomMask(originalBytes.length),
-      _maskedBytes = Uint8List(originalBytes.length) {
-    for (int i = 0; i < originalBytes.length; i++) {
-      _maskedBytes[i] = originalBytes[i] ^ _mask[i];
+  ObfuscatedBytes(List<int> original)
+    : _mask = _randomMask(original.length),
+      _masked = Uint8List(original.length) {
+    for (var i = 0; i < original.length; i++) {
+      _masked[i] = original[i] ^ _mask[i];
     }
   }
 ```
 
-`ObfuscatedString` (trong `storage_value.dart`) làm điều tương tự cho giá trị đã cache. Việc này nâng độ khó của tấn công memory-dump; nó **không** thay thế được hai lớp trên.
+Điều này nâng rào chắn trước tấn công đọc memory dump; nó không thay thế các lớp ở trên.
 
 #### Khi Keychain trục trặc — thử lại, không bao giờ xoá sạch
 
-Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Trước đây `SecureStorageImpl` coi *mọi* lỗi như vậy là hỏng dữ liệu và gọi `deleteAll()` — xoá sạch mọi giá trị bảo mật, kể cả master key của `PrefStorageImpl` vốn nằm trong cùng kho. Giờ thì:
+Việc đọc master key có thể lỗi vì những lý do nhất thời: Keychain trước lần mở khoá đầu tiên sau khi khởi động lại máy (app được mở nền), KeyStore đang bận. Vì vậy `SecureStorageImpl` không bao giờ coi một lỗi platform là hỏng dữ liệu và không bao giờ xoá sạch kho — master key của `PrefStorageImpl` nằm trong cùng kho, nên xoá sạch sẽ phá luôn mọi preference. Việc thử lại là `EncryptedStorage.readKeyWithRetry`, dùng chung cho cả hai backend:
 
 ```dart
-// platform/infra/storage/lib/src/impl/secure_storage_impl.dart
-Future<String?> _readMasterKey() async {
+// platform/infra/storage/lib/src/impl/encrypted_storage.dart
+static Future<String?> readKeyWithRetry(
+  FlutterSecureStorage storage,
+  String keyId, {
+  required Duration retryDelay,
+  required String tag,
+}) async {
   for (var attempt = 1; ; attempt++) {
     try {
-      return await _storage.read(key: _MASTER_KEY_ID);
+      return await storage.read(key: keyId);
     } catch (e) {
-      final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
+      final lastAttempt = attempt >= StorageConstants.MASTER_KEY_READ_ATTEMPTS;
       // … ghi log: WARNING khi thử lại, ERROR ở lần cuối …
       if (lastAttempt) rethrow; // không xoá gì, không sinh key mới
-      await Future<void>.delayed(_retryDelay * attempt);
+      await Future<void>.delayed(retryDelay * attempt);
     }
   }
 }
@@ -777,7 +784,7 @@ Future<String?> _readMasterKey() async {
 
 #### Master key của backend pref — cùng một quy tắc
 
-`PrefStorageImpl` mã hoá giá trị SharedPreferences bằng master key riêng, `_internal_pref_master_key`, cất trong cùng kho bảo mật. Trước đây gặp *bất kỳ* lỗi đọc nào nó cũng lùi về một key hoàn toàn mới trong SharedPreferences — chỉ sau một lỗi Keychain nhất thời, mọi preference đã lưu (theme, ngôn ngữ, cờ onboarding) giải mã lỗi và bị xoá ở lần đọc kế tiếp, còn lần khởi động bình thường sau đó lại bỏ rơi những gì phiên lỗi kia đã ghi. Giờ nó không bao giờ thay một key có thể vẫn còn tốt:
+`PrefStorageImpl` mã hoá giá trị SharedPreferences bằng master key riêng, `_internal_pref_master_key`, cất trong cùng kho bảo mật. Nó không bao giờ thay một key có thể vẫn còn tốt — một key mới sẽ bỏ rơi mọi preference đã lưu (theme, ngôn ngữ, cờ onboarding), và `read()` xoá giá trị nào nó không giải mã được:
 
 | Tình huống | `PrefStorageImpl.init` làm gì |
 | :-- | :-- |
@@ -796,15 +803,9 @@ Cả hai backend mở `flutter_secure_storage` (11.x) với cùng một cặp An
 
 Cặp này là thứ template đã ghi từ bản phát hành đầu tiên (10.x) và vẫn là mặc định của 11.x, nên nâng cấp 10 → 11 đọc được giá trị cũ nguyên vẹn: cùng alias KeyStore, cùng khoá đã bọc, không có bước migrate. Cái 11.x bỏ đi là các cipher trước 10 (RSA-PKCS1, AES-CBC, EncryptedSharedPreferences). App nào từng phát hành `flutter_secure_storage` 9.x trở xuống phải phát hành một bản 10.x trước — thiết bị nhảy thẳng từ 9 lên 11 sẽ mất giá trị bảo mật, gồm cả token và master key của `PrefStorageImpl`. Trên Android, `FlutterSecureStorage.checkUpgradeStatus()` (11.1+), gọi trước lần đọc đầu tiên, báo cho bạn biết điều đó có xảy ra hay không.
 
-### Che RAM là bảo vệ thật, không phải nhãn dán
-
-Ngoài mã hoá dữ liệu lúc nghỉ (AES-256-CBC với IV ngẫu nhiên mỗi lần ghi), `StorageValue` còn giữ giá trị **trong bộ nhớ** ở dạng XOR mask ngẫu nhiên, chỉ lộ ra đúng khoảnh khắc cần đọc. Master key cũng được xử lý y hệt. Điều này nâng rào chắn trước tấn công đọc memory dump — một lớp mà phần lớn template bỏ qua hoàn toàn.
-
-`SecureStorageImpl` không bao giờ xoá sạch kho khi gặp lỗi platform: việc đọc master key thất bại (Keychain bị khoá trước lần mở khoá đầu tiên, KeyStore đang bận) được thử lại rồi ném lại lỗi mà không xoá gì; chỉ master key có nhưng không dùng được mới bị thay, và chỉ giá trị không giải mã được mới bị xoá. `PrefStorageImpl` áp cùng quy tắc cho master key của riêng nó: chỉ lùi về key trong SharedPreferences khi key đó mở được các preference đã lưu hoặc chưa có preference nào để mất, còn không thì ném lại lỗi và giữ nguyên mọi preference. Xem [hướng dẫn storage](../guides/06_storage.md).
-
 ### Quyền sở hữu
 
-Mỗi package tiêu thụ tự khai `StorageValue` của mình qua `StorageManager` được inject, key đặt trong `utils/` của package đó. Các chủ sở hữu hiện tại:
+Mỗi package tiêu thụ tự khai `StorageValue` của mình qua `StorageManager` được inject, key đặt trong `utils/` của package đó (RULE-44). Các chủ sở hữu hiện tại:
 
 | Chủ sở hữu | Package | Key | Backend |
 |:--|:--|:--|:--|
@@ -821,17 +822,27 @@ Các class key của app shell nằm trong `platform/shell/adapters/lib/src/util
 
 Chạy trên isolate nền qua `NativeDatabase.createInBackground`. **Không phụ thuộc package nào khác** trong workspace.
 
-Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng hay DAO nào, và DI module của nó không đăng ký gì cả. Package nào cần lưu dữ liệu quan hệ thì tự khai **database của chính mình** ngay cạnh bảng, DAO và data source của nó, rồi mở database đó bằng các mảnh ghép dưới đây. `CacheDatabase` của module mẫu `cache` (`modules/cache/data/lib/src/database/`) là bản đấu nối tham chiếu.
+Package này **chỉ cấp cơ chế**: nó không sở hữu database, bảng hay DAO nào, và DI module của nó không đăng ký gì cả (RULE-46). Package nào cần lưu dữ liệu quan hệ thì tự khai **database của chính mình** ngay cạnh bảng, DAO và data source của nó, rồi mở database đó bằng các mảnh ghép dưới đây. `CacheDatabase` của module mẫu `cache` (`modules/cache/data/lib/src/database/`) là bản đấu nối tham chiếu.
 
-| Nhóm | Đường dẫn | Nội dung |
-|:--|:--|:--|
-| Mở database | `src/opening/` | `DriftDatabaseOpener` — mở bất kỳ `GeneratedDatabase` nào trên isolate nền, kiểm tra tính toàn vẹn, cách ly file hỏng |
-| Kết nối | `src/connection/` | `DatabaseConnectionFactory` — phân giải file, executor nền |
-| **Truy cập** | `src/access/` | `IDatabaseHandle`, `DatabaseHandle` |
-| **Migration** | `src/migration/` | `IDatabaseMigration`, `DatabaseMigrationRunner`, `driftMigrationStrategy` |
-| Constants | `src/utils/database_constants.dart` | `DEFAULT_READ_POOL`, `BUSY_TIMEOUT_MS`, `CORRUPT_FILE_SUFFIX`, các marker lỗi hỏng file / lỗi môi trường |
+Đây là ràng buộc của Drift, không phải sở thích. `@DriftDatabase(tables: [...])` được phân giải ở **compile time** — không có đăng ký bảng lúc runtime — và DAO buộc phải là **`part of`** thư viện database của nó. Package nào khai database thì buộc phải gọi tên mọi bảng trên database ấy, nên một `AppDatabase` dùng chung sẽ buộc một package phải biết bảng của tất cả package còn lại. Dời nó lên `apps/mobile/` chỉ di chuyển god object đó; cho mỗi package một database riêng mới cắt được sự phụ thuộc.
 
-Drift phân giải `@DriftDatabase(tables:)` lúc biên dịch và bắt buộc DAO phải là `part of` thư viện database của nó, nên một database khai ở đây sẽ phải gọi tên bảng của bất kỳ package nào sở hữu chúng. Giữ database thuộc về từng package mua được một tính chất: xoá package là xoá luôn database của nó, và không package nào khác với tới được các dòng dữ liệu đó. Cái giá phải trả là SQL không join xuyên ranh giới package — vượt qua một bounded context là việc của tầng repository, không phải của một câu truy vấn.
+| | |
+|---|---|
+| **Được** | Xoá package là xoá luôn database của nó; không gì khác tham chiếu tới. |
+| **Được** | Không package nào chạm được bản ghi của package khác — không có object dùng chung để mà chạm. |
+| **Trả giá** | **SQL không JOIN xuyên ranh giới package.** Vượt bounded context là việc của tầng repository — ghép hai repository trong một use case — chứ không phải nhét vào một truy vấn. |
+
+| Export | Loại | Ở đâu | Làm gì |
+|---|---|---|---|
+| `DriftDatabaseOpener` | `abstract final class` | `src/drift_database_opener.dart` | Mở bất kỳ `GeneratedDatabase` nào trên isolate nền, **verify** kết nối, cách ly file hỏng |
+| `DatabaseConnectionFactory` | `abstract final class` | `src/database_connection_factory.dart` | Phân giải đường dẫn file trong app documents, dựng executor nền, cách ly file |
+| `IDatabaseMigration<TDb>` | abstract class | `src/migration/` | Hợp đồng để một package đóng góp **một** bước schema |
+| `DatabaseMigrationRunner` | class | `src/migration/` | Sắp xếp, kiểm tra và replay các bước đó |
+| `driftMigrationStrategy(...)` | function | `src/migration/` | `MigrationStrategy` dùng chung: dispatch migration + các `PRAGMA` theo kết nối |
+| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | `src/access/` | Cách một data source chạm tới database mà không cầm toàn bộ DAO |
+| `DatabaseConstants` | class | `src/utils/database_constants.dart` | Kích thước read pool, busy timeout, marker lỗi hỏng/môi trường, hậu tố `.corrupt` |
+
+Mọi thứ ở trên đều generic theo `GeneratedDatabase`: `core_database` không bao giờ gọi tên một class database cụ thể — đó chính là điểm mấu chốt.
 
 ### Hai hợp đồng giữ các package không chạm bảng của nhau
 
@@ -847,62 +858,7 @@ ProfileLocalDataSource(IDatabaseHandle<ProfileDatabase> handle)
 > [!NOTE]
 > Trong phạm vi **một** database, đây là **cô lập ở mức bề mặt API, không phải cô lập cưỡng chế**: callback factory vẫn nhận được object database, nên một bên gọi cố tình vẫn với tới được mọi DAO trên đó. Giá trị nằm ở chỗ vượt qua ranh giới trở thành hành động cố ý và nhìn thấy được khi review, chứ không phải một tham số constructor bình thường. Cô lập *giữa các package* mới là rào chắn thật, và nó do đồ thị package cưỡng chế — package nào không khai `data_cache` thì thậm chí không gọi được tên `CacheDatabase`.
 
-Cách tạo database riêng cho một package, đóng góp migration và test nó: [`../guides/07_database.md`](../guides/07_database.md). Thiết kế đứng sau được trình bày dưới đây.
-
-### Luật: `core_database` không sở hữu database nào
-
-`core_database` chỉ cấp **cơ chế**. Nó không khai database, không khai bảng, không khai DAO — module DI của nó đăng ký đúng nghĩa là rỗng:
-
-```dart
-// platform/infra/database/lib/di/module.dart
-/// `core_database` registers nothing on its own.
-///
-/// It provides the persistence MECHANISM — [DriftDatabaseOpener],
-/// [driftMigrationStrategy], [IDatabaseMigration], [IDatabaseHandle] — and
-/// deliberately owns no database, no table and no DAO. Registering a database
-/// here would mean this package had to name the tables of whichever package
-/// owns them.
-@InjectableInit.microPackage()
-void initMicroPackage() {}
-```
-
-**Mỗi package sở hữu dữ liệu lưu trữ sẽ tự khai database của riêng nó**, đặt cạnh bảng, DAO và data source của chính nó. `CacheDatabase` của module mẫu `cache` (package `data_cache`, trong `modules/cache/data`) là bản wiring tham chiếu.
-
-### Vì sao — đây là ràng buộc của Drift, không phải sở thích
-
-Hai sự thật về Drift quyết định toàn bộ thiết kế:
-
-1. `@DriftDatabase(tables: [...])` được phân giải ở **compile time**. Không có đăng ký bảng lúc runtime.
-2. DAO buộc phải là **`part of`** thư viện database của nó — Drift sinh `_$XDaoMixin` và `$XTable` vào đúng thư viện đó.
-
-Ghép lại: package nào khai database thì package đó buộc phải gọi tên mọi bảng trên database ấy, và mọi DAO phải nằm cùng thư viện. Một `AppDatabase` dùng chung vì thế sẽ buộc một package phải biết bảng của tất cả package còn lại — đúng kiểu "một object biết mọi thứ" mà các luật sở hữu về storage và constants sinh ra để ngăn chặn.
-
-> [!NOTE]
-> Dời `AppDatabase` dùng chung lên `apps/mobile/` cũng **không** giải quyết được — nó chỉ di chuyển god object, và package sở hữu dữ liệu vẫn không thể giữ một DAO dùng được. Cho mỗi package một database riêng mới thực sự cắt được sự phụ thuộc này.
-
-### Được gì, trả giá gì
-
-| | |
-|---|---|
-| **Được** | Xoá package là xoá luôn database của nó. Không package nào tham chiếu tới, nên không gì khác vỡ. |
-| **Được** | Không package nào chạm được bản ghi của package khác — không có object dùng chung để mà chạm. |
-| **Trả giá** | **SQL không JOIN xuyên ranh giới package.** |
-
-Cái giá đó là có chủ đích. Vượt bounded context là việc của tầng repository — ghép hai repository trong một use case — chứ không phải nhét vào một truy vấn.
-
-### `core_database` export những gì
-
-| Export | Loại | Làm gì |
-|---|---|---|
-| `DriftDatabaseOpener` | `abstract final class` | Mở bất kỳ `GeneratedDatabase` nào trên isolate nền, **verify** kết nối, cách ly file hỏng |
-| `DatabaseConnectionFactory` | `abstract final class` | Phân giải đường dẫn file trong app documents, dựng executor nền, cách ly file |
-| `IDatabaseMigration` | abstract class | Hợp đồng để một package đóng góp **một** bước schema |
-| `DatabaseMigrationRunner` | class | Sắp xếp, kiểm tra và replay các bước đó |
-| `driftMigrationStrategy(...)` | function | `MigrationStrategy` dùng chung: dispatch migration + các `PRAGMA` theo kết nối |
-| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | Cách một data source chạm tới database mà không cầm toàn bộ DAO |
-| `DatabaseConstants` | class | Kích thước read pool, busy timeout, marker lỗi hỏng/môi trường, hậu tố `.corrupt` |
-
-Để ý: mọi thứ ở trên đều generic theo `GeneratedDatabase`. `core_database` không bao giờ gọi tên một class database cụ thể — đó chính là điểm mấu chốt.
+Cách tạo database riêng cho một package, đóng góp migration và test nó: [`../guides/07_database.md`](../guides/07_database.md). Cơ chế bên trong được trình bày dưới đây.
 
 ### Runner migration replay thế nào
 
@@ -934,7 +890,7 @@ Future<void> run(Migrator m, int from, int to) async {
 }
 ```
 
-Ba tính chất đáng gọi tên:
+Bốn tính chất đáng gọi tên:
 
 1. **Dùng `if` thuần, không phải `else if`.** Thiết bị bỏ lỡ vài bản phát hành sẽ replay *mọi* bước trung gian thay vì nhảy thẳng tới hình dạng mới nhất.
 2. **Upgrade chạy tăng dần, downgrade chạy giảm dần.** Thứ tự quan trọng ở cả hai chiều.
@@ -944,7 +900,7 @@ Ba tính chất đáng gọi tên:
 Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải giữa chừng migration. Phát hiện lỗi wiring khi đã chạy được nửa đường sẽ để lại schema migrate dở.
 
 > [!WARNING]
-> **Drift 2.x KHÔNG có `onDowngrade`** (lockfile đang resolve 2.35.0). `MigrationStrategy` chỉ expose `onCreate`, `onUpgrade` và `beforeOpen`; chính tài liệu Drift ghi rằng "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` là thật và có test, nhưng nó đi nhờ trên đúng một entry point đó thông qua so sánh `from`/`to`. Hãy implement khi thay đổi có thể đảo ngược; **ném lỗi có mô tả rõ ràng khi không thể**, để thất bại là tường minh thay vì để lại một schema không còn khớp với code đang chạy.
+> **Drift 2.x KHÔNG có `onDowngrade`.** `MigrationStrategy` chỉ expose `onCreate`, `onUpgrade` và `beforeOpen`; chính tài liệu Drift ghi rằng "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` là thật và có test, nhưng nó đi nhờ trên đúng một entry point đó thông qua so sánh `from`/`to`. Hãy implement khi thay đổi có thể đảo ngược; **ném lỗi có mô tả rõ ràng khi không thể**, để thất bại là tường minh thay vì để lại một schema không còn khớp với code đang chạy.
 
 ### Các `PRAGMA`, và vì sao chúng được tập trung hoá
 
@@ -1051,7 +1007,7 @@ Mất dữ liệu người dùng tệ hơn là báo lỗi lúc khởi động.
 
 `PushNotificationService` bọc Firebase Messaging và `flutter_local_notifications`. Channel ID và loại payload nằm ở `src/utils/notification_constants.dart`, tức ngay trong package tiêu thụ chúng — một channel ID thông báo không có lý do gì để mọi package trong app đọc được.
 
-Khởi động không bao giờ chờ người dùng hay mạng: `init()` (được await bên trong `configureDependencies()`) chỉ thiết lập Firebase, các channel, listener và plugin local-notifications. Hộp xin quyền và việc đăng ký FCM token chạy sau đó, không await, và ghi log lỗi thay vì throw — hãy đọc token từ `tokenStream`, vì `fcmToken` có thể vẫn là `null` ngay sau khi khởi động. Loại payload bị chặn (`addBlockedTypes`) so khớp không phân biệt hoa thường. Dòng tóm tắt và tiêu đề của inbox gộp do app cung cấp (`inboxSummaryBuilder` / `inboxTitleBuilder`, mặc định đều `null`) để chữ đến từ localization của chính app.
+Khởi động không bao giờ chờ người dùng hay mạng: `init()` (được await bên trong `configureDependencies()`) chỉ thiết lập Firebase, các channel, listener và plugin local-notifications. Việc đăng ký FCM token chạy sau đó, không await, và ghi log lỗi thay vì throw — hãy đọc token từ `tokenStream`, vì `fcmToken` có thể vẫn là `null` ngay sau khi khởi động. Xin quyền là **opt-in**: không có gì hiện hộp xin quyền lúc khởi động, app tự gọi `PushNotificationService.requestPermission()` ở chỗ nó muốn hỏi (hàm này đăng ký lại token). Một platform khai `push: false` (`platforms.<p>.push`, đọc qua `PlatformFacts`) khiến `init()` trả về trước khi đụng tới Firebase và các hàm còn lại thành no-op. Loại payload bị chặn (`addBlockedTypes` / `removeBlockedTypes`) so khớp không phân biệt hoa thường. Dòng tóm tắt và tiêu đề của inbox gộp do app cung cấp (`inboxSummaryBuilder` / `inboxTitleBuilder`, mặc định đều `null`) để chữ đến từ localization của chính app.
 
 Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự đăng ký từ `lib/firebase/firebase_module.dart` của mình. Vì thế manifest của app đặt `core_notifications` trong nhóm `notifications` với `phase: after` thay vì trong `core`: `before` chạy trước phần đăng ký của chính app. App không dùng push notification thì bỏ nhóm này đi.
 
@@ -1073,7 +1029,7 @@ Template hỗ trợ Provider và BLoC. Cần biết trước khi chọn: giờ c
 | Phân trang | `LoadMoreMixin` | Không có |
 | Kiểu state | `ViewStateModel<T>` bọc `ViewState` (5 nhánh, có `loadingMore`, data nằm ở model) | `BlocViewState<T>` (tuỳ chọn; 4 nhánh, tự mang payload) hoặc state Freezed tự định nghĩa |
 | Dạng lỗi | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — bắt buộc |
-| Render | `BaseViewWidget` … `BaseViewWidget6`, `PaginatedViewWidget*` | `BlocBuilder` (của `flutter_bloc`) |
+| Render | `BaseViewWidget`, `LoadMoreListView` | `BlocBuilder` (của `flutter_bloc`) |
 | Side effect khai báo | `ProviderStateListener` / `MultiProviderStateListener` | `BlocListener` (của `flutter_bloc`) |
 
 > [!WARNING]
@@ -1098,26 +1054,26 @@ Cách dùng thực tế cho cả hai nhánh: [`../guides/03_state_management.md`
 
 ---
 
-## 11. Build web — hiện trạng thật
+## 11. Build web — hiện trạng
 
-Đo bằng `flutter build web` trên `apps/admin` sau khi tạo thư mục `web/` (`flutter create --platforms=web .` — chưa app nào có sẵn `web/`), rồi mở bản release trong Chromium headless.
+Chưa app nào commit thư mục `web/`. `apps/admin` khai platform web với `runner: scaffold` (thư mục được tạo bằng `flutter create --platforms=web .`); `apps/mobile` không khai nó. Đo bằng `flutter build web`:
 
-| App | Biên dịch (dart2js; Wasm dry run cũng qua) | Khởi động |
-|:--|:--|:--|
-| `apps/admin` (auth + settings) | có | có — tới màn hình đăng nhập, `flutter_secure_storage` (kho WebCrypto) và `shared_preferences` đều chạy (trang phải là secure context: `https` hoặc `localhost`) |
-| `apps/mobile` (mọi module mẫu) | **không** — `core_database` import `package:drift/native.dart`, kéo theo `dart:ffi` của `sqlite3` | — |
+| App | Biên dịch |
+|:--|:--|
+| `apps/admin` (auth + settings) | có, sau khi tạo `web/` (dart2js; Wasm dry run cũng qua) |
+| `apps/mobile` (mọi module mẫu) | **không** — `core_database` import `package:drift/native.dart`, kéo theo `dart:ffi` của `sqlite3` |
+
+`flutter build web` không có tuỳ chọn `--flavor`: hãy nêu flavor bằng `--dart-define=APP_FLAVOR=<flavor>`, nếu không `AppConfig.appFlavor` là `dev` ở bản debug và `prod` ở các bản còn lại. App web cũng cần secure context (`https` hoặc `localhost`) cho kho WebCrypto của `flutter_secure_storage`.
 
 Điều gì giúp đường boot dùng chung an toàn trên web:
 
-- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Shell không gọi chúng ở đó: `runShellApp` kiểm tra `kIsWeb` trước `Platform.isIOS`, `GoRouteDataCustom.buildPage` trả về trước nhánh `Platform.isIOS`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
-- `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ. Trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được; cài vào thì vô hại nhưng gây hiểu lầm, và dòng `ERROR` "not pinned" từng ghi ra mô tả một cấu hình sai mà web không thể sửa. Trong test, `AppInitializer.debugIsWebOverride` đóng vai `kIsWeb`.
+- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Platform được đọc ở đúng một chỗ, `resolveAppPlatform()`, và các quyết định lúc boot đến từ `PlatformFacts` mà app đã khai (splash bằng Dart là chế độ `splash` của platform, không phải một nhánh theo `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` trả về một page thường trước nhánh `Platform.isIOS` (nên trên web nó cũng bỏ qua `RouteAwareWidget`: không có analytics màn hình), `MainScope` bỏ qua `FlutterNativeSplash.remove()`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
+- `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ: trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được. Trong test, truyền `platform: AppPlatform.web` cho `initBeforeRunApp`.
 
-Các lỗ hổng đã biết, chưa sửa ở đây:
+Các lỗ hổng đã biết:
 
 - `apps/mobile` cần database cho web trước khi biên dịch được: `WasmDatabase` của drift (asset `sqlite3.wasm` + drift worker), mở qua conditional import trong connection factory của `core_database`.
-- `MainScope` bỏ qua `FlutterNativeSplash.remove()` trên web, vì chưa app nào ở đây sinh asset splash cho web và lời gọi sẽ ném `PlatformException(… removeSplashFromWeb …)`.
-- `AppInfoHelper.getDeviceInfo` / `getDeviceString` / `platformName` rẽ nhánh theo `Platform.isAndroid`, vốn **ném lỗi** trên web. Không gì gọi chúng lúc boot; màn hình nào gọi thì phải chặn bằng `kIsWeb` trước.
-- `core_notifications` (chỉ `apps/mobile`) khởi tạo Firebase bằng options theo flavor của app, vốn không mô tả web app nào.
+- `core_notifications` (chỉ `apps/mobile`) khởi tạo Firebase bằng options theo flavor của app, vốn không mô tả web app nào; `push` mặc định tắt trên web.
 
 ---
 
@@ -1137,11 +1093,11 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `core_notifications` | `platform_kernel` |
 | `core_storage` | `platform_kernel` |
 | `data_core` | `platform_kernel`, `domain_core` |
-| `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
+| `core_base_ui` | `core_common`, `core_di`, `core_responsive`, `platform_kernel` |
 | `bloc_state_management` | `platform_kernel`, `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `core_responsive`, `domain_core` *(ngoại lệ đã duyệt)* |
-| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive` |
-| `platform_shell_adapters` | `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (chỉ cho `RetryDialog`) |
-| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |
+| `core_ui_kit` | `core_base_ui`, `core_responsive` |
+| `platform_shell_adapters` | `core_base_ui` (`LanguageSet`), `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (`RetryDialog`, `AppOverlay`) |
+| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |
 
 Không mũi tên nào trong bảng này trỏ tới `modules/*/feature` hay `modules/*/data` — đó là bất biến cần giữ.

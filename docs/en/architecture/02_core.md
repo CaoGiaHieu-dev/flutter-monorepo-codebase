@@ -10,7 +10,7 @@ Core packages are **infrastructure**. They provide mechanisms; they never encode
 
 Three rules apply to everything on this page — RULE-01, RULE-44 / RULE-46 (mechanism, not policy) and RULE-09 in the [registry](../reference/01_rules.md#rule-registry).
 
-**Core must not depend on features or data.** Three approved exceptions exist, listed in [the overview](01_overview.md#the-approved-exceptions). `tools/arch_check/check.dart` enforces the list on every PR.
+**Core must not depend on features or data** (RULE-01). The four approved `→ domain_core` edges are listed in [the overview](01_overview.md#the-approved-exceptions); `tools/arch_check/check.dart` enforces the list on every PR.
 
 **Core provides mechanism, not policy.** `core_storage` gives you `StorageValue<T>`; it does not decide that a key called `token` exists. `core_database` gives you a connection and a migration contract; it does not know your tables' business meaning. Whenever a core package starts naming a specific domain concept, that name belongs somewhere else.
 
@@ -18,38 +18,20 @@ Three rules apply to everything on this page — RULE-01, RULE-44 / RULE-46 (mec
 
 ### Where a package lives — the six groups
 
-`platform/` is split into six group folders by role. Only the folder says which group a package is in — every package **name** is unchanged (`core_di` is still `core_di`, now at `platform/foundation/contracts`), so imports, `app_manifest.yaml` and the dependency names in each `pubspec.yaml` do not mention groups at all.
+`platform/` is split into six group folders by role. Only the folder says which group a package is in — a package **name** carries no group (`core_di` lives at `platform/foundation/contracts`), so imports, `app_manifest.yaml` and the dependency names in each `pubspec.yaml` do not mention groups at all.
 
 | Group | Folder | Packages (folder) | What belongs here | May depend on |
 |:--|:--|:--|:--|:--|
-| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | What every other package builds on: the service locator and error handling, the cross-module DI contracts, Flutter-bound helpers. No I/O, no widgets, no transport type | foundation, `domain_core` |
+| **foundation** | `platform/foundation/` | `platform_kernel` (`kernel/`), `core_di` (`contracts/`), `core_common` (`common/`) | What every other package builds on: the service locator, error handling and the app-profile types (pure Dart); the cross-module DI contracts; the Flutter-bound boot, lifecycle and routing helpers. It names no Dio (HTTP client) type | foundation, `domain_core` |
 | **layers** | `platform/layers/` | `domain_core` (`domain/`), `data_core` (`data/`) | The base contracts of the domain and data layers — `Result<T>`, `AppFailure`, `BaseEntity`, `BaseRepository` — that `modules/*/domain` and `modules/*/data` extend | `domain_core`: nothing. `data_core`: foundation, `domain_core` |
 | **infra** | `platform/infra/` | `core_network`, `core_storage`, `core_database`, `core_notifications` (`network/`, `storage/`, `database/`, `notifications/`) | Mechanisms that reach outside the process — HTTP, key–value storage, SQLite, push. Mechanism only: no product module's keys, tables or endpoints. The default group of `generate.dart 4` / `5` | foundation, layers — never another infra package |
 | **ui** | `platform/ui/` | `core_responsive` (`responsive/`), `core_base_ui` (`design_system/`), `core_ui_kit` (`ui_kit/`) | Scaling and adaptive layout, design tokens, themes and global strings, the shared widget library | foundation, ui — never state, infra or shell |
 | **state** | `platform/state/` | `provider_state_management` (`provider/`), `bloc_state_management` (`bloc/`) | The state-management bases, and the widgets bound to them (`LoadMoreListView`); a feature picks one | foundation, layers, ui |
-| **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | The infrastructure adapters every app registers (`NetworkConfigImpl`, the storage adapters, `AppBootStorage`); the app shell every app composes: boot, router assembly, material wrapper, app state | every platform group (`app_shell → adapters`, never the reverse) |
+| **shell** | `platform/shell/` | `platform_shell_adapters` (`adapters/`), `platform_app_shell` (`app_shell/`) | The infrastructure adapters every app registers (`NetworkConfigImpl`, the storage adapters, `AppBootStorage`); the app shell every app composes: boot, composition check, router assembly, material wrapper, deep links | every platform group (`app_shell → adapters`, never the reverse) |
 
-The direction, with each arrow pointing at the side that is depended on: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`. `platform_kernel → domain_core` is part of the design, not an exception to it: `ErrorHandler` produces an `AppFailure` (the approved R1 edge). And, unchanged, nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` **R11** enforces the group direction: it reads a package's group from its folder (`platform/<group>/<package>`; a package outside a known group folder is itself a violation) and checks every `dependencies:` entry that is a platform package against the table above. Dev dependencies are not checked — they never ship; `platform_app_shell`'s tests use `core_storage` for fakes. An edge into `domain_core` / `data_core` also needs R1's approved list.
+The direction, with each arrow pointing at the side that is depended on: `domain_core ← foundation ← data_core ← infra`, `foundation ← ui ← state`, `layers ← state`, `shell ← all of platform/`. `platform_kernel → domain_core` is one of the four approved edges: `ErrorHandler` produces an `AppFailure`. Nothing under `platform/` depends on `modules/` (`arch_check` R1). `arch_check` **R11** enforces the group direction: it reads a package's group from its folder (`platform/<group>/<package>`; a package outside a known group folder is itself a violation) and checks every `dependencies:` entry that is a platform package against the table above — the allowed-group table is in [the registry](../reference/01_rules.md#platform-group-direction-r11) (RULE-02). Dev dependencies are not checked; `platform_app_shell`'s tests use `core_storage` for fakes. An edge into `domain_core` / `data_core` also needs the approved list of R1.
 
-The package graph obeys the direction **with no exception**. Three edges used to run against it; each was removed, not approved:
-
-- `core_common` (foundation) → `core_responsive` (ui). `BottomTransitionPage`, the one widget that scaled through it, moved to `core_ui_kit` (`navigation/`); `AppInitializer`'s phone-sized portrait lock compares against a private 600 px constant (the Material 3 `medium` breakpoint).
-- `core_ui_kit` (ui) → `provider_state_management` (state). `LoadMoreListView` / `LoadingMoreWidget` — the only kit widgets bound to `LoadMoreMixin` — moved into `provider_state_management` (`src/base_view/loading_more_widget.dart`), which may depend on `ui`. The kit now declares no state-management package.
-- `platform_kernel` → `dio`. The Dio → `AppFailure` mapping moved to `core_network` as `DioFailureClassifier`, registered into `ErrorHandler` (§ 1, § 6).
-
-Two lighter edges went with them: `core_storage` now takes `TypeHelper` from `platform_kernel` instead of the whole of `core_common`, and `data_auth` no longer declares an unused `flutter`.
-
-Group-level graph (arrow = "depends on"; every package edge falls on one of these):
-
-```text
-layers/domain  -> (nothing)
-foundation     -> foundation, layers/domain
-layers/data    -> foundation, layers/domain
-infra          -> foundation, layers/domain            (no infra -> infra)
-ui             -> foundation, ui
-state          -> foundation, layers/domain, ui
-shell          -> foundation, infra, ui, state, shell
-```
+Every package edge follows that direction, with no exception: `BottomTransitionPage` (which scales through `core_responsive`) lives in `core_ui_kit`; the widgets bound to `LoadMoreMixin` (`LoadMoreListView`) live in `provider_state_management`, so the kit declares no state-management package; and the kernel names no Dio type — `core_network` contributes `DioFailureClassifier` through `ErrorHandler.registerClassifier` (§ 1, § 6).
 
 A new mechanism package goes in `infra` — `dart tools/module_generator/generate.dart 4 <name>` puts it there; pass `--group <group>` for another group.
 
@@ -59,24 +41,27 @@ A new mechanism package goes in `infra` — `dart tools/module_generator/generat
 
 The bottom of the infrastructure stack is two packages, split by one question: *does it need Flutter?*
 
-**`platform_kernel`** is pure Dart — no `flutter` in its dependencies, enforced by `arch_check` R9, and no transport either: it names no `dio` type. Its only workspace dependency is `domain_core`, for the `AppFailure` that `ErrorHandler` produces. Depend on it directly unless you need something Flutter-bound.
+**`platform_kernel`** is pure Dart — no `flutter` in its dependencies, enforced by `arch_check` R9, and no transport either: it names no `dio` type. Its only workspace dependency is `domain_core`, for the `AppFailure` that `ErrorHandler` produces. Depend on it directly unless you need something Flutter-bound. Everything is in `lib/src/`:
 
 | Area | Path | Contents |
 |:--|:--|:--|
-| Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
-| Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
-| Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`). `ErrorClassifier` + `ErrorHandler.registerClassifier` let the package that owns an exception type map it — `core_network` registers `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` is a plain callback for the exceptions it cannot classify — the app shell points it at the optional `IErrorReporter` ([`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting)) |
-| Extensions | `src/extensions/` | `bool`, `Enum`, `List`, `String` — no `DateTime` or `num` formatting: dates, times and currency are locale-dependent, so format them with `intl`'s `DateFormat` / `NumberFormat` and the current locale |
-| Utils **and constants** | `src/utils/` | `EnvConstants`, `ErrorCodes`, `MessageQueue`, `helpers/` (`TypeHelper`, `ValidationHelper`, `JsonConverters`) |
+| Service locator | `service_locator.dart` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty`, and the `ServiceLocator` typedef for code that must name the locator without declaring `get_it` |
+| Flavor | `flavor.dart` | `Flavor` (`dev`, `staging`, `prod`; `toValue()` is the `--flavor` / DI-environment spelling) |
+| Errors | `error/` | `ErrorHandler.handleError()` (never throws), the `AppException` types, and a re-export of the failure types declared in `domain_core` next to `Result<T>`. `ErrorClassifier` + `ErrorHandler.registerClassifier` let the package that owns an exception type map it — `core_network` registers `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` is a plain callback for the exceptions it cannot classify — the app shell points it at the optional `IErrorReporter` ([`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting)) |
+| App profile | `profile/` | The types an app uses to tell the shell about itself — `AppProfile`, `AppFacts`, `AppPlatform`, `PlatformFacts`, `SslPinningPolicy`, and the typed tuning sections (`DisplayProfile`, `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile`); `registerAppProfile` puts them in the locator. What each field means: [`06_app_shell.md`](06_app_shell.md#the-app-profile), [`13_app_composition`](../guides/13_app_composition.md) |
+| Helpers | `helpers/` | `TypeHelper`, `ValidationHelper` |
+| String extension | `string_extension.dart` | `StringExtension` (`capitalize`, `isValidEmail`, `truncate`, …) and `StringPriceExtension` — no `DateTime` or `num` formatting: dates, times and currency are locale-dependent, so format them with `intl`'s `DateFormat` / `NumberFormat` and the current locale |
+| Constants | `utils/` | `EnvConstants` (`BASE_URL`, `WEB_DOMAIN`, `APP_NAME`), `ErrorCodes`, `ProfileConstants` (the `ALLOW_UNDECLARED_PLATFORM` and `APP_FLAVOR` defines) |
 
-**`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale so a `package:core_common/core_common.dart` import still resolves everything above; and `core_di`, for the optional `IAnalytics` that `RouteAwareWidget` reports screen views to. It depends on nothing in the `ui` group: `BottomTransitionPage` now lives in `core_ui_kit`.
+**`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale (`src/kernel.dart`) so a `package:core_common/core_common.dart` import still resolves everything above; and `core_di`, for the optional `IAnalytics` that `RouteAwareWidget` reports screen views to. It depends on nothing in the `ui` group.
 
 | Area | Path | Contents |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation — portrait lock on phone-sized displays only, system UI) |
-| Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
-| Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget` |
-| Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
+| Config | `src/config/` | `AppConfig` (flavor resolution, the TLS-bypass rule, default locale), `AppInitializer` (logger, `HttpOverrides`, orientation policy, `RouteAwareWidget.observer`), `resolveAppPlatform()` (the one place that maps the running device onto an `AppPlatform`) |
+| Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `DisposeGuard` |
+| Routing helpers | `src/go_route_data_custom.dart` | `GoRouteDataCustom`, `RouteAwareWidget` |
+| Helpers | `src/helpers/` | `AppUtils`, `EasyDebounce`, `AppInfoHelper` (package info) |
+| Input formatters | `src/input_formatters.dart` | `NumberCurrencyFormatter`, `PhoneNumberFormatter` |
 
 ### What does *not* belong here, and why
 
@@ -88,12 +73,12 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | REST endpoints (`/user/login`, `/user/refresh-token`) | the owning data package — [`modules/auth/data/lib/src/utils/auth_api_constants.dart`](../../../modules/auth/data/lib/src/utils/auth_api_constants.dart) | They belong solely to auth. Nothing else has any business naming them. |
 | Subsystem constants (analytics event names, socket events such as `TYPING` / `USER_JOINED`, remote-config keys) | the package implementing that subsystem, if it exists | Chat-specific events sitting in a core package are a boundary leak, and constants for a subsystem the repo does not have are dead weight. |
 
-Two constants files live at the bottom of the stack, because they are genuinely global — both in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values) and `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — the failure codes `ErrorHandler` and `BaseRepository` assign when there is no HTTP status, e.g. `REQUEST_CANCELLED`, `RESPONSE_REJECTED`, `UNKNOWN`, all outside the HTTP range so a 5xx is always a real one).
+Three constants files live at the bottom of the stack, because they are genuinely global — all in `platform_kernel`'s `src/utils/`: `EnvConstants` (`String.fromEnvironment` values), `ProfileConstants` (build-time defines the boot reads) and `ErrorCodes` ([`error_codes.dart`](../../../platform/foundation/kernel/lib/src/utils/error_codes.dart) — every non-HTTP failure code the platform assigns, grouped by range: `1xxx` network (`NETWORK_ERROR`, `NO_INTERNET`, `CONNECTION_TIMEOUT`, `REQUEST_CANCELLED`, …), `2xxx` storage, `3xxx` validation, `4xxx` parsing, `5xxx` cache, `6xxx` external service, `7xxx` response envelope (`RESPONSE_REJECTED`, `EMPTY_RESPONSE`) and `UNKNOWN` 9999 — all outside the HTTP range, so a 5xx is always a real one).
 
 > [!CAUTION]
 > Before adding a constant to `core_common`, ask: *would more than one unrelated domain read this?* If the answer is no, it belongs in the owning package's `utils/`.
 
-**Firebase options are not here either.** They name one bundle ID, so they belong to one app: each app that uses Firebase owns a `lib/firebase/firebase_module.dart` registering its per-flavour `FirebaseOptions` (the sample's is [`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)). While that module sat in `core_common`, a second app would have inherited the mobile app's Firebase identity.
+**Firebase options are not here either.** They name one bundle ID, so they belong to one app: each app that uses Firebase owns a `lib/firebase/firebase_module.dart` registering its per-flavour `FirebaseOptions` (the sample's is [`apps/mobile/lib/firebase/firebase_module.dart`](../../../apps/mobile/lib/firebase/firebase_module.dart)).
 
 ---
 
@@ -101,22 +86,25 @@ Two constants files live at the bottom of the stack, because they are genuinely 
 
 Contracts only. No implementations, no business logic. It is the neutral ground where the platform meets the modules — and every contract in it is **product-neutral**: named for what the platform needs (a session, a location), never for the module that happens to provide it.
 
-| Contract group | Path | Purpose |
+| Contract group | Path (under `lib/src/`) | Purpose |
 |:--|:--|:--|
-| Routing | `src/routing/` | `IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (where the shell sends a signed-out / signed-in user), `IDashboardRouteModule`, `NavigatorKeys` |
-| Session | `src/session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (shell-facing), `ISessionStatusStream` (feature-facing: state shared between a Provider and a BLoC feature), `ISessionRefreshListenable`, `ISessionGateway` (transport) — implemented by whichever module owns sign-in |
-| Storage contracts | `src/theme/`, `src/language/` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell's adapters package (`platform_shell_adapters`) |
-| Localization | `src/i_feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
-| Observability | `src/observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
+| Routing | `routing/` | `IFeatureRouteModule`, `INavDestinationModule` (with its `NavDestination`), `IAppEntryLocation`, `ISignInLocation` / `IPostSignInLocation` (where the shell sends a signed-out / signed-in user), `IDashboardRouteModule`, `NavigatorKeys` — one file per contract |
+| Session | `session/` | `SessionPrincipal`, `SessionFailure`, `ISessionState` (shell-facing), `ISessionStatusStream` (feature-facing: state shared between a Provider and a BLoC feature), `ISessionRefreshListenable`, `ISessionGateway` (transport) — implemented by whichever module owns sign-in |
+| App | `app/` | `IAppSplashScreen` (the Dart splash), `IAppTreeWrapper` (wraps the widget tree, ordered) |
+| Storage contracts | `i_theme_storage.dart`, `i_language_storage.dart` | `IThemeStorage`, `ILanguageStorage` — implemented in the app shell's adapters package (`platform_shell_adapters`) |
+| Localization | `i_feature_localization.dart` | `IFeatureLocalization` — each feature contributes its own delegate |
+| Observability | `observability/` | `IErrorReporter`, `IAnalytics` — optional, implemented by the app (Crashlytics, Sentry, Firebase Analytics, …); see [`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting) |
 
-**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), separate from the routing interfaces in `routing_interfaces.dart`. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
+Which of these an app provides, and what the shell does without each, is the app's `capabilities:` declaration (RULE-81) — [`06_app_shell.md`](06_app_shell.md#what-the-shell-resolves-from-an-app) lists them.
+
+**`NavigatorKeys`** lives in its own file, [`src/routing/navigator_keys.dart`](../../../platform/foundation/contracts/lib/src/routing/navigator_keys.dart), separate from the routing interfaces. It exposes `rootKey`, `appKey`, and `nested(id)` for a module that needs its own back stack.
 
 A `ShellRoute` and its child routes must share the **same** `GlobalKey` instance, but the shell is built by the app shell while the children are declared inside a feature. Neither side can host the key without creating a cycle, so the Hub — which both already depend on — holds it.
 
 Keys are requested by id rather than declared: `NavigatorKeys.nested('auth')` returns the same instance every time. The DI Hub therefore names no feature, and a module needing its own back stack adds nothing here.
 
 > [!NOTE]
-> `core_di` depends on `go_router`. That is not a leak: `IFeatureRouteModule` returns `List<RouteBase>` and `INavDestinationModule` returns `List<RouteBase>` too. These *are* routing contracts, so they must speak GoRouter's vocabulary — but note `INavDestinationModule` describes its destination with the Hub's own `NavDestination`, never a `BottomNavigationBarItem`, so the contract does not commit to a bottom bar. Abstracting them further would add an adapter layer with no benefit.
+> `core_di` depends on `go_router`. That is not a leak: `IFeatureRouteModule` and `INavDestinationModule` both return `List<RouteBase>`. These *are* routing contracts, so they must speak GoRouter's vocabulary — but note `INavDestinationModule` describes its destination with the Hub's own `NavDestination`, never a `BottomNavigationBarItem`, so the contract does not commit to a bottom bar. Abstracting them further would add an adapter layer with no benefit.
 
 **Not here:** anything with an implementation. If you write a `class …Impl` in `core_di`, it is in the wrong package. Nor a contract that exists so one feature can reach *one other module* — `AuthNavigator`, `IAuthActionHandler`, `HomeNavigator`: those live in the owning module's API package (`modules/auth/api` → `auth_api`, `modules/home/api` → `home_api`), which may depend on the foundation and Flutter only (`arch_check` R3).
 
@@ -124,35 +112,36 @@ Keys are requested by id rather than declared: `NavigatorKeys.nested('auth')` re
 
 ## 3. `core_base_ui` — design system
 
-Design tokens, themes, typography, global assets and the base localization bundle.
+Design tokens, themes, typography, global assets and the base localization bundle. Depends on `core_responsive`, `core_di`, `core_common` and `platform_kernel`.
 
 | Area | Path | Contents |
 |:--|:--|:--|
 | Design tokens | `src/styles/` | `AppSpacing`, `AppRadius`, `AppTextStyles`, `AppGradients`, `AppShadows` |
-| Theme | `src/theme/` | `ThemeProvider`, `ThemeSystemExtension`, `ThemeSystemInterface` |
-| Language | `src/language/` | `LanguageProvider` |
-| Extensions | `src/extensions/` | `context.colors`, key/locale extensions |
-| Generated | `src/gen/` | `Assets`, `AppLocalizations` (global strings) |
-| Constants | `src/utils/base_ui_constants.dart` | Non-token values: snackbar duration, dropdown geometry, app-bar font size |
+| Theme | `src/theme/` | `ThemeProvider` (builds `ThemeData` from the palette), `ThemeSystemExtension` (the palette — colour tokens including `shadow` and `scrim`; the `light` / `dark` palettes; `toColorScheme`; `withOverrides` for an app's `ThemeProfile`) |
+| Language | `src/language/` | `LanguageProvider`, `LanguageSet` (the languages an app offers, from its `LocaleProfile`), `AppLanguages` (`supported`, `fallback`, `resolve`, `nameOf` — where a language's display name is added) |
+| Extensions | `src/extensions/` | `context.colors` / `context.colorScheme` / `context.l10n`, `GlobalKey.showDropDown`, `Locale.languageName`, `AppLocalizations.failureMessage(code)` (a failure's translated sentence, picked by its code — never `AppFailure.message`, RULE-34) |
+| Licenses | `src/licenses/` | `registerBaseUiLicenses()` — the typeface's licence |
+| Generated | `src/gen/` | `Assets` (the logo SVG), `FontFamily`, `AppLocalizations` (global strings) |
+| Constants | `src/utils/base_ui_constants.dart` | Non-token values: dropdown geometry, app-bar title size, scrolled-under elevation, navigation-rail indicator alpha |
+
+The typeface and the global strings ship in this package (`assets/fonts/`, `assets/language/`). The launcher-icon and native-splash images are build inputs, not runtime assets: they live in the repository's `assets/branding/`, read by the root `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml`. The palette an app overrides is declared in its `ThemeProfile` (`PaletteToken` → colour), not by editing this package — [`11_design_system.md`](../guides/11_design_system.md).
 
 ### Zero Flutter widgets — verified
 
-The package contains **no** `StatelessWidget`, `StatefulWidget`, `State<…>` or `InheritedWidget`. This is checked, not assumed. Reusable widgets belong in [`core_ui_kit`](#4-core_ui_kit--reusable-widgets); `core_base_ui` supplies only the values those widgets consume.
+The package contains **no** `StatelessWidget`, `StatefulWidget`, `State<…>` or `InheritedWidget` in `lib/`. This is checked, not assumed. Reusable widgets belong in [`core_ui_kit`](#4-core_ui_kit--reusable-widgets); `core_base_ui` supplies only the values those widgets consume.
 
 ### Why design tokens stay in `styles/`, not `utils/`
 
-They are an approved exception to the "constants live in `utils/`" rule:
+They are an approved exception to the "constants live in `utils/`" rule (RULE-09):
 
 - They are **public API** imported directly by many feature packages.
 - `styles/` carries meaning — "this is the design system". `utils/` reads as "miscellaneous", which is exactly the wrong signal for tokens the whole app is expected to obey.
 
 Non-token magic values live in `src/utils/base_ui_constants.dart`. The dividing line: if a designer would recognise it, it is a token and stays in `styles/`.
 
-### Why the colour and font-size rules are review-held
+### Colours are review-held
 
-They were considered and deliberately left to review. A check for `Colors.<name>` would have to allow the places a literal colour is *correct* — `AppShadows`, which is the token file, and every modal scrim, where Flutter's own `ModalBarrier` is a fixed black and a theme-aware value would *lighten* the screen in dark mode. On this tree that is seven approved uses against two real ones, and a rule whose exception list outweighs its findings teaches people to skim it.
-
-The repo also forbids suppression comments, so there is no honest escape hatch for the legitimate cases. Review it is — which is exactly why three dark-mode bugs survived in `core_ui_kit` until they were audited for, and worth knowing when you copy a widget out of it.
+`arch_check` R20 rejects a raw number in the layout and paint constructors it lists (`fontSize:` included) outside `styles/` and `utils/`. A hardcoded colour is not checked: a lexical `Colors.<name>` rule cannot tell a correct literal from a violation, and RULE-71 forbids the suppression comment an exception list would need. RULE-33 is therefore held by review — read `context.colors.*`, never a literal. The two values that look like exceptions are tokens: `scrim` (the modal and loading barrier, black with an alpha in both palettes, because a theme-inverting scrim would *lighten* the screen in dark mode) and `shadow` (what `AppShadows` uses).
 
 ### `ThemeProvider` reacts to OS theme changes
 
@@ -162,14 +151,8 @@ The repo also forbids suppression comments, so there is no honest escape hatch f
 
 The observer is removed in `dispose()`, which is annotated `@disposeMethod` so GetIt invokes it on container reset — without it, every `resetDependencies()` in a test would leave a stale observer registered.
 
-The override, in `platform/ui/design_system/lib/src/theme/theme_provider.dart`:
-
 ```dart
 // platform/ui/design_system/lib/src/theme/theme_provider.dart
-/// Called by the framework when the OS switches between Light and Dark.
-///
-/// Only [ThemeMode.system] derives its appearance from the platform, so an
-/// explicit light/dark choice is left untouched — no wasted rebuild.
 @override
 void didChangePlatformBrightness() {
   super.didChangePlatformBrightness();
@@ -180,16 +163,16 @@ void didChangePlatformBrightness() {
   // …and rebuild consumers, because `currentTheme` now resolves differently.
   notifyListeners();
 }
-```
 
-Cleanup is wired into DI:
-
-```dart
 @disposeMethod
 @override
 void dispose() {
   if (_isObservingPlatform) {
     WidgetsBinding.instance.removeObserver(this);
+    _isObservingPlatform = false;
+  }
+  super.dispose();
+}
 ```
 
 The persisted preference is read through `IThemeStorage` — see [`../guides/06_storage.md`](../guides/06_storage.md#9-share-the-value-across-a-package-boundary).
@@ -200,20 +183,31 @@ The persisted preference is read through `IThemeStorage` — see [`../guides/06_
 
 The shared widget library every feature may consume. It is **core, not a feature**: it lives at `platform/ui/ui_kit` precisely so `modules/*/feature/` contains only removable product surfaces.
 
-Flat layout (no `src/`): `buttons/`, `inputs/`, `dialogs/`, `feedback/`, `layout/`, `media/`, `navigation/`, `utils/`.
+Everything is under `lib/src/`, behind the one package barrel (`lib/core_ui_kit.dart`):
 
-It depends on `core_common`, `core_base_ui` and `core_responsive` — never on a state-management package, on infra, on a feature or on `data_*`. `navigation/` also holds `BottomTransitionPage`, a `Page` that shows a go_router route as a modal bottom sheet (it moved here from `core_common` because its corner radius scales through `core_responsive`).
+| Folder | Contents |
+|:--|:--|
+| `buttons/` | `CustomButton.rectangle` |
+| `inputs/` | `CustomInputField` |
+| `feedback/` | `LoadingWidget`, `EmptyWidget` |
+| `media/` | `CustomCacheNetworkImage` |
+| `layout/` | `TextScaleDown` |
+| `navigation/` | `BottomTransitionPage` — a `Page` that shows a go_router route as a modal bottom sheet |
+| `dialogs/` | **`AppOverlay`**, the one overlay system: queued dialogs (`showDialog<T>` / `dismissDialog` / `clearDialogs`), a toast and a loading indicator, shown without a `BuildContext`; `OverlayDialogWidget` / `OverlayDialogState.closeDialog` as the base of a self-closing dialog (`RetryDialog` is one); `AppOverlayInitializer`, which the app shell mounts |
+| `utils/` | `SharedUiConstants` |
+
+It depends on `core_base_ui` and `core_responsive` — never on a state-management package, on infra, on a feature or on `data_*`.
 
 > [!NOTE]
-> The dependency runs **one way**: `state -> ui`. `provider_state_management` may depend on the ui group (its `LoadMoreListView` scales through `core_responsive`); `core_ui_kit` depends on no state-management package. A widget bound to `LoadMoreMixin` or `ViewState` therefore lives in `provider_state_management`, not here — which is where `LoadMoreListView` / `LoadingMoreWidget` moved. `provider_state_management` also keeps its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
+> The dependency runs **one way**: `state -> ui`. `provider_state_management` may depend on the ui group (its `LoadMoreListView` scales through `core_responsive`); `core_ui_kit` depends on no state-management package. A widget bound to `LoadMoreMixin` or `ViewState` therefore lives in `provider_state_management`, not here. `provider_state_management` also keeps its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
 
 ### The UI-agnostic rule
 
-Reusable widgets use their parameters **exactly as received** and must not scale them through `core_responsive`. Scaling is the caller's job, so by the time a value arrives it is already in device pixels — note `context.w(120)` on the calling side below. A widget still scales its *own* constants, or it would not be responsive at all:
+RULE-31: reusable widgets use their parameters **exactly as received** and must not scale them through `core_responsive`. Scaling is the caller's job, so by the time a value arrives it is already in device pixels — note `context.w(120)` on the calling side below. A widget still scales its *own* constants, or it would not be responsive at all:
 
 ```dart
 // caller scales
-CustomButton(width: context.w(120), height: context.h(44))
+CustomButton.rectangle(minWidth: context.w(120), height: context.h(44))
 
 // widget scales its own parameter -- wrong
 double _width(BuildContext context) => context.w(width);
@@ -222,7 +216,7 @@ double _width(BuildContext context) => context.w(width);
 Scaling inside means a caller who already scaled gets it applied twice, and a caller who wants a literal pixel value cannot get one.
 
 > [!WARNING]
-> **What this rule forbids.** An `AppBar` in `core_ui_kit` that carries:
+> **What this rule forbids.** An app-bar widget that carries:
 >
 > ```dart
 > @override
@@ -239,13 +233,16 @@ Defaults for these widgets live in `platform/ui/ui_kit/lib/src/utils/shared_ui_c
 class SharedUiConstants {
   SharedUiConstants._();
 
-  static const Duration DIALOG_TRANSITION_DURATION = Duration(milliseconds: 200);
+  static const Duration DIALOG_TRANSITION_DURATION = Duration(
+    milliseconds: 200,
+  );
   static const Duration TOAST_DURATION = Duration(seconds: 3);
-  static const Color DIALOG_BARRIER_COLOR = Color(0x80000000);
+  static const double BUTTON_HEIGHT = 48;
+  // … default sizes and alphas of the other widgets
 }
 ```
 
-They are defaults, not policy — a caller that needs a different value passes it through the constructor.
+They are defaults, not policy — a caller that needs a different value passes it through the constructor. Sizes are design pixels; the widget scales its own default.
 
 ---
 
@@ -255,7 +252,7 @@ The scaling mechanism every widget in the app resolves through, and the window s
 
 | Export | Path | What it is |
 |:--|:--|:--|
-| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget` mounted **once** above `MaterialApp`. Params: `child` (required), `designSize` (default 360×690), `scaleBounds` and `textScaleBounds` (both default `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (default `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver`. Asserts that `designSize` and every profile's `designSize` are positive and finite |
+| `ResponsiveInit` | `src/responsive_init.dart` | `StatelessWidget` mounted **once** above `MaterialApp`. Params: `child` (required), `designSize` (default 375×812), `scaleBounds` and `textScaleBounds` (both default `ScaleBounds.downOnly()`), `profiles`, `breakpoints` (default `ResponsiveBreakpoints.material3()`), `splitScreenMode`, `minTextAdapt`, `fontSizeResolver`. Asserts that `designSize` and every profile's `designSize` are positive and finite |
 | `ResponsiveScope` | `src/responsive_scope.dart` | `InheritedWidget` carrying `ResponsiveMetrics`; `maybeOf(context)` returns nullable, `of(context)` asserts when missing |
 | `ResponsiveMetrics` | `src/responsive_metrics.dart` | Immutable value object computing `width`, `height`, `radius`, `diagonal`, `diameter`, `sp`, `spMin`; exposes the resolved `activeProfile` / `effectiveDesignSize` / `effectiveScaleBounds` / `effectiveTextScaleBounds` / `effectiveMinTextAdapt`, plus `windowSizeClass`, `windowHeightClass`, `orientation`, and the static `isValidDesignSize(size)` |
 | `FontSizeResolver` | `src/responsive_metrics.dart` | `typedef double Function(num fontSize, ResponsiveMetrics metrics)` — its result is not clamped by any bounds |
@@ -268,7 +265,7 @@ The scaling mechanism every widget in the app resolves through, and the window s
 | `AdaptiveSplitView` | `src/adaptive/adaptive_split_view.dart` | Master–detail: two panes at a fold, hinge or from `splitAt`, one pane otherwise; an optional `divider` laid out `dividerExtent` wide (default 1). `primary` is capped so the divider and `secondary` always fit, and a `primaryWidth` that would leave `secondary` nothing falls back to one pane. `AdaptiveSplitView.isSplit(context)` tells the list which of the two it is |
 | `AdaptiveContent` | `src/adaptive/adaptive_content.dart` | Caps content at a readable width (640, not scaled) |
 | `FoldPosture` | `src/adaptive/fold_posture.dart` | `flat` / `book` / `tabletop` |
-| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (360), `DEFAULT_DESIGN_HEIGHT` (690), `DESIGN_SCALE_FACTOR` (1), the `BREAKPOINT_*` values; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `SPLIT_DIVIDER_EXTENT` (1), `CONTENT_MAX_WIDTH` (640) — in `src/utils/`, like every other package's constants |
+| Constants | `src/utils/` | `ResponsiveConstants`: `SPLIT_SCREEN_MIN_HEIGHT` (700), `DEFAULT_DESIGN_WIDTH` (375), `DEFAULT_DESIGN_HEIGHT` (812), `DESIGN_SCALE_FACTOR` (1), the `BREAKPOINT_*` and `BREAKPOINT_HEIGHT_*` values; `AdaptiveConstants`: `SPLIT_PRIMARY_FRACTION` (0.4), `SPLIT_DIVIDER_EXTENT` (1), `CONTENT_MAX_WIDTH` (640) — in `src/utils/`, like every other package's constants |
 
 Every factor is clamped, and by default only downward: a window smaller than the artboard shrinks the design, a larger one draws it 1:1 and leaves the extra room to the layout. Growth is opt-in and capped, per window class.
 
@@ -303,7 +300,7 @@ Degenerate input never collapses a layout. An empty window — Android reports 0
 > [!CAUTION]
 > **There is deliberately no `num` extension.** `16.w` **does not compile**. A number carries no context, so such an extension could only read a global singleton — and a widget reading a global never learns the metrics changed. Requiring a `BuildContext` makes the correct thing the only writable thing. There is no global instance, no imperative `init()`, no `setWidth()` helper and no rebuild flag — rebuild targeting is Flutter's job once the metrics live in an `InheritedWidget`.
 
-`dart tools/arch_check/check.dart` rule **R7** rejects the bare form — the pattern `[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()` — in any file importing `core_responsive`, and is Gate 1 of `pr_quality_check.yml`.
+RULE-30: `dart tools/arch_check/check.dart` rule **R7** rejects the bare form — a number literal or a parenthesised sum followed by `.w` / `.h` / `.r` / `.sp` / `.spMin` / `.dg` / `.dm` — in every hand-written `lib/` file, and an `extension … on num` that would make it compile; **R20** rejects a raw number in the layout and paint constructors it lists. Both are Gate 1 of `pr_quality_check.yml`.
 
 > [!NOTE]
 > A widget test that scales **must** wrap its subject in `ResponsiveInit`, or `ResponsiveScope.of` asserts. The package's own tests live in `platform/ui/responsive/test/`.
@@ -319,13 +316,14 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 | Area | Path | Contents |
 |:--|:--|:--|
 | Client | `src/api_client.dart` | `ApiClient.createClient()` — Dio factory, assembles the interceptor chain |
+| DI module | `lib/di/network_module.dart` | `NetworkModule` — registers the app's default `Dio`, built by `ApiClient` (`@lazySingleton`) |
 | Contract | `src/network_config.dart` | `NetworkConfig` — `getToken`, `getLocale`, `onRetryCallback`, `onRefreshToken`, `onRefreshFailed` |
 | Interceptors | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
-| Handlers | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler` |
-| Constants | `src/utils/network_constants.dart` | Timeouts, header names, `Bearer` prefix, extra keys, log tags |
-| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` 1003, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
+| Handlers | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler`, and `RequestOptions.forReplay()` (`request_replay.dart`) |
+| Constants | `src/utils/network_constants.dart` | Header names, `Bearer` prefix, `EXTRA_*` request flags, log tags — the timeouts, extra headers and redirect policy are the app's `NetworkProfile` |
+| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status — `ErrorCodes.HTTP_ERROR` when there is none, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
 
-`DioFailureClassifier` is how the kernel's `ErrorHandler` learns about Dio without importing it: an eager `@singleton` of this package's DI module whose `@PostConstruct` calls `ErrorHandler.registerClassifier`. The module runs in the `core` DI group, so the classifier is registered before any Dio client exists (all are lazy) and before any repository runs; `ApiClient`'s constructor registers it again, idempotently, for a client built outside DI. A unit test that drives a repository into a `DioException` without DI calls `DioFailureClassifier.ensureRegistered()` first. The apps' DI smoke tests assert the registration.
+`DioFailureClassifier` is how the kernel's `ErrorHandler` learns about Dio without importing it: an eager `@singleton` whose `@PostConstruct` calls `ErrorHandler.registerClassifier`. This package's module runs in the `core` DI group, so the classifier is registered before any Dio client exists (all are lazy) and before any repository runs; `ApiClient`'s constructor registers it again, idempotently, for a client built outside DI. A unit test that drives a repository into a `DioException` without DI calls `DioFailureClassifier.ensureRegistered()` first. The apps' DI smoke tests assert the registration (`checkAppContract` C08).
 
 `NetworkConfig` is implemented **in the app shell's adapters package** (`platform_shell_adapters`), not here — that is what keeps `core_network` free of any storage dependency. Both refresh callbacks default to `null`, so a client with no refresh endpoint simply surfaces the `401` unchanged.
 
@@ -344,9 +342,17 @@ How to declare a service, opt a request out, add a second client or turn pinning
 class ApiClient {
   final NetworkConfig _config;
   final NetworkProfile _profile;
+  final LocaleProfile _locale;
 
-  // The profile is optional: a client built by hand takes the template defaults.
-  ApiClient(this._config, [this._profile = const NetworkProfile(), …]);
+  // The profiles are optional: a client built by hand takes the template defaults.
+  ApiClient(
+    this._config, [
+    this._profile = const NetworkProfile(),
+    this._locale = const LocaleProfile(),
+  ]) {
+    // … throws when NetworkProfile.headers names a credential or shell-owned header (RULE-66)
+    DioFailureClassifier.ensureRegistered();
+  }
 
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
@@ -379,6 +385,7 @@ dio.interceptors.add(
   AuthInterceptor(
     getToken: _config.getToken,
     getLocale: _config.getLocale,
+    defaultLanguageCode: _locale.fallback,
   ),
 );
 
@@ -414,7 +421,7 @@ Auth runs first so the token is attached before anything else; refresh sits ahea
 
 #### `AuthInterceptor`
 
-Adds an upper-cased `language` header (falling back to the device locale, then to `vi`), and the bearer token when the request wants auth:
+Adds an upper-cased `language` header — the code `NetworkConfig.getLocale` resolved, else the app's `LocaleProfile.fallback` (`en` by default) — and the bearer token when the request wants auth:
 
 ```dart
 // platform/infra/network/lib/src/interceptors/auth_interceptor.dart
@@ -454,7 +461,7 @@ All three hooks are behind `kDebugMode`, and credential headers are masked even 
 
 ```dart
 // platform/infra/network/lib/src/interceptors/logging_interceptor.dart
-Map<String, dynamic> _redactHeaders(Map<String, dynamic> headers) {
+static Map<String, dynamic> redactHeaders(Map<String, dynamic> headers) {
   const redactedKeys = {
     HttpHeaders.authorizationHeader,
     HttpHeaders.cookieHeader,
@@ -499,23 +506,31 @@ The implementation delegates each value to whoever actually owns it, rather than
 // platform/shell/adapters/lib/src/network_config_impl.dart
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
-  NetworkConfigImpl(this._languageStorage);
+  NetworkConfigImpl(
+    this._languageStorage, [
+    LocaleProfile locale = const LocaleProfile(),
+  ]) : _languages = LanguageSet(locale);
 
   final ILanguageStorage _languageStorage;
+  final LanguageSet _languages;
 
-  /// Null in a build that composes no auth module.
+  /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
 
-  @override
-  String? Function() get getToken => () => _session?.readToken();
+  /// Whether a session owner is composed — *without* resolving it:
+  /// resolving the gateway while `Dio` is being built closes a dependency
+  /// cycle.
+  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
 
+  @override
+  String? Function() get getToken =>
+      () => _session?.readToken();
+
+  /// The app's language, resolved like `LanguageProvider` resolves it, so the
+  /// server always gets a language the app offers.
   @override
   String? Function() get getLocale =>
-      () => _languageStorage.getLanguage().languageCode;
-
-  /// Whether an auth module is composed — without resolving it: resolving
-  /// the gateway while `Dio` is being built closes a dependency cycle.
-  bool get _hasSession => getIt.isRegistered<ISessionGateway>();
+      () => _languages.resolve(_languageStorage.getLanguage()).languageCode;
 
   @override
   Future<String?> Function()? get onRefreshToken =>
@@ -543,7 +558,7 @@ Future<String?> refreshToken() async {
   final result = await _repository.refreshToken();
   if (result.isSuccess) return _local.getUserToken();
   final failure = result.errorOrNull;
-  if (isTransient(failure)) {
+  if (isTransientFailure(failure)) {
     throw StateError(
       'Session renewal did not reach the server: '
       '${failure?.message}',
@@ -552,11 +567,10 @@ Future<String?> refreshToken() async {
   return null;
 }
 
+// modules/auth/data/lib/src/session/transient_failure.dart
 /// Whether [failure] says nothing about the session's validity — the
 /// renewal never got an answer — so the session must be kept.
-///
-/// Exposed for tests: this predicate decides whether a user is signed out.
-static bool isTransient(AppFailure? failure) {
+bool isTransientFailure(AppFailure<dynamic>? failure) {
   if (failure is NetworkFailure) return true;
   if (failure is! ServerFailure) return false;
   final code = failure.code;
@@ -607,7 +621,7 @@ The retry is `await`-ed deliberately:
 return await _retryRequest(err, handler);
 ```
 
-`FormData` bodies are rebuilt before replay, because a form stream can only be consumed once.
+`FormData` bodies are rebuilt before replay (`RequestOptions.forReplay()`), because a form stream can only be consumed once.
 
 #### Three guards against infinite recursion
 
@@ -653,69 +667,50 @@ switch (profile.facts.sslPinning.decisionFor(flavor)) {
 }
 ```
 
-Where pinning can apply at all is a fact of the platform (`AppPlatform.canPinTls`: Android and iOS). On the **web** the browser validates certificates and Dio uses its browser adapter, so nothing is installed and one `INFO` line says so; on **desktop** the pinning plugin has no implementation, so one `INFO` line says "not applicable" — it used to log an `ERROR` on every start, and installing the pinning client there would have routed every HTTPS call through a plugin with no desktop side. `profile`, `platform` and `flavor` are required arguments of `initBeforeRunApp` and `init`: the initializer never guesses where it runs or which flavor it is (RULE-82), and there is no profile-less mode with a pin source of its own.
+Where pinning can apply at all is a fact of the platform (`AppPlatform.canPinTls`: Android and iOS). On the **web** the browser validates certificates and Dio uses its browser adapter, so nothing is installed and one `INFO` line says so; on **desktop** the pinning plugin has no implementation, so one `INFO` line says "not applicable" instead of installing a client that would route every HTTPS call through a plugin with no desktop side. `profile`, `platform` and `flavor` are required arguments of `initBeforeRunApp` and `init`: the initializer never guesses where it runs or which flavor it is (RULE-82), and there is no profile-less mode with a pin source of its own.
 
 `_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls after the profile checks and the `beforeDependencies` hook and **before** `configureDependencies()` — it reads only the profile, so it needs no registration. Timing is the whole point: Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`, and anything the graph builds can open a connection — an eager singleton while DI initialises, a contract implementation `checkAppContract` resolves right after, a controller created on the splash (auth restoring its session with a token refresh). An override installed later, after DI or in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
 
-Certificate validation is bypassed (for local self-signed servers) **only in a debug build that explicitly declared the `dev` flavor** — `AppConfig.bypassesCertificateValidation`. Everything else goes through the pinning path: `staging`, `prod`, a `dev` profile or release build, and a build with a **missing or unknown** flavor, which is treated as `prod` and logged as an ERROR. This fails closed on purpose: `AppConfig.appFlavor` used to fall back to `dev`, so a build made without `--flavor` — release included — accepted every certificate. `appFlavor` itself (the DI environment) now falls back to `dev` in a debug build and to `prod` otherwise.
+Certificate validation is bypassed (for local self-signed servers) **only in a debug build that explicitly declared the `dev` flavor** — `AppConfig.bypassesCertificateValidation`. Everything else goes through the pinning path: `staging`, `prod`, a `dev` profile or release build, and a build with a **missing or unknown** flavor, which is treated as `prod` and logged as an ERROR. This fails closed on purpose. `AppConfig.appFlavor` (the DI environment) falls back to `dev` in a debug build and to `prod` otherwise, but certificate handling reads `AppConfig.declaredFlavor`, which is `null` unless the build named a known flavor.
 
 ---
 
 ## 7. `core_storage` — encrypted key–value storage
 
-Provides the **mechanism only**. It defines no keys and no presets.
+Provides the **mechanism only**. It defines no keys and no presets. Its only workspace dependency is `platform_kernel` (`TypeHelper`).
 
 | Export | Purpose |
 |:--|:--|
-| `StorageInterface` | Backend contract; also hosts the AES helpers and the reserved-key guard |
-| `StorageManager` | `@singleton`; resolves a backend by `StorageType`, initializes the secure backend, then the others, via `@PostConstruct(preResolve: true)` — secure first because its first-launch wipe shares a keystore namespace with the pref backend's master key |
-| `StorageValue<T>` | Reactive wrapper over one key — `ChangeNotifier` + broadcast `Stream`, in-memory cache, auto-persist on write. Notifying after `dispose` is a no-op (`isDisposed`). The package's only workspace dependency is `platform_kernel` (`TypeHelper`) |
+| `StorageInterface` | `abstract interface class` — the backend contract (`init`, `read`, `write`, `delete`, `isValidKey`); no crypto, no `deleteAll` |
 | `StorageType` | `pref` (SharedPreferences) · `secure` (hardware-backed) |
-| `ObfuscatedString` / `ObfuscatedBytes` | RAM obfuscation |
+| `EncryptedStorage` | Base of both backends: the AES-256-CBC helpers (`encryptData` / `decryptData`), the master-key helpers, the reserved-key guard and the pinned `flutter_secure_storage` options |
+| `StorageManager` | `@singleton`; resolves a backend by `StorageType`, initializes the secure backend, then the others, via `@PostConstruct(preResolve: true)` — secure first because its first-launch wipe shares a keystore namespace with the pref backend's master key |
+| `StorageValue<T>` | Reactive wrapper over one key — `ChangeNotifier` + broadcast `Stream`, in-memory cache. `save(T)` and `remove()` return `Future<void>` that completes when the write is on disk; writes are **serialized** (the last one set is the one left on disk) and a failed write is logged, never thrown; the `value` setter starts the same write without waiting. Notifying after `dispose` is a no-op (`isDisposed`) |
+| `StorageCodec` | JSON encode / decode / revive of the values `StorageValue` stores |
+| `ObfuscatedBytes` | RAM obfuscation (`fromString`, `reveal`, `revealString`, `dispose`) |
 | `PrefStorageImpl` / `SecureStorageImpl` | Internal, resolved via `@Named('Pref')` / `@Named('Secure')` |
+| `StorageConstants` | Reserved key names, master-key sizes, retry attempts (`src/utils/`) |
 
-`core_storage` deliberately declares **zero keys**. It ships the machinery; every package declares its own values.
-
-```dart
-// platform/infra/storage/lib/core_storage.dart
-/// Core Storage — encrypted key-value persistence layer.
-///
-/// Provides only the storage MECHANISM — no package/feature-specific keys
-/// or presets are defined here. Each consumer (data layer, app shell, ...)
-/// must declare its own [StorageValue] instances with its own keys via
-/// [StorageManager], so no other feature can see or touch its data.
-```
+`core_storage` deliberately declares **zero keys**: it ships the machinery, and every package declares its own values.
 
 > [!NOTE]
 > There is no shared preset object and no central key registry — no `StorageValuePresets`, no `StorageKeyConstants`. A single object holding every domain's keys would let any injector read and write another feature's data, so the mechanism deliberately offers no such object to reach for.
 
-### Two encryption layers, plus RAM masking
+### Encryption layers, and RAM masking
 
-**Layer 1 — software AES-256-CBC with a fresh IV per write.** Implemented once on `StorageInterface` so both backends inherit it:
+**Layer 1 — software AES-256-CBC with a fresh IV per write.** Implemented once on `EncryptedStorage` so both backends inherit it:
 
 ```dart
-// platform/infra/storage/lib/src/contracts/storage_interface.dart
-/// Encrypt [data] using AES-CBC with a random IV.
-///
-/// Returns `"iv_base64:ciphertext_base64"`.
+// platform/infra/storage/lib/src/impl/encrypted_storage.dart
 String encryptData(String data) {
-  final rawBytes = _obfuscatedMasterKey!.reveal();
-  final key = encrypter.Key(rawBytes);
-  final aes = encrypter.AES(key, mode: encrypter.AESMode.cbc);
-  final enc = encrypter.Encrypter(aes);
-
-  final iv = encrypter.IV.fromSecureRandom(16);
-  final encrypted = enc.encrypt(data, iv: iv);
-
-  // Zero out key buffers immediately
-  rawBytes.fillRange(0, rawBytes.length, 0);
-  key.bytes.fillRange(0, key.bytes.length, 0);
-
-  return '${iv.base64}:${encrypted.base64}';
+  return _withKey((enc) {
+    final iv = encrypter.IV.fromSecureRandom(StorageConstants.IV_BYTES);
+    return '${iv.base64}:${enc.encrypt(data, iv: iv).base64}';
+  });
 }
 ```
 
-A random IV per write means writing the same value twice produces different ciphertext — an observer cannot tell that a value was unchanged.
+A random IV per write means writing the same value twice produces different ciphertext — an observer cannot tell that a value was unchanged. `_withKey` reveals the master key for the instant of the call and zeroes the buffers afterwards.
 
 **Layer 2 — hardware.** The 256-bit master key lives in Keychain/KeyStore under `_internal_master_key`, generated on first launch:
 
@@ -723,44 +718,56 @@ A random IV per write means writing the same value twice produces different ciph
 // platform/infra/storage/lib/src/impl/secure_storage_impl.dart
 if (masterKey == null) {
   // Generate a new 32-byte (256-bit) random key for AES
-  final newKey = encrypter.Key.fromSecureRandom(_MASTER_KEY_BYTES).base64;
-  await _storage.write(key: _MASTER_KEY_ID, value: newKey); // rethrows on failure
-  masterKey = newKey;
+  final newKey = EncryptedStorage.generateKey();
+  try {
+    await _storage.write(
+      key: StorageConstants.SECURE_MASTER_KEY_ID,
+      value: newKey,
+    );
+    masterKey = newKey;
+  } catch (e) {
+    // … logged
+    rethrow;
+  }
 }
 ```
 
-**Layer 3 (not advertised elsewhere) — RAM masking.** Neither the master key nor a cached value sits in memory as readable bytes. Both are XOR-masked with a random mask, and revealed only for the instant they are used:
+**RAM masking.** Neither the master key nor a cached value sits in memory as readable bytes. Both are XOR-masked with a random mask and revealed only for the instant they are used — `StorageValue` keeps its in-memory value as `ObfuscatedBytes`, and the master key receives the same treatment:
 
 ```dart
-// platform/infra/storage/lib/src/contracts/storage_interface.dart
-/// Container that obfuscates bytes in RAM using dynamic XOR masking.
+// platform/infra/storage/lib/src/obfuscated_bytes.dart
 class ObfuscatedBytes {
-  ObfuscatedBytes(Uint8List originalBytes)
-    : _mask = _generateRandomMask(originalBytes.length),
-      _maskedBytes = Uint8List(originalBytes.length) {
-    for (int i = 0; i < originalBytes.length; i++) {
-      _maskedBytes[i] = originalBytes[i] ^ _mask[i];
+  ObfuscatedBytes(List<int> original)
+    : _mask = _randomMask(original.length),
+      _masked = Uint8List(original.length) {
+    for (var i = 0; i < original.length; i++) {
+      _masked[i] = original[i] ^ _mask[i];
     }
   }
 ```
 
-`ObfuscatedString` (in `storage_value.dart`) does the same for cached values. This raises the bar for a memory-dump attack; it is not a substitute for the layers above.
+This raises the bar against a memory-dump attack; it is not a substitute for the layers above.
 
 #### When the Keychain misbehaves — retry, never wipe
 
-Reading the master key can fail for reasons that pass: the Keychain before the first unlock after a reboot (a background launch), a busy KeyStore. `SecureStorageImpl` used to treat *any* such failure as corruption and call `deleteAll()` — which destroyed every secure value, including `PrefStorageImpl`'s master key, which lives in the same store. Now:
+Reading the master key can fail for reasons that pass: the Keychain before the first unlock after a reboot (a background launch), a busy KeyStore. `SecureStorageImpl` therefore never treats a platform error as corruption and never wipes the store — `PrefStorageImpl`'s master key lives in the same store, so a wipe would destroy every preference too. The retry is `EncryptedStorage.readKeyWithRetry`, shared by both backends:
 
 ```dart
-// platform/infra/storage/lib/src/impl/secure_storage_impl.dart
-Future<String?> _readMasterKey() async {
+// platform/infra/storage/lib/src/impl/encrypted_storage.dart
+static Future<String?> readKeyWithRetry(
+  FlutterSecureStorage storage,
+  String keyId, {
+  required Duration retryDelay,
+  required String tag,
+}) async {
   for (var attempt = 1; ; attempt++) {
     try {
-      return await _storage.read(key: _MASTER_KEY_ID);
+      return await storage.read(key: keyId);
     } catch (e) {
-      final lastAttempt = attempt >= _MASTER_KEY_READ_ATTEMPTS;
+      final lastAttempt = attempt >= StorageConstants.MASTER_KEY_READ_ATTEMPTS;
       // … logged: WARNING while retrying, ERROR on the last attempt …
       if (lastAttempt) rethrow; // nothing deleted, no new key generated
-      await Future<void>.delayed(_retryDelay * attempt);
+      await Future<void>.delayed(retryDelay * attempt);
     }
   }
 }
@@ -776,7 +783,7 @@ Future<String?> _readMasterKey() async {
 
 #### The pref backend's master key — the same rule
 
-`PrefStorageImpl` seals SharedPreferences values with a master key of its own, `_internal_pref_master_key`, kept in the same secure store. It used to fall back on *any* read error to a brand-new key in SharedPreferences — after a single transient Keychain error every stored preference (theme, locale, the onboarding flag) failed to decrypt and was deleted on its next read, and the next healthy launch orphaned whatever that session wrote. Now it never replaces a key that may still be good:
+`PrefStorageImpl` seals SharedPreferences values with a master key of its own, `_internal_pref_master_key`, kept in the same secure store. It never replaces a key that may still be good — a new key would orphan every stored preference (theme, locale, the onboarding flag), and `read()` deletes a value it cannot decrypt:
 
 | Situation | What `PrefStorageImpl.init` does |
 | :-- | :-- |
@@ -795,15 +802,9 @@ Both backends open `flutter_secure_storage` (11.x) with the same explicit Androi
 
 This pair is what the template has written since its first release (10.x) and it is still the 11.x default, so the 10 → 11 upgrade reads existing values unchanged: same KeyStore alias, same wrapped key, no migration step. What 11.x dropped is the pre-10 ciphers (RSA-PKCS1, AES-CBC, EncryptedSharedPreferences). An app that ever shipped `flutter_secure_storage` 9.x or older must ship a 10.x release first — a device going straight from 9 to 11 loses its secure values, tokens and `PrefStorageImpl`'s master key included. On Android, `FlutterSecureStorage.checkUpgradeStatus()` (11.1+), called before the first read, reports whether that happened.
 
-### RAM obfuscation is a real protection, not a label
-
-Beyond encrypting data at rest (AES-256-CBC with a per-write random IV), `StorageValue` keeps its **in-memory** value XOR-masked with a random mask, and reveals it only for the moment a read needs it. The master key receives the same treatment. This raises the bar against memory-dump inspection — a layer most templates omit entirely.
-
-`SecureStorageImpl` never wipes the store on a platform error: a master-key read that fails (a locked Keychain before first unlock, a busy KeyStore) is retried and then rethrown with nothing deleted; only a master key that is present but unusable is replaced, and only an undecryptable value is dropped. `PrefStorageImpl` applies the same rule to its own master key: it falls back to a key in SharedPreferences only when that key opens the stored preferences or there are none to lose, and otherwise rethrows with every preference intact. See [the storage guide](../guides/06_storage.md).
-
 ### Ownership
 
-Each consuming package declares its own `StorageValue` instances through an injected `StorageManager`, with its keys in that package's `utils/`. Current owners:
+Each consuming package declares its own `StorageValue` instances through an injected `StorageManager`, with its keys in that package's `utils/` (RULE-44). Current owners:
 
 | Owner | Package | Keys | Backend |
 |:--|:--|:--|:--|
@@ -820,17 +821,27 @@ App-shell key classes live in `platform/shell/adapters/lib/src/utils/`. See [`..
 
 Runs on a background isolate via `NativeDatabase.createInBackground`. Depends on **no other workspace package**.
 
-This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing. Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. The `cache` sample module's `CacheDatabase` (`modules/cache/data/lib/src/database/`) is the reference wiring.
+This package is the **mechanism only**: it owns no database, no table and no DAO, and its DI module registers nothing (RULE-46). Each package that persists relational data declares **its own** database next to its own tables, DAO and data source, and opens it with the pieces below. The `cache` sample module's `CacheDatabase` (`modules/cache/data/lib/src/database/`) is the reference wiring.
 
-| Area | Path | Contents |
-|:--|:--|:--|
-| Opening | `src/opening/` | `DriftDatabaseOpener` — opens any `GeneratedDatabase` on a background isolate, verifies it, quarantines a corrupt file |
-| Connection | `src/connection/` | `DatabaseConnectionFactory` — file resolution, background executor |
-| **Access** | `src/access/` | `IDatabaseHandle`, `DatabaseHandle` |
-| **Migration** | `src/migration/` | `IDatabaseMigration`, `DatabaseMigrationRunner`, `driftMigrationStrategy` |
-| Constants | `src/utils/database_constants.dart` | `DEFAULT_READ_POOL`, `BUSY_TIMEOUT_MS`, `CORRUPT_FILE_SUFFIX`, corruption / environment error markers |
+This is forced by Drift, not a preference. `@DriftDatabase(tables: [...])` is resolved at **compile time** — there is no runtime table registration — and a DAO must be a **`part of`** its database library. Whichever package declares the database must therefore name every table on it, so a single shared `AppDatabase` would force one package to know the tables of all the others. Moving it up into `apps/mobile/` only relocates that god object; giving each package its own database removes the coupling.
 
-Drift resolves `@DriftDatabase(tables:)` at compile time and requires a DAO to be `part of` its database library, so a database declared here would have to name the tables of whichever package owns them. Keeping databases package-owned buys one property: deleting a package deletes its database with it, and no other package can reach its rows. The trade-off is that SQL cannot join across package boundaries — crossing a bounded context belongs at the repository layer, not inside a query.
+| | |
+|---|---|
+| **Gain** | Deleting a package deletes its database with it; nothing else references it. |
+| **Gain** | No package can reach another's rows — there is no shared object to reach through. |
+| **Cost** | **SQL cannot join across package boundaries.** Crossing a bounded context belongs at the repository layer — compose two repositories in a use case — not inside one query. |
+
+| Export | Kind | Where | What it does |
+|---|---|---|---|
+| `DriftDatabaseOpener` | `abstract final class` | `src/drift_database_opener.dart` | Opens any `GeneratedDatabase` on a background isolate, **verifies** the connection, quarantines a corrupt file |
+| `DatabaseConnectionFactory` | `abstract final class` | `src/database_connection_factory.dart` | Resolves the file path in app documents, builds the background executor, quarantines files |
+| `IDatabaseMigration<TDb>` | abstract class | `src/migration/` | Contract a package implements to contribute **one** schema step |
+| `DatabaseMigrationRunner` | class | `src/migration/` | Sorts, validates and replays those steps |
+| `driftMigrationStrategy(...)` | function | `src/migration/` | The shared `MigrationStrategy`: migration dispatch + the per-connection `PRAGMA`s |
+| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | `src/access/` | How a data source reaches its database without holding every DAO |
+| `DatabaseConstants` | class | `src/utils/database_constants.dart` | Read-pool size, busy timeout, corruption / environment error markers, `.corrupt` suffix |
+
+Every one of these is generic over `GeneratedDatabase`: `core_database` never names a concrete database class — that is the whole point.
 
 ### Two contracts keep packages out of each other's tables
 
@@ -846,62 +857,7 @@ ProfileLocalDataSource(IDatabaseHandle<ProfileDatabase> handle)
 > [!NOTE]
 > Within one database this is **API-surface isolation, not enforced isolation**: the factory callback still receives the database object, so a determined caller can reach any DAO on it. The value is that crossing that line becomes a deliberate, reviewable act rather than an ordinary constructor parameter. Isolation *between* packages is the real barrier, and it is enforced by the package graph — a package that does not declare `data_cache` cannot name `CacheDatabase` at all.
 
-How to give a package its own database, contribute a migration and test it: [`../guides/07_database.md`](../guides/07_database.md). The design behind it follows.
-
-### The rule: `core_database` owns no database
-
-`core_database` provides the **mechanism** only. It declares no database, no table and no DAO — its DI module registers literally nothing:
-
-```dart
-// platform/infra/database/lib/di/module.dart
-/// `core_database` registers nothing on its own.
-///
-/// It provides the persistence MECHANISM — [DriftDatabaseOpener],
-/// [driftMigrationStrategy], [IDatabaseMigration], [IDatabaseHandle] — and
-/// deliberately owns no database, no table and no DAO. Registering a database
-/// here would mean this package had to name the tables of whichever package
-/// owns them.
-@InjectableInit.microPackage()
-void initMicroPackage() {}
-```
-
-**Each package that owns persisted data declares its own database**, next to its own tables, DAO and data source. The `cache` sample module's `CacheDatabase` (package `data_cache`, in `modules/cache/data`) is the reference wiring.
-
-### Why — this is forced by Drift, not a preference
-
-Two Drift facts drive the whole design:
-
-1. `@DriftDatabase(tables: [...])` is resolved at **compile time**. There is no runtime table registration.
-2. A DAO must be a **`part of`** its database library — Drift generates `_$XDaoMixin` and `$XTable` into that same library.
-
-Put together: whichever package declares the database must name every table on it, and every DAO must live in that same library. A single shared `AppDatabase` would therefore force one package to know the tables of all the others — the same "one object knows everything" coupling the storage and constants ownership rules exist to prevent.
-
-> [!NOTE]
-> Moving a shared `AppDatabase` up into `apps/mobile/` does not solve this — it only relocates the god object, and the owning package still could not hold a usable DAO. Giving each package its own database is what actually removes the coupling.
-
-### What you gain, and what you pay
-
-| | |
-|---|---|
-| **Gain** | Deleting a package deletes its database with it. No other package references it, so nothing else breaks. |
-| **Gain** | No package can reach another's rows — there is no shared object to reach through. |
-| **Cost** | **SQL cannot join across package boundaries.** |
-
-That cost is deliberate. Crossing a bounded context belongs at the repository layer — compose two repositories in a use case — not inside a single query.
-
-### What `core_database` exports
-
-| Export | Kind | What it does |
-|---|---|---|
-| `DriftDatabaseOpener` | `abstract final class` | Opens any `GeneratedDatabase` on a background isolate, **verifies** the connection, quarantines a corrupt file |
-| `DatabaseConnectionFactory` | `abstract final class` | Resolves the file path in app documents, builds the background executor, quarantines files |
-| `IDatabaseMigration` | abstract class | Contract a package implements to contribute **one** schema step |
-| `DatabaseMigrationRunner` | class | Sorts, validates and replays those steps |
-| `driftMigrationStrategy(...)` | function | The shared `MigrationStrategy`: migration dispatch + the per-connection `PRAGMA`s |
-| `IDatabaseHandle<TDb>` / `DatabaseHandle<TDb>` | abstract class / class | How a data source reaches its database without holding every DAO |
-| `DatabaseConstants` | class | Read-pool size, busy timeout, corruption/environment error markers, `.corrupt` suffix |
-
-Notice every one of these is generic over `GeneratedDatabase`. `core_database` never names a concrete database class — that is the whole point.
+How to give a package its own database, contribute a migration and test it: [`../guides/07_database.md`](../guides/07_database.md). The mechanics follow.
 
 ### How the migration runner replays
 
@@ -933,7 +889,7 @@ Future<void> run(Migrator m, int from, int to) async {
 }
 ```
 
-Three properties worth naming:
+Four properties worth naming:
 
 1. **A plain `if`, not `else if`.** A device that skipped several releases replays *every* intermediate step instead of jumping straight to the newest shape.
 2. **Upgrades ascend, downgrades descend.** Order matters in both directions.
@@ -943,7 +899,7 @@ Three properties worth naming:
 Validation happens once, at construction — not mid-migration. Discovering a wiring mistake halfway through would leave the schema partially migrated.
 
 > [!WARNING]
-> **Drift 2.x has no `onDowngrade`** (the lockfile resolves 2.35.0). `MigrationStrategy` exposes only `onCreate`, `onUpgrade` and `beforeOpen`; Drift's own documentation notes that "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` is real and tested, but it rides on that single entry point via a `from`/`to` comparison. Implement it when the change is reversible; **throw a descriptive error when it is not**, so the failure is explicit instead of leaving a schema that no longer matches the running code.
+> **Drift 2.x has no `onDowngrade`.** `MigrationStrategy` exposes only `onCreate`, `onUpgrade` and `beforeOpen`; Drift's own documentation notes that "schema version upgrades and downgrades will both be run here". `IDatabaseMigration.downgrade` is real and tested, but it rides on that single entry point via a `from`/`to` comparison. Implement it when the change is reversible; **throw a descriptive error when it is not**, so the failure is explicit instead of leaving a schema that no longer matches the running code.
 
 ### The `PRAGMA` settings, and why they are centralised
 
@@ -1050,7 +1006,7 @@ Losing user data is worse than surfacing a startup error.
 
 `PushNotificationService` wraps Firebase Messaging and `flutter_local_notifications`. Channel IDs and payload types live in `src/utils/notification_constants.dart`, with the package that consumes them — a notification channel ID has no business being readable by every package in the app.
 
-Boot never waits on the user or the network: `init()` (awaited inside `configureDependencies()`) sets up Firebase, the channels, the listeners and the local-notifications plugin only. The permission prompts and FCM token registration run afterwards, un-awaited, and log failures instead of throwing — read the token from `tokenStream`, since `fcmToken` can still be `null` right after boot. Blocked payload types (`addBlockedTypes`) match case-insensitively. The grouped-inbox summary and title are app-supplied (`inboxSummaryBuilder` / `inboxTitleBuilder`, both `null` by default) so the text comes from the app's own localizations.
+Boot never waits on the user or the network: `init()` (awaited inside `configureDependencies()`) sets up Firebase, the channels, the listeners and the local-notifications plugin only. The FCM token registration runs afterwards, un-awaited, and logs a failure instead of throwing — read the token from `tokenStream`, since `fcmToken` can still be `null` right after boot. Asking for permission is **opt-in**: nothing prompts at boot, and an app calls `PushNotificationService.requestPermission()` where it wants to ask (which registers the token again). A platform that declares `push: false` (`platforms.<p>.push`, read through `PlatformFacts`) makes `init()` return before it touches Firebase and the rest no-ops. Blocked payload types (`addBlockedTypes` / `removeBlockedTypes`) match case-insensitively. The grouped-inbox summary and title are app-supplied (`inboxSummaryBuilder` / `inboxTitleBuilder`, both `null` by default) so the text comes from the app's own localizations.
 
 The service is an eager `@singleton` that injects `FirebaseOptions`, which each app registers from its own `lib/firebase/firebase_module.dart`. That is why an app's manifest lists `core_notifications` in a `notifications` group with `phase: after` rather than in `core`: `before` runs ahead of the app's own registrations. An app without push notifications leaves the group out.
 
@@ -1072,7 +1028,7 @@ The template supports Provider and BLoC. Be aware before choosing: both automate
 | Pagination | `LoadMoreMixin` | None |
 | State type | `ViewStateModel<T>` wrapping `ViewState` (5 variants incl. `loadingMore`, data held on the model) | `BlocViewState<T>` (optional; 4 variants, carries its own payload) or your own Freezed state |
 | Error shape | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — required |
-| Rendering | `BaseViewWidget` … `BaseViewWidget6`, `PaginatedViewWidget*` | `BlocBuilder` (from `flutter_bloc`) |
+| Rendering | `BaseViewWidget`, `LoadMoreListView` | `BlocBuilder` (from `flutter_bloc`) |
 | Declarative side effects | `ProviderStateListener` / `MultiProviderStateListener` | `BlocListener` (from `flutter_bloc`) |
 
 > [!WARNING]
@@ -1097,26 +1053,26 @@ Practical usage for both branches: [`../guides/03_state_management.md`](../guide
 
 ---
 
-## 11. Web builds — honest status
+## 11. Web builds — status
 
-Measured with `flutter build web` on `apps/admin` after scaffolding `web/` (`flutter create --platforms=web .` — neither app ships a `web/` folder), then loading the release build in headless Chromium.
+Neither app commits a `web/` folder. `apps/admin` declares the web platform with `runner: scaffold` (the folder is created with `flutter create --platforms=web .`); `apps/mobile` does not declare it. Measured with `flutter build web`:
 
-| App | Compiles (dart2js; the Wasm dry run passes too) | Boots |
-|:--|:--|:--|
-| `apps/admin` (auth + settings) | yes | yes — to the sign-in screen, with `flutter_secure_storage`'s WebCrypto store and `shared_preferences` working (the page must be a secure context: `https` or `localhost`) |
-| `apps/mobile` (every sample module) | **no** — `core_database` imports `package:drift/native.dart`, which pulls `sqlite3`'s `dart:ffi` | — |
+| App | Compiles |
+|:--|:--|
+| `apps/admin` (auth + settings) | yes once `web/` is scaffolded (dart2js; the Wasm dry run passes too) |
+| `apps/mobile` (every sample module) | **no** — `core_database` imports `package:drift/native.dart`, which pulls `sqlite3`'s `dart:ffi` |
+
+`flutter build web` has no `--flavor` option: name the flavor with `--dart-define=APP_FLAVOR=<flavor>`, or `AppConfig.appFlavor` is `dev` in a debug build and `prod` otherwise. A web app also needs a secure context (`https` or `localhost`) for `flutter_secure_storage`'s WebCrypto store.
 
 What makes the shared boot path web-safe:
 
-- `dart:io` **compiles** on the web; only *calling* most of it fails. The shell never calls it there: `runShellApp` checks `kIsWeb` before `Platform.isIOS`, `GoRouteDataCustom.buildPage` returns before its `Platform.isIOS` branch, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
-- `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates. The browser owns TLS, so neither pinning nor the dev-flavor bypass can apply; installing one anyway was harmless but suggested otherwise, and the "not pinned" `ERROR` it logged described a misconfiguration the web cannot fix. Tests stand in for `kIsWeb` with `AppInitializer.debugIsWebOverride`.
+- `dart:io` **compiles** on the web; only *calling* most of it fails. The platform is read in one place, `resolveAppPlatform()`, and boot decisions come from the app's declared `PlatformFacts` (the Dart splash is the platform's `splash` mode, not a fork on `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` returns a plain page before its `Platform.isIOS` branch (so on the web it also skips `RouteAwareWidget`: no screen analytics), `MainScope` skips `FlutterNativeSplash.remove()`, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
+- `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates: the browser owns TLS, so neither pinning nor the dev-flavor bypass can apply. Tests pass `platform: AppPlatform.web` to `initBeforeRunApp`.
 
-Known gaps, none fixed here:
+Known gaps:
 
-- `apps/mobile` needs a web database before it can even compile: drift's `WasmDatabase` (the `sqlite3.wasm` + drift worker assets), opened through a conditional import in `core_database`'s connection factory.
-- `MainScope` skips `FlutterNativeSplash.remove()` on the web, because no app here generates web splash assets and the call would throw `PlatformException(… removeSplashFromWeb …)`.
-- `AppInfoHelper.getDeviceInfo` / `getDeviceString` / `platformName` branch on `Platform.isAndroid`, which **throws** on the web. Nothing calls them during boot; a screen that does needs a `kIsWeb` guard first.
-- `core_notifications` (`apps/mobile` only) initialises Firebase with the app's per-flavor options, which describe no web app.
+- `apps/mobile` needs a web database before it can compile: drift's `WasmDatabase` (the `sqlite3.wasm` + drift worker assets), opened through a conditional import in `core_database`'s connection factory.
+- `core_notifications` (`apps/mobile` only) initialises Firebase with the app's per-flavor options, which describe no web app; `push` defaults to off on the web.
 
 ---
 
@@ -1136,11 +1092,11 @@ Local (workspace) dependencies only — pub.dev packages omitted. Which group ea
 | `core_notifications` | `platform_kernel` |
 | `core_storage` | `platform_kernel` |
 | `data_core` | `platform_kernel`, `domain_core` |
-| `core_base_ui` | `core_common`, `core_di`, `core_responsive` |
+| `core_base_ui` | `core_common`, `core_di`, `core_responsive`, `platform_kernel` |
 | `bloc_state_management` | `platform_kernel`, `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
 | `provider_state_management` | `core_common`, `core_responsive`, `domain_core` *(approved exception)* |
-| `core_ui_kit` | `core_common`, `core_base_ui`, `core_responsive` |
-| `platform_shell_adapters` | `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (`RetryDialog` only) |
-| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |
+| `core_ui_kit` | `core_base_ui`, `core_responsive` |
+| `platform_shell_adapters` | `core_base_ui` (`LanguageSet`), `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (`RetryDialog`, `AppOverlay`) |
+| `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |
 
 No arrow in this table points at `modules/*/feature` or `modules/*/data` — that is the invariant to preserve.

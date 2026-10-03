@@ -9,13 +9,13 @@
 
 ## 1. Tầng Domain để làm gì
 
-Domain là tâm của luật phụ thuộc: nó không phụ thuộc ai, còn mọi tầng khác phụ thuộc nó thông qua interface.
+Domain là tâm của luật phụ thuộc: nó không phụ thuộc gì ngoài `domain_core`, còn mọi tầng khác phụ thuộc nó thông qua interface.
 
 ```
 Feature (UI) ──→ Domain ←── Data
 ```
 
-Một domain package chỉ chứa đúng bốn thứ:
+Một domain package chứa bốn thứ:
 
 | Thành phần | Thư mục | Trách nhiệm |
 |:---|:---|:---|
@@ -30,23 +30,28 @@ Không widget, không HTTP, không SQL, không `SharedPreferences`. Nếu use ca
 
 ## 2. Quy tắc Pure Dart
 
-### Cấm import
+Registry: RULE-03 — `arch_check` R2 đọc import, `dependencies:`, `dev_dependencies:` và import trong test của domain, nên danh sách dưới đây được kiểm tra chứ không chỉ là quy ước.
+
+### Cấm
 
 ```dart
-import 'package:flutter/...';    // ❌
-import 'package:dio/...';        // ❌
-import 'package:retrofit/...';   // ❌
-import 'package:drift/...';      // ❌
+import 'package:flutter/...';    // ❌ Flutter, hay mọi package cần Flutter SDK
+import 'package:dio/...';        // ❌ transport
+import 'package:retrofit/...';   // ❌ transport
+import 'package:drift/...';      // ❌ persistence
+import 'package:platform_kernel/...';  // ❌ mọi package core_* / platform_*
 ```
+
+Cũng bị cấm: `data_*`, `feature_*`, domain của module khác, và các thư viện `dart:` chỉ dành cho engine như `dart:ui`.
 
 ### Được phép import
 
 | Package | Vì sao được phép |
 |:---|:---|
 | `dart:core`, `dart:async` | Nền tảng ngôn ngữ |
-| `domain_core` | `Result<T>`, `AppFailure`, `BaseEntity<T>`, `BaseUseCase`, `NoParams` |
-| `freezed_annotation`, `json_annotation` | Chỉ là annotation cho codegen |
-| `injectable`, `get_it` | Annotation DI |
+| `domain_core` | `Result<T>`, `AppFailure`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams` |
+| `freezed_annotation` | Chỉ là annotation cho codegen |
+| `injectable` | Annotation DI |
 
 ### Tự kiểm chứng
 
@@ -59,20 +64,18 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 ```
 
 > [!NOTE]
-> **Đồ thị package cưỡng chế điều này, không chỉ mình khâu review.** Không domain pubspec nào liệt kê `flutter` dưới `dependencies`, và cũng không cái nào khai một package `core_*`:
+> **Đồ thị package và `arch_check` cưỡng chế điều này, không chỉ mình khâu review.** Không domain pubspec nào liệt kê `flutter` dưới `dependencies`, và cũng không cái nào khai một package `core_*`:
 >
 > ```yaml
 > # modules/auth/domain/pubspec.yaml
 > dependencies:
 >   domain_core:
 >     path: ../../../platform/layers/domain
->   get_it: ^9.2.1
 >   injectable: ^3.0.0
 >   freezed_annotation: "^3.1.0"
->   json_annotation: "^4.12.0"
 > ```
 >
-> Bản thân `domain_core` **không** có phụ thuộc workspace nào cả. Vì vậy một dòng `import 'package:flutter/…'` thêm vào file domain sẽ không phân giải được, thay vì lặng lẽ biên dịch trót lọt. Hãy giữ nguyên như thế: đừng bao giờ thêm `flutter` hay một package `core_*` vào pubspec của domain.
+> Bản thân `domain_core` **không** có phụ thuộc workspace nào cả. Vì vậy một dòng `import 'package:flutter/…'` thêm vào file domain sẽ không phân giải được, thay vì lặng lẽ biên dịch trót lọt, còn một dependency `core_*` thì làm Gate 1 đỏ. Test của domain chạy trên `package:test`, không phải `flutter_test`.
 >
 > Một điểm cần nói cho chính xác, kẻo tuyên bố trên bị hiểu quá: mọi domain pubspec vẫn mang một ràng buộc `flutter:` dưới mục `environment:`. Đó là khẳng định phiên bản SDK tối thiểu, không phải một dependency — nó không kéo dòng code Flutter nào vào đồ thị package, và phép kiểm tra độ thuần bên trên vẫn qua. Nhưng nó có nghĩa là pub cần Flutter SDK hiện diện để resolve các package này, nên ở trạng thái hiện tại chúng chưa dùng được từ một runtime Dart thuần. Nếu có ngày bạn cần chia sẻ một domain package cho server Dart thuần, hãy bỏ dòng `environment: flutter:` đi.
 
@@ -88,7 +91,7 @@ grep -rn "import 'package:flutter\|import 'package:dio\|import 'package:retrofit
 
 ### `Result<T>` — kiểu trả về của mọi use case
 
-Định nghĩa tại `platform/layers/domain/lib/src/result/result.dart`, với `AppFailure` nằm ngay cạnh trong `src/failures/`:
+Định nghĩa tại `platform/layers/domain/lib/src/result/result.dart`, với `AppFailure` trong `src/failures/app_failure.dart`:
 
 ```dart
 @freezed
@@ -96,7 +99,7 @@ sealed class Result<T> with _$Result<T> {
   const Result._();
 
   const factory Result.success([T? data]) = Success<T>;
-  const factory Result.failure(AppFailure error) = Failure<T>;
+  const factory Result.failure(AppFailure<dynamic> error) = Failure<T>;
   const factory Result.none() = None<T>;
   const factory Result.cancel() = Cancel<T>;
 ```
@@ -113,7 +116,7 @@ switch (result) {
 ```
 
 > [!NOTE]
-> **`None` và `Cancel` là hai nhánh dự phòng chưa dùng.** Grep toàn repo: không repository hay use case nào từng trả về `Result.none()` hoặc `Result.cancel()` — chúng chỉ xuất hiện trong `platform/state/provider/test/base_provider_test.dart`.
+> **`None` và `Cancel` là hai nhánh dự phòng chưa dùng.** Grep toàn repo: không repository hay use case nào từng trả về `Result.none()` hoặc `Result.cancel()` — ngoài `result.dart`, chúng chỉ xuất hiện trong `platform/layers/domain/test/result_test.dart`.
 >
 > Nên câu trả lời trung thực cho *"khi nào `Cancel` xảy ra?"* là: **hiện tại không bao giờ.** Chúng tồn tại để union có thể mở rộng sau này mà không gây breaking change. Cái giá phải trả là bạn vẫn phải xử lý chúng trong `switch` / `whenAsync` vét cạn.
 
@@ -136,17 +139,10 @@ switch (result) {
 ```dart
 Future<R> whenAsync<R>({
   required FutureOr<R> Function(T? data) success,
-  required FutureOr<R> Function(AppFailure error) failure,
+  required FutureOr<R> Function(AppFailure<dynamic> error) failure,
   required FutureOr<R> Function() none,
   required FutureOr<R> Function() cancel,
 }) async { ... }
-```
-
-Có sẵn hai alias cho payload bọc từ server:
-
-```dart
-typedef BaseResult<T> = Result<BaseEntity<T>>;
-typedef BasePaginateResult<T> = Result<BaseEntity<PaginatedEntity<T>>>;
 ```
 
 ### `BaseEntity<T>` — vỏ response chuẩn
@@ -180,7 +176,7 @@ abstract class BaseUseCase<RType, Params> {
 }
 ```
 
-`FutureOr` là cố ý: use case đọc storage cục bộ có thể hoàn toàn đồng bộ (`LogoutUseCase` trả về một `Result<void>` thường), còn use case gọi mạng thì trả `Future`.
+`FutureOr` là cố ý: use case chỉ đọc state cục bộ có thể trả thẳng một `Result<T>`, còn use case gọi mạng thì trả `Future`. Mọi use case đang có đều trả `Future`.
 
 Dùng `NoParams()` khi thao tác không cần đầu vào.
 
@@ -197,7 +193,7 @@ Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là m�
 | `entities/user_entity.dart` | `UserEntity` (Freezed) |
 | `entities/user_role.dart` | enum `UserRole` — `customer`, `owner`, `none`, `unknown` |
 | `params/login_params.dart` | `LoginParams` |
-| `repositories/i_auth_repository.dart` | `IAuthRepository` |
+| `repositories/i_auth_repository.dart` | `IAuthRepository` — `login`, `logout`, `refreshToken`, `restoreSession` |
 | `usecases/` | `LoginUseCase`, `LogoutUseCase`, `RestoreSessionUseCase` |
 
 ### Một use case đầy đủ
@@ -224,7 +220,7 @@ Ba điều cần sao chép từ đây:
 2. **Constructor injection** — repository interface đi vào qua constructor. Tuyệt đối không gọi `getIt<T>()` bên trong use case.
 3. **Không validate, không bóc tách** — use case chuyển thẳng params đi tiếp. `LoginParams` cũng không tự validate; nó chỉ mang dữ liệu đầu vào, vốn đã được form đăng nhập (`AuthFormWidget` trong `feature_auth`) validate trước khi dựng params. Quy tắc nào phải đúng bất kể bên gọi là ai thì thuộc về use case, trả về dưới dạng `Failure` — repository đã trả sẵn `Result<T>`, nên không có gì phải bóc tách.
 
-Use case đồng bộ chỉ khác ở chỗ bỏ `Future`:
+Use case không có đầu vào nhận `NoParams` và trông y như vậy:
 
 ```dart
 @injectable
@@ -234,7 +230,7 @@ class LogoutUseCase extends BaseUseCase<void, NoParams> {
   final IAuthRepository _authRepository;
 
   @override
-  Result<void> call(NoParams params) {
+  Future<Result<void>> call(NoParams params) {
     return _authRepository.logout();
   }
 }
@@ -243,32 +239,29 @@ class LogoutUseCase extends BaseUseCase<void, NoParams> {
 ### `UserRole` có thành viên `unknown` là có chủ đích
 
 ```dart
-enum UserRole {
-  @JsonValue('customer') customer,
-  @JsonValue('owner') owner,
-  @JsonValue('none') none,
-  unknown,
-}
+enum UserRole { customer, owner, none, unknown }
 ```
 
-`unknown` không mang `@JsonValue`; nó là điểm rơi cho `@JsonKey(unknownEnumValue: UserRole.unknown)` trong `UserModel`, nhờ đó một role mà server thêm sau này vẫn deserialize được thay vì ném lỗi.
+Enum này là Dart thuần: backend viết một role trên đường truyền ra sao là chuyện của transport, nên domain không gọi tên giá trị JSON nào. `unknown` là điểm rơi mà `UserModel` (trong `data_auth`) ánh xạ một chuỗi role lạ vào, nhờ đó một role mà server thêm sau này vẫn đọc được thay vì ném lỗi.
+
+---
+
 ## 5. Bố cục package và quy tắc đặt tên
 
 ```
 modules/<name>/domain/
 ├── lib/
-│   ├── domain_<name>.dart          # barrel công khai
+│   ├── domain_<name>.dart          # barrel duy nhất của package (được sinh)
 │   ├── di/
 │   │   ├── module.dart             # @InjectableInit.microPackage()
-│   │   └── di.dart
+│   │   └── module.module.dart      # do injectable sinh
 │   └── src/
 │       ├── entities/
 │       ├── params/
 │       ├── repositories/
 │       ├── usecases/
 │       ├── services/               # tuỳ chọn
-│       ├── utils/                  # hằng số do package sở hữu (nếu có)
-│       └── src.dart
+│       └── utils/                  # hằng số do package sở hữu (nếu có)
 └── pubspec.yaml
 ```
 
@@ -279,7 +272,7 @@ modules/<name>/domain/
 | Repository interface | `i_<name>_repository.dart` | tiền tố `I` | `IAuthRepository` |
 | Use case | `_usecase.dart` | `UseCase` | `LoginUseCase` |
 
-Tiền tố `I` chỉ dành cho interface. Tuyệt đối không đặt tên lớp hiện thực là `IFoo`. Hằng số viết `UPPER_SNAKE_CASE` và nằm trong `utils/` của chính package — xem [quy tắc](../reference/01_rules.md).
+Tiền tố `I` chỉ đánh dấu interface (RULE-78); hằng số nằm trong `utils/` của chính package (RULE-09) — xem [quy tắc](../reference/01_rules.md).
 
 ### Entity dùng Freezed kèm constructor riêng tư
 
@@ -291,19 +284,20 @@ abstract class UserEntity with _$UserEntity {
   const factory UserEntity({
     required String id,
     String? email,
-    // …
+    String? name,
+    UserRole? role,
   }) = _UserEntity;
 }
 ```
 
-Dòng `const Class._()` là bắt buộc. Thiếu nó, Freezed không sinh được lớp cho phép bạn bổ sung getter riêng (`BaseEntity.isSuccess` phụ thuộc vào điều này).
+Hãy giữ dòng `const Class._()`: thiếu nó, Freezed không sinh được lớp cho phép bạn bổ sung getter riêng (`BaseEntity.isSuccess` phụ thuộc vào điều này).
 
 ---
 
 ## 6. Thêm mới vào tầng Domain
 
 ```bash
-# 1. Sinh khung package (tạo thư mục + đăng ký workspace member)
+# 1. Sinh khung package (thêm vào mọi app manifest, rồi chạy `composer sync`)
 dart tools/module_generator/generate.dart 2 payment
 
 # 2. Viết entity → params → repository interface → use case
@@ -311,18 +305,18 @@ dart tools/module_generator/generate.dart 2 payment
 # 3. Sinh code Freezed + injectable
 dart run build_runner build --workspace
 
-# 4. Cập nhật barrel — sau codegen, vì barrel cũng export file sinh ra
+# 4. Sinh lại barrel của package — sau codegen, vì barrel cũng export file sinh ra
 dart tools/barrel_generator/generate.dart modules/payment/domain/lib
 ```
 
 Checklist trước khi mở PR:
 
-- [ ] Không có import `flutter` / `dio` / `retrofit` / `drift` ở bất kỳ đâu trong package
+- [ ] Không có import hay dependency `flutter` / `dio` / `retrofit` / `drift` / `core_*` ở bất kỳ đâu trong package (`dart tools/arch_check/check.dart`)
 - [ ] Entity dùng Freezed kèm `const Class._()`
 - [ ] Use case là `@injectable` (không bao giờ singleton) và trả `Result<T>`
 - [ ] Phụ thuộc đi vào qua constructor — không `getIt<T>()` trong thân hàm
 - [ ] Hằng số nằm trong `utils/` của chính package
-- [ ] Package đã khai trong danh sách workspace ở `pubspec.yaml` gốc, có `resolution: workspace`
+- [ ] Một app lắp package này (`app_manifest.yaml` → `composer sync`) và pubspec của nó có `resolution: workspace`
 
 ---
 

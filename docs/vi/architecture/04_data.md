@@ -15,7 +15,7 @@ Feature (UI) ──→ Domain ←── Data
               core_network / core_storage / core_database
 ```
 
-Data phụ thuộc **vào trong** là Domain (để hiện thực interface của Domain) và **ra ngoài** là hạ tầng `core_*`. Không ai phụ thuộc Data ngoại trừ app shell — nơi lắp ráp tất cả. Một feature package tuyệt đối không được import `data_*`.
+Data phụ thuộc **vào trong** là Domain (để hiện thực interface của Domain) và **ra ngoài** là hạ tầng `platform/`. Không ai phụ thuộc Data ngoại trừ app, mà `lib/di/injection.dart` được sinh của nó là file duy nhất import một package module (RULE-05). Feature không bao giờ import `data_*` (RULE-04).
 
 | Công việc | Nằm ở đâu |
 |:---|:---|
@@ -31,10 +31,9 @@ Data phụ thuộc **vào trong** là Domain (để hiện thực interface củ
 ```
 modules/<name>/data/
 ├── lib/
-│   ├── data_<name>.dart             # barrel công khai
+│   ├── data_<name>.dart             # barrel duy nhất của package (được sinh)
 │   ├── di/
-│   │   ├── module.dart              # @InjectableInit.microPackage()
-│   │   └── register_module.dart     # tuỳ chọn — @module bind thư viện ngoài
+│   │   └── module.dart              # @InjectableInit.microPackage() + các @module bind (nếu có)
 │   └── src/
 │       ├── data_sources/
 │       │   ├── remote/              # Retrofit / HTTP
@@ -44,10 +43,9 @@ modules/<name>/data/
 │       │   └── dao/
 │       ├── models/                  # DTO có .toEntity()
 │       ├── repositories_impl/
-│       ├── services/                # tuỳ chọn — hiện thực hợp đồng core_di không phải repository
+│       ├── session/                 # tuỳ chọn — hiện thực hợp đồng core_di không phải repository
 │       │                            #   (data_auth: AuthSessionGatewayImpl → ISessionGateway)
-│       ├── utils/                   # key, endpoint — thuộc sở hữu package này
-│       └── src.dart
+│       └── utils/                   # key, endpoint — thuộc sở hữu package này
 └── pubspec.yaml
 ```
 
@@ -58,7 +56,7 @@ Các package hiện có:
 
 | Package | Nội dung |
 |:---|:---|
-| `data_core` | `BaseRepository`, `BaseModel`, request model |
+| `data_core` | `BaseRepository`, `BaseModel`, `BaseRequest` |
 | `data_auth` | `UserModel`, data source auth, `AuthRepositoryImpl` |
 | `data_cache` | `CacheDatabase` (database Drift do package tự sở hữu), `CacheEntryModel`, local data source, `CacheEntryRepositoryImpl` |
 
@@ -83,8 +81,7 @@ Future<Result<T>> execute<R, T>(
     final isSuccess = successCondition?.call(response) ?? true;
     if (isSuccess) {
       await onSuccess?.call(response);
-      // …ánh xạ R → T…
-      return Success(mappedData);
+      return _toResult<R, T>(response, mapper);
     }
     await onFailure?.call(response);
     return Failure(
@@ -106,36 +103,36 @@ Hai tham số kiểu, và chúng **không** giống nhau:
 - **`T`** — thứ Domain mong đợi (một Entity, danh sách Entity, `void`)
 - **`mapper`** — cầu nối `R → T`, thường là `(model) => model.toEntity()`
 
-Nếu lời gọi trả về `null`, `T` nullable và không truyền `mapper`, hàm trả `Success(null as T)` — đó là cách các thao tác `Future<Result<void>>` hoạt động mà không cần thủ tục thừa. Response khác `null` vẫn được trả về dưới dạng `T` kể cả khi `T` nullable.
+Response `null` chỉ là thành công khi `T` nullable (`void`, `T?`) — đó là cách các thao tác `Future<Result<void>>` hoạt động mà không cần thủ tục thừa — và nó không bao giờ được đưa cho `mapper`. Với `T` không nullable thì đó là một failure mang code `ErrorCodes.EMPTY_RESPONSE`. Response khác `null` mà không có `mapper` thì bản thân nó phải là một `T`.
 
 ### `executeSync<R, T>()` — đồng bộ
 
-Cùng hình dạng, dành cho công việc cục bộ không bất đồng bộ. `onFailure` ở đây nhận `Object` bị ném ra, không phải response.
+Cùng hình dạng, dành cho công việc cục bộ không bất đồng bộ, trả thẳng `Result<T>`. `onFailure` ở đây nhận `Object` bị ném ra, không phải response.
 
 ### Cơ chế chuyển đổi lỗi
 
 Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` của `platform_kernel` (cũng tới được qua re-export của `core_common`), và hàm này trả về một `AppFailure`.
 
 > [!NOTE]
-> `ErrorHandler` là điểm chuyển đổi duy nhất. Không hề có `AppFailure.fromException()` — đừng bịa ra một cái, và cũng đừng tự nặn failure tại chỗ gọi. Khi buộc phải tạo tường minh, hãy dùng các hàm trợ giúp `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)`…
+> `ErrorHandler` là điểm chuyển đổi duy nhất (RULE-43). Không hề có `AppFailure.fromException()` — đừng bịa ra một cái, và cũng đừng tự nặn failure tại chỗ gọi. Khi buộc phải tạo tường minh, hãy dùng các hàm trợ giúp `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)`…
 
 ### `ErrorHandler` thực sự nhận diện được gì
 
-`platform/foundation/kernel/lib/src/error/error_handler.dart` phân nhánh theo thứ tự: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định.
+`platform/foundation/kernel/lib/src/error/error_handler.dart` phân loại theo thứ tự: `AppException` → các `ErrorClassifier` đã đăng ký, theo thứ tự đăng ký → `SocketException` → `HttpException` → `FormatException` → nhánh mặc định. Kernel là Dart thuần và không gọi tên kiểu transport nào: `core_network` đăng ký `DioFailureClassifier` (nó ánh xạ `DioException`) trong lúc nhóm DI `core` khởi tạo, nên lỗi Dio được phân loại trước khi bất kỳ repository nào chạy.
 
 > [!WARNING]
-> **Không có nhánh nào cho `FirebaseException` / `FirebaseAuthException` / `PlatformException`.** `AuthRepositoryImpl` đi kèm template dùng Retrofit nên sample không dính lỗi này — nhưng đổi transport sang Firebase SDK thì mọi lỗi Firebase — sai mật khẩu, không tìm thấy user, mất mạng — đều rơi xuống nhánh mặc định:
+> **Không gì phân loại `FirebaseException` / `FirebaseAuthException` / `PlatformException` cho tới khi bạn đăng ký một classifier cho chúng.** `AuthRepositoryImpl` đi kèm template dùng Retrofit nên sample không dính lỗi này — nhưng đổi transport sang Firebase SDK thì mọi lỗi Firebase — sai mật khẩu, không tìm thấy user, mất mạng — đều rơi xuống nhánh mặc định:
 >
 > ```dart
-> return ServerFailure(
->   message: _isDebug ? error.toString() : 'Unknown error occurred',
->   code: 9999,
+> final failure = ServerFailure<dynamic>(
+>   message: _isDebug ? error.toString() : _unknownMessage, // 'Unknown error occurred'
+>   code: ErrorCodes.UNKNOWN, // 9999
 > );
 > ```
 >
-> Ở bản release, người dùng thấy **"Unknown error occurred"** cho mọi lần đăng nhập thất bại. Tệ hơn, mọi UI phân loại lỗi theo code — chẳng hạn `AuthProvider.mapAuthFailure` đang khớp `AuthFailure` mang `401` và `ServerFailure` mang `404` — sẽ **không bao giờ khớp**, vì code luôn là `9999`.
+> Mọi lỗi đó thành cùng một failure, nên mọi UI phân loại lỗi theo code — chẳng hạn `AuthProvider.mapAuthFailure` đang khớp `AuthFailure` mang `401` và `ServerFailure` mang `404` — sẽ **không bao giờ khớp**. Nhánh mặc định còn gọi `ErrorHandler.onUnclassifiedError`, mà app shell nối vào `IErrorReporter` tuỳ chọn như một lỗi non-fatal (RULE-67), nên ít nhất khoảng trống này được báo cáo.
 >
-> Nếu bạn thêm repository chạy trên Firebase, hãy bổ sung nhánh tương ứng vào `ErrorHandler` trước.
+> Nếu bạn thêm repository chạy trên Firebase, hãy hiện thực `ErrorClassifier` cho các kiểu exception của nó rồi đưa cho `ErrorHandler.registerClassifier` trước (RULE-43). `DioFailureClassifier` trong `platform/infra/network/lib/src/error/dio_failure_classifier.dart` là mẫu.
 
 ---
 
@@ -148,9 +145,7 @@ Model là biểu diễn của riêng tầng Data. Nó không bao giờ lọt và
 ```dart
 // platform/layers/data/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
-  E toEntity() {
-    throw UnimplementedError();
-  }
+  E toEntity();
 }
 ```
 
@@ -167,8 +162,8 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
     @JsonKey(name: 'id') required String id,
     @JsonKey(name: 'email') String? email,
     @JsonKey(name: 'name') String? name,
-    @JsonKey(name: 'role', unknownEnumValue: UserRole.unknown) UserRole? role,
-    // …
+    @JsonKey(name: 'role') String? role, // cách viết của backend
+    @JsonKey(name: 'token') String? token, // credential: không bao giờ vào entity
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -176,14 +171,19 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
   @override
   UserEntity toEntity() {
-    return UserEntity(id: id, email: email, name: name, role: role, /* … */);
+    return UserEntity(
+      id: id,
+      email: email,
+      name: name,
+      role: role == null ? null : _roleFromName(role!),
+    );
   }
 
   factory UserModel.fromEntity(UserEntity entity) { /* … */ }
 }
 ```
 
-`unknownEnumValue: UserRole.unknown` nghĩa là một role backend thêm sau này sẽ deserialize thành `unknown` thay vì ném lỗi.
+Role vẫn là `String` trên đường truyền và được ánh xạ trong `toEntity()`: cách viết là chuyện của transport, nên `UserRole` của `domain_auth` không mang annotation JSON nào, và một role backend thêm sau này sẽ ánh xạ thành `UserRole.unknown` thay vì ném lỗi.
 
 `fromEntity` là chiều ngược lại, dùng khi ghi một entity ngược lên API hay cache. Sample chưa có luồng ghi ngược nào, nên hiện chỉ `modules/auth/data/test/user_model_test.dart` dùng tới nó.
 
@@ -333,7 +333,7 @@ Endpoint REST cũng theo đúng quy tắc sở hữu này — `modules/auth/data
 
 ## 6. `data_auth` — đọc phần này trước khi copy
 
-`AuthRepositoryImpl` là file bị copy nhiều nhất trong template, nên nó được viết đúng như tài liệu này mô tả về tầng data: một Retrofit data source cho mạng, một `StorageValue` data source cho phiên đăng nhập, `execute()` bọc cả hai, và ánh xạ model → entity ngay tại ranh giới.
+`AuthRepositoryImpl` là file bị copy nhiều nhất trong template, nên nó được viết theo cách tài liệu này mô tả về tầng data: một Retrofit data source cho mạng, một `StorageValue` data source cho phiên đăng nhập, `execute()` bọc cả hai, và ánh xạ model → entity ngay tại ranh giới. Ngoài `login` và `logout`, nó còn hiện thực `refreshToken` và `restoreSession`; khi lần gia hạn không tới được server, `restoreSession` lùi về user đã lưu ở lần đăng nhập gần nhất, nhờ đó khởi động lúc offline vẫn giữ trạng thái đã đăng nhập.
 
 ```dart
 @LazySingleton(as: IAuthRepository)
@@ -348,7 +348,7 @@ Retrofit client được dựng một lần trong [`modules/auth/data/lib/di/mod
 
 ```dart
 @module
-abstract class RegisterModule {
+abstract class AuthDataDiModule {
   @lazySingleton
   AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
       AuthRemoteDataSource(dio);
@@ -358,7 +358,7 @@ abstract class RegisterModule {
 Dựng ở đây thay vì bên trong repository giữ cho dependency hiển lộ với container — đó chính là khe hở để test truyền một fake vào.
 
 > [!NOTE]
-> **Muốn xác thực qua Firebase?** Đổi transport bên trong `AuthRepositoryImpl` và giữ nguyên hình dạng bên dưới — nhưng hãy đăng ký một `ErrorClassifier` cho exception Firebase với `ErrorHandler` trước (§3; `DioFailureClassifier` của `core_network` là mẫu). Thiếu nhánh đó, mọi lỗi Firebase đều thành *"Unknown error occurred"* ở bản release.
+> **Muốn xác thực qua Firebase?** Đổi transport bên trong `AuthRepositoryImpl` và giữ nguyên hình dạng bên dưới — nhưng hãy đăng ký một `ErrorClassifier` cho exception Firebase với `ErrorHandler` trước (§3; `DioFailureClassifier` của `core_network` là mẫu). Thiếu nó, mọi lỗi Firebase đều thành cùng một `ServerFailure(code: ErrorCodes.UNKNOWN)`.
 
 ### Lưu giữ phiên đăng nhập
 
@@ -372,10 +372,10 @@ Future<Result<UserEntity>> _authenticate(
     request,
     successCondition: (response) =>
         response.isSuccess && response.data != null,
-    onSuccess: (response) {
+    onSuccess: (response) async {
       final user = response.data!;
-      _local.saveUserToken(user.token);
-      _local.saveUserData(user);
+      await _local.saveUserToken(user.token);
+      await _local.saveUserData(user);
     },
     mapper: (response) => response.data!.toEntity(),
   );
@@ -390,7 +390,7 @@ Ba chi tiết gánh toàn bộ sức nặng:
 | `onSuccess` lưu token | `NetworkConfig.getToken()` đọc lại token qua `ISessionGateway`, do `data_auth` hiện thực trên nền `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt |
 | `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên — có hẳn một test khẳng định điều đó |
 
-`logout` dùng `executeSync` chứ không phải `execute`: nó chỉ xoá storage, không có gì để await.
+`logout` là `execute<void, void>(_local.clearAllAuthData)`: xoá storage là bất đồng bộ, nên một lần ghi thất bại đến tay bên gọi dưới dạng `Result` thay vì bị mất.
 
 Đây chính là mắt xích khép vòng với interceptor refresh 401 của `core_network`. Xem [hướng dẫn networking](../guides/08_networking.md).
 
@@ -422,7 +422,7 @@ Checklist:
 - [ ] Không kiểu Drift / Dio / Retrofit nào xuất hiện trong chữ ký công khai
 - [ ] Storage key và endpoint nằm trong `utils/` của package này
 - [ ] Lớp sở hữu storage là singleton kèm `@PostConstruct(preResolve: true)`
-- [ ] Mọi package thực sự dùng đều đã khai trong `pubspec.yaml` — kiểm tra bằng `dart tools/unused_checker/check_unused_packages.dart`
+- [ ] Mọi package được import đều đã khai trong `pubspec.yaml` (`arch_check` R5) và mọi package đã khai đều được dùng (`dart tools/unused_checker/check_unused_packages.dart`) — RULE-06
 
 Sau đó:
 

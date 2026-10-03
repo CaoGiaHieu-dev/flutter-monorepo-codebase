@@ -14,7 +14,7 @@ Feature (UI) ──→ Domain ←── Data
               core_network / core_storage / core_database
 ```
 
-Data depends **inward** on Domain (to implement its interfaces) and **outward** on `core_*` infrastructure. Nothing depends on Data except the app shell, which assembles it. A feature package may never import `data_*`.
+Data depends **inward** on Domain (to implement its interfaces) and **outward** on `platform/` infrastructure. Nothing depends on Data except the app, whose generated `lib/di/injection.dart` is the one file that imports a module package (RULE-05). A feature never imports `data_*` (RULE-04).
 
 | Job | Where |
 |:---|:---|
@@ -30,10 +30,9 @@ Data depends **inward** on Domain (to implement its interfaces) and **outward** 
 ```
 modules/<name>/data/
 ├── lib/
-│   ├── data_<name>.dart             # public barrel
+│   ├── data_<name>.dart             # the package's one barrel (generated)
 │   ├── di/
-│   │   ├── module.dart              # @InjectableInit.microPackage()
-│   │   └── register_module.dart     # optional @module third-party bindings
+│   │   └── module.dart              # @InjectableInit.microPackage() + any @module bindings
 │   └── src/
 │       ├── data_sources/
 │       │   ├── remote/              # Retrofit / HTTP
@@ -43,10 +42,9 @@ modules/<name>/data/
 │       │   └── dao/
 │       ├── models/                  # DTOs with .toEntity()
 │       ├── repositories_impl/
-│       ├── services/                # optional — core_di contract impls that are not repositories
+│       ├── session/                 # optional — core_di contract impls that are not repositories
 │       │                            #   (data_auth: AuthSessionGatewayImpl → ISessionGateway)
-│       ├── utils/                   # keys, endpoints — owned by this package
-│       └── src.dart
+│       └── utils/                   # keys, endpoints — owned by this package
 └── pubspec.yaml
 ```
 
@@ -57,7 +55,7 @@ Current packages:
 
 | Package | Contents |
 |:---|:---|
-| `data_core` | `BaseRepository`, `BaseModel`, request models |
+| `data_core` | `BaseRepository`, `BaseModel`, `BaseRequest` |
 | `data_auth` | `UserModel`, auth data sources, `AuthRepositoryImpl` |
 | `data_cache` | `CacheDatabase` (a package-owned Drift database), `CacheEntryModel`, local data source, `CacheEntryRepositoryImpl` |
 
@@ -82,8 +80,7 @@ Future<Result<T>> execute<R, T>(
     final isSuccess = successCondition?.call(response) ?? true;
     if (isSuccess) {
       await onSuccess?.call(response);
-      // …map R → T…
-      return Success(mappedData);
+      return _toResult<R, T>(response, mapper);
     }
     await onFailure?.call(response);
     return Failure(
@@ -105,36 +102,36 @@ Two type parameters, and they are not the same thing:
 - **`T`** — what Domain expects (an Entity, a list of Entities, `void`)
 - **`mapper`** — the `R → T` bridge, normally `(model) => model.toEntity()`
 
-If the call returns `null`, `T` is nullable and no `mapper` is supplied, `Success(null as T)` is returned — that is how `Future<Result<void>>` operations work without ceremony. A non-null response is passed through as `T` even when `T` is nullable.
+A `null` response is a success only when `T` is nullable (`void`, `T?`) — that is how `Future<Result<void>>` operations work without ceremony — and it is never handed to `mapper`. For a non-nullable `T` it is a failure coded `ErrorCodes.EMPTY_RESPONSE`. A non-null response with no `mapper` must already be a `T`.
 
 ### `executeSync<R, T>()` — synchronous
 
-Same shape for local, non-async work. `onFailure` here receives the thrown `Object`, not the response.
+Same shape for local, non-async work, returning `Result<T>` directly. `onFailure` here receives the thrown `Object`, not the response.
 
 ### Error conversion
 
 Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `platform_kernel` (also reachable through `core_common`'s re-export), which returns an `AppFailure`.
 
 > [!NOTE]
-> `ErrorHandler` is the only conversion point. There is no `AppFailure.fromException()` — do not invent one, and do not hand-roll a failure at the call site. When you must construct one explicitly, use the helpers `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)` and so on.
+> `ErrorHandler` is the only conversion point (RULE-43). There is no `AppFailure.fromException()` — do not invent one, and do not hand-roll a failure at the call site. When you must construct one explicitly, use the helpers `ErrorHandler.serverFailure(...)`, `.networkFailure(...)`, `.authFailure(...)` and so on.
 
 ### What `ErrorHandler` actually recognises
 
-`platform/foundation/kernel/lib/src/error/error_handler.dart` branches on, in order: `AppException` → `DioException` → `SocketException` → `HttpException` → `FormatException` → fallback.
+`platform/foundation/kernel/lib/src/error/error_handler.dart` classifies in this order: `AppException` → the registered `ErrorClassifier`s, in registration order → `SocketException` → `HttpException` → `FormatException` → the fallback. The kernel is pure Dart and names no transport type: `core_network` registers `DioFailureClassifier` (it maps `DioException`) while the `core` DI group initialises, so a Dio error is classified before any repository runs.
 
 > [!WARNING]
-> **There is no `FirebaseException` / `FirebaseAuthException` / `PlatformException` branch.** The shipped `AuthRepositoryImpl` goes through Retrofit, so this does not bite the sample — but swap its transport for the Firebase SDK and every Firebase error — wrong password, user-not-found, network-request-failed — falls through to the generic tail:
+> **Nothing classifies a `FirebaseException` / `FirebaseAuthException` / `PlatformException` until you register a classifier for it.** The shipped `AuthRepositoryImpl` goes through Retrofit, so this does not bite the sample — but swap its transport for the Firebase SDK and every Firebase error — wrong password, user-not-found, network-request-failed — falls through to the fallback:
 >
 > ```dart
-> return ServerFailure(
->   message: _isDebug ? error.toString() : 'Unknown error occurred',
->   code: 9999,
+> final failure = ServerFailure<dynamic>(
+>   message: _isDebug ? error.toString() : _unknownMessage, // 'Unknown error occurred'
+>   code: ErrorCodes.UNKNOWN, // 9999
 > );
 > ```
 >
-> In a release build the user sees **"Unknown error occurred"** for every failed sign-in. Worse, any UI that maps failures by code — such as `AuthProvider.mapAuthFailure`, which matches an `AuthFailure` with `401` and a `ServerFailure` with `404` — can never match, because the code is always `9999`.
+> Every one of them is the same failure, so any UI that maps failures by code — such as `AuthProvider.mapAuthFailure`, which matches an `AuthFailure` with `401` and a `ServerFailure` with `404` — can never match. The fallback also calls `ErrorHandler.onUnclassifiedError`, which the app shell points at the optional `IErrorReporter` as a non-fatal error (RULE-67), so at least the gap is reported.
 >
-> If you add a Firebase-backed repository, add the matching branch to `ErrorHandler` first.
+> If you add a Firebase-backed repository, implement `ErrorClassifier` for its exception types and hand it to `ErrorHandler.registerClassifier` first (RULE-43). `DioFailureClassifier` in `platform/infra/network/lib/src/error/dio_failure_classifier.dart` is the model.
 
 ---
 
@@ -147,9 +144,7 @@ A Model is the Data layer's own representation. It never escapes into Domain —
 ```dart
 // platform/layers/data/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
-  E toEntity() {
-    throw UnimplementedError();
-  }
+  E toEntity();
 }
 ```
 
@@ -166,8 +161,8 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
     @JsonKey(name: 'id') required String id,
     @JsonKey(name: 'email') String? email,
     @JsonKey(name: 'name') String? name,
-    @JsonKey(name: 'role', unknownEnumValue: UserRole.unknown) UserRole? role,
-    // …
+    @JsonKey(name: 'role') String? role, // the backend's spelling
+    @JsonKey(name: 'token') String? token, // a credential: never reaches the entity
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -175,14 +170,19 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
 
   @override
   UserEntity toEntity() {
-    return UserEntity(id: id, email: email, name: name, role: role, /* … */);
+    return UserEntity(
+      id: id,
+      email: email,
+      name: name,
+      role: role == null ? null : _roleFromName(role!),
+    );
   }
 
   factory UserModel.fromEntity(UserEntity entity) { /* … */ }
 }
 ```
 
-`unknownEnumValue: UserRole.unknown` means a role the backend adds later deserialises to `unknown` instead of throwing.
+The role stays a `String` on the wire and is mapped in `toEntity()`: the spelling is the transport's concern, so `domain_auth`'s `UserRole` carries no JSON annotation, and a role the backend adds later maps to `UserRole.unknown` instead of throwing.
 
 `fromEntity` is the reverse trip, for writing an entity back to the API or a cache. Nothing in the sample writes back, so today only `modules/auth/data/test/user_model_test.dart` exercises it.
 
@@ -332,7 +332,7 @@ REST endpoints follow the same ownership rule — `modules/auth/data/lib/src/uti
 
 ## 6. `data_auth` — read this before copying it
 
-`AuthRepositoryImpl` is the most-copied file in the template, so it is written exactly the way this document describes the layer: a Retrofit data source for the network, a `StorageValue` data source for the session, `execute()` around both, and a model-to-entity mapping at the boundary.
+`AuthRepositoryImpl` is the most-copied file in the template, so it is written the way this document describes the layer: a Retrofit data source for the network, a `StorageValue` data source for the session, `execute()` around both, and a model-to-entity mapping at the boundary. Besides `login` and `logout` it implements `refreshToken` and `restoreSession`; when a renewal never reached the server, `restoreSession` falls back to the user stored at the last sign-in, so an offline start stays signed in.
 
 ```dart
 @LazySingleton(as: IAuthRepository)
@@ -347,7 +347,7 @@ The Retrofit client is built once in [`modules/auth/data/lib/di/module.dart`](..
 
 ```dart
 @module
-abstract class RegisterModule {
+abstract class AuthDataDiModule {
   @lazySingleton
   AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
       AuthRemoteDataSource(dio);
@@ -357,7 +357,7 @@ abstract class RegisterModule {
 Constructing it here rather than inside the repository keeps the dependency visible to the container, which is what leaves a seam for a fake in tests.
 
 > [!NOTE]
-> **Authenticating through Firebase instead?** Swap the transport inside `AuthRepositoryImpl` and keep the shape below — but register an `ErrorClassifier` for Firebase exceptions with `ErrorHandler` first (§3; `core_network`'s `DioFailureClassifier` is the model). Without one, every Firebase error collapses to *"Unknown error occurred"* in release.
+> **Authenticating through Firebase instead?** Swap the transport inside `AuthRepositoryImpl` and keep the shape below — but register an `ErrorClassifier` for Firebase exceptions with `ErrorHandler` first (§3; `core_network`'s `DioFailureClassifier` is the model). Without one, every Firebase error becomes the same `ServerFailure(code: ErrorCodes.UNKNOWN)`.
 
 ### Session persistence
 
@@ -371,10 +371,10 @@ Future<Result<UserEntity>> _authenticate(
     request,
     successCondition: (response) =>
         response.isSuccess && response.data != null,
-    onSuccess: (response) {
+    onSuccess: (response) async {
       final user = response.data!;
-      _local.saveUserToken(user.token);
-      _local.saveUserData(user);
+      await _local.saveUserToken(user.token);
+      await _local.saveUserData(user);
     },
     mapper: (response) => response.data!.toEntity(),
   );
@@ -389,7 +389,7 @@ Three details carry the weight:
 | `onSuccess` saves the token | `NetworkConfig.getToken()` reads it back through `ISessionGateway`, which `data_auth` implements over `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger |
 | `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward — there is a test asserting exactly that |
 
-`logout` is `executeSync`, not `execute`: it only clears storage, and there is nothing to await.
+`logout` is `execute<void, void>(_local.clearAllAuthData)`: clearing storage is asynchronous, so the failure of a write reaches the caller as a `Result` instead of being lost.
 
 This is what closes the loop with `core_network`'s 401 refresh interceptor. See [the networking guide](../guides/08_networking.md).
 
@@ -421,7 +421,7 @@ Checklist:
 - [ ] No Drift / Dio / Retrofit type appears in any public signature
 - [ ] Storage keys and endpoints live in this package's `utils/`
 - [ ] Storage-owning classes are singletons with `@PostConstruct(preResolve: true)`
-- [ ] Every package actually used is declared in `pubspec.yaml` — verify with `dart tools/unused_checker/check_unused_packages.dart`
+- [ ] Every package imported is declared in `pubspec.yaml` (`arch_check` R5) and every declared one is used (`dart tools/unused_checker/check_unused_packages.dart`) — RULE-06
 
 Then:
 

@@ -28,6 +28,7 @@ export 'src/app_material_wrapper.dart';
 export 'src/boot/boot_error_app.dart';
 export 'src/bootstrap.dart';
 export 'src/composition/composition_check.dart';
+export 'src/composition/factory_check.dart';
 export 'src/composition/shell_contracts.dart';
 export 'src/main_scope.dart';
 export 'src/navigation/app_router.dart';

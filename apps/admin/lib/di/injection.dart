@@ -95,15 +95,23 @@ const _externalModulesAfter = [
 /// own before this runs; `registerProfileDefaults` then adds the template's
 /// default for any section still missing, so a graph booted without a profile
 /// completes instead of throwing `"<Section> is not registered"`.
+///
+/// [locator] is where the graph registers — `getIt`, always, in a real boot. A
+/// test passes a `FactoryRecorder` (platform_app_shell) wrapped around `getIt`
+/// to watch the factories go by and build each one.
 @InjectableInit(
   externalPackageModulesBefore: _externalModulesBefore,
   externalPackageModulesAfter: _externalModulesAfter,
 )
-Future<void> configureDependencies({String? environment}) async {
-  getIt.enableRegisteringMultipleInstancesOfOneType();
-  registerProfileDefaults();
+Future<void> configureDependencies({
+  String? environment,
+  ServiceLocator? locator,
+}) async {
+  final target = locator ?? getIt;
+  target.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults(locator: target);
   final env = environment ?? AppConfig.appFlavor.toValue();
-  await getIt.init(environment: env);
+  await target.init(environment: env);
 }
 
 /// Reset all dependencies (useful for testing)

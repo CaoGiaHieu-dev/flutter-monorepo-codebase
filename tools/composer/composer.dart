@@ -1066,15 +1066,23 @@ const _injectionTail = '''
 /// own before this runs; `registerProfileDefaults` then adds the template's
 /// default for any section still missing, so a graph booted without a profile
 /// completes instead of throwing `"<Section> is not registered"`.
+///
+/// [locator] is where the graph registers — `getIt`, always, in a real boot. A
+/// test passes a `FactoryRecorder` (platform_app_shell) wrapped around `getIt`
+/// to watch the factories go by and build each one.
 @InjectableInit(
   externalPackageModulesBefore: _externalModulesBefore,
   externalPackageModulesAfter: _externalModulesAfter,
 )
-Future<void> configureDependencies({String? environment}) async {
-  getIt.enableRegisteringMultipleInstancesOfOneType();
-  registerProfileDefaults();
+Future<void> configureDependencies({
+  String? environment,
+  ServiceLocator? locator,
+}) async {
+  final target = locator ?? getIt;
+  target.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults(locator: target);
   final env = environment ?? AppConfig.appFlavor.toValue();
-  await getIt.init(environment: env);
+  await target.init(environment: env);
 }
 
 /// Reset all dependencies (useful for testing)
@@ -1888,7 +1896,7 @@ WHAT VERIFY HOLDS THE DECLARATION TO
        per flavor) is registered under the app's lib/
   V11  the env files that exist hold exactly the keys `env:` declares
   V12  the entry point passes `profile:`; test/di_smoke_test.dart exists,
-       calls checkAppContract and builds every factory (`callFactories: true`)
+       calls checkAppContract and builds every factory (`FactoryRecorder` + `buildEvery`)
   V17  no member pubspec but the root's has a top-level `workspace:` key
        (a nested workspace node, RULE-16)
   V7 refuses before anything is written, in `sync` too. V3, V10, V11, V12 and

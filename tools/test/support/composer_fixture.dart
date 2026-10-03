@@ -149,11 +149,11 @@ import 'package:platform_app_shell/platform_app_shell.dart';
 import '../lib/app/app_profile.dart';
 
 void main() {
-  test('the declared contract holds', () {
-    getIt.findAll<Object>(
-      instantiateLazySingletons: true,
-      callFactories: true,
-    );
+  test('the declared contract holds', () async {
+    getIt.findAll<Object>(instantiateLazySingletons: true);
+    final recorder = FactoryRecorder(getIt);
+    await configureDependencies(locator: recorder);
+    await recorder.buildEvery();
     final report = checkAppContract(
       appProfile,
       flavor: Flavor.dev,

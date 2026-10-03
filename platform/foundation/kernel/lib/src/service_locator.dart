@@ -3,6 +3,11 @@ import 'package:get_it/get_it.dart';
 /// Global service locator instance.
 final GetIt getIt = GetIt.instance;
 
+/// The service locator's type, for code that has to name it without declaring
+/// `get_it` — an app's generated `configureDependencies` takes one so a test can
+/// watch what the graph registers, and the app itself never imports the package.
+typedef ServiceLocator = GetIt;
+
 /// Resolves [T], or `null` when nothing is registered for it.
 ///
 /// Use this — never bare [getIt] — whenever `T` is a contract whose only

@@ -633,20 +633,34 @@ void main() {
       ]);
     });
 
-    test('a smoke test that does not call the factories fails', () async {
+    test('a smoke test that does not build the factories fails', () async {
       for (final dropped in [
-        // Absent, false, or only in a comment: none builds a factory.
-        kFixtureSmokeTest.replaceFirst('callFactories: true,\n', ''),
-        kFixtureSmokeTest.replaceFirst('callFactories: true', 'callFactories: false'),
+        // Neither the recorder nor `buildEvery`, the old blanket call,
+        // or the words only in a comment: none builds a factory one by one.
+        kFixtureSmokeTest
+            .replaceFirst('final recorder = FactoryRecorder(getIt);\n', '')
+            .replaceFirst('await recorder.buildEvery();\n', ''),
+        kFixtureSmokeTest.replaceFirst('await recorder.buildEvery();\n', ''),
         kFixtureSmokeTest.replaceFirst(
-          'callFactories: true,\n',
-          '// callFactories: true\n',
+          'final recorder = FactoryRecorder(getIt);\n',
+          '',
+        ),
+        kFixtureSmokeTest
+            .replaceFirst('final recorder = FactoryRecorder(getIt);\n', '')
+            .replaceFirst(
+              'await recorder.buildEvery();\n',
+              'getIt.findAll<Object>(callFactories: true);\n',
+            ),
+        kFixtureSmokeTest.replaceFirst(
+          'await recorder.buildEvery();\n',
+          '// await recorder.buildEvery();\n',
         ),
       ]) {
         final ws = demo(extra: {'apps/demo/test/di_smoke_test.dart': dropped});
 
         expectRefused(await syncAndVerify(ws), [
-          'apps/demo/test/di_smoke_test.dart: callFactories: never `true`',
+          'apps/demo/test/di_smoke_test.dart: buildEvery: never builds the '
+              'factories',
           'RULE-63',
         ]);
       }

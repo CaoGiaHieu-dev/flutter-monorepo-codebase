@@ -9,8 +9,10 @@ import 'src/catalog.dart';
 import 'src/checks.dart';
 import 'src/facts_emit.dart';
 import 'src/manifest_v2.dart';
+import 'src/native_flavors.dart';
 import 'src/new_app.dart';
 import 'src/package_facts.dart';
+import 'src/profile_summary.dart';
 import 'src/provisions.dart';
 import 'src/report.dart';
 
@@ -1058,12 +1060,19 @@ const _injectionTail = '''
 /// Boots the dependency graph: every module of `_externalModulesBefore`, then
 /// the `after` groups in manifest order, for [environment] — by default the
 /// flavor this build is.
+///
+/// A class the graph builds injects the profile sections it reads
+/// (`NetworkProfile`, `LocaleProfile`, ...). `runShellApp` registers the app's
+/// own before this runs; `registerProfileDefaults` then adds the template's
+/// default for any section still missing, so a graph booted without a profile
+/// completes instead of throwing `"<Section> is not registered"`.
 @InjectableInit(
   externalPackageModulesBefore: _externalModulesBefore,
   externalPackageModulesAfter: _externalModulesAfter,
 )
 Future<void> configureDependencies({String? environment}) async {
   getIt.enableRegisteringMultipleInstancesOfOneType();
+  registerProfileDefaults();
   final env = environment ?? AppConfig.appFlavor.toValue();
   await getIt.init(environment: env);
 }
@@ -1199,6 +1208,9 @@ AppView _view(
     packageFacts: facts,
     catalog: catalog,
     provisions: provisions,
+    native: readNativeFlavors(app.dir),
+    profile: readProfileOverrides(app.dir),
+    shippedLanguages: readShippedLanguages(packages['core_base_ui']),
   );
 }
 

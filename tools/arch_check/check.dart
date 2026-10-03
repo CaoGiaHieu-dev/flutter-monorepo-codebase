@@ -294,7 +294,7 @@ String? _moduleOf(MonorepoPackage pkg) {
   return (i == -1 || i + 1 >= segments.length) ? null : segments[i + 1];
 }
 
-/// R16: the shell catalog (`kShellContracts` in `platform_app_shell`) names
+/// R16: the shell catalog (`SHELL_CONTRACTS` in `platform_app_shell`) names
 /// every contract the shell looks up optionally.
 ///
 /// An app declares, per catalog row, that it provides the contract or does
@@ -368,7 +368,7 @@ List<Violation> _catalogViolations(
           Violation(
             'R16',
             '${p.posix.relative(file, from: root)}:${lookup.line}',
-            'the shell resolves `$type` optionally but `kShellContracts` has '
+            'the shell resolves `$type` optionally but `SHELL_CONTRACTS` has '
                 'no row for it. ${owners == null ? 'No package registers it, so an app brings it' : 'It is implemented only in modules/${owners.join(', modules/')}'}'
                 ' — add `ShellContract<$type>(...)` to $catalogRel so each '
                 'app declares it under `capabilities:` (RULE-81), or resolve '
@@ -1368,7 +1368,7 @@ RULES CHECKED
 
   R16 The shell contract catalog is complete
       `platform_app_shell` keeps one table of what the shell resolves from
-      dependency injection (`kShellContracts`); each app declares every
+      dependency injection (`SHELL_CONTRACTS`); each app declares every
       optional row under `capabilities:` as provided, or absent with a reason
       (RULE-81). So (a) every `core_di` or module-API contract that a platform/
       package resolves with `getItOrNull<X>` / `getAllOrEmpty<X>` — and that is

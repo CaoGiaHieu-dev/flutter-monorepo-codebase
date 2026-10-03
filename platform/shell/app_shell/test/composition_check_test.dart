@@ -48,9 +48,12 @@ void main() {
 
       expect(report.problems, isEmpty);
       expect(report.isClean, isTrue);
-      expect(report.states, hasLength(kShellContracts.length));
+      expect(report.states, hasLength(SHELL_CONTRACTS.length));
       expect(report.explain(), contains('`test_app` on android, flavor dev'));
-      expect(report.explain(), contains('22 contracts checked'));
+      expect(
+        report.explain(),
+        contains('${SHELL_CONTRACTS.length} contracts checked'),
+      );
     });
 
     test('lists every implementation of a collected contract', () {
@@ -114,11 +117,11 @@ void main() {
     });
 
     test('every required row is held', () async {
-      final required = kShellContracts
+      final required = SHELL_CONTRACTS
           .where((c) => c.need == ShellNeed.required)
           .map((c) => c.id)
           .toList();
-      expect(required, hasLength(8));
+      expect(required, hasLength(7));
 
       for (final id in required) {
         registerRequiredShell(skip: {id});
@@ -365,6 +368,82 @@ void main() {
       getIt.registerSingleton<IFeatureRouteModule>(aRoute());
 
       expect(_codes(_check(testProfile())), ['C01', 'C01']);
+    });
+  });
+
+  group('C10 a registration whose constructor throws', () {
+    test('is a problem in the report, never an exception out of the check', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IFeatureRouteModule>(aRoute())
+        ..registerLazySingleton<IAppSplashScreen>(
+          () => throw StateError('the splash needs a service that is not up'),
+        );
+
+      final report = _check(
+        testProfile(
+          capabilities: declare(provided: const {'routes', 'splash'}),
+        ),
+      );
+
+      expect(_codes(report), ['C10']);
+      final problem = _problem(report, 'C10');
+      expect(problem.description, contains('`IAppSplashScreen` (`splash`)'));
+      expect(problem.description, contains('the splash needs a service'));
+      expect(problem.action, contains('constructor'));
+      // The row is still in the report, with nothing registered.
+      final row = report.states.singleWhere((s) => s.contract.id == 'splash');
+      expect(row.registered, isEmpty);
+    });
+
+    test('is not compared with the declaration a second time', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IFeatureRouteModule>(aRoute())
+        ..registerLazySingleton<IAppSplashScreen>(
+          () => throw StateError('boom'),
+        );
+
+      // Declared absent while something is registered would be C03 — but the
+      // registration could not be resolved, so only C10 speaks.
+      final report = _check(testProfile());
+
+      expect(_codes(report), ['C10']);
+    });
+
+    test('a router whose constructor throws is C10, and C07 stays quiet', () {
+      registerRequiredShell(skip: const {'app_router'});
+      getIt
+        ..registerSingleton<IFeatureRouteModule>(aRoute())
+        ..registerLazySingleton<AppRouter>(
+          () => throw StateError('the router could not be built'),
+        );
+
+      final report = _check(testProfile());
+
+      expect(_codes(report), ['C10']);
+      expect(
+        _problem(report, 'C10').description,
+        contains('the router could not be built'),
+      );
+    });
+
+    test('a production release logs it and goes on (RULE-05)', () {
+      registerRequiredShell();
+      getIt
+        ..registerSingleton<IFeatureRouteModule>(aRoute())
+        ..registerLazySingleton<IAppSplashScreen>(
+          () => throw StateError('boom'),
+        );
+      final report = checkAppContract(
+        testProfile(
+          capabilities: declare(provided: const {'routes', 'splash'}),
+        ),
+        flavor: Flavor.prod,
+        platform: AppPlatform.android,
+      );
+
+      expect(handleCompositionReport(report, isRelease: true), isTrue);
     });
   });
 

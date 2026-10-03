@@ -7,6 +7,7 @@ import '../arch_check/platform_forks.dart';
 import '../composer/src/catalog.dart';
 import '../composer/src/manifest_v2.dart';
 import '../composer/src/package_facts.dart';
+import '../composer/src/profile_summary.dart';
 import '../composer/src/report.dart';
 import 'support/tool_harness.dart';
 
@@ -18,7 +19,7 @@ import 'support/tool_harness.dart';
 /// - the vocabularies (`Flavor`, `AppPlatform`, `RunnerKind`, `SplashMode`) and
 ///   the one derived fact (`AppPlatform.canPinTls`);
 /// - the catalog: every `ShellContract<` row is parsed, ids are unique, and the
-///   split is the 8 required / 14 optional the report promises;
+///   split is the 7 required / 14 optional the report promises;
 /// - the **dead-key guard**: every key of the parse table names a consumer that
 ///   really reads it — `app.kind` was a key nothing read, and that class of bug
 ///   must not recur;
@@ -89,6 +90,35 @@ void main() {
       expect(kDefaultOrientation, kOrientationPolicies.first);
     });
 
+    test('the profile defaults the report prints are the kernel\'s', () {
+      final display = read(
+        'platform/foundation/kernel/lib/src/profile/display_profile.dart',
+      );
+      final network = read(
+        'platform/foundation/kernel/lib/src/profile/network_profile.dart',
+      );
+      expect(
+        display,
+        contains(
+          'this.designSize = const SizeSpec(${kDefaultDesignSize.replaceAll(' x ', ', ')})',
+        ),
+      );
+      expect(display, contains('this.textScaleMax = $kDefaultTextScaleMax,'));
+      expect(
+        display,
+        contains(
+          'this.phoneMaxShortestSide = ${kDefaultPhoneMax.split(' ').first},',
+        ),
+      );
+      expect(
+        RegExp(r'Timeout = const Duration\(seconds: (\d+)\)')
+            .allMatches(network)
+            .map((m) => '${m.group(1)} s')
+            .toSet(),
+        {kDefaultTimeout},
+      );
+    });
+
     test('the desktop platforms', () {
       final match = RegExp(
         r'bool get isDesktop =>([^;]*);',
@@ -116,7 +146,7 @@ void main() {
 
   group('the shell contract catalog', () {
     final source = read(
-      'platform/shell/app_shell/lib/src/composition/shell_contracts.dart',
+      'platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart',
     );
     final catalog = parseCatalogSource(source);
 
@@ -131,8 +161,8 @@ void main() {
       expect(ids.toSet(), hasLength(ids.length));
     });
 
-    test('8 required rows, 14 optional ones, a bundle of four', () {
-      expect(catalog.requiredRows, hasLength(8));
+    test('7 required rows, 14 optional ones, a bundle of four', () {
+      expect(catalog.requiredRows, hasLength(7));
       expect(catalog.optional, hasLength(14));
       expect(catalog.membersOf('session'), hasLength(4));
     });
@@ -162,16 +192,59 @@ void main() {
       test('${key.key} is read by ${key.consumer}', () {
         final file = File(p.join(repoRoot, key.consumer));
         expect(file.existsSync(), isTrue, reason: '${key.consumer} is gone');
+        // A use, not a name: `name` is also the field's own declaration, so a
+        // bare identifier proves nothing about a reader. The guard asks for a
+        // member access or a call, which only code that *uses* the value has.
+        expect(
+          key.reads,
+          matches(RegExp(r'[.(]')),
+          reason:
+              '`${key.key}`: `reads` must be a use-site expression '
+              '(`facts.name`, `platformFacts.splash`), not a field name',
+        );
         expect(
           file.readAsStringSync(),
           contains(key.reads),
           reason:
               '`${key.key}` names `${key.consumer}` as its reader, but the '
-              'file no longer mentions `${key.reads}` — a key nothing reads '
+              'file no longer contains `${key.reads}` — a key nothing reads '
               'is the `app.kind` bug',
         );
       });
     }
+
+    test('a key only composer reads says so, and nothing else does', () {
+      final reportOnly = [
+        for (final key in kManifestKeys)
+          if (key.reportOnly) key.key,
+      ];
+      expect(reportOnly, ['platforms.<p>.runner']);
+      for (final key in kManifestKeys.where((k) => k.reportOnly)) {
+        expect(key.consumer, startsWith('tools/composer/'));
+      }
+      // No runtime package reads `PlatformFacts.runner`: if one starts to,
+      // this list is stale.
+      final runtime =
+          [
+            for (final entity in Directory(
+              p.join(repoRoot, 'platform'),
+            ).listSync(recursive: true))
+              if (entity is File &&
+                  entity.path.endsWith('.dart') &&
+                  !entity.path.contains('/test/') &&
+                  !entity.path.contains('.dart_tool') &&
+                  !entity.path.contains('/build/'))
+                entity,
+          ].where(
+            (f) =>
+                RegExp(r'(?<!this)\.runner\b').hasMatch(f.readAsStringSync()),
+          );
+      expect(
+        runtime.map((f) => p.relative(f.path, from: repoRoot)),
+        isEmpty,
+        reason: '`.runner` is read at runtime: drop `reportOnly` from it',
+      );
+    });
 
     test('the pubspec keys composer checks have a reader, too', () {
       // `platforms:` and `composition.app_provides` are not manifest keys, so
@@ -331,17 +404,18 @@ void main() {
       }
       // And no code the sources report is left out of the list.
       final reported = {
-        for (final m in RegExp(r"'([PC]0\d)'").allMatches(sources)) m.group(1)!,
+        for (final m in RegExp(r"'([PC]\d\d)'").allMatches(sources))
+          m.group(1)!,
       };
       expect({for (final problem in kBootProblems) problem.id}, reported);
     });
 
     test(
-      'every check V1 to V14 is listed once, and composer implements it',
+      'every check V1 to V16 is listed once, and composer implements it',
       () {
         expect(
           [for (final check in kComposerChecks) check.id],
-          [for (var i = 1; i <= 14; i++) 'V$i'],
+          [for (var i = 1; i <= 16; i++) 'V$i'],
         );
         final implementation =
             read('tools/composer/src/checks.dart') +

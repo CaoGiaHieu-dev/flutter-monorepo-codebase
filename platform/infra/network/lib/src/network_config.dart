@@ -1,11 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:platform_kernel/platform_kernel.dart';
 
 /// Configuration interface for network services.
 /// This allows the core_network package to remain fully decoupled from
 /// specific storage mechanisms and visual/UI libraries while still performing
 /// authorization injections and displaying UI components like retry dialogs.
-abstract class NetworkConfig implements SslPinningConfig {
+abstract class NetworkConfig {
   /// Callback to get the current authentication token.
   String? Function() get getToken;
 
@@ -32,7 +31,4 @@ abstract class NetworkConfig implements SslPinningConfig {
   /// Invoked once when [onRefreshToken] could not produce a new token, so the
   /// app can clear the session and send the user back to the login screen.
   Future<void> Function()? get onRefreshFailed => null;
-
-  @override
-  List<String> get sslPinningHashes;
 }

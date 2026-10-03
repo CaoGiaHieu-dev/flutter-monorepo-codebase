@@ -68,7 +68,7 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 - **RULE-45** — a storage owner is a singleton with `@PostConstruct(preResolve: true)`, never `@injectable`.
 - **RULE-46** — a package needing SQL declares its own Drift database; no shared `AppDatabase`; a DAO is `part of` its own database.
 - **RULE-47** — a migration registers as `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` (typed), and the database's `@preResolve` open carries `@Order(1)`.
-- **RULE-48** — SSL pinning needs `SslPinningConfig` bound in its own right and non-empty `sslPinningHashes`; the certificate bypass is keyed on `AppConfig.bypassesCertificateValidation` (debug build with an explicit `--flavor dev`), never on `appFlavor`, which falls back to `dev` in any debug build.
+- **RULE-48** — SSL pinning is the app's per-flavor decision in `app_manifest.yaml` (`flavors.<f>.ssl_pinning`: at least two pins, or `disabled` with a reason), read at boot from `AppFacts.sslPinning` — never a hash list hardcoded in a platform package; the certificate bypass is keyed on `AppConfig.bypassesCertificateValidation` (debug build with an explicit `--flavor dev`), never on `appFlavor`, which falls back to `dev` in any debug build.
 - **RULE-49** — entities are Freezed with `const Class._()`; a use case is `@injectable`, does one thing and returns `Result<T>`.
 
 ### 50–59 · State management
@@ -100,11 +100,17 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 - **RULE-78** *[gate for the `I` prefix]* — file and class suffixes follow the naming table (`_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `i_<name>_repository`, `_repository_impl`, `_navigator_impl`, `_action_handler_impl`); the `I` prefix marks an interface, never a concrete class.
 - **RULE-79** — a behaviour change updates `docs/en` and `docs/vi`; docs cite rules as `RULE-NN` rather than restating them.
 
+**Apps and composition (RULE-80–82)**
+
+- **RULE-80** — everything per-app lives in `apps/<id>/` (`app_manifest.yaml`, `lib/app/app_profile.dart`, `lib/app/app_hooks.dart`); flag a design size, text-scale cap, locale list, pin, timeout, orientation, fallback location or splash / push / deep-link switch hardcoded in `platform/` that one app may want different.
+- **RULE-81** *[gate]* — every optional contract in the shell catalog (`SHELL_CONTRACTS`) is `provided`, or `absent` with a reason that says why the app goes without, in the app's `capabilities:`; flag a new shell lookup with no catalog row and a reason that merely restates what the shell does.
+- **RULE-82** *[gate]* — a platform difference is read from `PlatformFacts`; flag a new `Platform.is*`, `kIsWeb`, `defaultTargetPlatform` or `TargetPlatform.*` fork outside `resolveAppPlatform()` and the allow-list.
+
 ---
 
 ## 🧭 Project context (not rules — what the code should look like)
 
-- An app's `main.dart` is one call, `runShellApp(configureDependencies: configureDependencies)`; zone, DI, `AppInitializer.initBeforeRunApp()` (logger + `HttpOverrides`, before any widget), splash and `AppInitializer.init()` live in `platform_app_shell`'s `bootstrap.dart`.
+- An app's `main.dart` is one call, `runShellApp(profile: appProfile, hooks: appHooks, configureDependencies: configureDependencies)`: the manifest-generated `facts` and typed tuning live in `lib/app/app_profile.dart`, code seams in `lib/app/app_hooks.dart` (`ShellHooks`). The boot sequence — zone, profile checks, `AppInitializer.initBeforeRunApp()` (logger + `HttpOverrides`: the declared pins, before DI builds anything), DI, `checkAppContract`, splash and `AppInitializer.init()` — lives in `platform_app_shell`'s `bootstrap.dart`.
 - `AppRouter` is a GetIt `@singleton`; there are no static lookups such as `AppRouter.currentContext`. GoRouter's `errorPageBuilder` uses `UndefinedRouteWidget`. `DeeplinkProvider.initAppLink()` is started by `NavigatorWrapperWidget` after the boot redirect or a sign-in.
 - DI groups run `core` → the app's own registrations → `notifications` → `shell` → `ui` → `domain` → `data` → `feature` → `other`, declared in each `apps/<id>/app_manifest.yaml`.
 - Shared widgets already exist in `platform/ui/ui_kit` — flag a re-implemented button, input or dialog.

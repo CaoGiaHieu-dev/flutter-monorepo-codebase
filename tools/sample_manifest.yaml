@@ -162,7 +162,7 @@ packages:
 # ---------------------------------------------------------------------------
 # A "feature" is never just its feature package. Each bundle lists everything
 # that travels with it. `capabilities` lists the optional shell contracts
-# (ids of `kShellContracts`, or a bundle id such as `session`) the bundle is
+# (ids of `SHELL_CONTRACTS`, or a bundle id such as `session`) the bundle is
 # the only provider of; `shared_capabilities` the ones it shares with another
 # module, which an app's DI smoke test (`checkAppContract`) names after the
 # removal if the last provider went. `breaks` records samples that stop

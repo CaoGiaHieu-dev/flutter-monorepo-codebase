@@ -1,3 +1,17 @@
+/// What to remove right after `flutter create` has written a runner into an
+/// app — the shell lines of the report's create block and of `composer new`'s
+/// next steps. `flutter create` writes files this repository does not want:
+/// a sample widget test that does not compile (`MyApp` is not a class here, so
+/// Gate 2 fails), an `analysis_options.yaml` that would replace the root's
+/// strict options for the whole app (RULE-70), and IDE project files.
+const List<String> kFlutterCreateCleanup = [
+  '# flutter create also writes files this repo does not want: a sample test',
+  '# that does not compile, an analysis_options.yaml that would replace the',
+  "# root's strict options for this whole app (RULE-70), and IDE files.",
+  'rm -f test/widget_test.dart analysis_options.yaml',
+  'rm -rf .idea *.iml',
+];
+
 /// Native notes: what a person standing up a platform's runner should know
 /// that no manifest key can express and no gate checks.
 ///
@@ -16,9 +30,12 @@ const Map<String, List<String>> kPlatformNotes = {
         'GoogleService-Info.plist copy phase. From the plugin docs.',
   ],
   'web': [
-    '`flutter build web` has no --flavor option: pass '
-        '--dart-define=FLUTTER_APP_FLAVOR=<flavor>, and a release without it '
-        'runs as prod. Measured.',
+    '`flutter build web` has no --flavor option, and the Flutter tool refuses '
+        '--dart-define=FLUTTER_APP_FLAVOR (the name is the framework\'s own). '
+        'Name the flavor with --dart-define=APP_FLAVOR=<flavor>, which the '
+        'shell reads on the web only; without it a release runs as prod and a '
+        'debug run as dev. The tool\'s refusal is measured; the APP_FLAVOR '
+        'define is covered by a unit test, not by a web build.',
     'The browser owns TLS, so SSL pinning does not apply; secure storage '
         'needs a secure context (https or localhost). Measured.',
   ],

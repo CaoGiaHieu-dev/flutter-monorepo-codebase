@@ -58,48 +58,6 @@ void main() {
     });
   });
 
-  group('NetworkConfigImpl.sslPinningHashes', () {
-    // The test run declares no flavor, so `AppConfig.appFlavor` is `dev`.
-    const leaf = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-    const backup = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=';
-
-    Future<NetworkConfigImpl> configWith([SslPinningPolicy? policy]) async =>
-        policy == null
-        ? NetworkConfigImpl(await _languageStorage())
-        : NetworkConfigImpl(await _languageStorage(), policy);
-
-    test('a hand-built config pins nothing', () async {
-      expect((await configWith()).sslPinningHashes, isEmpty);
-    });
-
-    test('a disabled decision pins nothing', () async {
-      final config = await configWith(
-        const SslPinningPolicy({
-          Flavor.dev: SslPinning.disabled('local servers'),
-        }),
-      );
-      expect(config.sslPinningHashes, isEmpty);
-    });
-
-    test('a pinned decision hands over its hashes, leaf first', () async {
-      final config = await configWith(
-        const SslPinningPolicy({
-          Flavor.dev: SslPinning.pinned(leaf, backup, ['CCC=']),
-        }),
-      );
-      expect(config.sslPinningHashes, [leaf, backup, 'CCC=']);
-    });
-
-    test('only the current flavor decides', () async {
-      final config = await configWith(
-        const SslPinningPolicy({
-          Flavor.prod: SslPinning.pinned(leaf, backup),
-        }),
-      );
-      expect(config.sslPinningHashes, isEmpty);
-    });
-  });
-
   group('NetworkConfigImpl.getLocale', () {
     test('sends the stored language', () async {
       final storage = await _languageStorage();

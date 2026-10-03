@@ -118,6 +118,29 @@ void main() {
     expect(options.headers['x-client'], 'reports');
     expect(options.receiveTimeout, const Duration(seconds: 20));
   });
+
+  test('a bare graph — no profile registered, only the defaults the generated '
+      'configureDependencies adds — still builds the default Dio', () async {
+    addTearDown(getIt.reset);
+    registerProfileDefaults();
+    getIt.registerSingleton<NetworkConfig>(_Config());
+
+    await CoreNetworkPackageModule().init(GetItHelper(getIt));
+
+    final options = getIt<Dio>().options;
+    expect(options.connectTimeout, const Duration(seconds: 20));
+    expect(options.followRedirects, isFalse);
+  });
+
+  test('without the sections the graph fails on the first one it needs', () {
+    addTearDown(getIt.reset);
+    getIt.registerSingleton<NetworkConfig>(_Config());
+
+    expect(() async {
+      await CoreNetworkPackageModule().init(GetItHelper(getIt));
+      getIt<Dio>();
+    }, throwsStateError);
+  });
 }
 
 class _Config implements NetworkConfig {
@@ -140,7 +163,4 @@ class _Config implements NetworkConfig {
     required VoidCallback onRetry,
     required VoidCallback onCancel,
   }) {}
-
-  @override
-  List<String> get sslPinningHashes => const [];
 }

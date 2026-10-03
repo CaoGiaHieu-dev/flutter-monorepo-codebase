@@ -29,6 +29,37 @@ void main() {
     getIt.registerSingleton<IFeatureRouteModule>(aRoute());
   }
 
+  group('checkDeclaredStarts', () {
+    final profile = testProfile(
+      platforms: {AppPlatform.android: platformFacts(window: _window)},
+    );
+
+    test('a window with the hook an app passes is a valid start — the case a '
+        'smoke test that forgot the hook got wrong', () {
+      final hooks = ShellHooks(configureWindow: (_, _) async {});
+
+      expect(checkDeclaredStarts(profile, hooks), isEmpty);
+    });
+
+    test('a window with no hook is P05 for every flavor, keyed by where', () {
+      final problems = checkDeclaredStarts(profile, const ShellHooks());
+
+      expect(problems.keys, [
+        'android / dev',
+        'android / staging',
+        'android / prod',
+      ]);
+      expect(
+        problems.values.expand((list) => list).map((p) => p.code).toSet(),
+        {'P05'},
+      );
+    });
+
+    test('an app that declares no window needs no hook', () {
+      expect(checkDeclaredStarts(testProfile(), const ShellHooks()), isEmpty);
+    });
+  });
+
   group('a declared window', () {
     testWidgets('with no configureWindow hook stops at P05 before DI', (
       tester,

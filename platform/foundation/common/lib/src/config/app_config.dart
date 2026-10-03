@@ -3,6 +3,8 @@ import 'package:flutter/services.dart' as services;
 import 'package:material_ui/material_ui.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
+import 'platform_resolver.dart';
+
 /// Central configuration class for the application
 ///
 /// This class provides access to environment-specific configurations
@@ -36,7 +38,31 @@ class AppConfig {
   ///
   /// Anything security-relevant must read this, not [appFlavor]: only an
   /// explicit declaration may relax a safeguard.
-  static Flavor? get declaredFlavor => parseFlavor(services.appFlavor);
+  static Flavor? get declaredFlavor => parseFlavor(
+    declaredFlavorName(
+      toolFlavor: services.appFlavor,
+      webDefine: ProfileConstants.APP_FLAVOR,
+      isWeb: resolveAppPlatform() == AppPlatform.web,
+    ),
+  );
+
+  /// The flavor name a build declared: the Flutter tool's own
+  /// ([toolFlavor], `--flavor`) when there is one, else — on the web only,
+  /// whose tool has no `--flavor` — the `--dart-define=APP_FLAVOR=<name>`
+  /// ([webDefine]). `null` when the build declared none.
+  ///
+  /// The define never overrides a flavor the tool set, and is ignored off the
+  /// web: a native build that names its flavor twice has one source of truth.
+  @visibleForTesting
+  static String? declaredFlavorName({
+    required String? toolFlavor,
+    required String webDefine,
+    required bool isWeb,
+  }) {
+    if (toolFlavor != null && toolFlavor.trim().isNotEmpty) return toolFlavor;
+    if (isWeb && webDefine.trim().isNotEmpty) return webDefine;
+    return null;
+  }
 
   /// Current application flavor (dev, staging, prod), used to pick the DI
   /// environment and per-flavor configuration.
@@ -44,8 +70,14 @@ class AppConfig {
   /// A build that declared no known flavor falls back per build mode — see
   /// [resolveFlavor]: `dev` in a debug build (so a plain `flutter run` of an
   /// app without flavors still works), `prod` otherwise.
-  static Flavor get appFlavor =>
-      resolveFlavor(services.appFlavor, isDebug: kDebugMode);
+  static Flavor get appFlavor => resolveFlavor(
+    declaredFlavorName(
+      toolFlavor: services.appFlavor,
+      webDefine: ProfileConstants.APP_FLAVOR,
+      isWeb: resolveAppPlatform() == AppPlatform.web,
+    ),
+    isDebug: kDebugMode,
+  );
 
   /// Whether TLS certificate validation may be switched off.
   ///
@@ -90,8 +122,20 @@ class AppConfig {
     required bool isDebug,
   }) => isDebug && declaredFlavor == Flavor.dev;
 
-  /// Application title from environment constants
-  static String get title => EnvConstants.APP_NAME;
+  /// The title the user sees for the app (the `MaterialApp` title, the window
+  /// and task-switcher label).
+  ///
+  /// The per-flavor display name `APP_NAME` from the env file when the build
+  /// defines it (`Codebase (DEV)`, `Codebase (STG)`) — that is how a flavor
+  /// tells itself apart on a device — else [appName], the app's own name
+  /// (`app.name` in its manifest, carried by `AppFacts.name`), else empty.
+  /// So `app.name` is what the app is called, and `APP_NAME` is the per-flavor
+  /// override of it.
+  static String titleFor(String? appName) {
+    const flavorName = EnvConstants.APP_NAME;
+    if (flavorName.isNotEmpty) return flavorName;
+    return appName ?? '';
+  }
 
   /// Base URL for API calls based on current flavor
   static String get baseUrl => EnvConstants.BASE_URL;

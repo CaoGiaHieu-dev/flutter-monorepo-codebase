@@ -19,6 +19,64 @@ void main() {
     });
   });
 
+  group('AppConfig.declaredFlavorName', () {
+    test('the Flutter tool\'s --flavor wins, on every platform', () {
+      for (final isWeb in [true, false]) {
+        expect(
+          AppConfig.declaredFlavorName(
+            toolFlavor: 'staging',
+            webDefine: 'prod',
+            isWeb: isWeb,
+          ),
+          'staging',
+        );
+      }
+    });
+
+    test('the web, which has no --flavor, reads --dart-define=APP_FLAVOR', () {
+      expect(
+        AppConfig.declaredFlavorName(
+          toolFlavor: null,
+          webDefine: 'staging',
+          isWeb: true,
+        ),
+        'staging',
+      );
+      expect(
+        AppConfig.parseFlavor(
+          AppConfig.declaredFlavorName(
+            toolFlavor: '',
+            webDefine: 'staging',
+            isWeb: true,
+          ),
+        ),
+        Flavor.staging,
+      );
+    });
+
+    test('off the web the define is ignored: one source of truth', () {
+      expect(
+        AppConfig.declaredFlavorName(
+          toolFlavor: null,
+          webDefine: 'staging',
+          isWeb: false,
+        ),
+        isNull,
+      );
+    });
+
+    test('nothing declared is null, so the build-mode fallback applies', () {
+      expect(
+        AppConfig.declaredFlavorName(
+          toolFlavor: null,
+          webDefine: '',
+          isWeb: true,
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('AppConfig.resolveFlavor', () {
     test('a declared flavor wins in every build mode', () {
       for (final isDebug in [true, false]) {

@@ -3,6 +3,7 @@ import 'facts_emit.dart';
 import 'manifest_v2.dart';
 import 'package_facts.dart';
 import 'platform_notes.dart';
+import 'profile_summary.dart';
 
 /// The app report: what a newcomer reads first, generated from the manifest and
 /// the composed packages.
@@ -77,6 +78,14 @@ const List<CodedLine> kComposerChecks = [
     'the generated regions (facts, report, imports, modules) equal regeneration',
   ),
   CodedLine('V14', 'no reason is empty, `TODO` or `TBD`'),
+  CodedLine(
+    'V15',
+    'the productFlavors of a committed Android runner and the flavor schemes of a committed iOS runner are the declared flavors; no env file exists for an undeclared one (V11)',
+  ),
+  CodedLine(
+    'V16',
+    'every DI group has a `why`, and the groups the template names (core, notifications, shell, ui, domain, data, feature, other) keep that relative order',
+  ),
 ];
 
 /// The problem codes the kernel (`validate`, P) and the shell
@@ -111,6 +120,10 @@ const List<CodedLine> kBootProblems = [
     'C09',
     'a catalog contract is missing from `facts.capabilities`: run `composer sync`',
   ),
+  CodedLine(
+    'C10',
+    'resolving a registered contract threw: its constructor or factory fails',
+  ),
 ];
 
 /// The report for [view], Markdown, without the region markers.
@@ -132,8 +145,18 @@ String renderReport(AppView view) {
 
   // -- 1. identity ---------------------------------------------------------
   line('### 1. Identity (b)');
-  line('| Flavor | Env file | SSL pinning |');
-  line('|:--|:--|:--|');
+  final androidIds = view.native.android;
+  final iosIds = view.native.ios;
+  line(
+    '| Flavor | Env file | SSL pinning |'
+    '${androidIds == null ? '' : ' Android application ID |'}'
+    '${iosIds == null ? '' : ' iOS bundle ID |'}',
+  );
+  line(
+    '|:--|:--|:--|'
+    '${androidIds == null ? '' : ':--|'}'
+    '${iosIds == null ? '' : ':--|'}',
+  );
   for (final flavor in decl.flavors.keys) {
     final decision = ssl[flavor];
     final String pinning;
@@ -148,8 +171,29 @@ String renderReport(AppView view) {
           ? 'disabled — $why'
           : 'disabled (default) — $why';
     }
-    line('| $flavor | `${kEnvFiles[flavor]}` | $pinning |');
+    String nativeId(Map<String, String?>? ids) =>
+        ids == null ? '' : ' ${_nativeId(ids, flavor)} |';
+    line(
+      '| $flavor | `${kEnvFiles[flavor]}` | $pinning |'
+      '${nativeId(androidIds)}${nativeId(iosIds)}',
+    );
   }
+  line();
+  if (androidIds != null || iosIds != null) {
+    line(
+      'The application and bundle IDs are read from the committed native '
+      'projects (`composer verify` holds their flavor names to the manifest, '
+      'check V15; the IDs themselves are not checked).',
+    );
+    line();
+  }
+  // Two names exist; say which one a user sees (RULE-80: one owner per value).
+  final nameKey = decl.env.any((e) => e.key == 'APP_NAME');
+  line(
+    'Name shown to users (the MaterialApp title: task switcher and browser tab): '
+    '`${decl.name}` (`app.name`)'
+    '${nameKey ? ', unless the build defines `APP_NAME`, which overrides it per flavor (`env.<flavor>`, for example `${decl.name} (DEV)`) so a flavor tells itself apart on a device' : ''}.',
+  );
   line();
   if (decl.env.isEmpty) {
     line('No environment keys are declared.');
@@ -206,6 +250,9 @@ String renderReport(AppView view) {
       'flutter create --platforms=${scaffold.join(',')} --org com.example '
       '--project-name ${view.pubspecName} .',
     );
+    for (final cleanup in kFlutterCreateCleanup) {
+      line(cleanup);
+    }
     line('```');
     line();
     line('Native notes (not checked):');
@@ -312,7 +359,7 @@ String renderReport(AppView view) {
   }
   line();
   line(
-    'The shell\'s catalog is `kShellContracts` in `platform_app_shell`; a '
+    'The shell\'s catalog is `SHELL_CONTRACTS` in `platform_app_shell`; a '
     'required row is registered by a shell package, an optional one by an app '
     'or a module, and `checkAppContract` holds this table to the graph the app '
     'actually builds. `ISessionStatusStream` has no row: only a module looks '
@@ -327,18 +374,50 @@ String renderReport(AppView view) {
   // -- 5. behaviour values -------------------------------------------------
   line('### 5. Behaviour values (profile)');
   line(
-    'Typed Dart in `lib/app/app_profile.dart`, below the generated facts. '
-    'A section left out is the template default, and every section type '
-    'documents its defaults and ranges: `display:` (`DisplayProfile` — the '
-    'design artboard, the scale policy of each window class, the OS '
-    'font-size cap, split-screen mode, the phone threshold), `router:` '
-    '(`RouterProfile` — when the entry location is used, the fallback '
-    'location), `locale:` (`LocaleProfile` — the languages offered, the '
-    'fallback and first-launch language), `theme:` (`ThemeProfile` — the mode '
-    'a first launch opens in, the palette overrides) and `network:` '
-    '(`NetworkProfile` — the default HTTP client\'s timeouts, extra headers '
-    'and redirect policy).',
+    'Typed Dart in `lib/app/app_profile.dart`, below the generated facts: '
+    'five sections, each documenting its ranges. A section the app leaves out '
+    'is the template default printed here; a section it sets is printed as '
+    'written (`composer verify` re-reads the file, so this page cannot go '
+    'stale).',
   );
+  line();
+  final profile = view.profile;
+  if (!profile.found) {
+    line(
+      'The app\'s `lib/app/app_profile.dart` was not found, so every value is '
+      'shown as the template default.',
+    );
+  } else if (profile.expressions.isEmpty) {
+    line(
+      '**This app sets no profile section: every value below is the template '
+      'default.**',
+    );
+  } else {
+    line(
+      '**This app sets: ${profile.expressions.keys.map((k) => '`$k:`').join(', ')}.** '
+      'The other sections are the template default.',
+    );
+  }
+  line();
+  line('| Section | What it tunes | This app | Template default |');
+  line('|:--|:--|:--|:--|');
+  for (final section in kProfileSections) {
+    final set = profile.expressions[section.key];
+    final defaults = [
+      for (final d in section.defaults)
+        d == 'languages: every language the template ships'
+            ? (view.shippedLanguages.isEmpty
+                  ? d
+                  : 'languages: every language the template ships '
+                        '(${view.shippedLanguages.join(', ')})')
+            : d,
+    ];
+    line(
+      '| `${section.key}:` (`${section.type}`) | ${_cell(section.tunes)} '
+      '| ${set == null ? 'default' : '**set** — `${_cell(set)}`'} '
+      '| ${_cell(defaults.join(' · '))} |',
+    );
+  }
   line();
 
   // -- 6. decisions to revisit ----------------------------------------------
@@ -353,12 +432,25 @@ String renderReport(AppView view) {
       );
     }
   }
+  final listed = <String>{};
+  void revisitAbsent(String key, CapabilityDecl? state) {
+    if (state == null || state.provided || !listed.add(key)) return;
+    revisit.add(
+      '`capabilities.$key`: **absent** — ${_cell(state.reason ?? '')}',
+    );
+  }
+
+  // A crash reporter and analytics are worth a second look on every app; any
+  // other absence is listed while its reason is still `new`'s placeholder.
   for (final id in const ['error_reporter', 'analytics']) {
-    final state = view.capability(id);
-    if (state != null && !state.provided) {
-      revisit.add(
-        '`capabilities.$id`: **absent** — ${_cell(state.reason ?? '')}',
-      );
+    revisitAbsent(id, view.capability(id));
+  }
+  for (final row in view.catalog.optional) {
+    final state = view.capability(row.id);
+    if (state != null &&
+        !state.provided &&
+        (state.reason ?? '').startsWith(kNotComposedPrefix)) {
+      revisitAbsent(row.manifestKey, state);
     }
   }
   if (revisit.isEmpty) {
@@ -393,6 +485,13 @@ String renderReport(AppView view) {
     'types registered in the `after` groups.',
   );
   return b.toString();
+}
+
+/// The native ID of [flavor] in [ids], or `—`.
+String _nativeId(Map<String, String?> ids, String flavor) {
+  if (!ids.containsKey(flavor)) return '—';
+  final id = ids[flavor];
+  return id == null ? '— (not readable)' : '`$id`';
 }
 
 /// The packages of the app's graph that register [type], or `—`; the app's own
@@ -451,7 +550,13 @@ String renderCatalog(ShellCatalog catalog) {
     line('      type        ${key.type}');
     line('      default     ${key.defaultValue}');
     line('      refused     ${key.validation}');
-    line('      read by     ${key.consumer} (${key.reads})');
+    line(
+      key.reportOnly
+          ? '      read by     ${key.consumer} (${key.reads}) — composer only: '
+                'a check and the report read it; no runtime code does, so it '
+                'is carried in the generated facts for tests and `describe`'
+          : '      read by     ${key.consumer} (${key.reads})',
+    );
     line('      replaces    ${key.replaces}');
     line();
   }

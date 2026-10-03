@@ -1,8 +1,8 @@
 import 'package:injectable/injectable.dart';
 
 /// Registers the shell's infrastructure adapters: the storage adapters behind
-/// `ILanguageStorage` / `IThemeStorage`, the `AppBootStorage` boot flag,
-/// `NetworkConfig` and its `SslPinningConfig` binding.
+/// `ILanguageStorage` / `IThemeStorage`, the `AppBootStorage` boot flag and
+/// `NetworkConfig`.
 ///
 /// ## Where it runs
 ///

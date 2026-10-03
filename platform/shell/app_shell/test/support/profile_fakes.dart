@@ -10,11 +10,6 @@ import 'package:platform_shell_adapters/platform_shell_adapters.dart';
 
 import 'shell_fakes.dart';
 
-class FakePins implements SslPinningConfig {
-  @override
-  List<String> get sslPinningHashes => const [];
-}
-
 class FakeSplash implements IAppSplashScreen {
   FakeSplash([this.onBuild]);
 
@@ -69,7 +64,7 @@ Map<String, CapabilityExpectation> declare({
   Map<String, CapabilityExpectation> overrides = const {},
   Set<String> omit = const {},
 }) => {
-  for (final contract in kShellContracts)
+  for (final contract in SHELL_CONTRACTS)
     if (contract.need == ShellNeed.optional && !omit.contains(contract.id))
       contract.id:
           overrides[contract.id] ??
@@ -106,7 +101,7 @@ AppProfile testProfile({
   ),
 );
 
-/// Registers what the shell's own packages register — the 8 required rows —
+/// Registers what the shell's own packages register — the 7 required rows —
 /// plus the [DioFailureClassifier] hook `core_network` installs, in
 /// [getIt]. [skip] leaves some out, by catalog id.
 ///
@@ -121,7 +116,6 @@ AppRouter registerRequiredShell({Set<String> skip = const {}}) {
   register<ILanguageStorage>('language_storage', FakeLanguageStorage.new);
   register<IThemeStorage>('theme_storage', FakeThemeStorage.new);
   register<AppBootStorage>('boot_storage', memoryBootStorage);
-  register<SslPinningConfig>('ssl_pinning', FakePins.new);
   register<AppRouter>('app_router', () => router);
   register<DeeplinkProvider>(
     'deeplink_provider',

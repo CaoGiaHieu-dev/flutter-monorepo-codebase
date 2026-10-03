@@ -287,6 +287,50 @@ modules:
       expect(ws.read('apps/admin/app_manifest.yaml'), admin);
     });
 
+    test('an app created with no modules (`modules: []`) can be extended', () {
+      // What `composer new` writes for an app that composes no module: the
+      // generator used to find no `modules:` list in the expected format and
+      // roll the whole generation back.
+      final ws = TempWorkspace.create({
+        'pubspec.yaml': 'name: ws\nworkspace:\n  - apps/kiosk\n',
+        'apps/kiosk/app_manifest.yaml': '''
+app:
+  id: kiosk
+
+di_groups:
+  - name: core
+    phase: before
+    packages: [core_common]
+
+# Modules this app composes.
+modules: []
+
+# `extra_dependencies:` (optional)
+''',
+        'apps/kiosk/pubspec.yaml': 'name: kiosk_app\n',
+      });
+      CommonHelpers.registerInAppManifests(
+        'feature_panel',
+        ModuleType.feature,
+        'panel',
+        apps: const ['kiosk'],
+        root: ws.root,
+      );
+      CommonHelpers.registerInAppManifests(
+        'domain_panel',
+        ModuleType.domain,
+        'panel',
+        apps: const ['kiosk'],
+        root: ws.root,
+      );
+
+      final manifest = ws.read('apps/kiosk/app_manifest.yaml');
+      expect(manifest, isNot(contains('modules: []')));
+      expect(manifest, contains('modules:\n  - { id: panel, layers: '));
+      expect(manifest, contains('feature'));
+      expect(manifest, contains('domain'));
+    });
+
     test('a platform package joins the core group of the listed app only', () {
       final ws = workspace();
       CommonHelpers.registerInAppManifests(

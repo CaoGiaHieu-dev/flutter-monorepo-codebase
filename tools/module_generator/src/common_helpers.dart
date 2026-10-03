@@ -428,6 +428,12 @@ class CommonHelpers {
       );
       return;
     }
+    // `composer new` writes an app with no modules as `modules: []` — an empty
+    // flow list has no block to append to, so it becomes the block form first.
+    final emptyFlow = lines.indexWhere(
+      (l) => RegExp(r'^modules:\s*\[\s*\]\s*(#.*)?$').hasMatch(l),
+    );
+    if (emptyFlow != -1) lines[emptyFlow] = 'modules:';
     final modulesIndex = lines.indexWhere((l) => l.trimRight() == 'modules:');
     if (modulesIndex == -1) return;
     // After the last `- ` item; comments and blank lines between items are

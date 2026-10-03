@@ -7,10 +7,10 @@ import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Concrete implementation of NetworkConfig, shared by every app. What differs
-/// per app comes from the sections `runShellApp` registers before the graph is
-/// built: the certificate pinning decision of each flavor — the app's
-/// [SslPinningPolicy] (`flavors.<f>.ssl_pinning` in its manifest) — and the
-/// languages it offers, its [LocaleProfile].
+/// per app comes from the section `runShellApp` registers before the graph is
+/// built: the languages the app offers, its [LocaleProfile]. (Certificate
+/// pinning is not here: it is the app's declared decision, installed by
+/// `AppInitializer.initBeforeRunApp` from `flavors.<f>.ssl_pinning`.)
 ///
 /// This fulfills dependencies of core_network, using core_ui_kit's
 /// `RetryDialog` for the retry prompt — the only reason
@@ -36,12 +36,10 @@ import 'package:material_ui/material_ui.dart';
 class NetworkConfigImpl implements NetworkConfig {
   NetworkConfigImpl(
     this._languageStorage, [
-    this._pinning = const SslPinningPolicy.none(),
     LocaleProfile locale = const LocaleProfile(),
   ]) : _languages = LanguageSet(locale);
 
   final ILanguageStorage _languageStorage;
-  final SslPinningPolicy _pinning;
   final LanguageSet _languages;
 
   /// Null in a build that composes no session owner.
@@ -110,23 +108,4 @@ class NetworkConfigImpl implements NetworkConfig {
       builder: (context) => RetryDialog(onRetry: onRetry, onCancel: onCancel),
     );
   }
-
-  /// The SPKI SHA-256 pins of the current flavor, as the app's manifest decided
-  /// them (`flavors.<f>.ssl_pinning`).
-  ///
-  /// **Empty means this flavor does not pin** — the decision is `disabled` (its
-  /// reason is logged at boot by `AppInitializer`), or the policy is the
-  /// hand-built `SslPinningPolicy.none()`. Pins are set in the manifest, never
-  /// here: `pins: ["<leaf>", "<backup>"]`, at least two so a certificate
-  /// rotation does not lock every installed client out of the API. To read the
-  /// pin for a host:
-  /// ```sh
-  /// openssl s_client -servername <host> -connect <host>:443 </dev/null \
-  ///   | openssl x509 -pubkey -noout \
-  ///   | openssl pkey -pubin -outform der \
-  ///   | openssl dgst -sha256 -binary \
-  ///   | openssl enc -base64
-  /// ```
-  @override
-  List<String> get sslPinningHashes => _pinning.hashesFor(AppConfig.appFlavor);
 }

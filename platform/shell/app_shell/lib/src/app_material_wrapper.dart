@@ -144,7 +144,9 @@ class AppMaterialWrapper extends StatelessWidget {
     required Locale locale,
     required LanguageSet languages,
   }) {
-    final title = AppConfig.title;
+    // What the app is called: its per-flavor `APP_NAME` when the build defines
+    // one, else `app.name` of its manifest.
+    final title = AppConfig.titleFor(getItOrNull<AppProfile>()?.facts.name);
     const debugShowCheckedModeBanner = false;
     const showPerformanceOverlay = false;
     // Localization configuration

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../module_generator/src/common_helpers.dart';
+import '../module_generator/src/module_type.dart';
 import 'support/composer_fixture.dart';
 import 'support/tool_harness.dart';
 
@@ -82,6 +84,7 @@ void main() {
           .replaceFirst(
             '  - name: feature\n',
             '  - name: data\n    phase: after\n    from_modules: data\n'
+                '    why: "implements the domain interfaces"\n'
                 '  - name: feature\n',
           );
 
@@ -230,19 +233,50 @@ void main() {
       // `foo` registers the session bundle and `routes`.
       expect(manifest, contains('  session: provided\n'));
       expect(manifest, contains('  routes: provided\n'));
-      // Nothing registers a splash: absent, with what the shell does instead —
-      // the catalog's text, never a placeholder.
+      // Nothing registers a splash: absent, and the reason says what is true
+      // of the app — no module composes it — never what the shell does
+      // without it (the report's "If absent" column says that, once). Not a
+      // placeholder `TODO`, either: `verify` passes.
       expect(
         manifest,
         contains(
           '  splash: { state: absent, reason: '
-          '"the native splash is kept" }\n',
+          '"not composed: no module this app composes registers '
+          '`IAppSplashScreen` — replace this with why the app goes without" }\n',
         ),
       );
+      expect(manifest, isNot(contains('the native splash is kept')));
       expect(manifest, isNot(contains('TODO')));
       expect(manifest, isNot(contains('TBD')));
       // Every platform is a runner still to be created.
       expect(manifest, contains('  windows: { runner: scaffold }\n'));
+    });
+
+    test('a bundle is described once, as a bundle, not by one member', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'bare', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      final manifest = ws.read('apps/bare/app_manifest.yaml');
+
+      // The members of the `session` bundle share one key: the reason names
+      // them all, instead of copying the sentence of the first to the rest.
+      expect(
+        manifest,
+        contains(
+          'not composed: no module this app composes registers the '
+          '`session` contracts (ISessionState, ISessionGateway)',
+        ),
+      );
+      // And the report keeps what the shell does without it in its own column.
+      final report = ws.read('apps/bare/README.md');
+      expect(report, contains('### 6. Decisions to revisit before shipping'));
+      expect(
+        report,
+        contains('`capabilities.session`: **absent** — not composed:'),
+        reason: 'a placeholder reason is listed until its author decides',
+      );
     });
 
     test('with no modules, every optional contract is absent', () async {
@@ -297,6 +331,61 @@ void main() {
         contains('- core_database'),
       );
       expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test(
+      'the smoke test asks the boot\'s own question, hooks included',
+      () async {
+        // A hand-rolled `validate(...)` call without `hasWindowHook` made P05
+        // fire forever for an app that declared a window and passed the hook.
+        final ws = await workspace();
+        expect(
+          await run(ws, ['new', 'kiosk', '--platforms', 'windows']),
+          exitsWith(0),
+        );
+        final smoke = ws.read('apps/kiosk/test/di_smoke_test.dart');
+        expect(
+          smoke,
+          contains('checkDeclaredStarts(appProfile, appHooks)'),
+        );
+        expect(
+          smoke,
+          contains("import 'package:kiosk_app/app/app_hooks.dart';"),
+        );
+        expect(smoke, isNot(contains('appProfile.validate(')));
+      },
+    );
+
+    test('an app with no modules can be given one by the generator', () async {
+      // `modules: []` is what `new` writes for an app with none; the generator
+      // used to roll back with "no `modules:` list in the expected format".
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'kiosk', '--platforms', 'windows']),
+        exitsWith(0),
+      );
+      CommonHelpers.registerInAppManifests(
+        'feature_panel',
+        ModuleType.feature,
+        'panel',
+        apps: const ['kiosk'],
+        root: ws.root,
+      );
+      expect(
+        ws.read('apps/kiosk/app_manifest.yaml'),
+        contains('modules:\n  - { id: panel, layers: [feature] }'),
+      );
+    });
+
+    test('says how to give the new app a module of its own', () async {
+      final ws = await workspace();
+      final result = await run(ws, ['new', 'bare', '--platforms', 'linux']);
+      expect(result, exitsWith(0));
+      expect(
+        result.output,
+        contains('--apps bare'),
+        reason: 'without --apps the generator adds the module to every app',
+      );
     });
 
     test('gives the smoke test of a database app its own doubles', () async {
@@ -405,6 +494,12 @@ void main() {
         expect(ws.exists('apps/reports/$folder'), isFalse, reason: folder);
       }
       expect(result.output, contains('does NOT run `flutter create`'));
+      // And the cleanup `flutter create` makes necessary: its sample test does
+      // not compile here and its analysis_options.yaml replaces the strict one.
+      expect(result.output, contains('rm -f test/widget_test.dart '));
+      expect(result.output, contains('analysis_options.yaml'));
+      expect(result.output, contains('rm -rf .idea *.iml'));
+      expect(result.output, contains('Only `env.dev` is written.'));
       expect(
         result.output,
         contains(

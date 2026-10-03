@@ -1,5 +1,5 @@
 /// The app shell's infrastructure adapters, shared by every app under
-/// `apps/`: `NetworkConfigImpl` (+ its `SslPinningConfig` binding),
+/// `apps/`: `NetworkConfigImpl`,
 /// `LanguageStorageImpl` / `ThemeStorageImpl` behind `core_di`'s
 /// `ILanguageStorage` / `IThemeStorage`, and the `AppBootStorage` boot flag.
 ///
@@ -12,7 +12,6 @@ library;
 // Auto-generated exports, do not edit manually.
 export 'di/module.dart';
 export 'di/module.module.dart';
-export 'di/network_binding_module.dart';
 export 'src/app_boot_storage.dart';
 export 'src/language_storage_impl.dart';
 export 'src/network_config_impl.dart';

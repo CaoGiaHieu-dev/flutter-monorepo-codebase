@@ -36,8 +36,9 @@ import '../navigation/app_router.dart';
 @lazySingleton
 class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
   /// [_platform] is what the app declared for the platform it runs on
-  /// (`registerAppProfile` registers it before DI); the template default —
-  /// deep links on — when none is given.
+  /// (`registerAppProfile` registers it before DI). The `const` default — the
+  /// template's, deep links on — serves a provider built by hand; a graph
+  /// resolves the registered section.
   DeeplinkProvider(
     this._router, [
     this._platform = const PlatformFacts.today(),

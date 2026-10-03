@@ -175,12 +175,13 @@ void main() {
     expect(logsAt(warning, _reason), isTrue);
   });
 
-  test('without a profile the behaviour is the one before apps declared '
-      'themselves', () {
-    AppInitializer.initBeforeRunApp();
+  test('reads only the profile: with nothing registered in DI, a pinned '
+      'decision is still installed', () {
+    expect(getIt.isRegistered<AppProfile>(), isFalse);
 
-    // No SslPinningConfig registered: the legacy ERROR, not the declared path.
-    expect(installedPinning(), isFalse);
-    expect(logsAt(error, 'no SslPinningConfig registered'), isTrue);
+    boot(pinned, AppPlatform.android, Flavor.prod);
+
+    expect(installedPinning(), isTrue);
+    expect(logsAt(error, 'NOT pinned'), isFalse);
   });
 }

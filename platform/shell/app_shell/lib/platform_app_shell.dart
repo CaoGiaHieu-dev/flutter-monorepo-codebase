@@ -16,7 +16,7 @@
 /// An app can also tell the shell what it is: [runShellApp] takes an
 /// `AppProfile` (its declared platforms, flavors and capabilities) and
 /// [ShellHooks] (its code at fixed points). The shell holds the declaration to
-/// what the app actually registers — [kShellContracts] is the one table of
+/// what the app actually registers — [SHELL_CONTRACTS] is the one table of
 /// what the shell resolves, [checkAppContract] the one check of it — and a
 /// boot that cannot start shows [BootErrorApp] instead of a blank window.
 library;
@@ -34,5 +34,6 @@ export 'src/navigation/app_router.dart';
 export 'src/provider/deeplink_provider.dart';
 export 'src/root_app.dart';
 export 'src/shell_hooks.dart';
+export 'src/utils/shell_contract_constants.dart';
 export 'src/widgets/navigator_wrapper_widget.dart';
 export 'src/widgets/undefined_route_widget.dart';

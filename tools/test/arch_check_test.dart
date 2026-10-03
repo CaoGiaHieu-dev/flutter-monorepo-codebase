@@ -609,7 +609,7 @@ void main() {
 
   group('R16 the shell catalog is complete', () {
     const catalogPath =
-        'platform/shell/app_shell/lib/src/composition/shell_contracts.dart';
+        'platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart';
 
     /// A catalog source with one row per type in [types].
     String catalog(List<String> types) {
@@ -623,7 +623,7 @@ void main() {
               "  whenAbsent: 'nothing',\n"
               '),',
       ];
-      return 'const List<ShellContract<Object>> kShellContracts = [\n'
+      return 'const List<ShellContract<Object>> SHELL_CONTRACTS = [\n'
           '${rows.join('\n')}\n];\n';
     }
 
@@ -730,7 +730,7 @@ void main() {
           rows: ['IFooContract'],
           extra: {
             catalogPath:
-                'const kShellContracts = [\n'
+                'const SHELL_CONTRACTS = [\n'
                 'ShellContract<IFooContract>(id: 1),\n'
                 '];\n',
           },

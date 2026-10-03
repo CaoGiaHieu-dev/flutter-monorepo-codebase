@@ -90,17 +90,18 @@ di_groups:
   - name: shell
     phase: after
     packages: [platform_shell_adapters, platform_app_shell]
-    why: "adapters first (storage adapters, AppBootStorage, NetworkConfig + SslPinningConfig), then router and deep links. ui depends on it"
+    why: "adapters first (storage adapters, AppBootStorage, NetworkConfig), then router and deep links. ui injects the storage adapters, so shell precedes it"
 
   - name: ui
     phase: after
     packages: [core_base_ui]
-    why: "ThemeProvider and LanguageProvider inject IThemeStorage / ILanguageStorage registered by shell (RULE-13)"
+    why: "ThemeProvider and LanguageProvider inject IThemeStorage / ILanguageStorage, which shell registers. They are lazy, so only an eager singleton added here would fail on another order (RULE-13); composer verify holds the order (V16)"
 
   - name: domain
     phase: after
     packages: [domain_core]
     from_modules: domain
+    why: "pure-Dart use cases and repository interfaces: data implements them and features inject them, so domain comes first of the three"
 
   - name: data
     phase: after
@@ -111,12 +112,14 @@ di_groups:
   - name: feature
     phase: after
     from_modules: feature
+    why: "screens, routes and controllers inject the use cases the domain and data groups register, so features come after both"
 
   - name: other
     phase: after
     packages:
       - provider_state_management
       - bloc_state_management
+    why: "no ordering constraint: the state-management bases register nothing, so they go last by convention"
 
 # ---------------------------------------------------------------------------
 # Modules this app composes.

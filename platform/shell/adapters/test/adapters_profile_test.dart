@@ -13,7 +13,7 @@ void main() {
 
   group('NetworkConfigImpl.getLocale follows the LocaleProfile', () {
     NetworkConfigImpl config(ILanguageStorage storage, LocaleProfile locale) =>
-        NetworkConfigImpl(storage, const SslPinningPolicy.none(), locale);
+        NetworkConfigImpl(storage, locale);
 
     test('a language the app does not offer is sent as its fallback', () async {
       final storage = await _languageStorage();

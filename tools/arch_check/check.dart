@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import '../composer/src/catalog.dart';
 import '../shared/contract_scan.dart';
@@ -32,6 +34,10 @@ const _approvedUpwardEdges = <String, String>{
       'Core -> Domain is the correct Clean Architecture direction.',
   'bloc_state_management -> domain_core':
       'BlocViewState.error carries AppFailure directly.',
+  'data_core -> domain_core':
+      'BaseRepository returns Result<T> and AppFailure, which live in '
+      'domain_core. Data -> Domain is the correct Clean Architecture '
+      'direction, and both packages are platform layers.',
 };
 
 /// The one file in an app that is allowed to name the modules it composes.
@@ -122,39 +128,19 @@ String? _platformGroupOf(MonorepoPackage pkg, String root) {
   return segments[1];
 }
 
-/// Why a domain package (`domain_*`, `domain_core` included) may not depend
-/// on [dep] — null when it may. RULE-03: pure Dart, no transport, and no
-/// workspace package outside the domain layer — `domain_core` and another
-/// module's `domain_*` are the only workspace edges a domain may have.
-String? _domainDependencyProblem(String dep) {
-  const flutterOrTransport = {
-    'flutter',
-    'dio',
-    'retrofit',
-    'material_ui',
-    'cupertino_ui',
-  };
-  if (flutterOrTransport.contains(dep)) return 'Flutter or transport';
-  for (final prefix in const ['core_', 'platform_', 'data_', 'feature_']) {
-    if (dep.startsWith(prefix)) return 'a `$prefix*` package';
-  }
-  return null;
-}
+/// Transport and persistence libraries: a layer that must stay free of them
+/// (the domain, the kernel) may not declare or import any.
+const _transportPackages = <String>{
+  'dio',
+  'retrofit',
+  'drift',
+  'go_router',
+  'http',
+};
 
-/// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
-/// binding anywhere in their dependency closure.
-///
-/// `platform_kernel` is the foundation every other package may depend on, so
-/// its dependency list becomes everyone's — the reason it is held to a harder
-/// line than `core_*`. A `*_contracts` package is the public surface between
-/// two modules and stays here for the same reason: an interface that cannot
-/// import `BuildContext` cannot quietly become a widget API.
-///
-/// `modules/*/domain` is covered by R2 instead, which predates this rule.
-bool _isPureDartTier(String packageName) =>
-    packageName == 'platform_kernel' || packageName.endsWith('_contracts');
-
-/// Anything that drags a Flutter binding in.
+/// Anything that drags a Flutter binding in, by name. A package not listed
+/// here is still caught when its own dependencies reach Flutter
+/// ([_FlutterClosure]).
 const _flutterBound = <String>{
   'flutter',
   'flutter_localizations',
@@ -165,6 +151,127 @@ const _flutterBound = <String>{
   'provider',
   'flutter_bloc',
 };
+
+/// Why a pure-Dart package (the domain, the kernel) may not use [dep] — null
+/// when it may. [flutter] is asked about packages that are not named in
+/// [_flutterBound] or [_transportPackages]: a Flutter plugin, or a package
+/// that depends on the Flutter SDK, is as unusable on a Dart VM as the SDK.
+String? _pureDartProblem(String dep, _FlutterClosure flutter) {
+  if (_transportPackages.contains(dep))
+    return 'a transport or persistence package';
+  if (_flutterBound.contains(dep)) return 'Flutter or a Flutter-bound package';
+  final culprit = flutter.culprit(dep);
+  if (culprit != null) {
+    return culprit == dep
+        ? 'a Flutter plugin'
+        : 'it depends on the Flutter-bound `$culprit`';
+  }
+  return null;
+}
+
+/// Why a domain package (`domain_*`, `domain_core` included) may not depend
+/// on [dep] — null when it may. RULE-03: pure Dart, no transport, and no
+/// workspace package outside the domain layer — `domain_core` and another
+/// module's `domain_*` are the only workspace edges a domain may have. A
+/// module API package is refused as well: it is what a *feature* reaches a
+/// module through, and a domain depending on one would point inward-out.
+String? _domainDependencyProblem(String dep, _FlutterClosure flutter) {
+  for (final prefix in const ['core_', 'platform_', 'data_', 'feature_']) {
+    if (dep.startsWith(prefix)) return 'a `$prefix*` package';
+  }
+  if (_apiPackages.contains(dep)) return 'a module API package';
+  return _pureDartProblem(dep, flutter);
+}
+
+/// The pure-Dart tier: packages that must run on a Dart VM, with no Flutter
+/// binding anywhere in their dependency closure.
+///
+/// `platform_kernel` is the foundation every other package may depend on, so
+/// its dependency list becomes everyone's — the reason it is held to a harder
+/// line than `core_*`.
+///
+/// `modules/*/domain` and `domain_core` are covered by R2 instead, which holds
+/// them to the same transport and Flutter lists.
+bool _isPureDartTier(String packageName) => packageName == 'platform_kernel';
+
+/// Which packages drag Flutter in, by what they declare rather than by name.
+///
+/// A package is Flutter-bound when it depends on the Flutter SDK
+/// (`flutter: sdk: flutter`, `flutter_localizations`, …) or is a Flutter
+/// plugin (a top-level `flutter: plugin:` section), or when any package it
+/// depends on is. Workspace packages are read from their own pubspec; hosted
+/// ones from `.dart_tool/package_config.json`, which `pub get` writes. Without
+/// that file only the workspace and the named lists are known — the gate runs
+/// after `pub get` in CI, where the file is always there.
+class _FlutterClosure {
+  _FlutterClosure(String root, this._workspace)
+    : _hosted = _readPackageConfig(root);
+
+  final Map<String, MonorepoPackage> _workspace;
+  final Map<String, String> _hosted;
+  final Map<String, String?> _memo = {};
+
+  /// Package name -> the directory pub resolved it to.
+  static Map<String, String> _readPackageConfig(String root) {
+    final file = File(p.join(root, '.dart_tool', 'package_config.json'));
+    if (!file.existsSync()) return const {};
+    try {
+      final json = jsonDecode(file.readAsStringSync());
+      final out = <String, String>{};
+      for (final entry in (json as Map)['packages'] as List) {
+        final name = (entry as Map)['name'] as String;
+        final dir = file.uri.resolve('${entry['rootUri']}/');
+        out[name] = p.posix.normalize(dir.toFilePath().replaceAll(r'\', '/'));
+      }
+      return out;
+    } on Object {
+      return const {};
+    }
+  }
+
+  YamlMap? _pubspecOf(String name) {
+    final member = _workspace[name];
+    if (member != null) return member.pubspec;
+    final dir = _hosted[name];
+    if (dir == null) return null;
+    final file = File(p.join(dir, 'pubspec.yaml'));
+    if (!file.existsSync()) return null;
+    try {
+      final yaml = loadYaml(file.readAsStringSync());
+      return yaml is YamlMap ? yaml : null;
+    } on YamlException {
+      return null;
+    }
+  }
+
+  /// The Flutter-bound package reached from [name] (itself included), or null.
+  String? culprit(String name) {
+    if (_memo.containsKey(name)) return _memo[name];
+    _memo[name] = null; // a dependency cycle ends here
+    return _memo[name] = _resolve(name);
+  }
+
+  String? _resolve(String name) {
+    if (_flutterBound.contains(name)) return name;
+    final yaml = _pubspecOf(name);
+    if (yaml == null) return null;
+    final flutterSection = yaml['flutter'];
+    if (flutterSection is YamlMap && flutterSection.containsKey('plugin')) {
+      return name;
+    }
+    final deps = yaml['dependencies'];
+    if (deps is! YamlMap) return null;
+    for (final entry in deps.entries) {
+      final dep = entry.key;
+      if (dep is! String) continue;
+      final spec = entry.value;
+      if (spec is YamlMap && spec['sdk'] == 'flutter') return dep;
+      final found = culprit(dep);
+      if (found != null) return found;
+    }
+    return null;
+  }
+}
 
 /// Packages every Dart package may import without declaring: they ship with
 /// the SDK rather than through `pubspec.yaml` resolution.
@@ -234,16 +341,24 @@ List<_PackageRef> _packageRefsIn(String content) {
 /// Naming is already enforced (§4), so the name is the more reliable signal,
 /// and it survives any relayout.
 ///
+/// The exception to the exception: every package under `platform/` is `core`,
+/// whatever its name. `data_core` and `domain_core` carry the `data_` /
+/// `domain_` prefix but are platform layers — classified by name they were
+/// taken for a product data / domain package, which exempted them from R1.
+/// The folder is the one thing that says "platform", and a package that sits
+/// there (or stray, directly under it) belongs to the platform.
+///
 /// The one exception is an app, which is recognised by the marker `composer`
 /// uses — an `app_manifest.yaml` beside its pubspec — because app packages
 /// are named for the product (`app`, `admin_app`), not for a layer. Matching
 /// `app` / `app_*` by name classified a second app called `admin_app` as
 /// core: R1 then flagged its composition root and R10 skipped it entirely.
-String _layerOf(MonorepoPackage pkg) {
+String _layerOf(MonorepoPackage pkg, String root) {
   final name = pkg.name;
   if (File(p.join(pkg.rootPath, 'app_manifest.yaml')).existsSync()) {
     return 'app';
   }
+  if (_platformGroupOf(pkg, root) != null) return 'core';
   if (name.startsWith('domain_')) return 'domain';
   if (name.startsWith('data_')) return 'data';
   if (name.startsWith('feature_')) return 'features';
@@ -275,6 +390,18 @@ String _stripComment(String line) {
   return i == -1 ? line : line.substring(0, i);
 }
 
+/// Every `.dart` file under `<packageRoot>/<dir>` (`test`, say), POSIX paths.
+/// Empty when the folder does not exist.
+List<String> _dartFilesUnder(String packageRoot, String dir) {
+  final folder = Directory(p.posix.join(packageRoot, dir));
+  if (!folder.existsSync()) return const [];
+  return [
+    for (final e in folder.listSync(recursive: true, followLinks: false))
+      if (e is File && p.extension(e.path) == '.dart')
+        p.posix.normalize(e.path.replaceAll(r'\', '/')),
+  ];
+}
+
 /// A DI lookup that throws when the type is unregistered.
 ///
 /// `getItOrNull<` and `getAllOrEmpty<` do not match: the literal `getIt<` /
@@ -292,6 +419,74 @@ String? _moduleOf(MonorepoPackage pkg) {
   final segments = p.posix.split(pkg.rootPath.replaceAll(r'\', '/'));
   final i = segments.lastIndexOf('modules');
   return (i == -1 || i + 1 >= segments.length) ? null : segments[i + 1];
+}
+
+/// R1: whether a platform package may not reach [target] at all — it is on
+/// the module side of the ring (a `feature_*`, `data_*`, `domain_*` or
+/// `<id>_api` package, by name, or any package living under `modules/`).
+/// `domain_core` / `data_core` match by name too: reaching them is the
+/// approved-edge list's business, not a free pass.
+bool _isUpwardOfPlatform(String target, Map<String, MonorepoPackage> packages) {
+  if (target.startsWith('feature_') ||
+      target.startsWith('data_') ||
+      target.startsWith('domain_') ||
+      _apiPackages.contains(target)) {
+    return true;
+  }
+  final pkg = packages[target];
+  return pkg != null && _moduleOf(pkg) != null;
+}
+
+/// R3: why [pkg] (a feature or a data package) may not depend on [dep], or
+/// null when it may. Returns the noun phrase and the way out.
+///
+/// `Feature -> Domain <- Data`: a feature never reaches another feature or any
+/// data package (it uses the other module's `<id>_api`); a data package never
+/// reaches a feature, nor another module's data package (module data is
+/// private to the module that owns it). A module's API package is open to
+/// both — it is the public surface.
+(String what, String hint)? _moduleLayerProblem(
+  MonorepoPackage pkg,
+  String layer,
+  String dep,
+  Map<String, MonorepoPackage> packages,
+) {
+  if (dep == pkg.name) return null;
+  if (layer == 'features') {
+    if (dep.startsWith('feature_')) {
+      return (
+        'another feature',
+        'Depend on that module\'s API package (`modules/<id>/api`, '
+            '`<id>_api`) or a core_di contract instead.',
+      );
+    }
+    if (dep.startsWith('data_')) {
+      return ('data package', 'Features depend on domain, never on data.');
+    }
+  }
+  if (layer == 'data') {
+    if (dep.startsWith('feature_')) {
+      return (
+        'feature',
+        'Data implements domain contracts; it never reaches the UI layer.',
+      );
+    }
+    if (dep.startsWith('data_') && dep != 'data_core') {
+      final other = packages[dep];
+      final sameModule =
+          other != null &&
+          _moduleOf(pkg) != null &&
+          _moduleOf(pkg) == _moduleOf(other);
+      if (!sameModule) {
+        return (
+          'another module\'s data package',
+          'A module\'s data stays private to it: go through its domain '
+              'contract or its `<id>_api` package.',
+        );
+      }
+    }
+  }
+  return null;
 }
 
 /// R16: the shell catalog (`SHELL_CONTRACTS` in `platform_app_shell`) names
@@ -482,8 +677,13 @@ void main(List<String> args) {
     _catalogViolations(root, packages, contractTypes, removableContracts),
   );
 
+  final flutter = _FlutterClosure(root, packages);
+
   for (final pkg in packages.values) {
-    final layer = _layerOf(pkg);
+    final layer = _layerOf(pkg, root);
+    // A domain package is recognised by its name even when it sits under
+    // `platform/` (`domain_core`, classified `core`): RULE-03 holds it too.
+    final isDomain = pkg.name.startsWith('domain_') && layer != 'app';
     final files = dartFilesUnderLib(pkg.rootPath);
     // Parsed from YAML by MonorepoHelper — a hand-rolled line scanner
     // silently drops entries after a blank line inside the block.
@@ -499,12 +699,8 @@ void main(List<String> args) {
         final target = ref.package;
         final edge = '${pkg.name} -> $target';
 
-        if (layer == 'core') {
-          final upward =
-              target.startsWith('feature_') ||
-              target.startsWith('data_') ||
-              target.startsWith('domain_') ||
-              _apiPackages.contains(target);
+        if (layer == 'core' && target != pkg.name) {
+          final upward = _isUpwardOfPlatform(target, packages);
           if (upward && !_approvedUpwardEdges.containsKey(edge)) {
             blocking.add(
               Violation(
@@ -517,26 +713,15 @@ void main(List<String> args) {
           }
         }
 
-        if (layer == 'features') {
-          if (target.startsWith('feature_') && target != pkg.name) {
+        if (layer == 'features' || layer == 'data') {
+          final problem = _moduleLayerProblem(pkg, layer, target, packages);
+          if (problem != null) {
             blocking.add(
               Violation(
                 'R3',
                 '$rel:${ref.line}',
-                '`${pkg.name}` imports another feature `$target`. '
-                    'Depend on that module\'s API package '
-                    '(`modules/<id>/api`, `<id>_api`) or a core_di contract '
-                    'instead.',
-              ),
-            );
-          }
-          if (target.startsWith('data_')) {
-            blocking.add(
-              Violation(
-                'R3',
-                '$rel:${ref.line}',
-                '`${pkg.name}` imports data package `$target`. '
-                    'Features depend on domain, never on data.',
+                '`${pkg.name}` imports ${problem.$1} `$target`. '
+                    '${problem.$2}',
               ),
             );
           }
@@ -561,8 +746,8 @@ void main(List<String> args) {
           }
         }
 
-        if (layer == 'domain') {
-          final problem = _domainDependencyProblem(target);
+        if (isDomain) {
+          final problem = _domainDependencyProblem(target, flutter);
           if (problem != null) {
             blocking.add(
               Violation(
@@ -600,11 +785,8 @@ void main(List<String> args) {
 
     if (layer == 'core') {
       for (final dep in declared) {
-        final upward =
-            dep.startsWith('feature_') ||
-            dep.startsWith('data_') ||
-            dep.startsWith('domain_') ||
-            _apiPackages.contains(dep);
+        if (dep == pkg.name) continue;
+        final upward = _isUpwardOfPlatform(dep, packages);
         if (upward &&
             !_approvedUpwardEdges.containsKey('${pkg.name} -> $dep')) {
           blocking.add(
@@ -616,6 +798,20 @@ void main(List<String> args) {
             ),
           );
         }
+      }
+    }
+
+    if (layer == 'features' || layer == 'data') {
+      for (final dep in declared) {
+        final problem = _moduleLayerProblem(pkg, layer, dep, packages);
+        if (problem == null) continue;
+        blocking.add(
+          Violation(
+            'R3',
+            pubspecRel,
+            '`${pkg.name}` declares ${problem.$1} `$dep`. ${problem.$2}',
+          ),
+        );
       }
     }
 
@@ -656,6 +852,19 @@ void main(List<String> args) {
       for (final dep in declared) {
         final target = packages[dep];
         if (target == null || dep == pkg.name) continue;
+        // Every platform group sits below every module: a modules/ package is
+        // a target no group may reach (R1 says the same by name).
+        if (_moduleOf(target) != null) {
+          blocking.add(
+            Violation(
+              'R11',
+              pubspecRel,
+              '`${pkg.name}` (platform/$group) depends on `$dep`, a package '
+                  'under modules/. No platform group may reach a module.',
+            ),
+          );
+          continue;
+        }
         final targetGroup = _platformGroupOf(target, root);
         if (targetGroup == null || targetGroup == 'invalid') continue;
         if (allowed.contains(targetGroup)) continue;
@@ -671,9 +880,9 @@ void main(List<String> args) {
       }
     }
 
-    if (layer == 'domain') {
+    if (isDomain) {
       for (final dep in declared) {
-        final problem = _domainDependencyProblem(dep);
+        final problem = _domainDependencyProblem(dep, flutter);
         if (problem == null) continue;
         blocking.add(
           Violation(
@@ -746,34 +955,31 @@ void main(List<String> args) {
     // Dart VM — without a single `package:flutter` import in its source.
     if (_isPureDartTier(pkg.name)) {
       for (final dep in declared) {
-        if (_flutterBound.contains(dep)) {
-          blocking.add(
-            Violation(
-              'R9',
-              p.posix.relative(
-                p.posix.join(pkg.rootPath, 'pubspec.yaml'),
-                from: root,
-              ),
-              '`${pkg.name}` is pure-Dart tier but declares `$dep`. '
-                  'Move whatever needs it into a Flutter-side package.',
-            ),
-          );
-        }
+        final problem = _pureDartProblem(dep, flutter);
+        if (problem == null) continue;
+        blocking.add(
+          Violation(
+            'R9',
+            pubspecRel,
+            '`${pkg.name}` is pure-Dart tier but declares `$dep` ($problem). '
+                'Move whatever needs it into a Flutter-side package.',
+          ),
+        );
       }
       for (final file in files) {
         if (isGeneratedSource(file)) continue;
         final content = File(file).readAsStringSync();
         for (final ref in _packageRefsIn(content)) {
-          if (_flutterBound.contains(ref.package)) {
-            blocking.add(
-              Violation(
-                'R9',
-                '${p.posix.relative(file, from: root)}:${ref.line}',
-                '`${pkg.name}` is pure-Dart tier and must not import '
-                    '`${ref.package}`.',
-              ),
-            );
-          }
+          final problem = _pureDartProblem(ref.package, flutter);
+          if (problem == null) continue;
+          blocking.add(
+            Violation(
+              'R9',
+              '${p.posix.relative(file, from: root)}:${ref.line}',
+              '`${pkg.name}` is pure-Dart tier and must not import '
+                  '`${ref.package}` ($problem).',
+            ),
+          );
         }
       }
     }
@@ -823,11 +1029,20 @@ void main(List<String> args) {
     // time, before any lookup runs. `network_config_impl.dart` imported
     // `data_auth` and `domain_auth` for exactly this reason and made the auth
     // module unremovable while every document claimed otherwise.
-    if (_layerOf(pkg) == 'app') {
-      for (final file in files) {
+    //
+    // The app's tests are held to the same line: a test that names a module
+    // type is a build that stops compiling when the module is removed, and a
+    // removed module is exactly what the smoke test exists to prove boots.
+    // Only the composition root *in lib/* may name a module.
+    if (layer == 'app') {
+      final libRoot = p.posix.join(pkg.rootPath, 'lib');
+      for (final file in [...files, ..._dartFilesUnder(pkg.rootPath, 'test')]) {
         if (isGeneratedSource(file)) continue;
         final rel = p.posix.relative(file, from: root);
-        if (p.posix.basename(file) == _compositionRoot) continue;
+        if (p.posix.basename(file) == _compositionRoot &&
+            p.posix.isWithin(libRoot, file)) {
+          continue;
+        }
 
         final content = File(file).readAsStringSync();
         for (final ref in _packageRefsIn(content)) {
@@ -836,8 +1051,8 @@ void main(List<String> args) {
             Violation(
               'R10',
               '$rel:${ref.line}',
-              'the app shell imports `${ref.package}`. Only '
-                  '`$_compositionRoot` may name a module (its API package '
+              'the app imports `${ref.package}`. Only '
+                  '`lib/**/$_compositionRoot` may name a module (its API package '
                   'included); everywhere else '
                   'declare a contract in `core_di` and resolve it with '
                   '`getItOrNull`. A type import cannot be guarded — it fails '
@@ -1050,6 +1265,24 @@ List<Violation> _hygieneViolations(String root) {
       continue;
     }
 
+    // --- R13: no package-local analyzer configuration ----------------------
+    // The root analysis_options.yaml is the one lint set (changing it is held
+    // by review). A package-local file replaces it for that package and can
+    // switch any rule off with no `// ignore` for R13's comment scan to see.
+    if (p.posix.basename(rel) == 'analysis_options.yaml' &&
+        segments.length > 1) {
+      out.add(
+        Violation(
+          'R13',
+          rel,
+          'package-local analysis_options.yaml. Only the repository root '
+              'holds one: a nested file silently replaces the shared lint set '
+              'for its package. Delete it and fix what it was hiding.',
+        ),
+      );
+      continue;
+    }
+
     if (!rel.endsWith('.dart') || _isGeneratedForHygiene(rel)) continue;
 
     final inProductTree =
@@ -1140,7 +1373,7 @@ List<Violation> _hygieneViolations(String root) {
 
   // --- R14: data_sources/, never datasources/ -----------------------------
   // Walked as directories so an empty `datasources/` is caught as well.
-  for (final top in const ['modules', 'platform']) {
+  for (final top in const ['modules', 'platform', 'apps']) {
     final dir = Directory(p.join(root, top));
     if (!dir.existsSync()) continue;
     void walk(Directory d) {
@@ -1174,9 +1407,9 @@ void _report(
   Duration elapsed,
 ) {
   const ruleTitles = <String, String>{
-    'R1': 'Dependency direction (core must not reach outward)',
+    'R1': 'Dependency direction (platform must not reach modules)',
     'R2': 'Domain is pure Dart',
-    'R3': 'Feature and module-API boundaries',
+    'R3': 'Module layer boundaries (feature, data, API)',
     'R4': 'Package constants live in utils/',
     'R5': 'Every import is declared',
     'R6': 'Generated files are not hand-edited',
@@ -1186,7 +1419,7 @@ void _report(
     'R10': 'The app shell composes modules, it does not import them',
     'R11': 'Platform group direction',
     'R12': 'No PowerShell scripts',
-    'R13': 'No analyzer suppressions in hand-written Dart',
+    'R13': 'No analyzer suppressions or package-local lint config',
     'R14': 'Data source folders are data_sources/',
     'R15': 'The I prefix is reserved for interfaces',
     'R16': 'The shell contract catalog is complete',
@@ -1251,26 +1484,36 @@ so it can gate CI.
 
 RULES CHECKED
   R1  Dependency direction
-      No platform/* package may import or declare a feature_*, data_*,
-      domain_* or module API (<id>_api) package, except for the approved edges
-      listed at the top of the run. Checked in both lib/ imports and
+      No package under platform/ — every group, platform/layers/data
+      (data_core) and platform/layers/domain (domain_core) included — may
+      import or declare a feature_*, data_*, domain_* or module API (<id>_api)
+      package, or any package living under modules/, except for the approved
+      edges listed at the top of the run. A platform package is recognised by
+      its folder, not by its name. Checked in both lib/ imports and
       pubspec.yaml.
 
   R2  Domain is pure Dart
       No domain_* package (domain_core included) may import or declare under
-      `dependencies:` flutter, material_ui, cupertino_ui, dio or retrofit, nor
-      any core_*, platform_*, data_* or feature_* package. domain_core and
+      `dependencies:` flutter, material_ui, cupertino_ui, go_router, provider,
+      flutter_bloc, dio, retrofit, drift or http, nor any core_*, platform_*,
+      data_*, feature_* or module API (<id>_api) package, nor any package that
+      is a Flutter plugin or depends on the Flutter SDK (found through the
+      pubspecs pub resolved, `.dart_tool/package_config.json`). domain_core and
       other domain_* packages are its only workspace dependencies
       (dev_dependencies are not checked).
 
-  R3  Feature and module-API boundaries
-      A feature may not import another feature, nor any data_* package.
-      Cross-feature work goes through the other module's API package
+  R3  Module layer boundaries (Feature -> Domain <- Data)
+      A feature may not import or declare another feature, nor any data_*
+      package. A data package may not import or declare a feature_* package,
+      nor another module's data_* package (data_core and its own module's are
+      fine). Cross-feature work goes through the other module's API package
       (modules/<id>/api, named <id>_api) or a product-neutral contract in
       core_di. An API package (<id>_api under modules/) may depend on
       platform/foundation/ packages and Flutter/pub packages only — never on
       its own module's domain/data/feature, another module's package or API,
-      or any other platform group. Checked in lib/ imports and pubspec.yaml.
+      or any other platform group. (A domain package may not use an API
+      package either: R2.) Checked in lib/ imports and pubspec.yaml, so a
+      dependency declared and never imported fails too.
 
   R4  Package constants live in utils/
       A *public* `static const` must sit in a `utils/` directory (in practice
@@ -1306,16 +1549,22 @@ RULES CHECKED
       runtime on whichever screen calls it.
 
   R9  The pure-Dart tier stays pure
-      `platform_kernel` and every `*_contracts` package must neither import a
-      Flutter-bound package nor declare one in `pubspec.yaml`. The pubspec half
-      matters: a package can declare a Flutter plugin and never write
-      `import 'package:flutter/...'`, which R2 would pass.
+      `platform_kernel` must neither import nor declare in `pubspec.yaml`:
+      Flutter and its bound packages (material_ui, cupertino_ui,
+      flutter_localizations, flutter_web_plugins, go_router, provider,
+      flutter_bloc), the transport and persistence libraries (dio, retrofit,
+      drift, http), or any package that is a Flutter plugin or depends on the
+      Flutter SDK, directly or through other packages (read from the
+      workspace pubspecs and `.dart_tool/package_config.json`). The pubspec
+      half matters: a package can declare a Flutter plugin and never write
+      `import 'package:flutter/...'`.
 
   R10 The app shell composes modules, it does not import them
       In an app (a package with app_manifest.yaml), only lib/di/injection.dart
       — the composition root — may import a domain_*, data_*, feature_* or
-      <id>_api package. Anywhere else a module import is an unguardable compile-time
-      dependency: the build breaks the moment that module is removed.
+      <id>_api package. Anywhere else — lib/ and the app's test/ included —
+      a module import is an unguardable compile-time dependency: the build
+      breaks the moment that module is removed.
 
   R11 Platform group direction
       Every package under platform/ sits in a group folder,
@@ -1345,10 +1594,14 @@ RULES CHECKED
       the cause; for a deprecation, migrate to the replacement API. Only real
       line comments count — the same text inside a string literal or a `///`
       doc comment is not a suppression and is not reported.
+      And no analysis_options.yaml except the repository root's: a
+      package-local file replaces the shared lint set for its package and can
+      switch rules off where no comment scan can see it. (Editing the root
+      file stays a review matter.)
 
   R14 Data source folders are data_sources/
-      No directory named `datasources` (any letter case) under modules/ or
-      platform/. The convention is data_sources/remote and data_sources/local.
+      No directory named `datasources` (any letter case) under modules/,
+      platform/ or apps/. The convention is data_sources/remote and data_sources/local.
       Checked on directories, so an empty one is reported too.
 
   R15 The I prefix is reserved for interfaces

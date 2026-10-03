@@ -88,8 +88,6 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `paths.google_play_key_prod` / `_dev` | Google Play service-account JSON files |
 | `paths.app_store_connect_key_filepath` | The `.p8` API key file. Its name **must be `AuthKey_<app_store_connect.api_key_id>.p8`** — the name App Store Connect gives the download. The TestFlight upload runs `xcrun altool --apiKey <id>`, which takes no key path: it looks only for that file name, in `$API_PRIVATE_KEYS_DIR` (the lane sets it to this file's directory) or in `./private_keys`, `~/private_keys`, `~/.private_keys`, `~/.appstoreconnect/private_keys`. Locally, a differently named file still uploads, through a temporary renamed copy and a warning; `fastlane.yml` refuses it |
 
-The former `paths.change_log_android` / `_ios` keys are gone (see [§3](#3-lanes)); if your `Config.yaml` still has them they are ignored.
-
 ### Gems and plugins
 
 The one plugin, `fastlane-plugin-firebase_app_distribution`, is already listed in `apps/mobile/fastlane/Pluginfile`. Install everything once and always run through Bundler:
@@ -115,7 +113,7 @@ Do not run `fastlane add_plugin`: the plugin is already there, the command is in
 
 Every lane is interactive: any parameter you omit is prompted for. Passing it on the command line skips the prompt, which is what makes the lanes CI-friendly.
 
-Without a terminal — CI, a pipe, `< /dev/null` — fastlane cannot prompt. A parameter you omit then takes its default and the lane says so (`Non-interactive: version not passed, using "1.0.0". Pass version:<value> to choose.`): `flutter_version` → `flutter.default_version`, `version` → `default_app_version`, `build_number` → `auto`, `build_type` → `apk`, `track` → `internal`, `change_log` → empty, and **`distribute_store` / `distribute_firebase` → `false`**, so nothing is uploaded unless the command line asks for it (the interactive prompt still offers Firebase by default). `flavor` has no default: the lane stops and asks for `flavor:<value>`. Before, the first omitted parameter crashed the run with `Could not retrieve response as fastlane runs in non-interactive mode` and a Ruby backtrace.
+Without a terminal — CI, a pipe, `< /dev/null` — fastlane cannot prompt. A parameter you omit then takes its default and the lane says so (`Non-interactive: version not passed, using "1.0.0". Pass version:<value> to choose.`): `flutter_version` → `flutter.default_version`, `version` → `default_app_version`, `build_number` → `auto`, `build_type` → `apk`, `track` → `internal`, `change_log` → empty, and **`distribute_store` / `distribute_firebase` → `false`**, so nothing is uploaded unless the command line asks for it (the interactive prompt still offers Firebase by default). `flavor` has no default: the lane stops and asks for `flavor:<value>`.
 
 The command-line values are checked before any setup starts: `version` must be one to three dot-separated integers (`1.2.0`), `build_number` a positive integer or `auto`, `build_type` `apk` or `aab`, `flavor` one of `VALID_FLAVORS` — anything else stops the lane at once with the accepted values.
 
@@ -154,7 +152,7 @@ A lane takes its change log from, in this order:
 2. `change_log_file:` — a file whose path is passed **explicitly**. The cross-platform lanes write the change log once to a temp directory **outside the repository**, pass it to both children as `change_log_file:`, and delete it in an `ensure` block whether the run succeeded or not;
 3. an interactive prompt.
 
-Nothing is read implicitly and nothing is written back. (The lanes used to read a fixed `change_log_<platform>.txt` *before* looking at `change_log:`, so a file left behind by an interrupted run silently replaced the change log you passed.)
+Nothing is read implicitly and nothing is written back.
 
 Valid values enforced by `helpers.rb`:
 
@@ -186,7 +184,7 @@ bundle exec fastlane store version:1.2.0 build_number:auto track:internal
 
 ### Build numbers
 
-`build_number` accepts a positive integer or `auto`; an **empty** value (`build_number:` — what a CI input left blank produces) also means `auto`. Anything else (`0`, `abc`) stops the lane: it used to become `"".to_i` = `0` and ship as `--build-number=0`. With `auto`, `determine_build_number` works it out:
+`build_number` accepts a positive integer or `auto`; an **empty** value (`build_number:` — what a CI input left blank produces) also means `auto`. Anything else (`0`, `abc`) stops the lane. With `auto`, `determine_build_number` works it out:
 
 | Distribution | `auto` resolves to |
 |:---|:---|
@@ -314,7 +312,7 @@ create("staging") {
 `<base>` is `app_bundle_ids.android` / `app_bundle_ids.ios` from `Config.yaml`. The Xcode identifiers are set per build configuration (`Debug-<flavor>`, `Release-<flavor>`, `Profile-<flavor>`) in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj`, and `tools/firebase/firebase_config.dart` registers the same `.staging` iOS ID.
 
 > [!NOTE]
-> These lists are maintained independently and nothing checks that they agree. If Fastlane computed `.staging` while Gradle produced `.stg` — or `.stg` while Xcode produced `.staging`, as it did before the helper took the platform — a staging upload would look up a store listing that does not match the artifact. If you add a flavor or rename a suffix, change the helper, Gradle **and** Xcode in the same commit.
+> These lists are maintained independently and nothing checks that they agree. If Fastlane computed `.staging` while Gradle produced `.stg` — or `.stg` while Xcode produced `.staging` — a staging upload would look up a store listing that does not match the artifact. If you add a flavor or rename a suffix, change the helper, Gradle **and** Xcode in the same commit.
 
 ---
 
@@ -372,7 +370,7 @@ Unless you pass `skip_setup:true`, every lane calls `setup_flutter_environment`.
 | `stable` (or empty) | `fvm install` — the `.fvmrc` pin | the `flutter` on PATH, as is |
 | exact, e.g. `3.47.4` | must equal the `.fvmrc` pin, else the lane stops (switching would rewrite the tracked `.fvmrc`) | must equal `flutter --version`, else the lane stops |
 
-Nothing is upgraded implicitly. `flutter_upgrade:true` (opt-in, non-FVM only) runs `flutter channel stable` + `flutter upgrade --force` first — it used to run on every `stable` build, silently moving the machine's toolchain. `flutter precache --ios` runs only for iOS builds on macOS.
+Nothing is upgraded implicitly. `flutter_upgrade:true` (opt-in, non-FVM only) runs `flutter channel stable` + `flutter upgrade --force` first. `flutter precache --ios` runs only for iOS builds on macOS.
 
 It then runs `install_dependencies`, with `fvm ` in front of `dart` / `flutter` when FVM is in use:
 
@@ -389,8 +387,7 @@ sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
 
 `--enforce-lockfile` builds from exactly the committed workspace `pubspec.lock`, and fails when it no longer matches the pubspecs instead of re-resolving.
 
-The barrel pass comes last because a barrel also exports generated files, and the `lib/src/gen/gen.dart` barrels are gitignored — it mirrors step 6 of `tools/workspace_setup/configure.dart`.
-
+The barrel pass comes last because a barrel also exports the generated files on disk — it mirrors step 6 of `tools/workspace_setup/configure.dart`.
 
 Because this runs `flutter clean` and a full workspace `build_runner`, it is slow. Use `skip_setup:true` for iterative local builds.
 

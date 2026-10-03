@@ -89,8 +89,6 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `paths.google_play_key_prod` / `_dev` | File JSON service-account của Google Play |
 | `paths.app_store_connect_key_filepath` | File API key `.p8`. Tên file **bắt buộc là `AuthKey_<app_store_connect.api_key_id>.p8`** — đúng tên App Store Connect đặt cho file tải về. Bước upload TestFlight chạy `xcrun altool --apiKey <id>`, lệnh này không nhận đường dẫn key: nó chỉ tìm file có đúng tên đó, trong `$API_PRIVATE_KEYS_DIR` (lane đặt biến này thành thư mục chứa file) hoặc trong `./private_keys`, `~/private_keys`, `~/.private_keys`, `~/.appstoreconnect/private_keys`. Ở local, file đặt tên khác vẫn upload được, qua một bản sao tạm đã đổi tên kèm cảnh báo; `fastlane.yml` thì từ chối |
 
-Hai khoá cũ `paths.change_log_android` / `_ios` đã bị bỏ (xem [§3](#3-danh-sách-lane)); nếu `Config.yaml` của bạn còn giữ chúng thì chúng bị bỏ qua.
-
 ### Gem và plugin
 
 Plugin duy nhất, `fastlane-plugin-firebase_app_distribution`, đã có sẵn trong `apps/mobile/fastlane/Pluginfile`. Cài mọi thứ một lần và luôn chạy qua Bundler:
@@ -116,7 +114,7 @@ Các lane không phụ thuộc locale: cả hai Fastfile đặt encoding ngoài 
 
 Mọi lane đều tương tác: tham số nào bạn không truyền thì nó sẽ hỏi. Truyền sẵn trên dòng lệnh sẽ bỏ qua câu hỏi — đó là điều khiến các lane này dùng được trong CI.
 
-Khi không có terminal — CI, một pipe, `< /dev/null` — fastlane không thể hỏi. Tham số bạn bỏ qua khi đó nhận giá trị mặc định và lane in ra điều đó (`Non-interactive: version not passed, using "1.0.0". Pass version:<value> to choose.`): `flutter_version` → `flutter.default_version`, `version` → `default_app_version`, `build_number` → `auto`, `build_type` → `apk`, `track` → `internal`, `change_log` → rỗng, và **`distribute_store` / `distribute_firebase` → `false`**, nên không có gì được upload nếu dòng lệnh không yêu cầu (câu hỏi tương tác vẫn mặc định chọn Firebase). `flavor` không có mặc định: lane dừng và yêu cầu `flavor:<giá trị>`. Trước đây, tham số đầu tiên bị bỏ qua làm lần chạy crash với `Could not retrieve response as fastlane runs in non-interactive mode` kèm backtrace Ruby.
+Khi không có terminal — CI, một pipe, `< /dev/null` — fastlane không thể hỏi. Tham số bạn bỏ qua khi đó nhận giá trị mặc định và lane in ra điều đó (`Non-interactive: version not passed, using "1.0.0". Pass version:<value> to choose.`): `flutter_version` → `flutter.default_version`, `version` → `default_app_version`, `build_number` → `auto`, `build_type` → `apk`, `track` → `internal`, `change_log` → rỗng, và **`distribute_store` / `distribute_firebase` → `false`**, nên không có gì được upload nếu dòng lệnh không yêu cầu (câu hỏi tương tác vẫn mặc định chọn Firebase). `flavor` không có mặc định: lane dừng và yêu cầu `flavor:<giá trị>`.
 
 Các giá trị trên dòng lệnh được kiểm tra trước khi bắt đầu setup: `version` phải gồm một đến ba số nguyên cách nhau bởi dấu chấm (`1.2.0`), `build_number` là số nguyên dương hoặc `auto`, `build_type` là `apk` hoặc `aab`, `flavor` thuộc `VALID_FLAVORS` — giá trị khác làm lane dừng ngay và liệt kê các giá trị hợp lệ.
 
@@ -155,7 +153,7 @@ Một lane lấy change log theo thứ tự sau:
 2. `change_log_file:` — một file mà đường dẫn được truyền **tường minh**. Các lane cross-platform ghi change log một lần vào thư mục tạm **nằm ngoài repo**, truyền nó cho cả hai lane con dưới dạng `change_log_file:`, rồi xoá trong khối `ensure` dù lần chạy thành công hay không;
 3. hỏi tương tác.
 
-Không có gì được đọc ngầm và cũng không có gì được ghi ngược lại. (Trước đây các lane đọc một file cố định `change_log_<platform>.txt` *trước cả khi* xét `change_log:`, nên một file còn sót lại từ lần chạy bị ngắt giữa chừng sẽ âm thầm thay thế change log bạn truyền vào.)
+Không có gì được đọc ngầm và cũng không có gì được ghi ngược lại.
 
 Giá trị hợp lệ do `helpers.rb` kiểm soát:
 
@@ -187,7 +185,7 @@ bundle exec fastlane store version:1.2.0 build_number:auto track:internal
 
 ### Build number
 
-`build_number` nhận một số nguyên dương hoặc `auto`; giá trị **rỗng** (`build_number:` — thứ mà một input CI để trống sinh ra) cũng có nghĩa là `auto`. Mọi giá trị khác (`0`, `abc`) làm lane dừng lại: trước đây nó thành `"".to_i` = `0` và được build ra với `--build-number=0`. Với `auto`, `determine_build_number` tự tính:
+`build_number` nhận một số nguyên dương hoặc `auto`; giá trị **rỗng** (`build_number:` — thứ mà một input CI để trống sinh ra) cũng có nghĩa là `auto`. Mọi giá trị khác (`0`, `abc`) làm lane dừng lại. Với `auto`, `determine_build_number` tự tính:
 
 | Phân phối | `auto` thành |
 |:---|:---|
@@ -315,7 +313,7 @@ create("staging") {
 `<base>` là `app_bundle_ids.android` / `app_bundle_ids.ios` trong `Config.yaml`. Các identifier của Xcode được đặt theo từng build configuration (`Debug-<flavor>`, `Release-<flavor>`, `Profile-<flavor>`) trong `apps/mobile/ios/Runner.xcodeproj/project.pbxproj`, và `tools/firebase/firebase_config.dart` cũng đăng ký đúng ID iOS `.staging` đó.
 
 > [!NOTE]
-> Các danh sách này được duy trì độc lập và không có gì kiểm tra xem chúng có khớp nhau hay không. Nếu Fastlane tính ra `.staging` trong khi Gradle sinh `.stg` — hoặc `.stg` trong khi Xcode sinh `.staging`, như trước khi helper nhận thêm platform — một lần upload staging sẽ tra tới một store listing không khớp artifact. Nếu thêm flavor hay đổi hậu tố, hãy sửa helper, Gradle **và** Xcode trong cùng một commit.
+> Các danh sách này được duy trì độc lập và không có gì kiểm tra xem chúng có khớp nhau hay không. Nếu Fastlane tính ra `.staging` trong khi Gradle sinh `.stg` — hoặc `.stg` trong khi Xcode sinh `.staging` — một lần upload staging sẽ tra tới một store listing không khớp artifact. Nếu thêm flavor hay đổi hậu tố, hãy sửa helper, Gradle **và** Xcode trong cùng một commit.
 
 ---
 
@@ -373,7 +371,7 @@ Trừ khi bạn truyền `skip_setup:true`, mọi lane đều gọi `setup_flutt
 | `stable` (hoặc rỗng) | `fvm install` — bản `.fvmrc` ghim | `flutter` trên PATH, giữ nguyên |
 | cụ thể, ví dụ `3.47.4` | phải bằng bản `.fvmrc` ghim, không thì lane dừng (chuyển phiên bản sẽ ghi đè `.fvmrc` đang được track) | phải bằng `flutter --version`, không thì lane dừng |
 
-Không có gì bị nâng cấp ngầm. `flutter_upgrade:true` (phải tự bật, chỉ khi không dùng FVM) chạy `flutter channel stable` + `flutter upgrade --force` trước — trước đây lệnh này chạy ở mọi bản build `stable`, âm thầm thay đổi toolchain của máy. `flutter precache --ios` chỉ chạy cho bản build iOS trên macOS.
+Không có gì bị nâng cấp ngầm. `flutter_upgrade:true` (phải tự bật, chỉ khi không dùng FVM) chạy `flutter channel stable` + `flutter upgrade --force` trước. `flutter precache --ios` chỉ chạy cho bản build iOS trên macOS.
 
 Sau đó nó chạy `install_dependencies`, thêm `fvm ` trước `dart` / `flutter` khi dùng FVM:
 
@@ -390,8 +388,7 @@ sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
 
 `--enforce-lockfile` build đúng theo `pubspec.lock` của workspace đã commit, và fail khi lockfile không còn khớp các pubspec thay vì resolve lại.
 
-Lượt sinh barrel chạy cuối cùng vì barrel còn export cả các file được sinh ra, và các barrel `lib/src/gen/gen.dart` nằm trong gitignore — nó làm y như bước 6 của `tools/workspace_setup/configure.dart`.
-
+Lượt sinh barrel chạy cuối cùng vì barrel còn export cả các file được sinh ra đang có trên đĩa — nó làm y như bước 6 của `tools/workspace_setup/configure.dart`.
 
 Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace nên rất chậm. Dùng `skip_setup:true` khi build đi build lại ở local.
 

@@ -16,7 +16,7 @@
 | JDK | **17 trở lên** (build được trên 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` là mức bytecode đích, không phải giới hạn trên |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
-| Ruby ≥ 3.0 | chỉ cần cho Fastlane | xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
+| Ruby ≥ 3.2 | chỉ cần cho Fastlane | `Gemfile.lock` đã commit do Bundler 4 ghi ra; xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 | Node.js + npm, một tài khoản Google, một Firebase project | chỉ cần cho cấu hình Firebase **thật** (§3) | Firebase CLI là một package npm; nếu dùng stub ở §3 thì bỏ qua cả ba |
 
 ### FVM là tuỳ chọn
@@ -49,7 +49,7 @@ flutter --version      # phải >= 3.47.4
 
 ## 2. Clone và dựng workspace
 
-Đây là **Pub Workspace**. Toàn bộ 31 thành viên workspace (28 package, hai app, và `tools`) dùng chung **một** lần resolve dependency duy nhất. Một script setup chuẩn bị cho tất cả:
+Đây là **Pub Workspace**. Toàn bộ 31 thành viên workspace (hai app, 12 package module, 16 package platform và `tools`) dùng chung **một** lần resolve dependency duy nhất. Một script setup chuẩn bị cho tất cả:
 
 ```bash
 git clone <repo-url>
@@ -58,29 +58,20 @@ cd flutter-monorepo-codebase
 dart tools/workspace_setup/configure.dart
 ```
 
-**`configure.dart` chính là bước setup**. Nó không phải lối tắt cho `pub get` + `build_runner`. Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
+**`configure.dart` chính là bước setup.** Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
 
 1. `dart pub global activate flutterfire_cli`. Chỉ nhánh Firebase thật ở [§3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được) dùng tới nó.
 2. `flutter clean` tại root.
 3. `flutter pub get` tại root. Bước này resolve cả workspace theo file `pubspec.lock` duy nhất ở root.
 4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/ui/design_system` và các feature auth, home, onboarding, settings, splash.
 5. `dart run build_runner build --workspace`, chạy injectable, freezed, json_serializable, retrofit, go_router_builder, drift và flutter_gen.
-6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì `injection.dart` của chúng do composer sinh ra.
+6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì app không có barrel. Trên một bản clone mới bước này không đổi gì: các barrel đã được commit.
 
 Script tự dùng `fvm` nếu máy bạn đã cài sẵn. Không có bản bọc `configure.sh` hay `configure.bat`, vì một script Dart chạy y hệt nhau trên mọi nền tảng.
 
-> [!IMPORTANT]
-> **Chỉ `flutter pub get` + `build_runner` thì chưa thành một bản setup chạy được.** `lib/src/src.dart` của `core_base_ui` và của mọi feature có bản dịch đều export `gen/gen.dart`. Barrel đó, cùng `gen/language/language.dart`, bị gitignore và chỉ được bước 6 ghi ra. Nếu dừng sau bước 5, `flutter analyze` báo khoảng 17 lỗi dạng:
->
-> ```
-> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/ui/design_system/lib/src/src.dart:3:8 • uri_does_not_exist
-> error • Undefined name 'AppLocalizations' • …
-> error • Undefined name 'Assets' • …
-> ```
->
-> Cách sửa: chạy `dart tools/workspace_setup/configure.dart`.
+Mỗi package có **một barrel được commit**, `lib/<package_name>.dart` (RULE-75). Barrel export mọi file library dưới `lib/`, kể cả các file sinh ra bị gitignore (output gen-l10n dưới `lib/src/gen/language/`, `assets.gen.dart`, `module.module.dart`). Vì vậy một bản clone mới là một bản setup chạy được khi `pub get`, gen-l10n và build_runner đã chạy xong; trước đó, `flutter analyze` báo `uri_does_not_exist` cho các export ấy.
 
-Nếu muốn làm tay thì phải chạy đủ các bước sau, theo đúng thứ tự (ví dụ bằng bash). Lượt barrel phải chạy **sau** gen-l10n và build_runner, vì nó export những file hai bước đó ghi ra:
+Nếu muốn làm tay thì chạy đủ ba bước sau, theo đúng thứ tự (ví dụ bằng bash). Lượt barrel chỉ cần khi bạn thêm, đổi tên hoặc xoá một file dưới `lib/` của package ([03_daily_workflow.md](03_daily_workflow.md)):
 
 ```bash
 flutter pub get
@@ -88,8 +79,6 @@ flutter pub get
 (cd platform/ui/design_system && flutter gen-l10n)
 for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
 dart run build_runner build --workspace
-# barrel cho mọi package có lib/, trừ các app
-for d in platform/*/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
 ```
 
 Những gì sẽ thấy ở một lần chạy sạch:
@@ -114,7 +103,7 @@ import 'firebase_options_staging.dart' as stg;
 
 Ba file đó được **sinh riêng cho từng dự án và bị git bỏ qua** (`apps/mobile/.gitignore` có dòng `firebase_options_*.dart`), vì chúng chứa định danh Firebase project của riêng bạn.
 
-Chúng thuộc về **app**, không thuộc `platform/`: Firebase options gắn với một bundle ID, nên mỗi app dùng Firebase sở hữu thư mục `lib/firebase/` của riêng nó. Trước đây chúng nằm trong `core_common`, khiến mọi app khác trong workspace nhận luôn options của app mobile. Khi chưa có chúng, `flutter analyze` báo:
+Chúng thuộc về **app**, không thuộc `platform/`: Firebase options gắn với một bundle ID, nên mỗi app dùng Firebase sở hữu thư mục `lib/firebase/` của riêng nó. Khi chưa có chúng, `flutter analyze` báo:
 
 ```
 error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:4:8 • uri_does_not_exist
@@ -138,7 +127,7 @@ Sau đó chạy từ thư mục gốc repo:
 dart tools/firebase/firebase_config.dart --app mobile
 ```
 
-Script yêu cầu Firebase CLI đã được cài và đã đăng nhập. Nếu thiếu, script in hướng dẫn cài đặt rồi thoát với mã 1; nó thử `firebase login` tối đa hai lần, từ chối chạy khi không có terminal, và `--help` in ra cách dùng. `configure.dart` đã activate `flutterfire_cli` từ trước. Script hỏi ba thứ: **Firebase project ID**, **base bundle ID / package name** (`com.example.codebase`) và danh sách flavor (mặc định `dev staging prod`). Sau đó nó chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode. Các file được ghi ra là `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`, đều tính tương đối với `apps/mobile/`. Package Android nhận hậu tố `.dev` / `.stg` / không hậu tố. Bundle ID iOS nhận `.dev` / `.staging` / không hậu tố. Có thể bỏ `--app` khi workspace chỉ có một app.
+Script yêu cầu Firebase CLI đã được cài và đã đăng nhập. Nếu thiếu, script in hướng dẫn cài đặt rồi thoát với mã 1; nó thử `firebase login` tối đa hai lần, từ chối chạy khi không có terminal, và `--help` in ra cách dùng. `configure.dart` đã activate `flutterfire_cli` từ trước. Script hỏi ba thứ: **Firebase project ID**, **base bundle ID / package name** (`com.example.codebase`) và danh sách flavor (mặc định `dev staging prod`). Sau đó nó chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode. Các file được ghi ra là `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`, đều tính tương đối với `apps/mobile/`. Package Android nhận hậu tố `.dev` / `.stg` / không hậu tố. Bundle ID iOS nhận `.dev` / `.staging` / không hậu tố. `--app` là bắt buộc vì workspace có nhiều hơn một app.
 
 > [!NOTE]
 > Script hỗ trợ đặt **mọi flavor vào cùng một project ID** mà bạn nhập. Muốn dev, staging và prod nằm ở các Firebase project riêng thì hãy chạy FlutterFire bằng tay, một lần cho mỗi môi trường, **từ `apps/mobile/`**:
@@ -262,25 +251,30 @@ APP_LINK_MODE=
 APP_NAME=
 ```
 
-Ba trong số đó xuất hiện trong Dart qua `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), đọc bằng `String.fromEnvironment`:
+Dart đọc chúng qua `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), nơi khai ba key bằng `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
   EnvConstants._();
 
+  /// The base URL for all API endpoints.
   static const String BASE_URL = String.fromEnvironment('BASE_URL');
+
+  /// The web domain whose links open the app (universal / app links).
   static const String WEB_DOMAIN = String.fromEnvironment('WEB_DOMAIN');
+
+  /// The name of the application.
   static const String APP_NAME = String.fromEnvironment('APP_NAME');
 }
 ```
 
 > [!NOTE]
-> `APP_LINK_MODE` **không** được khai trong `EnvConstants`: chỉ entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Vẫn giữ nó trong file env dù Dart không đọc. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env và `EnvConstants`.
+> `WEB_DOMAIN` và `APP_LINK_MODE` là `native_only: true` trong manifest: Gradle và Xcode đọc chúng, không có code Dart nào đọc. `APP_LINK_MODE` hoàn toàn không được khai trong `EnvConstants`; entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Giữ cả hai trong file env. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env, mục `env:` của manifest và `EnvConstants`.
 
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
 
-Một app đọc những key nào, và flavor nào phải có chúng khác rỗng, được khai trong `app_manifest.yaml` của app, dưới `env:` (`BASE_URL: { required_in: [prod] }`; `native_only: true` cho key chỉ Gradle hay Xcode đọc). Một bản build non-debug của flavor yêu cầu một key mà key đó đang rỗng sẽ dừng ở màn hình boot-error (`P03`) thay vì chạy mà không có mạng — nên một key chỉ bắt buộc ở nơi bản build thiếu nó là vô dụng: `APP_NAME` thì không, tiêu đề rơi về `app.name` trong manifest. và `composer verify` kiểm tra rằng các file env đang có chứa đúng các key đã khai (V11). Chính các flavor cũng được khai ở đó (`flavors:`), cùng quyết định pinning của từng app ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
+Một app đọc những key nào, và flavor nào phải có chúng khác rỗng, được khai trong `app_manifest.yaml` của app, dưới `env:` (`BASE_URL: { required_in: [prod] }`; `native_only: true` cho key chỉ Gradle hay Xcode đọc). Một bản build non-debug của flavor yêu cầu một key mà key đó đang rỗng sẽ dừng ở màn hình boot-error (`P03`) thay vì chạy mà không có mạng. Vì vậy một key chỉ bắt buộc ở nơi bản build thiếu nó là vô dụng: `APP_NAME` thì không, tiêu đề rơi về `app.name` trong manifest. `composer verify` kiểm tra rằng các file env đang có chứa đúng các key đã khai (V11). Chính các flavor cũng được khai ở đó (`flavors:`), cùng quyết định pinning của từng app ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
 ---
 
 ## 6. Chạy app
@@ -325,8 +319,7 @@ File kết quả nằm ở `apps/mobile/build/app/outputs/flutter-apk/app-dev-de
 `apps/mobile/android/gradle.properties` đặt `android.builtInKotlin=true`. Giữ nguyên, đừng tắt.
 
 Flutter đang chuyển plugin từ Kotlin Gradle Plugin (KGP) sang phần hỗ trợ Kotlin
-tích hợp sẵn trong Flutter Gradle plugin. Plugin nào đã migrate — lỗi này lộ ra ở
-đây qua `google_sign_in_android`, trước khi sample auth thôi phụ thuộc vào nó — sẽ
+tích hợp sẵn trong Flutter Gradle plugin. Plugin nào đã migrate sẽ
 biên dịch phần Java của nó dựa trên class sinh ra
 từ chính Kotlin sources của nó. Khi tắt cờ này, phần Kotlin đó không được biên
 dịch, và build chết ở những symbol trông như đáng lẽ phải tồn tại:
@@ -339,9 +332,8 @@ GoogleSignInPlugin.java:218: error: cannot find symbol
 Thông báo lỗi chỉ ra tên plugin chứ không nhắc tới cờ, nên rất dễ tưởng nhầm là
 lỗi version dependency. Không phải — ghim plugin về version cũ hơn cũng không cứu được.
 
-Tại thời điểm viết, `firebase_core` **chưa** migrate và vẫn dùng KGP (`firebase_auth`
-và `photo_manager` cũng vậy, nhưng đã rời khỏi workspace). Plugin như thế hiện vẫn
-build bình thường, chỉ cảnh báo:
+Plugin chưa migrate và vẫn dùng KGP (hiện là `firebase_core`) vẫn build bình
+thường, chỉ cảnh báo:
 
 ```
 WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): ...
@@ -377,7 +369,7 @@ Hãy xác nhận tên file trên thiết bị trước (`adb shell run-as <appli
 
 ```bash
 flutter analyze                     # kỳ vọng: No issues found!
-cd platform/infra/storage && flutter test && cd ../..
+(cd platform/infra/storage && flutter test)
 ```
 
 Nếu `flutter analyze` chưa sạch:
@@ -385,8 +377,8 @@ Nếu `flutter analyze` chưa sạch:
 | Bạn thấy | Nguyên nhân | Cách sửa |
 | :--- | :--- | :--- |
 | `Target of URI doesn't exist: 'firebase_options_dev.dart'` (và `_prod`, `_staging`) trong `firebase_module.dart` | Thiếu các file Firebase options bị gitignore | [Bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được), dùng file thật hoặc stub |
-| `Target of URI doesn't exist: 'gen/gen.dart'`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` (khoảng 17 lỗi) | Setup dừng trước lượt barrel, thường do chỉ chạy `pub get` + `build_runner` | Chạy `dart tools/workspace_setup/configure.dart` |
-| `Undefined class '_$…'`, không tìm thấy `… .g.dart` / `.freezed.dart` | Codegen chưa chạy hoặc đã cũ | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `dart run build_runner build --workspace` nếu đã setup một lần) |
+| `Target of URI doesn't exist` cho một file dưới `lib/src/gen/`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` | gen-l10n chưa chạy: các barrel export output bị gitignore của nó | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `flutter gen-l10n` trong package báo lỗi) |
+| `Undefined class '_$…'`, không tìm thấy `… .g.dart` / `.freezed.dart` / `.module.dart` | build_runner chưa chạy hoặc đã cũ | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `dart run build_runner build --workspace` nếu đã setup một lần) |
 
 ---
 

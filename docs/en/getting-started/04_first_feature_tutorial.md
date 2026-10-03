@@ -25,13 +25,13 @@ dart tools/module_generator/generate.dart 1 notes "" 1 1 --apps mobile
 
 The arguments are: `1` a feature, `notes` its name, `""` no package prefix, `1` Provider, `1` a stack route (`IFeatureRouteModule`). `--apps mobile` keeps the module out of `apps/admin`.
 
-It runs for about 90 seconds and ends with:
+It runs `pub get`, code generation and the barrel pass for the new package, so give it a minute or two. It ends with:
 
 ```text
 [V] Module "feature_notes" created.
 ```
 
-It then prints a "What is left for you to do by hand" list. You can skip it: its routes are already filled in. Its item 3 mentions `core_di`, but this tutorial puts the navigator in the module's own API package instead (step 9, RULE-22).
+It then prints a "What is left for you to do by hand" list. You can skip it: the page, the provider and the route are already filled in. Its item 3 is step 9 below: other features reach the screen through a navigator in the module's own API package (RULE-22).
 
 See what changed:
 
@@ -40,6 +40,7 @@ git status --short
 ```
 
 ```text
+ M apps/mobile/README.md
  M apps/mobile/app_manifest.yaml
  M apps/mobile/lib/di/injection.dart
  M apps/mobile/pubspec.yaml
@@ -47,7 +48,7 @@ git status --short
 ?? modules/notes/
 ```
 
-The generator added `- { id: notes, layers: [feature] }` to the mobile manifest. Then it ran `composer sync`, which rewrote the other three files. Never edit those three by hand (RULE-16).
+The generator added `- { id: notes, layers: [feature] }` to the mobile manifest. Then it ran `composer sync`, which rewrote the other four files: the root `workspace:` list, the app's path dependencies, `injection.dart` and the generated report in the app's README. Never edit those by hand (RULE-16).
 
 Run the tests the generator wrote:
 
@@ -70,7 +71,18 @@ Each package comes with one stub: `INotesRepository` with a placeholder `ping()`
 
 ## 3. Write the domain: entity, contract, use case
 
-The domain is pure Dart: no Flutter, no Dio, no `core_*` (RULE-03). Create the entity:
+The domain is pure Dart: no Flutter, no Dio, no `core_*` (RULE-03). The generated `pubspec.yaml` lists only what the generated stub imports (RULE-06), so declare Freezed before you write the entity. In the `pubspec.yaml` of `domain_notes`, add one entry to each of the two sections. The versions are the catalog's, from `pubspec_dependencies.yaml` (RULE-74):
+
+```yaml
+# modules/notes/domain/pubspec.yaml — add an entry under each existing section
+dependencies:
+  freezed_annotation: "^3.1.0"
+
+dev_dependencies:
+  freezed: "^4.0.0-dev.3"
+```
+
+Create the entity:
 
 ```dart
 // modules/notes/domain/lib/src/entities/note_entity.dart
@@ -128,6 +140,25 @@ class GetNotesUseCase extends BaseUseCase<List<NoteEntity>, NoParams> {
 ```
 
 ## 4. Write the data layer: model, fake data source, repository
+
+The data package needs the same treatment: its model uses Freezed and JSON. In the `pubspec.yaml` of `data_notes`, add:
+
+```yaml
+# modules/notes/data/pubspec.yaml — add an entry under each existing section
+dependencies:
+  freezed_annotation: "^3.1.0"
+  json_annotation: "^4.12.0"
+
+dev_dependencies:
+  freezed: "^4.0.0-dev.3"
+  json_serializable: "^6.14.1"
+```
+
+Then resolve the workspace:
+
+```bash
+flutter pub get
+```
 
 The model parses JSON and maps itself to the entity:
 
@@ -310,8 +341,8 @@ import 'package:domain_notes/domain_notes.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import '../extensions/extensions.dart';
-import '../provider/provider.dart';
+import '../extensions/l10n_notes_extension.dart';
+import '../provider/notes_provider.dart';
 
 class NotesPage extends StatelessWidget {
   const NotesPage({super.key});
@@ -537,67 +568,19 @@ Expect `All tests passed!` twice: four tests in the feature, two in the data pac
 
 ## 9. Let Home open the notes screen
 
-`feature_home` may not import `feature_notes` (RULE-04). It reaches the screen through a navigator interface in the notes module's **API package**, `notes_api` (RULE-22). No generator builds one; it is two files.
-
-Create the package's pubspec:
-
-```yaml
-# modules/notes/api/pubspec.yaml
-name: notes_api
-description: "Public API of the notes module — the contracts other features may depend on"
-version: 1.0.0
-publish_to: none
-
-environment:
-  sdk: ">=3.13.3 <4.0.0"
-  flutter: ">=3.47.4"
-
-resolution: workspace
-
-dependencies:
-  flutter:
-    sdk: flutter
-```
-
-Create the interface:
-
-```dart
-// modules/notes/api/lib/src/navigators/notes_navigator.dart
-import 'package:flutter/widgets.dart';
-
-/// Routes owned by the notes module, for other features to reach.
-/// Resolve it with `getItOrNull<NotesNavigator>()`.
-abstract class NotesNavigator {
-  void toNotes(BuildContext context);
-}
-```
-
-Add the `api` layer to the module's line in `apps/mobile/app_manifest.yaml`:
-
-```yaml
-# apps/mobile/app_manifest.yaml — under modules:
-  - { id: notes, layers: [api, data, domain, feature] }
-```
-
-Compose it, resolve it and export its files:
+`feature_home` may not import `feature_notes` (RULE-04). It reaches the screen through a navigator interface in the notes module's **API package**, `notes_api` (RULE-22). The generator builds it, and because `feature_notes` already exists it also wires the feature to it:
 
 ```bash
-dart tools/composer/composer.dart sync
-flutter pub get
-dart tools/barrel_generator/generate.dart modules/notes/api/lib
+dart tools/module_generator/generate.dart 6 notes --apps mobile
 ```
 
-`sync` prints `✅ 2 app(s) composed, 35 workspace members.`
+It ends with `[V] Module "notes_api" created.`, adds the `api` layer to the module's manifest line (`- { id: notes, layers: [api, data, domain, feature] }`), runs `composer sync`, and writes three things:
 
-**Implement the navigator in the feature.** In `modules/notes/feature/pubspec.yaml`, add under `dependencies:`:
+- `notes_api`, a package in the module's `api/` folder that holds contracts only: `NotesNavigator` with one method, `toNotes(BuildContext context)`, in `lib/src/navigators/notes_navigator.dart`.
+- A `notes_api` dependency in `modules/notes/feature/pubspec.yaml`.
+- `lib/src/routing/notes_navigator_impl.dart` in `feature_notes`, the feature's side of the contract.
 
-```yaml
-# modules/notes/feature/pubspec.yaml — under dependencies:
-  notes_api:
-    path: ../api
-```
-
-Then create the implementation in the feature's `routing/`. It pushes the route, so the back arrow returns to Home:
+The generated implementation navigates with `go`, which replaces the stack. Change it to `push` so the back arrow returns to Home:
 
 ```dart
 // modules/notes/feature/lib/src/routing/notes_navigator_impl.dart
@@ -607,7 +590,7 @@ import 'package:notes_api/notes_api.dart';
 
 import 'notes_route_module.dart';
 
-@Singleton(as: NotesNavigator)
+@LazySingleton(as: NotesNavigator)
 class NotesNavigatorImpl implements NotesNavigator {
   @override
   void toNotes(BuildContext context) => const NotesRoute().push<void>(context);
@@ -632,7 +615,7 @@ Add an `openNotes` key to Home's two ARB files, `modules/home/feature/assets/lan
 "openNotes": "Mở ghi chú"
 ```
 
-Put a comma after the key before it, since ARB is strict JSON. Then add two imports to `modules/home/feature/lib/src/pages/home_page.dart`. Keep the list sorted: `core_common` goes before `core_di`, and `notes_api` after `material_ui`.
+Put a comma after the key before it, since ARB is strict JSON. Then add two imports to `modules/home/feature/lib/src/pages/home_page.dart`. Keep the list sorted: `core_common` goes between `core_base_ui` and `core_di`, and `notes_api` after `material_ui`.
 
 ```dart
 // modules/home/feature/lib/src/pages/home_page.dart — two new imports
@@ -679,7 +662,7 @@ With a backend: tap **Open notes** on Home. The two notes appear, and the back a
 
 ## Verify
 
-Run the gates CI runs, in its order. Each line shows what a pass prints.
+Run the CI gates that apply to this change, in CI's order ([`../operations/01_cicd.md`](../operations/01_cicd.md)). Each line shows what a pass prints.
 
 ```bash
 dart tools/composer/composer.dart verify          # ✅ Generated artifacts are up to date.
@@ -690,7 +673,7 @@ cd modules/notes/data && flutter test && cd -     # All tests passed!
 cd modules/home/feature && flutter test && cd -   # All tests passed!
 cd apps/mobile && flutter test test/di_smoke_test.dart && cd -   # All tests passed!
 dart tools/dependency_sync.dart --check           # ✅ Success: All packages ... in perfect sync
-dart tools/unused_checker/check_script.dart       # 🎉 FINAL RESULT: All checks passed!
+dart tools/unused_checker/check_unused_packages.dart   # ✅ Success! No unused packages found across all workspace modules.
 ```
 
 The DI smoke test boots the real DI graph of `apps/mobile` for every flavor. It is what proves your new registrations resolve (RULE-63).
@@ -751,7 +734,7 @@ Expect `✓ Built build/app/outputs/flutter-apk/app-dev-debug.apk`. The first bu
 | `Undefined name 'NoteEntity'` (or `GetNotesUseCase`) in another package | The domain barrel does not export the new files yet | Run the barrel generator for `modules/notes/domain/lib` after `build_runner` (step 5) |
 | `The class 'NotesProvider' doesn't have an unnamed constructor with 0 arguments`, or tests fail to compile | `module.module.dart` or the generated tests still build `NotesProvider()` | Re-run `build_runner` (end of step 7) and replace the two tests (step 8) |
 | `context.l10nNotes.emptyNotes` does not exist | `gen-l10n` has not run since the ARB edit | `cd modules/notes/feature && flutter gen-l10n` |
-| `flutter pub get` fails on `notes_api` | The `api` layer is not in the manifest yet, or `composer sync` was skipped | Add `api` to the notes line, then `composer sync` and `flutter pub get` (step 9) |
+| `flutter pub get` fails on `notes_api` | The `api` layer is not in the manifest yet, so the workspace does not list the package | Run `dart tools/module_generator/generate.dart 6 notes --apps mobile` (step 9), or add `api` to the notes line and run `composer sync` |
 | `flutter analyze` reports `directives_ordering` in `home_page.dart` | The new imports are out of alphabetical order | `core_common` goes before `core_di`; `notes_api` after `material_ui` |
 | `composer verify` fails after you edited `injection.dart` or a pubspec's managed block | Those regions are generated | Revert the hand edit and run `composer sync` (RULE-16) |
 | The DI smoke test fails with `… is not registered` | A registration is missing or the codegen is stale | Re-run `build_runner`; check the class carries its annotation ([`05_di.md`](../guides/05_di.md)) |

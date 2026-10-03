@@ -56,7 +56,7 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 | RULE-12 | A contract implemented only under `modules/` (a `core_di` contract or an `<id>_api` type) is resolved outside its own module with `getItOrNull` / `getAllOrEmpty` + a fallback — never `getIt` / `getAll`, and never as a required constructor parameter of an injectable class | `getAll<T>()` throws when nothing is registered; removing the module crashes boot | arch_check R8 | `dart tools/arch_check/check.dart` | [§6](#6-feature-boundaries-and-removability) |
 | RULE-13 | An eager `@Singleton` never depends on a type a later DI group registers — use `@LazySingleton`; `shell` runs before `ui`, `notifications` after the app's own registrations | GetIt throws `"<Type> is not registered"` at boot, and `flutter analyze` cannot see it | test (`apps/*/test/di_smoke_test.dart`), CI gate 3; composer verify V12 keeps that test in place | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§5](#5-di-registration-order) |
 | RULE-14 | A second interface on one implementation is bound through a `@module` (`ISessionState` and `ISessionRefreshListenable` ← `AuthProvider` in `feature_auth`) | GetIt resolves the exact type, never a supertype — the shell's `getItOrNull<ISessionState>()` silently returns `null` and the app boots signed-out forever | test (`apps/*/test/di_smoke_test.dart`: `checkAppContract` C02 / C04 for a contract the app declares `provided`), review | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§15](#15-cross-feature-communication) |
-| RULE-15 | Each package that registers anything declares `@InjectableInit.microPackage()` at `lib/di/module.dart` with no arguments (sole exception: `core_notifications`' `ignoreUnregisteredTypesInPackages`); a package with nothing to register has no `module.dart`; no monolithic domain/data module | A per-package module is what composer composes and removal deletes | review (composer leaves a package without the marker out of `injection.dart`; the smoke test catches a registration someone consumes) | review | [guides/05_di §7](../guides/05_di.md) |
+| RULE-15 | Each package an app composes into its DI graph (listed in a `di_groups` entry, or a module layer) declares `@InjectableInit.microPackage()` at `lib/di/module.dart` with no arguments (sole exception: `core_notifications`' `ignoreUnregisteredTypesInPackages`), even when it registers nothing; a package no `di_groups` entry lists (`platform_kernel`, `core_responsive`, an `<id>_api`) has no `module.dart`; no monolithic domain/data module | A per-package module is what composer composes and removal deletes | review (composer leaves a package without the marker out of `injection.dart`; the smoke test catches a registration someone consumes) | review | [guides/05_di §7](../guides/05_di.md) |
 | RULE-16 | Composition comes from `apps/<id>/app_manifest.yaml` through `composer sync`: never hand-edit a `composer:managed` region (root `workspace:`, app path dependencies, `injection.dart` — all of it, the `facts` region of `lib/app/app_profile.dart`, the `report` region of the app `README.md`); every member declares `resolution: workspace` and the root is the only workspace node | Generated composition and facts cannot drift from the manifest | composer verify (CI gate 0: V13 drift of every region, V17 no nested `workspace:`), `flutter pub get` (a member without `resolution: workspace` is refused) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-and-barrels) |
 
 ### 20–29 · Routing, navigation and feature boundaries
@@ -151,7 +151,7 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 1. Add a row in the matching range with the next free id — never renumber, never reuse. A retired rule keeps its row, marked **retired**, with where it went.
 2. Name what enforces it. If nothing mechanical does, write `review` — do not imply a gate that does not exist. When a rule becomes machine-checked, update its **Enforced by** in the same PR.
 3. Put the explanation (why, exceptions, history) in the section below or in the right guide, and link it from **Details**.
-4. Mirror the row in [`docs/vi/reference/01_rules.md`](../../vi/reference/01_rules.md). If the rule is among the most violated, add its one-liner to the top-rules list in `CLAUDE.md` and `.agents/AGENTS.md` — as an id and one line, not a paraphrase.
+4. Mirror the row in [`docs/vi/reference/01_rules.md`](../../vi/reference/01_rules.md). If the rule is among the most violated, add its one-liner to the top-rules table in `CLAUDE.md` — as an id and one line, not a paraphrase.
 
 ---
 
@@ -393,7 +393,10 @@ This is not a style rule. The throwing lookup **compiles**: the calling package 
 
 1. its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it;
 2. `dart tools/composer/composer.dart sync`, which regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list;
-3. `flutter pub get` + `dart run build_runner build --workspace`.
+3. delete the module's package directories (`modules/<id>/<layer>/`, then `modules/<id>/`): `composer verify` fails on a package that is on disk but in no app's composition;
+4. `flutter pub get` + `dart run build_runner build --workspace`.
+
+A package another package still lists in its `pubspec.yaml` stays in the workspace (composer follows dependencies), so drop those dependencies and imports first.
 
 The `injection.dart` imports are the shell's **only intentional hard reference** to features — as the composition root it must name what it composes. Every other consumer goes through `core_di` (product-neutral contracts) or the owning module's API package.
 
@@ -413,8 +416,9 @@ An API package is composed as the `api` layer (`- { id: auth, layers: [api, doma
 **Verify**
 
 ```bash
-# after removing a feature
+# after removing a feature (and deleting its directories)
 dart tools/composer/composer.dart sync
+dart tools/composer/composer.dart verify
 flutter pub get && dart run build_runner build --workspace
 dart tools/arch_check/check.dart
 flutter analyze
@@ -567,7 +571,7 @@ double? get leadingWidth => context.w(64);   // overrides super.leadingWidth for
 
 ✅ **Right** — accept the constructor parameter, let the caller scale it.
 
-**Sizes do not grow on a tablet.** Every factor is clamped by a `ScaleBounds`. The default, `ScaleBounds.downOnly()`, stops at 1:1: a window smaller than the artboard shrinks the design, and a larger one draws it at design size. Do not tune a screen expecting `context.w(16)` to come out bigger on an iPad — spend the extra room on layout. Where a window class genuinely should grow, the app opts in for that class in its profile with a capped policy (`DisplayProfile(scale: {WindowClass.large: ScalePolicy.bounded(max: 1.2)})` in `lib/app/app_profile.dart`, RULE-80). See [design system §6](../guides/11_design_system.md#6-set-the-scale-policy-per-window-class).
+**Sizes do not grow on a tablet.** Every factor is clamped by a `ScaleBounds`. The default, `ScaleBounds.downOnly()`, stops at 1:1: a window smaller than the artboard shrinks the design, and a larger one draws it at design size. Do not tune a screen expecting `context.w(16)` to come out bigger on an iPad — spend the extra room on layout. Where a window class genuinely should grow, the app opts in for that class in its profile with a capped policy (`DisplayProfile(scale: {WindowClass.expanded: ScalePolicy.fixed(), WindowClass.large: ScalePolicy.bounded(max: 1.2)})` in `lib/app/app_profile.dart`, RULE-80; `scale` replaces the template map rather than merging with it, so keep the `expanded` entry). See [design system §6](../guides/11_design_system.md#6-set-the-scale-policy-per-window-class).
 
 **Choose a layout by window size class, never by device.** Use `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` or `AdaptiveSplitView` — never a device model, `Platform.isIOS`, or an ad-hoc `shortestSide` check. One device shows many windows — an iPad in Split View, a foldable's cover screen, a desktop window dragged narrow — and only the window class sees them. The dashboard's bottom bar / rail switch is the reference; see [design system §7](../guides/11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
 

@@ -306,12 +306,12 @@ Cả hai đường đều bọc cây widget trong **`ResponsiveInit`** (từ `co
 | `scale` — lớp không được liệt kê | `ScalePolicy.downOnly()` | Cửa sổ nhỏ hơn khung thì thiết kế thu nhỏ; cửa sổ lớn hơn — tablet, cửa sổ desktop — vẽ 1:1 và để chỗ dư cho layout |
 | `scale` — `WindowClass.expanded` | `ScalePolicy.fixed()` | Từ rộng 840 trở lên (nên cả `large` và `extraLarge`), dùng logical pixel thật — cửa sổ laptop thấp hơn 812 không làm mọi khoảng cách dọc nhỏ đi |
 | `splitScreenMode` | `true` | Chặn dưới chiều cao dùng để scale ở 700, để một ô chia đôi màn hình thấp vẫn dùng được |
-| `textScaleMax` | 2.0 | Trần cho cỡ chữ của hệ điều hành mà người dùng đặt ([bên dưới](#cỡ-chữ-của-hệ-điều-hành-được-tôn-trọng-tới-2x)); một `const` assert từ chối giá trị dưới 2.0 |
+| `textScaleMax` | 2.0 | Trần cho cỡ chữ của hệ điều hành mà người dùng đặt ([bên dưới](#cỡ-chữ-của-hệ-điều-hành-được-tôn-trọng-tối-đa-2x)); một `const` assert từ chối giá trị dưới 2.0 |
 | `phoneMaxShortestSide` | 600 | Cạnh ngắn nhất mà dưới đó một màn hình được tính là điện thoại, cho chính sách hướng `phones_portrait` |
 
-Theme scale chữ bằng `context.sp`, nên nó đi theo chính sách này như mọi thứ khác. Cho một lớp phóng to là opt-in trong profile của app — `DisplayProfile(scale: {WindowClass.medium: ScalePolicy.bounded(max: 1.2)})` trong `lib/app/app_profile.dart`. Bảng tham số đầy đủ, mỗi cửa sổ nhận được gì, và các widget thích ứng dùng chỗ dư nằm ở [`11_design_system.md`](../guides/11_design_system.md) §6–§7.
+Theme scale chữ bằng `context.sp`, nên nó đi theo chính sách này như mọi thứ khác. Cho một lớp phóng to là opt-in trong profile của app — `DisplayProfile(scale: {WindowClass.expanded: ScalePolicy.fixed(), WindowClass.medium: ScalePolicy.bounded(max: 1.2)})` trong `lib/app/app_profile.dart`. `scale` thay thế map của template chứ không gộp với nó, nên một map tự đặt mà bỏ mục `expanded` sẽ đưa `expanded`, `large` và `extraLarge` về `downOnly()`. Bảng tham số đầy đủ, mỗi cửa sổ nhận được gì, và các widget thích ứng dùng chỗ dư nằm ở [`11_design_system.md`](../guides/11_design_system.md) §6–§7.
 
-`ResponsiveInit` phát metrics xuống qua `ResponsiveScope`, một `InheritedWidget`, nên widget nào đọc metrics là tự đăng ký theo dõi chúng — không có cờ rebuild nào để tinh chỉnh. Việc scale vẫn phải đi qua `BuildContext` — không có extension trên `num`, nên `16.h` đơn giản là không biên dịch được. Luật và các gate của nó là RULE-30 trong [registry](../reference/01_rules.md#rule-registry); `arch_check` R7 chặn dạng bare, còn R20 chặn số thô trong constructor layout và paint.
+`ResponsiveInit` phát metrics xuống qua `ResponsiveScope`, một `InheritedWidget`, nên widget nào đọc metrics là tự đăng ký theo dõi chúng — không có cờ rebuild nào để tinh chỉnh. Việc scale vẫn phải đi qua `BuildContext` — không có extension trên `num`, nên `16.h` đơn giản là không biên dịch được. Luật và các gate của nó là RULE-30 trong [registry](../reference/01_rules.md#bảng-đăng-ký-luật); `arch_check` R7 chặn dạng bare, còn R20 chặn số thô trong constructor layout và paint.
 
 ---
 

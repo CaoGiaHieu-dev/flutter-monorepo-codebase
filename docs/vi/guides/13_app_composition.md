@@ -130,6 +130,9 @@ Sau khi sửa profile, chạy `composer sync`: § 5 của báo cáo trong README
 
 ```dart
 // lib/app/app_hooks.dart
+import 'package:core_common/core_common.dart'; // AppRuntime, WindowFacts
+import 'package:platform_app_shell/platform_app_shell.dart';
+
 const ShellHooks appHooks = ShellHooks(
   beforeDependencies: _initCrashReporting, // hàm top-level: const
   configureWindow: _sizeTheWindow,
@@ -144,7 +147,7 @@ Future<void> _sizeTheWindow(AppRuntime runtime, WindowFacts window) async {
 }
 ```
 
-Gõ `const ShellHooks(` là IDE liệt kê bảy hook, mỗi hook được ghi rõ chạy khi nào và không được làm gì: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (bảng nằm trong [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#các-hook)). Một hook ném lỗi được báo cáo như mọi lỗi trong zone của app và dừng boot tại nơi nó chạy. Template không chuyển kèm plugin cửa sổ nào (RULE-74: catalog chỉ có thêm khi một app dùng tới), nên app nào muốn đặt kích thước cửa sổ desktop thì tự thêm plugin vào dependency của mình.
+Hook nào nhắc tới `AppRuntime` hoặc `WindowFacts` cần import `core_common`, mà file được sinh không có sẵn. Gõ `const ShellHooks(` là IDE liệt kê bảy hook, mỗi hook được ghi rõ chạy khi nào và không được làm gì: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (bảng nằm trong [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#các-hook)). Một hook ném lỗi được báo cáo như mọi lỗi trong zone của app và dừng boot tại nơi nó chạy. Template không chuyển kèm plugin cửa sổ nào (RULE-74: catalog chỉ có thêm khi một app dùng tới), nên app nào muốn đặt kích thước cửa sổ desktop thì tự thêm plugin vào dependency của mình.
 
 ## 6. Contract: shell đòi gì ở một app
 

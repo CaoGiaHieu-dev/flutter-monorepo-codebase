@@ -57,7 +57,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-12 | Contract chỉ được implement dưới `modules/` (contract của `core_di` hay type của `<id>_api`) phải resolve bằng `getItOrNull` / `getAllOrEmpty` + fallback bên ngoài module của nó — không bao giờ `getIt` / `getAll`, và không bao giờ là tham số constructor bắt buộc của một class injectable | `getAll<T>()` ném lỗi khi không có đăng ký; gỡ module là boot sập | arch_check R8 | `dart tools/arch_check/check.dart` | [§6](#6-ranh-giới-feature-và-khả-năng-gỡ-bỏ) |
 | RULE-13 | `@Singleton` eager không bao giờ phụ thuộc type do nhóm DI chạy sau đăng ký — dùng `@LazySingleton`; `shell` chạy trước `ui`, `notifications` sau phần đăng ký của chính app | GetIt ném `"<Type> is not registered"` lúc boot, và `flutter analyze` không thấy | test (`apps/*/test/di_smoke_test.dart`), CI gate 3; composer verify V12 giữ test đó tồn tại | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§5](#5-thứ-tự-đăng-ký-di) |
 | RULE-14 | Interface thứ hai trên cùng một implementation được bind qua `@module` (`ISessionState` và `ISessionRefreshListenable` ← `AuthProvider` trong `feature_auth`) | GetIt resolve đúng type, không bao giờ supertype — `getItOrNull<ISessionState>()` của shell lặng lẽ trả `null` và app mãi mãi ở trạng thái chưa đăng nhập | test (`apps/*/test/di_smoke_test.dart`: `checkAppContract` C02 / C04 cho contract mà app khai là `provided`), review | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§15](#15-giao-tiếp-giữa-các-feature) |
-| RULE-15 | Mỗi package có đăng ký gì đó khai `@InjectableInit.microPackage()` ở `lib/di/module.dart` không đối số (ngoại lệ duy nhất: `ignoreUnregisteredTypesInPackages` của `core_notifications`); package không có gì để đăng ký thì không có `module.dart`; không có module domain/data nguyên khối | Module theo package là thứ composer ghép và việc gỡ bỏ xoá đi | review (composer bỏ package thiếu marker khỏi `injection.dart`; smoke test bắt đăng ký mà có nơi dùng tới) | review | [guides/05_di §7](../guides/05_di.md) |
+| RULE-15 | Mỗi package mà một app ghép vào đồ thị DI (được liệt kê trong một mục `di_groups`, hoặc là một tầng của module) khai `@InjectableInit.microPackage()` ở `lib/di/module.dart` không đối số (ngoại lệ duy nhất: `ignoreUnregisteredTypesInPackages` của `core_notifications`), kể cả khi nó không đăng ký gì; package không mục `di_groups` nào liệt kê (`platform_kernel`, `core_responsive`, một `<id>_api`) thì không có `module.dart`; không có module domain/data nguyên khối | Module theo package là thứ composer ghép và việc gỡ bỏ xoá đi | review (composer bỏ package thiếu marker khỏi `injection.dart`; smoke test bắt đăng ký mà có nơi dùng tới) | review | [guides/05_di §7](../guides/05_di.md) |
 | RULE-16 | Composition đến từ `apps/<id>/app_manifest.yaml` qua `composer sync`: không bao giờ sửa tay vùng `composer:managed` (`workspace:` ở gốc, path dependency của app, `injection.dart` — toàn bộ file, vùng `facts` của `lib/app/app_profile.dart`, vùng `report` của `README.md` của app); mọi member khai `resolution: workspace` và gốc là nút workspace duy nhất | Composition và facts sinh ra không thể lệch khỏi manifest | composer verify (CI gate 0: V13 lệch ở mọi vùng, V17 không có `workspace:` lồng nhau), `flutter pub get` (member thiếu `resolution: workspace` bị từ chối) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-và-barrel) |
 
 ### 20–29 · Routing, điều hướng và ranh giới feature
@@ -152,7 +152,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 1. Thêm một dòng vào dải phù hợp với id trống kế tiếp — không bao giờ đánh số lại, không bao giờ tái sử dụng. Luật bị bỏ vẫn giữ dòng của nó, đánh dấu **retired**, kèm nơi nó chuyển tới.
 2. Ghi rõ thứ thực thi nó. Nếu không có gì tự động, ghi `review` — đừng ngụ ý một gate không tồn tại. Khi luật trở thành được máy kiểm, cập nhật cột **Thực thi bởi** trong cùng PR.
 3. Đặt phần giải thích (vì sao, ngoại lệ, lịch sử) vào mục bên dưới hoặc guide phù hợp, và link từ cột **Chi tiết**.
-4. Phản chiếu dòng đó ở [`docs/en/reference/01_rules.md`](../../en/reference/01_rules.md). Nếu luật thuộc nhóm bị vi phạm nhiều nhất, thêm câu một dòng của nó vào danh sách luật hàng đầu trong `CLAUDE.md` và `.agents/AGENTS.md` — dưới dạng id và một dòng, không diễn giải lại.
+4. Phản chiếu dòng đó ở [`docs/en/reference/01_rules.md`](../../en/reference/01_rules.md). Nếu luật thuộc nhóm bị vi phạm nhiều nhất, thêm câu một dòng của nó vào bảng luật hàng đầu trong `CLAUDE.md` — dưới dạng id và một dòng, không diễn giải lại.
 
 ---
 
@@ -394,7 +394,10 @@ dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_ch
 
 1. dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó;
 2. `dart tools/composer/composer.dart sync`, lệnh này sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root;
-3. `flutter pub get` + `dart run build_runner build --workspace`.
+3. xoá các thư mục package của module (`modules/<id>/<layer>/`, rồi `modules/<id>/`): `composer verify` báo lỗi với package còn trên đĩa nhưng không thuộc cách ghép của app nào;
+4. `flutter pub get` + `dart run build_runner build --workspace`.
+
+Package mà một package khác vẫn liệt kê trong `pubspec.yaml` sẽ ở lại workspace (composer đi theo dependency), nên hãy bỏ các dependency và import đó trước.
 
 Các import trong `injection.dart` là **tham chiếu cứng có chủ đích duy nhất** của app shell tới feature — với vai trò composition root, nó buộc phải gọi tên những gì nó lắp ráp. Mọi consumer khác đều đi qua `core_di` (hợp đồng trung lập với sản phẩm) hoặc package API của module sở hữu.
 
@@ -414,8 +417,9 @@ Package API được lắp ráp như layer `api` (`- { id: auth, layers: [api, d
 **Kiểm chứng**
 
 ```bash
-# sau khi gỡ một feature
+# sau khi gỡ một feature (và xoá các thư mục của nó)
 dart tools/composer/composer.dart sync
+dart tools/composer/composer.dart verify
 flutter pub get && dart run build_runner build --workspace
 dart tools/arch_check/check.dart
 flutter analyze
@@ -568,7 +572,7 @@ double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩn
 
 ✅ **Đúng** — nhận tham số qua constructor, để nơi gọi tự scale.
 
-**Kích thước không to ra trên tablet.** Mọi hệ số đều bị kẹp bởi một `ScaleBounds`, và mặc định `ScaleBounds.downOnly()` dừng ở 1:1: cửa sổ nhỏ hơn khung thiết kế thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ đúng cỡ thiết kế. Đừng tinh chỉnh màn hình với kỳ vọng `context.w(16)` sẽ lớn hơn trên iPad — hãy dùng chỗ dư cho layout. Nếu một lớp cửa sổ thực sự nên to ra, app opt-in cho riêng lớp đó trong profile của mình bằng một chính sách có chặn (`DisplayProfile(scale: {WindowClass.large: ScalePolicy.bounded(max: 1.2)})` trong `lib/app/app_profile.dart`, RULE-80). Xem [design system §6](../guides/11_design_system.md#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ).
+**Kích thước không to ra trên tablet.** Mọi hệ số đều bị kẹp bởi một `ScaleBounds`, và mặc định `ScaleBounds.downOnly()` dừng ở 1:1: cửa sổ nhỏ hơn khung thiết kế thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ đúng cỡ thiết kế. Đừng tinh chỉnh màn hình với kỳ vọng `context.w(16)` sẽ lớn hơn trên iPad — hãy dùng chỗ dư cho layout. Nếu một lớp cửa sổ thực sự nên to ra, app opt-in cho riêng lớp đó trong profile của mình bằng một chính sách có chặn (`DisplayProfile(scale: {WindowClass.expanded: ScalePolicy.fixed(), WindowClass.large: ScalePolicy.bounded(max: 1.2)})` trong `lib/app/app_profile.dart`, RULE-80; `scale` thay thế map của template chứ không gộp với nó, nên hãy giữ mục `expanded`). Xem [design system §6](../guides/11_design_system.md#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ).
 
 **Chọn layout theo lớp kích thước cửa sổ, không bao giờ theo thiết bị.** Dùng `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` hoặc `AdaptiveSplitView` — đừng bao giờ dùng đời máy, `Platform.isIOS` hay một phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ — iPad đang Split View, màn hình ngoài của máy gập, cửa sổ desktop bị kéo hẹp — và chỉ lớp cửa sổ mới thấy được chúng. Việc dashboard đổi giữa bottom bar và rail là mẫu tham chiếu; xem [design system §7](../guides/11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
 

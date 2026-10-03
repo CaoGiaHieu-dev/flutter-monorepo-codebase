@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
 import 'package:drift/drift.dart' show GeneratedDatabase;
 import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/services.dart';
@@ -126,6 +128,25 @@ void main() {
         // The graph is built from the sections the profile registered before
         // it: the router got the app's own `RouterProfile`, not a default.
         expect(getIt<AppRouter>().profile, same(appProfile.router));
+
+        // The same for the locale: the language set is the profile's, and
+        // every localization delegate a feature contributes supports every
+        // language the app offers — a language the app declares but a feature
+        // has no translations for would show that feature's raw keys.
+        final languages = getIt<LanguageProvider>().languageSet;
+        expect(
+          languages.fallback.languageCode,
+          appProfile.locale.fallback,
+        );
+        for (final feature in getAllOrEmpty<IFeatureLocalization>()) {
+          for (final locale in languages.supported) {
+            expect(
+              feature.delegate.isSupported(locale),
+              isTrue,
+              reason: '${feature.runtimeType} / ${locale.languageCode}',
+            );
+          }
+        }
 
         final report = checkAppContract(
           appProfile,

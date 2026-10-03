@@ -12,6 +12,7 @@ export 'src/gen/language/app_localizations_en.dart';
 export 'src/gen/language/app_localizations_vi.dart';
 export 'src/language/app_languages.dart';
 export 'src/language/language_provider.dart';
+export 'src/language/language_set.dart';
 export 'src/licenses/base_ui_licenses.dart';
 export 'src/styles/app_gradients.dart';
 export 'src/styles/app_radius.dart';

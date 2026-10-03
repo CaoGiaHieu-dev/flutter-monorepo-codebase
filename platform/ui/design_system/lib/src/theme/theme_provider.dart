@@ -17,15 +17,33 @@ import 'theme_system_extensions.dart';
 /// - Providing access to the current theme mode.
 /// - Setting the theme mode based on user preference.
 /// - Managing the system UI overlay style based on the theme mode.
-/// - Building the light and dark themes.
+/// - Building the light and dark themes from the app's palette: the template's
+///   with the app's `ThemeProfile` overrides applied, once.
 /// - Reacting to OS-level Dark/Light changes while [ThemeMode.system] is active.
 @lazySingleton
 class ThemeProvider extends ChangeNotifier
     with WidgetsBindingObserver, DisposeGuard {
   final IThemeStorage _themeStorage;
 
-  /// Constructor for ThemeProvider.
-  ThemeProvider(this._themeStorage);
+  /// Constructor for ThemeProvider. [profile] is the app's `ThemeProfile`
+  /// (its palette overrides; the mode it opens in is `IThemeStorage`'s
+  /// default); a hand-built provider takes the template palette.
+  ThemeProvider(
+    this._themeStorage, [
+    ThemeProfile profile = const ThemeProfile(),
+  ]) : _light = ThemeSystemExtension.light.withOverrides(profile.light),
+       _dark = ThemeSystemExtension.dark.withOverrides(profile.dark);
+
+  /// The two palettes, built once — [ThemeData], the [ColorScheme], the
+  /// system bars and `context.colors` all read these, so they cannot
+  /// disagree.
+  final ThemeSystemExtension _light;
+  final ThemeSystemExtension _dark;
+
+  /// The app's palette for [brightness]: the template's with the app's
+  /// overrides.
+  ThemeSystemExtension paletteFor(Brightness brightness) =>
+      brightness == Brightness.dark ? _dark : _light;
 
   /// Current theme mode.
   ///
@@ -98,10 +116,10 @@ class ThemeProvider extends ChangeNotifier
   /// the theme mode. It also creates a custom text theme with adjusted font sizes
   /// and applies the theme system's colors to the text theme.
   ThemeData _themeData(BuildContext context, ThemeMode mode) {
-    final themeSystem = ThemeSystemExtension.withMode(mode);
     final brightness = mode == ThemeMode.dark
         ? Brightness.dark
         : Brightness.light;
+    final themeSystem = paletteFor(brightness);
     // Every slot built from the palette, so `colorScheme.*` and
     // `context.colors.*` agree — Material's components read the scheme.
     final colorScheme = themeSystem.toColorScheme(brightness);
@@ -350,17 +368,25 @@ class ThemeProvider extends ChangeNotifier
   /// whenever the OS was dark. [didChangePlatformBrightness] calls this
   /// again, so the bars follow the OS while [ThemeMode.system] is active.
   void setSystemTheme() {
-    systemUiOverlayStyle = overlayStyleFor(effectiveBrightness);
+    final brightness = effectiveBrightness;
+    systemUiOverlayStyle = overlayStyleFor(
+      brightness,
+      palette: paletteFor(brightness),
+    );
   }
 
   /// The status/navigation bar styling for an app rendered in [brightness]:
   /// transparent status bar, navigation bar in that palette's background,
-  /// and icons contrasting with it.
-  static SystemUiOverlayStyle overlayStyleFor(Brightness brightness) {
+  /// and icons contrasting with it. [palette] is the app's, as
+  /// [paletteFor] gives it; omitted, the template's.
+  static SystemUiOverlayStyle overlayStyleFor(
+    Brightness brightness, {
+    ThemeSystemExtension? palette,
+  }) {
     final isDark = brightness == Brightness.dark;
-    final themeSystem = ThemeSystemExtension.withMode(
-      isDark ? ThemeMode.dark : ThemeMode.light,
-    );
+    final themeSystem =
+        palette ??
+        (isDark ? ThemeSystemExtension.dark : ThemeSystemExtension.light);
     // Icons contrast with the bars: light icons on a dark app, and vice versa.
     final iconBrightness = isDark ? Brightness.light : Brightness.dark;
     final base = isDark

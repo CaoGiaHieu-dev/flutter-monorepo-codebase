@@ -23,7 +23,7 @@ extension GlobalKeyExtension on GlobalKey {
   /// final key = GlobalKey();
   /// final picked = await key.showDropDown<Locale>(
   ///   context,
-  ///   options: AppLocalizations.supportedLocales,
+  ///   options: context.read<LanguageProvider>().languageSet.supported,
   ///   builder: (context, locale) => Text(locale.languageName(context)),
   /// );
   /// ```

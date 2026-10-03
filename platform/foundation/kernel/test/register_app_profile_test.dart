@@ -27,6 +27,9 @@ void main() {
         expect(locator<PlatformFacts>(), same(iosFacts));
         expect(locator<SslPinningPolicy>(), same(profile.facts.sslPinning));
         expect(locator<RouterProfile>(), same(profile.router));
+        expect(locator<LocaleProfile>(), same(profile.locale));
+        expect(locator<ThemeProfile>(), same(profile.theme));
+        expect(locator<NetworkProfile>(), same(profile.network));
       },
     );
 
@@ -42,6 +45,9 @@ void main() {
       expect(locator.isRegistered<PlatformFacts>(), isTrue);
       expect(locator.isRegistered<SslPinningPolicy>(), isTrue);
       expect(locator.isRegistered<RouterProfile>(), isTrue);
+      expect(locator.isRegistered<LocaleProfile>(), isTrue);
+      expect(locator.isRegistered<ThemeProfile>(), isTrue);
+      expect(locator.isRegistered<NetworkProfile>(), isTrue);
       // Nothing else is bound: the facts are read through the profile, and a
       // section a class is not DI-built for (`DisplayProfile`) is handed to
       // it by `runShellApp`.

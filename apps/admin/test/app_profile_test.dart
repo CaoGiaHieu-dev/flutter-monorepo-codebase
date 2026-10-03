@@ -128,6 +128,24 @@ void main() {
 
       expect(appProfile.router.entry, EntryPolicy.firstLaunch);
       expect(appProfile.router.fallbackPath, isNull);
+
+      // Language, theme and the default HTTP client are the template's too.
+      const locale = LocaleProfile();
+      expect(appProfile.locale.supported, locale.supported);
+      expect(appProfile.locale.fallback, locale.fallback);
+      expect(appProfile.locale.initial, locale.initial);
+
+      const theme = ThemeProfile();
+      expect(appProfile.theme.mode, theme.mode);
+      expect(appProfile.theme.light, theme.light);
+      expect(appProfile.theme.dark, theme.dark);
+
+      const network = NetworkProfile();
+      expect(appProfile.network.connectTimeout, network.connectTimeout);
+      expect(appProfile.network.receiveTimeout, network.receiveTimeout);
+      expect(appProfile.network.sendTimeout, network.sendTimeout);
+      expect(appProfile.network.headers, network.headers);
+      expect(appProfile.network.followRedirects, network.followRedirects);
     });
   });
 }

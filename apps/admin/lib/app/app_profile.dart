@@ -128,6 +128,10 @@ const AppFacts appFacts = AppFacts(
 ///
 /// The sections to tune — each documents its defaults and ranges:
 /// `display:` (`DisplayProfile` — the design artboard, the scale policy of
-/// each window class, the OS font-size cap) and `router:` (`RouterProfile` —
-/// the entry-location policy, the fallback location).
+/// each window class, the OS font-size cap), `router:` (`RouterProfile` —
+/// the entry-location policy, the fallback location), `locale:`
+/// (`LocaleProfile` — the languages offered, the fallback and first-launch
+/// language), `theme:` (`ThemeProfile` — the mode a first launch opens in, the
+/// palette overrides) and `network:` (`NetworkProfile` — the default HTTP
+/// client's timeouts, extra headers and redirect policy).
 const AppProfile appProfile = AppProfile(facts: appFacts);

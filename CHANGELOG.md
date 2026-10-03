@@ -81,6 +81,15 @@ with the architecture rules enforced by CI instead of review alone.
   `ShellHooks` gains `navigatorObservers`, `redirect` and `configureWindow`. Every default is
   today's behaviour; a platform that switches push or deep links off logs one INFO line naming the
   manifest key, and a declared `window` with no `configureWindow` hook stops the boot (`P05`).
+- App-owned values on the ui and infra side (the apps layer, step 4 of 6): `AppProfile` gains
+  `locale` (`LocaleProfile`: the languages the app offers, its fallback and its first-launch
+  language), `theme` (`ThemeProfile`: the mode a first launch opens in and overrides for the 17
+  palette tokens — `context.colors`, the `ColorScheme` and the gradients all follow) and `network`
+  (`NetworkProfile`: the default HTTP client's three timeouts, extra headers and redirect policy).
+  `core_base_ui` gains `LanguageSet`, which `LanguageProvider`, `AppMaterialWrapper`, the language
+  picker in settings and the `language` header all read. Every default is today's behaviour; each
+  DI smoke test also checks that every feature's localization delegate supports every language the
+  app offers.
 
 ### Changed
 
@@ -101,6 +110,14 @@ with the architecture rules enforced by CI instead of review alone.
   a `RouterProfile` (all optional, defaulting to today's behaviour); `core_notifications` now
   depends on `platform_kernel`. `registerAppProfile` also registers `AppPlatform` and
   `RouterProfile`; `runShellApp` registers the `AppRuntime` beside the `ShellHooks`.
+- **Breaking, for forks of the template** (apps layer, step 4): `BaseUiConstants.FALLBACK_LANGUAGE_CODE`,
+  `NetworkConstants.DEFAULT_LANGUAGE_CODE` and the three `NetworkConstants` timeouts are gone — the
+  fallback language is `LocaleProfile.fallback`, the timeouts are `NetworkProfile`'s;
+  `ThemeSystemExtension.withMode` is replaced by `ThemeProvider.paletteFor`; `AppLanguages`
+  statics answer for the template's languages only, an app asks its `LanguageSet`. `ApiClient`,
+  `LanguageProvider`, `ThemeProvider`, `NetworkConfigImpl`, `LanguageStorageImpl` and
+  `ThemeStorageImpl` take their section as an optional last parameter (defaults as before);
+  `registerAppProfile` also registers `LocaleProfile`, `ThemeProfile` and `NetworkProfile`.
 - Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is now the
   single rule registry — 65 rules with stable ids `RULE-01`…`RULE-79`, each with its reason, what
   enforces it (`arch_check` R1–R15, analyzer, a test, a CI gate, `composer verify`, `docs_check` or

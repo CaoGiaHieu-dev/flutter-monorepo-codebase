@@ -1,38 +1,30 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../gen/language/app_localizations.dart';
-import '../utils/base_ui_constants.dart';
+import 'language_set.dart';
 
-/// The languages the app ships, and the one it falls back to — the single
-/// source every locale decision reads.
+/// Language helpers that do not depend on an app: the template's own
+/// [LanguageSet] and the display names.
+///
+/// The statics answer for the template defaults — every shipped language,
+/// `en` as the fallback — **not** for an app's `LocaleProfile`; code that runs
+/// inside an app asks the app's set instead (`LanguageProvider.languageSet`),
+/// so an app that offers `vi` alone is never shown a language it did not
+/// choose. [nameOf] is the same for every app.
 ///
 /// [supported] is generated from the ARB files in `assets/language/`, so
 /// adding `ja.arb` adds Japanese here; [nameOf] then needs its display name.
-/// `LanguageProvider` (the app's locale), `AppMaterialWrapper`'s
-/// `localeResolutionCallback` (a device locale on first launch) and the
-/// network adapter's `language` header all resolve through [resolve].
-///
-/// `core_network` cannot depend on this package (infra never depends on ui);
-/// its own `NetworkConstants.DEFAULT_LANGUAGE_CODE`, used only by a client
-/// built without an app `NetworkConfig`, must name the same language as
-/// [fallback].
 abstract final class AppLanguages {
-  /// Every locale the app has translations for.
-  static List<Locale> get supported => AppLocalizations.supportedLocales;
+  static final LanguageSet _template = LanguageSet();
 
-  /// Used when a requested locale is not [supported]:
-  /// [BaseUiConstants.FALLBACK_LANGUAGE_CODE].
-  static Locale get fallback =>
-      const Locale(BaseUiConstants.FALLBACK_LANGUAGE_CODE);
+  /// Every locale the template has translations for.
+  static List<Locale> get supported => _template.supported;
 
-  /// The supported locale with [locale]'s language code — a device's
-  /// `vi_VN` resolves to `vi` — or [fallback].
-  static Locale resolve(Locale? locale) {
-    for (final candidate in supported) {
-      if (candidate.languageCode == locale?.languageCode) return candidate;
-    }
-    return fallback;
-  }
+  /// The template's fallback language, `en`.
+  static Locale get fallback => _template.fallback;
+
+  /// [LanguageSet.resolve] for the template's set.
+  static Locale resolve(Locale? locale) => _template.resolve(locale);
 
   /// [locale]'s display name in the current language, or its language tag
   /// when no name is translated for it.

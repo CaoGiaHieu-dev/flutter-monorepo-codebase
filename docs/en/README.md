@@ -2,7 +2,7 @@
 
 🌍 *Language:* **English** | [Tiếng Việt](../vi/README.md)
 
-Everything you need to work in this Flutter monorepo, organised by **what you are trying to do** rather than by which package a topic happens to live in. Every code sample in these pages is quoted from real source with its file path, so you can always open the original.
+Everything you need to work in this Flutter monorepo, organised by **what you are trying to do** rather than by which package a topic happens to live in. A code sample that comes from a file names that file, so you can always open the original.
 
 ---
 
@@ -61,11 +61,11 @@ Practical, step-by-step, with working code. This is the "how to use" section. Ev
 | [`05_di.md`](guides/05_di.md) | Which annotation do I use, where does my module get registered, and why does the app throw "not registered" at startup? |
 | [`06_storage.md`](guides/06_storage.md) | How do I persist a value so it survives restarts — without letting another package read or overwrite it? |
 | [`07_database.md`](guides/07_database.md) | How do I store relational data so that deleting my package deletes its database with it? |
-| [`08_networking.md`](guides/08_networking.md) | How do I call a new endpoint, opt a request out of auth or retry, plug in token refresh and turn on SSL pinning? |
+| [`08_networking.md`](guides/08_networking.md) | How do I call a new endpoint, opt a request out of auth or retry, plug in token refresh and turn on certificate pinning? |
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | How does a feature ship its own translations, and how do colours, fonts and dimensions stay consistent? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A needs something from feature B — how, without importing it? |
 | [`11_design_system.md`](guides/11_design_system.md) | Where is every colour, font, spacing step and radius defined — which file do I edit to rebrand the app, and how does the UI scale and adapt on tablets, foldables and split screen? |
-| [`12_module_isolation.md`](guides/12_module_isolation.md) | How does a team check out only its own module, build the whole app from it, and never see another team's source? |
+| [`12_module_isolation.md`](guides/12_module_isolation.md) | How does a team check out only its own module, build the whole app from it, and never see another team's source — and how does a module expose an API package? |
 | [`13_app_composition.md`](guides/13_app_composition.md) | What does an app compose, register and enable per platform, which file do I edit to change it, and how do I create a third app with one command? |
 
 ---
@@ -108,7 +108,7 @@ Building, signing and shipping.
 | Change theme, colours or spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
 | Lay out a screen for tablets, foldables or split screen | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Share state between two features | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |
-| Remove a feature from the app | [`guides/01_new_feature.md`](guides/01_new_feature.md) § removal | [`reference/01_rules.md`](reference/01_rules.md) |
+| Remove a feature from the app | [`guides/01_new_feature.md`](guides/01_new_feature.md) § 9 | [`reference/01_rules.md`](reference/01_rules.md) |
 | Choose Provider or BLoC | [`guides/03_state_management.md`](guides/03_state_management.md) | — |
 | Fix "not registered" at startup | [`guides/05_di.md`](guides/05_di.md) | [`architecture/06_app_shell.md`](architecture/06_app_shell.md) |
 | Fix a red CI run | [`operations/01_cicd.md`](operations/01_cicd.md) | [`reference/03_tooling.md`](reference/03_tooling.md) |
@@ -134,7 +134,7 @@ History that is no longer current guidance lives in [`../history/`](../history/r
 ## Conventions in these pages
 
 - **Every link is relative.** They work on GitHub, in an IDE preview, and on a local docs server alike.
-- **Every code block names its source file** in a leading comment — open it to see the current version.
+- **A code block that comes from a file names it** in a leading comment — open the file to see the current version.
 - Callouts carry weight: `> [!NOTE]` is context, `> [!WARNING]` is something that will bite you, `> [!CAUTION]` is something that can lose data or ship a broken build.
 - Where a rule has an approved exception, the exception is written down with its reasoning — so a later audit does not "fix" it by mistake.
 

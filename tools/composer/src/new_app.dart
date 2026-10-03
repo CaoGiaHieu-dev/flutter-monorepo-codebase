@@ -207,6 +207,12 @@ class NewAppPlan {
   String get pubspecName => '${request.id}_app';
   bool get usesDatabase => corePackages.contains(kDatabasePackage);
 
+  /// Whether a composed package contributes a stack route or a tab — what the
+  /// shell needs to have a screen to show (`checkAppContract` C05, RULE-20).
+  bool get hasScreen => capabilities.any(
+    (c) => c.provided && (c.key == 'routes' || c.key == 'tabs'),
+  );
+
   /// Whether any declared platform can enforce TLS pinning — what decides if
   /// staging and prod must carry a pin decision.
   bool get anyPlatformCanPin =>
@@ -530,6 +536,7 @@ Map<String, String> renderAppFiles(
     ],
     'platformsCsv': request.platforms.join(','),
     'smokePlatform': plan.smokePlatform,
+    'usesDatabase': plan.usesDatabase,
     'hasModules': plan.modules.isNotEmpty,
     'modulesCsv': plan.modules.map((m) => m.id).join(','),
     'modulesText': plan.modules.map((m) => m.id).join(', '),
@@ -550,6 +557,8 @@ Map<String, String> renderAppFiles(
       'core_base_ui/core_base_ui.dart',
       'core_common/core_common.dart',
       'core_di/core_di.dart',
+      if (plan.usesDatabase) 'drift/drift.dart show GeneratedDatabase',
+      'flutter/services.dart',
       'flutter_secure_storage/flutter_secure_storage.dart',
       'flutter_test/flutter_test.dart',
       'platform_app_shell/platform_app_shell.dart',
@@ -595,14 +604,22 @@ Map<String, String> renderAppFiles(
 }
 
 /// `import 'package:<uri>';` lines for [uris], in the order the
-/// `directives_ordering` lint wants them.
+/// `directives_ordering` lint wants them. An entry `<uri> show <Name>` becomes
+/// `import 'package:<uri>' show <Name>;`.
 List<Map<String, String>> _sortedImports(List<String> uris) => [
-  for (final uri in uris.toList()..sort()) {'line': "import 'package:$uri';"},
+  for (final entry in uris.toList()..sort()) {'line': _importLine(entry)},
 ];
+
+String _importLine(String entry) {
+  final parts = entry.split(' show ');
+  final show = parts.length > 1 ? ' show ${parts[1]}' : '';
+  return "import 'package:${parts[0]}'$show;";
+}
 
 /// The external packages the template names.
 const List<String> _templateDependencies = [
   'injectable',
+  'drift',
   'flutter_secure_storage',
   'shared_preferences',
   'flutter_lints',
@@ -675,8 +692,14 @@ List<String> nextSteps(NewAppPlan plan) {
         '--org com.example --project-name ${plan.pubspecName} .',
     'then declare each platform `runner: committed` in the manifest and run '
         '`dart tools/composer/composer.dart sync --app ${plan.id}`.',
+    if (!plan.hasScreen)
+      'No composed module contributes a screen yet (no IFeatureRouteModule and '
+          'no INavDestinationModule), so the smoke test fails with C05 until '
+          'one does: compose a module with a feature layer, or generate one '
+          '(`dart tools/module_generator/generate.dart 1 <name> ...`).',
     if (plan.usesDatabase)
-      'This app links core_database: copy the path_provider and database '
-          'doubles from apps/mobile/test/di_smoke_test.dart into its smoke test.',
+      'This app links core_database: its smoke test already carries the '
+          'path_provider double and closes each package-owned database '
+          'between boots.',
   ];
 }

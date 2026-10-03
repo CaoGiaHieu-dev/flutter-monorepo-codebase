@@ -257,6 +257,28 @@ void main() {
       expect(await run(ws, ['verify']), exitsWith(0));
     });
 
+    test('says so when no module contributes a screen', () async {
+      final ws = await workspace();
+      final bare = await run(ws, ['new', 'bare', '--platforms', 'linux']);
+      expect(bare, exitsWith(0));
+      expect(bare.output, contains('No composed module contributes a screen'));
+      expect(bare.output, contains('C05'));
+
+      final withScreen = await run(ws, [
+        'new',
+        'shown',
+        '--platforms',
+        'linux',
+        '--modules',
+        'foo',
+      ]);
+      expect(withScreen, exitsWith(0));
+      expect(
+        withScreen.output,
+        isNot(contains('No composed module contributes a screen')),
+      );
+    });
+
     test('composes core_database when a module links it', () async {
       final ws = await workspace();
       expect(
@@ -275,6 +297,40 @@ void main() {
         contains('- core_database'),
       );
       expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('gives the smoke test of a database app its own doubles', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'ledger',
+          '--platforms',
+          'windows',
+          '--modules',
+          'bar',
+        ]),
+        exitsWith(0),
+      );
+      final smoke = ws.read('apps/ledger/test/di_smoke_test.dart');
+      expect(smoke, contains("import 'dart:io';"));
+      expect(
+        smoke,
+        contains("import 'package:drift/drift.dart' show GeneratedDatabase;"),
+      );
+      expect(smoke, contains('plugins.flutter.io/path_provider'));
+      expect(smoke, contains('getIt.findAll<GeneratedDatabase>()'));
+      expect(ws.read('apps/ledger/pubspec.yaml'), contains('  drift: '));
+
+      // An app that links no database carries none of it.
+      expect(
+        await run(ws, ['new', 'plain', '--platforms', 'linux']),
+        exitsWith(0),
+      );
+      final plain = ws.read('apps/plain/test/di_smoke_test.dart');
+      expect(plain, isNot(contains('path_provider\')')));
+      expect(plain, isNot(contains('GeneratedDatabase')));
+      expect(ws.read('apps/plain/pubspec.yaml'), isNot(contains('drift')));
     });
 
     test(

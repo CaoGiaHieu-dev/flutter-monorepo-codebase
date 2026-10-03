@@ -112,22 +112,6 @@ void main() {
       expect(seen, [same(error)]);
     });
 
-    testWidgets('the older onError parameter is still honoured', (
-      tester,
-    ) async {
-      final seen = <Object>[];
-      final error = StateError('configureDependencies failed');
-
-      runShellApp(
-        configureDependencies: () async => throw error,
-        onError: (e, _) => seen.add(e),
-      );
-      await pumpUntil(tester, () => seen.isNotEmpty);
-
-      expect(tester.takeException(), same(error));
-      expect(seen, [same(error)]);
-    });
-
     testWidgets('a throwing beforeDependencies reaches onError and stops the '
         'boot before DI', (tester) async {
       final seen = <Object>[];

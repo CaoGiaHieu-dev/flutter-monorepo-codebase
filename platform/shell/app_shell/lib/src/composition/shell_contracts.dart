@@ -95,7 +95,7 @@ const List<ShellContract<Object>> kShellContracts = [
     cardinality: ContractCardinality.one,
     consumer:
         'platform/ui/design_system/lib/src/language/language_provider.dart:15, '
-        'platform/shell/adapters/lib/src/network_config_impl.dart:35',
+        'platform/shell/adapters/lib/src/network_config_impl.dart:41',
     whenAbsent: 'boot throws "ILanguageStorage is not registered"',
   ),
   ShellContract<IThemeStorage>(
@@ -119,9 +119,10 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/foundation/common/lib/src/config/app_initializer.dart:156',
+        'platform/foundation/common/lib/src/config/app_initializer.dart:202',
     whenAbsent:
-        'certificate pinning is skipped and an ERROR is logged; it must be '
+        'the pinning view of the app\'s manifest decision is not bound, so '
+        'a boot without a profile skips pinning and logs an ERROR; it must be '
         'bound in its own right, never as a supertype (RULE-14)',
   ),
   ShellContract<AppRouter>(
@@ -130,7 +131,7 @@ const List<ShellContract<Object>> kShellContracts = [
     cardinality: ContractCardinality.one,
     consumer:
         'platform/shell/app_shell/lib/src/root_app.dart:48, '
-        'platform/shell/app_shell/lib/src/bootstrap.dart:189',
+        'platform/shell/app_shell/lib/src/bootstrap.dart:166',
     whenAbsent: 'boot throws "AppRouter is not registered"',
   ),
   ShellContract<DeeplinkProvider>(
@@ -164,7 +165,7 @@ const List<ShellContract<Object>> kShellContracts = [
     consumer:
         'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:40, '
         'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart:46, '
-        'platform/shell/adapters/lib/src/network_config_impl.dart:87',
+        'platform/shell/adapters/lib/src/network_config_impl.dart:94',
     whenAbsent:
         'the navigation wrapper treats the app as signed out, every deep '
         'link is routed, and a lost session is a no-op',
@@ -174,7 +175,7 @@ const List<ShellContract<Object>> kShellContracts = [
     bundle: 'session',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/adapters/lib/src/network_config_impl.dart:38',
+    consumer: 'platform/shell/adapters/lib/src/network_config_impl.dart:45',
     whenAbsent: 'requests carry no bearer token and nothing refreshes it',
   ),
   ShellContract<ISessionRefreshListenable>(
@@ -237,7 +238,7 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'splash',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:184',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:161',
     whenAbsent: 'the native splash is kept through boot',
   ),
   ShellContract<IAppTreeWrapper>(
@@ -258,7 +259,7 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'error_reporter',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:383',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:363',
     whenAbsent: 'errors are printed and sent nowhere (RULE-67)',
   ),
   ShellContract<IAnalytics>(

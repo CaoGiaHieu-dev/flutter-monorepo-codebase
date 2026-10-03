@@ -78,6 +78,7 @@ Map<String, CapabilityExpectation> declare({
 AppProfile testProfile({
   Map<AppPlatform, PlatformFacts>? platforms,
   Map<String, CapabilityExpectation>? capabilities,
+  SslPinningPolicy? sslPinning,
 }) => AppProfile(
   facts: AppFacts(
     id: 'test_app',
@@ -90,11 +91,13 @@ AppProfile testProfile({
           AppPlatform.ios: platformFacts(splash: SplashMode.native),
         },
     capabilities: capabilities ?? declare(provided: const {'routes'}),
-    sslPinning: const SslPinningPolicy({
-      Flavor.dev: SslPinning.disabled('test'),
-      Flavor.staging: SslPinning.disabled('test'),
-      Flavor.prod: SslPinning.disabled('test'),
-    }),
+    sslPinning:
+        sslPinning ??
+        const SslPinningPolicy({
+          Flavor.dev: SslPinning.disabled('test'),
+          Flavor.staging: SslPinning.disabled('test'),
+          Flavor.prod: SslPinning.disabled('test'),
+        }),
   ),
 );
 

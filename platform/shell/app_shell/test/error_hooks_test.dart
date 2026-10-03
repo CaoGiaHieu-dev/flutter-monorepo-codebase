@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
 
+import 'support/profile_fakes.dart';
+
 class _Recorded {
   _Recorded(this.error, this.stack, this.fatal, this.reason);
 
@@ -173,8 +175,9 @@ void main() {
 
     await tester.runAsync(() async {
       runShellApp(
+        profile: testProfile(),
+        hooks: ShellHooks(onError: (e, _) => seen.add(e)),
         configureDependencies: () async => throw error,
-        onError: (e, _) => seen.add(e),
       );
       await Future<void>.delayed(const Duration(milliseconds: 50));
     });

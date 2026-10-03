@@ -558,7 +558,8 @@ Map<String, String> renderAppFiles(
       'core_common/core_common.dart',
       'core_di/core_di.dart',
       if (plan.usesDatabase) 'drift/drift.dart show GeneratedDatabase',
-      'flutter/services.dart',
+      // Only the `path_provider` channel double (database apps) names it.
+      if (plan.usesDatabase) 'flutter/services.dart',
       'flutter_secure_storage/flutter_secure_storage.dart',
       'flutter_test/flutter_test.dart',
       'platform_app_shell/platform_app_shell.dart',

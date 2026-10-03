@@ -24,20 +24,127 @@ import '../arch_check/dart_source.dart';
 /// second; `checkAppContract` re-derives the truth from the real graph and the
 /// smoke test fails when the two disagree.
 
-/// Generated output, which carries no repo-authored declarations.
+/// File names a generator conventionally writes. A name alone proves nothing:
+/// anyone can call a hand-written file `size_ext.g.dart`, so [isGeneratedSource]
+/// also asks for the generator's own header.
+bool _hasGeneratedName(String name) =>
+    name.endsWith('.g.dart') ||
+    name.endsWith('.freezed.dart') ||
+    name.endsWith('.config.dart') ||
+    name.endsWith('.module.dart') ||
+    name.endsWith('.gr.dart') ||
+    name.endsWith('.mocks.dart') ||
+    name == 'generated_plugin_registrant.dart';
+
+/// Whether [name] is a file the FlutterFire CLI writes (gitignored, and in CI
+/// a compile-only stub that carries no generator header).
+bool _isFirebaseOptions(String name) => name.startsWith('firebase_options_');
+
+/// The comment a generator writes before the first line of code: `GENERATED
+/// CODE - DO NOT MODIFY BY HAND` (build_runner, flutter_gen), `Mocks generated
+/// by Mockito`, `Generated file. Do not edit.` (plugin registrant), or the
+/// `dart format` / coverage markers those generators add.
+final RegExp _generatorHeader = RegExp(
+  r'generated\s+(?:code|by|file)|do not edit|dart format width|'
+  r'coverage:ignore-file',
+  caseSensitive: false,
+);
+
+/// Whether [content]'s leading comment block (blank lines and `//` lines up to
+/// the first line of code) carries a generator header.
+bool hasGeneratorHeader(String content) {
+  final head = StringBuffer();
+  for (final line in content.split('\n')) {
+    final t = line.trim();
+    if (t.isNotEmpty && !t.startsWith('//')) break;
+    head.writeln(t);
+  }
+  return _generatorHeader.hasMatch(head.toString());
+}
+
+/// The first ~2 KB of [file] as text, or empty when it cannot be read.
+String _headOf(String file) {
+  try {
+    final raf = File(file).openSync();
+    try {
+      final bytes = raf.readSync(2048);
+      return String.fromCharCodes(bytes);
+    } finally {
+      raf.closeSync();
+    }
+  } on FileSystemException {
+    return '';
+  }
+}
+
+/// `output-dir:` of a package's `l10n.yaml`, as a path relative to the package
+/// (`lib/src/gen/language`), memoised per package. `flutter gen-l10n` writes
+/// no header in its Dart files, so the folder its configuration names is how
+/// they are recognised.
+final Map<String, String?> _l10nOutputDirs = {};
+
+String? _l10nOutputDir(String packageRoot) =>
+    _l10nOutputDirs.putIfAbsent(packageRoot, () {
+      final file = File(p.posix.join(packageRoot, 'l10n.yaml'));
+      if (!file.existsSync()) return null;
+      final m = RegExp(
+        r'^\s*output-dir\s*:\s*([^\s#]+)',
+        multiLine: true,
+      ).firstMatch(file.readAsStringSync());
+      return m == null
+          ? null
+          : p.posix.normalize(m.group(1)!.replaceAll(RegExp('[\'"]'), ''));
+    });
+
+/// Whether [posixPath], a file of the package at [packageRoot], is generated
+/// output that carries no repo-authored declarations or imports.
 ///
-/// `.g.dart` / `.freezed.dart` are conventional; the `firebase_options_*` files
-/// are emitted by the FlutterFire CLI and are gitignored.
-bool isGeneratedSource(String posixPath) {
-  final name = p.posix.basename(posixPath);
-  return name.endsWith('.g.dart') ||
-      name.endsWith('.freezed.dart') ||
-      name.endsWith('.config.dart') ||
-      name.endsWith('.module.dart') ||
-      name.endsWith('.mocks.dart') ||
-      name.startsWith('firebase_options_') ||
-      posixPath.contains('/gen/') ||
-      posixPath.contains('/generated/');
+/// Read against the path **below the package**, never the absolute one: a
+/// checkout cloned into `~/gen/app` or `/srv/generated/ci` has `gen` in every
+/// path, and the old test on the whole path skipped every file there.
+///
+/// A file counts only when its name or folder says so *and* the generator
+/// vouches for it:
+///
+/// - a conventional name (`*.g.dart`, `*.freezed.dart`, `*.config.dart`,
+///   `*.module.dart`, `*.gr.dart`, `*.mocks.dart`, the plugin registrant) or a
+///   file under a `gen/` / `generated/` folder, and
+/// - the generator's header in its leading comment, or — for `flutter gen-l10n`,
+///   which writes none — a place in the package's `l10n.yaml` `output-dir`.
+///
+/// A hand-written `size_ext.g.dart`, or a hand-written file dropped into
+/// `lib/src/gen/`, therefore stays under every rule (R6 reports the first).
+/// `firebase_options_*.dart` is the one exception: the FlutterFire CLI
+/// (gitignored) and the CI stub both lack a header.
+bool isGeneratedSource(String posixPath, {required String packageRoot}) {
+  final file = posixPath.replaceAll(r'\', '/');
+  final rel = p.posix.isWithin(packageRoot, file)
+      ? p.posix.relative(file, from: packageRoot)
+      : file;
+  final name = p.posix.basename(rel);
+  if (_isFirebaseOptions(name)) return true;
+  final segments = p.posix.split(p.posix.dirname(rel));
+  final inGenFolder =
+      segments.contains('gen') || segments.contains('generated');
+  if (!_hasGeneratedName(name) && !inGenFolder) return false;
+  if (hasGeneratorHeader(_headOf(file))) return true;
+  final l10n = _l10nOutputDir(packageRoot);
+  return l10n != null && p.posix.dirname(rel) == l10n;
+}
+
+/// Whether [name] looks like generator output at all — the half of
+/// [isGeneratedSource] that does not read the file.
+bool hasGeneratedName(String name) => _hasGeneratedName(name);
+
+/// The directory of the package that owns [file]: the nearest ancestor below
+/// [repoRoot] holding a `pubspec.yaml`, or [repoRoot] itself when none does.
+String packageRootOf(String file, String repoRoot) {
+  var dir = p.posix.dirname(file.replaceAll(r'\', '/'));
+  while (dir.length > repoRoot.length && p.posix.isWithin(repoRoot, dir)) {
+    if (File(p.posix.join(dir, 'pubspec.yaml')).existsSync()) return dir;
+    dir = p.posix.dirname(dir);
+  }
+  return repoRoot;
 }
 
 /// Every `.dart` file under `<packageRoot>/lib`, POSIX paths, unsorted.
@@ -56,7 +163,7 @@ List<String> dartFilesUnderLib(String packageRoot) {
 /// the generated output, sorted.
 List<String> handWrittenDartUnderLib(String packageRoot) => [
   for (final f in dartFilesUnderLib(packageRoot))
-    if (!isGeneratedSource(f)) f,
+    if (!isGeneratedSource(f, packageRoot: packageRoot)) f,
 ]..sort();
 
 // ---------------------------------------------------------------------------
@@ -77,18 +184,52 @@ final RegExp typeDeclaration = RegExp(
 /// Comma lists are captured whole (`implements A, B`) and split by the caller,
 /// which is what makes a dual-registering controller like `AuthProvider` —
 /// `implements IAuthSessionState, IAuthRefreshListenable` — register both.
+///
+/// A supertype may carry an import prefix (`implements c.IFoo`) and type
+/// arguments (`implements IFoo<Bar>, IBaz`); the caller strips the prefix.
 final RegExp supertypeRef = RegExp(
-  r'(?:implements|extends|with|as:)\s*([A-Z]\w*(?:\s*,\s*[A-Z]\w*)*)',
+  r'(?:implements|extends|with|as:)\s*'
+  r'((?:\w+\s*\.\s*)?[A-Z]\w*(?:\s*<[^;{}()]*?>)?'
+  r'(?:\s*,\s*(?:\w+\s*\.\s*)?[A-Z]\w*(?:\s*<[^;{}()]*?>)?)*)',
 );
+
+/// The type names in one [supertypeRef] capture: the comma-separated names,
+/// each without its import prefix and type arguments.
+List<String> supertypeNames(String capture) {
+  final out = <String>[];
+  var depth = 0;
+  final current = StringBuffer();
+  void flush() {
+    final name = current.toString().trim();
+    current.clear();
+    if (name.isEmpty) return;
+    out.add(name.split('.').last.trim());
+  }
+
+  for (final c in capture.split('')) {
+    if (c == '<') {
+      depth++;
+    } else if (c == '>') {
+      depth--;
+    } else if (depth == 0 && c == ',') {
+      flush();
+    } else if (depth == 0) {
+      current.write(c);
+    }
+  }
+  flush();
+  return out;
+}
 
 /// Every type declared in the hand-written Dart under `<packageRoot>/lib`.
 Set<String> typesDeclaredIn(String packageRoot) {
   final out = <String>{};
   for (final file in dartFilesUnderLib(packageRoot)) {
-    if (isGeneratedSource(file)) continue;
-    for (final m in typeDeclaration.allMatches(
-      File(file).readAsStringSync(),
-    )) {
+    if (isGeneratedSource(file, packageRoot: packageRoot)) continue;
+    // Comments and strings blanked: a commented-out `class IOld` or a
+    // template in a string declares nothing.
+    final code = DartSource.scan(File(file).readAsStringSync()).code;
+    for (final m in typeDeclaration.allMatches(code)) {
       out.add(m.group(1)!);
     }
   }
@@ -122,11 +263,12 @@ Map<String, Set<String>> ownersImplementing(
     final owner = unit.owner;
     if (owner == null) continue;
     for (final file in dartFilesUnderLib(unit.rootPath)) {
-      if (isGeneratedSource(file)) continue;
-      final content = File(file).readAsStringSync();
-      for (final m in supertypeRef.allMatches(content)) {
-        for (final raw in m.group(1)!.split(',')) {
-          final name = raw.trim();
+      if (isGeneratedSource(file, packageRoot: unit.rootPath)) continue;
+      // Comment- and string-stripped: prose such as "works with ISessionState"
+      // or a commented-out `class Old implements IFoo` is not an implementer.
+      final code = DartSource.scan(File(file).readAsStringSync()).code;
+      for (final m in supertypeRef.allMatches(code)) {
+        for (final name in supertypeNames(m.group(1)!)) {
           if (contractTypes.contains(name)) {
             (out[name] ??= <String>{}).add(owner);
           }

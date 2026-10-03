@@ -25,6 +25,9 @@ dev_dependencies:
   # plugins' in-memory doubles.
   flutter_test:
     sdk: flutter
+{{#usesDatabase}}
+  drift: {{v.drift}}                      # closes the package-owned databases between boots
+{{/usesDatabase}}
   flutter_secure_storage: {{v.flutter_secure_storage}}
   shared_preferences: {{v.shared_preferences}}
   flutter_lints: {{v.flutter_lints}}

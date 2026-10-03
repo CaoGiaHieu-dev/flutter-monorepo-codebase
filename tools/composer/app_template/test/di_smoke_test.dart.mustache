@@ -1,3 +1,7 @@
+{{#usesDatabase}}
+import 'dart:io';
+
+{{/usesDatabase}}
 {{#smokeImports}}
 {{{line}}}
 {{/smokeImports}}
@@ -11,11 +15,22 @@
 /// minus the widgets, with the platform plugins replaced by their in-memory
 /// test doubles.
 ///
+{{#usesDatabase}}
+/// - storage: the plugins' own in-memory stores;
+/// - `path_provider`: a temporary directory, for the package-owned Drift
+///   databases the graph opens (`@preResolve`) on a background isolate; each
+///   is closed between boots, as GetIt's reset does not close it.
+///
+/// An app that also composes `core_notifications` (Firebase, messaging, local
+/// notifications) copies those doubles from `apps/mobile/test/di_smoke_test.dart`.
+{{/usesDatabase}}
+{{^usesDatabase}}
 /// The graph touches the storage plugins only. A package that needs more
 /// brings its own doubles: an app that composes `core_database` (a module that
 /// opens a Drift database) or `core_notifications` (Firebase, messaging, local
 /// notifications) copies the `path_provider`, Firebase and notification
 /// doubles from `apps/mobile/test/di_smoke_test.dart`.
+{{/usesDatabase}}
 ///
 /// It names no module on purpose (only `injection.dart` may — arch_check
 /// R10): it checks what the shell resolves, however the manifest composes
@@ -36,12 +51,43 @@ const _platform = AppPlatform.{{smokePlatform}};
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+{{#usesDatabase}}
+  late Directory documents;
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    documents = Directory.systemTemp.createTempSync('di_smoke_');
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (_) async => documents.path,
+    );
+  });
+
+  tearDown(() async {
+    // Each package-owned database runs on its own isolate; GetIt's reset
+    // does not close it, and the next boot would open a second instance.
+    for (final database in getIt.findAll<GeneratedDatabase>()) {
+      await database.close();
+    }
+    await resetDependencies();
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    documents.deleteSync(recursive: true);
+  });
+{{/usesDatabase}}
+{{^usesDatabase}}
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
   });
 
   tearDown(resetDependencies);
+{{/usesDatabase}}
 
   for (final flavor in appFacts.flavors) {
     test(

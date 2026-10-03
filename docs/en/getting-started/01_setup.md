@@ -279,7 +279,7 @@ class EnvConstants {
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.
 
-Which keys an app reads, and which flavors must have them non-empty, is declared in the app's `app_manifest.yaml` under `env:` (`BASE_URL: { required_in: [prod] }`, `APP_NAME: { required_in: [staging, prod] }`; `native_only: true` for a key only Gradle or Xcode reads). A non-debug staging or prod build whose required key is empty stops at a boot-error screen (`P03`) instead of running with no network and an empty title, and `composer verify` checks that the env files that exist hold exactly the declared keys (V11). The flavors themselves are declared there too (`flavors:`), and so is each app's pinning decision ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
+Which keys an app reads, and which flavors must have them non-empty, is declared in the app's `app_manifest.yaml` under `env:` (`BASE_URL: { required_in: [prod] }`; `native_only: true` for a key only Gradle or Xcode reads). A non-debug build of a flavor that requires a key, and whose key is empty, stops at a boot-error screen (`P03`) instead of running with no network — so a key is required only where a build without it is unusable: `APP_NAME` is not, the title falls back to the manifest's `app.name`. and `composer verify` checks that the env files that exist hold exactly the declared keys (V11). The flavors themselves are declared there too (`flavors:`), and so is each app's pinning decision ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
 ---
 
 ## 6. Run the app
@@ -293,7 +293,7 @@ Both `flutter run` and `flutter build` must be invoked **from `apps/mobile/`**. 
 > generates its desktop runners and runs it. To give an app a platform it lacks, run
 > `flutter create --platforms=linux .` (or `macos`, `windows`) **inside that app's directory** —
 > never at the workspace root — and delete the `test/widget_test.dart` and `analysis_options.yaml`
-> it writes, as that README explains. A desktop run accepts `--flavor`, though this repo configures flavors natively for Android and iOS only; the **web** has no `--flavor` option at all — pass `--dart-define=FLUTTER_APP_FLAVOR=<flavor>` there. An app declares the platforms it runs on in its manifest (`platforms:`), and `describe --app <id>` prints the exact `flutter create` line for each one still to be created.
+> it writes, as that README explains. A desktop run accepts `--flavor`, though this repo configures flavors natively for Android and iOS only; the **web** has no `--flavor` option at all — pass `--dart-define=APP_FLAVOR=<flavor>` there (the Flutter tool refuses the framework's own `FLUTTER_APP_FLAVOR`; the shell reads `APP_FLAVOR` on the web only). An app declares the platforms it runs on in its manifest (`platforms:`), and `describe --app <id>` prints the exact `flutter create` line for each one still to be created.
 
 ### From the CLI
 

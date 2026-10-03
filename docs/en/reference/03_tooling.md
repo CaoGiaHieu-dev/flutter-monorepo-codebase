@@ -72,7 +72,7 @@ Exit codes follow one convention across the tools: `0` success, `1` the check fa
 - Only the regions between `composer:managed:<region>` and `composer:end:<region>` are generated; never hand-edit them (RULE-16).
 - A non-strict `sync` that skipped a missing module prints a `PARTIAL COMPOSITION` block and the `git checkout --` line that restores the files.
 - A third app is one command, and the two files you then edit are its manifest and `lib/app/app_profile.dart`: [`../guides/13_app_composition.md` § 8](../guides/13_app_composition.md#8-a-third-app-by-command).
-- Manifest validation, the checks V1–V14, package discovery and the `api` layer: [details](../../../tools/README.md#composer).
+- Manifest validation, the checks V1–V16, package discovery and the `api` layer: [details](../../../tools/README.md#composer).
 
 ### `bootstrap` — before composer can run
 

@@ -64,7 +64,6 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | Area | Path | Contents |
 |:--|:--|:--|
 | Service locator | `src/di/` | `getIt`, `getItOrNull`, `getAll`, `getAllOrEmpty` |
-| Config | `src/config/` | `SslPinningConfig` |
 | Enums | `src/enums/` | app-wide enums (`Flavor`, …) |
 | Errors | `src/error/` | `ErrorHandler.handleError()`, exception types, and a re-export of `AppFailure` (declared in `domain_core` alongside `Result<T>`). `ErrorClassifier` + `ErrorHandler.registerClassifier` let the package that owns an exception type map it — `core_network` registers `DioFailureClassifier` (§ 6). `ErrorHandler.onUnclassifiedError` is a plain callback for the exceptions it cannot classify — the app shell points it at the optional `IErrorReporter` ([`06_app_shell.md`](06_app_shell.md#errors-and-crash-reporting)) |
 | Extensions | `src/extensions/` | `bool`, `Enum`, `List`, `String` — no `DateTime` or `num` formatting: dates, times and currency are locale-dependent, so format them with `intl`'s `DateFormat` / `NumberFormat` and the current locale |
@@ -320,7 +319,7 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 | Area | Path | Contents |
 |:--|:--|:--|
 | Client | `src/api_client.dart` | `ApiClient.createClient()` — Dio factory, assembles the interceptor chain |
-| Contract | `src/network_config.dart` | `NetworkConfig` — `getToken`, `getLocale`, `onRetryCallback`, `onRefreshToken`, `onRefreshFailed`, `sslPinningHashes` |
+| Contract | `src/network_config.dart` | `NetworkConfig` — `getToken`, `getLocale`, `onRetryCallback`, `onRefreshToken`, `onRefreshFailed` |
 | Interceptors | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handlers | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler` |
 | Constants | `src/utils/network_constants.dart` | Timeouts, header names, `Bearer` prefix, extra keys, log tags |
@@ -331,7 +330,7 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 `NetworkConfig` is implemented **in the app shell's adapters package** (`platform_shell_adapters`), not here — that is what keeps `core_network` free of any storage dependency. Both refresh callbacks default to `null`, so a client with no refresh endpoint simply surfaces the `401` unchanged.
 
 > [!CAUTION]
-> **SSL pinning is only as good as the decision an app makes.** `NetworkConfigImpl.sslPinningHashes` returns the pins the app's manifest declares for the flavor (`flavors.<f>.ssl_pinning`), and the template apps declare `disabled` with a stated reason for staging and prod — so pinning is off there, and `AppInitializer` logs the reason as a `WARNING` on every Android or iOS start that does not bypass validation (everything but a debug build that explicitly declared `--flavor dev`, a missing or unknown flavor included, which is treated as `prod` for TLS). The gap is visible rather than silent, and it stays one until an app declares pins. See [the networking guide](../guides/08_networking.md#10-turn-on-ssl-pinning).
+> **SSL pinning is only as good as the decision an app makes.** The pins are the app's manifest decision for the flavor (`flavors.<f>.ssl_pinning`, carried by `SslPinningPolicy` and read by `AppInitializer` — `NetworkConfig` has no part in it), and the template apps declare `disabled` with a stated reason for staging and prod — so pinning is off there, and `AppInitializer` logs the reason as a `WARNING` on every Android or iOS start that does not bypass validation (everything but a debug build that explicitly declared `--flavor dev`, a missing or unknown flavor included, which is treated as `prod` for TLS). The gap is visible rather than silent, and it stays one until an app declares pins. See [the networking guide](../guides/08_networking.md#10-turn-on-ssl-pinning).
 
 How to declare a service, opt a request out, add a second client or turn pinning on: [`../guides/08_networking.md`](../guides/08_networking.md). What happens inside the client follows.
 
@@ -478,7 +477,7 @@ Bodies are masked too, at any depth: a value under `password`, `token`, `access_
 
 ```dart
 // platform/infra/network/lib/src/network_config.dart
-abstract class NetworkConfig implements SslPinningConfig {
+abstract class NetworkConfig {
   String? Function() get getToken;
   String? Function() get getLocale;
 
@@ -489,9 +488,6 @@ abstract class NetworkConfig implements SslPinningConfig {
 
   Future<String?> Function()? get onRefreshToken => null;
   Future<void> Function()? get onRefreshFailed => null;
-
-  @override
-  List<String> get sslPinningHashes;
 }
 ```
 
@@ -657,9 +653,9 @@ switch (profile.facts.sslPinning.decisionFor(flavor)) {
 }
 ```
 
-Where pinning can apply at all is a fact of the platform (`AppPlatform.canPinTls`: Android and iOS). On the **web** the browser validates certificates and Dio uses its browser adapter, so nothing is installed and one `INFO` line says so; on **desktop** the pinning plugin has no implementation, so one `INFO` line says "not applicable" — it used to log an `ERROR` on every start, and installing the pinning client there would have routed every HTTPS call through a plugin with no desktop side. An `AppInitializer` call without an app profile (a hand-built host, a test) keeps the older behaviour: pin `SslPinningConfig.sslPinningHashes` when there are any, log an `ERROR` when there are none or the config is unregistered.
+Where pinning can apply at all is a fact of the platform (`AppPlatform.canPinTls`: Android and iOS). On the **web** the browser validates certificates and Dio uses its browser adapter, so nothing is installed and one `INFO` line says so; on **desktop** the pinning plugin has no implementation, so one `INFO` line says "not applicable" — it used to log an `ERROR` on every start, and installing the pinning client there would have routed every HTTPS call through a plugin with no desktop side. `profile`, `platform` and `flavor` are required arguments of `initBeforeRunApp` and `init`: the initializer never guesses where it runs or which flavor it is (RULE-82), and there is no profile-less mode with a pin source of its own.
 
-`_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls right after `configureDependencies()` and **before** `MainScope` builds the splash. Timing is the whole point: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there — auth restoring its session with a token refresh — can make the first request at once, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`. An override installed later, in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
+`_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls after the profile checks and the `beforeDependencies` hook and **before** `configureDependencies()` — it reads only the profile, so it needs no registration. Timing is the whole point: Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`, and anything the graph builds can open a connection — an eager singleton while DI initialises, a contract implementation `checkAppContract` resolves right after, a controller created on the splash (auth restoring its session with a token refresh). An override installed later, after DI or in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
 
 Certificate validation is bypassed (for local self-signed servers) **only in a debug build that explicitly declared the `dev` flavor** — `AppConfig.bypassesCertificateValidation`. Everything else goes through the pinning path: `staging`, `prod`, a `dev` profile or release build, and a build with a **missing or unknown** flavor, which is treated as `prod` and logged as an ERROR. This fails closed on purpose: `AppConfig.appFlavor` used to fall back to `dev`, so a build made without `--flavor` — release included — accepted every certificate. `appFlavor` itself (the DI environment) now falls back to `dev` in a debug build and to `prod` otherwise.
 

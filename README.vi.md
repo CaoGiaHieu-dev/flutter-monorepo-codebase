@@ -395,7 +395,7 @@ Future<void> configureDependencies({String? environment}) async {
 > boot đồ thị thật trong CI (Gate 3) và bắt được lỗi này.
 >
 > **RULE-14** — GetIt không resolve theo supertype: bind interface thứ hai qua `@module`
-> (xem `platform/shell/adapters/lib/di/network_binding_module.dart`).
+> (xem `modules/auth/feature/lib/di/module.dart`).
 
 ---
 

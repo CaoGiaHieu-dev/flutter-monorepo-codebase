@@ -180,7 +180,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-`order` is an ascending sort key, not an index, and must be unique across tabs. `destination` returns a neutral `NavDestination`, so the same contribution renders as a bottom-bar item or a rail item. `feature_dashboard` builds that chrome from every registered tab and drops it when fewer than two are registered ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-is-chrome-only)). Why the chrome switches on window size class: [`11_design_system.md` § 7](11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
+`order` is an ascending sort key, not an index, and must be unique across tabs. `destination` returns a neutral `NavDestination`, so the same contribution renders as a bottom-bar item or a rail item. `feature_dashboard` builds that chrome from every registered tab and drops it when fewer than two are registered ([`../architecture/05_features.md` § 4](../architecture/05_features.md#4-feature_dashboard-is-chrome-only)). An app that composes two or more tabs must compose `feature_dashboard` too and declare `dashboard: provided`, or only the first tab is reachable — `checkAppContract` fails the smoke test with `C12` ([`13_app_composition.md` § 6](13_app_composition.md#6-contracts-what-the-shell-asks-of-an-app)). Why the chrome switches on window size class: [`11_design_system.md` § 7](11_design_system.md#7-lay-out-for-tablets-foldables-and-split-screen).
 
 ## 6. Let other features navigate to your screen
 

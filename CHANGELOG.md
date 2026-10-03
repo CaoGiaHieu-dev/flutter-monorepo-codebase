@@ -55,7 +55,7 @@ with the architecture rules enforced by CI instead of review alone.
   gains `AppProfile` / `AppFacts` (what an app is and where it runs: platforms, flavors, env keys,
   capabilities, SSL pinning per flavor), `AppProfile.validate` (problems `P01`–`P05`) and
   `registerAppProfile`; `core_common` gains `resolveAppPlatform()`; `platform_app_shell` gains the
-  22-row catalog of what the shell resolves (`kShellContracts`), `checkAppContract` (problems
+  21-row catalog of what the shell resolves (`SHELL_CONTRACTS`: 7 required, 14 optional), `checkAppContract` (problems
   `C01`–`C09`), `ShellHooks` (`onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`) and
   a boot-error screen. `runShellApp` takes an optional `profile:` and `hooks:`; with a profile, an
   undeclared platform stops at that screen before dependency injection instead of a blank window.
@@ -109,7 +109,7 @@ with the architecture rules enforced by CI instead of review alone.
   shell does without it as its reason, never `TODO`), then runs `sync` and `verify`. It refuses an
   existing id or a platform a requested module blocks before writing anything, and never runs
   `flutter create`: it prints the line. `composer describe --catalog` now also lists the
-  per-package pubspec keys, checks V1–V14 and problem codes `P01`–`P05` / `C01`–`C09`. New guide
+  per-package pubspec keys, checks V1–V16 and problem codes `P01`–`P05` / `C01`–`C12`. New guide
   `docs/en/guides/13_app_composition.md` (+ `docs/vi`) and skill `configure_app`; registry group
   80–89 with RULE-80 (everything per-app is declared in `apps/<id>/`), RULE-81 (every optional
   contract has a declared state) and RULE-82 (platform differences are an app decision), 68 rules
@@ -229,6 +229,12 @@ with the architecture rules enforced by CI instead of review alone.
 - `flutter_secure_storage` 10.3.1 → 11.2.0 (`flutter_secure_storage_darwin` 0.4.x: iOS 13+,
   Android minSdk 24). Values written by 10.x are read unchanged — same pinned RSA-OAEP + AES-GCM
   pair; see `docs/en/guides/06_storage.md` § 3 for apps that once shipped 9.x.
+- Apps layer follow-up: `AppInitializer.initBeforeRunApp` and `init` require `platform` and
+  `flavor` (no private `kIsWeb` fork, R17 allow-list entry removed); `APP_NAME` is no longer
+  `required_in` — the title falls back to `app.name`, so a production release is not stopped at the
+  boot-error screen over a cosmetic key (`BASE_URL` stays required in prod); `checkAppContract`
+  gains `C11` (`router.fallbackPath` is not a registered route) and `C12` (two or more tabs and no
+  dashboard); the shell catalog cites the file of each lookup instead of a line number.
 
 ### Fixed
 
@@ -251,8 +257,11 @@ with the architecture rules enforced by CI instead of review alone.
 
 - Certificate validation is bypassed only in a debug build that explicitly declared
   `--flavor dev`; a missing or unknown flavor is treated as prod.
-- `SslPinningConfig` is bound in its own right, so pinning no longer silently no-ops once hashes
-  are configured.
+- Certificate pinning is the app's declared decision per flavor (`flavors.<f>.ssl_pinning`),
+  installed by `AppInitializer` from the profile before dependency injection starts; there is one
+  pin source, so the `SslPinningConfig` supertype, its `@module` binding and
+  `NetworkConfig.sslPinningHashes` are gone and a missing registration can no longer switch
+  pinning off.
 - `LoggingInterceptor` redacts credentials in bodies as well as headers and logs only in debug.
 - The AI code-review tool sends the Gemini key in a header, redacts it from errors, and stores
   it in a gitignored file instead of tracked config.

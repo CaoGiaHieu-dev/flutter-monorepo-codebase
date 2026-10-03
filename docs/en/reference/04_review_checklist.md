@@ -87,7 +87,7 @@ grep -rn "package:flutter" modules/*/domain/lib   # must be empty
 - [ ] **RULE-45** — the storage owner is a singleton with `@PostConstruct(preResolve: true)`, never `@injectable`
 - [ ] **RULE-46** — new tables and DAOs live in the owning package's own database
 - [ ] **RULE-47** — a schema change bumped `schemaVersion` and registered `IDatabaseMigration<YourDatabase>`; the open carries `@Order(1)`
-- [ ] **RULE-48** — a change touching networking keeps `SslPinningConfig` bound and says whether `sslPinningHashes` is filled
+- [ ] **RULE-48** — a change touching networking leaves each flavor's `ssl_pinning` decision in `app_manifest.yaml` intact (pins, or `disabled` with a reason) and says whether the pins are filled
 
 ---
 

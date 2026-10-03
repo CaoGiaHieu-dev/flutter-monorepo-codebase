@@ -54,7 +54,7 @@ Secrets are never committed. If you find any of the following in the history, re
 ## For projects built on this template
 
 - Decide `flavors.<f>.ssl_pinning` in your app manifest (at least two pins, or `disabled` with a
-  reason) and keep the `SslPinningConfig` binding as shipped
-  (`platform/shell/adapters/lib/di/network_binding_module.dart`).
+  reason). The decision is the app's `SslPinningPolicy`, which `AppInitializer` installs before DI
+  starts; there is no pin to register or bind and no constant in `platform/` to edit.
 - Generate your own release keystores and keep them out of git.
 - Replace the placeholder contact above and enable private vulnerability reporting in your fork.

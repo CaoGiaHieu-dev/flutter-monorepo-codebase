@@ -28,8 +28,8 @@ tool's edge cases and exit codes, is [`docs/en/reference/03_tooling.md`](../../.
 
 - `describe --app <id>` prints the report that also sits in the app's `README.md` (generated, between
   `composer:managed:report` markers — never edit it). `describe --catalog` is the key reference: every
-  manifest key with its default and its reader, the 22-row contract catalog, the derived defaults, the
-  pubspec keys, checks V1–V14 and problem codes P01–P05 / C01–C09. Do not copy that table into prose.
+  manifest key with its default and its reader, the 21-row contract catalog, the derived defaults, the
+  pubspec keys, checks V1–V16 and problem codes P01–P05 / C01–C12. Do not copy that table into prose.
 - `new` renders `tools/composer/app_template/` into `apps/<id>/`, derives `capabilities:` from what the
   requested modules register, then runs `sync` and `verify`. It refuses an existing id or a platform a
   module blocks **before writing anything**, and it **never runs `flutter create`**: it prints the line

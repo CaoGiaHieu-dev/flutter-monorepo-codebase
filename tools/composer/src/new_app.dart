@@ -7,6 +7,7 @@ import 'package:yaml/yaml.dart';
 import 'catalog.dart';
 import 'manifest_v2.dart';
 import 'package_facts.dart';
+import 'platform_notes.dart';
 import 'provisions.dart';
 
 /// `composer new <id>`: the pieces that need no knowledge of composer's
@@ -169,7 +170,7 @@ class PlannedCapability {
   final String key;
   final bool provided;
 
-  /// What the shell does without it, for an absent contract.
+  /// Why an absent contract is absent (`not composed: ...` from `new`).
   final String? reason;
 }
 
@@ -426,11 +427,22 @@ class NewAppPlan {
     if (registered.every((r) => r)) {
       capabilities.add(PlannedCapability(key, provided: true));
     } else if (registered.every((r) => !r)) {
+      // The state of the app, not a restatement of what the shell does without
+      // it (the report's "If absent" column says that, once): no module this
+      // app composes registers the contract. The report lists such a reason
+      // under "Decisions to revisit" until its author replaces it with a
+      // decision.
+      final what = members.length == 1
+          ? '`${members.first.type}`'
+          : 'the `$key` contracts '
+                '(${members.map((m) => m.type).join(', ')})';
       capabilities.add(
         PlannedCapability(
           key,
           provided: false,
-          reason: members.first.whenAbsent,
+          reason:
+              '$kNotComposedPrefix no module this app composes registers '
+              '$what — replace this with why the app goes without',
         ),
       );
     } else {
@@ -552,6 +564,7 @@ Map<String, String> renderAppFiles(
     // `directives_ordering` sorts by URI, so where the app's own package falls
     // depends on its id.
     'smokeImports': _sortedImports([
+      '${plan.pubspecName}/app/app_hooks.dart',
       '${plan.pubspecName}/app/app_profile.dart',
       '${plan.pubspecName}/di/injection.dart',
       'core_base_ui/core_base_ui.dart',
@@ -691,13 +704,19 @@ List<String> nextSteps(NewAppPlan plan) {
         'Flutter tool\'s to write. When you want them, run, once:',
     '  cd apps/${plan.id} && flutter create --platforms=${request.platforms.join(',')} '
         '--org com.example --project-name ${plan.pubspecName} .',
+    for (final cleanup in kFlutterCreateCleanup) '  $cleanup',
     'then declare each platform `runner: committed` in the manifest and run '
         '`dart tools/composer/composer.dart sync --app ${plan.id}`.',
+    'Only `env.dev` is written. Create `env.stg` and `env.prod` (the same keys; '
+        'the report names them) when you build those flavors — `composer '
+        'verify` holds each file that exists to `env:` (V11).',
     if (!plan.hasScreen)
       'No composed module contributes a screen yet (no IFeatureRouteModule and '
           'no INavDestinationModule), so the smoke test fails with C05 until '
           'one does: compose a module with a feature layer, or generate one '
-          '(`dart tools/module_generator/generate.dart 1 <name> ...`).',
+          'for this app alone (`dart tools/module_generator/generate.dart 1 '
+          '<name> "" <SM> <route> --apps ${plan.id}` — without `--apps` the '
+          'generator adds it to every app).',
     if (plan.usesDatabase)
       'This app links core_database: its smoke test already carries the '
           'path_provider double and closes each package-owned database '

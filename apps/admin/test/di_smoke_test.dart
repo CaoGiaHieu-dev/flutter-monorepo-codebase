@@ -1,3 +1,4 @@
+import 'package:admin_app/app/app_hooks.dart';
 import 'package:admin_app/app/app_profile.dart';
 import 'package:admin_app/di/injection.dart';
 import 'package:core_base_ui/core_base_ui.dart';
@@ -92,18 +93,9 @@ void main() {
   }
 
   test('every declared platform and flavor is a valid way to start', () {
-    for (final platform in appFacts.platforms.keys) {
-      for (final flavor in appFacts.flavors) {
-        expect(
-          appProfile.validate(
-            platform: platform,
-            flavor: flavor,
-            checkEnv: false,
-          ),
-          isEmpty,
-          reason: '${platform.name} / ${flavor.name}',
-        );
-      }
-    }
+    // The boot's own question for each `platform / flavor` the manifest
+    // declares, with the hooks `main.dart` passes: a platform that declares a
+    // `window` needs `appHooks.configureWindow` (P05).
+    expect(checkDeclaredStarts(appProfile, appHooks), isEmpty);
   });
 }

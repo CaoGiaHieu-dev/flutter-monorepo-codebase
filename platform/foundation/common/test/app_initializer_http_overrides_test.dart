@@ -3,18 +3,33 @@ import 'dart:io';
 import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class _Pins implements SslPinningConfig {
-  @override
-  List<String> get sslPinningHashes => const [
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-  ];
-}
-
 class _Sentinel extends HttpOverrides {}
 
-/// `runShellApp` installs certificate pinning before the splash is built, so
-/// `initBeforeRunApp` must do it synchronously — and `init`, which runs later
-/// and calls it again, must not install a second override.
+const _pinned = SslPinning.pinned(
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
+);
+
+AppProfile _profile({required SslPinning? decision}) => AppProfile(
+  facts: AppFacts(
+    id: 'overrides',
+    name: 'Overrides',
+    flavors: Flavor.values.toSet(),
+    platforms: {
+      for (final platform in AppPlatform.values)
+        platform: const PlatformFacts.today(),
+    },
+    sslPinning: SslPinningPolicy({
+      if (decision != null)
+        for (final flavor in Flavor.values) flavor: decision,
+    }),
+  ),
+);
+
+/// `runShellApp` installs certificate pinning before dependency injection
+/// starts, so `initBeforeRunApp` must do it synchronously, from the profile
+/// alone — and `init`, which runs later and calls it again, must not install
+/// a second override.
 void main() {
   setUp(() async {
     await getIt.reset();
@@ -22,48 +37,66 @@ void main() {
   });
 
   tearDown(() async {
+    HttpOverrides.global = null;
     await getIt.reset();
     AppInitializer.debugResetBeforeRunApp();
     AppInitializer.debugIsWebOverride = null;
   });
 
   test('installs the pinning HttpOverrides synchronously', () {
-    getIt.registerSingleton<SslPinningConfig>(_Pins());
     final before = HttpOverrides.current;
 
-    AppInitializer.initBeforeRunApp();
+    AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: _pinned),
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
 
     expect(HttpOverrides.current, isNot(same(before)));
     expect(HttpOverrides.current, isNotNull);
   });
 
   test('is idempotent: a second call installs nothing', () {
-    getIt.registerSingleton<SslPinningConfig>(_Pins());
-    AppInitializer.initBeforeRunApp();
+    final profile = _profile(decision: _pinned);
+    AppInitializer.initBeforeRunApp(
+      profile: profile,
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
 
     final sentinel = _Sentinel();
     HttpOverrides.global = sentinel;
-    AppInitializer.initBeforeRunApp();
+    AppInitializer.initBeforeRunApp(
+      profile: profile,
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
 
     expect(HttpOverrides.current, same(sentinel));
   });
 
-  test('leaves HttpOverrides alone without pins (logs instead)', () {
+  test('leaves HttpOverrides alone without a pin decision (logs instead)', () {
     final sentinel = _Sentinel();
     HttpOverrides.global = sentinel;
 
-    AppInitializer.initBeforeRunApp();
+    AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: null),
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
 
     expect(HttpOverrides.current, same(sentinel));
   });
 
-  test('installs nothing on the web, even with pins configured', () {
-    getIt.registerSingleton<SslPinningConfig>(_Pins());
+  test('installs nothing on the web, even with pins declared', () {
     AppInitializer.debugIsWebOverride = true;
     final sentinel = _Sentinel();
     HttpOverrides.global = sentinel;
 
-    AppInitializer.initBeforeRunApp();
+    AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: _pinned),
+      flavor: Flavor.prod,
+    );
 
     expect(HttpOverrides.current, same(sentinel));
   });

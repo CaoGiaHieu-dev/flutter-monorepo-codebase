@@ -185,4 +185,51 @@ void main() {
       expect(locator<AppProfile>(), same(profile));
     });
   });
+
+  group('registerProfileDefaults', () {
+    test('a bare graph gets the template default of every section', () {
+      registerProfileDefaults(locator: locator);
+
+      expect(locator<PlatformFacts>(), isA<PlatformFacts>());
+      expect(locator<SslPinningPolicy>(), isA<SslPinningPolicy>());
+      expect(locator<RouterProfile>().entry, EntryPolicy.firstLaunch);
+      expect(locator<LocaleProfile>().fallback, 'en');
+      expect(locator<ThemeProfile>().mode, ThemeModeSetting.system);
+      expect(
+        locator<NetworkProfile>().connectTimeout,
+        const Duration(seconds: 20),
+      );
+    });
+
+    test('never registers the app identity', () {
+      registerProfileDefaults(locator: locator);
+
+      expect(locator.isRegistered<AppProfile>(), isFalse);
+      expect(locator.isRegistered<AppPlatform>(), isFalse);
+    });
+
+    test('a section the app registered stays, and the rest fill in', () {
+      final profile = mobileProfile();
+      registerAppProfile(
+        profile,
+        platform: AppPlatform.android,
+        locator: locator,
+      );
+
+      registerProfileDefaults(locator: locator);
+
+      expect(locator<LocaleProfile>(), same(profile.locale));
+      expect(locator<NetworkProfile>(), same(profile.network));
+      expect(locator<PlatformFacts>(), same(androidFacts));
+    });
+
+    test('is idempotent', () {
+      registerProfileDefaults(locator: locator);
+      final first = locator<NetworkProfile>();
+
+      registerProfileDefaults(locator: locator);
+
+      expect(locator<NetworkProfile>(), same(first));
+    });
+  });
 }

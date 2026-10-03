@@ -1,6 +1,8 @@
 import 'catalog.dart';
 import 'manifest_v2.dart';
+import 'native_flavors.dart';
 import 'package_facts.dart';
+import 'profile_summary.dart';
 import 'provisions.dart';
 
 /// One `di_groups` entry, resolved to the packages it composes.
@@ -47,6 +49,9 @@ class AppView {
     required this.packageFacts,
     required this.catalog,
     this.provisions = const ProvisionIndex.empty(),
+    this.native = const NativeFlavors.none(),
+    this.profile = const ProfileOverrides.unknown(),
+    this.shippedLanguages = const [],
   });
 
   final String id;
@@ -71,6 +76,16 @@ class AppView {
 
   /// What every workspace package registers, from the static scan.
   final ProvisionIndex provisions;
+
+  /// The flavors the committed Android and iOS runners declare, read as text.
+  final NativeFlavors native;
+
+  /// The profile sections the app's own `lib/app/app_profile.dart` sets.
+  final ProfileOverrides profile;
+
+  /// The language codes the template ships (the ARB files of `core_base_ui`),
+  /// empty when unknown.
+  final List<String> shippedLanguages;
 
   /// The packages whose registrations are part of this app's graph: the ones it
   /// composes, and the app's own `lib/`.

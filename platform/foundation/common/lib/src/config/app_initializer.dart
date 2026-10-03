@@ -27,29 +27,30 @@ class AppInitializer {
   /// ([HttpOverrides.global] — pinning, or, in a debug build that declared
   /// the `dev` flavor only, a bypass for local self-signed servers).
   ///
-  /// `runShellApp` calls this right after dependency injection and **before**
-  /// `MainScope` builds the splash. It cannot wait for [init]: the splash is
-  /// already wrapped in every feature's `IAppTreeWrapper`, so a controller
-  /// created there can open its first connection while [init] is still
-  /// pending — and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it
-  /// created first, so that connection's client (unpinned) would serve the
-  /// whole session.
+  /// `runShellApp` calls this **before** dependency injection starts, so
+  /// nothing the graph builds — an eager singleton, a contract implementation
+  /// the composition check instantiates, a controller on the splash — can open
+  /// a connection ahead of it. It cannot wait for [init]: Dio's
+  /// `IOHttpClientAdapter` keeps the `HttpClient` it created first, so a
+  /// connection opened before the override is installed (unpinned) would serve
+  /// the whole session. It needs no registration: it reads only the app's
+  /// [profile].
   ///
-  /// With the app's [profile], the [platform] this run is on and the [flavor]
-  /// it is built as (what `runShellApp` passes; the flavor defaults to
-  /// [AppConfig.appFlavor]), certificate pinning follows the app's declared
-  /// decision for the flavor ([SslPinningPolicy]): pinned installs the
-  /// pinning client, disabled logs its reason, and a platform that cannot pin
+  /// Certificate pinning follows the app's declared decision for the [flavor]
+  /// this run is built as (default [AppConfig.appFlavor]): `flavors.<f>.
+  /// ssl_pinning` in the manifest, carried by [AppFacts.sslPinning]
+  /// ([SslPinningPolicy]). Pinned installs the pinning client with exactly
+  /// those hashes, disabled logs its reason, and a platform that cannot pin
   /// TLS (`AppPlatform.canPinTls`: the web, where the browser owns TLS, and
   /// the desktop, where the pinning plugin has no implementation) says so once
-  /// instead of installing or complaining. Without them the behaviour is the
-  /// one before apps could declare it: pin whatever the registered
-  /// `SslPinningConfig` lists, and log an ERROR when it lists none.
+  /// instead of installing or complaining. [platform] is the platform this run
+  /// is on; left out, the web is told apart from every other platform by
+  /// [kIsWeb] only.
   ///
   /// Idempotent: [init] calls it too, for a host that never called it, and a
   /// second call installs nothing.
   static void initBeforeRunApp({
-    AppProfile? profile,
+    required AppProfile profile,
     AppPlatform? platform,
     Flavor? flavor,
   }) {
@@ -81,8 +82,8 @@ class AppInitializer {
 
   /// Performs all required startup initializations.
   static Future<void> init({
+    required AppProfile profile,
     RouteObserver<ModalRoute<void>>? routeObserver,
-    AppProfile? profile,
     AppPlatform? platform,
     Flavor? flavor,
   }) async {
@@ -116,7 +117,7 @@ class AppInitializer {
   }
 
   static void _setupHttpOverrides(
-    AppProfile? profile,
+    AppProfile profile,
     AppPlatform? platform,
     Flavor flavor,
   ) {
@@ -158,7 +159,8 @@ class AppInitializer {
       DynamicLogger.log(
         'FLUTTER_APP_FLAVOR is missing or unknown ("$appFlavor"). Treating '
         'the build as prod for TLS: certificate validation stays ON. Pass '
-        '--flavor dev to allow self-signed certificates in a debug build.',
+        '--flavor dev to allow self-signed certificates in a debug build '
+        '(on the web: --dart-define=APP_FLAVOR=dev).',
         tag: 'Security',
         level: LogLevel.ERROR,
       );
@@ -185,39 +187,10 @@ class AppInitializer {
       return;
     }
 
-    // The app's declared decision for this flavor, when it declared itself.
-    if (profile != null) {
-      _applyDeclaredPinning(profile, flavor);
-      return;
-    }
-
-    // Apply Global SSL Certificate Pinning via HttpSecurityPinningClient.
-    // This automatically secures all HttpClients in the entire application
-    // (including Dio, Image loaders, WebSockets, etc.)
-    //
-    // Requires `SslPinningConfig` to be registered in GetIt. Registering only
-    // the `NetworkConfig` subtype is not enough — GetIt resolves by exact
-    // type — which is why the app shell binds it explicitly in
-    // `platform/shell/adapters/lib/di/network_binding_module.dart`.
-    final config = getItOrNull<SslPinningConfig>();
-    final hashes = config?.sslPinningHashes;
-
-    if (hashes != null && hashes.isNotEmpty) {
-      HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
-    } else {
-      // Never fail silently here: without pinning the app still talks to the
-      // server over plain TLS, so a proxy with a trusted root can read every
-      // request. Surfacing it keeps a misconfiguration from shipping unnoticed.
-      DynamicLogger.log(
-        config == null
-            ? 'SSL pinning skipped: no SslPinningConfig registered in GetIt. '
-                  'Traffic on ${AppConfig.appFlavor.name} is NOT pinned.'
-            : 'SSL pinning skipped: sslPinningHashes is empty. '
-                  'Traffic on ${AppConfig.appFlavor.name} is NOT pinned.',
-        tag: 'Security',
-        level: LogLevel.ERROR,
-      );
-    }
+    // The app's declared decision for this flavor (`flavors.<f>.ssl_pinning`).
+    // Installing the pinning client secures every `HttpClient` in the
+    // application (Dio, image loaders, web sockets).
+    _applyDeclaredPinning(profile, flavor);
   }
 
   /// Pinning as the app's manifest decided it for the current flavor
@@ -249,17 +222,15 @@ class AppInitializer {
   }
 
   static Future<void> _configureSystemSettings(
-    AppProfile? profile,
+    AppProfile profile,
     AppPlatform? platform,
   ) async {
-    final facts = platform == null
-        ? null
-        : profile?.facts.platformFor(platform);
+    final facts = platform == null ? null : profile.facts.platformFor(platform);
     await SystemChrome.setPreferredOrientations(
       preferredOrientationsFor(
         _shortestSideAtLaunch(),
         policy: facts?.orientation ?? OrientationPolicy.phonesPortrait,
-        phoneMaxShortestSide: profile?.display.phoneMaxShortestSide,
+        phoneMaxShortestSide: profile.display.phoneMaxShortestSide,
       ),
     );
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);

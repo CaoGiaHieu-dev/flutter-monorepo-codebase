@@ -31,7 +31,6 @@ export 'src/profile/router_profile.dart';
 export 'src/profile/ssl_pinning.dart';
 export 'src/profile/theme_profile.dart';
 export 'src/service_locator.dart';
-export 'src/ssl_pinning_config.dart';
 export 'src/string_extension.dart';
 export 'src/utils/env_constants.dart';
 export 'src/utils/error_codes.dart';

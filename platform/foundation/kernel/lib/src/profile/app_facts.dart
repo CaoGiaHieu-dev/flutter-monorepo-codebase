@@ -42,7 +42,7 @@ final class AppFacts {
   final List<EnvRule> env;
 
   /// The app's declaration for every optional contract the shell resolves,
-  /// keyed by the catalog id (`kShellContracts`): provided, or absent with a
+  /// keyed by the catalog id (`SHELL_CONTRACTS`): provided, or absent with a
   /// reason.
   final Map<String, CapabilityExpectation> capabilities;
 

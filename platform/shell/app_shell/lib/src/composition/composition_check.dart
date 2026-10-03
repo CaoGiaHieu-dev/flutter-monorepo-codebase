@@ -3,13 +3,14 @@ import 'package:core_di/core_di.dart';
 import 'package:core_network/core_network.dart';
 
 import '../navigation/app_router.dart';
+import '../utils/shell_contract_constants.dart';
 import 'shell_contracts.dart';
 
 /// Holds an app's declaration to the dependency graph it actually built:
 /// the one check the DI smoke test and the debug boot share.
 ///
 /// Call it after dependency injection. It resolves every row of
-/// [kShellContracts] the way the shell does (`getItOrNull` /
+/// [SHELL_CONTRACTS] the way the shell does (`getItOrNull` /
 /// `getAllOrEmpty`, so absence is data, not a throw) and compares it with
 /// what `profile.facts.capabilities` declares:
 ///
@@ -21,11 +22,16 @@ import 'shell_contracts.dart';
 /// - `C06` two `INavDestinationModule`s share an `order` (RULE-24);
 /// - `C07` `AppRouter.router` fails to assemble;
 /// - `C08` `DioFailureClassifier` is not registered exactly once;
-/// - `C09` an optional contract has no declaration at all.
+/// - `C09` an optional contract has no declaration at all;
+/// - `C10` a registration's constructor throws when the contract is resolved.
 ///
-/// A registration whose constructor throws propagates that error, exactly as
-/// the shell's own lookup would. [flavor] and [platform] only label the
-/// report — nothing in the graph differs by them.
+/// Resolving a contract builds its lazy registration, and the router is
+/// assembled eagerly (`C07`), so this runs app code. What it throws never
+/// escapes: a throwing constructor is a `C10` problem in the report, handled
+/// like any other — a production release logs it and goes on (the shell would
+/// meet the same error at its own first lookup, with the reason on record).
+/// [flavor] and [platform] only label the report — nothing in the graph
+/// differs by them.
 CompositionReport checkAppContract(
   AppProfile profile, {
   required Flavor flavor,
@@ -36,12 +42,42 @@ CompositionReport checkAppContract(
   final sync = 'dart tools/composer/composer.dart sync --app $id';
   final states = <ContractState>[];
   final problems = <ProfileProblem>[];
+  // Contracts whose resolution threw: reported once as `C10`, never compared
+  // with the declaration, and not resolved a second time by the structure
+  // checks below.
+  final failed = <Type>{};
 
-  for (final contract in kShellContracts) {
-    final registered = contract.registered();
+  for (final contract in SHELL_CONTRACTS) {
     final declared = contract.need == ShellNeed.optional
         ? profile.facts.capabilities[contract.id]
         : null;
+
+    final List<Object> registered;
+    try {
+      registered = contract.registered();
+    } catch (error) {
+      failed.add(contract.type);
+      states.add(
+        ContractState(
+          contract: contract,
+          expectation: declared,
+          registered: const [],
+        ),
+      );
+      problems.add(
+        ProfileProblem(
+          code: 'C10',
+          description:
+              '`${contract.type}` (`${contract.id}`) is registered, but '
+              'resolving it threw: $error',
+          action:
+              'Fix the constructor or the registration the error names — '
+              'the shell resolves `${contract.type}` the same way and would '
+              'throw the same error at its first lookup.',
+        ),
+      );
+      continue;
+    }
     states.add(
       ContractState(
         contract: contract,
@@ -120,7 +156,7 @@ CompositionReport checkAppContract(
 
   problems
     ..addAll(_bundleDisagreements(profile, manifest, sync))
-    ..addAll(_structure());
+    ..addAll(_structure(failed));
 
   return CompositionReport(
     appId: id,
@@ -139,7 +175,7 @@ Iterable<ProfileProblem> _bundleDisagreements(
   String sync,
 ) sync* {
   final bundles = <String, List<ShellContract<Object>>>{};
-  for (final contract in kShellContracts) {
+  for (final contract in SHELL_CONTRACTS) {
     final bundle = contract.bundle;
     if (bundle != null) bundles.putIfAbsent(bundle, () => []).add(contract);
   }
@@ -168,12 +204,18 @@ Iterable<ProfileProblem> _bundleDisagreements(
   }
 }
 
-/// `C05`–`C08`: what both smoke tests used to check by hand.
-Iterable<ProfileProblem> _structure() sync* {
-  final routes = getAllOrEmpty<IFeatureRouteModule>().toList();
-  final tabs = getAllOrEmpty<INavDestinationModule>().toList();
+/// `C05`–`C08`: what both smoke tests used to check by hand. A contract in
+/// [failed] already threw while it was resolved (`C10`): what depends on it is
+/// skipped rather than reported twice.
+Iterable<ProfileProblem> _structure(Set<Type> failed) sync* {
+  final routes = failed.contains(IFeatureRouteModule)
+      ? null
+      : getAllOrEmpty<IFeatureRouteModule>().toList();
+  final tabs = failed.contains(INavDestinationModule)
+      ? null
+      : getAllOrEmpty<INavDestinationModule>().toList();
 
-  if (routes.isEmpty && tabs.isEmpty) {
+  if (routes != null && tabs != null && routes.isEmpty && tabs.isEmpty) {
     yield const ProfileProblem(
       code: 'C05',
       description:
@@ -186,7 +228,7 @@ Iterable<ProfileProblem> _structure() sync* {
   }
 
   final byOrder = <int, List<INavDestinationModule>>{};
-  for (final tab in tabs) {
+  for (final tab in tabs ?? const <INavDestinationModule>[]) {
     byOrder.putIfAbsent(tab.order, () => []).add(tab);
   }
   for (final MapEntry(key: order, value: sharing) in byOrder.entries) {
@@ -200,12 +242,12 @@ Iterable<ProfileProblem> _structure() sync* {
     );
   }
 
-  final router = getItOrNull<AppRouter>();
-  if (router != null) {
+  if (!failed.contains(AppRouter)) {
     try {
+      final router = getItOrNull<AppRouter>();
       // Assembles the GoRouter from every contribution; it asserts on a
       // malformed tree (duplicate or missing paths) while it is built.
-      if (router.router.configuration.routes.isEmpty) {
+      if (router != null && router.router.configuration.routes.isEmpty) {
         throw StateError('the router has no routes');
       }
     } catch (error) {

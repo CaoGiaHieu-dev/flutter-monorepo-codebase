@@ -30,10 +30,10 @@ import 'shell_hooks.dart';
 /// ```
 ///
 /// The boot sequence itself is identical across apps — [profile] checks,
-/// DI, then [AppInitializer.initBeforeRunApp] (logger + certificate
-/// pinning), then the splash, then [AppInitializer.init], then the router —
-/// so it lives here rather than being copied into each `main.dart`, where the
-/// copies would drift.
+/// [AppInitializer.initBeforeRunApp] (logger + certificate pinning), DI, the
+/// composition check, then the splash, then [AppInitializer.init], then the
+/// router — so it lives here rather than being copied into each `main.dart`,
+/// where the copies would drift.
 ///
 /// ## The app profile
 ///
@@ -53,14 +53,23 @@ import 'shell_hooks.dart';
 /// 2. The profile and its sections are registered ([registerAppProfile]),
 ///    and so are the [hooks] (`getItOrNull<ShellHooks>()`), still before DI,
 ///    so anything built while the graph initialises can read them.
-/// 3. **After DI**, [checkAppContract] holds the app's `capabilities:`
+/// 3. **Before DI** too, [AppInitializer.initBeforeRunApp] installs the
+///    certificate handling (the declared pins, or the debug dev-flavor
+///    bypass) as the global `HttpOverrides`. It needs only the profile, never
+///    the graph, so nothing the graph builds afterwards — an eager singleton,
+///    a contract implementation [checkAppContract] instantiates — can open a
+///    connection ahead of it.
+/// 4. **After DI**, [checkAppContract] holds the app's `capabilities:`
 ///    declaration to what the graph registered ([handleCompositionReport]).
 ///    In a dev or staging flavor, or a debug or profile build, a mismatch
 ///    stops the boot with the same screen; in a production release it is
 ///    logged and reported as a non-fatal error and the app starts anyway — a
-///    removed module must still run (RULE-05). An app's DI smoke test should
-///    call [checkAppContract] on the graph it boots, so CI finds the mismatch
-///    before a release does.
+///    removed module must still run (RULE-05). The check resolves every
+///    optional contract and assembles the router, so a registration whose
+///    constructor throws is one more problem (`C10`) in that same report, not
+///    an exception that ends the boot before any screen. An app's DI smoke
+///    test should call [checkAppContract] on the graph it boots, so CI finds
+///    the mismatch before a release does.
 ///
 /// The Dart splash is chosen by the platform's declared `splash`
 /// (`platforms.<p>.splash` in the manifest), not by a fork on the operating
@@ -134,6 +143,20 @@ void runShellApp({
       _registerHooks(hooks, runtime);
       await hooks.beforeDependencies?.call(runtime);
 
+      // Before the graph is built, not after it. Certificate handling is
+      // `HttpOverrides.global`, and Dio keeps the first `HttpClient` it
+      // creates, so it must be in place before anything the graph
+      // instantiates can open a connection: an eager singleton while it
+      // initialises, a contract implementation `checkAppContract` resolves
+      // right after, the controller of a feature's `IAppTreeWrapper` on the
+      // splash (auth restores its session with a token refresh). It reads the
+      // profile only — the declared pins — and needs no registration.
+      AppInitializer.initBeforeRunApp(
+        profile: profile,
+        platform: runtime.platform,
+        flavor: runtime.flavor,
+      );
+
       await configureDependencies();
 
       final report = checkAppContract(
@@ -146,17 +169,6 @@ void runShellApp({
         onNonFatalError: hooks.onNonFatalError,
       );
       if (!goesOn) return;
-
-      // Before anything is built. The splash below is already wrapped in every
-      // feature's `IAppTreeWrapper`, and a controller created there may open
-      // a connection straight away (auth restores the session with a token
-      // refresh). Dio keeps the first `HttpClient` it creates, so pinning
-      // installed any later — in `initService` — would never reach it.
-      AppInitializer.initBeforeRunApp(
-        profile: profile,
-        platform: runtime.platform,
-        flavor: runtime.flavor,
-      );
 
       // The platform's declared `splash` decides — iOS keeps its native splash
       // for the whole boot by default, so no Dart splash is built there.
@@ -239,6 +251,37 @@ List<ProfileProblem> validateBoot(
     );
   }
   return problems.where((p) => p.code != _undeclaredPlatform).toList();
+}
+
+/// What stops each way the app declares it can start: for every platform and
+/// flavor `profile` declares, the problems [AppProfile.validate] finds —
+/// keyed `platform / flavor`; an entry exists only where there is a problem.
+///
+/// An app's DI smoke test calls this instead of hand-rolling `validate`
+/// arguments: it asks the same question [runShellApp]'s boot does, including
+/// whether the app passed a [ShellHooks.configureWindow] hook for a platform
+/// that declares a `window` (`P05`) — read from [hooks], so the test and the
+/// boot cannot disagree about it. Required environment keys are not checked
+/// by default ([checkEnv]), as a test boots without `--dart-define`s.
+Map<String, List<ProfileProblem>> checkDeclaredStarts(
+  AppProfile profile,
+  ShellHooks hooks, {
+  bool checkEnv = false,
+}) {
+  final problems = <String, List<ProfileProblem>>{};
+  for (final platform in profile.facts.platforms.keys) {
+    for (final flavor in profile.facts.flavors) {
+      final found = profile.validate(
+        platform: platform,
+        flavor: flavor,
+        checkEnv: checkEnv,
+        hasWindowHook: hooks.configureWindow != null,
+      );
+      if (found.isNotEmpty)
+        problems['${platform.name} / ${flavor.name}'] = found;
+    }
+  }
+  return problems;
 }
 
 /// The problem code of a platform the manifest does not declare.

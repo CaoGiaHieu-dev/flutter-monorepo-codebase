@@ -73,6 +73,12 @@ String orientationConstant(String policy) => switch (policy) {
   _ => policy,
 };
 
+/// What `composer new` writes as the reason of an `absent` capability: the
+/// state of the app, not yet a decision of its author. The report lists every
+/// reason that starts with it under "Decisions to revisit", so absence stays
+/// something somebody chose (RULE-81) rather than something nobody noticed.
+const String kNotComposedPrefix = 'not composed:';
+
 /// The `dev` flavor's pinning decision when the manifest says nothing: the dev
 /// flavor exists to talk to local servers with self-signed certificates.
 const String kDevPinReason =
@@ -88,6 +94,7 @@ class KeySpec {
     required this.consumer,
     required this.reads,
     required this.replaces,
+    this.reportOnly = false,
   });
 
   /// The dotted key path, `<p>` / `<f>` / `<KEY>` / `<id>` standing for a map
@@ -106,12 +113,20 @@ class KeySpec {
   /// Repo-relative path of the file that reads the key.
   final String consumer;
 
-  /// The identifier in [consumer] that carries the key's value. A tools test
-  /// requires the file to name it.
+  /// The expression in [consumer] that *uses* the key's value — a member
+  /// access or a call (`facts.name`, `platformFacts.splash`), never a bare
+  /// field name, which a declaration also contains and which therefore proves
+  /// nothing. A tools test requires the file to contain it, and requires it to
+  /// name a member (`.` or `(`).
   final String reads;
 
   /// What this replaces, or `none`.
   final String replaces;
+
+  /// True when only composer reads the key (a check and the report); no
+  /// runtime code does. The key is still carried in the generated facts, for
+  /// tests and `describe`, and the catalog says so instead of "read by".
+  final bool reportOnly;
 }
 
 /// The parse table: every key of the declaration half, with its consumer.
@@ -126,18 +141,25 @@ const List<KeySpec> kManifestKeys = [
     type: 'package-name string',
     defaultValue: 'required',
     validation: 'unique across apps',
-    consumer: 'platform/foundation/kernel/lib/src/profile/app_facts.dart',
-    reads: 'id',
+    consumer:
+        'platform/shell/app_shell/lib/src/composition/composition_check.dart',
+    reads: 'facts.id',
     replaces: 'the same key in manifest v1',
   ),
   KeySpec(
     key: 'app.name',
     type: 'non-empty string',
-    defaultValue: 'required',
+    defaultValue:
+        'required — what the app is called: the window and task-switcher '
+        'title unless the build defines APP_NAME, which overrides it per '
+        'flavor',
     validation: 'non-empty',
-    consumer: 'platform/foundation/kernel/lib/src/profile/app_facts.dart',
-    reads: 'name',
-    replaces: 'none',
+    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart',
+    reads: 'facts.name',
+    replaces:
+        'the APP_NAME env key as the only name: it is now the per-flavor '
+        'override of this one (`Codebase (DEV)`), so a flavor still tells '
+        'itself apart',
   ),
   KeySpec(
     key: 'app.entrypoint',
@@ -145,7 +167,7 @@ const List<KeySpec> kManifestKeys = [
     defaultValue: 'lib/main.dart',
     validation: 'non-empty string',
     consumer: 'tools/composer/src/report.dart',
-    reads: 'entrypoint',
+    reads: 'decl.entrypoint',
     replaces: 'the dead key of manifest v1 (nothing read it)',
   ),
   KeySpec(
@@ -153,8 +175,8 @@ const List<KeySpec> kManifestKeys = [
     type: 'f is dev | staging | prod; value empty or { ssl_pinning }',
     defaultValue: 'required, at least one',
     validation: 'closed vocabulary (Flavor)',
-    consumer: 'platform/foundation/kernel/lib/src/profile/app_facts.dart',
-    reads: 'flavors',
+    consumer: 'platform/foundation/kernel/lib/src/profile/app_profile.dart',
+    reads: 'facts.flavors',
     replaces: "the ['dev','staging','prod'] literals of the smoke tests",
   ),
   KeySpec(
@@ -167,8 +189,8 @@ const List<KeySpec> kManifestKeys = [
         'pins: at least 2 (leaf and backup), each the base64 of 32 bytes; '
         'a reason is non-empty and not TODO/TBD; refused when no declared '
         'platform can pin',
-    consumer: 'platform/foundation/kernel/lib/src/profile/ssl_pinning.dart',
-    reads: 'SslPinningPolicy',
+    consumer: 'platform/foundation/common/lib/src/config/app_initializer.dart',
+    reads: 'facts.sslPinning',
     replaces: 'NetworkConfigImpl.sslPinningHashes = const []',
   ),
   KeySpec(
@@ -178,8 +200,8 @@ const List<KeySpec> kManifestKeys = [
     validation:
         'KEY is UPPER_SNAKE; required_in names declared flavors; a '
         'native_only key is never emitted to Dart and never checked at boot',
-    consumer: 'platform/foundation/kernel/lib/src/profile/env_rule.dart',
-    reads: 'requiredIn',
+    consumer: 'platform/foundation/kernel/lib/src/profile/app_profile.dart',
+    reads: 'facts.env',
     replaces: 'env_constants.dart: an empty BASE_URL was accepted silently',
   ),
   KeySpec(
@@ -187,8 +209,8 @@ const List<KeySpec> kManifestKeys = [
     type: 'p is android | ios | web | windows | macos | linux',
     defaultValue: 'required, at least one',
     validation: 'closed vocabulary (AppPlatform)',
-    consumer: 'platform/foundation/kernel/lib/src/profile/app_facts.dart',
-    reads: 'platforms',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart',
+    reads: 'facts.platformFor(',
     replaces: 'nothing declared the platforms an app runs on',
   ),
   KeySpec(
@@ -198,9 +220,10 @@ const List<KeySpec> kManifestKeys = [
     validation:
         'committed: apps/<id>/<p>/ exists; scaffold: it does not '
         '(the report prints the flutter create line)',
-    consumer: 'platform/foundation/kernel/lib/src/profile/platform_facts.dart',
-    reads: 'runner',
+    consumer: 'tools/composer/src/checks.dart',
+    reads: 'platform.runner',
     replaces: 'a runner folder was the only sign of a platform',
+    reportOnly: true,
   ),
   KeySpec(
     key: 'platforms.<p>.splash',
@@ -210,7 +233,7 @@ const List<KeySpec> kManifestKeys = [
         'else native',
     validation: 'dart needs capability splash provided',
     consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart',
-    reads: 'splash',
+    reads: 'platformFacts.splash',
     replaces: 'usesDartSplash = kIsWeb || !Platform.isIOS',
   ),
   KeySpec(
@@ -222,7 +245,7 @@ const List<KeySpec> kManifestKeys = [
     validation: 'true needs core_notifications composed and supporting <p>',
     consumer:
         'platform/infra/notifications/lib/src/push_notification_service.dart',
-    reads: 'push',
+    reads: '_platform.push',
     replaces: 'push was initialised on every platform the package compiled for',
   ),
   KeySpec(
@@ -232,7 +255,7 @@ const List<KeySpec> kManifestKeys = [
     validation: 'none',
     consumer:
         'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart',
-    reads: 'deepLinks',
+    reads: '_platform.deepLinks',
     replaces: 'deep links were subscribed on every platform',
   ),
   KeySpec(
@@ -243,7 +266,7 @@ const List<KeySpec> kManifestKeys = [
         'locked to portrait, larger ones rotate freely',
     validation: 'closed vocabulary (OrientationPolicy)',
     consumer: 'platform/foundation/common/lib/src/config/app_initializer.dart',
-    reads: 'orientation',
+    reads: 'facts?.orientation',
     replaces: 'the portrait lock hardcoded in AppInitializer',
   ),
   KeySpec(
@@ -255,7 +278,7 @@ const List<KeySpec> kManifestKeys = [
         'positive; min no larger than initial; the app must pass a '
         'ShellHooks.configureWindow hook (boot problem P05 otherwise)',
     consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart',
-    reads: 'configureWindow',
+    reads: 'platformFacts.window',
     replaces: 'no seam at all: a desktop window opened at the OS default',
   ),
   KeySpec(
@@ -268,7 +291,7 @@ const List<KeySpec> kManifestKeys = [
         'TODO/TBD',
     consumer:
         'platform/shell/app_shell/lib/src/composition/composition_check.dart',
-    reads: 'capabilities',
+    reads: 'facts.capabilities',
     replaces: 'eleven unchecked lookups in each smoke test',
   ),
   KeySpec(
@@ -277,7 +300,7 @@ const List<KeySpec> kManifestKeys = [
     defaultValue: 'none',
     validation: 'none',
     consumer: 'tools/composer/src/report.dart',
-    reads: 'why',
+    reads: 'group.why',
     replaces: 'prose comments in the manifest',
   ),
 ];

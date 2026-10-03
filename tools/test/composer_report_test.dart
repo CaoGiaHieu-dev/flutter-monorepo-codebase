@@ -75,6 +75,7 @@ void main() {
             '  - name: notifications\n'
                 '    phase: after\n'
                 '    packages: [core_notifications]\n'
+                '    why: "FirebaseOptions come from the app, after core"\n'
                 '  - name: shell\n',
           ),
       extra: {

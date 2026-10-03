@@ -4,9 +4,9 @@
 //
 // The app declares itself the way manifest v2 requires — name, flavors,
 // platforms, capabilities — against a catalog of five contracts the fixture
-// carries in its own `platform_app_shell/lib/src/composition/
-// shell_contracts.dart` (composer reads the catalog from the workspace, as
-// it reads every package). The pieces are separate so a test can break one.
+// carries in its own `platform_app_shell/lib/src/utils/
+// shell_contract_constants.dart` (composer reads the catalog from the
+// workspace, as it reads every package). The pieces are separate so a test can break one.
 //
 // The declaration is also true of the source: `core_common` registers the one
 // required contract, `feature_foo` registers what `session` and `routes` say
@@ -16,12 +16,12 @@
 
 /// Repo-relative path of the fixture's catalog source.
 const String kFixtureCatalogPath =
-    'platform/shell/app_shell/lib/src/composition/shell_contracts.dart';
+    'platform/shell/app_shell/lib/src/utils/shell_contract_constants.dart';
 
 /// The fixture's catalog: one required row, a two-member bundle (`session`),
 /// and three more optional rows.
 const String kFixtureCatalog = '''
-const List<ShellContract<Object>> kShellContracts = [
+const List<ShellContract<Object>> SHELL_CONTRACTS = [
   ShellContract<ILanguageStorage>(
     id: 'language_storage',
     need: ShellNeed.required,
@@ -101,7 +101,7 @@ String demoManifest({
   String env = '',
   String platforms = kPlatforms,
   String capabilities = kCapabilities,
-  String why = '',
+  String why = '    why: "mechanism only, before anything else"\n',
 }) =>
     '$appBlock'
     '$flavors'
@@ -116,12 +116,15 @@ String demoManifest({
     '  - name: shell\n'
     '    phase: after\n'
     '    packages: [platform_app_shell]\n'
+    '    why: "the shell adapters precede what injects them"\n'
     '  - name: domain\n'
     '    phase: after\n'
     '    from_modules: domain\n'
+    '    why: "interfaces first: features inject them"\n'
     '  - name: feature\n'
     '    phase: after\n'
     '    from_modules: feature\n'
+    '    why: "screens inject the use cases of the groups above"\n'
     'modules:\n'
     '$modules';
 

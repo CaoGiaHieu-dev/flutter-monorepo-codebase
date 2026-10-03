@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 /// What the shell resolves from dependency injection, read from
-/// `platform_app_shell`'s `kShellContracts` (the one table of what an app must
+/// `platform_app_shell`'s `SHELL_CONTRACTS` (the one table of what an app must
 /// and may provide).
 ///
 /// composer cannot import the package — it runs before code generation, and the
@@ -13,9 +13,9 @@ import 'package:path/path.dart' as p;
 /// row this parser cannot read is a red test, not a silently missing id.
 
 /// Repo-relative path of the catalog source, from the package directory.
-const String kCatalogFile = 'lib/src/composition/shell_contracts.dart';
+const String kCatalogFile = 'lib/src/utils/shell_contract_constants.dart';
 
-/// One row of `kShellContracts`.
+/// One row of `SHELL_CONTRACTS`.
 class CatalogEntry {
   const CatalogEntry({
     required this.type,
@@ -93,13 +93,13 @@ class ShellCatalog {
   }
 }
 
-/// Reads `kShellContracts` from [source], the text of `shell_contracts.dart`.
+/// Reads `SHELL_CONTRACTS` from [source], the text of `utils/shell_contract_constants.dart`.
 ///
 /// Throws a [FormatException] naming the row when one cannot be read.
 ShellCatalog parseCatalogSource(String source) {
-  final start = source.indexOf('kShellContracts');
+  final start = source.indexOf('SHELL_CONTRACTS');
   if (start == -1) {
-    throw const FormatException('no `kShellContracts` list in the source');
+    throw const FormatException('no `SHELL_CONTRACTS` list in the source');
   }
   final body = source.substring(start);
   final starts = RegExp(r'ShellContract<(\w+)>\(').allMatches(body).toList();

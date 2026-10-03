@@ -104,7 +104,8 @@ final class AppProfile {
           action:
               'Add `${flavor.name}:` under `flavors:` in $manifest and run '
               '`$sync`; or build a declared flavor with `--flavor <name>` '
-              '(on the web: `--dart-define=FLUTTER_APP_FLAVOR=<name>`).',
+              '(on the web, which has no `--flavor`: '
+              '`--dart-define=APP_FLAVOR=<name>`).',
         ),
       );
     }

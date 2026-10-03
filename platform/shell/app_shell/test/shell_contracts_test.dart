@@ -32,51 +32,51 @@ Iterable<({String path, int line})> _lookups(ShellContract<Object> contract) =>
 
 /// What the shell resolves from DI, as one table.
 void main() {
-  group('kShellContracts', () {
-    test('has 8 required and 14 optional rows', () {
-      expect(kShellContracts, hasLength(22));
+  group('SHELL_CONTRACTS', () {
+    test('has 7 required and 14 optional rows', () {
+      expect(SHELL_CONTRACTS, hasLength(21));
       expect(
-        kShellContracts.where((c) => c.need == ShellNeed.required),
-        hasLength(8),
+        SHELL_CONTRACTS.where((c) => c.need == ShellNeed.required),
+        hasLength(7),
       );
       expect(
-        kShellContracts.where((c) => c.need == ShellNeed.optional),
+        SHELL_CONTRACTS.where((c) => c.need == ShellNeed.optional),
         hasLength(14),
       );
     });
 
     test('ids and types are unique', () {
-      expect(kShellContracts.map((c) => c.id).toSet(), hasLength(22));
-      expect(kShellContracts.map((c) => c.type).toSet(), hasLength(22));
+      expect(SHELL_CONTRACTS.map((c) => c.id).toSet(), hasLength(21));
+      expect(SHELL_CONTRACTS.map((c) => c.type).toSet(), hasLength(21));
     });
 
     test('ids are snake_case', () {
-      for (final contract in kShellContracts) {
+      for (final contract in SHELL_CONTRACTS) {
         expect(contract.id, matches(RegExp(r'^[a-z]+(_[a-z]+)*$')));
       }
     });
 
     test('every row says what the shell does without it', () {
-      for (final contract in kShellContracts) {
+      for (final contract in SHELL_CONTRACTS) {
         expect(contract.whenAbsent.trim(), isNotEmpty, reason: contract.id);
         expect(contract.consumer.trim(), isNotEmpty, reason: contract.id);
       }
     });
 
     test('only optional rows are bundled, and the session bundle has four', () {
-      for (final contract in kShellContracts) {
+      for (final contract in SHELL_CONTRACTS) {
         if (contract.bundle != null) {
           expect(contract.need, ShellNeed.optional, reason: contract.id);
         }
       }
       expect(
-        kShellContracts.where((c) => c.bundle == 'session').map((c) => c.id),
+        SHELL_CONTRACTS.where((c) => c.bundle == 'session').map((c) => c.id),
         ['session_state', 'session_gateway', 'session_refresh', 'sign_in'],
       );
     });
 
     test('the manifest key is the bundle, else the id', () {
-      final byId = {for (final c in kShellContracts) c.id: c};
+      final byId = {for (final c in SHELL_CONTRACTS) c.id: c};
 
       expect(byId['sign_in']!.manifestKey, 'session');
       expect(byId['splash']!.manifestKey, 'splash');
@@ -84,7 +84,7 @@ void main() {
 
     test('collected contracts are the ones several modules contribute', () {
       expect(
-        kShellContracts
+        SHELL_CONTRACTS
             .where((c) => c.cardinality == ContractCardinality.many)
             .map((c) => c.id),
         ['routes', 'tabs', 'tree_wrappers', 'localization'],
@@ -94,7 +94,7 @@ void main() {
     test('every consumer line is a lookup of the contract it names', () {
       final root = _repoRoot();
 
-      for (final contract in kShellContracts) {
+      for (final contract in SHELL_CONTRACTS) {
         for (final (:path, :line) in _lookups(contract)) {
           final file = File('${root.path}/$path');
           expect(file.existsSync(), isTrue, reason: '${contract.id}: $path');
@@ -116,7 +116,7 @@ void main() {
                 '${contract.id}: $path:$line is not a lookup of $type — the '
                 'catalog has drifted from the code. The file names $type at '
                 '${namedAt.isEmpty ? 'no line' : 'line ${namedAt.join(', ')}'}'
-                '; update this row\'s `consumer` in shell_contracts.dart '
+                '; update this row\'s `consumer` in utils/shell_contract_constants.dart '
                 'in the same change that moved it.',
           );
         }
@@ -129,10 +129,10 @@ void main() {
     tearDown(getIt.reset);
 
     ShellContract<Object> row(String id) =>
-        kShellContracts.singleWhere((c) => c.id == id);
+        SHELL_CONTRACTS.singleWhere((c) => c.id == id);
 
     test('nothing registered is an empty list, never a throw', () {
-      for (final contract in kShellContracts) {
+      for (final contract in SHELL_CONTRACTS) {
         expect(contract.registered(), isEmpty, reason: contract.id);
       }
     });

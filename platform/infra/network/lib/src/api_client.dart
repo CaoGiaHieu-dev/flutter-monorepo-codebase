@@ -19,8 +19,11 @@ import 'utils/network_constants.dart';
 /// What an app tunes comes from its [NetworkProfile] (timeouts, extra headers,
 /// redirects) and [LocaleProfile] (the language sent when the config supplies
 /// none) — `runShellApp` registers both before the graph is built, so the
-/// default `Dio` the `core` group builds already carries them. A client built
-/// by hand takes the template defaults.
+/// default `Dio` the `core` group builds already carries them. The `const`
+/// defaults of the constructor serve a client built by hand only: injectable
+/// resolves both sections unconditionally, so a graph needs them registered
+/// (`registerAppProfile`, or `registerProfileDefaults` for the template's own
+/// values — the generated `configureDependencies` calls the latter).
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;

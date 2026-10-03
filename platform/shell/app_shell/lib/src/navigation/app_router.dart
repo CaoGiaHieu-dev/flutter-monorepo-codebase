@@ -36,8 +36,9 @@ import '../widgets/undefined_route_widget.dart';
 /// registers them before DI (so a build or a test without them just has none).
 @singleton
 class AppRouter {
-  /// Creates the router. [profile] is the app's `RouterProfile` — the
-  /// template defaults when none is given.
+  /// Creates the router. [profile] is the app's `RouterProfile`; the `const`
+  /// default (the template's own) serves a router built by hand — a graph
+  /// resolves it from the registered section.
   AppRouter([this.profile = const RouterProfile()]);
 
   /// The app's router settings: the entry-location policy and the fallback

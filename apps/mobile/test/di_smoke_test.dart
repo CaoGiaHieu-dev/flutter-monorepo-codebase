@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_app/app/app_hooks.dart';
 import 'package:mobile_app/app/app_profile.dart';
 import 'package:mobile_app/di/injection.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
@@ -159,19 +160,10 @@ void main() {
   }
 
   test('every declared platform and flavor is a valid way to start', () {
-    for (final platform in appFacts.platforms.keys) {
-      for (final flavor in appFacts.flavors) {
-        expect(
-          appProfile.validate(
-            platform: platform,
-            flavor: flavor,
-            checkEnv: false,
-          ),
-          isEmpty,
-          reason: '${platform.name} / ${flavor.name}',
-        );
-      }
-    }
+    // The boot's own question for each `platform / flavor` the manifest
+    // declares, with the hooks `main.dart` passes: a platform that declares a
+    // `window` needs `appHooks.configureWindow` (P05).
+    expect(checkDeclaredStarts(appProfile, appHooks), isEmpty);
   });
 }
 

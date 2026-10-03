@@ -24,6 +24,13 @@ import 'theme_profile.dart';
 /// `AppMaterialWrapper` are not DI-built, and `runShellApp` hands each its
 /// section.)
 ///
+/// A DI-built class takes a section as a constructor parameter, and
+/// injectable resolves it unconditionally — a parameter's `const` default
+/// serves a hand-built object, never a graph. So a graph is only complete once
+/// the sections are registered; [registerProfileDefaults] is what lets a bare
+/// graph (one booted with no `registerAppProfile`) complete with the
+/// template's own behaviour.
+///
 /// `runShellApp` calls this *before* the generated `configureDependencies`:
 /// an eager singleton built while the graph initialises can inject a section,
 /// and nothing registered later can shadow it. A harness that boots
@@ -80,4 +87,34 @@ void _register<T extends Object>(GetIt locator, T instance) {
     locator.unregister<T>();
   }
   locator.registerSingleton<T>(instance);
+}
+
+/// Registers the template default of every section [registerAppProfile] binds
+/// that is not registered yet — [PlatformFacts] (`PlatformFacts.today()`),
+/// [SslPinningPolicy] (`SslPinningPolicy.none()`), [RouterProfile],
+/// [LocaleProfile], [ThemeProfile] and [NetworkProfile] — into [locator] when
+/// given, else the global [getIt].
+///
+/// The generated `configureDependencies` calls it right before the graph is
+/// built, after `runShellApp` (or a smoke test) has registered the app's real
+/// profile: what is registered stays, so an app's section always wins, and
+/// only a graph booted *without* a profile gets the defaults — which keeps an
+/// infra or ui package that needs one section (`core_network` takes
+/// [NetworkProfile] and [LocaleProfile]) bootable on its own instead of
+/// failing with a bare `"NetworkProfile is not registered"`.
+///
+/// [AppProfile] and [AppPlatform] are not defaulted: no DI-built class takes
+/// them, and an app's identity is never a default.
+void registerProfileDefaults({GetIt? locator}) {
+  final target = locator ?? getIt;
+  void ifAbsent<T extends Object>(T instance) {
+    if (!target.isRegistered<T>()) target.registerSingleton<T>(instance);
+  }
+
+  ifAbsent<PlatformFacts>(const PlatformFacts.today());
+  ifAbsent<SslPinningPolicy>(const SslPinningPolicy.none());
+  ifAbsent<RouterProfile>(const RouterProfile());
+  ifAbsent<LocaleProfile>(const LocaleProfile());
+  ifAbsent<ThemeProfile>(const ThemeProfile());
+  ifAbsent<NetworkProfile>(const NetworkProfile());
 }

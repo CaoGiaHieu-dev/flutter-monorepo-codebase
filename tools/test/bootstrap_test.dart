@@ -71,7 +71,10 @@ void main() {
     expect(root, contains('  - platform/foundation/common\n'));
     final app = ws.read('apps/demo/pubspec.yaml');
     expect(app, isNot(contains('feature_gone')));
-    expect(app, contains('  core_common:\n    path: ../../platform/foundation/common\n'));
+    expect(
+      app,
+      contains('  core_common:\n    path: ../../platform/foundation/common\n'),
+    );
   });
 
   test('a complete checkout has nothing to prune', () async {

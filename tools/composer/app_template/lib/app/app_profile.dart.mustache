@@ -19,4 +19,18 @@ import 'package:core_common/core_common.dart';
 /// language), `theme:` (`ThemeProfile` — the mode a first launch opens in, the
 /// palette overrides) and `network:` (`NetworkProfile` — the default HTTP
 /// client's timeouts, extra headers and redirect policy).
+///
+/// This app sets no section, so every value is the template default — the
+/// README report (§ 5) prints them. To tune one, pass it by name, for example
+/// (a shorter HTTP timeout and a wider text-scale cap):
+///
+/// ```dart
+/// const AppProfile appProfile = AppProfile(
+///   facts: appFacts,
+///   network: NetworkProfile(connectTimeout: Duration(seconds: 10)),
+///   display: DisplayProfile(textScaleMax: 3.0),
+/// );
+/// ```
+///
+/// then run `composer sync`: the report's § 5 lists the section as set.
 const AppProfile appProfile = AppProfile(facts: appFacts);

@@ -232,7 +232,11 @@ void _pinning(
           key,
           'no declared platform can pin TLS (${decl.platforms.map((p) => p.name).join(', ')}: '
           'the browser owns TLS on web, the pinning plugin has no desktop '
-          'implementation), so the key does nothing — delete it',
+          'implementation), so the key does nothing — delete it. To pin, '
+          'declare android or ios; or pin where the app connects to (a '
+          'gateway or proxy that holds the pinned certificate); or add a '
+          'desktop pinning implementation first '
+          '(docs/en/guides/08_networking.md § 10)',
         );
       }
       continue;
@@ -387,8 +391,10 @@ String _origin(AppView view, PackageFacts facts) {
 /// |:-:|:--|
 /// | V3  | `capabilities:` equals the code, both directions; every required row has an implementer |
 /// | V10 | what a composed package needs the app to register (`composition.app_provides`) is registered, per flavor |
-/// | V11 | the env files that exist hold exactly the keys `env:` declares |
+/// | V11 | the env files that exist hold exactly the keys `env:` declares, and none exists for a flavor the manifest does not declare |
 /// | V12 | the entry point passes the profile; the DI smoke test exists and calls `checkAppContract` |
+/// | V15 | the `productFlavors` of a committed Android runner and the flavor schemes of a committed iOS runner are the flavors the manifest declares |
+/// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
 ///
 /// [root] is the repository root the app's files are read from.
 List<String> checkComposition(AppView view, {required String root}) {
@@ -400,6 +406,8 @@ List<String> checkComposition(AppView view, {required String root}) {
   _contractsMatchCode(view, (key, problem) => bad(manifest, key, problem));
   _appProvides(view, (key, problem) => bad(manifest, key, problem));
   _envFiles(view, root, bad);
+  _nativeFlavors(view, bad);
+  _groupOrder((key, problem) => bad(manifest, key, problem), view);
   _entryAndSmokeTest(view, root, bad);
   return problems;
 }
@@ -529,6 +537,21 @@ void _envFiles(
   String root,
   void Function(String file, String key, String problem) bad,
 ) {
+  // An env file for a flavor the manifest does not declare: the flavor was
+  // removed from `flavors:` and its file (a secret-bearing one, often) stayed.
+  for (final entry in kEnvFiles.entries) {
+    if (view.declaration.flavors.containsKey(entry.key)) continue;
+    final rel = p.posix.join(view.dir, entry.value);
+    if (!File(p.join(root, rel)).existsSync()) continue;
+    bad(
+      rel,
+      'flavor',
+      'belongs to the flavor `${entry.key}`, which ${view.manifestPath} does '
+          'not declare under `flavors:` — declare it (`${entry.key}:`), or '
+          'delete this file',
+    );
+  }
+
   final declared = {for (final e in view.declaration.env) e.key};
   for (final flavor in view.declaration.flavors.keys) {
     final name = kEnvFiles[flavor];
@@ -559,6 +582,118 @@ void _envFiles(
         'declared under `env:` in ${view.manifestPath} but missing from this '
         'file — add `$key=` (the value may be empty), or delete the key '
         'from the manifest',
+      );
+    }
+  }
+}
+
+/// V15: a flavor is also a native fact — a Gradle `productFlavor`, an Xcode
+/// scheme — selected by name with `--flavor`. A committed runner that names
+/// flavors holds exactly the ones the manifest declares; a runner that names
+/// none (an app built without `--flavor`) says nothing.
+void _nativeFlavors(
+  AppView view,
+  void Function(String file, String key, String problem) bad,
+) {
+  final declared = view.declaration.flavors.keys.toSet();
+  final native = view.native;
+
+  void compare(String where, Set<String> found, String how) {
+    for (final flavor in declared.toList()..sort()) {
+      if (found.contains(flavor)) continue;
+      bad(
+        view.manifestPath,
+        'flavors.$flavor',
+        'declared, but $where has no $how named `$flavor` (it has '
+            '${(found.toList()..sort()).join(', ')}) — add it there, or '
+            'delete `$flavor:` from `flavors:`',
+      );
+    }
+    for (final flavor in found.toList()..sort()) {
+      if (declared.contains(flavor)) continue;
+      bad(
+        view.manifestPath,
+        'flavors',
+        '$where has a $how named `$flavor`, which the manifest does not '
+            'declare — declare `$flavor:` under `flavors:`, or remove it '
+            'there',
+      );
+    }
+  }
+
+  final android = native.android;
+  if (android != null) {
+    compare(
+      '${view.dir}/${native.androidFile}',
+      android.keys.toSet(),
+      'productFlavor',
+    );
+  }
+  final ios = native.ios;
+  if (ios != null) {
+    compare(
+      '${view.dir}/${native.iosSchemesDir}',
+      ios.keys.toSet(),
+      'scheme',
+    );
+  }
+}
+
+/// The order the template's DI groups run in (RULE-13): `core` registers the
+/// mechanism everything uses; `notifications` waits for the app's own
+/// `FirebaseOptions`; `shell` registers the adapters `ui` injects; `domain`
+/// before the `data` that implements it before the `feature` that uses both;
+/// `other` registers nothing and goes last by convention. A manifest may add
+/// groups of its own anywhere — only the named ones are held to this order.
+const List<String> kGroupOrder = [
+  'core',
+  'notifications',
+  'shell',
+  'ui',
+  'domain',
+  'data',
+  'feature',
+  'other',
+];
+
+/// V16: the group order is the one thing in a manifest whose mistake only
+/// surfaces at boot (`"<Type> is not registered"`), so it carries a reason
+/// per group, and the groups the template names keep their relative order.
+void _groupOrder(
+  void Function(String key, String problem) bad,
+  AppView view,
+) {
+  for (final (index, group) in view.groups.indexed) {
+    final why = group.why;
+    if (why == null || why.trim().isEmpty) {
+      bad(
+        'di_groups[${group.name}].why',
+        'missing — say why `${group.name}` sits at position ${index + 1}: what '
+            'it injects from an earlier group, or what a later group needs '
+            'from it (`no ordering constraint: <reason>` when there is none)',
+      );
+    } else if (isEmptyReason(why)) {
+      bad(
+        'di_groups[${group.name}].why',
+        'is `TODO` or `TBD` — say why `${group.name}` sits where it does',
+      );
+    }
+  }
+
+  final named = [
+    for (final group in view.groups)
+      if (kGroupOrder.contains(group.name)) group.name,
+  ];
+  for (var i = 0; i < named.length; i++) {
+    for (var j = i + 1; j < named.length; j++) {
+      if (kGroupOrder.indexOf(named[i]) <= kGroupOrder.indexOf(named[j])) {
+        continue;
+      }
+      bad(
+        'di_groups',
+        '`${named[i]}` is listed before `${named[j]}`, but the order is '
+            '${kGroupOrder.join(' → ')} (RULE-13): `${named[j]}` must '
+            'initialise first',
       );
     }
   }

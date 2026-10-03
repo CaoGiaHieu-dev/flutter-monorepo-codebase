@@ -16,7 +16,7 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 
 ### Cách đọc bảng đăng ký
 
-- **ID** — `RULE-NN`, ổn định vĩnh viễn. Mỗi dải số gom một chủ đề; khoảng trống là chỗ để mở rộng. Một id không bao giờ bị đánh số lại hay tái sử dụng.
+- **ID** — `RULE-NN`, ổn định vĩnh viễn. Mỗi dải số gom một chủ đề; khoảng trống là chỗ để mở rộng. Một id không bao giờ bị đánh số lại hay tái sử dụng. 68 luật trong chín họ: 01–09 phân tầng · 10–19 DI · 20–29 routing · 30–39 UI, l10n, a11y · 40–49 data, storage, database, network · 50–59 state · 60–69 kiểm thử, logging, lỗi · 70–79 công cụ và docs · 80–89 app và composition.
 - **Thực thi bởi** — thứ chặn một vi phạm không cho merge:
 
   | Giá trị | Ý nghĩa |
@@ -25,6 +25,8 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
   | `analyzer (<lint>)` | `flutter analyze` với setting hoặc lint đó — CI Gate 2, 0 issue kể cả info |
   | `test (<file>)` | một test fail khi có vi phạm — CI Gate 3 |
   | `CI gate N` | một bước của `.github/workflows/pr_quality_check.yml`: 0 composer verify · 1 arch_check + `tools/test` · 2 analyze · 3 test theo package · 4 đồng bộ catalog · 5 docs_check · `build` job build APK debug |
+  | `CI barrel gate` | bước "Barrels match the generator" của cùng workflow — sau codegen, barrel được sinh lại phải bằng barrel đã commit |
+  | `CI unused-deps step` | bước cuối của job `quality`, `dart tools/unused_checker/check_unused_packages.dart`, có chặn merge |
   | `composer verify` | Gate 0 — composition sinh ra khớp với `apps/<id>/app_manifest.yaml` |
   | `docs_check` | Gate 5 — mọi đường dẫn trong docs tồn tại, `docs/en` ↔ `docs/vi` cùng hình dạng |
   | `review` | không có gì tự động — người review giữ luật, dùng [`04_review_checklist.md`](04_review_checklist.md) |
@@ -36,27 +38,27 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
-| RULE-01 | Không package `platform/*` nào import hay khai báo package `feature_*`, `data_*`, `domain_*` của sản phẩm hay `<id>_api` — chỉ có ba cạnh `→ domain_core` đã duyệt | Core là vòng trong cùng; một cạnh hướng lên khiến module không gỡ được | arch_check R1 | `dart tools/arch_check/check.dart` | [§1](#1-hướng-phụ-thuộc) |
+| RULE-01 | Không package `platform/*` nào import hay khai báo (trong `dependencies:`, `dev_dependencies:` hay test) một package nằm dưới `modules/` — `feature_*`, `data_*`, `domain_*` của sản phẩm, `<id>_api` hay package module tuỳ biến; một cạnh trỏ vào `domain_core` / `data_core` chỉ tồn tại nếu nó là một trong bốn cạnh `→ domain_core` đã duyệt | Core là vòng trong cùng; một cạnh hướng lên khiến module không gỡ được | arch_check R1 (import, `dependencies:`, `dev_dependencies:`, import trong test) | `dart tools/arch_check/check.dart` | [§1](#1-hướng-phụ-thuộc) |
 | RULE-02 | Mỗi package platform nằm ở `platform/<group>/<package>` và `dependencies:` của nó theo DAG nhóm (không infra → infra, ui không bao giờ → state) | Mỗi nhóm tự sở hữu và thay thế được | arch_check R11 | `dart tools/arch_check/check.dart` | [§1 R11](#chiều-giữa-các-nhóm-platform-r11) |
-| RULE-03 | Domain là Dart thuần: không import hay dependency `flutter` / `dio` / `retrofit` / `core_*`; `domain_core` không có dependency workspace nào | Domain sống lâu hơn mọi lựa chọn framework | arch_check R2 | `grep -rn "package:flutter" modules/*/domain/lib` (rỗng) | [§7](#7-domain-là-pure-dart) |
-| RULE-04 | Feature không bao giờ import feature khác hay package `data_*`; nó chỉ chạm module khác qua `<id>_api` của module đó, package chỉ phụ thuộc `platform/foundation/*` và Flutter | Module độc lập về sở hữu và gỡ bỏ | arch_check R3 | `dart tools/arch_check/check.dart` | [§6](#package-api-của-module) |
+| RULE-03 | Domain là Dart thuần: một package domain (`modules/*/domain`, `domain_core`) không import và không khai package Flutter hay gắn với Flutter, package transport hay lưu trữ (`dio`, `retrofit`, `drift`, `http`), thư viện `dart:` chỉ dành cho engine, cũng như package workspace nào ngoài `domain_core` và domain của chính module đó; test của nó chạy trên `package:test` | Domain sống lâu hơn mọi lựa chọn framework | arch_check R2 (import, `dependencies:`, `dev_dependencies:`, import trong test) | `dart tools/arch_check/check.dart` | [§7](#7-domain-là-pure-dart) |
+| RULE-04 | Bên trong một module chiều là `Feature → Domain ← Data`: feature không bao giờ import feature khác, package `data_*` hay domain của module khác; package data không bao giờ import feature hay data / domain / API của module khác; domain không bao giờ với tới data hay feature. Module khác chỉ được chạm qua `<id>_api` của nó (chỉ mở cho feature), package này chỉ phụ thuộc `platform/foundation/*` và package Flutter / pub | Module độc lập về sở hữu và gỡ bỏ | arch_check R3 (package feature, data và API; import, `dependencies:`, `dev_dependencies:`, test), arch_check R2 (phía domain) | `dart tools/arch_check/check.dart` | [§6](#package-api-của-module) |
 | RULE-05 | Mọi module gỡ được: trong `apps/*` chỉ `lib/di/injection.dart` import package module; các package shell không import cái nào | Import kiểu vô hiệu hoá `getItOrNull` — nó fail lúc biên dịch | arch_check R10, arch_check R1 | gỡ khỏi manifest, `composer sync`, build | [§6](#6-ranh-giới-feature-và-khả-năng-gỡ-bỏ) |
-| RULE-06 | Mọi import `package:` dưới `lib/` phải khai trong `dependencies:` của package đó (không chỉ `dev_dependencies`); mục thừa bị xoá | Một `package_config.json` dùng chung che giấu import chưa khai tới lúc tách package | arch_check R5 | `dart tools/arch_check/check.dart` · `dart tools/unused_checker/check_unused_packages.dart` | [§2](#2-khai-báo-dependency-tường-minh) |
-| RULE-07 | `platform_kernel` giữ Dart thuần — không import hay dependency gắn Flutter, không type transport | Danh sách dependency của nó là của mọi package | arch_check R9 | `dart tools/arch_check/check.dart` | [architecture/02_core §1](../architecture/02_core.md) |
+| RULE-06 | Mọi import `package:` dưới `lib/` phải khai trong `dependencies:` của package đó (không chỉ `dev_dependencies`); dependency đã khai mà không ai import thì bị xoá | Một `package_config.json` dùng chung che giấu import chưa khai tới lúc tách package | arch_check R5 (chưa khai), bước unused-deps của CI (đã khai, không hề import) | `dart tools/arch_check/check.dart` · `dart tools/unused_checker/check_unused_packages.dart` | [§2](#2-khai-báo-dependency-tường-minh) |
+| RULE-07 | `platform_kernel` giữ Dart thuần — không package Flutter hay gắn với Flutter, không thư viện transport hay lưu trữ (`dio`, `retrofit`, `drift`, `http`), không thư viện `dart:` chỉ dành cho engine, trong import, `dependencies:`, `dev_dependencies:` hay test | Danh sách dependency của nó là của mọi package | arch_check R9 | `dart tools/arch_check/check.dart` | [architecture/02_core §1](../architecture/02_core.md) |
 | RULE-08 | `core_di` chỉ chứa contract trung lập sản phẩm: không dependency `domain_*`, contract mang value type riêng (`SessionPrincipal`), trả `Widget` thuần, và ưu tiên `sealed class` Dart 3 thay vì Freezed | Một type domain trong hub khiến mọi bên tiêu thụ phụ thuộc một module | arch_check R1 (nửa dependency), review | `dart tools/arch_check/check.dart` | [§15](#15-giao-tiếp-giữa-các-feature) |
-| RULE-09 | Hằng số công khai của package nằm trong `utils/` của chính nó (route `*_path.dart`, khoá `*_storage_keys.dart`, endpoint `*_api_constants.dart`) dạng `UPPER_SNAKE_CASE`; design token ở `styles/`; không có file hằng số dùng chung xuyên domain | Mỗi hằng số có đúng một chủ | arch_check R4 | `dart tools/arch_check/check.dart` | [§3](#3-hằng-số-nằm-trong-utils) |
+| RULE-09 | Hằng số công khai của package nằm trong `utils/` của chính nó (route `*_path.dart`, khoá `*_storage_keys.dart`, endpoint `*_api_constants.dart`) dạng `UPPER_SNAKE_CASE`; design token ở `styles/`; không có file hằng số dùng chung xuyên domain | Mỗi hằng số có đúng một chủ | arch_check R4 (`static const` công khai nằm ngoài `utils/` / `styles/`), review (cách đặt tên, các dạng khai báo khác, file hằng số dùng chung) | `dart tools/arch_check/check.dart` | [§3](#3-hằng-số-nằm-trong-utils) |
 
 ### 10–19 · Dependency injection
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
-| RULE-10 | Controller của màn hình (Provider, Bloc, Cubit) là factory `@injectable`; chỉ controller toàn app (`ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`, `AuthProvider`) là `@lazySingleton` | GetIt không bao giờ giải phóng singleton — lần vào sau dùng lại state cũ | review | review | [§10](#10-vòng-đời-controller) |
-| RULE-11 | Chỉ inject qua constructor — không `getIt<T>()` trong ViewModel, Bloc, Repository hay UseCase | Dependency hiện rõ và thay được bằng fake viết tay | review | review | [guides/05_di §7](../guides/05_di.md) |
-| RULE-12 | Contract chỉ được implement dưới `modules/` phải resolve bằng `getItOrNull` / `getAllOrEmpty` + fallback bên ngoài module của nó — không bao giờ `getIt` / `getAll` | `getAll<T>()` ném lỗi khi không có đăng ký; gỡ module là boot sập | arch_check R8 | `dart tools/arch_check/check.dart` | [§6](#6-ranh-giới-feature-và-khả-năng-gỡ-bỏ) |
-| RULE-13 | `@Singleton` eager không bao giờ phụ thuộc type do nhóm DI chạy sau đăng ký — dùng `@LazySingleton`; `shell` chạy trước `ui`, `notifications` sau phần đăng ký của chính app | GetIt ném `"<Type> is not registered"` lúc boot, và `flutter analyze` không thấy | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§5](#5-thứ-tự-đăng-ký-di) |
-| RULE-14 | Interface thứ hai trên cùng một implementation được bind qua `@module` (`ISessionState` và `ISessionRefreshListenable` ← `AuthProvider` trong `feature_auth`) | GetIt resolve đúng type, không bao giờ supertype — `getItOrNull<ISessionState>()` của shell lặng lẽ trả `null` và app mãi mãi ở trạng thái chưa đăng nhập | test (`apps/*/test/di_smoke_test.dart`), review | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§15](#15-giao-tiếp-giữa-các-feature) |
-| RULE-15 | Mỗi package khai `@InjectableInit.microPackage()` ở `lib/di/module.dart` không đối số (ngoại lệ duy nhất: `ignoreUnregisteredTypesInPackages` của `core_notifications`); không có module domain/data nguyên khối | Module theo package là thứ composer ghép và việc gỡ bỏ xoá đi | review | review | [guides/05_di §8](../guides/05_di.md) |
-| RULE-16 | Composition đến từ `apps/<id>/app_manifest.yaml` qua `composer sync`: không bao giờ sửa tay vùng `composer:managed` (`workspace:` ở gốc, path dependency của app, `injection.dart` — toàn bộ file, vùng `facts` của `lib/app/app_profile.dart`, vùng `report` của `README.md` của app); mọi member khai `resolution: workspace` và gốc là nút workspace duy nhất | Composition và facts sinh ra không thể lệch khỏi manifest | composer verify (CI gate 0) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-và-barrel) |
+| RULE-10 | Controller của màn hình (Provider, Bloc, Cubit) là factory `@injectable`; chỉ các controller toàn app — `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`, `AuthProvider` — là `@lazySingleton` | GetIt không bao giờ giải phóng singleton — lần vào sau dùng lại state cũ | review | review | [§10](#10-vòng-đời-controller) |
+| RULE-11 | Chỉ inject qua constructor — không `getIt<T>()` trong ViewModel, Bloc, Repository, UseCase hay widget; nơi được tra cứu là `build` của route module (RULE-21) và code composition của chính shell | Dependency hiện rõ và thay được bằng fake viết tay | review | review | [guides/05_di §6](../guides/05_di.md) |
+| RULE-12 | Contract chỉ được implement dưới `modules/` (contract của `core_di` hay type của `<id>_api`) phải resolve bằng `getItOrNull` / `getAllOrEmpty` + fallback bên ngoài module của nó — không bao giờ `getIt` / `getAll`, và không bao giờ là tham số constructor bắt buộc của một class injectable | `getAll<T>()` ném lỗi khi không có đăng ký; gỡ module là boot sập | arch_check R8 | `dart tools/arch_check/check.dart` | [§6](#6-ranh-giới-feature-và-khả-năng-gỡ-bỏ) |
+| RULE-13 | `@Singleton` eager không bao giờ phụ thuộc type do nhóm DI chạy sau đăng ký — dùng `@LazySingleton`; `shell` chạy trước `ui`, `notifications` sau phần đăng ký của chính app | GetIt ném `"<Type> is not registered"` lúc boot, và `flutter analyze` không thấy | test (`apps/*/test/di_smoke_test.dart`), CI gate 3; composer verify V12 giữ test đó tồn tại | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§5](#5-thứ-tự-đăng-ký-di) |
+| RULE-14 | Interface thứ hai trên cùng một implementation được bind qua `@module` (`ISessionState` và `ISessionRefreshListenable` ← `AuthProvider` trong `feature_auth`) | GetIt resolve đúng type, không bao giờ supertype — `getItOrNull<ISessionState>()` của shell lặng lẽ trả `null` và app mãi mãi ở trạng thái chưa đăng nhập | test (`apps/*/test/di_smoke_test.dart`: `checkAppContract` C02 / C04 cho contract mà app khai là `provided`), review | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§15](#15-giao-tiếp-giữa-các-feature) |
+| RULE-15 | Mỗi package có đăng ký gì đó khai `@InjectableInit.microPackage()` ở `lib/di/module.dart` không đối số (ngoại lệ duy nhất: `ignoreUnregisteredTypesInPackages` của `core_notifications`); package không có gì để đăng ký thì không có `module.dart`; không có module domain/data nguyên khối | Module theo package là thứ composer ghép và việc gỡ bỏ xoá đi | review (composer bỏ package thiếu marker khỏi `injection.dart`; smoke test bắt đăng ký mà có nơi dùng tới) | review | [guides/05_di §7](../guides/05_di.md) |
+| RULE-16 | Composition đến từ `apps/<id>/app_manifest.yaml` qua `composer sync`: không bao giờ sửa tay vùng `composer:managed` (`workspace:` ở gốc, path dependency của app, `injection.dart` — toàn bộ file, vùng `facts` của `lib/app/app_profile.dart`, vùng `report` của `README.md` của app); mọi member khai `resolution: workspace` và gốc là nút workspace duy nhất | Composition và facts sinh ra không thể lệch khỏi manifest | composer verify (CI gate 0: V13 lệch ở mọi vùng, V17 không có `workspace:` lồng nhau), `flutter pub get` (member thiếu `resolution: workspace` bị từ chối) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-và-barrel) |
 
 ### 20–29 · Routing, điều hướng và ranh giới feature
 
@@ -64,24 +66,24 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 |---|---|---|---|---|---|
 | RULE-20 | Không bao giờ sửa `app_router.dart` để thêm route: đóng góp `IFeatureRouteModule` / `INavDestinationModule` / `IAppEntryLocation` qua DI | Router được lắp từ DI, nhờ vậy feature gỡ được | review | review | [§11](#11-routing) |
 | RULE-21 | Controller được tạo ở route (`build` của `*_route_module.dart`); `Page` không bao giờ tự bọc thêm `BlocProvider` / `ChangeNotifierProvider` | Bọc hai lần tạo hai controller; UI đọc nhầm cái | review | review | [§10](#10-vòng-đời-controller) |
-| RULE-22 | Điều hướng xuyên feature đi qua navigator của module sở hữu trong `<id>_api` (implement trong `routing/` của feature đó), resolve bằng `getItOrNull`; không bao giờ hardcode path hay `GoRouter.of(context).go(...)` sang feature khác; shell dùng `ISignInLocation` / `IPostSignInLocation` | Path route là chi tiết riêng của chủ sở hữu | review, arch_check R8 (phần lookup) | review | [§11](#11-routing) |
-| RULE-23 | `BuildContext` được truyền trực tiếp từ nơi gọi ở UI — không bao giờ `NavigatorKeys.*.currentContext` | Context toàn cục sống lâu hơn widget sở hữu nó | review | review | [§11](#11-routing) |
-| RULE-24 | Mỗi package feature một mối quan tâm UI có biên; `feature_dashboard` chỉ là chrome; `INavDestinationModule` chỉ cho destination chính, với `order` duy nhất | Package gom nhiều màn hình không liên quan thì không gỡ riêng được | review, test (`apps/*/test/di_smoke_test.dart` — `order` duy nhất) | review | [§11](#11-routing) |
+| RULE-22 | Điều hướng xuyên feature đi qua navigator của module sở hữu trong `<id>_api` (implement trong `routing/` của feature đó), resolve bằng `getItOrNull`; không bao giờ hardcode path hay `GoRouter.of(context).go(...)` sang feature khác; shell dùng `ISignInLocation` / `IPostSignInLocation` | Path route là chi tiết riêng của chủ sở hữu | review, arch_check R8 (phần lookup), arch_check R1 / R10 (không file platform hay app nào import package API) | review | [§11](#11-routing) |
+| RULE-23 | `BuildContext` được truyền trực tiếp từ nơi gọi ở UI — không bao giờ đọc từ một biến toàn cục: `NavigatorKeys.*.currentContext` hay bất kỳ nơi giữ navigator hoặc context tĩnh nào khác | Context toàn cục sống lâu hơn widget sở hữu nó | review | review | [§11](#11-routing) |
+| RULE-24 | Mỗi package feature một mối quan tâm UI có biên; `feature_dashboard` chỉ là chrome; `INavDestinationModule` chỉ cho destination chính, với `order` duy nhất | Package gom nhiều màn hình không liên quan thì không gỡ riêng được | review, test (`apps/*/test/di_smoke_test.dart`: `checkAppContract` C06 `order` duy nhất, C12 hai tab trở lên cần dashboard) | review | [§11](#11-routing) |
 | RULE-25 | Nhu cầu xuyên feature dùng một trong sáu mô hình được duyệt; hành động UI đi qua `I*ActionHandler` trong `<id>_api` của chủ sở hữu (implement trong `handlers/`) — không dùng cho điều hướng thuần hay logic domain | Coupling tường minh và một chiều | review | review | [§15](#15-giao-tiếp-giữa-các-feature) |
 
 ### 30–39 · UI, responsive, đa ngôn ngữ và khả năng truy cập
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
-| RULE-30 | Mọi kích thước được scale qua `BuildContext` (`context.w/h/sp/r`, `context.edgeInsets`, token): không số thô trong layout, không `16.w` trần; trong hàm async đọc giá trị trước `await` đầu tiên | Chỉ đọc qua context mới rebuild khi xoay, chia màn hình và resize | arch_check R7 (extension trần), review (số thô) | `dart tools/arch_check/check.dart` | [§12](#12-responsive-ui) |
+| RULE-30 | Mọi kích thước được scale qua `BuildContext` (`context.w/h/sp/r`, `context.edgeInsets`, token): không số thô trong layout, không `16.w` trần; trong hàm async đọc giá trị trước `await` đầu tiên | Chỉ đọc qua context mới rebuild khi xoay, chia màn hình và resize | arch_check R7 (dạng trần), arch_check R20 (số thô trong các constructor layout và vẽ mà nó liệt kê), review (số thô đi qua biến hoặc widget không được liệt kê; thứ tự `await`) | `dart tools/arch_check/check.dart` | [§12](#12-responsive-ui) |
 | RULE-31 | Widget tái sử dụng của `core_ui_kit` dùng tham số đúng như nhận và chỉ scale hằng số riêng của nó; token đã scale không bao giờ bị scale lại | Scale hai lần — hoặc không lần nào — là lỗi layout thầm lặng | review | review | [§12](#12-responsive-ui) |
-| RULE-32 | Chọn layout theo window size class (`context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout`) — không bao giờ `Platform.is*`, model thiết bị hay `shortestSide` tự chế | Một thiết bị hiển thị nhiều cửa sổ | review | review | [§12](#12-responsive-ui) |
-| RULE-33 | Màu, kiểu chữ, khoảng cách và bo góc lấy từ design token (`context.colors`, `AppTextStyles.*(context)`, `AppSpacing` / `AppRadius`); con số đổi trong hằng `raw*`, không bao giờ hardcode trong widget | Một chỗ để đổi thương hiệu; sáng/tối miễn phí | review | review | [guides/11_design_system](../guides/11_design_system.md) |
-| RULE-34 | Mọi chữ hiển thị cho người dùng được dịch: ARB của feature trong `assets/language/`, đăng ký qua `IFeatureLocalization` — không bao giờ sửa `root_app.dart`; chuỗi toàn cục chỉ ở `core_base_ui`; `core_ui_kit` không có ARB | Delegate gom từ DI giữ cho feature gỡ được | review | `dart tools/unused_checker/check_unused_translate.dart` | [§13](#13-đa-ngôn-ngữ-và-asset) |
+| RULE-32 | Chọn layout theo window size class (`context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout`) — không bao giờ `Platform.is*`, model thiết bị hay `shortestSide` tự chế (chuyển trang theo quy ước của hệ điều hành là một mục allow-list của RULE-82, không phải chọn layout) | Một thiết bị hiển thị nhiều cửa sổ | review (việc chọn theo window class, model thiết bị, `shortestSide`), arch_check R17 (nhánh `Platform.is*` / `kIsWeb` ngoài allow-list, RULE-82) | `dart tools/arch_check/check.dart` | [§12](#12-responsive-ui) |
+| RULE-33 | Màu, kiểu chữ, khoảng cách và bo góc lấy từ design token (`context.colors`, `AppTextStyles.*(context)`, `AppSpacing` / `AppRadius`); con số đổi trong hằng `raw*`, không bao giờ hardcode trong widget | Một chỗ để đổi thương hiệu; sáng/tối miễn phí | arch_check R20 (số thô), review (màu, kiểu chữ, con số bị đổi ngoài `raw*`) | `dart tools/arch_check/check.dart` | [guides/11_design_system](../guides/11_design_system.md) |
+| RULE-34 | Mọi chữ hiển thị cho người dùng được dịch: ARB của feature trong `assets/language/`, đăng ký qua `IFeatureLocalization` — không bao giờ sửa `app_material_wrapper.dart` của shell, nơi gom chúng; chuỗi toàn cục chỉ ở `core_base_ui`; `core_ui_kit` không có ARB. `AppFailure.message` là chữ dành cho lập trình viên và không bao giờ lên màn hình: `code` của failure được ánh xạ sang một chuỗi đã dịch | Delegate gom từ DI giữ cho feature gỡ được | review | review | [§13](#13-đa-ngôn-ngữ-và-asset) |
 | RULE-35 | Khoá ARB là `lowerCamelCase` | `gen-l10n` chép khoá thành tên getter, và code sinh ra không được phân tích | review | review | [§13](#13-đa-ngôn-ngữ-và-asset) |
 | RULE-36 | Mỗi dialog và bottom sheet là một widget class riêng (`*_dialog.dart` → `…Dialog`, `*_bottom_sheet.dart` → `…BottomSheet`), không bao giờ là cây widget inline trong builder của `showDialog` / `showModalBottomSheet` | Tái sử dụng, test và review được | review | review | [§14](#14-dialog-và-bottom-sheet) |
-| RULE-37 | Asset riêng của feature nằm trong `assets/` của feature đó; `core_base_ui` chỉ giữ asset và chuỗi toàn cục, và không có widget | Kho asset toàn cục buộc mọi feature vào nhau | review | `dart tools/unused_checker/check_unused_assets.dart` | [§13](#13-đa-ngôn-ngữ-và-asset) |
-| RULE-38 | Chữ theo cỡ chữ của hệ điều hành: không bao giờ `withNoTextScaling` hay `TooltipVisibility(visible: false)` (shell giới hạn ở `DisplayProfile.textScaleMax` — 2.0 trừ khi app đặt khác, và không bao giờ dưới 2.0), không bao giờ khung chữ cao cố định; nút chỉ có icon mang `tooltip`, ảnh có nghĩa mang `semanticLabel` | Người nhìn kém và người dùng trình đọc màn hình | test (`platform/shell/app_shell/test/accessibility_test.dart`), review | `cd platform/shell/app_shell && flutter test test/accessibility_test.dart` | [§19](#19-khả-năng-truy-cập) |
+| RULE-37 | Asset riêng của feature nằm trong `assets/` của feature đó; `core_base_ui` chỉ giữ asset và chuỗi toàn cục, và không có widget | Kho asset toàn cục buộc mọi feature vào nhau | review | review | [§13](#13-đa-ngôn-ngữ-và-asset) |
+| RULE-38 | Chữ theo cỡ chữ của hệ điều hành: không bao giờ `withNoTextScaling` hay `TooltipVisibility(visible: false)` (shell giới hạn ở `DisplayProfile.textScaleMax` — 2.0 trừ khi app đặt khác, không bao giờ dưới 2.0 và tối đa 4.0), không bao giờ khung chữ cao cố định; nút chỉ có icon mang `tooltip`, ảnh có nghĩa mang `semanticLabel` | Người nhìn kém và người dùng trình đọc màn hình | test (`platform/shell/app_shell/test/accessibility_test.dart` cho shell; các test text-scale của `feature_auth` và `feature_dashboard` cho các trang đó), analyzer (const assert trên `DisplayProfile.textScaleMax`), review (mọi màn hình khác) | `cd platform/shell/app_shell && flutter test test/accessibility_test.dart` | [§19](#19-khả-năng-truy-cập) |
 | RULE-39 | Vùng chạm tối thiểu 48 × 48 dp (`kMinInteractiveDimension`); cạnh đầu/cuối dòng dùng `edgeInsetsDirectional`, không phải `left` / `right` vật lý | Khả năng truy cập vận động; ngôn ngữ viết phải sang trái | review | review | [§19](#19-khả-năng-truy-cập) |
 
 ### 40–49 · Domain, data, storage, database và network
@@ -92,11 +94,11 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | RULE-41 | Data source trả về Model (vỏ bọc duy nhất: `BaseEntity<T>`), không bao giờ Entity hay type sinh ra (row Drift chuyển đổi ở biên); Model implement `BaseModel<E>` với `.toEntity()` | Type transport và lưu trữ ở lại trong package data | review | review | [§8](#8-tầng-data) |
 | RULE-42 | `RepositoryImpl` kế thừa `BaseRepository` và bọc việc trong `execute()` / `executeSync()`; tầng data không bao giờ ném lỗi lên UI — nó trả `Result.failure(AppFailure)` | Lỗi đi qua biên dưới dạng giá trị | review | review | [§8](#8-tầng-data) |
 | RULE-43 | Lỗi được phân loại bằng `ErrorHandler.handleError(e)` — không bao giờ tự chế `AppFailure.fromException()`; một họ exception mới (Firebase, platform) đăng ký một `ErrorClassifier` | Lỗi chưa phân loại rơi về mã 9999, "Unknown error occurred" | review | review | [§8](#8-tầng-data) |
-| RULE-44 | `core_storage` không định nghĩa khoá: mỗi bên tiêu thụ khai `StorageValue<T>` của riêng mình, khoá từ `utils/*_storage_keys.dart` của chính nó, không bao giờ đưa nó cho package khác (hãy công bố interface trên `core_di`), và chọn `secure` cho token/PII, `pref` cho cài đặt | Một object khoá dùng chung cho phép bất kỳ package nào đọc dữ liệu của package khác | review | review | [§4](#4-storage-do-package-sở-hữu) |
+| RULE-44 | `core_storage` không định nghĩa khoá: mỗi bên tiêu thụ khai `StorageValue<T>` của riêng mình, khoá từ `utils/*_storage_keys.dart` của chính nó, không bao giờ đưa nó cho package khác (hãy công bố interface — trong `core_di` khi giá trị trung lập với sản phẩm, như `IThemeStorage`; trong `<id>_api` của chủ sở hữu khi nó thuộc về một module), và chọn `secure` cho token/PII, `pref` cho cài đặt | Một object khoá dùng chung cho phép bất kỳ package nào đọc dữ liệu của package khác | review | review | [§4](#4-storage-do-package-sở-hữu) |
 | RULE-45 | Chủ sở hữu storage là singleton (`@singleton` / `@lazySingleton` / `@Singleton(as:)`) kèm `@PostConstruct(preResolve: true)` — không bao giờ `@injectable` | Factory phát ra cache rỗng, getter lặng lẽ trả `null` | review | review | [§4](#4-storage-do-package-sở-hữu) |
 | RULE-46 | Package cần SQL khai database Drift của riêng mình (bảng, DAO là `part of` nó) trên nền `core_database`; không có `AppDatabase` dùng chung | Drift gắn bảng lúc biên dịch — database dùng chung sở hữu mọi bảng | review | review | [guides/07_database](../guides/07_database.md) |
-| RULE-47 | Migration được đăng ký có kiểu theo database của nó — `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` — và lệnh mở `@preResolve` của database mang `@Order(1)` | Đăng ký không kiểu không bao giờ được gom; bước migrate lặng lẽ không chạy | review | review | [guides/07_database §4](../guides/07_database.md) |
-| RULE-48 | SSL pinning là một quyết định tường minh theo từng flavor trong `app_manifest.yaml` (`flavors.<f>.ssl_pinning`: ít nhất hai pin — leaf + dự phòng — hoặc `disabled` kèm lý do); nó tới client dưới dạng `SslPinningPolicy` của app, mà `AppInitializer.initBeforeRunApp` đọc trước khi DI bắt đầu — không có nguồn pin nào khác; việc bỏ qua chứng chỉ chỉ có trong bản debug `--flavor dev` | Thiếu quyết định khiến traffic không được pin mà không ai chủ ý chọn | composer verify (V9), analyzer (các const assert của `SslPinning`), test (`platform/foundation/common/test/pin_policy_matrix_test.dart`) | `dart tools/composer/composer.dart verify` · `cd platform/foundation/common && flutter test test/pin_policy_matrix_test.dart` | [guides/08_networking §5](../guides/08_networking.md) |
+| RULE-47 | Migration được đăng ký có kiểu theo database của nó — `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` — và lệnh mở `@preResolve` của database mang `@Order(1)` | Đăng ký không kiểu không bao giờ được gom; bước migrate lặng lẽ không chạy | review | review | [guides/07_database §11](../guides/07_database.md) |
+| RULE-48 | SSL pinning là một quyết định tường minh theo từng flavor trong `app_manifest.yaml` (`flavors.<f>.ssl_pinning`: ít nhất hai pin — leaf + dự phòng — hoặc `disabled` kèm lý do); `composer sync` sinh nó vào `facts` của app (`AppFacts.sslPinning`, một `SslPinningPolicy`) và `AppInitializer.initBeforeRunApp` cài nó trước khi DI bắt đầu — không có nguồn pin nào khác. Một quyết định `disabled` làm gate qua nhưng không phải là pin: template ship một quyết định như vậy, đánh dấu `TEMPLATE PLACEHOLDER`, cho `staging` và `prod`, mà README của app liệt kê dưới "Decisions to revisit before shipping" và log lúc boot, và bản release cần pin thật. Việc bỏ qua chứng chỉ chỉ có trong bản debug mà flavor đã khai là `dev` | Thiếu quyết định khiến traffic không được pin mà không ai chủ ý chọn | composer verify (V1 hình dạng và hai pin, V9 một quyết định cho mỗi flavor), analyzer (các const assert của `PinnedSsl` / `DisabledSsl`), test (`platform/foundation/common/test/pin_policy_matrix_test.dart`, `platform/foundation/common/test/app_config_test.dart`; `apps/*/test/di_smoke_test.dart` qua `checkDeclaredStarts`: P04, flavor không có quyết định trên platform có thể pin), boot (chính P04 đó chặn app khởi động) | `dart tools/composer/composer.dart verify` · `cd platform/foundation/common && flutter test test/pin_policy_matrix_test.dart` | [guides/08_networking §10](../guides/08_networking.md) |
 | RULE-49 | Entity dùng Freezed với `const Class._()`; use case là `@injectable`, làm một việc và trả `Result<T>` | Một bề mặt domain bất biến và đồng nhất | review | review | [§7](#7-domain-là-pure-dart) |
 
 ### 50–59 · Quản lý state
@@ -104,46 +106,46 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
 | RULE-50 | Feature BLoC dùng `BaseBloc` + event Freezed (`BaseCubit` chỉ khi không cần event); feature Provider kế thừa `BaseProvider<T>` và dùng `executeOperation` | Mỗi thư viện state một mẫu | review | review | [§9](#9-freezed-bloc-và-state) |
-| RULE-51 | Các subclass event Freezed là private (`= _HomeStarted`), và Bloc dùng `part` / `part of` cho `_event.dart`, `_state.dart` và `_bloc.freezed.dart` | Event là API riêng của Bloc | review | review | [§9](#9-freezed-bloc-và-state) |
-| RULE-52 | Mọi handler `on<Event>` là `async` và nhận `(event, emit)` — không bao giờ closure đồng bộ gọi việc async không await | Nếu không: "emit was called after an event handler completed normally" | review, analyzer (unawaited_futures) | `flutter analyze` | [§9](#9-freezed-bloc-và-state) |
+| RULE-51 | Các subclass event Freezed là private (`= _HomeProfileStarted`), và Bloc dùng `part` / `part of` cho `<name>_event.dart`, `<name>_state.dart` và `<name>_bloc.freezed.dart` | Event là API riêng của Bloc | review | review | [§9](#9-freezed-bloc-và-state) |
+| RULE-52 | Mọi handler `on<Event>` là `async` và nhận `(event, emit)` — không bao giờ closure đồng bộ gọi việc async không await | Nếu không: "emit was called after an event handler completed normally" | arch_check R18 (closure inline khai `async`, hoặc tear-off của method `async` trong cùng file), review (hình dạng `(event, emit)`; handler khai ở file khác) | `dart tools/arch_check/check.dart` | [§9](#9-freezed-bloc-và-state) |
 | RULE-53 | State `BlocViewState<T>` được chốt qua `emitResult` (`BlocResultMixin` / `CubitResultMixin`); state tuỳ biến kết thúc mọi nhánh ở một state cuối; code generic ghi rõ đối số kiểu (`BlocViewState<T>.loading()`, không bao giờ `const BlocViewState.loading()`) | State `const` trong helper `<T>` là `BlocViewState<Never>` và không bao giờ bằng | review | review | [§9](#9-freezed-bloc-và-state) |
-| RULE-54 | State xuyên feature được chia sẻ qua interface `Stream` / `ValueListenable` trung lập, không bao giờ qua instance Bloc hay Provider; chủ sở hữu đăng ký `@singleton` cụ thể và bind interface trong `@module` | Feature dùng thư viện state khác nhau vẫn tách rời | review | review | [§15](#15-giao-tiếp-giữa-các-feature) |
+| RULE-54 | State xuyên feature được chia sẻ qua interface `Stream` / `ValueListenable` trung lập, không bao giờ qua instance Bloc hay Provider; chủ sở hữu đăng ký `@singleton` cụ thể và bind interface như RULE-14 nêu | Feature dùng thư viện state khác nhau vẫn tách rời | review | review | [§15](#15-giao-tiếp-giữa-các-feature) |
 
 ### 60–69 · Kiểm thử, logging và báo lỗi
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
-| RULE-60 | Test nằm trong `test/` của chính package; package Flutter dùng `flutter_test`, package Dart thuần (`domain_core`, `tools`) dùng `package:test` | CI Gate 3 tự tìm mọi thư mục `test/` | CI gate 3 | `cd <package> && flutter test` | [§17](#17-kiểm-thử) |
+| RULE-60 | Test nằm trong `test/` của chính package; package Flutter dùng `flutter_test`, package Dart thuần (`domain_*`, `data_core`, `platform_kernel`, `tools`) dùng `package:test` | CI Gate 3 tự tìm mọi thư mục `test/` | CI gate 3 (tự tìm; fail nếu không có), arch_check R2 / R9 (test của domain hay kernel ở lại trên `package:test`), review | `cd <package> && flutter test` | [§17](#17-kiểm-thử) |
 | RULE-61 | Fake được viết tay — không mockito, không mocktail | Không codegen cho test; fake chính là lời mô tả contract | review | `grep -rnE "mockito\|mocktail" --include=pubspec.yaml .` (rỗng) | [§17](#17-kiểm-thử) |
 | RULE-62 | Widget test có scale phải bọc widget được test trong `ResponsiveInit` | `ResponsiveScope.of` assert thay vì lặng lẽ dùng giá trị chưa scale | test (widget test fail ở assert) | `cd <package> && flutter test` | [§17](#17-kiểm-thử) |
-| RULE-63 | Mỗi app giữ `test/di_smoke_test.dart`, boot đồ thị DI thật cho mọi flavor mà manifest khai và đối chiếu nó với khai báo của app (`checkAppContract`; `validate` cho mọi platform và flavor đã khai); plugin được chạm tới trong lúc DI (`@preResolve`, `@PostConstruct(preResolve: true)`) có test double ở đó | Nó bắt lỗi thứ tự DI và đăng ký thiếu trước khi thiết bị gặp | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test` | [§17](#17-kiểm-thử) |
-| RULE-64 | Thay đổi một gate tool (`arch_check`, `composer`, `docs_check`, `dependency_sync`, barrel generator, …) phải thêm vào `tools/test/` ca kiểm lẽ ra đã bắt được bug | Gate không có test mục ruỗng âm thầm | CI gate 1 (`tools/test`) | `cd tools && dart test` | [§17](#17-kiểm-thử) |
-| RULE-65 | Chẩn đoán lúc chạy đi qua `dynamic_logger` (`DynamicLogger.log`), không bao giờ `print`; CLI tool ghi bằng `stdout.writeln` / `stderr.writeln` | `print` lọt vào log bản release và không lọc được | analyzer (avoid_print) | `flutter analyze` | [§18](#18-logging-báo-lỗi-và-bí-mật) |
-| RULE-66 | Bí mật không bao giờ được commit (env prod, keystore, API key nằm trong gitignore) và không bao giờ bị log (header `Authorization` / `Cookie` và trường thông tin đăng nhập bị che; log network chỉ bật khi `kDebugMode`) | Lịch sử git và log thiết bị bị rò rỉ | review | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
-| RULE-67 | Báo crash và lỗi được cắm vào bằng cách đăng ký một `IErrorReporter` (và tuỳ chọn `IAnalytics`) trong app — không bao giờ tự gán `FlutterError.onError` / `PlatformDispatcher.instance.onError`; app đã đăng ký một cái thì khai nó là `provided` trong `capabilities:` (RULE-81) | Hook của shell nối chuỗi mọi handler; ghi đè một cái là mất phần còn lại | review | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
+| RULE-63 | Mỗi app giữ `test/di_smoke_test.dart`, boot đồ thị DI thật cho mọi flavor mà manifest khai, dựng mọi lazy singleton và mọi factory `@injectable` (lỗi chỉ ra tên type), đối chiếu đồ thị với khai báo của app (`checkAppContract`) và kiểm tra mọi platform và flavor đã khai đều khởi động được (`checkDeclaredStarts`); plugin được chạm tới trong lúc DI (`@preResolve`, `@PostConstruct(preResolve: true)`) có test double ở đó | Nó bắt lỗi thứ tự DI và đăng ký thiếu trước khi thiết bị gặp | test (`apps/*/test/di_smoke_test.dart`), CI gate 3; composer verify V12 (file tồn tại, gọi `checkAppContract` và dựng mọi factory) | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§17](#17-kiểm-thử) |
+| RULE-64 | Thay đổi một gate tool (`arch_check`, `composer`, `docs_check`, `dependency_sync`, barrel generator, …) phải thêm vào `tools/test/` ca kiểm lẽ ra đã bắt được bug | Gate không có test mục ruỗng âm thầm | review (CI gate 1 chạy `tools/test`, nên ca kiểm đã có không thể hồi quy; không gì kiểm tra rằng một thay đổi đã thêm ca mới) | `cd tools && dart test` | [§17](#17-kiểm-thử) |
+| RULE-65 | Chẩn đoán lúc chạy đi qua `dynamic_logger` (`DynamicLogger.log`), không bao giờ `print` hay `debugPrint`; CLI tool ghi bằng `stdout.writeln` / `stderr.writeln` | `print` lọt vào log bản release và không lọc được | analyzer (avoid_print), arch_check R19 (`print`, `debugPrint`, `debugPrintStack` trong `lib/` của platform, module và app) | `flutter analyze` · `dart tools/arch_check/check.dart` | [§18](#18-logging-báo-lỗi-và-bí-mật) |
+| RULE-66 | Bí mật không bao giờ được commit (env prod, keystore release và API key nằm trong gitignore; keystore duy nhất được track là khoá dev công khai `apps/mobile/android/keystore-dev.jks`, giúp bản clone mới build được `dev` và không bao giờ ký bản release) và không bao giờ bị log (header `Authorization` / `Cookie` và trường thông tin đăng nhập bị che; log network chỉ bật khi `kDebugMode`) | Lịch sử git và log thiết bị bị rò rỉ | review, `.gitignore` (vật liệu ký và `env.prod` không bị track), test (`platform/infra/network/test/logging_interceptor_test.dart`: che header và body) | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
+| RULE-67 | Báo crash và lỗi được cắm vào bằng cách đăng ký một `IErrorReporter` (và tuỳ chọn `IAnalytics`) trong app — không bao giờ tự gán `FlutterError.onError` / `PlatformDispatcher.instance.onError` (bootstrap của `platform_app_shell`, tức `runShellApp`, sở hữu và nối chuỗi chúng); app đã đăng ký một cái thì khai nó là `provided` trong `capabilities:` (RULE-81) | Hook của shell nối chuỗi mọi handler; ghi đè một cái là mất phần còn lại | review (không gán hook ngoài bootstrap), composer verify V3 và test (`apps/*/test/di_smoke_test.dart`: `checkAppContract`) cho khai báo `capabilities:` | review | [§18](#18-logging-báo-lỗi-và-bí-mật) |
 
 ### 70–79 · Công cụ, vệ sinh repo và tài liệu
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
 | RULE-70 | `flutter analyze` báo 0 issue — kể cả info — với `strict-casts`, `strict-inference`, `strict-raw-types` và các lint bổ sung | Kiểu chặt bắt được thứ review bỏ sót | analyzer, CI gate 2 | `flutter analyze` | [§16](#độ-nghiêm-của-analyzer) |
-| RULE-71 | Không tắt lint trong Dart viết tay (`// ignore:`, `// ignore_for_file:`, tắt một rule trong `analysis_options.yaml`); deprecation được migrate sau khi nghiên cứu cách thay thế | Tắt lint che mất bug thật tiếp theo | arch_check R13 | `dart tools/arch_check/check.dart` | [§16](#16-công-cụ-và-vệ-sinh-code) |
+| RULE-71 | Không có comment `// ignore:` / `// ignore_for_file:` trong Dart viết tay và không có `analysis_options.yaml` riêng của package; `analysis_options.yaml` duy nhất ở gốc chỉ tắt một lint hay bỏ qua một mã lỗi khi có comment ngay bên cạnh nói rõ vì sao, và một `false` / `ignore` mới được review như một thay đổi luật; deprecation được migrate sau khi nghiên cứu cách thay thế | Tắt lint che mất bug thật tiếp theo | arch_check R13 (comment ignore, `analysis_options.yaml` riêng của package), review (mọi thay đổi ở `analysis_options.yaml` gốc) | `dart tools/arch_check/check.dart` | [§16](#16-công-cụ-và-vệ-sinh-code) |
 | RULE-72 | Không có script PowerShell (`.ps1`): ưu tiên tool `.dart` đa nền tảng; `.sh` / `.bat` chỉ khi Dart không làm được | Chính sách thực thi của Windows chặn `.ps1` | arch_check R12 | `dart tools/arch_check/check.dart` | [§16](#16-công-cụ-và-vệ-sinh-code) |
 | RULE-73 | Lệnh được viết không có tiền tố `fvm`; tool gọi toolchain phải phát hiện FVM qua `tools/shared/toolchain.dart` | Có `.fvmrc` không có nghĩa là đã cài `fvm` | review | review | [§16](#16-công-cụ-và-vệ-sinh-code) |
-| RULE-74 | Version dependency chỉ nằm trong `pubspec_dependencies.yaml` và đến các member qua `dart tools/dependency_sync.dart` | Một catalog, không lệch theo package | CI gate 4 | `dart tools/dependency_sync.dart --check` | [§16](#16-công-cụ-và-vệ-sinh-code) |
-| RULE-75 | Barrel generator được chạy lại sau khi thêm, đổi tên hay xoá file trong `lib/` — sau gen-l10n / build_runner — và không ai thêm tay `export` vào barrel | Generator xoá export viết tay và export các file sinh ra đang có trên đĩa | review | `dart tools/barrel_generator/generate.dart <package>/lib` | [§20](#20-workspace-codegen-và-barrel) |
-| RULE-76 | File sinh ra (`*.g.dart`, `*.freezed.dart`, `*.module.dart`, `*.config.dart`) không bao giờ bị sửa tay; codegen là `dart run build_runner build --workspace`, không có `-d` | Lần chạy sau xoá mất chỗ sửa | arch_check R6 (cảnh báo), review | `dart run build_runner build --workspace` | [§20](#20-workspace-codegen-và-barrel) |
-| RULE-77 | Analyze sạch không phải là build: thay đổi DI, dependency hay chuyển chỗ type kết thúc bằng một lần build APK debug, và type mà code sinh ra dùng được import từ nhà thật của nó, không bao giờ qua re-export giới hạn bằng `show` | Analysis bỏ qua code sinh ra | CI gate build | `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` | [§20](#20-workspace-codegen-và-barrel) |
-| RULE-78 | File, class và package theo bảng đặt tên (`_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `i_<name>_repository`, `_repository_impl`, tiền tố tầng `core_` / `domain_` / `data_` / `feature_`); tiền tố `I` đánh dấu interface, không bao giờ là class cụ thể | Tên nói lên file là gì | arch_check R15 (tiền tố `I`), review | `dart tools/arch_check/check.dart` | [02_naming](02_naming.md) |
+| RULE-74 | Version dependency chỉ nằm trong `pubspec_dependencies.yaml` và đến các member qua `dart tools/dependency_sync.dart` | Một catalog, không lệch theo package | CI gate 4 (`dependency_sync --check`: lệch version, và dependency hosted không có trong catalog) | `dart tools/dependency_sync.dart --check` | [§16](#16-công-cụ-và-vệ-sinh-code) |
+| RULE-75 | Mỗi package dưới `modules/` và `platform/` có một barrel, `lib/<package>.dart`, và không có barrel thư mục; bên trong một package, file import file cụ thể, không bao giờ import barrel; barrel generator được chạy lại sau khi thêm, đổi tên hay xoá file trong `lib/` — sau gen-l10n / build_runner — và không ai thêm tay `export` vào barrel | Generator thay mọi `export` bằng danh sách của riêng nó và export các file sinh ra đang có trên đĩa | CI barrel gate (barrel cũ hoặc `export` thêm tay), analyzer (`prefer_relative_imports`: không import `package:` file của chính package), review (import tương đối barrel của chính nó; chạy generator sau codegen) | `dart tools/barrel_generator/generate.dart <package>/lib` | [§20](#20-workspace-codegen-và-barrel) |
+| RULE-76 | File sinh ra (`*.g.dart`, `*.freezed.dart`, `*.module.dart`, `*.config.dart`) không bao giờ được commit và không bao giờ bị sửa tay; codegen là `dart run build_runner build --workspace`, không có `-d` | Lần chạy sau xoá mất chỗ sửa | `.gitignore` (file sinh ra không bị track), arch_check R6 (file giống file sinh ra nhưng thiếu header của generator bị commit), review (không có `-d`) | `dart run build_runner build --workspace` | [§20](#20-workspace-codegen-và-barrel) |
+| RULE-77 | Analyze sạch không phải là build: thay đổi DI, dependency hay chuyển chỗ type kết thúc bằng một lần build APK debug, và type mà code sinh ra dùng được import từ nhà thật của nó, không bao giờ qua re-export giới hạn bằng `show` | Analysis bỏ qua code sinh ra | CI gate build (job APK debug), review (vế re-export) | `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` | [§20](#20-workspace-codegen-và-barrel) |
+| RULE-78 | File, class và package theo bảng đặt tên (`_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `i_<name>_repository`, `_repository_impl`, tiền tố tầng `core_` / `domain_` / `data_` / `feature_`); tiền tố `I` đánh dấu interface, không bao giờ là class cụ thể | Tên nói lên file là gì | arch_check R15 (tiền tố `I`), arch_check R3 (package module được đặt tên theo thư mục của nó), review (hậu tố file) | `dart tools/arch_check/check.dart` | [02_naming](02_naming.md) |
 | RULE-79 | Docs thay đổi cùng PR với code, ở `docs/en` **và** `docs/vi` với cùng hình dạng; mọi đường dẫn repo được nhắc tới đều tồn tại; một luật được phát biểu một lần — ở đây — và nơi khác trích `RULE-NN` | Docs lệch dạy sai pattern | docs_check (CI gate 5), review | `dart tools/docs_check/check.dart` | [CONTRIBUTING § 5](../../../CONTRIBUTING.md#5-documentation-contract) |
 
 ### 80–89 · App và composition
 
 | ID | Luật | Vì sao | Thực thi bởi | Kiểm chứng | Chi tiết |
 |---|---|---|---|---|---|
-| RULE-80 | Mọi thứ riêng của từng app được khai trong `apps/<id>/`: platform, flavor, env và capability trong `app_manifest.yaml`; hành vi của shell trong `lib/app/app_profile.dart`; code trong `lib/app/app_hooks.dart`. Một package platform không bao giờ hardcode giá trị mà một app có thể muốn khác (design size, trần text-scale, locale, pin, timeout, orientation, vị trí fallback, công tắc splash / push / deep link) | App thứ hai phải khác được mà không sửa `platform/` | composer verify (khai báo và facts sinh ra), test (`apps/*/test/app_profile_test.dart`), review | `dart tools/composer/composer.dart verify` | [§21](#21-app-và-composition) |
+| RULE-80 | Mọi thứ riêng của từng app được khai trong `apps/<id>/`: platform, flavor, env và capability trong `app_manifest.yaml`; hành vi của shell trong `lib/app/app_profile.dart`; code trong `lib/app/app_hooks.dart`. Một package platform không bao giờ hardcode giá trị mà một app có thể muốn khác (design size, trần text-scale, locale, pin, timeout, orientation, vị trí fallback, công tắc splash / push / deep link) | App thứ hai phải khác được mà không sửa `platform/` | composer verify (V1 từ vựng, V9 pin, V11 khoá env, V13 facts sinh ra), test (`apps/*/test/app_profile_test.dart`), analyzer (const assert của profile), review (không giá trị riêng của app nào bị hardcode trong `platform/`) | `dart tools/composer/composer.dart verify` | [§21](#21-app-và-composition) |
 | RULE-81 | Mọi contract tuỳ chọn trong catalog của shell (`SHELL_CONTRACTS`) có một trạng thái được khai trong `capabilities:` của từng app — `provided`, hoặc `absent` kèm lý do — và khai báo đó được đối chiếu với code ở Gate 0, trong smoke test và lúc boot | Sự vắng mặt phải là một quyết định, không phải tai nạn | composer verify (V2–V4, V14), arch_check R16, test (`apps/*/test/di_smoke_test.dart`) | `dart tools/composer/composer.dart verify` · `dart tools/arch_check/check.dart` | [§21](#21-app-và-composition) |
-| RULE-82 | Khác biệt giữa các platform là quyết định của app, đọc từ `PlatformFacts`; `Platform.is*`, `kIsWeb`, `defaultTargetPlatform` và `TargetPlatform.*` chỉ xuất hiện trong `resolveAppPlatform()` và một số ít chỗ được allow-list vì phụ thuộc API của hệ điều hành | Một nơi duy nhất để canh đúng nhánh web; app khai được platform bật thứ gì | arch_check R17 | `dart tools/arch_check/check.dart` | [§21](#21-app-và-composition) |
+| RULE-82 | Khác biệt giữa các platform là quyết định của app, đọc từ `PlatformFacts`; `Platform.is*`, `kIsWeb`, `defaultTargetPlatform` và `TargetPlatform.*` chỉ xuất hiện trong `resolveAppPlatform()` và các chỗ được allow-list trong `kPlatformForkAllowList` (API hệ điều hành không có trên web, quy ước của hệ điều hành như chuyển trang), mỗi chỗ kèm lý do | Một nơi duy nhất để canh đúng nhánh web; app khai được platform bật thứ gì | arch_check R17 | `dart tools/arch_check/check.dart` | [§21](#21-app-và-composition) |
 
 ### Thêm hoặc sửa một luật
 
@@ -158,9 +160,9 @@ Muốn hướng dẫn từng bước thì xem [`../guides/`](../guides/); muốn
 
 Bảng đăng ký: RULE-01 · RULE-02 · RULE-03.
 
-**Luật.** Phụ thuộc luôn hướng vào trong: `Feature → Domain ← Data`, với `core/*` là hạ tầng nằm dưới. **Không package `core/*` nào được phụ thuộc `feature_*`, `data_*` hay `domain_*`** — cả bằng import lẫn bằng khai báo trong `pubspec.yaml` — trừ các cạnh `→ domain_core` đã duyệt dưới đây. Luật **R1** của `arch_check` chặn mọi cạnh khác.
+**Luật.** Phụ thuộc luôn hướng vào trong: `Feature → Domain ← Data`, với `platform/*` là hạ tầng nằm dưới. **Không package `platform/*` nào được phụ thuộc một package dưới `modules/`** (`feature_*`, `data_*`, `domain_*` của sản phẩm, `<id>_api`) — bằng import, bằng khai báo trong `pubspec.yaml` (`dependencies:` hay `dev_dependencies:`) hay bằng import trong test — và một cạnh trỏ vào `domain_core` / `data_core` chỉ tồn tại nếu nó là một trong các cạnh đã duyệt dưới đây. Luật **R1** của `arch_check` chặn mọi cạnh khác.
 
-**Vì sao.** Core là vòng hạ tầng trong cùng. Nếu core với tay ngược lên trên, vòng tròn khép lại thành chu trình và không tầng nào phía trên có thể gỡ ra hay tái sử dụng độc lập được nữa.
+**Vì sao.** Platform là vòng hạ tầng trong cùng. Nếu nó với tay ngược lên trên, vòng tròn khép lại thành chu trình và không tầng nào phía trên có thể gỡ ra hay tái sử dụng độc lập được nữa.
 
 **Domain nằm ở tâm và không phụ thuộc ai.** Trạng thái đã kiểm chứng:
 
@@ -171,16 +173,17 @@ Bảng đăng ký: RULE-01 · RULE-02 · RULE-03.
 
 ### Ngoại lệ hướng lên được duyệt
 
-Chỉ có đúng ba. Thêm cái thứ tư bắt buộc phải cập nhật trang này (RULE-01, cả hai ngôn ngữ) và danh sách cho phép trong `tools/arch_check/check.dart` — nếu không, tool sẽ làm fail build.
+Chỉ có đúng bốn. Thêm cái thứ năm bắt buộc phải cập nhật trang này (RULE-01, cả hai ngôn ngữ) và danh sách cho phép `_approvedUpwardEdges` trong `tools/arch_check/check.dart` — nếu không, tool sẽ làm fail build, và nó in danh sách này ở đầu mỗi lần chạy.
 
 | Ngoại lệ | Lý do |
 |---|---|
-| `provider_state_management → domain_core` | Cần `Result<T>` và `PaginatedEntity<T>` cho `executeOperation` / `PaginatedViewWidget`. |
+| `provider_state_management → domain_core` | Cần `Result<T>` và `AppFailure` cho `executeOperation` / `OperationConfig`. |
 | `platform_kernel → domain_core` | `ErrorHandler` sinh ra `AppFailure`, class nằm ở `domain_core` như một phần của hợp đồng `Result`. Core→Domain là chiều **đúng** của Clean Architecture. |
 | `bloc_state_management → domain_core` | `BlocViewState.error` mang thẳng `AppFailure`, nên kiểu state cơ sở cần nó. |
+| `data_core → domain_core` | `BaseRepository` trả `Result<T>` và `AppFailure`, vốn nằm ở `domain_core`. Data→Domain là chiều **đúng** của Clean Architecture, và cả hai package đều là platform layer. |
 
 > [!NOTE]
-> Ba cạnh này là những cạnh `platform → domain_core` duy nhất, và mọi cạnh platform khác đều theo chiều giữa các nhóm (`docs/vi/architecture/02_core.md` § 0): `ui` không bao giờ phụ thuộc `state`, `infra` không bao giờ phụ thuộc một package infra khác, và foundation không bao giờ phụ thuộc `ui` hay một transport. `core_ui_kit` không khai package quản lý state nào — `LoadMoreListView` nằm ở `provider_state_management` (`state → ui` là chiều được phép) — và `provider_state_management` vẫn tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`. Kernel không gọi tên kiểu Dio nào: `core_network` đóng góp `DioFailureClassifier` qua `ErrorHandler.registerClassifier`.
+> Bốn cạnh này là những cạnh `platform → domain_core` duy nhất, và mọi cạnh platform khác đều theo chiều giữa các nhóm (`docs/vi/architecture/02_core.md` § 0): `ui` không bao giờ phụ thuộc `state`, `infra` không bao giờ phụ thuộc một package infra khác, và foundation không bao giờ phụ thuộc `ui` hay một transport. `core_ui_kit` không khai package quản lý state nào — `LoadMoreListView` nằm ở `provider_state_management` (`state → ui` là chiều được phép) — và `provider_state_management` tự trang bị `DefaultLoadingWidget` / `DefaultEmptyWidget` trong `lib/src/base_view/default_state_widgets.dart` thay vì mượn của `core_ui_kit`. Kernel không gọi tên kiểu Dio nào: `core_network` đóng góp `DioFailureClassifier` qua `ErrorHandler.registerClassifier`.
 
 ### Chiều giữa các nhóm platform (R11)
 
@@ -240,8 +243,10 @@ Bảng đăng ký: RULE-06.
 
 ```bash
 dart tools/arch_check/check.dart                      # R5: import trong lib/ nhưng thiếu ở `dependencies:` (khai ở dev_dependencies không được tính)
-dart tools/unused_checker/check_unused_packages.dart  # đã khai ở `dependencies:` nhưng không hề import
+dart tools/unused_checker/check_unused_packages.dart  # đã khai ở `dependencies:` nhưng không hề import (CI: bước cuối của job `quality`, có chặn merge)
 ```
+
+R5 chỉ đọc `lib/`: import trong `test/` của một package không thuộc phạm vi của nó, và package chỉ test mới dùng thì thuộc về `dev_dependencies:`.
 
 ---
 
@@ -278,16 +283,7 @@ class AuthStorageKeys {
 >
 > Chúng là API công khai của design system, và `styles/` mang đúng ngữ nghĩa đó trong khi `utils/` đọc lên là "linh tinh". Di chuyển sẽ làm hỏng mọi tham chiếu trong docs mà chẳng được gì. **Đừng "sửa" chỗ này ở lần audit sau.**
 
-Các hằng số đã bị đuổi khỏi `core_common`, ghi lại để không ai thêm lại:
-
-| Trước | Nay | Vì sao |
-|---|---|---|
-| `StorageKeyConstants` | đã xoá → khoá theo từng chủ trong `utils/` (§ 4) | giữ khoá storage của mọi domain |
-| `ApiConstants` | `AuthApiConstants` trong `modules/auth/data/lib/src/utils/` | chỉ giữ endpoint của auth |
-| `NotificationConstants` | `platform/infra/notifications/lib/src/utils/` | thuộc về package notifications |
-| `AnalyticsConstants`, `SocketConstants`, `FirebaseRemoteConfigConstants` | đã xoá | không có tham chiếu nào; khung chết |
-
-Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục — hiện có `EnvConstants` (nối `String.fromEnvironment`) và `ErrorCodes` (mã lỗi `ErrorHandler` gán khi không có HTTP status), nằm trong `lib/src/utils/` của `platform_kernel` và được `core_common` re-export.
+Đáy ngăn xếp chỉ giữ giá trị thực sự dùng chung toàn cục: `EnvConstants` (nối `String.fromEnvironment`), `ProfileConstants` (các công tắc `--dart-define` lúc build của app profile) và `ErrorCodes` (mã lỗi `ErrorHandler` gán). Chúng nằm trong `lib/src/utils/` của `platform_kernel` và `core_common` re-export toàn bộ kernel. Hằng số riêng của một package ở lại với package đó — id channel thông báo là `NotificationConstants` trong `platform/infra/notifications/lib/src/utils/`, endpoint của auth là `AuthApiConstants` trong `modules/auth/data/lib/src/utils/`.
 
 ---
 
@@ -341,10 +337,10 @@ Bảng đăng ký: RULE-13 · RULE-63.
 
 **Vì sao.** GetIt sẽ ném `"<Type> is not registered"` ngay lúc boot. Module khởi tạo theo đúng thứ tự khai trong `apps/mobile/lib/di/injection.dart`, được sinh từ `di_groups` của manifest: `core` (before), rồi — sau phần đăng ký của chính app — `notifications`, `shell`, `ui`, `domain`, `data`, `feature`, `other` (after). `apps/admin` không có nhóm `notifications`.
 
-Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_shell_adapters` đăng ký (đứng đầu nhóm `shell`) — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`. (`NetworkConfigImpl` từng là ví dụ, vì inject `AuthLocalDataSource` từ một module chạy sau; giờ nó đọc phiên qua `ISessionGateway` ngay lúc gọi và không còn dependency kiểu đó.)
+Có hai ràng buộc đang có hiệu lực. `shell` trước `ui`: `ThemeProvider` trong `core_base_ui` inject `IThemeStorage`, do `platform_shell_adapters` đăng ký (đứng đầu nhóm `shell`) — đảo hai nhóm là app hỏng lúc boot. Và `notifications` sau phần đăng ký của chính app: `PushNotificationService` là eager và inject `FirebaseOptions` do app đăng ký, nên `core_notifications` không thể nằm trong `core`.
 
 > [!CAUTION]
-> **`flutter analyze` KHÔNG bắt được loại lỗi này** — nó chỉ lộ ra lúc chạy, trên một lần boot. Lần boot đó chính là việc `test/di_smoke_test.dart` của mỗi app làm (RULE-63): mọi flavor, plugin thay bằng test double, mọi lazy singleton được dựng. CI Gate 3 chạy nó, nên lỗi thứ tự làm fail PR chứ không phải lần mở app đầu tiên.
+> **`flutter analyze` KHÔNG bắt được loại lỗi này** — nó chỉ lộ ra lúc chạy, trên một lần boot. Lần boot đó chính là việc `test/di_smoke_test.dart` của mỗi app làm (RULE-63): mọi flavor, plugin thay bằng test double, mọi lazy singleton và mọi factory `@injectable` được dựng. CI Gate 3 chạy nó, nên lỗi thứ tự làm fail PR chứ không phải lần mở app đầu tiên.
 
 **Kiểm chứng**
 
@@ -373,7 +369,7 @@ Bảng đăng ký: RULE-04 · RULE-05 · RULE-12 · RULE-24.
 
 **Vì sao.** Một template mà không xoá được feature thì không phải template. Khả năng gỡ bỏ cũng chính là bằng chứng thực tế rằng ranh giới là có thật.
 
-**Được máy cưỡng chế.** `arch_check` **R3** chặn một feature import feature khác (hay bất kỳ package data nào), **R8** chặn `getIt` / `getAll` kiểu ném lỗi trên một hợp đồng chỉ do module hiện thực, còn **R10** chặn việc *import* một module — kể cả package API của nó — ở bất cứ đâu trong app trừ `injection.dart`. R10 tồn tại vì riêng R8 là chưa đủ: `getItOrNull` canh một lookup, còn một import không giải được thì hỏng ngay ở khâu biên dịch, trước khi có lookup nào chạy. `network_config_impl.dart` import `data_auth` và `domain_auth` đúng vì lý do đó, và khiến module auth không thể gỡ bỏ trong khi mục này nói ngược lại.
+**Được máy cưỡng chế.** `arch_check` **R3** chặn một feature import feature khác (hay bất kỳ package data nào), **R8** chặn `getIt` / `getAll` kiểu ném lỗi trên một hợp đồng chỉ do module hiện thực, còn **R10** chặn việc *import* một module — kể cả package API của nó — ở bất cứ đâu trong app trừ `injection.dart`. R10 tồn tại vì riêng R8 là chưa đủ: `getItOrNull` canh một lookup, còn một import không giải được thì hỏng ngay ở khâu biên dịch, trước khi có lookup nào chạy. Nó đọc mọi file `.dart` của app — `lib/`, `test/`, `integration_test/`, `test_driver/`, `tool/` — nên một test nêu tên module cũng bị từ chối; chỉ `lib/di/injection.dart` được phép.
 
 Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng `core_di` kèm fallback:
 
@@ -386,13 +382,13 @@ Mọi thứ app shell tiêu thụ lúc chạy đều đi qua một hợp đồng
 > [!WARNING]
 > `getAll<T>()` và `getAllOrEmpty<T>()` khác nhau đúng ở chỗ này. `getAll` ném lỗi khi type chưa đăng ký, nên một lệnh `getAll<IFeatureLocalization>()` trần sẽ làm app crash ngay lúc dựng `MaterialApp` ở bất kỳ bản build nào không có feature nào đóng góp.
 
-**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` được implement bởi một package dưới `modules/` — ở bất kỳ tầng nào: `ISessionGateway` trong `data_auth` cũng tính như navigator của một feature — gắn với module implement nó, rồi chặn mọi `getIt<T>()` / `getAll<T>()` (dạng ném lỗi) lên chúng:
+**Cưỡng chế bằng máy.** Luật **R8** của `arch_check` tự suy ra mọi contract của `core_di` và mọi type của `<id>_api` được implement bởi một package dưới `modules/` — ở bất kỳ tầng nào: `ISessionGateway` trong `data_auth` cũng tính như navigator của một feature — gắn với module implement nó, rồi chặn mọi lookup dạng ném lỗi lên chúng — `getIt<T>()`, `getIt.get<T>()`, `getAll<T>()`, `GetIt.I<T>()`, kể cả qua một alias khai trong cùng file — và cả class `@injectable` nằm ngoài mọi module mà nhận một contract như vậy làm tham số constructor bắt buộc:
 
 ```bash
 dart tools/arch_check/check.dart      # luật R8 — Gate 1 của pr_quality_check.yml
 ```
 
-Đây không phải luật về phong cách. Lookup ném lỗi vẫn **compile được**: package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature implement contract đó, nên `flutter analyze` không thấy gì sai. Nó chỉ vỡ lúc runtime, ở bản build không có feature đó, trên đúng màn hình nào gọi tới. Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký nên nằm ngoài tập hợp này. Module bị gỡ nguyên khối, nên mọi package của chính module implement được phép resolve contract của nó theo kiểu eager.
+Đây không phải luật về phong cách. Lookup ném lỗi vẫn **compile được**: package gọi nó phụ thuộc `core_di` chứ không phụ thuộc feature implement contract đó, nên `flutter analyze` không thấy gì sai. Nó chỉ vỡ lúc runtime, ở bản build không có feature đó, trên đúng màn hình nào gọi tới. (Một alias của `GetIt` đi qua nhiều file thì không theo dõi được; review giữ phần đó.) Contract do app shell implement (`IThemeStorage`, `ILanguageStorage`) thì luôn được đăng ký nên nằm ngoài tập hợp này. Module bị gỡ nguyên khối, nên mọi package của chính module implement được phép resolve contract của nó theo kiểu eager.
 
 **Gỡ một feature** — manifest là file duy nhất sửa bằng tay:
 
@@ -461,9 +457,9 @@ Bảng đăng ký: RULE-50 · RULE-51 · RULE-52 · RULE-53.
 
 **Luật.**
 
-- Subclass event của BLoC phải **private**: `const factory HomeEvent.started() = _HomeStarted;`
-- Dùng `part` / `part of`: `_bloc.dart` khai `part '_event.dart';` và `part '_bloc.freezed.dart';`
-- Handler nhận đủ hai tham số và phải `async`: `Future<void> _onStarted(_HomeStarted event, Emitter<...> emit) async`
+- Subclass event của BLoC phải **private**: `const factory HomeProfileEvent.started() = _HomeProfileStarted;`
+- Dùng `part` / `part of`: `home_profile_bloc.dart` khai `part 'home_profile_event.dart';` và `part 'home_profile_bloc.freezed.dart';`
+- Handler nhận đủ hai tham số và phải `async`: `Future<void> _onAuthStatusChanged(_HomeProfileAuthStatusChanged event, Emitter<BlocViewState<SessionPrincipal?>> emit) async` (`modules/home/feature/lib/src/bloc/home_profile_bloc.dart`). `arch_check` R18 từ chối `on<Event>` mà handler không `async`
 
 > [!CAUTION]
 > Closure đồng bộ gọi việc async mà không await sẽ sinh ra `emit was called after an event handler completed normally` — handler trả về ngay lập tức, rồi việc async mới emit vào một sink đã đóng.
@@ -472,7 +468,7 @@ Bảng đăng ký: RULE-50 · RULE-51 · RULE-52 · RULE-53.
 
 | | `ViewState` (Provider) | `BlocViewState<T>` (BLoC) |
 |---|---|---|
-| File | `provider_state_management/lib/src/base/view_state_model.dart` | `bloc_state_management/lib/src/bloc_view_state.dart` |
+| File | `platform/state/provider/lib/src/base/view_state_model.dart` | `platform/state/bloc/lib/src/bloc_view_state.dart` |
 | Generic | không | có |
 | Số variant | 5 (có `loadingMore`) | 4 |
 | Lỗi | `error({ErrorState? error})` — nullable | `error(AppFailure error)` — bắt buộc |
@@ -487,7 +483,7 @@ Bảng đăng ký: RULE-50 · RULE-51 · RULE-52 · RULE-53.
 
 Bảng đăng ký: RULE-10 · RULE-21.
 
-**Luật.** Controller gắn với màn hình là `@injectable` (factory). Controller toàn cục có thể là `@lazySingleton`. Controller được khởi tạo **tại route**, trong `build` của `*_route_module.dart`.
+**Luật.** Controller gắn với màn hình là `@injectable` (factory). Các controller toàn app nêu trong RULE-10 — `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`, `AuthProvider` — là `@lazySingleton`. Controller được khởi tạo **tại route**, trong `build` của `*_route_module.dart`.
 
 **Vì sao.** ViewModel `@singleton` bị GetIt giữ mãi mãi, nên pop màn hình là rò rỉ nó, và lần vào tiếp theo sẽ dùng lại state cũ.
 
@@ -506,7 +502,7 @@ Bảng đăng ký: RULE-20 · RULE-22 · RULE-23 · RULE-24.
 |---|---|---|
 | `IFeatureRouteModule` | route dạng stack dưới `ShellRoute` của app | không (khớp theo path) |
 | `INavDestinationModule` | một tab bottom-nav + một `StatefulShellBranch` | **có** — `order` tăng dần |
-| `IAppEntryLocation` | `initialLocation` ở lần chạy đầu tiên (các lần cold-start sau dùng fallback) | không áp dụng |
+| `IAppEntryLocation` | `initialLocation` của lần vào đầu — mặc định chỉ ở lần chạy đầu tiên, các lần cold-start sau dùng fallback (`RouterProfile.entry`) | không áp dụng |
 | `IDashboardRouteModule` | chỉ phần chrome của dashboard | chỉ `feature_dashboard` |
 
 Điều hướng xuyên feature đi qua interface Navigator khai trong package API của module sở hữu (`modules/<id>/api`, ví dụ `AuthNavigator` trong `auth_api`), implement trong `routing/` của feature thuộc module đó, và resolve bằng `getItOrNull`. App shell không dùng navigator của module nào: nó đưa người dùng tới `ISignInLocation` / `IPostSignInLocation` (`core_di`), fallback về `AppRouter.fallbackLocation`. Cấm hardcode path hoặc gọi `GoRouter.of(context).go(...)` sang feature khác. **`BuildContext` phải được truyền trực tiếp từ nơi gọi ở UI** — đừng với lấy `NavigatorKeys.*.currentContext`.
@@ -521,7 +517,7 @@ Bảng đăng ký: RULE-30 · RULE-31 · RULE-32.
 
 **Luật.** Mọi kích thước — rộng, cao, padding, margin, cỡ chữ, bo góc — đều phải scale **qua `BuildContext`** bằng `core_responsive`: `context.w(x)`, `context.h(x)`, `context.sp(x)`, `context.r(x)` (và `context.spMin`, `context.dg`, `context.dm`). Cấm double thô trong layout, và cấm luôn dạng gọi trên receiver trần `16.h`.
 
-**Vì sao dạng trần thậm chí không tồn tại.** `core_responsive` **không** cung cấp extension nào trên `num`, nên `16.h` không biên dịch được. Đó là chủ đích: một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, mà widget đọc singleton thì không bao giờ biết metrics màn hình đã đổi. Ngược lại, `context.h(16)` **đăng ký dependency InheritedWidget** lên `ResponsiveScope`, nên nó rebuild khi metrics đổi: xoay máy, split-screen, resize cửa sổ desktop. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được — và luật R7 của `arch_check` từ chối dạng trần trong mọi file import `core_responsive`, nên một extension khai ở nơi khác cũng không lén đưa nó trở lại được.
+**Vì sao dạng trần thậm chí không tồn tại.** `core_responsive` **không** cung cấp extension nào trên `num`, nên `16.h` không biên dịch được. Đó là chủ đích: một con số không mang theo context, nên extension kiểu đó chỉ có thể đọc một singleton toàn cục, mà widget đọc singleton thì không bao giờ biết metrics màn hình đã đổi. Ngược lại, `context.h(16)` **đăng ký dependency InheritedWidget** lên `ResponsiveScope`, nên nó rebuild khi metrics đổi: xoay máy, split-screen, resize cửa sổ desktop. Bắt buộc phải có context chính là cách biến "làm đúng" thành lựa chọn duy nhất viết được — và luật R7 của `arch_check` từ chối dạng trần trong mọi file `lib/` viết tay, không chỉ các file import `core_responsive`, cùng mọi extension trên `num` khai `w`, `h`, `r`, `sp`, `spMin`, `dg` hay `dm`, nên một extension khai ở nơi khác cũng không lén đưa nó trở lại được.
 
 ❌ **Sai** — không biên dịch được, và nếu có thì giá trị cũng sẽ cũ dần:
 ```dart
@@ -535,7 +531,7 @@ SizedBox(height: context.h(16))
 
 **Design token cũng nhận context:** `AppSpacing.lg(context)`, `AppRadius.xxlRadius(context)`, `AppTextStyles.bodyMediumStyle(context)`. Con số nằm trong các hằng `raw*` — sửa `raw*`, đừng sửa accessor. Không bao giờ scale lại một token đã scale.
 
-**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Mẫu minh hoạ — hiện chưa màn hình nào trong template cần tới:
+**Không có context trong tầm với?** Trong hàm `async`, hãy đọc giá trị từ context **trước lệnh `await` đầu tiên** rồi truyền đi. Tuyệt đối không giữ `BuildContext` xuyên qua `await`. Mẫu minh hoạ — không màn hình nào trong template cần tới:
 
 ```dart
 Future<void> _loadAvatar() async {
@@ -565,14 +561,14 @@ Future<void> _loadAvatar() async {
 
 ❌ **Sai** — một lệnh ghi đè bên trong âm thầm vứt bỏ giá trị của caller:
 ```dart
-// điều platform/ui/ui_kit/lib/navigation/app_bar_custom.dart từng làm
+// bên trong một widget dùng lại của core_ui_kit
 @override
 double? get leadingWidth => context.w(64);   // ghi đè super.leadingWidth vĩnh viễn
 ```
 
 ✅ **Đúng** — nhận tham số qua constructor, để nơi gọi tự scale.
 
-**Kích thước không to ra trên tablet.** Mọi hệ số đều bị kẹp bởi một `ScaleBounds`, và mặc định `ScaleBounds.downOnly()` dừng ở 1:1: cửa sổ nhỏ hơn khung thiết kế thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ đúng cỡ thiết kế. Đừng tinh chỉnh màn hình với kỳ vọng `context.w(16)` sẽ lớn hơn trên iPad — hãy dùng chỗ dư cho layout. Nếu một lớp cửa sổ thực sự nên to ra, hãy opt-in cho riêng lớp đó bằng một bound có chặn (`ResponsiveProfile(scaleBounds: ScaleBounds(max: 1.2))` trong `profiles` của `_ResponsiveWrapper`). Xem [design system §6](../guides/11_design_system.md#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ).
+**Kích thước không to ra trên tablet.** Mọi hệ số đều bị kẹp bởi một `ScaleBounds`, và mặc định `ScaleBounds.downOnly()` dừng ở 1:1: cửa sổ nhỏ hơn khung thiết kế thì thiết kế thu nhỏ, cửa sổ lớn hơn thì vẽ đúng cỡ thiết kế. Đừng tinh chỉnh màn hình với kỳ vọng `context.w(16)` sẽ lớn hơn trên iPad — hãy dùng chỗ dư cho layout. Nếu một lớp cửa sổ thực sự nên to ra, app opt-in cho riêng lớp đó trong profile của mình bằng một chính sách có chặn (`DisplayProfile(scale: {WindowClass.large: ScalePolicy.bounded(max: 1.2)})` trong `lib/app/app_profile.dart`, RULE-80). Xem [design system §6](../guides/11_design_system.md#6-đặt-chính-sách-scale-theo-từng-lớp-cửa-sổ).
 
 **Chọn layout theo lớp kích thước cửa sổ, không bao giờ theo thiết bị.** Dùng `context.windowSizeClass`, `context.adaptive(...)`, `AdaptiveLayout` hoặc `AdaptiveSplitView` — đừng bao giờ dùng đời máy, `Platform.isIOS` hay một phép kiểm `shortestSide` tự chế. Một thiết bị có nhiều cửa sổ — iPad đang Split View, màn hình ngoài của máy gập, cửa sổ desktop bị kéo hẹp — và chỉ lớp cửa sổ mới thấy được chúng. Việc dashboard đổi giữa bottom bar và rail là mẫu tham chiếu; xem [design system §7](../guides/11_design_system.md#7-bố-cục-cho-tablet-máy-gập-và-chia-đôi-màn-hình).
 
@@ -589,10 +585,10 @@ final twoPane = context.isExpandedOrWider;
 **Kiểm chứng**
 
 ```bash
-dart tools/arch_check/check.dart      # luật R7 — chặn mọi dạng gọi scale bare
+dart tools/arch_check/check.dart      # luật R7 — mọi dạng gọi scale bare; luật R20 — số thô trong tham số layout
 ```
 
-Nửa "extension trần" của luật này được **cưỡng chế bằng máy**, không dựa vào review: R7 chạy như Gate 1 của `pr_quality_check.yml` ở mọi PR và in `file:line` cho từng vi phạm. Các điểm về số double thô, chính sách scale và lớp cửa sổ do review giữ.
+Hai nửa của luật này được **cưỡng chế bằng máy**: R7 (extension trần) và R20 (số thô làm giá trị của tham số layout hay vẽ — `SizedBox`, `EdgeInsets`, `BorderRadius`, `fontSize:`, các tham số kích thước của `Container`, `Icon`, `Positioned`, … — trong `lib/` ngoài `styles/` và `utils/`) chạy như Gate 1 của `pr_quality_check.yml` ở mọi PR và in `file:line` cho từng vi phạm. R20 là phép quét từ vựng trên các constructor nó liệt kê: số double thô đi qua biến hay widget không được liệt kê, thứ tự đọc trước `await`, chính sách scale và việc chọn lớp cửa sổ do review giữ.
 
 ---
 
@@ -602,13 +598,15 @@ Bảng đăng ký: RULE-34 · RULE-35 · RULE-37.
 
 **Luật.** Toàn bộ chữ hiển thị cho người dùng phải được dịch — cấm hardcode chuỗi UI. Mỗi feature sở hữu file `.arb` trong `assets/language/` của mình và đăng ký `IFeatureLocalization` qua DI. Truy cập qua extension của feature: `context.l10nAuth.someKey`.
 
-Feature **không được** sửa `platform/shell/app_shell/lib/src/root_app.dart` để thêm delegate; app shell tự gom bằng `getAllOrEmpty<IFeatureLocalization>()`.
+Feature **không được** sửa shell để thêm delegate; `platform/shell/app_shell/lib/src/app_material_wrapper.dart` tự gom chúng bằng `getAllOrEmpty<IFeatureLocalization>()`.
 
 Chuỗi toàn cục nằm ở `core_base_ui`. `core_ui_kit` **không được** định nghĩa `.arb` riêng — nó dùng của `core_base_ui`.
 
-**Asset cũng thuộc về feature.** Ảnh, SVG và animation riêng của một feature nằm trong `assets/` của chính feature đó (ví dụ có sẵn là `modules/auth/feature/assets/language/`; ảnh đặt cạnh đó trong một `assets/images/` do feature tự tạo). `core_base_ui` dành riêng cho asset toàn cục — logo app, icon toàn cục — và chuỗi dự phòng toàn cục, và không chứa widget nào.
+**Asset cũng thuộc về feature.** Ảnh, SVG và animation riêng của một feature nằm trong `assets/` của chính feature đó (ví dụ có sẵn là `modules/auth/feature/assets/language/`; ảnh đặt cạnh đó trong một `assets/images/` do feature tự tạo). `core_base_ui` dành riêng cho asset toàn cục — logo app, icon toàn cục, font — và chuỗi dự phòng toàn cục, và không chứa widget nào.
 
-**Khóa ARB dùng `lowerCamelCase`.** `flutter gen-l10n` biến mỗi khóa thành getter Dart nguyên văn, nên khóa `snake_case` sinh ra `context.l10nAuth.welcome_back` — một định danh phá vỡ quy ước đặt tên của chính Dart ở mọi nơi gọi. File sinh ra bị loại khỏi analysis, nên sẽ không có linter nào báo cho bạn. Hãy chọn kiểu viết ngay trong `.arb`; đó là nơi duy nhất bạn chọn được.
+**Khóa ARB dùng `lowerCamelCase`.** `flutter gen-l10n` biến mỗi khóa thành getter Dart nguyên văn, nên khóa `snake_case` sinh ra `context.l10nAuth.welcome_back` — một định danh phá vỡ quy ước đặt tên của chính Dart ở mọi nơi gọi. File sinh ra bị loại khỏi analysis, nên không linter nào báo cho bạn. Hãy chọn kiểu viết ngay trong `.arb`; đó là nơi duy nhất bạn chọn được.
+
+**`AppFailure.message` là chữ dành cho lập trình viên.** Đó là thứ `ErrorHandler` hay một data source viết cho log, không phải cho màn hình. Màn hình hiển thị một chuỗi đã dịch được chọn từ `code` của failure — `core_base_ui` có sẵn ánh xạ chung `context.l10n.failureMessage(failure.code)` (`failure_message_extension.dart`, được test trong `platform/ui/design_system/test/failure_message_test.dart`), và feature nào nói được cụ thể hơn thì dùng ARB riêng — và không bao giờ hiển thị `message` thô.
 
 ---
 
@@ -640,9 +638,12 @@ Bảng đăng ký: RULE-08 · RULE-14 · RULE-25 · RULE-54.
 **Đăng ký kép** (mô hình 3): feature sở hữu đăng ký class cụ thể là `@singleton`, rồi bind interface qua `@module` của DI:
 
 ```dart
+// modules/auth/feature/lib/di/module.dart
 @module
-abstract class AuthModule {
-  ISessionStatusStream bind(AuthStatusStreamImpl impl) => impl;
+abstract class AuthDiModule {
+  @singleton
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) =>
+      impl;
 }
 ```
 
@@ -664,11 +665,11 @@ Bảng đăng ký: RULE-70 · RULE-71 · RULE-72 · RULE-73 · RULE-74.
 | Luật | Chi tiết |
 |---|---|
 | Cấm `print()` trong `tools/` | dùng `stdout.writeln()` / `stderr.writeln()` |
-| Cấm tắt lint | `// ignore_for_file: ...` bị cấm; hãy tìm cách migrate thật |
+| Cấm tắt lint | `// ignore:` và `// ignore_for_file:` bị cấm, và không package nào có `analysis_options.yaml` riêng (R13); lint bị tắt trong file gốc phải có comment nói rõ vì sao; hãy tìm cách migrate thật |
 | Cấm script PowerShell | `.ps1` bị cấm (chính sách thực thi của Windows); dùng `.dart` |
 | Không bao giờ sửa tay file sinh | `.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart` |
 | Version lấy từ catalog | sửa `pubspec_dependencies.yaml` rồi chạy tool sync |
-| Chạy lại barrel generator | sau khi thêm, đổi tên, hoặc xoá file trong `lib/` |
+| Chạy lại barrel generator | sau khi thêm, đổi tên, hoặc xoá file trong `lib/`, sau codegen |
 | Xử lý deprecation đàng hoàng | nghiên cứu đường migrate; cấm vá tạm và cấm ignore |
 
 **FVM là tuỳ chọn.** `.fvmrc` ghim một version, nhưng không có nghĩa là `fvm` đã được cài: viết lệnh trần (`flutter pub get`) và tự thêm `fvm ` nếu máy bạn dùng nó. Tool gọi toolchain phát hiện nó lúc chạy qua `tools/shared/toolchain.dart` (`useFvm`, `dartExecutable` / `dartArgs`, `flutterExecutable` / `flutterArgs`), vốn đòi cả file cấu hình lẫn `fvm --version` chạy được.
@@ -695,7 +696,7 @@ Một file `analysis_options.yaml` duy nhất ở root áp dụng cho mọi pack
 
 Bảng đăng ký: RULE-60 · RULE-61 · RULE-62 · RULE-63 · RULE-64.
 
-**Luật.** Test nằm cạnh code nó kiểm, trong thư mục `test/` riêng của từng package. Package Flutter dùng `flutter_test`; package Dart thuần (`domain_core`, `tools`) dùng `package:test`, được ghim trong catalog. Fake được viết tay — repo không khai mockito hay mocktail.
+**Luật.** Test nằm cạnh code nó kiểm, trong thư mục `test/` riêng của từng package. Package Flutter dùng `flutter_test`; package Dart thuần (`domain_*`, `data_core`, `platform_kernel`, `tools`) dùng `package:test`, được ghim trong catalog — `arch_check` R2 và R9 từ chối `flutter_test` trong package domain hay kernel. Fake được viết tay — repo không khai mockito hay mocktail.
 
 **Vì sao.** CI Gate 3 không giữ danh sách: nó tìm mọi thư mục có cả `pubspec.yaml` lẫn `test/` và chạy `flutter test --coverage` ở đó, và fail nếu không tìm thấy thư mục nào. Package mới có test được phủ ngay khi nó tồn tại. Fake viết tay không cần codegen và đọc lên như lời phát biểu về contract nó thay thế.
 
@@ -703,7 +704,7 @@ Ba test gánh luật ở nơi khác trong file này:
 
 | Test | Giữ |
 |---|---|
-| `apps/<id>/test/di_smoke_test.dart` (mọi app) | Boot đồ thị DI sinh ra thật của app cho `dev`, `staging` và `prod` với mọi plugin thay bằng test double, dựng mọi lazy singleton, và đối chiếu đồ thị với `capabilities:` của app (`checkAppContract`: mọi contract bắt buộc, mọi `provided` / `absent` đã khai, có màn hình, `order` duy nhất, `AppRouter.router` ráp được) — bằng chứng lúc chạy cho RULE-13, RULE-14, RULE-24 (`order` duy nhất), RULE-48 (nửa binding) và RULE-81 |
+| `apps/<id>/test/di_smoke_test.dart` (mọi app) | Boot đồ thị DI sinh ra thật của app cho mọi flavor mà manifest khai với mọi plugin thay bằng test double, dựng mọi lazy singleton và mọi factory `@injectable` (lỗi chỉ ra tên type), đối chiếu đồ thị với `capabilities:` của app (`checkAppContract`: mọi contract bắt buộc, mọi `provided` / `absent` đã khai, có màn hình, `order` duy nhất, `AppRouter.router` ráp được) và hỏi `checkDeclaredStarts` xem mọi platform và flavor đã khai có khởi động được không — bằng chứng lúc chạy cho RULE-13, RULE-14, RULE-24 (`order` duy nhất), RULE-48 (một quyết định pin cho mỗi flavor, P04) và RULE-81 |
 | `platform/shell/app_shell/test/accessibility_test.dart` | Nút chỉ có icon giữ tooltip làm nhãn ngữ nghĩa; cỡ chữ của hệ điều hành đi qua tới `DisplayProfile.textScaleMax` (RULE-38) |
 | `tools/test/` | Mọi gate tool, mỗi ca trong một workspace dùng xong bỏ ở thư mục tạm (RULE-64); CI chạy nó ngay sau Gate 1, và Gate 3 bỏ qua `tools/` |
 
@@ -716,7 +717,7 @@ Plugin mà đồ thị DI chạm tới trong lúc khởi tạo — một factory
 ```bash
 cd platform/foundation/common && flutter test          # một package
 cd apps/mobile && flutter test test/di_smoke_test.dart # boot DI, mọi flavor
-cd tools && dart test                                  # các gate tool (~15 s)
+cd tools && dart test                                  # các gate tool
 dart tools/coverage_report/report.dart                 # coverage theo package sau --coverage (tham khảo)
 ```
 
@@ -726,11 +727,11 @@ dart tools/coverage_report/report.dart                 # coverage theo package s
 
 Bảng đăng ký: RULE-43 · RULE-65 · RULE-66 · RULE-67.
 
-**Luật.** Chẩn đoán lúc chạy đi qua `dynamic_logger` (`DynamicLogger.log`), không bao giờ `print` — lint `avoid_print` của analyzer từ chối nó. CLI tool trong `tools/` ghi bằng `stdout.writeln` / `stderr.writeln`. Không có gì bí mật bị log hay commit.
+**Luật.** Chẩn đoán lúc chạy đi qua `dynamic_logger` (`DynamicLogger.log`), không bao giờ `print` hay `debugPrint` — lint `avoid_print` của analyzer từ chối `print`, còn `arch_check` R19 từ chối `print`, `debugPrint` và `debugPrintStack` trong `lib/` của mọi package platform, module và app. CLI tool trong `tools/` ghi bằng `stdout.writeln` / `stderr.writeln`. Không có gì bí mật bị log hay commit.
 
-**Vì sao.** Đầu ra của `print` lọt vào log thiết bị bản release và không lọc được theo mức hay tag. Stack network cho thấy chuẩn che dữ liệu: `LoggingInterceptor` chỉ chạy khi `kDebugMode` ở cả ba hook, kể cả `onError`, và che header `Authorization` / `Cookie` cùng các trường thông tin đăng nhập trong body (`password`, `token`, `access_token`, …) — xem [`../architecture/02_core.md`](../architecture/02_core.md#chuỗi-interceptor) § 6. File env production, keystore, `key.properties` và API key (`tools/code_review/.gemini_api_key`, `apps/mobile/fastlane/Config.yaml`) nằm trong gitignore; CI dựng chúng từ secret ([`../operations/01_cicd.md`](../operations/01_cicd.md) § 7).
+**Vì sao.** Đầu ra của `print` lọt vào log thiết bị bản release và không lọc được theo mức hay tag. Stack network cho thấy chuẩn che dữ liệu: `LoggingInterceptor` chỉ chạy khi `kDebugMode` ở cả ba hook, kể cả `onError`, và che header `Authorization` / `Cookie` cùng các trường thông tin đăng nhập trong body (`password`, `token`, `access_token`, …) — xem [`../architecture/02_core.md`](../architecture/02_core.md#chuỗi-interceptor) § 6. File env production, keystore, `key.properties` và API key (`tools/code_review/.gemini_api_key`, `apps/mobile/fastlane/Config.yaml`) nằm trong gitignore, với một ngoại lệ có chủ đích: `apps/mobile/android/keystore-dev.jks` và `key-dev.properties` được track để bản clone mới build được flavor `dev` — một khoá công khai không bao giờ ký bản release (`SECURITY.md`). `env.dev` / `env.stg` không chứa bí mật và được track; `env.prod` thì không. CI dựng phần còn lại từ secret ([`../operations/01_cicd.md`](../operations/01_cicd.md) § 7).
 
-**Báo lỗi.** `runShellApp` cài một hook phía sau zone handler, `FlutterError.onError` và `PlatformDispatcher.instance.onError`. Nó giữ handler trước đó, gọi `onError` tuỳ chọn của app, rồi `getItOrNull<IErrorReporter>()` với `fatal: true`; `ErrorHandler.onUnclassifiedError` gửi các exception `ErrorHandler` không phân loại được tới cùng reporter với `fatal: false`. Muốn cắm Crashlytics hay Sentry, đăng ký một implementation `IErrorReporter` trong app (`@LazySingleton(as: IErrorReporter)` trong `lib/` của chính nó); `IAnalytics` cũng vậy, và mọi page `GoRouteDataCustom` báo màn hình của nó qua đó. Tự gán `FlutterError.onError` là thay thế chuỗi thay vì gia nhập nó. Chi tiết: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § "Lỗi và crash reporting".
+**Báo lỗi.** `runShellApp` là nơi duy nhất đặt các hook lỗi (`installShellErrorHooks` trong `platform/shell/app_shell/lib/src/bootstrap.dart`): zone handler, `FlutterError.onError` — giữ handler trước đó — và `PlatformDispatcher.instance.onError` đều kết thúc ở một lần báo cáo, gọi `onError` tuỳ chọn của app rồi `getItOrNull<IErrorReporter>()` với `fatal: true`; `ErrorHandler.onUnclassifiedError` gửi các exception `ErrorHandler` không phân loại được tới cùng reporter với `fatal: false`. Muốn cắm Crashlytics hay Sentry, đăng ký một implementation `IErrorReporter` trong app (`@LazySingleton(as: IErrorReporter)` trong `lib/` của chính nó); `IAnalytics` cũng vậy, và mọi page `GoRouteDataCustom` báo màn hình của nó qua đó. Tự gán `FlutterError.onError` là thay thế chuỗi thay vì gia nhập nó. Chi tiết: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § "Lỗi và crash reporting".
 
 **Phân loại lỗi.** Lỗi đến UI dưới dạng `AppFailure` do `ErrorHandler.handleError(e)` tạo ra. `ErrorHandler` không nêu tên type transport nào; một họ exception mà nó cần hiểu thì đăng ký `ErrorClassifier` qua `ErrorHandler.registerClassifier` — như cách `core_network` đóng góp `DioFailureClassifier`. Hiện chưa có classifier cho Firebase: `FirebaseException`, `FirebaseAuthException` và `PlatformException` đều rơi về `ServerFailure(code: 9999)`, "Unknown error occurred" ở bản release. Hãy đăng ký một cái trước khi màn hình nào dựa vào mã lỗi Firebase.
 
@@ -748,13 +749,14 @@ Bảng đăng ký: RULE-38 · RULE-39 · RULE-30 (inset theo hướng).
 - **Vùng chạm tối thiểu 48 × 48 dp** (`kMinInteractiveDimension`) — thu nhỏ phần nhìn, không thu vùng chạm.
 - **Phải sang trái.** Padding mang nghĩa đầu/cuối dòng dùng `context.edgeInsetsDirectional(start:, end:)`, tự lật khi RTL; `edgeInsets(left:/right:)` là vật lý.
 
-**Vì sao.** Mỗi điều trên từng là một lỗi thật ở đây: `RootApp` từng kết thúc bằng `withNoTextScaling`, ghim mọi chữ ở 100 % bất kể người dùng chọn gì, và một `TooltipVisibility(visible: false)` toàn cục làm câm mọi icon button với trình đọc màn hình. Chi tiết: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § 7.
+**Vì sao.** `withNoTextScaling` ghim mọi chữ ở 100 % bất kể người dùng chọn gì, và một `TooltipVisibility(visible: false)` toàn cục làm câm mọi icon button với trình đọc màn hình. Test của shell chỉ phủ shell; việc tuân thủ của từng màn hình do review giữ, kèm một test text-scale cho `feature_auth` và `feature_dashboard`. Chi tiết: [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md) § 7.
 
 **Kiểm chứng**
 
 ```bash
 cd platform/shell/app_shell && flutter test test/accessibility_test.dart
 cd modules/auth/feature && flutter test test/login_page_text_scale_test.dart
+cd modules/dashboard/feature && flutter test test/dashboard_text_scale_test.dart
 ```
 
 ---
@@ -765,9 +767,9 @@ Bảng đăng ký: RULE-16 · RULE-75 · RULE-76 · RULE-77.
 
 **Composition được sinh ra.** Mỗi `apps/<id>/app_manifest.yaml` là mô tả duy nhất được sửa tay của một app. `dart tools/composer/composer.dart sync` ghi năm thứ từ nó, mỗi thứ nằm giữa marker `composer:managed`: danh sách `workspace:` ở gốc, path dependency của app trong `pubspec.yaml` của nó, `lib/di/injection.dart` của nó (các import, danh sách module và điểm vào `configureDependencies` — file không còn code viết tay), vùng `facts` của `lib/app/app_profile.dart` (khai báo dưới dạng const Dart) và vùng `report` trong `README.md` của app. `composer verify` là Gate 0 và fail khi có bất kỳ sai lệch nào, đồng thời đối chiếu khai báo với mã nguồn ([§21](#21-app-và-composition)). Module generator thêm module mới vào mọi manifest (hoặc chỉ các app nêu bằng `--apps`) và tự chạy `sync`; `composer new` tạo cả một app. Workspace phẳng: `resolution: workspace` ở mọi member, không có nút workspace trung gian.
 
-**Barrel.** `dart tools/barrel_generator/generate.dart <package>/lib` viết lại barrel của package từ những gì có trên đĩa. Nó **xoá** mọi dòng bắt đầu bằng `export '` rồi phát lại danh sách đã sắp xếp của nó, nên export thêm tay sẽ lặng lẽ biến mất — hãy đặt re-export có chủ đích trong một file nguồn bình thường (`platform/foundation/kernel/lib/src/error/failures.dart` đúng là vậy). Nó cũng export các file sinh ra đang có trên đĩa (`module.module.dart`, `lib/src/gen/**`; `src.dart` của `core_base_ui` export `gen/gen.dart`), nên lần chạy cuối phải đến **sau** gen-l10n và build_runner — đúng thứ tự `tools/workspace_setup/configure.dart` dùng.
+**Barrel.** Mỗi package dưới `modules/` và `platform/` có đúng một barrel, `lib/<package_name>.dart`; bên trong một package, file import file cụ thể, không bao giờ import barrel. `dart tools/barrel_generator/generate.dart <package>/lib` (đường dẫn không phải `lib/` của một package thì thoát với mã 64) viết lại nó từ những gì có trên đĩa: một danh sách `export` đã sắp xếp cho mọi file thư viện dưới `lib/`, kể cả file sinh ra đang có trên đĩa (`module.module.dart`, `lib/src/gen/**`), và nó xoá barrel thư mục viết tay. Nó **thay** mọi directive `export` của barrel, nên export thêm tay sẽ lặng lẽ biến mất — hãy đặt re-export có chủ đích trong một file nguồn bình thường (`platform/foundation/common/lib/src/kernel.dart` đúng là vậy). Vì barrel đã commit liệt kê cả file sinh ra nằm trong gitignore, lần chạy cuối phải đến **sau** gen-l10n và build_runner — đúng thứ tự `tools/workspace_setup/configure.dart` dùng — và CI chạy lại nó rồi fail khi barrel hay bất kỳ file `.dart` nào đang được track bị khác đi (bước "Barrels match the generator").
 
-**Code sinh ra vô hình với analysis.** `analysis_options.yaml` loại `**.freezed.dart`, `**.g.dart`, `**.mocks.dart`, `**.config.dart` và `**.module.dart`, nên `flutter analyze` sạch không có nghĩa là app biên dịch được. Sự cố thật: chuyển `AppFailure` từ `core_common` sang `domain_core` làm hỏng `bloc_view_state.freezed.dart`, vốn cần `$AppFailureCopyWith` sinh ra; shim re-export của `core_common` liệt kê type trong mệnh đề `show` và không mang theo được nó. Analyze báo *No issues found*; build APK fail với `Type '$AppFailureCopyWith' not found`. Cách sửa — và cũng là luật — là import type mà code sinh ra dùng từ nhà thật của nó.
+**Code sinh ra vô hình với analysis.** `analysis_options.yaml` loại `**.freezed.dart`, `**.g.dart`, `**.mocks.dart`, `**.config.dart` và `**.module.dart`, nên `flutter analyze` sạch không có nghĩa là app biên dịch được. Ví dụ: `bloc_view_state.freezed.dart` cần `$AppFailureCopyWith` do `domain_core` khai; một re-export liệt kê type trong mệnh đề `show`, như `platform/foundation/kernel/lib/src/error/failures.dart`, không mang theo được nó. Analyze báo *No issues found*; build APK fail với `Type '$AppFailureCopyWith' not found`. Luật: import type mà code sinh ra dùng từ nhà thật của nó (`bloc_state_management` import `package:domain_core/domain_core.dart`).
 
 `build_runner` không nhận `-d`: `--delete-conflicting-outputs` đã bị gỡ và bị bỏ qua kèm cảnh báo.
 
@@ -801,7 +803,7 @@ Chia thế nào trong một câu: manifest nói app **là** gì và chạy ở �
 
 Shell resolve mọi contract tuỳ chọn qua một catalog duy nhất, `SHELL_CONTRACTS` (`utils/shell_contract_constants.dart` trong `platform_app_shell`: 7 dòng bắt buộc do chính các package của shell đăng ký, 14 dòng tuỳ chọn do app hoặc module đóng góp — tổng 21; `composer describe --catalog` in bảng thật). App khai từng dòng tuỳ chọn là `provided` hoặc `{ state: absent, reason }` (RULE-81): `composer verify` từ chối dòng chưa khai (V2), khai báo mà code mâu thuẫn ở cả hai chiều (V3), bundle mà các thành viên bất đồng (V4) và lý do rỗng hoặc `TODO` (V14); `checkAppContract` đối chiếu cùng khai báo đó với đồ thị app thực sự dựng, trong smoke test của từng app và lúc boot; `arch_check` R16 giữ cho chính catalog luôn đầy đủ, nên thêm một lookup của shell mà không đưa vào catalog sẽ fail Gate 1.
 
-**Vì sao.** Trước đây một app chỉ khai composition và không gì khác. Mọi quyết định riêng của app là một hằng số trong package dùng chung, một nhánh `Platform.is*` trong một trong năm file, hoặc một file native — và không có gì nói app phải đăng ký gì, mỗi platform bật gì hay app được phép can thiệp vào đâu. App thứ hai không thể khác mà không sửa `platform/`.
+**Vì sao.** Một quyết định riêng của app mà nằm trong một hằng số của package dùng chung, một nhánh `Platform.is*` hay một file native thì vô hình với mọi tool: không có gì nói app phải đăng ký gì, mỗi platform bật gì hay app được phép đổi gì, và app thứ hai không thể khác mà không sửa `platform/`. Khai trong manifest, profile, hook và contract thì mỗi quyết định có đúng một chỗ và một gate đọc nó.
 
 **Khác biệt giữa các platform** là quyết định của app (RULE-82): `platforms.<p>` trong manifest khai app chạy ở đâu và mỗi platform bật gì (splash, push, deep link, orientation, window), shell mỗi lần chạy đọc đúng một `PlatformFacts`, và nhánh chính sách duy nhất dựa trên `kIsWeb` / `defaultTargetPlatform` là `resolveAppPlatform()`. Một nhánh mới phải được biện minh trong `kPlatformForkAllowList` (`tools/arch_check/platform_forks.dart`) kèm lý do, nếu không R17 fail.
 
@@ -838,7 +840,11 @@ Cách đọc một app, thêm platform, capability, pin, locale hay hook, và to
 | Package API của module chỉ phụ thuộc foundation; feature import API của module khác, không bao giờ feature của nó | `dart tools/arch_check/check.dart` (R3) |
 | Không `.ps1`, không tắt lint, không `datasources/`, không class cụ thể `I*` | `dart tools/arch_check/check.dart` (R12–R15) |
 | Mọi lookup của shell nằm trong catalog; nhánh theo platform được allow-list kèm lý do | `dart tools/arch_check/check.dart` (R16, R17) |
-| Domain thuần | `grep -rn "package:flutter" modules/*/domain/lib` |
+| Handler Bloc async; không `print` / `debugPrint` trong `lib/`; không số thô trong tham số layout | `dart tools/arch_check/check.dart` (R18, R19, R20) |
+| File có tên giống file sinh ra mà thiếu header của generator | `dart tools/arch_check/check.dart` (R6) |
+| Hằng số trong `utils/` | `dart tools/arch_check/check.dart` (R4) |
+| Domain thuần; kernel Dart thuần | `dart tools/arch_check/check.dart` (R2, R9) |
+| Barrel khớp với generator | Bước CI "Barrels match the generator" — ở local `dart tools/barrel_generator/generate.dart <package>/lib`, rồi `git status` |
 | Composition khớp manifest | `dart tools/composer/composer.dart verify` |
 | Một app khai gì và shell resolve gì từ nó | `dart tools/composer/composer.dart describe --app <id>` |
 | Đường dẫn trong docs và tương đồng en ↔ vi | `dart tools/docs_check/check.dart` |

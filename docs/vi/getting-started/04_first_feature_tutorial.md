@@ -26,13 +26,13 @@ dart tools/module_generator/generate.dart 1 notes "" 1 1 --apps mobile
 
 Các tham số là: `1` một feature, `notes` tên của nó, `""` không có tiền tố package, `1` Provider, `1` một route dạng stack (`IFeatureRouteModule`). `--apps mobile` giữ module ngoài `apps/admin`.
 
-Lệnh chạy khoảng 90 giây và kết thúc bằng:
+Lệnh chạy `pub get`, sinh code và lượt barrel cho package mới, nên hãy cho nó một hai phút. Nó kết thúc bằng:
 
 ```text
 [V] Module "feature_notes" created.
 ```
 
-Sau đó nó in danh sách "What is left for you to do by hand". Bạn có thể bỏ qua: route đã được điền sẵn. Mục 3 của danh sách nhắc tới `core_di`, nhưng tutorial này đặt navigator trong package API riêng của module (bước 9, RULE-22).
+Sau đó nó in danh sách "What is left for you to do by hand". Bạn có thể bỏ qua: page, provider và route đã được điền sẵn. Mục 3 của danh sách chính là bước 9 bên dưới: các feature khác tới màn hình này qua một navigator nằm trong package API riêng của module (RULE-22).
 
 Xem những gì đã thay đổi:
 
@@ -41,6 +41,7 @@ git status --short
 ```
 
 ```text
+ M apps/mobile/README.md
  M apps/mobile/app_manifest.yaml
  M apps/mobile/lib/di/injection.dart
  M apps/mobile/pubspec.yaml
@@ -48,7 +49,7 @@ git status --short
 ?? modules/notes/
 ```
 
-Generator đã thêm `- { id: notes, layers: [feature] }` vào manifest của mobile. Rồi nó chạy `composer sync`, lệnh này viết lại ba file còn lại. Đừng bao giờ sửa tay ba file đó (RULE-16).
+Generator đã thêm `- { id: notes, layers: [feature] }` vào manifest của mobile. Rồi nó chạy `composer sync`, lệnh này viết lại bốn file còn lại: danh sách `workspace:` ở gốc, các path dependency của app, `injection.dart` và báo cáo được sinh trong README của app. Đừng bao giờ sửa tay chúng (RULE-16).
 
 Chạy các test mà generator đã viết:
 
@@ -71,7 +72,18 @@ Mỗi package có sẵn một stub: `INotesRepository` với phương thức gi�
 
 ## 3. Viết domain: entity, hợp đồng, use case
 
-Domain là Dart thuần: không Flutter, không Dio, không `core_*` (RULE-03). Tạo entity:
+Domain là Dart thuần: không Flutter, không Dio, không `core_*` (RULE-03). `pubspec.yaml` được sinh ra chỉ liệt kê những gì stub được sinh ra import (RULE-06), nên hãy khai báo Freezed trước khi viết entity. Trong `pubspec.yaml` của `domain_notes`, thêm một mục vào mỗi trong hai phần. Các version lấy từ catalog, trong `pubspec_dependencies.yaml` (RULE-74):
+
+```yaml
+# modules/notes/domain/pubspec.yaml — add an entry under each existing section
+dependencies:
+  freezed_annotation: "^3.1.0"
+
+dev_dependencies:
+  freezed: "^4.0.0-dev.3"
+```
+
+Tạo entity:
 
 ```dart
 // modules/notes/domain/lib/src/entities/note_entity.dart
@@ -129,6 +141,25 @@ class GetNotesUseCase extends BaseUseCase<List<NoteEntity>, NoParams> {
 ```
 
 ## 4. Viết tầng data: model, data source giả, repository
+
+Package data cũng cần làm như vậy: model của nó dùng Freezed và JSON. Trong `pubspec.yaml` của `data_notes`, thêm:
+
+```yaml
+# modules/notes/data/pubspec.yaml — add an entry under each existing section
+dependencies:
+  freezed_annotation: "^3.1.0"
+  json_annotation: "^4.12.0"
+
+dev_dependencies:
+  freezed: "^4.0.0-dev.3"
+  json_serializable: "^6.14.1"
+```
+
+Rồi resolve workspace:
+
+```bash
+flutter pub get
+```
 
 Model đọc JSON và tự map sang entity:
 
@@ -311,8 +342,8 @@ import 'package:domain_notes/domain_notes.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
-import '../extensions/extensions.dart';
-import '../provider/provider.dart';
+import '../extensions/l10n_notes_extension.dart';
+import '../provider/notes_provider.dart';
 
 class NotesPage extends StatelessWidget {
   const NotesPage({super.key});
@@ -538,67 +569,19 @@ Kết quả mong đợi: `All tests passed!` hai lần — bốn test trong feat
 
 ## 9. Cho Home mở màn hình notes
 
-`feature_home` không được import `feature_notes` (RULE-04). Nó tới màn hình qua một navigator interface nằm trong **package API** của module notes, `notes_api` (RULE-22). Không generator nào dựng package này; nó chỉ gồm hai file.
-
-Tạo pubspec của package:
-
-```yaml
-# modules/notes/api/pubspec.yaml
-name: notes_api
-description: "Public API of the notes module — the contracts other features may depend on"
-version: 1.0.0
-publish_to: none
-
-environment:
-  sdk: ">=3.13.3 <4.0.0"
-  flutter: ">=3.47.4"
-
-resolution: workspace
-
-dependencies:
-  flutter:
-    sdk: flutter
-```
-
-Tạo interface:
-
-```dart
-// modules/notes/api/lib/src/navigators/notes_navigator.dart
-import 'package:flutter/widgets.dart';
-
-/// Routes owned by the notes module, for other features to reach.
-/// Resolve it with `getItOrNull<NotesNavigator>()`.
-abstract class NotesNavigator {
-  void toNotes(BuildContext context);
-}
-```
-
-Thêm layer `api` vào dòng của module trong `apps/mobile/app_manifest.yaml`:
-
-```yaml
-# apps/mobile/app_manifest.yaml — under modules:
-  - { id: notes, layers: [api, data, domain, feature] }
-```
-
-Ghép nó vào app, resolve, và export các file của nó:
+`feature_home` không được import `feature_notes` (RULE-04). Nó tới màn hình qua một navigator interface nằm trong **package API** của module notes, `notes_api` (RULE-22). Generator dựng package này, và vì `feature_notes` đã tồn tại nên nó cũng đấu nối feature vào đó:
 
 ```bash
-dart tools/composer/composer.dart sync
-flutter pub get
-dart tools/barrel_generator/generate.dart modules/notes/api/lib
+dart tools/module_generator/generate.dart 6 notes --apps mobile
 ```
 
-`sync` in ra `✅ 2 app(s) composed, 35 workspace members.`
+Lệnh kết thúc bằng `[V] Module "notes_api" created.`, thêm layer `api` vào dòng của module trong manifest (`- { id: notes, layers: [api, data, domain, feature] }`), chạy `composer sync`, và ghi ra ba thứ:
 
-**Implement navigator trong feature.** Trong `modules/notes/feature/pubspec.yaml`, thêm dưới `dependencies:`:
+- `notes_api`, một package trong thư mục `api/` của module, chỉ chứa hợp đồng: `NotesNavigator` với một phương thức, `toNotes(BuildContext context)`, trong `lib/src/navigators/notes_navigator.dart`.
+- Một dependency `notes_api` trong `modules/notes/feature/pubspec.yaml`.
+- `lib/src/routing/notes_navigator_impl.dart` trong `feature_notes`, phía feature của hợp đồng.
 
-```yaml
-# modules/notes/feature/pubspec.yaml — under dependencies:
-  notes_api:
-    path: ../api
-```
-
-Rồi tạo phần implement trong `routing/` của feature. Nó push route, nên nút quay lại đưa bạn về Home:
+Phần implement được sinh ra điều hướng bằng `go`, thay thế cả stack. Hãy đổi nó thành `push` để nút quay lại đưa bạn về Home:
 
 ```dart
 // modules/notes/feature/lib/src/routing/notes_navigator_impl.dart
@@ -608,7 +591,7 @@ import 'package:notes_api/notes_api.dart';
 
 import 'notes_route_module.dart';
 
-@Singleton(as: NotesNavigator)
+@LazySingleton(as: NotesNavigator)
 class NotesNavigatorImpl implements NotesNavigator {
   @override
   void toNotes(BuildContext context) => const NotesRoute().push<void>(context);
@@ -633,7 +616,7 @@ Thêm key `openNotes` vào hai file ARB của Home, `modules/home/feature/assets
 "openNotes": "Mở ghi chú"
 ```
 
-Nhớ thêm dấu phẩy sau key đứng trước, vì ARB là JSON chặt. Rồi thêm hai import vào `modules/home/feature/lib/src/pages/home_page.dart`. Giữ danh sách theo thứ tự chữ cái: `core_common` đứng trước `core_di`, còn `notes_api` đứng sau `material_ui`.
+Nhớ thêm dấu phẩy sau key đứng trước, vì ARB là JSON chặt. Rồi thêm hai import vào `modules/home/feature/lib/src/pages/home_page.dart`. Giữ danh sách theo thứ tự chữ cái: `core_common` đứng giữa `core_base_ui` và `core_di`, còn `notes_api` đứng sau `material_ui`.
 
 ```dart
 // modules/home/feature/lib/src/pages/home_page.dart — two new imports
@@ -680,7 +663,7 @@ Nếu có backend: bấm **Mở ghi chú** trên Home. Hai ghi chú hiện ra, v
 
 ## Kiểm tra
 
-Chạy các gate mà CI chạy, theo đúng thứ tự. Mỗi dòng ghi kèm thứ mà một lần chạy đạt sẽ in ra.
+Chạy các gate của CI áp dụng cho thay đổi này, theo đúng thứ tự của CI ([`../operations/01_cicd.md`](../operations/01_cicd.md)). Mỗi dòng ghi kèm thứ mà một lần chạy đạt sẽ in ra.
 
 ```bash
 dart tools/composer/composer.dart verify          # ✅ Generated artifacts are up to date.
@@ -691,7 +674,7 @@ cd modules/notes/data && flutter test && cd -     # All tests passed!
 cd modules/home/feature && flutter test && cd -   # All tests passed!
 cd apps/mobile && flutter test test/di_smoke_test.dart && cd -   # All tests passed!
 dart tools/dependency_sync.dart --check           # ✅ Success: All packages ... in perfect sync
-dart tools/unused_checker/check_script.dart       # 🎉 FINAL RESULT: All checks passed!
+dart tools/unused_checker/check_unused_packages.dart   # ✅ Success! No unused packages found across all workspace modules.
 ```
 
 Smoke test DI boot đồ thị DI thật của `apps/mobile` cho mọi flavor. Đó là bằng chứng các đăng ký mới của bạn resolve được (RULE-63).
@@ -752,7 +735,7 @@ Kết quả mong đợi: `✓ Built build/app/outputs/flutter-apk/app-dev-debug.
 | `Undefined name 'NoteEntity'` (hoặc `GetNotesUseCase`) ở một package khác | Barrel của domain chưa export các file mới | Chạy barrel generator cho `modules/notes/domain/lib` sau `build_runner` (bước 5) |
 | `The class 'NotesProvider' doesn't have an unnamed constructor with 0 arguments`, hoặc test không compile | `module.module.dart` hoặc các test được sinh vẫn dựng `NotesProvider()` | Chạy lại `build_runner` (cuối bước 7) và thay hai test (bước 8) |
 | `context.l10nNotes.emptyNotes` không tồn tại | Chưa chạy `gen-l10n` sau khi sửa ARB | `cd modules/notes/feature && flutter gen-l10n` |
-| `flutter pub get` lỗi ở `notes_api` | Layer `api` chưa có trong manifest, hoặc đã bỏ qua `composer sync` | Thêm `api` vào dòng notes, rồi `composer sync` và `flutter pub get` (bước 9) |
+| `flutter pub get` lỗi ở `notes_api` | Layer `api` chưa có trong manifest, nên workspace chưa liệt kê package này | Chạy `dart tools/module_generator/generate.dart 6 notes --apps mobile` (bước 9), hoặc thêm `api` vào dòng notes rồi chạy `composer sync` |
 | `flutter analyze` báo `directives_ordering` trong `home_page.dart` | Các import mới sai thứ tự chữ cái | `core_common` đứng trước `core_di`; `notes_api` đứng sau `material_ui` |
 | `composer verify` fail sau khi bạn sửa `injection.dart` hay khối managed của một pubspec | Các vùng đó là code được sinh | Hoàn tác phần sửa tay và chạy `composer sync` (RULE-16) |
 | Smoke test DI fail với `… is not registered` | Thiếu một đăng ký, hoặc code sinh ra đã cũ | Chạy lại `build_runner`; kiểm tra class có mang annotation của nó ([`05_di.md`](../guides/05_di.md)) |

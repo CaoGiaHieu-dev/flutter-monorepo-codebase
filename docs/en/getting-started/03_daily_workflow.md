@@ -2,7 +2,7 @@
 
 **This page answers:** which command do I run, and when? What breaks if I skip it?
 
-**After reading you can:** work in this monorepo without the two classic time-sinks — stale generated code and missing barrel exports.
+**After reading you can:** work in this monorepo without the classic time-sinks — stale generated code, a stale barrel and a composition that drifted from its manifest.
 
 ---
 
@@ -14,6 +14,8 @@
         ├─ touched an annotation?  ──► dart run build_runner build --workspace
         │
         ├─ added/renamed/deleted a file in lib/?  ──► dart tools/barrel_generator/generate.dart <pkg>/lib
+        │
+        ├─ edited an app_manifest.yaml?  ──► dart tools/composer/composer.dart sync
         │
         ├─ edited pubspec_dependencies.yaml?  ──► dart tools/dependency_sync.dart
         │
@@ -35,7 +37,7 @@ Run it whenever you add, remove, or edit any of these:
 | :--- | :--- | :--- |
 | `@freezed`, a new union case, a new field | `freezed` | `*.freezed.dart` |
 | `@JsonSerializable`, `fromJson` / `toJson` | `json_serializable` | `*.g.dart` |
-| `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, `apps/mobile/lib/di/injection.config.dart` |
+| `@injectable`, `@lazySingleton`, `@Singleton(as:)`, `@module`, `@PostConstruct`, `@disposeMethod` | `injectable_generator` | `*.module.dart`, and each app's `lib/di/injection.config.dart` |
 | `@RestApi`, `@GET`, `@POST` | `retrofit_generator` | `*.g.dart` |
 | `@DriftDatabase`, `@DriftAccessor`, a new table | `drift_dev` | `<name>_database.g.dart`, next to your database (e.g. `cache_database.g.dart`) |
 | `@TypedGoRoute`, `@TypedShellRoute` | `go_router_builder` | `*_route_module.g.dart` |
@@ -59,7 +61,7 @@ dart run build_runner watch --workspace
 
 ## 3. Barrel generator — after adding, renaming, or deleting a file
 
-Every package exposes its public API through barrel files (`src.dart`, `<package>.dart`, and one per folder). They are generated, not hand-maintained.
+Every package exposes its public API through **one barrel**, `lib/<package_name>.dart` (RULE-75). It is generated, not hand-maintained, and it exports every library file under `lib/`.
 
 ```bash
 dart tools/barrel_generator/generate.dart modules/auth/feature/lib
@@ -67,10 +69,12 @@ dart tools/barrel_generator/generate.dart modules/auth/domain/lib
 dart tools/barrel_generator/generate.dart platform/infra/storage/lib
 ```
 
-The tool skips generated files (`*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart`) and `part of` files, then formats what it wrote.
+The tool takes a package's `lib/` and nothing else (any other path exits `64`). It skips `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `*_test.dart` and `part of` files, but it does export the other generated libraries present on disk (`*.module.dart`, everything under `lib/src/gen/`). So run it **after** `build_runner` and `flutter gen-l10n`. It replaces every `export` in the barrel, deletes any directory barrel, then formats what it wrote.
+
+Inside a package a file imports the concrete file (`../pages/notes_page.dart`), never the barrel.
 
 > [!WARNING]
-> Symptom of forgetting: your new class compiles inside its own package but is **invisible** to importers — `Undefined class` even though the file clearly exists.
+> Symptom of forgetting: your new class compiles inside its own package but is **invisible** to importers — `Undefined class` even though the file clearly exists. CI catches a stale barrel too: after `configure.dart` it fails the build if the generator changed or added any `.dart` file.
 
 ---
 
@@ -90,7 +94,7 @@ dart tools/dependency_sync.dart --check
 The tool also repairs broken local `path:` entries for workspace packages.
 
 > [!NOTE]
-> Native Android dependencies in `apps/mobile/android/app/build.gradle.kts` are **outside** this catalog. Bumping `play-services-auth` or `androidx.window` is a manual Gradle edit.
+> Native Android dependencies in `apps/mobile/android/app/build.gradle.kts` are **outside** this catalog. Today that is `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:…")`; bumping it is a manual Gradle edit.
 
 ---
 
@@ -98,11 +102,12 @@ The tool also repairs broken local `path:` entries for workspace packages.
 
 | Tool | Command | Use it when |
 | :--- | :--- | :--- |
-| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>]` | Scaffolding a new Feature / Domain / Data / Core / Custom package. It adds the module to **every** `app_manifest.yaml`, both `apps/mobile` and `apps/admin`, and runs `composer sync`, which registers it in the workspace and in every app. `apps/admin` composes only auth + settings. If the new module does not belong there, delete its entry from `apps/admin/app_manifest.yaml` and run `dart tools/composer/composer.dart sync`. Run with no arguments on a terminal for interactive mode. A feature missing `<SM>` or `<route>` prompts for it on a terminal and exits `64` without one, so always pass both; an invalid name (it must be a Dart package name) or value is rejected up front, before anything is written. `--help` prints the usage. |
-| **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. |
-| **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session. It lists what pub.dev has newer. In a terminal it then shows an interactive checklist: `a` applies the selected versions to the catalog and runs `dependency_sync` + `pub get`, and `q` quits. Without a TTY (CI, a pipe) it only reports. Exits `1` if resolving, `pub outdated` or applying an update fails. |
-| **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass. Needs a Gemini API key (`GEMINI_API_KEY`, `--api-key`, or saved when prompted). Also supports `--all`, `--file <path>`, `--focus architecture,security`, and `--language <code>` for that run only. Generated files, tests and git-ignored files are always excluded. Without a key and without a terminal it exits `1`. |
-| **Workspace setup** | `dart tools/workspace_setup/configure.dart` | First setup of a clone, after a big rebase, or when things are inexplicably broken. It runs, in order: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `flutter gen-l10n` in every package with an `l10n.yaml` → `dart run build_runner build --workspace` → the barrel generator for every package with a `lib/` (apps skipped). Stops at the first failing step. |
+| **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--apps <id,id>]` | Scaffolding a new Feature / Domain / Data / Core / Custom / API package (`<type>` 1–6). It adds a module to **every** `app_manifest.yaml` (or only `--apps`) and runs `composer sync`, which registers it in the workspace and in each app. `apps/admin` composes only auth + settings, so pass `--apps mobile` for a module that does not belong there. Always pass every argument: a feature missing `<SM>` or `<route>` exits `64` without a terminal. `--help` prints the usage; every argument is in [`../reference/03_tooling.md`](../reference/03_tooling.md#module_generator). |
+| **Composer** | `dart tools/composer/composer.dart sync` / `verify` / `describe --app <id>` | `sync` after editing an `app_manifest.yaml`; `verify` is CI Gate 0; `describe` prints what an app declares and what the shell resolves. [`../guides/13_app_composition.md`](../guides/13_app_composition.md). |
+| **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. The packages check is a CI step. |
+| **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session. It lists what pub.dev has newer. In a terminal it then shows an interactive checklist: `a` applies the selected versions to the catalog and runs `dependency_sync` + `pub get`, and `q` quits. Without a terminal (CI, a pipe) it only reports. |
+| **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass, never a merge gate. Needs a Gemini API key (`GEMINI_API_KEY`, `--api-key`, or saved when prompted). Also supports `--all`, `--file <path>`, `--focus architecture,security`, and `--language <code>` for that run only. |
+| **Workspace setup** | `dart tools/workspace_setup/configure.dart` | First setup of a clone, after a big rebase, or when things are inexplicably broken. It runs, in order: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `flutter gen-l10n` in every package with an `l10n.yaml` → `dart run build_runner build --workspace` → the barrel generator for every package with a `lib/` (apps skipped). Stops at the first failing step. `--stub-firebase` also writes compile-only Firebase files ([`01_setup.md`](01_setup.md#32-no-firebase-project-yet-use-stubs)). |
 
 Module generator examples:
 
@@ -125,35 +130,43 @@ dart tools/module_generator/generate.dart 3 payment
 
 ## 6. Before you commit
 
+The commands CI runs, in its order ([`../operations/01_cicd.md`](../operations/01_cicd.md)). Run the ones your change touches:
+
 ```bash
-# 1. Static analysis — must be clean across the whole workspace
+# Gate 0 — the composition matches every app_manifest.yaml
+dart tools/composer/composer.dart verify
+
+# Gate 1 — the layering rules, and the gate tools' own tests (only if you changed tools/)
+dart tools/arch_check/check.dart
+(cd tools && dart test)
+
+# Gate 2 — static analysis, clean across the whole workspace (infos count)
 flutter analyze
 
-# 2. Tests — they live per package, so run every package that has a test/
-#    directory (the same discovery CI Gate 3 uses; bash — Git Bash on Windows)
+# Gate 3 — tests live per package, so run every package that has a test/ directory
+#         (the same discovery CI uses; bash — Git Bash on Windows)
 for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort); do
   dir=$(dirname "$pubspec")
   [ -d "$dir/test" ] || continue
   (cd "$dir" && flutter test) || { echo "FAILED: $dir"; break; }
 done
 
-# 2b. Changed anything under tools/? The gate tools have their own suite
-#     (throwaway temp workspaces, ~15 s) — CI runs it right after Gate 1
-(cd tools && dart test)
-
-# 3. Version catalog is in sync
+# Gate 4 — the version catalog is in sync
 dart tools/dependency_sync.dart --check
 
-# 4. No undeclared dependency (arch_check R5: an import missing from
-#    `dependencies:`) and no unused one (declared but never imported)
-dart tools/arch_check/check.dart
+# Gate 5 — the docs still describe this tree
+dart tools/docs_check/check.dart
+
+# Also blocking in CI — no declared dependency that nothing imports (RULE-06)
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them. So it keeps working when you add a package with tests or remove a sample that had some. CI Gate 3 discovers them the same way. It stops at the first failing package and names it. Add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail). Use `flutter_test` in a Flutter package and `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` is step 2b. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
+Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some. CI discovers them the same way. The loop stops at the first failing package and names it. Add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail). Use `flutter_test` in a Flutter package and `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` has its own suite, shown under Gate 1. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
+
+An undeclared import is caught by `arch_check` (R5); the unused checker covers the reverse.
 
 > [!CAUTION]
-> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The loop above already catches it — each app's `test/di_smoke_test.dart` boots the real graph for every flavor (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 8 shows how to read the generated files to find the culprit.
+> `flutter analyze` **cannot** catch DI ordering faults (RULE-13): an eager `@Singleton` that depends on a type a *later* module registers compiles fine and throws `not registered` at boot. The Gate 3 loop catches it — each app's `test/di_smoke_test.dart` boots the real graph for every flavor and builds every factory (RULE-63). When it fails, [../guides/05_di.md](../guides/05_di.md) § 8 shows how to read the generated files to find the culprit.
 
 ### Optional: prove the app still builds
 
@@ -173,6 +186,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Forgot `build_runner` after an annotation change | `Undefined class '_$…Impl'`, DI type not registered | `dart run build_runner build --workspace` |
 | Forgot the barrel generator after adding a file | New class invisible outside its package | `dart tools/barrel_generator/generate.dart <pkg>/lib` |
 | Hand-edited a generated file | Change vanishes on next codegen | Edit the annotated source |
+| Edited an `app_manifest.yaml`, or a `composer:managed` region, by hand | `composer verify` fails (Gate 0) | Edit only the manifest, then `dart tools/composer/composer.dart sync` (RULE-16) |
 | Ran `pub get` inside a sub-package | Stray `pubspec.lock` files | Delete them, run `flutter pub get` at the root |
 | Ran `flutter build apk` from the repo root | `Target file "lib\main.dart" not found` | `cd apps/mobile` first |
 | Hardcoded a version in a package pubspec | `dependency_sync --check` fails | Move it to `pubspec_dependencies.yaml`, re-sync |

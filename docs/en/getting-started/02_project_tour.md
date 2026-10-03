@@ -22,20 +22,20 @@ flutter-monorepo-codebase/
 │       │   └── firebase/          # This app's FirebaseOptions (options files git-ignored)
 │       ├── android/  ios/         # Native projects — build the APK from apps/mobile/, not the root
 │       ├── fastlane/              # Release lanes
-│       ├── test/                  # di_smoke_test.dart, app_profile_test.dart
+│       ├── test/                  # di_smoke_test.dart, app_profile_test.dart, boot_undeclared_platform_test.dart
 │       ├── env.dev  env.stg       # Flavor env files (env.prod is NOT in the repo)
 │       └── pubspec.yaml           # Path deps between composer:managed markers are generated
 │
 ├── platform/                      # Infra team's ground — every module may depend on it
 │   ├── foundation/                # Pure base everything builds on: getIt/errors, DI contracts, Flutter helpers
-│   │   ├── kernel/                # platform_kernel: getIt helpers, ErrorHandler, pure-Dart utils
+│   │   ├── kernel/                # platform_kernel: getIt helpers, ErrorHandler, app profile types, pure-Dart utils
 │   │   ├── contracts/             # core_di: DI Hub — product-neutral contracts (session, locations, routing)
 │   │   └── common/                # core_common: AppConfig, AppInitializer, Flutter-bound helpers
 │   ├── layers/                    # Base contracts of the domain and data layers
 │   │   ├── domain/                # domain_core: Result<T>, AppFailure, BaseEntity, BaseUseCase
 │   │   └── data/                  # data_core: BaseRepository, BaseModel, request models
 │   ├── infra/                     # I/O mechanisms: network, storage, database, push
-│   │   ├── network/               # core_network: Dio + Retrofit factory, interceptor chain, SSL pinning
+│   │   ├── network/               # core_network: Dio factory, interceptor chain, retry and token refresh
 │   │   ├── storage/               # core_storage: StorageManager + StorageValue<T> (defines NO keys)
 │   │   ├── database/              # core_database: Drift mechanism: IDatabaseHandle, IDatabaseMigration, opener
 │   │   └── notifications/         # core_notifications: Push Notification management module
@@ -61,8 +61,10 @@ flutter-monorepo-codebase/
 │   ├── dashboard/feature/         # Sample: shell chrome only (bottom bar on compact, NavigationRail from medium, extended from large)
 │   ├── onboarding/feature/        # Sample: IAppEntryLocation, the first-launch location
 │   └── splash/feature/            # Sample: IAppSplashScreen, shown before the router exists
-├── tools/                  # Dart CLI tooling (generators, checkers, sync)
+├── tools/                  # Dart CLI tooling (composer, generators, gates) and its tests
 ├── docs/                   # This documentation (en/ + vi/), plus history/
+├── .github/workflows/      # CI: the PR quality gates, AI review, build and Fastlane workflows
+├── fastlane/               # Root proxy for apps/mobile/fastlane
 ├── .agents/                # AGENTS.md — entry point for AI tools other than Claude Code
 ├── .claude/skills/         # Task recipes for AI agents
 ├── CLAUDE.md               # Agent brief for Claude Code — cites the rule registry
@@ -77,7 +79,7 @@ flutter-monorepo-codebase/
 
 ## 2. Every package, and what it owns
 
-The authoritative list is the `workspace:` block in the root `pubspec.yaml`.
+The authoritative list is the `workspace:` block in the root `pubspec.yaml`: 31 members, which are the two apps, 16 platform packages in six groups, 12 module packages and `tools`.
 
 ### Core — `platform/*`
 
@@ -85,17 +87,17 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `platform_kernel` | `platform/foundation/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` (re-exporting `AppFailure` from `domain_core`), exceptions, enums, primitive extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
-| `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `DeeplinkProvider`, the contract catalog and `ShellHooks`. Imports no module |
+| `platform_kernel` | `platform/foundation/kernel` | Pure Dart, no Flutter (arch_check R9): `getIt` / `getItOrNull` / `getAll` / `getAllOrEmpty`, `ErrorHandler` and `ErrorClassifier` (re-exporting `AppFailure` from `domain_core`), exceptions, `Flavor`, the app profile types (`AppProfile`, `AppFacts`, `PlatformFacts`, `SslPinningPolicy`, …), string extensions, `TypeHelper`, `ValidationHelper`, `EnvConstants` |
+| `platform_app_shell` | `platform/shell/app_shell` | The shell every app composes: `runShellApp`, `MainScope`, `AppRouter`, `AppMaterialWrapper`, `NavigatorWrapperWidget`, `DeeplinkProvider`, the contract catalog (`SHELL_CONTRACTS`), `ShellHooks` and `checkAppContract`. Imports no module |
 | `platform_shell_adapters` | `platform/shell/adapters` | The shell's infrastructure adapters: the theme/language/boot storage adapters and `NetworkConfigImpl`. Imports no module |
-| `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer`, mixins, `GoRouteDataCustom`, formatters. Re-exports `platform_kernel`, which holds `ErrorHandler`, enums, extensions, `EnvConstants` |
-| `core_di` | `platform/foundation/contracts` | The **DI hub**, product-neutral contracts only: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `IDashboardRouteModule`), `IFeatureLocalization`, `NavigatorKeys`, the session contracts (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. A module's navigator / action handler lives in its own `modules/<id>/api` package |
+| `core_common` | `platform/foundation/common` | The Flutter-bound half: `AppConfig`, `AppInitializer` (installs the app's declared TLS pinning), `resolveAppPlatform`, mixins (`DisposeGuard`, `LifecycleMixin`, `NetworkMixin`), `GoRouteDataCustom`, input formatters, `EasyDebounce`. Re-exports `platform_kernel`, which holds `ErrorHandler`, `Flavor`, the profile types, `EnvConstants` |
+| `core_di` | `platform/foundation/contracts` | The **DI hub**, product-neutral contracts only: routing (`IFeatureRouteModule`, `INavDestinationModule`, `IAppEntryLocation`, `ISignInLocation`, `IPostSignInLocation`, `IDashboardRouteModule`), `IFeatureLocalization`, `IAppSplashScreen` / `IAppTreeWrapper`, `IErrorReporter` / `IAnalytics`, `NavigatorKeys`, the session contracts (`ISessionState`, `ISessionStatusStream`, …), `IThemeStorage` / `ILanguageStorage`. A module's navigator / action handler lives in its own `modules/<id>/api` package |
 | `core_base_ui` | `platform/ui/design_system` | Design system: colors, typography, `AppSpacing`/`AppRadius`/`AppGradients`/`AppShadows`, `ThemeProvider`, `LanguageProvider`, global assets & L10n. **Contains zero Flutter widgets.** |
 | `core_ui_kit` | `platform/ui/ui_kit` | All reusable widgets: buttons, inputs, dialogs, feedback, layout, media, navigation (incl. `BottomTransitionPage`) + `SharedUiConstants` |
-| `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors, SSL pinning contract, `DioFailureClassifier` (Dio → `AppFailure`) |
-| `core_storage` | `platform/infra/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, RAM obfuscation. Defines **no keys**. |
+| `core_network` | `platform/infra/network` | `ApiClient` (Dio factory), `NetworkConfig` contract, Auth/Retry/Logging/RefreshToken interceptors and their handlers, `DioFailureClassifier` (Dio → `AppFailure`) |
+| `core_storage` | `platform/infra/storage` | Storage **mechanism only**: `StorageInterface`, `StorageManager`, `StorageValue<T>`, `StorageType`, `StorageCodec`, RAM obfuscation. Defines **no keys**. |
 | `core_database` | `platform/infra/database` | Drift/SQLite **mechanism only**: background-isolate opener, connection factory, `IDatabaseHandle`, migration contracts. Owns **no database, table or DAO** — each package declares its own. |
-| `core_responsive` | `platform/ui/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through (down only, by default); window size classes and the adaptive layout widgets (`context.adaptive`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
+| `core_responsive` | `platform/ui/responsive` | Responsive sizing: `ResponsiveInit`, `ResponsiveScope`, `ResponsiveMetrics`, and the `context.w/h/sp/r` extensions every widget scales through (down only, by default); window size classes and the adaptive layout widgets (`context.adaptive`, `AdaptiveBuilder`, `AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`) |
 | `core_notifications` | `platform/infra/notifications` | Push notification service + its own `NotificationConstants` |
 | `provider_state_management` | `platform/state/provider` | `BaseProvider`, `executeOperation`, `ViewStateModel`, `ProviderStateListener`, `BaseViewWidget`, `LoadMoreMixin`, `LoadMoreListView` |
 | `bloc_state_management` | `platform/state/bloc` | `BaseBloc`, `BaseCubit`, `BlocViewState<T>` |
@@ -108,7 +110,7 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | :--- | :--- | :--- |
 | `domain_core` | `platform/layers/domain` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
 | `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
-| `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RefreshTokenUseCase` |
+| `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RestoreSessionUseCase` |
 
 ### Data — `modules/*/data`
 
@@ -116,25 +118,25 @@ Implements the domain contracts. Data sources return **Models**, never entities,
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `data_core` | `platform/layers/data` | `BaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest`, `ExtraRequest` |
+| `data_core` | `platform/layers/data` | `BaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + `CacheEntries` table + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
-| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthStorageKeys`, `AuthApiConstants` |
+| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthSessionGatewayImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
 ### Features — `modules/*/feature`
 
-One bounded UI concern per package. A feature may depend on `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, and a state-management package — **never on `data_*` and never on another feature**.
+One bounded UI concern per package. A feature may depend on `domain_*`, `core_di`, `core_common`, `core_base_ui`, `core_ui_kit`, `core_responsive`, a state-management package and an `<id>_api` package — **never on `data_*` and never on another feature** (RULE-04).
 
 | Package | Path | Owns |
 | :--- | :--- | :--- |
-| `feature_auth` | `modules/auth/feature` | A single login page, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl` (implementing `auth_api`), `AuthStatusStreamImpl`, `AuthSignInLocation` |
-| `feature_home` | `modules/home/feature` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination` |
+| `feature_auth` | `modules/auth/feature` | A single login page, `AuthProvider` (Provider branch), `AuthNavigatorImpl`, `AuthActionHandlerImpl` (implementing `auth_api`), `AuthStatusStreamImpl`, `AuthSignInLocation`, `AuthTreeWrapper` |
+| `feature_home` | `modules/home/feature` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination`, `HomeNavigatorImpl` (implementing `home_api`), `HomePostSignInLocation` |
 | `feature_settings` | `modules/settings/feature` | Settings tab, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Onboarding flow, `IAppEntryLocation` implementation |
 | `feature_dashboard` | `modules/dashboard/feature` | **Shell chrome only** — the `Scaffold` + primary navigation: a bottom bar on a `compact` window, a `NavigationRail` from `medium` up (extended from `large`). Builds destinations from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
-| `feature_splash` | `modules/splash/feature` | Splash page shown by `MainScope` before the router exists |
+| `feature_splash` | `modules/splash/feature` | `SplashPage` and `SplashScreenImpl` (`IAppSplashScreen`), shown by `MainScope` before the router exists |
 
 > [!NOTE]
-> Everything under `domain/`, `data/`, and `features/` is **sample / reference code**. It demonstrates the wiring, not production business rules. Copy the patterns, then delete or replace the samples.
+> Everything under `modules/` (auth, cache, home, settings, onboarding, splash, dashboard) is **sample / reference code**. It demonstrates the wiring, not production business rules. Copy the patterns, then delete or replace the samples.
 
 ---
 
@@ -177,19 +179,20 @@ Read it as: **arrows point at what you are allowed to depend on.**
 
 ### Core must not depend on features
 
-`tools/arch_check/check.dart` enforces this on every PR (Gate 1 of `pr_quality_check.yml`). Three infrastructure → `domain_core` edges are approved — Domain is the innermost ring, so depending on it is legal:
+`tools/arch_check/check.dart` enforces this on every PR (Gate 1 of `pr_quality_check.yml`). Four infrastructure → `domain_core` edges are approved — Domain is the innermost ring, so depending on it is legal:
 
 | Allowed exception | Why |
 | :--- | :--- |
 | `provider_state_management → domain_core` | `PaginatedEntity<T>` and `Result<T>` are used in base view widgets |
 | `bloc_state_management → domain_core` | `BlocViewState.error` carries an `AppFailure` |
 | `platform_kernel → domain_core` | `ErrorHandler` produces an `AppFailure` |
+| `data_core → domain_core` | `BaseRepository.execute()` returns a `Result<T>` |
 
 Verify at any time:
 
 ```bash
 grep -rl "package:feature_" platform/*/*/lib    # must print nothing
-dart tools/arch_check/check.dart              # R1: no platform/* → feature_/data_/domain_ edge outside the three above
+dart tools/arch_check/check.dart              # R1: no platform/* → feature_/data_/domain_ edge outside the four above
 ```
 
 ---
@@ -203,8 +206,8 @@ workspace:
   # composer:managed:workspace — generated from app_manifest.yaml
   - apps/admin
   - apps/mobile
-  - modules/auth/data
-  # … 25 more, tools included
+  - modules/auth/api
+  # … 28 more, tools included
   # composer:end:workspace
 ```
 
@@ -239,6 +242,7 @@ Consequences you must know:
 | Share a widget between features | `platform/ui/ui_kit/` | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Let feature A trigger something in feature B | B's `modules/<id>/api/lib/src/actions/`, or `core_di/src/session/` for the session | [../guides/10_cross_feature.md](../guides/10_cross_feature.md) |
 | Bump a dependency version | `pubspec_dependencies.yaml` | [03_daily_workflow.md](03_daily_workflow.md) |
+| Change what an app is (platform, flavor, capability, hook) or compose it | `apps/<id>/app_manifest.yaml`, `apps/<id>/lib/app/` | [../guides/13_app_composition.md](../guides/13_app_composition.md) |
 | Change the CI pipeline | `.github/workflows/`, `azure-ci-cd.yml` | [../operations/01_cicd.md](../operations/01_cicd.md) |
 
 ---

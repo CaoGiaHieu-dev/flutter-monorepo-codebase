@@ -16,10 +16,10 @@ Five pipelines ship with the template — four on GitHub Actions, one on Azure D
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Manual (`workflow_dispatch`) | Signed release APK → Firebase App Distribution, plus its obfuscation symbols as an artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR to `main`/`develop`/`master` + manual | Markdown report artifact + PR comments |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Manual (`workflow_dispatch`) | Delegates to Fastlane lanes |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — blocks the merge; then a debug dev APK build and a module-generator smoke test |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — the merge gate; then a debug dev APK build and a module-generator smoke test |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (manual only) | Prod APK + obfuscation symbols artifacts → Firebase |
 
-`pr_quality_check.yml` is the only pipeline that gates a merge. It runs six blocking gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — plus one advisory audit, with the gate tools' own test suite run right after Gate 1 — and then, in two more jobs, builds the app (a debug `dev` APK), which no gate can prove, and smoke-tests the module generator. See [§6](#6-the-quality-gate).
+`pr_quality_check.yml` is the only pipeline that gates a merge. Its first job runs six numbered gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — with the gate tools' own test suite right after Gate 1, a barrel-drift check after code generation, a blocking unused-dependency audit, and one advisory step (the coverage report). Two more jobs build the app (a debug `dev` APK), which no gate can prove, and smoke-test the module generator. See [§6](#6-the-quality-gate).
 
 ---
 
@@ -62,7 +62,7 @@ The build number is not an input — it uses `${{ github.run_number }}`, so it i
    ```
    `ENV_FILE` is `env.dev` / `env.stg` / `env.prod`, set by step 4 — the same flavor-to-file mapping Fastlane uses.
 8. **Upload obfuscation symbols** — `--obfuscate` makes every stack trace from the build unreadable without the symbol files `--split-debug-info` wrote to `obfuscate/`, and they are not inside the APK. They are uploaded as the artifact `debug-symbols-<flavor>-<version>+<run>` (90-day retention), **before** distribution so a failed upload cannot lose them. Read a crash with `flutter symbolize -i <stack-trace-file> -d <artifact>/app.android-arm64.symbols`.
-9. **Distribute** — the Firebase CLI itself: Node 22 (`actions/setup-node@v6`), `npm install --global firebase-tools@15`, then `firebase appdistribution:distribute apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk --app <FIREBASE_ANDROID_APP_ID> --release-notes-file … --groups <groups>`. It authenticates through `GOOGLE_APPLICATION_CREDENTIALS`, pointing at the `FIREBASE_SERVICE_ACCOUNT_KEY` JSON written to a `umask 077` temp file that is deleted when the step ends. The release notes (`Build version`, `Flavor`, `Notes`) go through a file and every input through `env:`, so quotes or `$(…)` in `notes` are passed verbatim. A missing secret fails the step by name. (This replaced the third-party `nickwph/firebase-app-distribution-action@v1`; the secret names did not change.)
+9. **Distribute** — the Firebase CLI itself: Node 22 (`actions/setup-node@v6`), `npm install --global firebase-tools@15`, then `firebase appdistribution:distribute apps/mobile/build/app/outputs/flutter-apk/app-<flavor>-release.apk --app <FIREBASE_ANDROID_APP_ID> --release-notes-file … --groups <groups>`. It authenticates through `GOOGLE_APPLICATION_CREDENTIALS`, pointing at the `FIREBASE_SERVICE_ACCOUNT_KEY` JSON written to a `umask 077` temp file that is deleted when the step ends. The release notes (`Build version`, `Flavor`, `Notes`) go through a file and every input through `env:`, so quotes or `$(…)` in `notes` are passed verbatim. A missing secret fails the step by name.
 
 > [!NOTE]
 > **The `cd apps/mobile` is not optional.** `flutter build apk` run from the repository root fails with a confusing `android/app/build.gradle not found`, because the Flutter project lives in `apps/mobile/`, not at the workspace root. The same applies when you build locally — see [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
@@ -92,11 +92,11 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 ### Flutter version pinning
 
-Dependency installation runs `dart tools/workspace_setup/configure.dart`. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input. (Before, `flutter_version` was bound only on `workflow_dispatch`, so every PR run installed whatever stable was newest.)
+Dependency installation runs `dart tools/workspace_setup/configure.dart`. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input.
 
 ### The "Fail on Critical Issues" step does not fail
 
-The final step counts the files the report marks HIGH priority — the one `**<Priority label>:** 🔴 HIGH` line each file section carries (written by `tools/code_review/lib/services/report_service.dart`; the label is translated, the value is not). It used to count every 🔴 in the report, which always included the legend row `| 🔴 **High** | … |`, so the count was never zero. Then it deliberately does nothing with the count:
+The final step counts the files the report marks HIGH priority — the one `**<Priority label>:** 🔴 HIGH` line each file section carries (written by `tools/code_review/lib/services/report_service.dart`; the label is translated, the value is not). Then it deliberately does nothing with the count:
 
 ```bash
 if [ "$CRITICAL_COUNT" -gt 0 ]; then
@@ -137,7 +137,7 @@ Manual dispatch that hands the whole build over to Fastlane, run **from the repo
 2. **Ruby 3.3 + `bundle install`** at the repository root (`ruby/setup-ruby` with `bundler-cache` on GitHub-hosted runners, a plain `bundle install` on `self-hosted`). The root `Gemfile` lists `fastlane` and `cocoapods` and loads the plugins from `apps/mobile/fastlane/Pluginfile` through `fastlane/Pluginfile`, so there is no `fastlane add_plugin` step — that command is interactive and fails on a runner.
 3. **Flutter** at `flutter_version`.
 4. **Restore gitignored build inputs from secrets** — `apps/mobile/fastlane/Config.yaml`, the flavor's Firebase options (other flavors stubbed), `google-services.json` (Android), `GoogleService-Info.plist` (iOS, optional), `env.prod` and the release keystore (prod; staging exports `ORG_GRADLE_PROJECT_allowDevKeystoreForStaging=true` with a `::warning::`, as in [§2](#2-flutter_buildyml--build-and-distribute)), and the credential files `Config.yaml` points at — only those the chosen distribution needs. The Firebase service account goes to `firebase.credentials_map.<flavor>`, or `.default` when the flavor has no entry — the same fallback the lanes use. The App Store Connect key is written only if `paths.app_store_connect_key_filepath` ends in `AuthKey_<app_store_connect.api_key_id>.p8`, the one name `xcrun altool` finds it by ([`02_fastlane_release.md` §2](02_fastlane_release.md#2-configuration)). Every missing secret is reported by name, then the step fails.
-5. **Build and distribute** — `bundle exec fastlane <lane> …`. Inputs reach the script through `env:`, never interpolated into it, so a change log containing quotes or `$(…)` is passed verbatim. The lane does its own toolchain setup: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`, then the barrel pass (`tools/barrel_generator/generate.dart` per package) — the `lib/src/gen/gen.dart` barrels are gitignored, so a clean runner compiles nothing without it.
+5. **Build and distribute** — `bundle exec fastlane <lane> …`. Inputs reach the script through `env:`, never interpolated into it, so a change log containing quotes or `$(…)` is passed verbatim. The lane does its own toolchain setup: `flutter pub get --enforce-lockfile`, `gen-l10n`, `build_runner`, then the barrel pass (`tools/barrel_generator/generate.dart` per package), the same order as steps 3–6 of `configure.dart`.
 6. **Upload obfuscation symbols** — the lanes build with `--split-debug-info=apps/mobile/obfuscate`; that directory is uploaded as the artifact `debug-symbols-<platform>-<flavor>-<version>+<run>` (90 days), even when distribution failed after the build.
 
 > [!NOTE]
@@ -168,25 +168,28 @@ The iOS build and iOS distribute tasks are present but fully commented out.
 
 `pr_quality_check.yml` runs on every pull request to `main`, `develop` or `master`. It is the only pipeline that can block a merge.
 
-Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter pub get --enforce-lockfile`** → Gate 0 → Gate 1 → the gate tools' tests (`cd tools && dart test`) → `dart tools/workspace_setup/configure.dart --stub-firebase` (the compile-only Firebase stubs first, then clean, pub get, gen-l10n, `build_runner`, barrels) → Gates 2–5, with the coverage report after Gate 3 → the advisory audit. The `--enforce-lockfile` step is what holds a PR to the committed `pubspec.lock`: it fails when the lockfile no longer matches the pubspecs, where the plain `flutter pub get` inside `configure.dart` would silently re-resolve it.
+Job `quality`, step by step: checkout → Flutter from `.fvmrc` → **`flutter pub get --enforce-lockfile`** → Gate 0 → Gate 1 (`arch_check`, then the gate tools' tests) → `dart tools/workspace_setup/configure.dart --stub-firebase` (the compile-only Firebase stubs first, then clean, pub get, gen-l10n, `build_runner`, barrels) → the barrel-drift check → Gate 2 → Gate 3 → the coverage report → Gate 4 → Gate 5 → the unused-dependency audit. The `--enforce-lockfile` step is what holds a PR to the committed `pubspec.lock`: it fails when the lockfile no longer matches the pubspecs, where the plain `flutter pub get` inside `configure.dart` would silently re-resolve it.
 
 | # | Gate | Command | Blocking |
 |:--|:---|:---|:---|
 | 0 | Composition and generated facts match every app's manifest, and its declaration matches the source | `dart tools/composer/composer.dart verify` | yes |
-| 1 | Architecture rules (R1–R17) | `dart tools/arch_check/check.dart` | yes |
+| 1 | Architecture rules (R1–R20) | `dart tools/arch_check/check.dart` | yes |
 | 1 | …and the gate tools' own tests | `cd tools && dart test` | yes |
+| — | Barrels match the generator (RULE-75) | after `configure.dart`: fails if any tracked `*.dart` file changed or an untracked one appeared (`git diff --exit-code -- '*.dart'`, `git ls-files --others --exclude-standard -- '*.dart'`) | yes |
 | 2 | Static analysis — strict modes on, 0 issues incl. infos ([rules § 16](../reference/01_rules.md)) | `flutter analyze` | yes |
 | 3 | Tests, per package | `flutter test --coverage` in every package that has a `test/` directory, except `tools/` | yes |
 | — | Coverage report | `dart tools/coverage_report/report.dart` — per-package line coverage in the job summary | no (advisory) |
 | 4 | Catalog drift | `dart tools/dependency_sync.dart --check` | yes |
 | 5 | Documentation accuracy and en ↔ vi parity | `dart tools/docs_check/check.dart` | yes |
-| — | Unused dependency audit | `dart tools/unused_checker/check_unused_packages.dart` | no (advisory) |
+| — | Unused dependency audit (RULE-06) | `dart tools/unused_checker/check_unused_packages.dart` | yes |
 
-Gate 0 does more than regenerate: it holds each app's declaration — the `capabilities:` it claims, the platforms its packages run on, the `FirebaseOptions` its push needs, its env files, its entry point and smoke test — to the source ([`../guides/13_app_composition.md`](../guides/13_app_composition.md) § 9), and the smoke test it requires is what Gate 3 later runs for every flavor. Gates 0 and 1 run first on purpose: they only read manifests, imports, pubspecs and source and need no codegen — `pub get` is enough, since `tools/` is a workspace member — and each finishes in a second or two, so a composition or layering mistake fails right after dependency resolution instead of after the full setup, analyze and test cycle. Gate 1 is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
+Gate 0 does more than regenerate: it holds each app's declaration — the `capabilities:` it claims, the platforms its packages run on, the `FirebaseOptions` its push needs, its env files, its entry point and smoke test — to the source ([`../guides/13_app_composition.md`](../guides/13_app_composition.md) § 9), and the smoke test it requires is what Gate 3 later runs for every flavor. Gates 0 and 1 run first on purpose: they only read manifests, imports, pubspecs and source and need no codegen — `pub get` is enough, since `tools/` is a workspace member — so a composition or layering mistake fails right after dependency resolution instead of after the full setup, analyze and test cycle. Gate 1 is also the only gate that can see layering at all; nothing in `analysis_options.yaml` knows that core must not import a feature.
 
-Every gate is a script under `tools/`, and a gate that has quietly stopped failing looks exactly like a clean PR. So the gates have tests of their own, in `tools/test/`, run as the second half of Gate 1: each test builds a throwaway workspace in a temp directory, runs the tool against it as a subprocess (compiled to kernel once per file, so the suite takes about 15 seconds) and asserts the exit code and output. They cover `arch_check` (a clean and a violating fixture for every rule R1–R17 — the platform group DAG and the module API rules included; R6 must warn and still exit 0), `composer verify` and `composer new` (a synced manifest passes; a new app passes at once and a refused one writes nothing; `phase: befor`, an unknown layer, a duplicate module and a module missing from disk are refused with their key path), `dependency_sync --check` (a mismatch and a malformed catalog exit 1), `docs_check` (a dead reference exits 1, a `<placeholder>` span and a removed sample bundle do not, the root comes from the script's location; an en ↔ vi pair with a missing heading, code block or table row exits 1), the barrel generator (a trailing slash, a `web/` directory inside `lib/`), composer `bootstrap --dry-run` (a missing member is reported and nothing written), the module generator's `--apps` validation (an unknown app id exits 64 and writes nothing), `remove_sample` (a module API package another module imports is kept, and deleted on a later run once nothing does), `configure.dart --stub-firebase`'s stubs (one per flavor, real files kept, no `package:` import reachable from `configure.dart`) and the coverage report (lcov parsing, generated files excluded, `--min`). Change a gate, add a case there. Like Gates 0 and 1 they need no codegen, which is why they run before the setup rather than in Gate 3.
+Every gate is a script under `tools/`, and a gate that has quietly stopped failing looks exactly like a clean PR. So the gates have tests of their own, in `tools/test/`, run as the second half of Gate 1: each test builds a throwaway workspace in a temp directory, runs the tool against it as a subprocess and asserts the exit code and output — a clean and a violating fixture for every `arch_check` rule, the `composer` checks, `dependency_sync --check`, `docs_check`, the barrel generator, `bootstrap`, the module generator's argument checks, `remove_sample`, the Firebase stubs and the coverage report. Change a gate, add a case there ([`../reference/03_tooling.md`](../reference/03_tooling.md#tests-for-the-tools-toolstest)). Like Gates 0 and 1 they need no codegen, which is why they run before the setup rather than in Gate 3.
 
-Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — today under `platform/*/*/test/` and `modules/*/*/test/`, nineteen packages — and a single `flutter test` at the root does not pick them up. It skips `tools/`, whose tests already ran.
+The barrel-drift check follows the setup. `configure.dart` has just rewritten every package's one barrel from the files on disk, after codegen. The barrels are committed and the codegen output is not, so a tracked `.dart` file that differs now is a barrel that was stale — a file added, renamed or deleted without re-running the generator — or one with an `export` added by hand, which the generator deletes. A package whose barrel was never committed shows up as an untracked file. Fix it locally with `dart tools/barrel_generator/generate.dart <package>/lib` and commit the result.
+
+Gate 3 loops per package because this is a Pub Workspace: tests live in each package's own `test/` — apps, modules and platform packages alike — and a single `flutter test` at the root does not pick them up. The loop discovers every directory that holds both a `pubspec.yaml` and a `test/`, fails when it finds none, and skips `tools/`, whose tests already ran. Each app's `test/di_smoke_test.dart` is part of it (RULE-63).
 
 Each package runs with `--coverage`, which leaves `<package>/coverage/lcov.info` (gitignored). The next step, **Coverage report (advisory)**, reads them all with `dart tools/coverage_report/report.dart` and writes a per-package line-coverage table — generated files (`*.g.dart`, `*.freezed.dart`, `*.config.dart`, `*.module.dart`, `gen/`, …) excluded — to the run's job summary. It runs even when a test failed (`if: !cancelled()`) and is `continue-on-error`, with no threshold. To make coverage a gate, add `--min <pct>` (the total) or `--min-package <pct>` (every package) to that step and remove `continue-on-error`; see [`../reference/03_tooling.md`](../reference/03_tooling.md).
 
@@ -207,7 +210,7 @@ The third job, **`generator-smoke`**, also `needs: quality`. Nothing else exerci
 dart tools/module_generator/generate.dart 1 smoke "" 2 2   # BLoC feature, bottom-nav tab
 ```
 
-— the widest template: routing, localization, DI and every `app_manifest.yaml` — and holds the result to the gates: `flutter analyze`, the generated module's own tests (`flutter test` in the new `feature_smoke` package — the page and BLoC tests the generator writes must pass untouched), `arch_check`, `composer verify`, and `check_unused_packages`, which fails only when the unused dependency is in `feature_smoke` (anywhere else it stays the quality job's advisory, shown as a warning). Nothing is committed; the checkout is thrown away.
+— the widest template: routing, localization, DI and every `app_manifest.yaml` — and holds the result to the gates: `flutter analyze`, the generated module's own tests (`flutter test` in the new `feature_smoke` package — the page and BLoC tests the generator writes must pass untouched), `arch_check`, `composer verify`, and `check_unused_packages`, which fails only when the unused dependency is in `feature_smoke` (anywhere else it is the quality job's audit that owns it, shown here as a warning). Nothing is committed; the checkout is thrown away.
 
 Make **all three** jobs required status checks in the branch protection rule.
 
@@ -226,7 +229,7 @@ Every file below is gitignored, so a clean runner has none of them; the release 
 | `FIREBASE_OPTIONS_<FLAVOR>_DART_B64` | `firebase_options_<flavor>.dart` in `apps/mobile/lib/firebase/` | `flutter_build.yml`, `fastlane.yml` — every build of that flavor | `cd apps/mobile/lib/firebase && base64 -w0 firebase_options_dev.dart` (generate the file with `dart tools/firebase/firebase_config.dart --app mobile`) |
 | `GOOGLE_SERVICES_<FLAVOR>_JSON_B64` | `apps/mobile/android/app/src/<flavor>/google-services.json` | both — every Android build of that flavor | `base64 -w0 apps/mobile/android/app/src/dev/google-services.json` |
 | `GOOGLE_SERVICE_INFO_<FLAVOR>_PLIST_B64` | `ios/flavors/<flavor>/GoogleService-Info.plist` under `apps/mobile/` | `fastlane.yml`, iOS builds — optional (warning if unset) | `base64 -w0 apps/mobile/ios/flavors/dev/GoogleService-Info.plist` |
-| `ENV_PROD_B64` | `apps/mobile/env.prod` | both — **prod** builds (`env.dev` / `env.stg` are committed) | `base64 -w0 apps/mobile/env.prod`. Replaces the former `ENV` secret, which was decoded to a root `.env` for every flavor |
+| `ENV_PROD_B64` | `apps/mobile/env.prod` | both — **prod** builds (`env.dev` / `env.stg` are committed) | `base64 -w0 apps/mobile/env.prod` |
 | `KEYSTORE_BASE64` | `apps/mobile/android/keystore.jks` | both — **prod** Android builds | `base64 -w0 upload-keystore.jks` |
 | `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS` | `apps/mobile/android/key.properties` (*raw*) | both — **prod** Android builds | Keystore password, key password, key alias |
 | `FASTLANE_CONFIG_YAML_B64` | `apps/mobile/fastlane/Config.yaml` | `fastlane.yml` — always | `base64 -w0 apps/mobile/fastlane/Config.yaml` |
@@ -275,17 +278,22 @@ dart tools/arch_check/check.dart
 
 # 2. Full workspace setup — the CI setup step; --stub-firebase writes the
 #    compile-only Firebase stubs only where no real file exists — then the
-#    remaining gates, in the same order
+#    remaining gates, in the same order. CI's barrel-drift check is the
+#    working tree after this step: `git status -- '*.dart'` must show nothing
+#    you did not change yourself
 dart tools/workspace_setup/configure.dart --stub-firebase
 flutter analyze
 dart tools/dependency_sync.dart --check
 dart tools/docs_check/check.dart
 
 # 3. Tests, per package (gate 3 — see §6), then the coverage table
-(cd platform/infra/storage && flutter test --coverage)
-(cd platform/infra/database && flutter test --coverage)
-# ...repeat for any package with a test/ directory
+for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort); do
+  dir=$(dirname "$pubspec")
+  [ -d "$dir/test" ] || continue
+  (cd "$dir" && flutter test --coverage) || { echo "FAILED: $dir"; break; }
+done
 dart tools/coverage_report/report.dart
+dart tools/unused_checker/check_unused_packages.dart
 
 # 4. The generator-smoke job — in a scratch clone, not your working tree:
 #    it registers `smoke` in every manifest and rewrites the lockfile
@@ -305,7 +313,7 @@ flutter build apk --flavor=dev --build-name=1.0.0 --build-number=1 \
 ```
 
 > [!NOTE]
-> Locally the dart-define path is `env.dev` (relative to `apps/mobile/`). CI uses the same files — `apps/mobile/env.<dev|stg|prod>` — but addresses them absolutely, through `$GITHUB_WORKSPACE` on GitHub and `$(Build.SourcesDirectory)` on Azure, because counting `../` from the app broke the moment the app moved one directory deeper.
+> Locally the dart-define path is `env.dev` (relative to `apps/mobile/`). CI uses the same files — `apps/mobile/env.<dev|stg|prod>` — but addresses them absolutely, through `$GITHUB_WORKSPACE` on GitHub and `$(Build.SourcesDirectory)` on Azure, so the path does not depend on how deep the app sits.
 
 A first build on a clean machine also needs `flutterfire configure` to have been run — the generated `firebase_options_*.dart` files and `google-services.json` are gitignored and `apps/mobile/lib/firebase/firebase_module.dart` imports all three options files unconditionally. (`pr_quality_check.yml`'s jobs run `configure.dart --stub-firebase`, which stubs the options for every app that has a `lib/firebase/firebase_module.dart` and a `google-services.json` per Android flavor — enough for analysis, tests and a debug build, not for a working Firebase; run the same flag locally when you have no Firebase project; the release pipelines restore the real ones from secrets — [§7](#7-secrets).) See [`../getting-started/01_setup.md`](../getting-started/01_setup.md).
 

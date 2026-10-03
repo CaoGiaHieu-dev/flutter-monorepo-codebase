@@ -15,7 +15,7 @@
 | JDK | **17 or newer** (builds on 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` is the bytecode target, not a ceiling |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
-| Ruby ≥ 3.0 | only for Fastlane | see [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
+| Ruby ≥ 3.2 | only for Fastlane | the committed `Gemfile.lock` was written by Bundler 4; see [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 | Node.js + npm, a Google account, a Firebase project | only for **real** Firebase config (§3) | the Firebase CLI is an npm package; skip all three if you use the §3 stubs |
 
 ### FVM is optional
@@ -48,7 +48,7 @@ flutter --version      # must be >= 3.47.4
 
 ## 2. Clone and set up the workspace
 
-This is a **Pub Workspace**. All 31 workspace members (28 packages, the two apps, and `tools`) share exactly one dependency resolution. One setup script prepares every one of them:
+This is a **Pub Workspace**. All 31 workspace members (the two apps, 12 module packages, 16 platform packages and `tools`) share exactly one dependency resolution. One setup script prepares every one of them:
 
 ```bash
 git clone <repo-url>
@@ -57,29 +57,20 @@ cd flutter-monorepo-codebase
 dart tools/workspace_setup/configure.dart
 ```
 
-**`configure.dart` is the setup step** — not a shortcut for `pub get` + `build_runner`. It runs, in order, stopping at the first failure:
+**`configure.dart` is the setup step.** It runs, in order, stopping at the first failure:
 
 1. `dart pub global activate flutterfire_cli` — only the real-Firebase path in [§3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it) uses it.
 2. `flutter clean` at the root.
 3. `flutter pub get` at the root — resolves the whole workspace against the one root `pubspec.lock`.
 4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/ui/design_system` and the auth, home, onboarding, settings and splash features).
 5. `dart run build_runner build --workspace` — injectable, freezed, json_serializable, retrofit, go_router_builder, drift, flutter_gen.
-6. `dart tools/barrel_generator/generate.dart <package>/lib` for every package with a `lib/` — the apps are skipped, because their `injection.dart` is composer's output.
+6. `dart tools/barrel_generator/generate.dart <package>/lib` for every package with a `lib/` — the apps are skipped, because they have no barrel. On a fresh clone it changes nothing: the barrels are committed.
 
 It uses `fvm` automatically when your machine is set up for it. There is no `configure.sh` or `configure.bat` wrapper — a Dart script runs identically on every platform.
 
-> [!IMPORTANT]
-> **`flutter pub get` + `build_runner` alone is not a working setup.** The `lib/src/src.dart` of `core_base_ui`, and of every feature with translations, exports `gen/gen.dart`. That barrel (plus `gen/language/language.dart`) is gitignored, and only step 6 writes it. Stop after step 5 and `flutter analyze` reports around 17 errors of this shape:
->
-> ```
-> error • Target of URI doesn't exist: 'gen/gen.dart' • platform/ui/design_system/lib/src/src.dart:3:8 • uri_does_not_exist
-> error • Undefined name 'AppLocalizations' • …
-> error • Undefined name 'Assets' • …
-> ```
->
-> The fix is to run `dart tools/workspace_setup/configure.dart`.
+Each package has **one committed barrel**, `lib/<package_name>.dart` (RULE-75). It exports every library file under `lib/`, the gitignored generated ones included (the gen-l10n output under `lib/src/gen/language/`, `assets.gen.dart`, `module.module.dart`). So a fresh clone is a working setup once `pub get`, gen-l10n and build_runner have run; before that, `flutter analyze` reports `uri_does_not_exist` for those exports.
 
-To run the steps by hand, run all of them, in this order. The barrel pass must come **after** gen-l10n and build_runner, because it exports the files they write (bash shown):
+To run the steps by hand, run all three, in this order (bash shown). The barrel pass is only needed after you add, rename or delete a file under a package's `lib/` ([03_daily_workflow.md](03_daily_workflow.md)):
 
 ```bash
 flutter pub get
@@ -87,8 +78,6 @@ flutter pub get
 (cd platform/ui/design_system && flutter gen-l10n)
 for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
 dart run build_runner build --workspace
-# barrels for every package with a lib/, apps excluded
-for d in platform/*/* modules/*/*; do [ -d "$d/lib" ] && dart tools/barrel_generator/generate.dart "$d/lib"; done
 ```
 
 What to expect on a clean run:
@@ -113,7 +102,7 @@ import 'firebase_options_staging.dart' as stg;
 
 Those three files are **generated per-project and git-ignored** (`apps/mobile/.gitignore` ignores `firebase_options_*.dart`), because they carry your own Firebase project identifiers.
 
-They belong to the **app**, not to `platform/`: Firebase options name one bundle ID, so each app that uses Firebase owns its own `lib/firebase/`. They used to live in `core_common`, which handed the mobile app's options to every other app in the workspace. Until they exist, `flutter analyze` reports:
+They belong to the **app**, not to `platform/`: Firebase options name one bundle ID, so each app that uses Firebase owns its own `lib/firebase/`. Until they exist, `flutter analyze` reports:
 
 ```
 error • Target of URI doesn't exist: 'firebase_options_dev.dart' • apps/mobile/lib/firebase/firebase_module.dart:4:8 • uri_does_not_exist
@@ -137,7 +126,7 @@ Then run from the repository root:
 dart tools/firebase/firebase_config.dart --app mobile
 ```
 
-The script requires the Firebase CLI to be installed and logged in. If it is missing, the script prints install instructions and exits 1; it tries `firebase login` at most twice, refuses to run without a terminal, and `--help` prints its usage. `configure.dart` has already activated `flutterfire_cli`. It asks for three things: a **Firebase project ID**, a **base bundle ID / package name** (`com.example.codebase`), and the flavors (default `dev staging prod`). Then it runs `flutterfire configure` inside `apps/mobile/` for every flavor and build mode. It writes `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` and `android/app/src/<flavor>/google-services.json`, all relative to `apps/mobile/`. The Android package gets `.dev` / `.stg` / no suffix, and the iOS bundle ID gets `.dev` / `.staging` / no suffix. `--app` may be omitted while the workspace has a single app.
+The script requires the Firebase CLI to be installed and logged in. If it is missing, the script prints install instructions and exits 1; it tries `firebase login` at most twice, refuses to run without a terminal, and `--help` prints its usage. `configure.dart` has already activated `flutterfire_cli`. It asks for three things: a **Firebase project ID**, a **base bundle ID / package name** (`com.example.codebase`), and the flavors (default `dev staging prod`). Then it runs `flutterfire configure` inside `apps/mobile/` for every flavor and build mode. It writes `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` and `android/app/src/<flavor>/google-services.json`, all relative to `apps/mobile/`. The Android package gets `.dev` / `.stg` / no suffix, and the iOS bundle ID gets `.dev` / `.staging` / no suffix. `--app` is required because the workspace holds more than one app.
 
 > [!NOTE]
 > The helper puts **all flavors in the one project ID** you type. To keep dev, staging and prod in separate Firebase projects, run FlutterFire by hand instead, once per environment, **from `apps/mobile/`**:
@@ -261,25 +250,31 @@ APP_LINK_MODE=
 APP_NAME=
 ```
 
-Three of them surface in Dart through `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), which reads them with `String.fromEnvironment`:
+Dart reads them through `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), which declares three with `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
   EnvConstants._();
 
+  /// The base URL for all API endpoints.
   static const String BASE_URL = String.fromEnvironment('BASE_URL');
+
+  /// The web domain whose links open the app (universal / app links).
   static const String WEB_DOMAIN = String.fromEnvironment('WEB_DOMAIN');
+
+  /// The name of the application.
   static const String APP_NAME = String.fromEnvironment('APP_NAME');
 }
 ```
 
 > [!NOTE]
-> `APP_LINK_MODE` is **not** declared in `EnvConstants`: only the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep it in the env file even though Dart never reads it. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files and to `EnvConstants` together.
+> `WEB_DOMAIN` and `APP_LINK_MODE` are `native_only: true` in the manifest: Gradle and Xcode read them, no Dart code does. `APP_LINK_MODE` is not declared in `EnvConstants` at all; the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep both in the env file. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files, to the manifest's `env:` and to `EnvConstants` together.
 
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.
 
-Which keys an app reads, and which flavors must have them non-empty, is declared in the app's `app_manifest.yaml` under `env:` (`BASE_URL: { required_in: [prod] }`; `native_only: true` for a key only Gradle or Xcode reads). A non-debug build of a flavor that requires a key, and whose key is empty, stops at a boot-error screen (`P03`) instead of running with no network — so a key is required only where a build without it is unusable: `APP_NAME` is not, the title falls back to the manifest's `app.name`. and `composer verify` checks that the env files that exist hold exactly the declared keys (V11). The flavors themselves are declared there too (`flavors:`), and so is each app's pinning decision ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
+Which keys an app reads, and which flavors must have them non-empty, is declared in the app's `app_manifest.yaml` under `env:` (`BASE_URL: { required_in: [prod] }`; `native_only: true` for a key only Gradle or Xcode reads). A non-debug build of a flavor that requires a key, and whose key is empty, stops at a boot-error screen (`P03`) instead of running with no network. So a key is required only where a build without it is unusable: `APP_NAME` is not, the title falls back to the manifest's `app.name`. `composer verify` checks that the env files that exist hold exactly the declared keys (V11). The flavors themselves are declared there too (`flavors:`), and so is each app's pinning decision ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
+
 ---
 
 ## 6. Run the app
@@ -325,9 +320,8 @@ The artifact lands at `apps/mobile/build/app/outputs/flutter-apk/app-dev-debug.a
 Flutter is migrating plugins off the Kotlin Gradle Plugin (KGP) and onto the
 Kotlin support built into the Flutter Gradle plugin. A plugin that has already
 migrated compiles its Java sources against classes generated from its own Kotlin
-sources. Here it was `google_sign_in_android` that surfaced this, before the auth
-sample stopped depending on it. With the flag off, those Kotlin sources are never
-compiled, and the build dies on symbols that look like they should exist:
+sources. With the flag off, those Kotlin sources are never compiled, and the
+build dies on symbols that look like they should exist:
 
 ```
 GoogleSignInPlugin.java:218: error: cannot find symbol
@@ -337,9 +331,8 @@ GoogleSignInPlugin.java:218: error: cannot find symbol
 The message names the plugin, not the flag, so it reads like a broken
 dependency version. It is not — pinning an older plugin version does not help.
 
-At the time of writing, `firebase_core` had **not** migrated and still applied KGP
-(`firebase_auth` and `photo_manager` were in the same state, and have since left
-the workspace). A plugin like that builds fine today and only emits a warning:
+A plugin that has not migrated and still applies KGP (today `firebase_core`)
+builds fine and only emits a warning:
 
 ```
 WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): ...
@@ -376,7 +369,7 @@ Confirm the file name on a device first (`adb shell run-as <applicationId> ls sh
 
 ```bash
 flutter analyze                     # expect: No issues found!
-cd platform/infra/storage && flutter test && cd ../..
+(cd platform/infra/storage && flutter test)
 ```
 
 If `flutter analyze` is not clean:
@@ -384,8 +377,8 @@ If `flutter analyze` is not clean:
 | You see | Cause | Fix |
 | :--- | :--- | :--- |
 | `Target of URI doesn't exist: 'firebase_options_dev.dart'` (and `_prod`, `_staging`) in `firebase_module.dart` | The gitignored Firebase options are missing | [Step 3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it), real or stubbed |
-| `Target of URI doesn't exist: 'gen/gen.dart'`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` (about 17 errors) | Setup stopped short of the barrel pass, typically after running only `pub get` + `build_runner` | Run `dart tools/workspace_setup/configure.dart` |
-| `Undefined class '_$…'`, `… .g.dart` / `.freezed.dart` not found | Codegen has not run, or is stale | Run `dart tools/workspace_setup/configure.dart` (or `dart run build_runner build --workspace` if setup already ran once) |
+| `Target of URI doesn't exist` for a file under `lib/src/gen/`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` | gen-l10n has not run: the barrels export its gitignored output | Run `dart tools/workspace_setup/configure.dart` (or `flutter gen-l10n` in the package that reports it) |
+| `Undefined class '_$…'`, `… .g.dart` / `.freezed.dart` / `.module.dart` not found | build_runner has not run, or is stale | Run `dart tools/workspace_setup/configure.dart` (or `dart run build_runner build --workspace` if setup already ran once) |
 
 ---
 

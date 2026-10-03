@@ -65,6 +65,34 @@ void main() {
       expect(kSplashModes, enumValues(facts, 'SplashMode'));
     });
 
+    test('OrientationPolicy, spelled snake_case in the manifest', () {
+      String snake(String name) => name.replaceAllMapped(
+        RegExp('[A-Z]'),
+        (m) => '_${m.group(0)!.toLowerCase()}',
+      );
+      expect(kOrientationPolicies, [
+        for (final v in enumValues(facts, 'OrientationPolicy')) snake(v),
+      ]);
+      // Every spelling maps onto the constant composer emits.
+      expect(
+        [for (final v in kOrientationPolicies) orientationConstant(v)],
+        enumValues(facts, 'OrientationPolicy'),
+      );
+      expect(kDefaultOrientation, kOrientationPolicies.first);
+    });
+
+    test('the desktop platforms', () {
+      final match = RegExp(
+        r'bool get isDesktop =>([^;]*);',
+      ).firstMatch(platform);
+      expect(match, isNotNull);
+      final names = {
+        for (final m in RegExp(r'this == (\w+)').allMatches(match!.group(1)!))
+          m.group(1)!,
+      };
+      expect(kDesktopPlatforms, names);
+    });
+
     test('the platforms that can pin TLS', () {
       final match = RegExp(
         r'bool get canPinTls =>([^;]*);',

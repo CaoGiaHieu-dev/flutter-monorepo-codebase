@@ -111,14 +111,20 @@ class DerivedPlatform {
     required this.orientation,
     required this.deepLinks,
     required this.push,
+    this.window,
   });
 
   final String name;
   final Sourced<String> runner;
   final Sourced<String> splash;
+
+  /// The kernel's `OrientationPolicy` constant (`phonesPortrait`).
   final Sourced<String> orientation;
   final Sourced<bool> deepLinks;
   final Sourced<bool> push;
+
+  /// The declared desktop window; null when the manifest declares none.
+  final Sourced<WindowDecl>? window;
 }
 
 /// The effective facts of every declared platform.
@@ -130,7 +136,11 @@ class DerivedPlatform {
 /// - `push`: on when `core_notifications` is composed and supports the
 ///   platform — but never on the web, where no service worker is shipped;
 /// - `deep_links`: on everywhere;
-/// - `orientation`: phone-sized displays locked to portrait.
+/// - `orientation`: phone-sized displays locked to portrait;
+/// - `window`: none — the shell does not touch the window;
+///
+/// and each of them is what the manifest says when it says anything
+/// (`platforms.<p>.push`, `.deep_links`, `.orientation`, `.window`).
 ///
 /// `PlatformFacts.today()` in the kernel holds the same defaults for a
 /// hand-built object; `app_sync_test.dart` compares the two.
@@ -161,7 +171,9 @@ List<DerivedPlatform> derivePlatforms(AppView view) {
     }
 
     final Sourced<bool> push;
-    if (!view.composesNotifications) {
+    if (platform.push != null) {
+      push = Sourced(platform.push!, 'manifest');
+    } else if (!view.composesNotifications) {
       push = const Sourced(
         false,
         'derived: core_notifications is not composed',
@@ -188,9 +200,16 @@ List<DerivedPlatform> derivePlatforms(AppView view) {
         name: name,
         runner: Sourced(platform.runner, 'manifest'),
         splash: splash,
-        orientation: const Sourced('phonesPortrait', 'default'),
-        deepLinks: const Sourced(true, 'default'),
+        orientation: platform.orientation == null
+            ? const Sourced('phonesPortrait', 'default')
+            : Sourced(orientationConstant(platform.orientation!), 'manifest'),
+        deepLinks: platform.deepLinks == null
+            ? const Sourced(true, 'default')
+            : Sourced(platform.deepLinks!, 'manifest'),
         push: push,
+        window: platform.window == null
+            ? null
+            : Sourced(platform.window!, 'manifest'),
       ),
     );
   }
@@ -262,6 +281,15 @@ String emitFacts(AppView view) {
     line(3, 'deepLinks: ${platform.deepLinks.value},');
     note(3, platform.push.source);
     line(3, 'push: ${platform.push.value},');
+    final window = platform.window;
+    if (window != null) {
+      note(3, window.source);
+      line(3, 'window: WindowFacts(');
+      line(4, 'initial: ${_sizeSpec(window.value.initial)},');
+      final min = window.value.min;
+      if (min != null) line(4, 'min: ${_sizeSpec(min)},');
+      line(3, '),');
+    }
     line(2, '),');
   }
   line(1, '},');
@@ -325,6 +353,10 @@ String emitFacts(AppView view) {
   line(0, ');');
   return b.toString();
 }
+
+/// `SizeSpec(1280, 800)`: a number the manifest wrote as `1280.0` stays a
+/// double, one it wrote as `1280` an int — both are valid `double` arguments.
+String _sizeSpec(SizeDecl size) => 'SizeSpec(${size.width}, ${size.height})';
 
 String _sslCall(SslDecl decision, int indent) {
   final pad = '  ' * (indent + 1);

@@ -269,24 +269,21 @@ void main() {
       );
     });
 
-    test(
-      'a key whose consumer has not landed is unknown, not ignored',
-      () async {
-        final ws = workspace(
-          manifest: demoManifest(
-            platforms:
-                'platforms:\n  android: { runner: committed, push: true }\n',
-          ),
-        );
-        await expectRefused(
-          ws,
-          contains(
-            '$manifestPath: platforms.android.push: unknown key — expected '
-            'runner, splash',
-          ),
-        );
-      },
-    );
+    test('a key nothing reads is unknown, not ignored', () async {
+      final ws = workspace(
+        manifest: demoManifest(
+          platforms:
+              'platforms:\n  android: { runner: committed, sound: true }\n',
+        ),
+      );
+      await expectRefused(
+        ws,
+        contains(
+          '$manifestPath: platforms.android.sound: unknown key — expected '
+          'runner, splash, push, deep_links, orientation, window',
+        ),
+      );
+    });
 
     test('a missing platforms section prints the YAML to paste', () async {
       final ws = workspace(manifest: demoManifest(platforms: ''));

@@ -40,7 +40,7 @@ env: # the keys of the env.<flavor> files; checked here, validated again at boot
   APP_LINK_MODE: { native_only: true }
 
 platforms: # a platform missing here is a platform this app does not run on
-  android: { runner: committed } # splash, push, deep links, orientation: derived or default — README §2 shows the effective values
+  android: { runner: committed } # each platform may also set splash, push, deep_links, orientation, window; left out, they are derived or default — README §2 shows the effective values
   ios: { runner: committed }
 
 capabilities: # the optional contracts the shell resolves; `composer describe --catalog` lists them

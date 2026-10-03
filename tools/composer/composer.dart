@@ -1252,6 +1252,7 @@ void _sync(
   // so a file or marker that has gone missing is refused up front instead of
   // leaving the other regions rewritten around it.
   final regions = <_Region>[];
+  final switchProblems = <String>[];
   for (final app in selected) {
     final r = _resolve(app, packages, <String>[]);
 
@@ -1273,6 +1274,7 @@ void _sync(
     // What the app declares, as const Dart the shell reads at boot, and as
     // the page a newcomer reads first.
     final view = _view(root, app, r, packages, catalog);
+    switchProblems.addAll(checkPlatformSwitches(view));
     regions
       ..add(
         _Region(
@@ -1310,6 +1312,19 @@ void _sync(
       _workspaceBody(ordered),
     ),
   );
+
+  // What a platform switches on has to be something the app composes
+  // (V8). Refused before anything is written, like a malformed manifest.
+  if (switchProblems.isNotEmpty) {
+    for (final problem in switchProblems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to compose: ${switchProblems.length} problem(s) in '
+      'app_manifest.yaml. Nothing was written.',
+    );
+    exit(1);
+  }
 
   // A missing file or marker is drift, not a skip. It used to be a warning
   // followed by "up to date" and exit 0 — so deleting a marker (and then

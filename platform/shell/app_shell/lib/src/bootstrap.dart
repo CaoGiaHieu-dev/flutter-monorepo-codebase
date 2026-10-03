@@ -4,28 +4,73 @@ import 'dart:io';
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
+import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'boot/boot_error_app.dart';
+import 'composition/composition_check.dart';
 import 'main_scope.dart';
 import 'navigation/app_router.dart';
 import 'root_app.dart';
+import 'shell_hooks.dart';
 
 /// Boots an app built on this shell.
 ///
 /// Every app's `main.dart` is one call to this, passing the
 /// `configureDependencies` generated for that app from its
-/// `app_manifest.yaml`:
+/// `app_manifest.yaml`, and — for an app that declares itself — its [profile]
+/// and [hooks]:
 ///
 /// ```dart
-/// void main() => runShellApp(configureDependencies: configureDependencies);
+/// void main() => runShellApp(
+///   profile: appProfile,
+///   hooks: appHooks,
+///   configureDependencies: configureDependencies,
+/// );
 /// ```
 ///
-/// The boot sequence itself is identical across apps — DI, then
-/// [AppInitializer.initBeforeRunApp] (logger + certificate pinning), then the
-/// splash, then [AppInitializer.init], then the router — so it lives here
-/// rather than being copied into each `main.dart`, where the copies would
-/// drift.
+/// The boot sequence itself is identical across apps — [profile] checks,
+/// DI, then [AppInitializer.initBeforeRunApp] (logger + certificate
+/// pinning), then the splash, then [AppInitializer.init], then the router —
+/// so it lives here rather than being copied into each `main.dart`, where the
+/// copies would drift.
+///
+/// ## The app profile
+///
+/// Without a [profile] the boot is the one every app had before apps could
+/// declare themselves. With one, the shell does three more things:
+///
+/// 1. **Before DI**, [AppProfile.validate] runs for the platform
+///    (`resolveAppPlatform`) and flavor this build is. A problem — an
+///    undeclared platform or flavor, a required `--dart-define` that is
+///    empty, a missing pin decision — stops the boot at [runBootError]'s
+///    screen, and `configureDependencies` is never called. Starting on a
+///    platform the manifest does not declare used to be a blank window with
+///    no error. `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` turns the
+///    undeclared-platform problem into a logged warning, for a developer's
+///    quick look.
+/// 2. The profile and its sections are registered ([registerAppProfile]),
+///    still before DI, so anything built while the graph initialises can read
+///    them.
+/// 3. **After DI**, [checkAppContract] holds the app's `capabilities:`
+///    declaration to what the graph registered. In a dev or staging flavor,
+///    or a debug or profile build, a mismatch stops the boot with the same
+///    screen; in a production release it is logged and reported as a
+///    non-fatal error and the app starts anyway — a removed module must
+///    still run (RULE-05), and the smoke test makes the mismatch unmergeable
+///    first.
+///
+/// With a profile the Dart splash is chosen by the platform's declared
+/// `splash` rather than by `Platform.isIOS`.
+///
+/// ## Hooks
+///
+/// [hooks] carries an app's code for fixed points: the two error channels
+/// ([ShellHooks.onError], [ShellHooks.onNonFatalError]),
+/// [ShellHooks.beforeDependencies] and [ShellHooks.afterBoot]. The last two
+/// receive an [AppRuntime], which needs a [profile]: passing either without
+/// one throws [ArgumentError].
 ///
 /// ## Errors
 ///
@@ -34,23 +79,98 @@ import 'root_app.dart';
 /// the framework catches ([FlutterError.onError] — build, layout, paint,
 /// image decoding) and errors escaping to the engine
 /// ([PlatformDispatcher.onError]). Each is still printed to the console as
-/// before, then handed to [onError] and to the registered [IErrorReporter],
-/// if any, as a fatal error.
+/// before, then handed to the fatal error hook and to the registered
+/// [IErrorReporter], if any, as a fatal error.
 ///
 /// To plug in Crashlytics or Sentry, register an `IErrorReporter` in the app
-/// (`getItOrNull`, so none is fine too); [onError] stays for an app that
-/// wants the raw callback. Errors thrown by `configureDependencies` itself
-/// reach [onError] only — the reporter is not registered yet.
+/// (`getItOrNull`, so none is fine too); the fatal hook stays for an app that
+/// wants the raw callback — [ShellHooks.onError], or the older [onError]
+/// parameter, which is honoured when [ShellHooks.onError] is not set. Errors
+/// thrown by `configureDependencies` itself reach the fatal hook only — the
+/// reporter is not registered yet.
 void runShellApp({
   required Future<void> Function() configureDependencies,
+  AppProfile? profile,
+  ShellHooks hooks = const ShellHooks(),
   ShellErrorCallback? onError,
 }) {
+  if (profile == null &&
+      (hooks.beforeDependencies != null || hooks.afterBoot != null)) {
+    throw ArgumentError.value(
+      hooks,
+      'hooks',
+      'beforeDependencies and afterBoot receive an AppRuntime, which needs '
+          'a profile: pass `profile:` to runShellApp.',
+    );
+  }
+  assert(
+    onError == null || hooks.onError == null,
+    'Pass the fatal error callback once: ShellHooks.onError, or the older '
+    'onError parameter.',
+  );
+
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      installShellErrorHooks(onError: onError);
+      installShellErrorHooks(
+        onError: hooks.onError ?? onError,
+        onNonFatalError: hooks.onNonFatalError,
+      );
       registerBaseUiLicenses();
+
+      AppRuntime? runtime;
+      if (profile != null) {
+        runtime = AppRuntime(
+          profile: profile,
+          flavor: AppConfig.appFlavor,
+          platform: resolveAppPlatform(),
+          isDebug: kDebugMode,
+        );
+
+        final problems = validateBoot(runtime);
+        if (problems.isNotEmpty) {
+          runBootError(
+            problems,
+            detailed: showsBootDiagnostics(runtime.flavor),
+          );
+          return;
+        }
+
+        // Before DI: an eager singleton built while the graph initialises can
+        // inject a section, and nothing registered later can shadow it.
+        registerAppProfile(profile, platform: runtime.platform);
+        await hooks.beforeDependencies?.call(runtime);
+      }
+
       await configureDependencies();
+
+      if (runtime != null) {
+        final report = checkAppContract(
+          runtime.profile,
+          flavor: runtime.flavor,
+          platform: runtime.platform,
+        );
+        if (!report.isClean) {
+          if (showsBootDiagnostics(runtime.flavor)) {
+            runBootError(report.problems, detailed: true);
+            return;
+          }
+          // A production release never locks users out of a build whose only
+          // fault is a declaration out of date.
+          DynamicLogger.log(
+            report.explain(),
+            tag: 'Boot',
+            level: LogLevel.ERROR,
+          );
+          _report(
+            StateError(report.explain()),
+            StackTrace.current,
+            fatal: false,
+            reason: 'the app composition does not match its declaration',
+            onError: hooks.onNonFatalError,
+          );
+        }
+      }
 
       // Before anything is built. The splash below is already wrapped in every
       // feature's `IAppTreeWrapper`, and a controller created there may open
@@ -59,10 +179,15 @@ void runShellApp({
       // installed any later — in `initService` — would never reach it.
       AppInitializer.initBeforeRunApp();
 
+      // With a profile the platform's declared `splash` decides. Without one:
       // iOS keeps its native splash for the whole boot, so no Dart splash is
       // built there. `kIsWeb` is checked first because `Platform.isIOS` throws
       // on web.
-      final usesDartSplash = kIsWeb || !Platform.isIOS;
+      final usesDartSplash = runtime != null
+          ? (getItOrNull<PlatformFacts>() ?? const PlatformFacts.today())
+                    .splash ==
+                SplashMode.dart
+          : kIsWeb || !Platform.isIOS;
 
       await MainScope(
         // Resolved through `core_di` rather than importing the splash feature:
@@ -72,9 +197,12 @@ void runShellApp({
             ? getItOrNull<IAppSplashScreen>()?.build()
             : null,
         root: const RootApp(),
-        initService: () => AppInitializer.init(
-          routeObserver: getIt<AppRouter>().routeObserver,
-        ),
+        initService: () async {
+          await AppInitializer.init(
+            routeObserver: getIt<AppRouter>().routeObserver,
+          );
+          if (runtime != null) await hooks.afterBoot?.call(runtime);
+        },
       ).run();
     },
     // Through `FlutterError.reportError`, so a zone error takes the same
@@ -90,8 +218,52 @@ void runShellApp({
   );
 }
 
-/// Receives every uncaught error once the shell's hooks are installed.
-typedef ShellErrorCallback = void Function(Object error, StackTrace stack);
+/// What stops [runtime]'s app before dependency injection starts: the
+/// problems [AppProfile.validate] finds for the platform and flavor this
+/// build is.
+///
+/// Required `--dart-define`s are checked in a non-debug build only — a plain
+/// `flutter run` of a debug build need not pass the env file.
+///
+/// With [allowUndeclaredPlatform] (the `ALLOW_UNDECLARED_PLATFORM` define by
+/// default) an undeclared platform (`P01`) is logged as a warning instead.
+@visibleForTesting
+List<ProfileProblem> validateBoot(
+  AppRuntime runtime, {
+  bool allowUndeclaredPlatform = ProfileConstants.ALLOW_UNDECLARED_PLATFORM,
+}) {
+  final problems = runtime.profile.validate(
+    platform: runtime.platform,
+    flavor: runtime.flavor,
+    checkEnv: !runtime.isDebug,
+  );
+  if (!allowUndeclaredPlatform) return problems;
+
+  for (final problem in problems.where((p) => p.code == _undeclaredPlatform)) {
+    DynamicLogger.log(
+      '${problem.description}\nALLOW_UNDECLARED_PLATFORM is set, so the boot '
+      'continues with the template defaults for this platform.\n'
+      '${problem.action}',
+      tag: 'Boot',
+      level: LogLevel.WARNING,
+    );
+  }
+  return problems.where((p) => p.code != _undeclaredPlatform).toList();
+}
+
+/// The problem code of a platform the manifest does not declare.
+const String _undeclaredPlatform = 'P01';
+
+/// Whether a boot that finds a problem stops and shows the full diagnostics:
+/// in a debug or profile build, or a flavor that is not production.
+///
+/// A production release instead shows a generic message when the problem
+/// leaves it no choice (an undeclared platform), and logs and carries on when
+/// the app can still run (a composition mismatch after DI) — it never locks
+/// users out over a declaration that is out of date.
+@visibleForTesting
+bool showsBootDiagnostics(Flavor flavor, {bool isRelease = kReleaseMode}) =>
+    !isRelease || flavor != Flavor.prod;
 
 const String _library = 'platform_app_shell';
 
@@ -108,13 +280,17 @@ const String _library = 'platform_app_shell';
 ///   `ErrorHandler` could not classify to the [IErrorReporter] as
 ///   non-fatal — they usually are bugs, not network weather.
 ///
-/// Reporting means: [onError], then `getItOrNull<IErrorReporter>()`,
-/// resolved at the moment of the error so a reporter registered by
-/// `configureDependencies` is picked up, and a missing one is not an error.
-/// A throwing callback or reporter is swallowed — it is never reported
-/// through itself.
+/// Reporting means: the callback — [onError] for the fatal channel,
+/// [onNonFatalError] for the unclassified failures — then
+/// `getItOrNull<IErrorReporter>()`, resolved at the moment of the error so a
+/// reporter registered by `configureDependencies` is picked up, and a missing
+/// one is not an error. A throwing callback or reporter is swallowed — it is
+/// never reported through itself.
 @visibleForTesting
-void installShellErrorHooks({ShellErrorCallback? onError}) {
+void installShellErrorHooks({
+  ShellErrorCallback? onError,
+  ShellErrorCallback? onNonFatalError,
+}) {
   final previous = FlutterError.onError;
   FlutterError.onError = (details) {
     (previous ?? FlutterError.presentError)(details);
@@ -144,6 +320,7 @@ void installShellErrorHooks({ShellErrorCallback? onError}) {
     stack,
     fatal: false,
     reason: 'ErrorHandler could not classify this exception',
+    onError: onNonFatalError,
   );
 }
 

@@ -12,17 +12,28 @@
 /// product `domain_*`. Every module-owned thing the shell needs arrives
 /// through a `core_di` contract resolved with `getItOrNull` /
 /// `getAllOrEmpty`.
+///
+/// An app can also tell the shell what it is: [runShellApp] takes an
+/// `AppProfile` (its declared platforms, flavors and capabilities) and
+/// [ShellHooks] (its code at fixed points). The shell holds the declaration to
+/// what the app actually registers — [kShellContracts] is the one table of
+/// what the shell resolves, [checkAppContract] the one check of it — and a
+/// boot that cannot start shows [BootErrorApp] instead of a blank window.
 library;
 
 // Auto-generated exports, do not edit manually.
 export 'di/module.dart';
 export 'di/module.module.dart';
 export 'src/app_material_wrapper.dart';
+export 'src/boot/boot_error_app.dart';
 export 'src/bootstrap.dart';
+export 'src/composition/composition_check.dart';
+export 'src/composition/shell_contracts.dart';
 export 'src/main_scope.dart';
 export 'src/navigation/app_router.dart';
 export 'src/provider/deeplink_provider.dart';
 export 'src/root_app.dart';
+export 'src/shell_hooks.dart';
 export 'src/utils/app_shell_ui_constants.dart';
 export 'src/widgets/navigator_wrapper_widget.dart';
 export 'src/widgets/undefined_route_widget.dart';

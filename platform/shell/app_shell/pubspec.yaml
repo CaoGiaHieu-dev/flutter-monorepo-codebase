@@ -18,6 +18,8 @@ dependencies:
     path: ../../foundation/common
   core_di:
     path: ../../foundation/contracts
+  core_network:
+    path: ../../infra/network
   core_responsive:
     path: ../../ui/responsive
   core_ui_kit:

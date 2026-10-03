@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/12_module_isolation.md@a5b62df -->
+<!-- translated-from: docs/en/guides/12_module_isolation.md@9a3fb93 -->
 # Cô lập Module bằng Git Submodule
 
 ## Mục tiêu

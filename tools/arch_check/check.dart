@@ -10,6 +10,7 @@ import '../unused_checker/monorepo_helper.dart';
 import '../unused_checker/output_formatter.dart';
 import 'dart_source.dart';
 import 'platform_forks.dart';
+import 'source_rules.dart';
 
 /// Mechanical enforcement of the architecture rules in the rule registry,
 /// `docs/en/reference/01_rules.md` (RULE-NN ids).
@@ -381,15 +382,6 @@ final RegExp _bareSizingExtension = RegExp(
   r'[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()',
 );
 
-/// Drops a trailing `//` comment so commented-out or explanatory text does not
-/// trip a rule. Naive about `//` inside string literals, which is acceptable
-/// here: the cost is a false positive on a line that mentions a URL, and the
-/// message points straight at it.
-String _stripComment(String line) {
-  final i = line.indexOf('//');
-  return i == -1 ? line : line.substring(0, i);
-}
-
 /// Every `.dart` file under `<packageRoot>/<dir>` (`test`, say), POSIX paths.
 /// Empty when the folder does not exist.
 List<String> _dartFilesUnder(String packageRoot, String dir) {
@@ -401,13 +393,6 @@ List<String> _dartFilesUnder(String packageRoot, String dir) {
         p.posix.normalize(e.path.replaceAll(r'\', '/')),
   ];
 }
-
-/// A DI lookup that throws when the type is unregistered.
-///
-/// `getItOrNull<` and `getAllOrEmpty<` do not match: the literal `getIt<` /
-/// `getAll<` requires the `<` immediately after, and those two identifiers
-/// carry more characters before theirs.
-final _throwingLookup = RegExp(r'\bget(?:It|All)<([A-Z]\w*)>');
 
 /// The module a package belongs to — `auth` for `modules/auth/data` — or
 /// `null` for a package outside `modules/`.
@@ -924,27 +909,25 @@ void main(List<String> args) {
     // registers an InheritedWidget dependency, so only the second rebuilds
     // when the metrics change (rotation, split-screen, desktop resize). The
     // bare form is therefore a silent staleness bug, not a style preference.
+    // Every hand-written Dart file under lib/ is read — a file that never
+    // imports core_responsive can still declare or reach a `num` extension of
+    // the same name.
     for (final file in files) {
-      final source = File(file).readAsStringSync();
-      if (!source.contains('core_responsive')) continue;
-
-      final lines = source.split('\n');
-      for (var i = 0; i < lines.length; i++) {
-        final code = _stripComment(lines[i]);
-        // A numeric or closing-paren receiver followed by a sizing extension.
-        for (final m in _bareSizingExtension.allMatches(code)) {
-          blocking.add(
-            Violation(
-              'R7',
-              '${p.posix.relative(file, from: root)}:${i + 1}',
-              'bare `.${m.group(1)}` sizing extension — use '
-                  '`context.${m.group(1)}(value)` so the widget rebuilds when '
-                  'screen metrics change. If no BuildContext is reachable, '
-                  'read the value from one before the first `await` and pass '
-                  'it in.',
-            ),
-          );
-        }
+      if (isGeneratedSource(file)) continue;
+      final scanned = DartSource.scan(File(file).readAsStringSync());
+      // A numeric or closing-paren receiver followed by a sizing extension.
+      for (final m in _bareSizingExtension.allMatches(scanned.code)) {
+        blocking.add(
+          Violation(
+            'R7',
+            '${p.posix.relative(file, from: root)}:${scanned.lineOf(m.start)}',
+            'bare `.${m.group(1)}` sizing extension — use '
+                '`context.${m.group(1)}(value)` so the widget rebuilds when '
+                'screen metrics change. If no BuildContext is reachable, '
+                'read the value from one before the first `await` and pass '
+                'it in.',
+          ),
+        );
       }
     }
 
@@ -991,28 +974,52 @@ void main(List<String> args) {
     // and modules are removable by design (RULE-05). The failure is
     // invisible to `flutter analyze` because the lookup type-checks fine; it
     // surfaces at runtime, on whichever screen happens to call it.
+    final module = _moduleOf(pkg);
     for (final file in files) {
       if (isGeneratedSource(file)) continue;
-      final lines = File(file).readAsStringSync().split('\n');
-      for (var i = 0; i < lines.length; i++) {
-        final code = _stripComment(lines[i]);
-        for (final m in _throwingLookup.allMatches(code)) {
-          final type = m.group(1)!;
-          final owners = removableContracts[type];
-          if (owners == null) continue;
-          // The owning module may resolve its own contract eagerly: if one
-          // of its packages is in the build, so is the registration.
-          final module = _moduleOf(pkg);
-          if (module != null && owners.contains(module)) continue;
+      final scanned = DartSource.scan(File(file).readAsStringSync());
+      final rel = p.posix.relative(file, from: root);
+      for (final lookup in throwingLookupsIn(scanned)) {
+        final type = lookup.text;
+        final owners = removableContracts[type];
+        if (owners == null) continue;
+        // The owning module may resolve its own contract eagerly: if one
+        // of its packages is in the build, so is the registration.
+        if (module != null && owners.contains(module)) continue;
 
+        blocking.add(
+          Violation(
+            'R8',
+            '$rel:${lookup.line}',
+            '`$type` is implemented only in modules/${owners.join(', modules/')}, '
+                'which is removable — a throwing lookup here crashes any '
+                'build without it. Use `getItOrNull<$type>()` (or '
+                '`getAllOrEmpty`) and handle the null case.',
+          ),
+        );
+      }
+
+      // The same crash, hidden in the generated wiring: a class outside every
+      // module that DI builds with a module-owned contract as a required
+      // parameter. Injectable resolves it with a throwing `get`, so the whole
+      // graph fails to build once the module is gone. Nullable parameters and
+      // `@factoryParam` ones are optional, and are not reported.
+      if (module == null) {
+        for (final param in injectedParametersIn(scanned)) {
+          final owners = removableContracts[param.type];
+          if (owners == null) continue;
           blocking.add(
             Violation(
               'R8',
-              '${p.posix.relative(file, from: root)}:${i + 1}',
-              '`$type` is implemented only in modules/${owners.join(', modules/')}, '
-                  'which is removable — a throwing lookup here crashes any '
-                  'build without it. Use `getItOrNull<$type>()` (or '
-                  '`getAllOrEmpty`) and handle the null case.',
+              '$rel:${param.line}',
+              'an injectable class takes `${param.type}` as a required '
+                  'constructor parameter, but it is implemented only in '
+                  'modules/${owners.join(', modules/')}, which is removable — '
+                  'DI cannot build this class without it. Make the parameter '
+                  'nullable (`${param.type}?`) and have the route pass '
+                  '`getItOrNull<${param.type}>()` as a `@factoryParam`, or '
+                  'resolve the contract at the call site with '
+                  '`getItOrNull`.',
             ),
           );
         }
@@ -1348,6 +1355,54 @@ List<Violation> _hygieneViolations(String root) {
       }
     }
 
+    // --- R18: Bloc event handlers are async (RULE-52) ---------------------
+    if (isForkScanned(rel)) {
+      for (final f in blocHandlerProblemsIn(scanned)) {
+        out.add(
+          Violation(
+            'R18',
+            '$rel:${f.line}',
+            'an `on<Event>` handler that is not async: ${f.text}. Declare '
+                'it `Future<void> ... async` and take `(event, emit)` — a '
+                'sync handler returns before its awaited work finishes, and '
+                'the late `emit` throws "emit was called after an event '
+                'handler completed normally".',
+          ),
+        );
+      }
+    }
+
+    // --- R19: runtime diagnostics go through DynamicLogger (RULE-65) -------
+    if (isProductLib(rel)) {
+      for (final f in diagnosticCallsIn(scanned)) {
+        out.add(
+          Violation(
+            'R19',
+            '$rel:${f.line}',
+            '`${f.text}(` writes to the console. Runtime diagnostics go '
+                'through `DynamicLogger.log` so they can be filtered and '
+                'stay out of release logs (tests and tools are not scanned: '
+                'tools write with `stdout.writeln`).',
+          ),
+        );
+      }
+    }
+
+    // --- R20: no raw layout numbers in widgets (RULE-30, RULE-33) ----------
+    if (isProductLib(rel) && !isConstantsHome(rel)) {
+      for (final f in rawLayoutNumbersIn(scanned)) {
+        out.add(
+          Violation(
+            'R20',
+            '$rel:${f.line}',
+            'raw number in `${f.text}`. Take layout and paint values from '
+                '`context.w/h/sp/r` or a design token (`AppSpacing`, '
+                '`AppRadius`); constants live under styles/ or utils/.',
+          ),
+        );
+      }
+    }
+
     // --- R15: the I prefix is reserved for interfaces --------------------
     if (inProductTree) {
       for (final m in _interfaceNamedClass.allMatches(scanned.code)) {
@@ -1424,6 +1479,9 @@ void _report(
     'R15': 'The I prefix is reserved for interfaces',
     'R16': 'The shell contract catalog is complete',
     'R17': 'Platform forks are an app decision',
+    'R18': 'Bloc event handlers are async',
+    'R19': 'Runtime diagnostics go through DynamicLogger',
+    'R20': 'No raw numeric literals for layout and paint',
   };
 
   if (warnings.isNotEmpty) {
@@ -1535,7 +1593,9 @@ RULES CHECKED
       `16.w` and `context.w(16)` compute the same number, but only the
       second registers an InheritedWidget dependency, so only the second
       rebuilds when metrics change (rotation, split-screen, resize).
-      Checked in files that mention core_responsive (in practice: import it).
+      Checked in every hand-written Dart file under lib/ of every package
+      (comments and string literals blanked), not only in files that import
+      core_responsive: an extension declared elsewhere type-checks too.
 
   R8  Removable contracts resolve optionally
       A `core_di` contract or a module API type (declared in any <id>_api
@@ -1545,6 +1605,16 @@ RULES CHECKED
       that case, so such a type must be resolved with `getItOrNull<T>()` /
       `getAllOrEmpty<T>()` and a fallback. Packages of the implementing
       module may still resolve its contracts eagerly.
+      Read on comment- and string-stripped source, so every spelling counts:
+      getIt<T>(), getIt.get<T>(), getIt.getAll<T>(), getIt.getAsync<T>(),
+      GetIt.I<T>(), GetIt.instance<T>(), a type argument split over lines, and
+      an untyped `final T x = getIt();` (the declared type is the lookup).
+      Also: an `@injectable` / `@lazySingleton` / `@singleton` class outside
+      every module whose constructor takes such a contract as a required
+      parameter (non-nullable, not `@factoryParam`) is reported — injectable
+      resolves it with a throwing get, so the graph stops building once the
+      module is gone. Both field-formal (`this._x`) and typed parameters are
+      read; a parameter the scan cannot type is left alone.
       Invisible to `flutter analyze`: the lookup type-checks, then crashes at
       runtime on whichever screen calls it.
 
@@ -1640,7 +1710,35 @@ RULES CHECKED
       entry with no reason, or for a file that no longer forks or exists, is
       itself a violation (RULE-82).
 
-  R12, R13, R15 and R17 read every file in the working tree that git does not
+  R18 Bloc event handlers are async  (RULE-52)
+      In hand-written Dart under platform/*/lib, modules/*/lib and apps/*/lib
+      every `on<Event>(handler)` registration must hand over an async handler:
+      an inline closure has to be `(event, emit) async ...`, and a tear-off
+      (`on<E>(_onE)`) has to resolve — in the same file — to a method declared
+      `Future<void> _onE(...) async`. A sync handler returns before its
+      awaited work finishes and the late `emit` throws "emit was called after
+      an event handler completed normally". A handler declared elsewhere (a
+      part file, a mixin) cannot be placed and is not judged. `.on<T>(` on
+      another object, and comments and strings, never match.
+
+  R19 Runtime diagnostics go through DynamicLogger  (RULE-65)
+      No `print(`, `debugPrint(` or `debugPrintStack(` call in lib/ of any
+      platform/ or modules/ package (comments and strings blanked, so a doc
+      example does not count; a method merely *named* print is not a call).
+      Use `DynamicLogger.log`. Tests are not scanned, and tools/ have their
+      own rule: they write with stdout.writeln / stderr.writeln.
+
+  R20 No raw numeric literals for layout and paint  (RULE-30, RULE-33)
+      In lib/ of every platform/ and modules/ package, outside any styles/
+      or utils/ folder and generated files, a number literal may not be the
+      value of: SizedBox(width:|height:), SizedBox.square(dimension:),
+      EdgeInsets.all/symmetric/only/fromLTRB (and the Directional forms),
+      BorderRadius.circular(, Radius.circular(, Offset(, fontSize:,
+      blurRadius: or strokeWidth:. Take it from `context.w/h/sp/r` or a design
+      token; `context.w(16)` is fine, `0` is fine, `16` is not. Constants
+      belong in styles/ (tokens) or utils/. Blocking: the tree has none.
+
+  R12, R13, R15 and R17-R20 read every file in the working tree that git does not
   ignore (tracked files and new ones about to be added; modules checked out
   as submodules included). Outside a git checkout every file is read.
 

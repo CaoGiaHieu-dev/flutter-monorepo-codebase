@@ -501,6 +501,32 @@ void main() {
       });
       expectViolation(run, 'R7', 'platform/infra/foo/lib/foo.dart:2');
     });
+
+    test(
+      'a bare .w in a file that never imports core_responsive fails',
+      () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/foo.dart': 'final gap = 16.w;\n',
+        });
+        expectViolation(run, 'R7', 'platform/infra/foo/lib/foo.dart:1');
+      },
+    );
+
+    test('a module widget with a bare .sp fails; a string and a generated '
+        'file do not', () async {
+      final run = await check({
+        'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
+        'modules/foo/feature/lib/a.dart': "const label = 'size 16.sp';\n",
+        'modules/foo/feature/lib/a.g.dart': 'final gap = 16.w;\n',
+      });
+      expectClean(run, 'R7');
+      final bad = await check({
+        'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
+        'modules/foo/feature/lib/a.dart': 'final f = (2 + 1).sp;\n',
+      });
+      expectViolation(bad, 'R7', 'modules/foo/feature/lib/a.dart:1');
+    });
   });
 
   group('R8 removable contracts resolve optionally', () {
@@ -540,6 +566,143 @@ void main() {
       );
       expectViolation(run, 'R8', 'platform/shell/app_shell/lib/shell.dart:2');
       expect(run.output, contains('modules/foo'));
+    });
+
+    group('every spelling of a throwing lookup', () {
+      for (final spelling in const {
+        'getIt.get<T>()': 'final foo = getIt.get<IFooContract>();',
+        'getIt.getAll<T>()': 'final foo = getIt.getAll<IFooContract>();',
+        'getIt.getAsync<T>()': 'final foo = getIt.getAsync<IFooContract>();',
+        'GetIt.I<T>()': 'final foo = GetIt.I<IFooContract>();',
+        'GetIt.instance<T>()': 'final foo = GetIt.instance<IFooContract>();',
+        'GetIt.instance.get<T>()':
+            'final foo = GetIt.instance.get<IFooContract>();',
+        'a type argument on the next line':
+            'final foo = getIt<\n  IFooContract\n>();',
+        'a spaced type argument': 'final foo = getIt < IFooContract > ();',
+        'an untyped getIt() assigned to a declared type':
+            'final IFooContract foo = getIt();',
+        'an untyped getIt.get() assigned to a declared type':
+            'IFooContract foo = getIt.get();',
+      }.entries) {
+        test('${spelling.key} fails', () async {
+          final run = await check(contractFixture(spelling.value));
+          expect(run, exitsWith(1));
+          expect(run.output, contains('R8 — '));
+          expect(
+            run.output,
+            contains('platform/shell/app_shell/lib/shell.dart:2'),
+          );
+        });
+      }
+
+      test('the optional spellings and a lookup in a comment pass', () async {
+        final run = await check(
+          contractFixture(
+            '// final a = getIt<IFooContract>();\n'
+            '/* getIt.get<IFooContract>() */\n'
+            "const s = 'getIt<IFooContract>()';\n"
+            'final b = getItOrNull<IFooContract>();\n'
+            'final c = getAllOrEmpty<IFooContract>();\n'
+            'final IFooContract? d = getItOrNull();',
+          ),
+        );
+        expectClean(run, 'R8');
+      });
+
+      test('a lookup of a contract nobody removes passes', () async {
+        final run = await check(
+          contractFixture('final foo = getIt.get<SomethingElse>();'),
+        );
+        expectClean(run, 'R8');
+      });
+    });
+
+    group('a non-module injectable that requires a module-owned contract', () {
+      Map<String, String> injected(String cls) => {
+        ...contractFixture('final foo = getItOrNull<IFooContract>();'),
+        'platform/shell/app_shell/pubspec.yaml': pubspec(
+          'platform_app_shell',
+          deps: ['core_di', 'injectable'],
+        ),
+        'platform/shell/app_shell/lib/needy.dart':
+            "import 'package:core_di/core_di.dart';\n"
+            "import 'package:injectable/injectable.dart';\n"
+            '$cls\n',
+      };
+
+      test('a required field-formal parameter fails', () async {
+        final run = await check(
+          injected(
+            '@lazySingleton\n'
+            'class Needy {\n'
+            '  Needy(this._foo);\n'
+            '  final IFooContract _foo;\n'
+            '}',
+          ),
+        );
+        expectViolation(
+          run,
+          'R8',
+          'platform/shell/app_shell/lib/needy.dart:5',
+        );
+        expect(run.output, contains('required constructor parameter'));
+      });
+
+      test('a required typed parameter on an @injectable fails', () async {
+        final run = await check(
+          injected(
+            '@injectable\n'
+            'class Needy {\n'
+            '  Needy(IFooContract foo, {required int other});\n'
+            '}',
+          ),
+        );
+        expect(run, exitsWith(1));
+        expect(run.output, contains('R8 — '));
+      });
+
+      test('a nullable, a factoryParam and a plain class pass', () async {
+        final run = await check(
+          injected(
+            '@injectable\n'
+            'class A {\n'
+            '  A(this._foo);\n'
+            '  final IFooContract? _foo;\n'
+            '}\n'
+            '@injectable\n'
+            'class B {\n'
+            '  B(@factoryParam IFooContract? foo);\n'
+            '}\n'
+            '@injectable\n'
+            'class C {\n'
+            '  C(@factoryParam IFooContract foo);\n'
+            '}\n'
+            'class D {\n'
+            '  D(IFooContract foo);\n'
+            '}\n'
+            '@injectable\n'
+            'class E {\n'
+            '  E(String name) : _gate = IFooContract.of(name);\n'
+            '  final Object _gate;\n'
+            '}',
+          ),
+        );
+        expectClean(run, 'R8');
+      });
+
+      test('the owning module may inject its own contract', () async {
+        final run = await check({
+          ...contractFixture('final foo = getItOrNull<IFooContract>();'),
+          'modules/foo/feature/lib/needy.dart':
+              "import 'package:core_di/core_di.dart';\n"
+              'class Needy {\n'
+              '  Needy(this._foo);\n'
+              '  final IFooContract _foo;\n'
+              '}\n',
+        });
+        expectClean(run, 'R8');
+      });
     });
   });
 
@@ -1257,6 +1420,305 @@ void main() {
         }),
         isEmpty,
       );
+    });
+  });
+
+  group('R18 Bloc event handlers are async', () {
+    Map<String, String> bloc(String body) => {
+      'modules/foo/feature/pubspec.yaml': pubspec(
+        'feature_foo',
+        deps: ['bloc_state_management'],
+      ),
+      'modules/foo/feature/lib/foo_bloc.dart':
+          "import 'package:bloc_state_management/bloc_state_management.dart';\n"
+          'class FooBloc extends BaseBloc<Object, int> {\n'
+          '$body\n'
+          '}\n',
+    };
+
+    test('async tear-offs and async closures pass', () async {
+      final run = await check(
+        bloc(
+          '  FooBloc() : super(0) {\n'
+          '    on<A>(_onA);\n'
+          '    on<B>(this._onB, transformer: sequential());\n'
+          '    on<C>((event, emit) async {\n'
+          '      emit(1);\n'
+          '    });\n'
+          '    on<D>((event, emit) async => emit(2));\n'
+          '    on<List<int>>(\n'
+          '      (event, emit) async {},\n'
+          '    );\n'
+          '    on<E>(_inherited);\n'
+          '  }\n'
+          '  Future<void> _onA(A event, Emitter<int> emit) async {}\n'
+          '  @override\n'
+          '  Future<void> _onB(B event, Emitter<int> emit) async {\n'
+          '    emit(3);\n'
+          '  }\n',
+        ),
+      );
+      expectClean(run, 'R18');
+    });
+
+    test('a sync block closure fails', () async {
+      final run = await check(
+        bloc(
+          '  FooBloc() : super(0) {\n'
+          '    on<A>((event, emit) {\n'
+          '      _load(emit);\n'
+          '    });\n'
+          '  }\n',
+        ),
+      );
+      expectViolation(run, 'R18', 'modules/foo/feature/lib/foo_bloc.dart:4');
+      expect(run.output, contains('not `async`'));
+    });
+
+    test('a sync arrow closure fails', () async {
+      final run = await check(
+        bloc(
+          '  FooBloc() : super(0) {\n'
+          '    on<A>((event, emit) => _load(emit));\n'
+          '  }\n',
+        ),
+      );
+      expectViolation(run, 'R18', 'modules/foo/feature/lib/foo_bloc.dart:4');
+    });
+
+    test('a tear-off of a method that is not async fails', () async {
+      final run = await check(
+        bloc(
+          '  FooBloc() : super(0) {\n'
+          '    on<A>(_onA);\n'
+          '  }\n'
+          '  Future<void> _onA(A event, Emitter<int> emit) => _load(emit);\n',
+        ),
+      );
+      expectViolation(run, 'R18', 'modules/foo/feature/lib/foo_bloc.dart:4');
+      expect(run.output, contains('`_onA` is not declared `async`'));
+    });
+
+    test('a tear-off of a void method fails', () async {
+      final run = await check(
+        bloc(
+          '  FooBloc() : super(0) {\n'
+          '    on<A>(_onA);\n'
+          '  }\n'
+          '  void _onA(A event, Emitter<int> emit) {}\n',
+        ),
+      );
+      expect(run, exitsWith(1));
+      expect(run.output, contains('R18 — '));
+    });
+
+    test('an async method that does not return Future<void> fails', () async {
+      final run = await check(
+        bloc(
+          '  FooBloc() : super(0) {\n'
+          '    on<A>(_onA);\n'
+          '  }\n'
+          '  Future<int> _onA(A event, Emitter<int> emit) async => 1;\n',
+        ),
+      );
+      expect(run, exitsWith(1));
+      expect(run.output, contains('not `Future<void>`'));
+    });
+
+    test('the module generator\'s bloc template is compliant', () async {
+      final template = File(
+        '$repoRoot/tools/module_generator/templates/feature/bloc/'
+        'bloc.dart.mustache',
+      ).readAsStringSync();
+      final rendered = template
+          .replaceAll('{{pascalNameInput}}', 'Notes')
+          .replaceAll('{{snakeNameInput}}', 'notes');
+      final run = await check({
+        'modules/notes/feature/pubspec.yaml': pubspec(
+          'feature_notes',
+          deps: [
+            'bloc_state_management',
+            'domain_core',
+            'freezed_annotation',
+            'injectable',
+          ],
+        ),
+        'modules/notes/feature/lib/notes_bloc.dart': rendered,
+      });
+      expectClean(run, 'R18');
+      // The same template with its handler stripped of `async` is caught: the
+      // check is reading the template's real handler, not passing vacuously.
+      final broken = await check({
+        'modules/notes/feature/pubspec.yaml': pubspec(
+          'feature_notes',
+          deps: [
+            'bloc_state_management',
+            'domain_core',
+            'freezed_annotation',
+            'injectable',
+          ],
+        ),
+        'modules/notes/feature/lib/notes_bloc.dart': rendered.replaceFirst(
+          ') async => emitResult(',
+          ') => emitResult(',
+        ),
+      });
+      expectViolation(
+        broken,
+        'R18',
+        'modules/notes/feature/lib/notes_bloc.dart:21',
+      );
+    });
+
+    test('an on<> in a comment or another object is not a handler', () async {
+      final run = await check(
+        bloc(
+          '  // on<A>((event, emit) {});\n'
+          '  void other(Stream<int> s) => s.on<int>((e) {});\n'
+          '  T pick<T>(Object o) => o.extension<T>();\n',
+        ),
+      );
+      expectClean(run, 'R18');
+    });
+  });
+
+  group('R19 runtime diagnostics go through DynamicLogger', () {
+    test('DynamicLogger, a doc-comment example and a string pass', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/infra/foo/lib/foo.dart':
+            '/// Example: `print(x)`.\n'
+            "const hint = 'call print(x) to see it';\n"
+            'void log(Object m) => DynamicLogger.log(m);\n'
+            'void debugPrintThrottled(String m) {}\n'
+            'class Sink { void print(Object o) {} }\n',
+      });
+      expectClean(run, 'R19');
+    });
+
+    for (final call in const [
+      'debugPrint("x");',
+      'debugPrintStack(stackTrace: s);',
+      'print("x");',
+    ]) {
+      test('$call in a platform lib fails', () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/foo.dart': 'void f(s) {\n  $call\n}\n',
+        });
+        expectViolation(run, 'R19', 'platform/infra/foo/lib/foo.dart:2');
+      });
+    }
+
+    test('print in a module lib fails; in test/ it passes', () async {
+      final run = await check({
+        'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
+        'modules/foo/feature/lib/foo.dart': 'void f() => print(1);\n',
+        'modules/foo/feature/test/foo_test.dart': 'void main() => print(1);\n',
+      });
+      expectViolation(run, 'R19', 'modules/foo/feature/lib/foo.dart:1');
+      expect(run.output, isNot(contains('foo_test.dart')));
+    });
+
+    test('a tool under tools/ may print', () async {
+      final run = await check({
+        'tools/pubspec.yaml': pubspec('tools'),
+        'tools/lib/t.dart': 'void f() => print(1);\n',
+      });
+      expectClean(run, 'R19');
+    });
+  });
+
+  group('R20 no raw numeric literals for layout and paint', () {
+    Future<ToolRun> widget(String body, {String file = 'widgets/box.dart'}) {
+      return check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/lib/$file': 'final w = $body;\n',
+      });
+    }
+
+    test('context-scaled values, tokens and zero pass', () async {
+      final run = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/lib/box.dart':
+            'final a = SizedBox(width: context.w(8), height: AppSpacing.md);\n'
+            'final b = EdgeInsets.symmetric(horizontal: context.w(16));\n'
+            'final c = const EdgeInsets.all(0);\n'
+            'final d = BorderRadius.circular(context.r(8));\n'
+            'final e = TextStyle(fontSize: context.sp(14));\n'
+            'final f = Offset(0, context.h(4));\n'
+            'final g = SizedBox(child: x, width: double.infinity);\n'
+            'final h = Radius.circular(AppRadius.md);\n'
+            'final i = SizedBox.shrink();\n'
+            "final j = 'SizedBox(width: 8)';\n"
+            '// final k = EdgeInsets.all(8);\n',
+      });
+      expectClean(run, 'R20');
+    });
+
+    for (final bad in const {
+      'SizedBox(width: 8)': 'SizedBox(width: 8)',
+      'SizedBox(child: c, height: 12.5)': 'SizedBox(child: c, height: 12.5)',
+      'SizedBox.square(dimension: 24)': 'SizedBox.square(dimension: 24)',
+      'EdgeInsets.all(16)': 'EdgeInsets.all(16)',
+      'EdgeInsets.symmetric(horizontal: 4)':
+          'EdgeInsets.symmetric(horizontal: 4)',
+      'EdgeInsets.only(left: context.w(1), top: 8)':
+          'EdgeInsets.only(left: context.w(1), top: 8)',
+      'EdgeInsets.fromLTRB(1, 2, 3, 4)': 'EdgeInsets.fromLTRB(1, 2, 3, 4)',
+      'EdgeInsetsDirectional.only(start: 8)':
+          'EdgeInsetsDirectional.only(start: 8)',
+      'TextStyle(fontSize: 14)': 'TextStyle(fontSize: 14)',
+      'BorderRadius.circular(8)': 'BorderRadius.circular(8)',
+      'Radius.circular(8)': 'Radius.circular(8)',
+      'BoxShadow(blurRadius: 4)': 'BoxShadow(blurRadius: 4)',
+      'CircularProgressIndicator(strokeWidth: 2)':
+          'CircularProgressIndicator(strokeWidth: 2)',
+      'Offset(4, 0)': 'Offset(4, 0)',
+    }.entries) {
+      test('${bad.key} fails', () async {
+        final run = await widget(bad.value);
+        expectViolation(run, 'R20', 'platform/ui/foo/lib/widgets/box.dart:1');
+      });
+    }
+
+    test('a multi-line call is found at the offending argument', () async {
+      final run = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/lib/box.dart':
+            'final a = EdgeInsets.symmetric(\n'
+            '  horizontal: context.w(8),\n'
+            '  vertical: 8,\n'
+            ');\n',
+      });
+      expectViolation(run, 'R20', 'platform/ui/foo/lib/box.dart:3');
+    });
+
+    test('the same literals under styles/ and utils/ pass', () async {
+      final run = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/lib/src/styles/shadows.dart':
+            'final a = BoxShadow(blurRadius: 4, offset: Offset(0, 2));\n',
+        'platform/ui/foo/lib/src/utils/consts.dart':
+            'final a = EdgeInsets.all(16);\n',
+      });
+      expectClean(run, 'R20');
+    });
+
+    test('a generated file and a test pass; a module widget fails', () async {
+      final run = await check({
+        'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
+        'modules/foo/feature/lib/a.freezed.dart':
+            'final a = EdgeInsets.all(16);\n',
+        'modules/foo/feature/test/a_test.dart':
+            'final a = EdgeInsets.all(16);\n',
+      });
+      expectClean(run, 'R20');
+      final bad = await check({
+        'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
+        'modules/foo/feature/lib/page.dart': 'final a = EdgeInsets.all(16);\n',
+      });
+      expectViolation(bad, 'R20', 'modules/foo/feature/lib/page.dart:1');
     });
   });
 

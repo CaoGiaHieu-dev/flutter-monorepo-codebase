@@ -221,7 +221,7 @@ CustomButton(width: context.w(120), height: context.h(44))
 | Scope | Annotation | Use for |
 |:---|:---|:---|
 | **Screen-scoped** | `@injectable` (factory) | ViewModels / BLoCs tied to one screen |
-| **App-global** | `@lazySingleton` | `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider` |
+| **App-global** | `@lazySingleton` | `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider` |
 
 > [!CAUTION]
 > **Never register a screen-scoped controller as a singleton.** GetIt would hold the instance forever, so state leaks between visits to the screen and the object is never disposed.

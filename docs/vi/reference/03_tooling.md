@@ -53,24 +53,27 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/arch_check/check.dart` | Cưỡng chế các luật phân tầng R1–R15 trên import, pubspec và tên file | `0` sạch (R6 chỉ cảnh báo) · `1` có vi phạm chặn · `64` mọi tham số khác `--help` | 1 |
+| `dart tools/arch_check/check.dart` | Cưỡng chế các luật phân tầng và vệ sinh R1–R17 trên import, pubspec, tên file và mã nguồn | `0` sạch (R6 chỉ cảnh báo) · `1` có vi phạm chặn · `64` mọi tham số khác `--help` | 1 |
 | `dart tools/arch_check/check.dart --help` | Mô tả từng luật | `0` | — |
 
 - Chỉ đọc import và file `pubspec.yaml`, không cần codegen, và chạy xong trong vài trăm ms.
 - Ba cạnh ngược chiều đã duyệt được in ra ở mọi lần chạy. Cạnh thứ tư phải cập nhật cùng lúc allow-list trong `check.dart` và RULE-01.
-- Từng luật, kèm lý do nó tồn tại: [chi tiết](../../../tools/README.vi.md#arch_check). Dòng registry mà mỗi luật cưỡng chế: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78.
+- Từng luật, kèm lý do nó tồn tại: [chi tiết](../../../tools/README.vi.md#arch_check). Dòng registry mà mỗi luật cưỡng chế: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (mọi lời tra cứu của shell đều có trong catalog contract) · R17 RULE-82 (một nhánh theo platform cần một mục allow-list kèm lý do, trong `tools/arch_check/platform_forks.dart`).
 
 ## `composer`
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
 | `dart tools/composer/composer.dart list [--app <id>]` | In phần lắp ráp của từng app | `0` · `1` manifest không hợp lệ · `64` cờ sai | — |
-| `dart tools/composer/composer.dart sync [--app <id>]` | Sinh lại danh sách `workspace:` ở root, path dependency và `injection.dart` của từng app từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
-| `dart tools/composer/composer.dart verify` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict` | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
+| `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | In báo cáo của một app — nó khai gì và shell resolve gì từ nó (đúng nội dung vùng `report` trong README của nó) — hoặc, với `--catalog`, mọi key manifest, catalog contract, các giá trị mặc định suy ra, các key trong pubspec, các check V1–V14 và các mã vấn đề | `0` · `1` app lạ hoặc catalog hỏng · `64` cờ sai | — |
+| `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Tạo `apps/<id>/` từ `tools/composer/app_template/`, suy ra `capabilities:` của nó từ những gì các module đăng ký, chạy `sync` và `verify`; **không bao giờ chạy `flutter create`** | `0` · `1` bị từ chối (id đã có, platform bị module chặn, module hoặc platform lạ) và không ghi gì, hoặc `verify` fail · `64` tham số sai | — |
+| `dart tools/composer/composer.dart sync [--app <id>]` | Sinh lại danh sách `workspace:` ở root, path dependency của từng app, `injection.dart` (toàn bộ), vùng `facts` của `lib/app/app_profile.dart` và vùng `report` trong `README.md` của app từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
+| `dart tools/composer/composer.dart verify` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Đồng thời đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào và smoke test (V12) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
 
 - Chỉ các vùng giữa `composer:managed:<region>` và `composer:end:<region>` là được sinh ra; không bao giờ sửa tay chúng (RULE-16).
 - Một lần `sync` không strict mà bỏ qua module thiếu sẽ in khối `PARTIAL COMPOSITION` kèm dòng `git checkout --` để khôi phục các file.
-- Kiểm tra manifest, cách tìm package và layer `api`: [chi tiết](../../../tools/README.vi.md#composer).
+- App thứ ba là một lệnh, và hai file bạn sửa sau đó là manifest cùng `lib/app/app_profile.dart` của nó: [`../guides/13_app_composition.md` § 8](../guides/13_app_composition.md#8-app-thứ-ba-bằng-một-lệnh).
+- Kiểm tra manifest, các check V1–V14, cách tìm package và layer `api`: [chi tiết](../../../tools/README.vi.md#composer).
 
 ### `bootstrap` — trước khi composer chạy được
 

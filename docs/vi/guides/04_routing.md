@@ -28,6 +28,8 @@ Tất cả contract nằm ở `platform/foundation/contracts/lib/src/routing/`.
 
 Chỉ dùng `INavDestinationModule` cho **đích đến bottom-nav thật sự** cần back stack riêng bền vững. Màn hình chỉ push lên stack thì thuộc về `IFeatureRouteModule` (RULE-24).
 
+Điều **app** — không phải feature — quyết định về router được khai trong `apps/<id>/`: `RouterProfile` trong `lib/app/app_profile.dart` (`entry`: mặc định `firstLaunch`, hoặc `always`, `never`; `fallbackPath`: mặc định là tab đầu tiên) và, trong `lib/app/app_hooks.dart`, `ShellHooks.navigatorObservers` cùng `ShellHooks.redirect` — một guard áp dụng toàn app; guard riêng của module vẫn nằm trong `GoRouteData.redirect` của nó. Deep link theo từng platform: `platforms.<p>.deep_links` trong manifest mặc định bật, và platform nào tắt nó sẽ log một dòng nêu tên key ([`13_app_composition.md`](13_app_composition.md)).
+
 ## 2. Thêm hằng số path
 
 Hằng số path nằm ở thư mục `src/utils/` của feature, không nằm trong `routing/` (RULE-09). `modules/auth/feature/lib/src/utils/auth_path.dart`:
@@ -416,6 +418,7 @@ Checklist review:
 
 - Luật: RULE-04 (không import feature → feature), RULE-12 (tra cứu tuỳ chọn), RULE-20 (không sửa `app_router.dart`), RULE-21 (controller ở route), RULE-22 (navigator trong `<id>_api`), RULE-23 (`BuildContext` từ nơi gọi), RULE-24 (tab so với màn hình push) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/06_app_shell.md` § 5](../architecture/06_app_shell.md#5-lắp-ráp-router) — lắp ráp router, entry và fallback location, suy giảm mềm
+- [`13_app_composition.md`](13_app_composition.md) — `RouterProfile`, các hook điều hướng và công tắc deep link theo platform
 - [`03_state_management.md`](03_state_management.md) — vòng đời controller
 - [`05_di.md`](05_di.md) — contract được đăng ký và gom lại thế nào
 - [`10_cross_feature.md`](10_cross_feature.md) — các mô hình giao tiếp xuyên feature khác

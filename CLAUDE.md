@@ -33,6 +33,9 @@ Read the registry row before touching the area. Enforcement first: a gate will c
 | RULE-34 | Every user-facing string translated via the feature's ARB + `IFeatureLocalization` | review |
 | RULE-35 | ARB keys are `lowerCamelCase` | review |
 | RULE-36 | Dialogs / bottom sheets are their own widget classes, never inline builders | review |
+| RULE-80 | Everything per-app lives in `apps/<id>/` (manifest, `lib/app/app_profile.dart`, `app_hooks.dart`) — never a constant in `platform/` | composer verify, test, review |
+| RULE-81 | Every optional shell contract is `provided` or `absent` + reason in the app's `capabilities:` | composer verify, arch_check R16, test |
+| RULE-82 | A platform difference is read from `PlatformFacts`; no new `Platform.is*` / `kIsWeb` fork | arch_check R17 |
 | RULE-16 | Never hand-edit a `composer:managed` region — edit the manifest, run `composer sync` | composer verify |
 | RULE-75 | Barrels regenerate after codegen; never hand-add an `export` | review |
 | RULE-71 | No `// ignore:` / `// ignore_for_file:` — fix the cause | arch_check R13 |
@@ -42,15 +45,19 @@ Read the registry row before touching the area. Enforcement first: a gate will c
 | RULE-43 | `ErrorHandler.handleError(e)`; data returns `Result.failure`, never throws to UI (RULE-42) | review |
 | RULE-77 | A clean analyze is not a build — finish DI/dependency changes with a debug APK | CI gate build |
 
-All 65 rules, grouped 01–09 layering · 10–19 DI · 20–29 routing · 30–39 UI/l10n/a11y ·
-40–49 data/storage/db/network · 50–59 state · 60–69 testing/logging/errors · 70–79 tooling/docs:
-[registry](docs/en/reference/01_rules.md#rule-registry).
+All 68 rules, grouped 01–09 layering · 10–19 DI · 20–29 routing · 30–39 UI/l10n/a11y ·
+40–49 data/storage/db/network · 50–59 state · 60–69 testing/logging/errors · 70–79 tooling/docs ·
+80–89 apps/composition: [registry](docs/en/reference/01_rules.md#rule-registry).
 
 ## Layout
 
 ```text
-apps/<id>/                 composition roots: app_manifest.yaml, generated lib/di/injection.dart,
-                           one-line main.dart (runShellApp), flavors, lib/firebase/ — mobile, admin
+apps/<id>/                 composition roots — mobile, admin; `composer new` makes a third:
+  app_manifest.yaml        what the app is (flavors, env, platforms, capabilities) + what it composes
+  README.md                reading path + a GENERATED report (`composer describe --app <id>`)
+  lib/app/                 app_profile.dart (generated `facts` + typed tuning), app_hooks.dart (ShellHooks)
+  lib/main.dart            runShellApp(profile:, hooks:, configureDependencies:)
+  lib/di/injection.dart    100 % generated; lib/firebase/ (mobile only); test/ smoke + profile tests
 modules/<id>/
   api/                     <id>_api — contracts other features use (navigator, action handlers)
   domain/                  domain_<id> — pure Dart: entities, use cases, repository interfaces
@@ -87,7 +94,7 @@ cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev   # t
 
 # The gates, in CI order (.github/workflows/pr_quality_check.yml)
 dart tools/composer/composer.dart verify   # Gate 0 — composition matches the manifests
-dart tools/arch_check/check.dart           # Gate 1 — R1–R15; --help describes each
+dart tools/arch_check/check.dart           # Gate 1 — R1–R17; --help describes each
 cd tools && dart test                      # Gate 1 — the gate tools' own tests (~15 s)
 flutter analyze                            # Gate 2 — 0 issues, infos included
 cd <package> && flutter test               # Gate 3 — every package with a test/ (incl. apps/*: DI smoke test)
@@ -102,6 +109,8 @@ dart tools/module_generator/generate.dart 1 <name> "" <SM 1=Provider|2=BLoC|3=no
 dart tools/module_generator/generate.dart 2 <name>          # domain   (3 = data, 4 = core_<name>, 5 = custom)
 dart tools/barrel_generator/generate.dart <package>/lib     # after adding/renaming/deleting a lib/ file
 dart tools/composer/composer.dart sync                      # after editing an app_manifest.yaml
+dart tools/composer/composer.dart describe --app <id>       # what an app declares + what the shell resolves; --catalog = every key
+dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>]   # a whole app; never runs flutter create
 dart tools/sample_cleanup/remove_sample.dart <bundle>       # dry run; --apply removes; --list lists
 ```
 
@@ -116,6 +125,10 @@ interface → use cases → models → data sources → repository impl → `bui
 `generate.dart 1 <name> "" <SM> <route>` if it has UI. The generator adds it to every
 `app_manifest.yaml` (or `--apps <id,id>`) and runs `composer sync`. Guides:
 [`01_new_feature`](docs/en/guides/01_new_feature.md), [`02_new_domain_data`](docs/en/guides/02_new_domain_data.md).
+
+**New app.** `composer new <id> --platforms <a,b> --modules <x,y>` → `flutter pub get` → `build_runner` →
+`cd apps/<id> && flutter test`; then edit only `app_manifest.yaml` and `lib/app/app_profile.dart`.
+Guide: [`13_app_composition`](docs/en/guides/13_app_composition.md).
 
 **Drop a module.** Delete its line from every `apps/<id>/app_manifest.yaml`, then
 `composer sync` → `flutter pub get` → `build_runner`. Or `remove_sample <bundle> --apply`.
@@ -133,10 +146,11 @@ smoke test (`cd apps/mobile && flutter test test/di_smoke_test.dart`), not by re
 | Screen logic with Provider / with BLoC | `implement_provider_ui` / `implement_bloc_ui` | `03_state_management` |
 | New screen, route, nav tab, cross-feature navigation | `implement_navigation_route` | `04_routing` |
 | Register something in DI, fix "not registered" | `implement_dependency_injection` | `05_di` |
+| Configure an app: platform, flavor, pin, language, palette, hook, capability; a third app | `configure_app` | `13_app_composition` |
 | Persist a key-value setting or token | `implement_package_storage` | `06_storage` |
 | Tables, offline lists, migrations | `implement_package_database` | `07_database` |
 | Trigger another feature's UI action | `implement_action_handler` | `10_cross_feature` |
-| Barrels, version sync, unused code, AI review | `run_repo_tooling` | `../reference/03_tooling` |
+| Barrels, version sync, unused code, AI review, `composer describe` / `new` | `run_repo_tooling` | `../reference/03_tooling` |
 | Translated string, new locale, theme | — | `09_localization_theming`, `11_design_system` |
 | Tablet / foldable / split-screen layout | — | `11_design_system` § 7 |
 | Crash reporting, analytics | — | `../architecture/06_app_shell` § 2 |
@@ -155,6 +169,9 @@ session     ISessionState · ISessionStatusStream · ISessionRefreshListenable �
 app         IAppSplashScreen · IAppTreeWrapper · IFeatureLocalization
 observe     IErrorReporter · IAnalytics                      (register one in the app — RULE-67)
 ```
+
+What an app does with each row is declared in its manifest `capabilities:` (RULE-81); the table of rows is
+`kShellContracts` — `composer describe --catalog` prints it.
 
 A module's contracts *for other features* (its navigator, action handlers) live in its own
 `modules/<id>/api` package (`auth_api`, `home_api`) — RULE-04, RULE-22, RULE-25.
@@ -184,7 +201,7 @@ A module's contracts *for other features* (its navigator, action handlers) live 
 - **Commits:** Conventional Commits — `<type>(<scope>): <summary>`, lowercase, no trailing period;
   body says why. User-visible changes get a line under `Unreleased` in `CHANGELOG.md`.
 - **Generated regions are off-limits:** `composer:managed` blocks (root `workspace:`, app path deps,
-  `injection.dart`), `*.g.dart`, `*.freezed.dart`, `*.module.dart`, `*.config.dart`, barrel exports.
+  `injection.dart`, the `facts` region of `lib/app/app_profile.dart`, the README `report` region), `*.g.dart`, `*.freezed.dart`, `*.module.dart`, `*.config.dart`, barrel exports.
 - **Versions** only in `pubspec_dependencies.yaml`, then `dart tools/dependency_sync.dart`.
 - **Tools** in `tools/` print with `stdout.writeln` / `stderr.writeln` (RULE-65) and shell out
   through `tools/shared/toolchain.dart` (RULE-73).

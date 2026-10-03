@@ -109,7 +109,7 @@ Tạo `ja.arb` trong `platform/ui/design_system/assets/language/` với `"@@loca
 }
 ```
 
-`AppLocalizations.supportedLocales` của `core_base_ui` chính là những gì app cung cấp: `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider` và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`) đều đọc nó. `gen-l10n` dựng nó từ các file ARB đang có, nên chính file mới là thứ thêm locale vào.
+Thứ app cung cấp là `LanguageSet` của nó: `LocaleProfile.supported` (`locale:` trong `lib/app/app_profile.dart` của app; null nghĩa là mọi ngôn ngữ `core_base_ui` chuyển kèm) giao với `AppLocalizations.supportedLocales`, thứ `gen-l10n` dựng từ các file ARB đang có. `MaterialApp.supportedLocales` (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider`, header `language` của mọi request và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`, theo thứ tự của profile) đều đọc nó. Nên file ARB mới thêm locale cho mọi app không nêu danh sách `supported`; app nào liệt kê ngôn ngữ của mình thì giữ danh sách đó. `LocaleProfile(supported: ['vi'], fallback: 'vi', initial: 'vi')` tạo một app chỉ có tiếng Việt (`initial` là ngôn ngữ lần chạy đầu mở ra; lựa chọn đã lưu thắng). Một profile không cung cấp ngôn ngữ nào đã có, hoặc có `fallback` mà nó không cung cấp, sẽ ném lỗi lúc boot nêu tên trường. Wrapper gắn delegate localization riêng của `material_ui`, nên một locale chỉ cần ARB của nó và không cần gì thêm cho chuỗi Material.
 
 ### Đặt tên ngôn ngữ trong bộ chọn
 

@@ -457,7 +457,7 @@ Dispatch events with `context.read<HomeProfileBloc>().add(const HomeProfileEvent
 | Controller kind | Annotation | Why |
 |---|---|---|
 | Screen-scoped VM / BLoC | `@injectable` (factory) | A fresh instance per screen; disposed when the route pops |
-| App-wide controller | `@lazySingleton` | Lives for the process (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider`) |
+| App-wide controller | `@lazySingleton` | Lives for the process (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`) |
 
 A screen-scoped controller is never a singleton (RULE-10). GetIt would hold it forever: popping the screen leaks it, and the next visit shows stale state.
 

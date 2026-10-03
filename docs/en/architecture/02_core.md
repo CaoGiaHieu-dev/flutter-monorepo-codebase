@@ -74,7 +74,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 
 | Area | Path | Contents |
 |:--|:--|:--|
-| Config | `src/config/` | `AppConfig` (flavor, design size, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation — portrait lock on phone-sized displays only, system UI) |
+| Config | `src/config/` | `AppConfig` (flavor, base URL, default locale), `AppInitializer` (HttpOverrides, logging, orientation — portrait lock on phone-sized displays only, system UI) |
 | Mixins | `src/mixins/` | `LifecycleMixin`, `NetworkMixin`, `LoadMoreControllerBinding` |
 | Routing helpers | `src/routing/` | `GoRouteDataCustom`, `RouteAwareWidget` |
 | Utils | `src/utils/` | `AppUtils`, `Debounce`, `formatters/`, `helpers/` (`AppInfoHelper`), `dialog/` |
@@ -331,30 +331,35 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 `NetworkConfig` is implemented **in the app shell's adapters package** (`platform_shell_adapters`), not here — that is what keeps `core_network` free of any storage dependency. Both refresh callbacks default to `null`, so a client with no refresh endpoint simply surfaces the `401` unchanged.
 
 > [!CAUTION]
-> **SSL pinning is only as good as its hash list.** `sslPinningHashes` currently returns `const []`, which disables pinning. `AppInitializer` logs an `ERROR` whenever the list is empty or the config is unregistered on any build that does not bypass validation — that is, everything but a debug build that explicitly declared `--flavor dev`, a missing or unknown flavor included (treated as `prod` for TLS), so the gap is visible rather than silent — but it is still a gap until you populate it. See [the networking guide](../guides/08_networking.md).
+> **SSL pinning is only as good as the decision an app makes.** `NetworkConfigImpl.sslPinningHashes` returns the pins the app's manifest declares for the flavor (`flavors.<f>.ssl_pinning`), and the template apps declare `disabled` with a stated reason for staging and prod — so pinning is off there, and `AppInitializer` logs the reason as a `WARNING` on every Android or iOS start that does not bypass validation (everything but a debug build that explicitly declared `--flavor dev`, a missing or unknown flavor included, which is treated as `prod` for TLS). The gap is visible rather than silent, and it stays one until an app declares pins. See [the networking guide](../guides/08_networking.md#10-turn-on-ssl-pinning).
 
 How to declare a service, opt a request out, add a second client or turn pinning on: [`../guides/08_networking.md`](../guides/08_networking.md). What happens inside the client follows.
 
 ### `ApiClient` defaults
 
-`core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (below), which the app shell implements.
+`core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (below), which the app shell implements, and what an app tunes — timeouts, extra headers, redirects — through its `NetworkProfile`, registered before the graph is built, so the default `Dio` the `core` group creates already carries it.
 
 ```dart
 // platform/infra/network/lib/src/api_client.dart
 @lazySingleton
 class ApiClient {
   final NetworkConfig _config;
+  final NetworkProfile _profile;
 
-  ApiClient(this._config);
+  // The profile is optional: a client built by hand takes the template defaults.
+  ApiClient(this._config, [this._profile = const NetworkProfile(), …]);
 
   /// Default base options for Dio.
   BaseOptions get _defaultOptions => BaseOptions(
     baseUrl: EnvConstants.BASE_URL,
-    connectTimeout: NetworkConstants.CONNECT_TIMEOUT,
-    receiveTimeout: NetworkConstants.RECEIVE_TIMEOUT,
-    sendTimeout: NetworkConstants.SEND_TIMEOUT,
-    followRedirects: false,
-    headers: {HttpHeaders.contentTypeHeader: ContentType.json.value},
+    connectTimeout: _profile.connectTimeout, // 20 s unless the app sets it
+    receiveTimeout: _profile.receiveTimeout,
+    sendTimeout: _profile.sendTimeout,
+    followRedirects: _profile.followRedirects,
+    headers: {
+      ..._profile.headers,
+      HttpHeaders.contentTypeHeader: ContentType.json.value,
+    },
   );
 ```
 
@@ -638,25 +643,21 @@ err.requestOptions.extra[NetworkConstants.EXTRA_TOKEN_REFRESH_ATTEMPTED] = true;
 
 ### When pinning is installed, and when it is skipped
 
-When the hash list is empty, the initializer refuses to fail silently:
+When pinning is installed, the app's manifest has decided it, per flavor, and the initializer applies the decision — it never fails silently:
 
 ```dart
 // platform/foundation/common/lib/src/config/app_initializer.dart
-if (hashes != null && hashes.isNotEmpty) {
-  HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
-} else {
-  // Never fail silently here: without pinning the app still talks to the
-  // server over plain TLS, so a proxy with a trusted root can read every
-  // request. Surfacing it keeps a misconfiguration from shipping unnoticed.
-  DynamicLogger.log(
-    config == null
-        ? 'SSL pinning skipped: no SslPinningConfig registered in GetIt. ...'
-        : 'SSL pinning skipped: sslPinningHashes is empty. ...',
-    tag: 'Security',
-    level: LogLevel.ERROR,
-  );
+switch (profile.facts.sslPinning.decisionFor(flavor)) {
+  case PinnedSsl(:final hashes):
+    HttpOverrides.global = _MyHttpSecurityPinningHttpOverrides(hashes);
+  case DisabledSsl(:final reason):
+    // WARNING: "SSL pinning is disabled for flavor <f>: <reason>. Traffic is NOT pinned."
+  case null:
+    // ERROR naming flavors.<f>.ssl_pinning — unreachable once `validate` (P04) passed
 }
 ```
+
+Where pinning can apply at all is a fact of the platform (`AppPlatform.canPinTls`: Android and iOS). On the **web** the browser validates certificates and Dio uses its browser adapter, so nothing is installed and one `INFO` line says so; on **desktop** the pinning plugin has no implementation, so one `INFO` line says "not applicable" — it used to log an `ERROR` on every start, and installing the pinning client there would have routed every HTTPS call through a plugin with no desktop side. An `AppInitializer` call without an app profile (a hand-built host, a test) keeps the older behaviour: pin `SslPinningConfig.sslPinningHashes` when there are any, log an `ERROR` when there are none or the config is unregistered.
 
 `_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls right after `configureDependencies()` and **before** `MainScope` builds the splash. Timing is the whole point: the splash is already wrapped in every feature's `IAppTreeWrapper`, so a controller created there — auth restoring its session with a token refresh — can make the first request at once, and Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`. An override installed later, in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
 
@@ -1117,7 +1118,7 @@ What makes the shared boot path web-safe:
 Known gaps, none fixed here:
 
 - `apps/mobile` needs a web database before it can even compile: drift's `WasmDatabase` (the `sqlite3.wasm` + drift worker assets), opened through a conditional import in `core_database`'s connection factory.
-- `MainScope` calls `FlutterNativeSplash.remove()` on every platform; on the web it throws `PlatformException(… removeSplashFromWeb …)` unless `flutter_native_splash` generated web assets for that app. The error is uncaught but not fatal — the app still boots — and it reaches the crash reporter on every web start.
+- `MainScope` skips `FlutterNativeSplash.remove()` on the web, because no app here generates web splash assets and the call would throw `PlatformException(… removeSplashFromWeb …)`.
 - `AppInfoHelper.getDeviceInfo` / `getDeviceString` / `platformName` branch on `Platform.isAndroid`, which **throws** on the web. Nothing calls them during boot; a screen that does needs a `kIsWeb` guard first.
 - `core_notifications` (`apps/mobile` only) initialises Firebase with the app's per-flavor options, which describe no web app.
 

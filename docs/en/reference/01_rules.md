@@ -49,13 +49,13 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 
 | ID | Rule | Why | Enforced by | Verify | Details |
 |---|---|---|---|---|---|
-| RULE-10 | Screen controllers (Provider, Bloc, Cubit) are `@injectable` factories; only app-wide controllers (`ThemeProvider`, `LanguageProvider`, `AppProvider`, `DeeplinkProvider`, `AuthProvider`) are `@lazySingleton` | GetIt never frees a singleton — the next visit reuses stale state | review | review | [§10](#10-controller-lifetime) |
+| RULE-10 | Screen controllers (Provider, Bloc, Cubit) are `@injectable` factories; only app-wide controllers (`ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`, `AuthProvider`) are `@lazySingleton` | GetIt never frees a singleton — the next visit reuses stale state | review | review | [§10](#10-controller-lifetime) |
 | RULE-11 | Constructor injection only — no `getIt<T>()` inside a ViewModel, Bloc, Repository or UseCase | Dependencies stay visible and replaceable by a hand-written fake | review | review | [guides/05_di §7](../guides/05_di.md) |
 | RULE-12 | A contract implemented only under `modules/` is resolved with `getItOrNull` / `getAllOrEmpty` + a fallback outside its own module — never `getIt` / `getAll` | `getAll<T>()` throws when nothing is registered; removing the module crashes boot | arch_check R8 | `dart tools/arch_check/check.dart` | [§6](#6-feature-boundaries-and-removability) |
 | RULE-13 | An eager `@Singleton` never depends on a type a later DI group registers — use `@LazySingleton`; `shell` runs before `ui`, `notifications` after the app's own registrations | GetIt throws `"<Type> is not registered"` at boot, and `flutter analyze` cannot see it | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§5](#5-di-registration-order) |
 | RULE-14 | A second interface on one implementation is bound through a `@module` (`SslPinningConfig ← NetworkConfig`) | GetIt resolves the exact type, never a supertype — pinning silently no-ops | test (`apps/*/test/di_smoke_test.dart`), review | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [§15](#15-cross-feature-communication) |
 | RULE-15 | Each package declares `@InjectableInit.microPackage()` at `lib/di/module.dart` with no arguments (sole exception: `core_notifications`' `ignoreUnregisteredTypesInPackages`); no monolithic domain/data module | A per-package module is what composer composes and removal deletes | review | review | [guides/05_di §8](../guides/05_di.md) |
-| RULE-16 | Composition comes from `apps/<id>/app_manifest.yaml` through `composer sync`: never hand-edit a `composer:managed` region (root `workspace:`, app path dependencies, `injection.dart`); every member declares `resolution: workspace` and the root is the only workspace node | Generated composition cannot drift from the manifest | composer verify (CI gate 0) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-and-barrels) |
+| RULE-16 | Composition comes from `apps/<id>/app_manifest.yaml` through `composer sync`: never hand-edit a `composer:managed` region (root `workspace:`, app path dependencies, `injection.dart` — all of it, the `facts` region of `lib/app/app_profile.dart`, the `report` region of the app `README.md`); every member declares `resolution: workspace` and the root is the only workspace node | Generated composition and facts cannot drift from the manifest | composer verify (CI gate 0) | `dart tools/composer/composer.dart verify` | [§20](#20-workspace-codegen-and-barrels) |
 
 ### 20–29 · Routing, navigation and feature boundaries
 
@@ -80,7 +80,7 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 | RULE-35 | ARB keys are `lowerCamelCase` | `gen-l10n` copies the key into a getter, and generated code is not analysed | review | review | [§13](#13-localization-and-assets) |
 | RULE-36 | Every dialog and bottom sheet is its own widget class (`*_dialog.dart` → `…Dialog`, `*_bottom_sheet.dart` → `…BottomSheet`), never an inline tree in a `showDialog` / `showModalBottomSheet` builder | Reusable, testable, reviewable | review | review | [§14](#14-dialogs-and-bottom-sheets) |
 | RULE-37 | Feature-specific assets live in the feature's `assets/`; `core_base_ui` holds only global assets and strings, and no widget | A global asset dump couples every feature | review | `dart tools/unused_checker/check_unused_assets.dart` | [§13](#13-localization-and-assets) |
-| RULE-38 | Text follows the OS font size: never `withNoTextScaling` or `TooltipVisibility(visible: false)` (the shell caps it at 2.0), never a fixed-height text container; an icon-only button carries a `tooltip`, a meaningful image a `semanticLabel` | Low-vision and screen-reader users | test (`platform/shell/app_shell/test/accessibility_test.dart`), review | `cd platform/shell/app_shell && flutter test test/accessibility_test.dart` | [§19](#19-accessibility) |
+| RULE-38 | Text follows the OS font size: never `withNoTextScaling` or `TooltipVisibility(visible: false)` (the shell caps it at `DisplayProfile.textScaleMax` — 2.0 unless the app sets it, and never below 2.0), never a fixed-height text container; an icon-only button carries a `tooltip`, a meaningful image a `semanticLabel` | Low-vision and screen-reader users | test (`platform/shell/app_shell/test/accessibility_test.dart`), review | `cd platform/shell/app_shell && flutter test test/accessibility_test.dart` | [§19](#19-accessibility) |
 | RULE-39 | Tap targets are at least 48 × 48 dp (`kMinInteractiveDimension`); a start/end side uses `edgeInsetsDirectional`, not physical `left` / `right` | Motor accessibility; right-to-left locales | review | review | [§19](#19-accessibility) |
 
 ### 40–49 · Domain, data, storage, database and network
@@ -95,7 +95,7 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 | RULE-45 | A storage owner is a singleton (`@singleton` / `@lazySingleton` / `@Singleton(as:)`) with `@PostConstruct(preResolve: true)` — never `@injectable` | A factory hands out empty caches, and getters return `null` silently | review | review | [§4](#4-package-owned-storage) |
 | RULE-46 | A package that needs SQL declares its own Drift database (tables, DAO as `part of` it) on top of `core_database`; there is no shared `AppDatabase` | Drift binds tables at compile time — a shared database owns every table | review | review | [guides/07_database](../guides/07_database.md) |
 | RULE-47 | A migration is registered typed to its database — `@LazySingleton(as: IDatabaseMigration<YourDatabase>)` — and the database's `@preResolve` open carries `@Order(1)` | An untyped registration is never collected; the step silently never runs | review | review | [guides/07_database §4](../guides/07_database.md) |
-| RULE-48 | SSL pinning needs `SslPinningConfig` bound in its own right (RULE-14) **and** non-empty `sslPinningHashes` (leaf + backup); the certificate bypass exists only in a debug `--flavor dev` build | Either gap silently disables pinning | test (`apps/*/test/di_smoke_test.dart` — binding), review (hashes) | `cd apps/mobile && flutter test test/di_smoke_test.dart` | [guides/08_networking §5](../guides/08_networking.md) |
+| RULE-48 | SSL pinning is an explicit per-flavor decision in `app_manifest.yaml` (`flavors.<f>.ssl_pinning`: at least two pins — leaf + backup — or `disabled` with a reason) **and** `SslPinningConfig` is bound in its own right (RULE-14); the certificate bypass exists only in a debug `--flavor dev` build | A missing decision or a missing binding silently disables pinning | composer verify (V9), analyzer (the const asserts of `SslPinning`), test (`apps/*/test/di_smoke_test.dart` — binding) | `dart tools/composer/composer.dart verify` · `cd apps/mobile && flutter test test/di_smoke_test.dart` | [guides/08_networking §5](../guides/08_networking.md) |
 | RULE-49 | Entities are Freezed with `const Class._()`; a use case is `@injectable`, does one thing and returns `Result<T>` | One immutable, uniform domain surface | review | review | [§7](#7-domain-is-pure-dart) |
 
 ### 50–59 · State management
@@ -115,11 +115,11 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 | RULE-60 | Tests live in the package's own `test/`; Flutter packages use `flutter_test`, pure-Dart ones (`domain_core`, `tools`) `package:test` | CI Gate 3 discovers every `test/` directory by itself | CI gate 3 | `cd <package> && flutter test` | [§17](#17-testing) |
 | RULE-61 | Fakes are hand-written — no mockito, no mocktail | No test codegen; a fake documents the contract it fakes | review | `grep -rnE "mockito\|mocktail" --include=pubspec.yaml .` (empty) | [§17](#17-testing) |
 | RULE-62 | A widget test that scales wraps the widget under test in `ResponsiveInit` | `ResponsiveScope.of` asserts instead of silently falling back to unscaled values | test (the widget test fails on the assert) | `cd <package> && flutter test` | [§17](#17-testing) |
-| RULE-63 | Each app keeps `test/di_smoke_test.dart`, which boots its real DI graph for every flavor; a plugin touched during DI (`@preResolve`, `@PostConstruct(preResolve: true)`) gets its test double there | It catches DI ordering and missing registrations before a device does | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test` | [§17](#17-testing) |
+| RULE-63 | Each app keeps `test/di_smoke_test.dart`, which boots its real DI graph for every flavor the manifest declares and holds it to the app's declaration (`checkAppContract`; `validate` for every declared platform and flavor); a plugin touched during DI (`@preResolve`, `@PostConstruct(preResolve: true)`) gets its test double there | It catches DI ordering and missing registrations before a device does | test (`apps/*/test/di_smoke_test.dart`), CI gate 3 | `cd apps/mobile && flutter test` | [§17](#17-testing) |
 | RULE-64 | A change to a gate tool (`arch_check`, `composer`, `docs_check`, `dependency_sync`, the barrel generator, …) adds the case that would have caught the bug to `tools/test/` | An untested gate rots silently | CI gate 1 (`tools/test`) | `cd tools && dart test` | [§17](#17-testing) |
 | RULE-65 | Runtime diagnostics go through `dynamic_logger` (`DynamicLogger.log`), never `print`; CLI tools write with `stdout.writeln` / `stderr.writeln` | `print` reaches release logs and cannot be filtered | analyzer (avoid_print) | `flutter analyze` | [§18](#18-logging-error-reporting-and-secrets) |
 | RULE-66 | Secrets are never committed (prod env, keystores, API keys stay gitignored) and never logged (`Authorization` / `Cookie` headers and credential fields are redacted; network logging is `kDebugMode`-gated) | Git history and device logs leak | review | review | [§18](#18-logging-error-reporting-and-secrets) |
-| RULE-67 | Crash and error reporting plugs in by registering an `IErrorReporter` (and optionally `IAnalytics`) in the app — never by setting `FlutterError.onError` / `PlatformDispatcher.instance.onError` yourself | The shell's hooks chain every handler; overwriting one drops the rest | review | review | [§18](#18-logging-error-reporting-and-secrets) |
+| RULE-67 | Crash and error reporting plugs in by registering an `IErrorReporter` (and optionally `IAnalytics`) in the app — never by setting `FlutterError.onError` / `PlatformDispatcher.instance.onError` yourself; an app that registers one declares it `provided` under `capabilities:` (RULE-81) | The shell's hooks chain every handler; overwriting one drops the rest | review | review | [§18](#18-logging-error-reporting-and-secrets) |
 
 ### 70–79 · Tooling, repository hygiene and documentation
 
@@ -135,6 +135,14 @@ For step-by-step instructions see [`../guides/`](../guides/); for the reasoning 
 | RULE-77 | A clean analyze is not a build: a DI, dependency or type-move change ends with a debug APK build, and a type used by generated code is imported from its real home, never through a `show`-limited re-export | Analysis excludes generated code | CI gate build | `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` | [§20](#20-workspace-codegen-and-barrels) |
 | RULE-78 | Files, classes and packages follow the naming table (`_page`, `_provider`, `_bloc`, `_usecase`, `_entity`, `i_<name>_repository`, `_repository_impl`, layer prefixes `core_` / `domain_` / `data_` / `feature_`); the `I` prefix marks an interface, never a concrete class | A name says what a file is | arch_check R15 (`I` prefix), review | `dart tools/arch_check/check.dart` | [02_naming](02_naming.md) |
 | RULE-79 | Docs change in the same PR as the code, in `docs/en` **and** `docs/vi` with the same shape; every repo path they name exists; a rule is stated once — here — and cited elsewhere as `RULE-NN` | Drifting docs teach the wrong pattern | docs_check (CI gate 5), review | `dart tools/docs_check/check.dart` | [CONTRIBUTING § 5](../../../CONTRIBUTING.md#5-documentation-contract) |
+
+### 80–89 · Apps and composition
+
+| ID | Rule | Why | Enforced by | Verify | Details |
+|---|---|---|---|---|---|
+| RULE-80 | Everything per-app is declared in `apps/<id>/`: platforms, flavors, env and capabilities in `app_manifest.yaml`; shell behaviour in `lib/app/app_profile.dart`; code in `lib/app/app_hooks.dart`. A platform package never hardcodes a value one app may want different (design size, text-scale cap, locales, pins, timeouts, orientation, fallback location, splash / push / deep-link switches) | A second app must differ without editing `platform/` | composer verify (the declaration and the generated facts), test (`apps/*/test/app_profile_test.dart`), review | `dart tools/composer/composer.dart verify` | [§21](#21-apps-and-composition) |
+| RULE-81 | Every optional contract in the shell catalog (`kShellContracts`) has a declared state in each app's `capabilities:` — `provided`, or `absent` with a reason — and the declaration is held to the code at Gate 0, in the smoke test and at boot | Absence must be a decision, not an accident | composer verify (V2–V4, V14), arch_check R16, test (`apps/*/test/di_smoke_test.dart`) | `dart tools/composer/composer.dart verify` · `dart tools/arch_check/check.dart` | [§21](#21-apps-and-composition) |
+| RULE-82 | Platform differences are an app decision read from `PlatformFacts`; `Platform.is*`, `kIsWeb`, `defaultTargetPlatform` and `TargetPlatform.*` appear only in `resolveAppPlatform()` and an allow-listed handful of API-availability sites | One place to get the web guard right; an app can state what a platform enables | arch_check R17 | `dart tools/arch_check/check.dart` | [§21](#21-apps-and-composition) |
 
 ### Adding or changing a rule
 
@@ -694,8 +702,8 @@ Three tests are load-bearing for rules elsewhere in this file:
 
 | Test | Holds |
 |---|---|
-| `apps/mobile/test/di_smoke_test.dart`, `apps/admin/test/di_smoke_test.dart` | Boots the app's real generated DI graph for `dev`, `staging` and `prod` with every plugin replaced by a test double, builds every lazy singleton, and resolves every shell contract and `AppRouter.router` — the runtime proof for RULE-13, RULE-14, RULE-24 (unique `order`) and RULE-48 (the binding half) |
-| `platform/shell/app_shell/test/accessibility_test.dart` | Icon-only buttons keep their tooltip as a semantic label; the OS text scale passes through up to `MAX_TEXT_SCALE_FACTOR` (RULE-38) |
+| `apps/<id>/test/di_smoke_test.dart` (every app) | Boots the app's real generated DI graph for `dev`, `staging` and `prod` with every plugin replaced by a test double, builds every lazy singleton, and holds the graph to the app's `capabilities:` (`checkAppContract`: every required contract, every declared `provided` / `absent`, a screen, unique `order`, `AppRouter.router` assembling) — the runtime proof for RULE-13, RULE-14, RULE-24 (unique `order`), RULE-48 (the binding half) and RULE-81 |
+| `platform/shell/app_shell/test/accessibility_test.dart` | Icon-only buttons keep their tooltip as a semantic label; the OS text scale passes through up to `DisplayProfile.textScaleMax` (RULE-38) |
 | `tools/test/` | Every gate tool, each case in a throwaway workspace in a temp dir (RULE-64); CI runs it right after Gate 1, and Gate 3 skips `tools/` |
 
 A plugin that the DI graph touches while it initialises — a `@preResolve` factory, a `@PostConstruct(preResolve: true)` — needs its test double added to the smoke tests, or they fail with the plugin's `MissingPluginException`.
@@ -733,7 +741,7 @@ Registry: RULE-38 · RULE-39 · RULE-30 (directional insets).
 
 **Rule.**
 
-- **Text follows the OS font size.** The shell wraps every `builder` in `MediaQuery.withClampedTextScaling(maxScaleFactor: AppShellUiConstants.MAX_TEXT_SCALE_FACTOR)` (2.0). Never `MediaQuery.withNoTextScaling`, never `TooltipVisibility(visible: false)` — it strips icon-button labels from semantics; the theme's `tooltipTheme` (`triggerMode: manual`) already suppresses the long-press popup.
+- **Text follows the OS font size.** The shell wraps every `builder` in `MediaQuery.withClampedTextScaling(maxScaleFactor: display.textScaleMax)` — `DisplayProfile.textScaleMax` is 2.0 unless the app sets it, and a `const` assert refuses anything below 2.0. Never `MediaQuery.withNoTextScaling`, never `TooltipVisibility(visible: false)` — it strips icon-button labels from semantics; the theme's `tooltipTheme` (`triggerMode: manual`) already suppresses the long-press popup.
 - **Text containers grow with their text.** Do not give a container of text a fixed `context.h(...)` height; let it size to its content, or scale it down with `TextScaleDown`.
 - **Everything interactive has a name.** An icon-only `IconButton` carries a `tooltip` (it becomes the semantic label); a meaningful image passes `semanticLabel` (`CustomCacheNetworkImage` does); a decorative one leaves it `null`.
 - **Tap targets are at least 48 × 48 dp** (`kMinInteractiveDimension`) — shrink the visual, not the hit area.
@@ -754,7 +762,7 @@ cd modules/auth/feature && flutter test test/login_page_text_scale_test.dart
 
 Registry: RULE-16 · RULE-75 · RULE-76 · RULE-77.
 
-**Composition is generated.** Each `apps/<id>/app_manifest.yaml` is the only hand-edited description of an app. `dart tools/composer/composer.dart sync` writes three things from it, each between `composer:managed` markers: the root `workspace:` list, the app's path dependencies in its `pubspec.yaml`, and its `lib/di/injection.dart`. `composer verify` is Gate 0 and fails on any drift. The module generator adds the new module to every manifest (or only the apps named with `--apps`) and runs `sync` itself. The workspace is flat: `resolution: workspace` in every member, no intermediate workspace node.
+**Composition is generated.** Each `apps/<id>/app_manifest.yaml` is the only hand-edited description of an app. `dart tools/composer/composer.dart sync` writes five things from it, each between `composer:managed` markers: the root `workspace:` list, the app's path dependencies in its `pubspec.yaml`, its `lib/di/injection.dart` (the imports, the module lists and the `configureDependencies` entry point — the file holds no hand-written code), the `facts` region of `lib/app/app_profile.dart` (the declaration as const Dart) and the `report` region of the app's `README.md`. `composer verify` is Gate 0 and fails on any drift, and holds the declaration to the source ([§21](#21-apps-and-composition)). The module generator adds the new module to every manifest (or only the apps named with `--apps`) and runs `sync` itself; `composer new` creates a whole app. The workspace is flat: `resolution: workspace` in every member, no intermediate workspace node.
 
 **Barrels.** `dart tools/barrel_generator/generate.dart <package>/lib` rewrites a package's barrel from what is on disk. It **deletes** every line starting with `export '` and re-emits its own sorted list, so a hand-added export silently vanishes — put a deliberate re-export in a normal source file (`platform/foundation/kernel/lib/src/error/failures.dart` is exactly that). It also exports the generated files present on disk (`module.module.dart`, `lib/src/gen/**`; `core_base_ui`'s `src.dart` exports `gen/gen.dart`), so the last run must come **after** gen-l10n and build_runner — the order `tools/workspace_setup/configure.dart` uses.
 
@@ -775,6 +783,42 @@ The APK build needs the gitignored `firebase_options_<flavor>.dart` files and `g
 
 ---
 
+## 21. Apps and composition
+
+Registry: RULE-80 · RULE-81 · RULE-82 · RULE-16.
+
+**Rule.** An app says what it is in four places, and nowhere else:
+
+| Channel | Holds | Lives in | Held by |
+|---|---|---|---|
+| Manifest | Facts a tool must see before code compiles: identity, flavors (and the SSL pin decision each carries), env keys, platforms and what each enables, capabilities, composition | `apps/<id>/app_manifest.yaml`, generated into the `facts` region of `lib/app/app_profile.dart` | `composer verify` (Gate 0), `checkAppContract`, boot |
+| Profile | How the shell behaves: display, router, locale, theme, network limits — typed, `const`, template defaults | `lib/app/app_profile.dart` below the generated region | the analyzer (const asserts), `apps/<id>/test/app_profile_test.dart` |
+| Hooks | Code at fixed points of the boot (`ShellHooks`) | `lib/app/app_hooks.dart` | the analyzer |
+| Contracts | `core_di` interfaces the app or a module registers, resolved through the shell's catalog | modules, `lib/app/*.dart` | `composer verify` (V3), `checkAppContract`, boot |
+
+The split in one sentence: the manifest says what the app **is** and where it runs, the profile says how the shell **behaves**, hooks are **code**. A platform package keeps the mechanism and a documented default equal to the template's behaviour (RULE-80); it never owns a value one app may want different.
+
+The shell resolves every optional contract through one catalog, `kShellContracts` in `platform_app_shell` (8 required rows the shell's own packages register, 14 optional rows an app or a module contributes). An app declares each optional row `provided` or `{ state: absent, reason }` (RULE-81): `composer verify` refuses an undeclared row (V2), a declaration the code contradicts in either direction (V3), a bundle whose members disagree (V4) and an empty or `TODO` reason (V14); `checkAppContract` holds the same declaration to the graph the app really builds, in each app's smoke test and at boot; `arch_check` R16 keeps the catalog itself complete, so adding a shell lookup without cataloguing it fails Gate 1.
+
+**Why.** Before this, an app declared composition and nothing else. Every per-app decision was a constant in a shared package, a `Platform.is*` fork in one of five files, or a native file — and nothing said what an app had to register, what each platform enabled or what it was allowed to change. A second app could not differ without editing `platform/`.
+
+**Platform differences** are an app decision (RULE-82): `platforms.<p>` in the manifest declares where the app runs and what each platform enables (splash, push, deep links, orientation, window), the shell reads exactly one `PlatformFacts` per run, and the one policy fork on `kIsWeb` / `defaultTargetPlatform` is `resolveAppPlatform()`. A new fork is justified in `kPlatformForkAllowList` (`tools/arch_check/platform_forks.dart`) with a reason, or R17 fails.
+
+**What stays locked** — changing it means editing the shared package, for every app: breakpoints, component themes, page transitions, the default `Dio` interceptor chain and retry policy, the 404 page, the shadow and scrim colours, push channel and icon, deep-link allow-lists, logger limits, the system-UI overlay, secure-storage options. Replacing a shell-owned type by registration order is unsupported: GetIt keeps the first registration of a type.
+
+**Verify**
+
+```bash
+dart tools/composer/composer.dart verify               # Gate 0 — the declaration, the generated regions, the source
+dart tools/composer/composer.dart describe --app <id>  # the report: what the app declares and what the shell resolves
+dart tools/arch_check/check.dart                       # R16 (catalog complete), R17 (platform forks)
+cd apps/<id> && flutter test test/di_smoke_test.dart   # checkAppContract for every flavor
+```
+
+How to read an app, add a platform, a capability, a pin, a locale or a hook, and the whole Gate 0 check list: [`../guides/13_app_composition.md`](../guides/13_app_composition.md).
+
+---
+
 ## Rule → command cheat sheet
 
 | Check | Command |
@@ -792,8 +836,10 @@ The APK build needs the gitignored `firebase_options_<flavor>.dart` files and `g
 | Platform group direction | `dart tools/arch_check/check.dart` (R11) |
 | Module API packages depend on the foundation only; features import other modules' APIs, never their features | `dart tools/arch_check/check.dart` (R3) |
 | No `.ps1`, no lint suppression, no `datasources/`, no concrete `I*` class | `dart tools/arch_check/check.dart` (R12–R15) |
+| Every shell lookup is catalogued; platform forks are allow-listed with a reason | `dart tools/arch_check/check.dart` (R16, R17) |
 | Domain purity | `grep -rn "package:flutter" modules/*/domain/lib` |
 | Composition matches the manifests | `dart tools/composer/composer.dart verify` |
+| What an app declares and what the shell resolves from it | `dart tools/composer/composer.dart describe --app <id>` |
 | Docs paths and en ↔ vi parity | `dart tools/docs_check/check.dart` |
 | Generated code compiles | `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` |
 

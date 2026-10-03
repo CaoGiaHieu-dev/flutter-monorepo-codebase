@@ -67,6 +67,7 @@ Thực hành, từng bước, có code chạy được. Đây là phần "how to
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A cần thứ gì đó từ feature B — làm sao, mà không import nó? |
 | [`11_design_system.md`](guides/11_design_system.md) | Mọi màu, font, bước spacing và bo góc định nghĩa ở đâu — sửa file nào để đổi nhận diện cho app, và giao diện scale cũng như thích ứng ra sao trên tablet, máy gập và chia đôi màn hình? |
 | [`12_module_isolation.md`](guides/12_module_isolation.md) | Làm sao để một team chỉ checkout module của mình, build được cả app từ đó, và không bao giờ thấy source của team khác? |
+| [`13_app_composition.md`](guides/13_app_composition.md) | Một app ghép, đăng ký và bật gì theo từng platform, sửa file nào để đổi điều đó, và tạo app thứ ba bằng một lệnh thế nào? |
 
 ---
 
@@ -104,6 +105,7 @@ Build, ký và phát hành.
 | Lưu một token hoặc một cờ | [`guides/06_storage.md`](guides/06_storage.md) | [`guides/05_di.md`](guides/05_di.md) |
 | Thêm một chuỗi dịch | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) | — |
 | Thêm một ngôn ngữ | [`guides/09_localization_theming.md`](guides/09_localization_theming.md) § 2 | — |
+| Cấu hình một app — platform, flavor, pin, ngôn ngữ, hook — hoặc tạo app thứ ba | [`guides/13_app_composition.md`](guides/13_app_composition.md) | [`architecture/06_app_shell.md`](architecture/06_app_shell.md) |
 | Đổi theme, màu hoặc spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
 | Dàn layout một màn hình cho tablet, máy gập hoặc chia đôi màn hình | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Chia sẻ state giữa hai feature | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |

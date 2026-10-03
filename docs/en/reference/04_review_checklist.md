@@ -15,7 +15,7 @@ The same gates `.github/workflows/pr_quality_check.yml` runs, in its order (CI f
 ```bash
 dart run build_runner build --workspace              # generated code up to date
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R15
+dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R17
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
 flutter analyze                                      # Gate 2 — static analysis, 0 issues
 # Gate 3 — `flutter test` in every package that has a test/ directory (apps/*: the DI smoke test)
@@ -29,6 +29,7 @@ dart tools/unused_checker/check_unused_packages.dart # advisory — declared but
 - [ ] **RULE-76** — no generated file (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) was hand-edited
 - [ ] **RULE-75** — the barrel generator was re-run, after codegen, if a `lib/` file was added, renamed or deleted
 - [ ] **RULE-77** — a DI, dependency or type-move change was followed by the debug APK build (CI's `build` job)
+- [ ] **RULE-80 · RULE-81 · RULE-82** — a per-app value is declared in `apps/<id>/` (manifest, profile, hook), not a constant in `platform/`; a module that registers a catalogued contract is declared `provided` in each app that composes it; no new platform fork outside the R17 allow-list
 
 ---
 

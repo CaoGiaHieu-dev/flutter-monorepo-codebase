@@ -62,6 +62,7 @@ Tuỳ chọn `--apps <id,id>` đặt sau các tham số vị trí chỉ ghép mo
 3. Thêm module vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — trừ khi `--apps` chỉ định một tập con.
    - Rồi nó tự chạy `dart tools/composer/composer.dart sync`. Lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app.
    - Bạn không phải chạy tay gì cả — nhưng xem ghi chú bên dưới nếu module không thuộc về mọi app.
+   - Nếu module đăng ký một contract mà shell có trong catalog (splash, tab, session, reporter), mỗi app ghép nó phải khai contract đó là `provided` trong `capabilities:`: generator in lời nhắc, và `composer verify` nêu tên key cùng dòng cần dán ([`13_app_composition.md`](13_app_composition.md) § 6). `remove_sample` tự lật các contract chỉ có một nơi cung cấp về `absent` giúp bạn.
 4. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator, `build_runner build --workspace`, rồi `dart fix --apply`.
 5. Ghi sẵn các test pass ngay khi sinh ra: `test/profile_page_test.dart` và `test/profile_provider_test.dart` (`test/<name>_bloc_test.dart` với BLoC, không có test controller với SM `3`). Test page dựng page dưới `ResponsiveInit` và localization của nó, với controller được cung cấp đúng như route cung cấp. CI Gate 3 chạy các test này.
 

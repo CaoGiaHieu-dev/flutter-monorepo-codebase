@@ -35,10 +35,10 @@ These are deliberate and documented, so they are **not** vulnerabilities in them
   Anyone can sign with that key. Gradle falls back to it for staging/prod when the real
   `key.properties` / `key-stg.properties` is absent — never ship a store build signed with it. See
   [`docs/en/operations/02_fastlane_release.md` § 4](docs/en/operations/02_fastlane_release.md).
-- **SSL pinning is off until you configure it.** `sslPinningHashes` in
-  `platform/shell/adapters/lib/src/network_config_impl.dart` returns an empty list, so staging/prod use
-  normal certificate validation only. Fill in at least two SPKI hashes (leaf + backup) before
-  relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning).
+- **SSL pinning is off until you configure it.** The template apps declare
+  `ssl_pinning: { disabled: … }` for staging and prod in `apps/mobile/app_manifest.yaml`, so they use
+  normal certificate validation only (and each app's report lists it under *decisions to revisit*).
+  Declare at least two SPKI hashes (leaf + backup) per flavor before relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning).
 - **Certificate validation is bypassed only in a debug build that explicitly declared
   `--flavor dev`.** A missing or unknown flavor is treated as prod. A bypass reachable any other
   way *is* a vulnerability — please report it.
@@ -53,7 +53,8 @@ Secrets are never committed. If you find any of the following in the history, re
 
 ## For projects built on this template
 
-- Fill in `sslPinningHashes` and bind `SslPinningConfig` as shipped
+- Decide `flavors.<f>.ssl_pinning` in your app manifest (at least two pins, or `disabled` with a
+  reason) and keep the `SslPinningConfig` binding as shipped
   (`platform/shell/adapters/lib/di/network_binding_module.dart`).
 - Generate your own release keystores and keep them out of git.
 - Replace the placeholder contact above and enable private vulnerability reporting in your fork.

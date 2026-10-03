@@ -61,6 +61,7 @@ An optional `--apps <id,id>` after the positional arguments composes the module 
 3. Adds the module to `modules:` in **every** `apps/<id>/app_manifest.yaml` — `admin` as well as `mobile` — unless `--apps` names a subset.
    - Then it runs `dart tools/composer/composer.dart sync` itself. That regenerates the root `pubspec.yaml` `workspace:` list and each app's path dependencies and `injection.dart`.
    - Nothing to run by hand — but see the note below if the module does not belong in every app.
+   - If the module registers a contract the shell catalogues (a splash, tabs, a session, a reporter), each app that composes it must declare that contract `provided` in `capabilities:`: the generator prints the reminder, and `composer verify` names the key and the line to paste ([`13_app_composition.md`](13_app_composition.md) § 6). `remove_sample` flips the sole-provider ones back to `absent` for you.
 4. Runs `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, the barrel generator, `build_runner build --workspace`, then `dart fix --apply`.
 5. Writes tests that pass as generated: `test/profile_page_test.dart` and `test/profile_provider_test.dart` (`test/<name>_bloc_test.dart` for BLoC, no controller test for SM `3`). The page test pumps the page under `ResponsiveInit` and its localizations, with the controller provided the way the route provides it. CI Gate 3 runs them.
 

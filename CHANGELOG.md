@@ -102,6 +102,20 @@ with the architecture rules enforced by CI instead of review alone.
   `defaultTargetPlatform`, `TargetPlatform.x` — only in an allow-list, each entry with its reason).
   `tools/shared/contract_scan.dart` is the one scanner `arch_check` and `composer` share.
   `apps/admin/env.dev` drops two keys the app never declared (`WEB_DOMAIN`, `APP_LINK_MODE`).
+- A third app by command, and the docs sweep (the apps layer, step 6 of 6): `composer new <id>
+  --platforms <a,b> [--modules <x,y>] [--name <text>]` renders `tools/composer/app_template/` into
+  `apps/<id>/` — manifest, profile, hooks, entry point, smoke and profile tests — derives its
+  `capabilities:` from what the requested modules register (an absent contract carries what the
+  shell does without it as its reason, never `TODO`), then runs `sync` and `verify`. It refuses an
+  existing id or a platform a requested module blocks before writing anything, and never runs
+  `flutter create`: it prints the line. `composer describe --catalog` now also lists the
+  per-package pubspec keys, checks V1–V14 and problem codes `P01`–`P05` / `C01`–`C09`. New guide
+  `docs/en/guides/13_app_composition.md` (+ `docs/vi`) and skill `configure_app`; registry group
+  80–89 with RULE-80 (everything per-app is declared in `apps/<id>/`), RULE-81 (every optional
+  contract has a declared state) and RULE-82 (platform differences are an app decision), 68 rules
+  in all; the guides, the shell architecture page, `SECURITY.md` and the setup, CI/CD and tooling
+  pages follow the apps layer (profile, hooks, pins in the manifest, generated `injection.dart`,
+  `describe` / `new`, R16 / R17).
 
 ### Changed
 

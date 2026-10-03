@@ -16,7 +16,7 @@ Mỗi ô ghi tên dòng trong bảng đăng ký mà nó kiểm. Bản thân lu�
 ```bash
 dart run build_runner build --workspace              # code sinh đã cập nhật
 dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R15
+dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R17
 (cd tools && dart test)                              # Gate 1 — test của chính các gate tool
 flutter analyze                                      # Gate 2 — phân tích tĩnh, 0 issue
 # Gate 3 — `flutter test` ở mọi package có thư mục test/ (apps/*: smoke test DI)
@@ -29,6 +29,7 @@ dart tools/unused_checker/check_unused_packages.dart # tham khảo — đã khai
 - [ ] **RULE-60 · RULE-63** — test pass ở mọi package bị đụng có thư mục `test/`, kể cả smoke test DI của mỗi app
 - [ ] **RULE-76** — không file sinh ra nào (`.g.dart`, `.freezed.dart`, `.module.dart`, `.config.dart`) bị sửa tay
 - [ ] **RULE-75** — đã chạy lại barrel generator, sau codegen, nếu có file trong `lib/` được thêm, đổi tên hoặc xoá
+- [ ] **RULE-80 · RULE-81 · RULE-82** — một giá trị riêng của app được khai trong `apps/<id>/` (manifest, profile, hook), không phải hằng số trong `platform/`; module đăng ký một contract có trong catalog được khai là `provided` ở mỗi app ghép nó; không có nhánh platform mới ngoài allow-list của R17
 - [ ] **RULE-77** — thay đổi DI, dependency hay chuyển chỗ type đã được theo sau bởi một lần build APK debug (job `build` của CI)
 
 ---

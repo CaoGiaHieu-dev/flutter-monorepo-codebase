@@ -11,7 +11,7 @@ Use this skill when the developer requests to create a new package/module in the
 [`02_new_domain_data.md`](../../../docs/en/guides/02_new_domain_data.md) · generator reference:
 [`03_tooling.md` § module_generator](../../../docs/en/reference/03_tooling.md).
 **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-04, RULE-05, RULE-09, RULE-16,
-RULE-20, RULE-24, RULE-34, RULE-75 — cite them, do not restate them.
+RULE-20, RULE-24, RULE-34, RULE-75, RULE-81 — cite them, do not restate them.
 
 ---
 
@@ -63,6 +63,14 @@ Once the answers are obtained, run the corresponding command (the Agent runs the
 > **Decide which apps compose the module before generating.** Without `--apps` it joins every
 > `apps/<id>/app_manifest.yaml` — `apps/admin` (auth + settings only) included. A module meant for
 > `mobile` only is `... --apps mobile`; an unknown id exits `64` before anything is written.
+
+> [!IMPORTANT]
+> **A module that registers a contract the shell catalogues changes each composing app's
+> `capabilities:`.** The generator prints a reminder; `composer verify` (V3) then names the key and the
+> line to paste (a nav tab → `tabs: provided`, routes → `routes: provided`, a splash →
+> `splash: provided`, …; `composer describe --catalog` lists the 14 optional contracts). Declare it in
+> every app that composes the module (RULE-81). A whole new *app* is not a module: use `composer new`
+> (the `configure_app` skill).
 
 **Examples:**
 
@@ -160,10 +168,12 @@ The app must still build after any feature package is deleted. Before finishing,
   the shell consumes is a product-neutral `core_di` contract (RULE-08). Consumers resolve either with
   `getItOrNull` / `getAllOrEmpty` and a fallback (RULE-12, arch_check R8).
 - Removal procedure: drop its line from `modules:` in every `apps/<id>/app_manifest.yaml` →
-  `dart tools/composer/composer.dart sync` (regenerates `injection.dart`, the app pubspecs and the
-  root `workspace:` list) → `flutter pub get` + `build_runner`. For a shipped sample only, run
-  `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` — it accepts only the bundles
-  listed in `tools/sample_manifest.yaml` (not a module you generated) and is a dry run without `--apply`.
+  `dart tools/composer/composer.dart sync` (regenerates `injection.dart`, the app pubspecs, the root
+  `workspace:` list, the `facts` and the README report) → `flutter pub get` + `build_runner`; then
+  `composer verify` names any capability that lost its last provider — declare it `absent` with a reason.
+  For a shipped sample only, run `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` — it
+  accepts only the bundles listed in `tools/sample_manifest.yaml` (not a module you generated), is a dry
+  run without `--apply`, flips the capabilities the bundle was the sole provider of and runs `sync` itself.
 
 ---
 
@@ -171,4 +181,4 @@ The app must still build after any feature package is deleted. Before finishing,
 
 - `docs/{en,vi}/guides/01_new_feature.md` — the long-form walkthrough
 - `docs/{en,vi}/guides/02_new_domain_data.md` — domain + data packages
-- `implement_navigation_route`, `implement_dependency_injection`, `run_repo_tooling`
+- `implement_navigation_route`, `implement_dependency_injection`, `run_repo_tooling`, `configure_app`

@@ -52,24 +52,27 @@ Exit codes follow one convention across the tools: `0` success, `1` the check fa
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/arch_check/check.dart` | Enforce the layering rules R1–R15 on imports, pubspecs and file names | `0` clean (R6 only warns) · `1` a blocking violation · `64` any argument but `--help` | 1 |
+| `dart tools/arch_check/check.dart` | Enforce the layering and hygiene rules R1–R17 on imports, pubspecs, file names and source | `0` clean (R6 only warns) · `1` a blocking violation · `64` any argument but `--help` | 1 |
 | `dart tools/arch_check/check.dart --help` | Describe every rule | `0` | — |
 
 - Reads imports and `pubspec.yaml` files only, needs no codegen, and finishes in a few hundred ms.
 - The three approved upward edges are printed on every run. A fourth needs the allow-list in `check.dart` and RULE-01 updated together.
-- Each rule, with why it exists: [details](../../../tools/README.md#arch_check). The registry row each rule enforces: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78.
+- Each rule, with why it exists: [details](../../../tools/README.md#arch_check). The registry row each rule enforces: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (every shell lookup is in the contract catalog) · R17 RULE-82 (a platform fork needs an allow-list entry with a reason, in `tools/arch_check/platform_forks.dart`).
 
 ## `composer`
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
 | `dart tools/composer/composer.dart list [--app <id>]` | Print each app's composition | `0` · `1` invalid manifest · `64` bad flag | — |
-| `dart tools/composer/composer.dart sync [--app <id>]` | Regenerate the root `workspace:` list, each app's path dependencies and `injection.dart` from `app_manifest.yaml` | `0` · `1` invalid manifest or YAML, a lost `composer:managed` marker, a managed package declared by hand · `64` bad flag | — |
-| `dart tools/composer/composer.dart verify` | Same, but write nothing and fail on drift; implies `--strict` | `0` · `1` drift, a module missing from disk, or any `sync` refusal · `64` bad flag | 0 |
+| `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | Print an app's report — what it declares and what the shell resolves from it (the text of its README `report` region) — or, with `--catalog`, every manifest key, the contract catalog, the derived defaults, the pubspec keys, the checks V1–V14 and the problem codes | `0` · `1` unknown app or broken catalog · `64` bad flag | — |
+| `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Create `apps/<id>/` from `tools/composer/app_template/`, derive its `capabilities:` from what the modules register, run `sync` and `verify`; **never runs `flutter create`** | `0` · `1` a refusal (id exists, platform blocked by a module, unknown module or platform) writing nothing, or a failing `verify` · `64` bad arguments | — |
+| `dart tools/composer/composer.dart sync [--app <id>]` | Regenerate the root `workspace:` list, each app's path dependencies, `injection.dart` (all of it), the `facts` region of `lib/app/app_profile.dart` and the `report` region of the app's `README.md` from `app_manifest.yaml` | `0` · `1` invalid manifest or YAML, a lost `composer:managed` marker, a managed package declared by hand · `64` bad flag | — |
+| `dart tools/composer/composer.dart verify` | Same, but write nothing and fail on drift; implies `--strict`. Also holds each app's declaration to the source: capabilities against what is registered (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10), env files (V11), entry point and smoke test (V12) | `0` · `1` drift, a module missing from disk, or any `sync` refusal · `64` bad flag | 0 |
 
 - Only the regions between `composer:managed:<region>` and `composer:end:<region>` are generated; never hand-edit them (RULE-16).
 - A non-strict `sync` that skipped a missing module prints a `PARTIAL COMPOSITION` block and the `git checkout --` line that restores the files.
-- Manifest validation, package discovery and the `api` layer: [details](../../../tools/README.md#composer).
+- A third app is one command, and the two files you then edit are its manifest and `lib/app/app_profile.dart`: [`../guides/13_app_composition.md` § 8](../guides/13_app_composition.md#8-a-third-app-by-command).
+- Manifest validation, the checks V1–V14, package discovery and the `api` layer: [details](../../../tools/README.md#composer).
 
 ### `bootstrap` — before composer can run
 

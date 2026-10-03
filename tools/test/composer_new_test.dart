@@ -314,6 +314,7 @@ void main() {
       );
       final smoke = ws.read('apps/ledger/test/di_smoke_test.dart');
       expect(smoke, contains("import 'dart:io';"));
+      expect(smoke, contains("import 'package:flutter/services.dart';"));
       expect(
         smoke,
         contains("import 'package:drift/drift.dart' show GeneratedDatabase;"),
@@ -330,6 +331,8 @@ void main() {
       final plain = ws.read('apps/plain/test/di_smoke_test.dart');
       expect(plain, isNot(contains('path_provider\')')));
       expect(plain, isNot(contains('GeneratedDatabase')));
+      // `MethodChannel` is the path_provider double's; unused, it fails Gate 2.
+      expect(plain, isNot(contains('flutter/services.dart')));
       expect(ws.read('apps/plain/pubspec.yaml'), isNot(contains('drift')));
     });
 

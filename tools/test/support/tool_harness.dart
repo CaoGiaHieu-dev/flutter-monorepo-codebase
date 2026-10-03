@@ -135,9 +135,20 @@ class TempWorkspace {
 
   /// Creates a temp directory holding [files] (repo-relative path ->
   /// content) and deletes it when the current test ends.
-  static TempWorkspace create(Map<String, String> files) {
+  ///
+  /// With [nestedUnder] the workspace root is that relative path *inside* the
+  /// temp directory (`modules`, `gen/repo`): the checkout then lives below
+  /// directories whose names mean something to a path-based rule, which is how
+  /// a real clone in `~/gen/app` or `/srv/modules/ci` looks to the gates.
+  static TempWorkspace create(
+    Map<String, String> files, {
+    String? nestedUnder,
+  }) {
     final dir = Directory.systemTemp.createTempSync('tool_ws_');
-    final ws = TempWorkspace._(p.normalize(dir.resolveSymbolicLinksSync()));
+    final base = p.normalize(dir.resolveSymbolicLinksSync());
+    final root = nestedUnder == null ? base : p.join(base, nestedUnder);
+    Directory(root).createSync(recursive: true);
+    final ws = TempWorkspace._(root);
     ws.write(files);
     addTearDown(() {
       if (dir.existsSync()) dir.deleteSync(recursive: true);

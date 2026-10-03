@@ -66,6 +66,7 @@ void main() {
 
     test('a core package importing a feature fails', () async {
       final run = await check({
+        'modules/bar/feature/pubspec.yaml': pubspec('feature_bar'),
         'platform/infra/foo/pubspec.yaml': pubspec(
           'core_foo',
           deps: ['feature_bar'],
@@ -93,6 +94,7 @@ void main() {
 
     test('data_core importing and declaring a feature fails', () async {
       final run = await check({
+        'modules/auth/feature/pubspec.yaml': pubspec('feature_auth'),
         'platform/layers/data/pubspec.yaml': pubspec(
           'data_core',
           deps: ['feature_auth'],
@@ -150,6 +152,7 @@ void main() {
 
     test('a platform package is core wherever its name points', () async {
       final run = await check({
+        'modules/x/feature/pubspec.yaml': pubspec('feature_x'),
         'platform/infra/odd/pubspec.yaml': pubspec(
           'data_odd',
           deps: ['feature_x'],
@@ -160,13 +163,66 @@ void main() {
   });
 
   group('R2 domain is pure Dart', () {
-    test('a dev-only flutter dependency and dart: imports pass', () async {
+    test('dart: imports and a pure-Dart dev dependency pass', () async {
       final run = await check({
         'modules/x/domain/pubspec.yaml': pubspec(
           'domain_x',
-          devDeps: ['flutter'],
+          devDeps: ['test'],
         ),
-        'modules/x/domain/lib/x.dart': "import 'dart:async';\n",
+        'modules/x/domain/lib/x.dart':
+            "import 'dart:async';\nimport 'dart:convert';\n",
+        'modules/x/domain/test/x_test.dart':
+            "import 'package:test/test.dart';\n",
+      });
+      expectClean(run, 'R2');
+    });
+
+    test('a Flutter dev dependency or test import fails too', () async {
+      final run = await check({
+        'modules/x/domain/pubspec.yaml': pubspec(
+          'domain_x',
+          devDeps: ['flutter_test'],
+        ),
+        'modules/x/domain/test/x_test.dart':
+            "import 'package:flutter_test/flutter_test.dart';\n",
+      });
+      expectViolation(run, 'R2', 'modules/x/domain/pubspec.yaml');
+      expect(run.output, contains('declares under `dev_dependencies:`'));
+      expect(run.output, contains('modules/x/domain/test/x_test.dart:1'));
+      expect(run.output, contains('imports from a test'));
+    });
+
+    for (final lib in [
+      'ui',
+      'html',
+      'js',
+      'js_interop',
+      'js_util',
+      'web_ui',
+    ]) {
+      test('a domain importing dart:$lib fails; the kernel too (R9)', () async {
+        final run = await check({
+          'modules/x/domain/pubspec.yaml': pubspec('domain_x'),
+          'modules/x/domain/lib/x.dart': "import 'dart:$lib';\n",
+          'platform/foundation/kernel/pubspec.yaml': pubspec(
+            'platform_kernel',
+          ),
+          'platform/foundation/kernel/lib/k.dart':
+              "import 'dart:$lib' show Color;\n",
+        });
+        expectViolation(run, 'R2', 'modules/x/domain/lib/x.dart:1');
+        expect(run.output, contains('imports `dart:$lib`'));
+        expect(run.output, contains('R9 — '));
+        expect(run.output, contains('platform/foundation/kernel/lib/k.dart:1'));
+        expect(run.output, contains('Flutter-engine or browser-only'));
+      });
+    }
+
+    test('dart:io and dart:async are not engine-only', () async {
+      final run = await check({
+        'modules/x/domain/pubspec.yaml': pubspec('domain_x'),
+        'modules/x/domain/lib/x.dart':
+            "import 'dart:io';\nimport 'dart:isolate';\n",
       });
       expectClean(run, 'R2');
     });
@@ -180,32 +236,47 @@ void main() {
       expectViolation(run, 'R2', 'modules/x/domain/lib/x.dart:1');
     });
 
-    test('domain_core and another domain_* package pass', () async {
+    test('domain_core passes', () async {
       final run = await check({
         'platform/layers/domain/pubspec.yaml': pubspec('domain_core'),
-        'modules/y/domain/pubspec.yaml': pubspec(
-          'domain_y',
-          deps: ['domain_core'],
-        ),
         'modules/x/domain/pubspec.yaml': pubspec(
           'domain_x',
-          deps: ['domain_core', 'domain_y'],
+          deps: ['domain_core'],
         ),
         'modules/x/domain/lib/x.dart':
-            "import 'package:domain_core/domain_core.dart';\n"
-            "import 'package:domain_y/domain_y.dart';\n",
+            "import 'package:domain_core/domain_core.dart';\n",
       });
       expectClean(run, 'R2');
     });
 
-    for (final dep in [
-      'core_network',
-      'platform_kernel',
-      'data_core',
-      'feature_x',
-    ]) {
+    test(
+      "another module's domain package fails, imported or declared",
+      () async {
+        final run = await check({
+          'modules/y/domain/pubspec.yaml': pubspec('domain_y'),
+          'modules/x/domain/pubspec.yaml': pubspec(
+            'domain_x',
+            deps: ['domain_y'],
+          ),
+          'modules/x/domain/lib/x.dart':
+              "import 'package:domain_y/domain_y.dart';\n",
+        });
+        expectViolation(run, 'R2', 'modules/x/domain/lib/x.dart:1');
+        expect(run.output, contains("another module's domain package"));
+        expect(run.output, contains('modules/x/domain/pubspec.yaml'));
+      },
+    );
+
+    for (final entry in {
+      'core_network': 'platform/infra/network',
+      'platform_kernel': 'platform/foundation/kernel',
+      'data_core': 'platform/layers/data',
+      'feature_x': 'modules/x/feature',
+    }.entries) {
+      final dep = entry.key;
       test('a domain package importing $dep fails', () async {
         final run = await check({
+          '${entry.value}/pubspec.yaml': pubspec(dep),
           'modules/x/domain/pubspec.yaml': pubspec('domain_x', deps: [dep]),
           'modules/x/domain/lib/x.dart': "import 'package:$dep/$dep.dart';\n",
         });
@@ -216,6 +287,7 @@ void main() {
 
     test('domain_core declaring a core_* package fails', () async {
       final run = await check({
+        'platform/foundation/contracts/pubspec.yaml': pubspec('core_di'),
         'platform/layers/domain/pubspec.yaml': pubspec(
           'domain_core',
           deps: ['core_di'],
@@ -282,6 +354,7 @@ void main() {
   group('R3 feature boundaries', () {
     test('a feature importing its domain passes', () async {
       final run = await check({
+        'modules/a/domain/pubspec.yaml': pubspec('domain_a'),
         'modules/a/feature/pubspec.yaml': pubspec(
           'feature_a',
           deps: ['domain_a'],
@@ -294,6 +367,7 @@ void main() {
 
     test('a feature importing another feature fails', () async {
       final run = await check({
+        'modules/b/feature/pubspec.yaml': pubspec('feature_b'),
         'modules/a/feature/pubspec.yaml': pubspec(
           'feature_a',
           deps: ['feature_b'],
@@ -309,6 +383,7 @@ void main() {
       'a feature declaring another feature, never importing it, fails',
       () async {
         final run = await check({
+          'modules/b/feature/pubspec.yaml': pubspec('feature_b'),
           'modules/a/feature/pubspec.yaml': pubspec(
             'feature_a',
             deps: ['feature_b'],
@@ -324,6 +399,7 @@ void main() {
       'a feature declaring a data package, never importing it, fails',
       () async {
         final run = await check({
+          'modules/a/data/pubspec.yaml': pubspec('data_a'),
           'modules/a/feature/pubspec.yaml': pubspec(
             'feature_a',
             deps: ['data_a'],
@@ -336,6 +412,7 @@ void main() {
 
     test('a feature importing a data package fails', () async {
       final run = await check({
+        'modules/a/data/pubspec.yaml': pubspec('data_a'),
         'modules/a/feature/pubspec.yaml': pubspec(
           'feature_a',
           deps: ['data_a'],
@@ -352,17 +429,15 @@ void main() {
         final run = await check({
           'platform/layers/data/pubspec.yaml': pubspec('data_core'),
           'modules/a/api/pubspec.yaml': pubspec('a_api'),
-          'modules/b/api/pubspec.yaml': pubspec('b_api'),
           'modules/a/domain/pubspec.yaml': pubspec('domain_a'),
           'modules/a/data/pubspec.yaml': pubspec(
             'data_a',
-            deps: ['domain_a', 'data_core', 'a_api', 'b_api'],
+            deps: ['domain_a', 'data_core', 'a_api'],
           ),
           'modules/a/data/lib/a.dart':
               "import 'package:domain_a/domain_a.dart';\n"
               "import 'package:data_core/data_core.dart';\n"
-              "import 'package:a_api/a_api.dart';\n"
-              "import 'package:b_api/b_api.dart';\n",
+              "import 'package:a_api/a_api.dart';\n",
         });
         expectClean(run, 'R3');
       },
@@ -370,6 +445,7 @@ void main() {
 
     test('a data package importing and declaring a feature fails', () async {
       final run = await check({
+        'modules/a/feature/pubspec.yaml': pubspec('feature_a'),
         'modules/a/data/pubspec.yaml': pubspec('data_a', deps: ['feature_a']),
         'modules/a/data/lib/a.dart':
             "import 'package:feature_a/feature_a.dart';\n",
@@ -452,7 +528,7 @@ void main() {
     });
   });
 
-  group('R6 generated files keep their header (warning only)', () {
+  group('R6 a file named like generated output carries the header', () {
     test('a generated file with its header raises nothing', () async {
       final run = await check({
         'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
@@ -463,15 +539,97 @@ void main() {
       expect(run.output, isNot(contains('generator header')));
     });
 
-    test('a headerless generated file warns but still exits 0', () async {
+    test('a headerless file named like generated output fails', () async {
       final run = await check({
         'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
         'platform/infra/foo/lib/foo.g.dart': 'class Edited {}\n',
       });
-      expect(run, exitsWith(0));
-      expect(run.output, contains('1 warning(s)'));
-      expect(run.output, contains('platform/infra/foo/lib/foo.g.dart'));
+      expectViolation(run, 'R6', 'platform/infra/foo/lib/foo.g.dart');
       expect(run.output, contains('generator header'));
+    });
+
+    test(
+      'every conventional suffix needs the header, not just .g.dart',
+      () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/a.freezed.dart': 'class A {}\n',
+          'platform/infra/foo/lib/b.config.dart': 'class B {}\n',
+          'platform/infra/foo/lib/c.module.dart': 'class C {}\n',
+        });
+        expectViolation(run, 'R6', 'platform/infra/foo/lib/a.freezed.dart');
+        expect(run.output, contains('platform/infra/foo/lib/b.config.dart'));
+        expect(run.output, contains('platform/infra/foo/lib/c.module.dart'));
+      },
+    );
+
+    test('a headerless lookalike is read by the other rules as hand-written '
+        'code, so it cannot smuggle a violation past them', () async {
+      final run = await check({
+        'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/infra/foo/lib/size_ext.g.dart': 'final gap = 16.w;\n',
+        'platform/infra/foo/lib/size_ext.config.dart': 'final gap = 16.h;\n',
+        'platform/infra/foo/lib/zz.freezed.dart':
+            'void f() { debugPrint("x"); }\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('R7 — '));
+      expect(run.output, contains('platform/infra/foo/lib/size_ext.g.dart:1'));
+      expect(run.output, contains('size_ext.config.dart:1'));
+      expect(run.output, contains('R19 — '));
+      expect(run.output, contains('platform/infra/foo/lib/zz.freezed.dart:1'));
+    });
+
+    test(
+      'a fake header must be the leading comment, not text further down',
+      () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/foo.g.dart':
+              'class Edited {}\n// GENERATED CODE - DO NOT MODIFY BY HAND\n',
+        });
+        expectViolation(run, 'R6', 'platform/infra/foo/lib/foo.g.dart');
+      },
+    );
+
+    test(
+      'a hand-written file in gen/ or generated/ is not generated',
+      () async {
+        final run = await check({
+          'platform/ui/kit/pubspec.yaml': pubspec('core_kit'),
+          'platform/ui/kit/lib/src/gen/zz_gen.dart':
+              'import \'package:feature_x/feature_x.dart\';\nfinal a = 16.w;\n',
+          'platform/ui/kit/lib/src/generated/hand.dart':
+              'import \'package:flutter/material.dart\';\n'
+              'Widget w() { debugPrint("x"); return const SizedBox(width: 16); }\n',
+          'modules/x/feature/pubspec.yaml': pubspec('feature_x'),
+        });
+        expect(run, exitsWith(1));
+        expect(
+          run.output,
+          contains('platform/ui/kit/lib/src/gen/zz_gen.dart:1'),
+        );
+        expect(run.output, contains('R7 — '));
+        expect(run.output, contains('R19 — '));
+        expect(run.output, contains('R20 — '));
+        expect(run.output, contains('R1 — '));
+      },
+    );
+
+    test('real generator output in gen/ is skipped: flutter_gen by its header, '
+        'gen-l10n by the l10n.yaml output-dir', () async {
+      final run = await check({
+        'platform/ui/kit/pubspec.yaml': pubspec('core_kit'),
+        'platform/ui/kit/l10n.yaml':
+            'arb-dir: assets/language\noutput-dir: lib/src/gen/language\n',
+        'platform/ui/kit/lib/src/gen/assets.gen.dart':
+            '// dart format width=80\n/// GENERATED CODE - DO NOT MODIFY BY HAND\n'
+            'final a = 16.w;\n',
+        'platform/ui/kit/lib/src/gen/language/app_localizations.dart':
+            "import 'package:feature_x/feature_x.dart';\nfinal a = 16.w;\n",
+      });
+      expectClean(run, 'R7');
+      expect(run.output, isNot(contains('R1 — ')));
     });
   });
 
@@ -518,7 +676,8 @@ void main() {
       final run = await check({
         'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
         'modules/foo/feature/lib/a.dart': "const label = 'size 16.sp';\n",
-        'modules/foo/feature/lib/a.g.dart': 'final gap = 16.w;\n',
+        'modules/foo/feature/lib/a.g.dart':
+            '// GENERATED CODE - DO NOT MODIFY BY HAND\nfinal gap = 16.w;\n',
       });
       expectClean(run, 'R7');
       final bad = await check({
@@ -827,6 +986,13 @@ void main() {
 
   group('R10 the app shell composes modules, it does not import them', () {
     Map<String, String> app(String mainImport) => {
+      'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
+      'modules/auth/data/pubspec.yaml': pubspec('data_auth'),
+      'platform/layers/domain/pubspec.yaml': pubspec('domain_core'),
+      'platform/layers/data/pubspec.yaml': pubspec(
+        'data_core',
+        deps: ['domain_core'],
+      ),
       'apps/demo/app_manifest.yaml': 'app:\n  id: demo\n',
       'apps/demo/pubspec.yaml': pubspec('demo_app', deps: ['feature_foo']),
       'apps/demo/lib/di/injection.dart':
@@ -878,6 +1044,122 @@ void main() {
             "import 'package:feature_foo/feature_foo.dart';\n",
       });
       expectViolation(run, 'R10', 'apps/demo/test/injection.dart:1');
+    });
+
+    test(
+      'an injection.dart anywhere but lib/di/ is not the composition root',
+      () async {
+        final run = await check({
+          ...app("import 'dart:async';\n"),
+          'apps/demo/lib/other/injection.dart':
+              "import 'package:feature_foo/feature_foo.dart';\n",
+          'apps/demo/lib/injection.dart':
+              "import 'package:feature_foo/feature_foo.dart';\n",
+        });
+        expectViolation(run, 'R10', 'apps/demo/lib/other/injection.dart:1');
+        expect(run.output, contains('apps/demo/lib/injection.dart:1'));
+        expect(
+          run.output,
+          isNot(contains('apps/demo/lib/di/injection.dart:1')),
+        );
+      },
+    );
+
+    test(
+      'integration_test/, test_driver/, tool/ and bin/ are scanned too',
+      () async {
+        const naming = "import 'package:feature_foo/feature_foo.dart';\n";
+        final run = await check({
+          ...app("import 'dart:async';\n"),
+          'apps/demo/integration_test/app_test.dart': naming,
+          'apps/demo/test_driver/x.dart': naming,
+          'apps/demo/tool/x.dart': naming,
+          'apps/demo/bin/x.dart': naming,
+        });
+        expectViolation(
+          run,
+          'R10',
+          'apps/demo/integration_test/app_test.dart:1',
+        );
+        expect(run.output, contains('apps/demo/test_driver/x.dart:1'));
+        expect(run.output, contains('apps/demo/tool/x.dart:1'));
+        expect(run.output, contains('apps/demo/bin/x.dart:1'));
+      },
+    );
+
+    test('a generated file, build/ and .dart_tool/ are not scanned', () async {
+      const naming = "import 'package:feature_foo/feature_foo.dart';\n";
+      final run = await check({
+        ...app("import 'dart:async';\n"),
+        'apps/demo/lib/di/injection.config.dart':
+            '// GENERATED CODE - DO NOT MODIFY BY HAND\n$naming',
+        'apps/demo/build/x.dart': naming,
+        'apps/demo/.dart_tool/x.dart': naming,
+      });
+      expectClean(run, 'R10');
+    });
+
+    test(
+      'a hosted package named like a module is not a module package',
+      () async {
+        final run = await check({
+          ...app(
+            "import 'package:feature_discovery/feature_discovery.dart';\n",
+          ),
+          'apps/demo/pubspec.yaml': pubspec(
+            'demo_app',
+            deps: [
+              'feature_foo',
+              'feature_discovery',
+              'data_table_2',
+              'domain_driven',
+              'core_extension',
+              'billing_api',
+            ],
+          ),
+          'apps/demo/lib/b.dart':
+              "import 'package:data_table_2/data_table_2.dart';\n"
+              "import 'package:domain_driven/x.dart';\n"
+              "import 'package:core_extension/x.dart';\n"
+              "import 'package:billing_api/billing_api.dart';\n",
+        });
+        expectClean(run, 'R10');
+      },
+    );
+
+    test('a custom package under modules/ is a module package too', () async {
+      final run = await check({
+        ...app("import 'package:zed_shared/zed_shared.dart';\n"),
+        'modules/zed/shared/pubspec.yaml': pubspec('zed_shared'),
+      });
+      expectViolation(run, 'R10', 'apps/demo/lib/main.dart:1');
+    });
+
+    test('conditional-import configurations and the missing-space spelling '
+        'are read', () async {
+      final run = await check({
+        ...app(
+          "import 'stub.dart' if (dart.library.io) "
+          "'package:feature_foo/feature_foo.dart';\n",
+        ),
+        'apps/demo/lib/b.dart':
+            "import'package:feature_foo/feature_foo.dart';\n",
+        'apps/demo/lib/c.dart': "import 'dart:async'; import 'package:feature_foo/feature_foo.dart';\n",
+      });
+      expectViolation(run, 'R10', 'apps/demo/lib/main.dart:1');
+      expect(run.output, contains('apps/demo/lib/b.dart:1'));
+      expect(run.output, contains('apps/demo/lib/c.dart:1'));
+    });
+
+    test('a directive-looking line in a block comment or a string is not '
+        'an import', () async {
+      final run = await check({
+        ...app(
+          "/*\nimport 'package:feature_foo/feature_foo.dart';\n*/\n"
+          "const t = '''\nimport 'package:feature_foo/feature_foo.dart';\n''';\n",
+        ),
+      });
+      expectClean(run, 'R10');
     });
   });
   group('R11 platform group direction', () {
@@ -1051,12 +1333,18 @@ void main() {
           'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
           'platform/infra/foo/lib/foo.dart':
               '/// Never write `// ignore: x`.\n'
+              '/// Mentioning ignore_for_file: or ignore: mid-sentence is fine.\n'
+              '// why // ignore: x is prose, not a suppression\n'
+              '/* ignore: unused_import */\n'
+              '// IGNORE: unused_import\n'
+              '/// ignore_for_file: not honoured in a doc comment\n'
               "const tip = '// ignore: not a comment';\n"
               "const t2 = '''\n// ignore_for_file: template text\n''';\n",
           'platform/infra/foo/lib/foo.g.dart':
               '// GENERATED CODE - DO NOT MODIFY BY HAND\n'
               '// ignore_for_file: type=lint\n',
           'platform/infra/foo/lib/src/gen/assets.dart':
+              '// GENERATED CODE - DO NOT MODIFY BY HAND\n'
               '// ignore_for_file: type=lint\n',
         });
         expectClean(run, 'R13');
@@ -1076,6 +1364,44 @@ void main() {
       expectViolation(run, 'R13', 'platform/infra/foo/test/foo_test.dart:1');
       expect(run.output, contains('tools/x/run.dart:2'));
     });
+
+    test(
+      'the analyzer honours /// ignore: and //// ignore: too, so they fail',
+      () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/a.dart':
+              '/// ignore: unused_import\nimport \'dart:async\';\n',
+          'platform/infra/foo/lib/b.dart':
+              '//// ignore: unused_import\nimport \'dart:async\';\n',
+          'platform/infra/foo/lib/c.dart':
+              '//ignore: unused_import\nimport \'dart:async\';\n',
+          'platform/infra/foo/lib/d.dart':
+              'import \'dart:async\'; // ignore: unused_import\n',
+          'platform/infra/foo/lib/e.dart': '// ignore_for_file: type=lint\n',
+        });
+        expectViolation(run, 'R13', 'platform/infra/foo/lib/a.dart:1');
+        for (final f in ['b', 'c', 'd', 'e']) {
+          expect(run.output, contains('platform/infra/foo/lib/$f.dart:1'));
+        }
+      },
+    );
+
+    test(
+      'a generated file under gen/ without a header is not exempt',
+      () async {
+        final run = await check({
+          'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+          'platform/infra/foo/lib/src/gen/hand.dart':
+              '// ignore_for_file: type=lint\n',
+        });
+        expectViolation(
+          run,
+          'R13',
+          'platform/infra/foo/lib/src/gen/hand.dart:1',
+        );
+      },
+    );
 
     test('the root analysis_options.yaml passes', () async {
       final run = await check({
@@ -1709,6 +2035,7 @@ void main() {
       final run = await check({
         'modules/foo/feature/pubspec.yaml': pubspec('feature_foo'),
         'modules/foo/feature/lib/a.freezed.dart':
+            '// GENERATED CODE - DO NOT MODIFY BY HAND\n'
             'final a = EdgeInsets.all(16);\n',
         'modules/foo/feature/test/a_test.dart':
             'final a = EdgeInsets.all(16);\n',
@@ -1720,6 +2047,428 @@ void main() {
       });
       expectViolation(bad, 'R20', 'modules/foo/feature/lib/page.dart:1');
     });
+  });
+
+  group('where the repository is cloned never changes the answer', () {
+    /// A small but complete workspace: platform, one module, an app.
+    Map<String, String> tree({String platformImport = ''}) => {
+      'pubspec.yaml': 'name: ws\n',
+      'platform/layers/domain/pubspec.yaml': pubspec('domain_core'),
+      'platform/infra/network/pubspec.yaml': pubspec(
+        'core_network',
+        deps: [if (platformImport.isNotEmpty) 'feature_auth'],
+      ),
+      'platform/infra/network/lib/net.dart': 'final a = 1;\n$platformImport',
+      'modules/auth/domain/pubspec.yaml': pubspec(
+        'domain_auth',
+        deps: ['domain_core'],
+      ),
+      'modules/auth/domain/lib/auth.dart':
+          "import 'package:domain_core/domain_core.dart';\n",
+      'modules/auth/feature/pubspec.yaml': pubspec(
+        'feature_auth',
+        deps: ['domain_auth'],
+      ),
+      'modules/auth/feature/lib/auth_page.dart':
+          "import 'package:domain_auth/domain_auth.dart';\n",
+      'apps/demo/app_manifest.yaml': 'app:\n  id: demo\n',
+      'apps/demo/pubspec.yaml': pubspec('demo_app', deps: ['feature_auth']),
+      'apps/demo/lib/di/injection.dart':
+          "import 'package:feature_auth/feature_auth.dart';\n",
+    };
+
+    const bad = "import 'package:feature_auth/feature_auth.dart';\n";
+
+    for (final nested in [
+      'modules/repo',
+      'gen/repo',
+      'generated/repo',
+      'platform/repo',
+      'apps/modules/gen/generated/repo',
+    ]) {
+      test('a clean tree stays clean under $nested/', () async {
+        final ws = TempWorkspace.create(tree(), nestedUnder: nested);
+        final run = await tool.run(const [], workingDirectory: ws.root);
+        expect(run, exitsWith(0));
+        expect(run.output, contains('All architecture rules hold'));
+      });
+
+      test(
+        'a platform -> feature import is still found under $nested/',
+        () async {
+          final ws = TempWorkspace.create(
+            tree(platformImport: bad),
+            nestedUnder: nested,
+          );
+          final run = await tool.run(const [], workingDirectory: ws.root);
+          expectViolation(run, 'R1', 'platform/infra/network/lib/net.dart:2');
+          // The generated-file test reads the path below the package, so the
+          // hand-written file is scanned: R5 sees the undeclared import too.
+          expect(run.output, isNot(contains('R16 — ')));
+        },
+      );
+
+      test('the other source rules still fire under $nested/', () async {
+        final ws = TempWorkspace.create({
+          ...tree(),
+          'platform/infra/network/lib/p.dart':
+              'final a = 16.w;\nfinal b = getIt<AuthNavigator>();\n'
+              'void f() { debugPrint("x"); }\n',
+        }, nestedUnder: nested);
+        final run = await tool.run(const [], workingDirectory: ws.root);
+        expect(run, exitsWith(1));
+        expect(run.output, contains('R7 — '));
+        expect(run.output, contains('R19 — '));
+        expect(run.output, contains('platform/infra/network/lib/p.dart:1'));
+      });
+    }
+  });
+
+  group('edges are classified by workspace location, not by name prefix', () {
+    test('hosted packages named like a layer are third-party code', () async {
+      final run = await check({
+        'platform/ui/kit/pubspec.yaml': pubspec(
+          'core_kit',
+          deps: ['data_table_2', 'feature_discovery', 'domain_driven'],
+        ),
+        'platform/ui/kit/lib/k.dart':
+            "import 'package:data_table_2/data_table_2.dart';\n"
+            "import 'package:feature_discovery/feature_discovery.dart';\n",
+        'modules/settings/feature/pubspec.yaml': pubspec(
+          'feature_settings',
+          deps: ['feature_discovery', 'data_table_2'],
+        ),
+        'modules/settings/feature/lib/s.dart':
+            "import 'package:feature_discovery/feature_discovery.dart';\n"
+            "import 'package:data_table_2/data_table_2.dart';\n",
+        'modules/settings/data/pubspec.yaml': pubspec(
+          'data_settings',
+          deps: ['feature_discovery', 'data_table_2'],
+        ),
+        'modules/settings/domain/pubspec.yaml': pubspec(
+          'domain_settings',
+          deps: ['core_extension'],
+        ),
+        'modules/settings/api/pubspec.yaml': pubspec(
+          'settings_api',
+          deps: ['feature_discovery'],
+        ),
+      });
+      for (final rule in ['R1', 'R2', 'R3']) {
+        expect(run.output, isNot(contains('$rule — ')), reason: rule);
+      }
+    });
+
+    test(
+      'a workspace package is judged by its folder even when mis-named',
+      () async {
+        final run = await check({
+          'modules/zed/domain/pubspec.yaml': pubspec('zed_domain'),
+          'modules/zed/domain/lib/z.dart':
+              "import 'package:flutter/material.dart';\n",
+        });
+        expectViolation(run, 'R2', 'modules/zed/domain/lib/z.dart:1');
+        expect(run.output, contains('must be named `domain_zed`'));
+      },
+    );
+
+    test(
+      'a mis-named feature and data package still get the R3 line',
+      () async {
+        final run = await check({
+          'modules/other/feature/pubspec.yaml': pubspec('feature_other'),
+          'modules/other/data/pubspec.yaml': pubspec('data_other'),
+          'modules/zed/feature/pubspec.yaml': pubspec(
+            'zed_feature',
+            deps: ['feature_other', 'data_other'],
+          ),
+          'modules/zed/feature/lib/z.dart':
+              "import 'package:feature_other/feature_other.dart';\n",
+          'modules/zed/data/pubspec.yaml': pubspec(
+            'zed_data',
+            deps: ['feature_other'],
+          ),
+        });
+        expectViolation(run, 'R3', 'modules/zed/feature/lib/z.dart:1');
+        expect(run.output, contains('imports another feature `feature_other`'));
+        expect(run.output, contains('declares data package `data_other`'));
+        expect(run.output, contains('`zed_data` declares feature'));
+        // Not "platform must not reach modules": they are not platform.
+        expect(run.output, isNot(contains('core package `zed_')));
+        expect(run.output, contains('must be named `feature_zed`'));
+        expect(run.output, contains('must be named `data_zed`'));
+      },
+    );
+
+    test('the right names pass the naming check', () async {
+      final run = await check({
+        'modules/zed/domain/pubspec.yaml': pubspec('domain_zed'),
+        'modules/zed/data/pubspec.yaml': pubspec('data_zed'),
+        'modules/zed/feature/pubspec.yaml': pubspec('feature_zed'),
+        'modules/zed/api/pubspec.yaml': pubspec('zed_api'),
+        'modules/zed/shared/pubspec.yaml': pubspec('anything_goes'),
+      });
+      expectClean(run, 'R3');
+    });
+
+    test('R10 sees a custom package under modules/, R1 too', () async {
+      final run = await check({
+        'modules/zed/shared/pubspec.yaml': pubspec('zed_shared'),
+        'platform/infra/foo/pubspec.yaml': pubspec(
+          'core_foo',
+          deps: ['zed_shared'],
+        ),
+        'platform/infra/foo/lib/f.dart':
+            "import 'package:zed_shared/zed_shared.dart';\n",
+      });
+      expectViolation(run, 'R1', 'platform/infra/foo/lib/f.dart:1');
+    });
+
+    test("a feature or data package reaching another module's domain fails, "
+        'its own passes', () async {
+      final run = await check({
+        'modules/cache/domain/pubspec.yaml': pubspec('domain_cache'),
+        'modules/settings/domain/pubspec.yaml': pubspec('domain_settings'),
+        'modules/settings/feature/pubspec.yaml': pubspec(
+          'feature_settings',
+          deps: ['domain_settings', 'domain_cache'],
+        ),
+        'modules/settings/feature/lib/s.dart':
+            "import 'package:domain_settings/domain_settings.dart';\n"
+            "import 'package:domain_cache/domain_cache.dart';\n",
+        'modules/settings/data/pubspec.yaml': pubspec(
+          'data_settings',
+          deps: ['domain_settings', 'domain_cache'],
+        ),
+      });
+      expectViolation(run, 'R3', 'modules/settings/feature/lib/s.dart:2');
+      expect(run.output, isNot(contains('lib/s.dart:1\n')));
+      expect(
+        run.output,
+        contains("`feature_settings` imports another module's domain package"),
+      );
+      expect(
+        run.output,
+        contains("`data_settings` declares another module's domain package"),
+      );
+    });
+
+    test("another module's API is for features only, not for data", () async {
+      final run = await check({
+        'modules/auth/api/pubspec.yaml': pubspec('auth_api'),
+        'modules/settings/feature/pubspec.yaml': pubspec(
+          'feature_settings',
+          deps: ['auth_api'],
+        ),
+        'modules/settings/data/pubspec.yaml': pubspec(
+          'data_settings',
+          deps: ['auth_api'],
+        ),
+      });
+      expectViolation(run, 'R3', 'modules/settings/data/pubspec.yaml');
+      expect(run.output, contains("another module's API package `auth_api`"));
+      expect(run.output, isNot(contains('`feature_settings` declares')));
+    });
+  });
+
+  group('dev dependencies and test imports are edges too', () {
+    test('a platform package declaring or testing a module fails', () async {
+      final run = await check({
+        'modules/auth/feature/pubspec.yaml': pubspec('feature_auth'),
+        'modules/auth/data/pubspec.yaml': pubspec('data_auth'),
+        'platform/infra/network/pubspec.yaml': pubspec(
+          'core_network',
+          devDeps: ['feature_auth', 'data_auth'],
+        ),
+        'platform/infra/network/test/x_test.dart':
+            "import 'package:feature_auth/feature_auth.dart';\n",
+        'platform/infra/network/integration_test/y_test.dart':
+            "import 'package:data_auth/data_auth.dart';\n",
+      });
+      expectViolation(run, 'R1', 'platform/infra/network/pubspec.yaml');
+      expect(run.output, contains('declares under `dev_dependencies:`'));
+      expect(run.output, contains('platform/infra/network/test/x_test.dart:1'));
+      expect(
+        run.output,
+        contains('platform/infra/network/integration_test/y_test.dart:1'),
+      );
+    });
+
+    test(
+      'platform -> platform dev dependencies and tests stay exempt (R11)',
+      () async {
+        final run = await check({
+          'platform/infra/storage/pubspec.yaml': pubspec('core_storage'),
+          'platform/shell/app_shell/pubspec.yaml': pubspec(
+            'platform_app_shell',
+            devDeps: ['core_storage'],
+          ),
+          'platform/shell/app_shell/test/a_test.dart':
+              "import 'package:core_storage/core_storage.dart';\n",
+          'platform/infra/network/pubspec.yaml': pubspec(
+            'core_network',
+            devDeps: ['core_storage'],
+          ),
+        });
+        expectClean(run, 'R1');
+        expectClean(run, 'R11');
+      },
+    );
+
+    test('a feature or data package declaring or testing the wrong module '
+        'fails', () async {
+      final run = await check({
+        'modules/home/feature/pubspec.yaml': pubspec('feature_home'),
+        'modules/cache/data/pubspec.yaml': pubspec('data_cache'),
+        'modules/settings/feature/pubspec.yaml': pubspec(
+          'feature_settings',
+          devDeps: ['feature_home'],
+        ),
+        'modules/settings/feature/test/s_test.dart':
+            "import 'package:feature_home/feature_home.dart';\n",
+        'modules/auth/data/pubspec.yaml': pubspec(
+          'data_auth',
+          devDeps: ['data_cache'],
+        ),
+        'modules/auth/data/test/a_test.dart':
+            "import 'package:data_cache/data_cache.dart';\n",
+      });
+      expectViolation(run, 'R3', 'modules/settings/feature/pubspec.yaml');
+      expect(
+        run.output,
+        contains('modules/settings/feature/test/s_test.dart:1'),
+      );
+      expect(run.output, contains('modules/auth/data/pubspec.yaml'));
+      expect(run.output, contains('modules/auth/data/test/a_test.dart:1'));
+    });
+
+    test('an API package with a dev dependency on a feature fails', () async {
+      final run = await check({
+        'modules/auth/feature/pubspec.yaml': pubspec('feature_auth'),
+        'modules/auth/api/pubspec.yaml': pubspec(
+          'auth_api',
+          devDeps: ['feature_auth'],
+        ),
+      });
+      expectViolation(run, 'R3', 'modules/auth/api/pubspec.yaml');
+    });
+
+    test(
+      'a pure-Dart tier with a Flutter test dependency fails (R2, R9)',
+      () async {
+        final run = await check({
+          'modules/x/domain/pubspec.yaml': pubspec(
+            'domain_x',
+            devDeps: ['flutter_test'],
+          ),
+          'modules/x/domain/test/x_test.dart':
+              "import 'package:flutter_test/flutter_test.dart';\n",
+          'platform/foundation/kernel/pubspec.yaml': pubspec(
+            'platform_kernel',
+            devDeps: ['flutter_test'],
+          ),
+          'platform/foundation/kernel/test/k_test.dart':
+              "import 'package:flutter_test/flutter_test.dart';\n",
+        });
+        expectViolation(run, 'R2', 'modules/x/domain/pubspec.yaml');
+        expect(run.output, contains('R9 — '));
+        expect(run.output, contains('platform/foundation/kernel/pubspec.yaml'));
+        expect(
+          run.output,
+          contains('platform/foundation/kernel/test/k_test.dart:1'),
+        );
+      },
+    );
+
+    test(
+      'a test importing its own package or a pure-Dart one passes',
+      () async {
+        final run = await check({
+          'modules/x/domain/pubspec.yaml': pubspec(
+            'domain_x',
+            devDeps: ['test'],
+          ),
+          'modules/x/domain/test/x_test.dart':
+              "import 'package:test/test.dart';\n"
+              "import 'package:domain_x/domain_x.dart';\n",
+        });
+        expectClean(run, 'R2');
+      },
+    );
+  });
+
+  group('imports are read from the lexer, not a line regex', () {
+    /// A feature that must not import `feature_b`, written every way.
+    Future<ToolRun> featureWith(String source) => check({
+      'modules/b/feature/pubspec.yaml': pubspec('feature_b'),
+      'modules/a/feature/pubspec.yaml': pubspec(
+        'feature_a',
+        deps: ['feature_b'],
+      ),
+      'modules/a/feature/lib/a.dart': source,
+    });
+
+    for (final entry in {
+      'no space after import': "import'package:feature_b/feature_b.dart';\n",
+      'a second directive on the line':
+          "import 'dart:async'; import 'package:feature_b/feature_b.dart';\n",
+      'a conditional configuration':
+          "import 'stub.dart' if (dart.library.io) "
+          "'package:feature_b/feature_b.dart';\n",
+      'a second conditional configuration':
+          "import 'stub.dart' if (dart.library.io) 'io.dart' "
+          "if (dart.library.html) 'package:feature_b/feature_b.dart';\n",
+      'an export': "export 'package:feature_b/feature_b.dart';\n",
+      'a wrapped show clause':
+          "import 'package:feature_b/feature_b.dart'\n    show B;\n",
+      'a directive after a block comment':
+          "/* x */ import 'package:feature_b/feature_b.dart';\n",
+    }.entries) {
+      test('${entry.key} is found (R3 imports)', () async {
+        final run = await featureWith(entry.value);
+        expectViolation(run, 'R3', 'modules/a/feature/lib/a.dart:1');
+        expect(run.output, contains('`feature_a` imports another feature'));
+      });
+    }
+
+    test(
+      'a conditional configuration naming flutter fails in the domain',
+      () async {
+        final run = await check({
+          'modules/x/domain/pubspec.yaml': pubspec('domain_x'),
+          'modules/x/domain/lib/x.dart': "import 'stub.dart' if (dart.library.ui) 'package:flutter/material.dart';\n",
+        });
+        expectViolation(run, 'R2', 'modules/x/domain/lib/x.dart:1');
+      },
+    );
+
+    test('and the kernel', () async {
+      final run = await check({
+        'platform/foundation/kernel/pubspec.yaml': pubspec('platform_kernel'),
+        'platform/foundation/kernel/lib/k.dart': "import 'stub.dart' if (dart.library.html) 'package:dio/dio.dart';\n",
+      });
+      expectViolation(run, 'R9', 'platform/foundation/kernel/lib/k.dart:1');
+    });
+
+    for (final entry in {
+      'a block comment': "/*\nimport 'package:feature_b/feature_b.dart';\n*/\n",
+      'a triple-quoted string':
+          "const t = '''\nimport 'package:feature_b/feature_b.dart';\n''';\n",
+      'a doc comment':
+          "/// import 'package:feature_b/feature_b.dart';\nconst a = 1;\n",
+      'a line comment': "// import 'package:feature_b/feature_b.dart';\n",
+      'a string': "const s = \"import 'package:feature_b/feature_b.dart';\";\n",
+    }.entries) {
+      test('${entry.key} is not an import', () async {
+        final run = await check({
+          'modules/b/feature/pubspec.yaml': pubspec('feature_b'),
+          'modules/a/feature/pubspec.yaml': pubspec('feature_a'),
+          'modules/a/feature/lib/a.dart': entry.value,
+        });
+        expectClean(run, 'R3');
+        expect(run.output, isNot(contains('R5 — ')));
+      });
+    }
   });
 
   group('R3 / R8 module API packages', () {

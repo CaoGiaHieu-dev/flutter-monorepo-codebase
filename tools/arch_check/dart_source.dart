@@ -71,13 +71,18 @@ class DartSource {
 
 /// One `import` / `export` / `part` directive.
 class Directive {
-  Directive(this.keyword, this.line, this.uris);
+  Directive(this.keyword, this.line, this.uris, this.start, this.end);
 
   /// `import`, `export` or `part`.
   final String keyword;
 
   /// 1-based line of the keyword.
   final int line;
+
+  /// Offset of the keyword, and of the end of the directive (just after its
+  /// `;`), in the source — which [DartSource.code] shares offset for offset.
+  final int start;
+  final int end;
 
   /// The directive's URI, then each `if (...) 'uri'` configuration's.
   final List<String> uris;
@@ -187,7 +192,15 @@ class _Scanner {
         final uri = _stringAfter(code, close + 1);
         if (uri != null) uris.add(_strings[uri]!.value);
       }
-      out.add(Directive(m.group(1)!, lineAt(m.start), uris));
+      out.add(
+        Directive(
+          m.group(1)!,
+          lineAt(m.start),
+          uris,
+          m.start,
+          stop == -1 ? code.length : stop + 1,
+        ),
+      );
     }
     return out;
   }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../arch_check/dart_source.dart';
 import '../shared/toolchain.dart';
 
 const _usage = '''
@@ -12,11 +13,16 @@ Dart file under lib/, sorted, then runs `dart format` on it.
 
   dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
 
-There is exactly one barrel per package. A directory barrel left by an older
-generator (a file holding only the auto-generated header and `export` lines)
-is deleted; one that also holds code keeps the code and loses the exports.
-Hand-written `export` lines in the package barrel are replaced; everything
-else in it (library doc comment, `library;`) is kept.
+There is exactly one barrel per package. A directory barrel is deleted: a
+file holding nothing but `export` lines of files in the same package, with or
+without the auto-generated header (an older generator wrote them; so does a
+hand). One that has the header and also holds code keeps the code and loses the
+exports. A file that re-exports ANOTHER package (`export 'package:x/x.dart';`,
+a regular source file, like core_common's kernel.dart) is not a directory
+barrel: it stays and is exported like any file.
+Every `export` directive in the package barrel is replaced, however it is
+written (single or double quotes, `export'x'`, a `show` / `hide` clause across
+lines); everything else in it (library doc comment, `library;`) is kept.
 
 Not exported: `*.g.dart`, `*.freezed.dart`, `*.mocks.dart`, `part of` files,
 `firebase_options*.dart`, lib/gen/ and hidden directories. Generated files
@@ -181,23 +187,58 @@ bool _isExported(String path, String content) {
   return !RegExp(r'^part\s+of\s+', multiLine: true).hasMatch(content);
 }
 
-/// A barrel an older, per-directory version of this tool wrote: the header
-/// and `export` lines, nothing else.
+/// A directory barrel: a lib file with nothing in it but `export` directives
+/// (`library;` and comments aside). With the generator's header it is one an
+/// older, per-directory version of this tool wrote — even an empty one. Without
+/// it, it is one somebody wrote by hand, and it counts only when every export
+/// names a file of this package (a relative URI): `export 'package:x/x.dart';`
+/// is a deliberate re-export that stays an ordinary source file.
 bool _isLegacyBarrel(String content) {
-  if (!content.contains(_header)) return false;
-  return content
-      .split('\n')
-      .map((l) => l.trim())
-      .every((l) => l.isEmpty || l == _header || l.startsWith("export '"));
+  final scanned = DartSource.scan(content);
+  if (scanned.directives.any((d) => d.keyword != 'export')) return false;
+  final rest = DartSource.scan(_withoutExportDirectives(content)).code
+      .replaceAll(RegExp(r'\blibrary\b[^;]*;'), '')
+      .trim();
+  if (rest.isNotEmpty) return false;
+  if (content.contains(_header)) return true;
+  final exports = scanned.directives.where((d) => d.keyword == 'export');
+  return exports.isNotEmpty &&
+      exports.every((d) => d.uris.every((u) => !u.contains(':')));
 }
 
 String _withoutExports(String content) {
-  final kept = content
+  final kept = _withoutExportDirectives(content)
       .split('\n')
-      .where((l) => l.trim() != _header && !l.trim().startsWith("export '"))
+      .where((l) => l.trim() != _header)
       .join('\n')
       .replaceAll(RegExp(r'\n{3,}'), '\n\n');
   return '${kept.trimLeft().trimRight()}\n';
+}
+
+/// [content] without any `export` directive: found by the lexer, so single and
+/// double quotes, `export'x'`, a `show` / `hide` clause that wraps over lines
+/// and a conditional configuration all go, and an `export` inside a comment or
+/// a string stays. The rest of the line goes with the directive.
+String _withoutExportDirectives(String content) {
+  final ranges = [
+    for (final d in DartSource.scan(content).directives)
+      if (d.keyword == 'export') (d.start, d.end),
+  ];
+  if (ranges.isEmpty) return content;
+  final out = StringBuffer();
+  var at = 0;
+  for (final (start, end) in ranges) {
+    out.write(content.substring(at, start));
+    at = end;
+    // Trailing blanks and one line break belong to the directive.
+    while (at < content.length && (content[at] == ' ' || content[at] == '\t')) {
+      at++;
+    }
+    if (at < content.length && content[at] == '\r') at++;
+    if (at < content.length && content[at] == '\n') at++;
+  }
+  out.write(content.substring(at));
+  return out.toString();
 }
 
 void _deleteEmptyDirectories(Directory dir) {
@@ -211,13 +252,14 @@ void _deleteEmptyDirectories(Directory dir) {
 }
 
 /// Keeps what a person wrote in the barrel (its doc comment, `library;`,
-/// imports) and replaces every `export` line with [exports].
+/// imports) and replaces every `export` directive with [exports].
 void _writeBarrel(File barrel, List<String> exports) {
   final kept = <String>[];
   if (barrel.existsSync()) {
-    for (final line in barrel.readAsLinesSync()) {
-      final t = line.trim();
-      if (t == _header || t.startsWith("export '")) continue;
+    for (final line in _withoutExportDirectives(
+      barrel.readAsStringSync(),
+    ).split(RegExp(r'\r?\n'))) {
+      if (line.trim() == _header) continue;
       kept.add(line);
     }
   }

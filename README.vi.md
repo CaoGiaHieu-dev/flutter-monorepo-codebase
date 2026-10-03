@@ -514,7 +514,7 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 - **Flutter**: >= 3.47.4 (Stable)
 - **Dart SDK**: >= 3.13.3
 - **JDK**: 17 trở lên (CI build với 17; `apps/mobile/android/app/build.gradle.kts` nhắm bytecode Java 17, đó không phải mức trần)
-- **Ruby**: >= 3.0 (cho Fastlane)
+- **Ruby**: >= 3.2 (cho Fastlane)
 - **Node.js + npm, tài khoản Google và một Firebase project**: chỉ cần cho cấu hình Firebase thật (bước 3)
 
 ### 2. Dựng Workspace — một lệnh

@@ -42,43 +42,43 @@ dart run build_runner build --workspace
   consumers' `getItOrNull` lookups already handle that. Run the removal again once nothing imports it.
 - `remove_sample` accepts only the bundles listed in `tools/sample_manifest.yaml` (an unknown one exits `64`) and
   never edits that file; `docs_check` therefore reports a documentation reference into a removed sample as INFO, not a failure.
+- `--apply` flips the manifests but edits no test: update each app's `test/app_profile_test.dart` (and any
+  `_factoriesNeedingArguments` entry) as [The app tests](#the-app-tests) says, or Gate 3 fails.
 - `verify` names any capability that lost its last provider but the tool could not know (V3): declare it
   `{ state: absent, reason: "…" }` (RULE-81).
 
 ## A module you generated
 
-Remove in this order — the manifest first, so no step leaves a manifest naming a package that is gone:
+Start with the consumers (below): the root `workspace:` list follows `dependencies` in every `pubspec.yaml`, so a
+package that something else still lists stays in the workspace and `flutter pub get` fails when you delete its
+directory. Then remove in this order — the manifest first, so no step leaves a manifest naming a package that is gone:
 
-1. Delete its line (or only the layers you drop) under `modules:` in **every** `apps/<id>/app_manifest.yaml` that
+1. Drop every dependency on, and import of, the module's packages (`<name>_api`, `domain_<name>`, `data_<name>`,
+   `feature_<name>`) outside the module — see **Check the consumers**.
+2. Delete its line (or only the layers you drop) under `modules:` in **every** `apps/<id>/app_manifest.yaml` that
    composes it. A core or custom package is a name under a `di_groups` entry's `packages:` instead.
-2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, each app's path dependencies, the root
+3. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, each app's path dependencies, the root
    `workspace:` list, the `facts` regions and the README reports.
-3. Delete the package directories: `modules/<name>/<layer>/` for each layer, then `modules/<name>/` when empty (or
-   `platform/<group>/<name>`).
-4. `flutter pub get && dart run build_runner build --workspace` — regenerates every app's `injection.config.dart`.
-5. `dart tools/composer/composer.dart verify`. If a capability lost its last provider, declare it `absent` with a
+4. Delete the package directories: `modules/<name>/<layer>/` for each layer, then `modules/<name>/` when empty (or
+   `platform/<group>/<name>`). Run `composer sync` again if `pub get` still names the package.
+5. `flutter pub get && dart run build_runner build --workspace` — regenerates every app's `injection.config.dart`.
+6. `dart tools/composer/composer.dart verify`. If a capability lost its last provider, declare it `absent` with a
    reason in each app's `capabilities:`, then `composer sync` again.
-6. Fix the consumers (below), then run the Verify block.
+7. Fix the app tests (below), then run the Verify block.
 
-Dropping a module from **one app** only is steps 1, 2 and 4 for that manifest (`--app <id>` limits `sync`); the root
+Dropping a module from **one app** only is steps 2, 3 and 5 for that manifest (`--app <id>` limits `sync`); the root
 `workspace:` list keeps the package while another app composes it.
 
-## Check the consumers
+## The app tests
 
-The shell degrades gracefully, but another package may hold a hard dependency on what you delete. Search first:
+Gate 3 runs `cd apps/<id> && flutter test` — the whole package, not only the smoke test. Two files name what you removed:
 
-```bash
-grep -rn "<name>_api\|domain_<name>\|data_<name>\|feature_<name>" --include=pubspec.yaml --include=*.dart . | grep -v "^./modules/<name>/"
-```
-
-- A consumer that resolves the module's contract with `getItOrNull` degrades (the control is hidden, the screen shows
-  its fallback). A consumer that depends on the **API package** keeps compiling while that package stays.
-- Anything importing `domain_<name>`, `data_<name>` or `feature_<name>` directly is a layering violation
-  (`arch_check` R3 / R10) — fix it before deleting, or the workspace stops resolving.
-- A contract owned by a removable feature reaches its consumers through `getItOrNull` / `getAllOrEmpty` and a
-  fallback, never as a required constructor parameter DI cannot satisfy once the owner is gone (RULE-12).
-- Documentation that names the removed paths: `dart tools/docs_check/check.dart` fails on a dead path in a module
-  that is **not** a sample bundle; remove or reword those lines ([`update_docs`](../update_docs/SKILL.md)).
+- `apps/<id>/test/di_smoke_test.dart` — a factory with a non-nullable `@factoryParam` has an entry in
+  `_factoriesNeedingArguments`. Once the module is gone the test fails with `FactoryProblem:F03 <Type> is listed in
+  notBuilt but is not a factory the graph registers`: delete the entry.
+- `apps/<id>/test/app_profile_test.dart` pins the capabilities the app provides ("declare every optional contract the
+  sample modules provide"). After any capability flips to `absent` — by hand, by `remove_sample`, or from a V3
+  finding — update the expectations in the same test files of **every** app you changed.
 
 ## Related
 
@@ -94,7 +94,7 @@ flutter analyze                                          # 0 issues (RULE-70)
 dart tools/arch_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 dart tools/docs_check/check.dart                         # no dead path
-cd apps/mobile && flutter test test/di_smoke_test.dart   # and cd apps/admin: the graph boots without the module
+cd apps/<id> && flutter test                             # every app: smoke test and app_profile_test (Gate 3)
 cd <each package that imported it> && flutter test
 cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77
 ```

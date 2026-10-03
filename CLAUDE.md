@@ -137,7 +137,7 @@ Guide: [`13_app_composition`](docs/en/guides/13_app_composition.md).
 **Drop a module.** Delete its line from every `apps/<id>/app_manifest.yaml`, then
 `composer sync` → **delete the leftover `modules/<id>/` directory** (`composer verify` fails on a package
 no app composes) → `flutter pub get` → `build_runner`. Or `remove_sample <bundle> --apply`, which
-deletes the directories itself.
+deletes the directories itself (skill `remove_module`).
 
 **Before you say "done".** The Gate 0–5 commands above for what you touched, plus the debug APK
 build after any DI, dependency or type-location change (RULE-77). A DI change is proven by the
@@ -155,10 +155,14 @@ smoke test (`cd apps/mobile && flutter test test/di_smoke_test.dart`), not by re
 | Configure an app: platform, flavor, pin, language, palette, hook, capability; a third app | `configure_app` | `13_app_composition` |
 | Persist a key-value setting or token | `implement_package_storage` | `06_storage` |
 | Tables, offline lists, migrations | `implement_package_database` | `07_database` |
+| Let one feature reach another module: an `<id>_api` package (navigator, contracts) | `create_api_package` | `10_cross_feature`, `12_module_isolation` |
 | Trigger another feature's UI action | `implement_action_handler` | `10_cross_feature` |
+| Remove a module or the shipped samples | `remove_module` | `01_new_feature` § 9 |
 | Barrels, version sync, unused code, AI review, `composer describe` / `new` | `run_repo_tooling` | `../reference/03_tooling` |
-| Translated string, new locale, theme | — | `09_localization_theming`, `11_design_system` |
+| Translated string, ARB key, new locale | `localize_feature` | `09_localization_theming` |
+| Theme, palette, tokens | — | `09_localization_theming`, `11_design_system` |
 | Tablet / foldable / split-screen layout | — | `11_design_system` § 7 |
+| Docs, a rule, the changelog, a vi translation | `update_docs` | `CONTRIBUTING` § 5 |
 | Crash reporting, analytics | — | `../architecture/06_app_shell` § 2 |
 | Work in a partial checkout (one module) | — | `12_module_isolation` § 2 |
 
@@ -195,7 +199,7 @@ A module's contracts *for other features* (its navigator, action handlers) live 
 | First run, project tour, daily loop | [`docs/en/getting-started/`](docs/en/getting-started/01_setup.md) |
 | A first module end to end (generate, code, test, gates, remove) — verified | [`04_first_feature_tutorial`](docs/en/getting-started/04_first_feature_tutorial.md) |
 | CI/CD, Fastlane, release, secrets | [`docs/en/operations/`](docs/en/operations/01_cicd.md) |
-| Task recipes for agents | [`.claude/skills/`](.claude/skills/) — configure app, create module, DI, BLoC/Provider UI, navigation, action handler, domain/data flow, storage, database, repo tooling |
+| Task recipes for agents | [`.claude/skills/`](.claude/skills/) — configure app, create module, create API package, remove module, localize feature, DI, BLoC/Provider UI, navigation, action handler, domain/data flow, storage, database, repo tooling, update docs |
 | Docs contract, commits, PR process | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Other AI tools' entry point | [`.agents/AGENTS.md`](.agents/AGENTS.md) |
 | How the repo got here | [`docs/history/restructure-log.md`](docs/history/restructure-log.md) |

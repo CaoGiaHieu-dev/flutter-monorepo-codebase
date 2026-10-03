@@ -35,7 +35,7 @@ flavors: # closed set: dev | staging | prod
 
 env: # the keys of the env.<flavor> files; checked here, validated again at boot
   BASE_URL: { required_in: [prod] }
-  APP_NAME: { required_in: [staging, prod] }
+  APP_NAME: { } # optional: AppConfig.titleFor falls back to `app.name`
   WEB_DOMAIN: { native_only: true } # read by Gradle / Xcode only — no Dart reader
   APP_LINK_MODE: { native_only: true }
 

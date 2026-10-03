@@ -19,16 +19,20 @@ Directory _repoRoot() {
   return dir;
 }
 
-/// `path:line` entries of a contract's `consumer`.
-Iterable<({String path, int line})> _lookups(ShellContract<Object> contract) =>
-    contract.consumer.split(',').map((entry) {
-      final trimmed = entry.trim();
-      final colon = trimmed.lastIndexOf(':');
-      return (
-        path: trimmed.substring(0, colon),
-        line: int.parse(trimmed.substring(colon + 1)),
-      );
-    });
+/// The files of a contract's `consumer`.
+Iterable<String> _consumerFiles(ShellContract<Object> contract) =>
+    contract.consumer.split(',').map((entry) => entry.trim());
+
+/// Whether [source] looks [type] up — `getIt<T>`, `getItOrNull<T>` or
+/// `getAllOrEmpty<T>` — or has it injected as a field (`final T _x;`).
+bool _looksUp(String source, String type) {
+  final t = RegExp.escape(type);
+  return RegExp('\\b(?:getIt|getItOrNull|getAllOrEmpty)\\s*<\\s*$t\\s*>')
+          .hasMatch(
+            source,
+          ) ||
+      RegExp('\\bfinal\\s+$t\\??\\s+_?\\w+\\s*;').hasMatch(source);
+}
 
 /// What the shell resolves from DI, as one table.
 void main() {
@@ -91,33 +95,24 @@ void main() {
       );
     });
 
-    test('every consumer line is a lookup of the contract it names', () {
+    test('every consumer file looks the contract up', () {
       final root = _repoRoot();
 
       for (final contract in SHELL_CONTRACTS) {
-        for (final (:path, :line) in _lookups(contract)) {
+        final files = _consumerFiles(contract).toList();
+        expect(files, isNotEmpty, reason: contract.id);
+        expect(files.toSet(), hasLength(files.length), reason: contract.id);
+        for (final path in files) {
           final file = File('${root.path}/$path');
           expect(file.existsSync(), isTrue, reason: '${contract.id}: $path');
-          final lines = file.readAsLinesSync();
-          expect(
-            line,
-            inInclusiveRange(1, lines.length),
-            reason: '${contract.id}: $path:$line',
-          );
           final type = contract.type.toString();
-          final namedAt = [
-            for (final (index, text) in lines.indexed)
-              if (text.contains(type)) index + 1,
-          ];
           expect(
-            lines[line - 1],
-            contains(type),
+            _looksUp(file.readAsStringSync(), type),
+            isTrue,
             reason:
-                '${contract.id}: $path:$line is not a lookup of $type — the '
-                'catalog has drifted from the code. The file names $type at '
-                '${namedAt.isEmpty ? 'no line' : 'line ${namedAt.join(', ')}'}'
-                '; update this row\'s `consumer` in utils/shell_contract_constants.dart '
-                'in the same change that moved it.',
+                '${contract.id}: $path no longer looks up $type — the catalog '
+                'has drifted from the code. Update this row\'s `consumer` in '
+                'utils/shell_contract_constants.dart in the same change.',
           );
         }
       }

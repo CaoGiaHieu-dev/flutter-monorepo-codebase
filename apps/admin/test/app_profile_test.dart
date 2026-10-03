@@ -70,7 +70,8 @@ void main() {
       };
       expect(required, {
         'BASE_URL': {Flavor.prod},
-        'APP_NAME': {Flavor.staging, Flavor.prod},
+        // The title falls back to `app.name`, so a missing APP_NAME never stops a boot.
+        'APP_NAME': isEmpty,
       });
     });
 

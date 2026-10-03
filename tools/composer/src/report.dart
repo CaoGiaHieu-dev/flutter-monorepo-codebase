@@ -124,6 +124,14 @@ const List<CodedLine> kBootProblems = [
     'C10',
     'resolving a registered contract threw: its constructor or factory fails',
   ),
+  CodedLine(
+    'C11',
+    '`router.fallbackPath` is not a route the assembled router registers',
+  ),
+  CodedLine(
+    'C12',
+    'two or more navigation tabs and no dashboard: no way to switch between them',
+  ),
 ];
 
 /// The report for [view], Markdown, without the region markers.

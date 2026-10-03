@@ -42,7 +42,7 @@ class CatalogEntry {
   /// `cardinality: ContractCardinality.many`.
   final bool many;
 
-  /// `path:line` of each lookup, as the source writes them.
+  /// The file of each lookup, as the source writes them.
   final String consumer;
 
   /// What the shell does when nothing is registered.

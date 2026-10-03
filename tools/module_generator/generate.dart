@@ -314,6 +314,11 @@ void main(List<String> args) async {
           stdout.writeln(
             '   See docs/en/guides/04_routing.md § 1 (Pick the routing contract).',
           );
+          stdout.writeln(
+            '   ⚠ A second tab needs a dashboard to switch to it: an app that '
+            'composes two or more tabs without feature_dashboard (capability '
+            '`dashboard`) fails check C12. Compose it, or keep one tab.',
+          );
           break;
         case FeatureRouteContribution.none:
           stdout.writeln(

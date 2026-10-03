@@ -266,7 +266,7 @@ const List<KeySpec> kManifestKeys = [
         'locked to portrait, larger ones rotate freely',
     validation: 'closed vocabulary (OrientationPolicy)',
     consumer: 'platform/foundation/common/lib/src/config/app_initializer.dart',
-    reads: 'facts?.orientation',
+    reads: 'facts.orientation',
     replaces: 'the portrait lock hardcoded in AppInitializer',
   ),
   KeySpec(

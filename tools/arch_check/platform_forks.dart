@@ -22,10 +22,6 @@ const Map<String, String> kPlatformForkAllowList = {
       'the policy fork itself: resolveAppPlatform() maps kIsWeb and '
       'defaultTargetPlatform to AppPlatform, web first because Platform.* '
       'throws there',
-  'platform/foundation/common/lib/src/config/app_initializer.dart':
-      'a fallback for a caller that passes no AppPlatform (a hand-built test): '
-      'runShellApp always passes resolveAppPlatform(), so a booted app never '
-      'reaches it',
   'platform/foundation/common/lib/src/go_route_data_custom.dart':
       'the page type is an OS convention (CupertinoPage on iOS, MaterialPage '
       'elsewhere) and dart:io Platform throws on the web. Known gap: on the web '

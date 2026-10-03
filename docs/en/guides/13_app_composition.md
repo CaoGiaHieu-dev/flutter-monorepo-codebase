@@ -129,6 +129,9 @@ After editing the profile run `composer sync`: the README report's § 5 prints t
 
 ```dart
 // lib/app/app_hooks.dart
+import 'package:core_common/core_common.dart'; // AppRuntime, WindowFacts
+import 'package:platform_app_shell/platform_app_shell.dart';
+
 const ShellHooks appHooks = ShellHooks(
   beforeDependencies: _initCrashReporting, // a top-level function: const
   configureWindow: _sizeTheWindow,
@@ -143,7 +146,7 @@ Future<void> _sizeTheWindow(AppRuntime runtime, WindowFacts window) async {
 }
 ```
 
-Type `const ShellHooks(` and the IDE lists the seven hooks, each documented with when it runs and what it may not do: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (the table is in [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#hooks)). A hook that throws is reported like any error in the app zone and stops the boot where it ran. The template ships no window plugin (RULE-74: the catalog gains one only when an app adopts it), so an app that wants a desktop window size adds the plugin to its own dependencies.
+A hook that names `AppRuntime` or `WindowFacts` needs the `core_common` import, which the generated file does not carry. Type `const ShellHooks(` and the IDE lists the seven hooks, each documented with when it runs and what it may not do: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (the table is in [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#hooks)). A hook that throws is reported like any error in the app zone and stops the boot where it ran. The template ships no window plugin (RULE-74: the catalog gains one only when an app adopts it), so an app that wants a desktop window size adds the plugin to its own dependencies.
 
 ## 6. Contracts: what the shell asks of an app
 

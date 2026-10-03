@@ -315,7 +315,7 @@ builder: (context, state, navigationShell) {
 
 ```bash
 dart tools/arch_check/check.dart     # ✅ … R3 (feature/API imports), R8 (optional lookups), R10 (app imports)
-grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # hits only in lib/di/injection.dart (generated)
+grep -rn "package:feature_" apps/mobile/lib --include="*.dart" --exclude="*.config.dart"   # hits only in lib/di/injection.dart (generated)
 cd apps/mobile && flutter test test/di_smoke_test.dart            # contracts resolve from the real graph
 ```
 

@@ -316,7 +316,7 @@ Bản thân `navigationShell` là widget hiển thị nhánh hiện tại. Vì v
 
 ```bash
 dart tools/arch_check/check.dart     # ✅ … R3 (import feature/API), R8 (tra cứu tuỳ chọn), R10 (import trong app)
-grep -rn "package:feature_" apps/mobile/lib --include="*.dart"   # chỉ có kết quả trong lib/di/injection.dart (file sinh tự động)
+grep -rn "package:feature_" apps/mobile/lib --include="*.dart" --exclude="*.config.dart"   # chỉ có kết quả trong lib/di/injection.dart (file sinh tự động)
 cd apps/mobile && flutter test test/di_smoke_test.dart            # hợp đồng resolve được từ graph thật
 ```
 

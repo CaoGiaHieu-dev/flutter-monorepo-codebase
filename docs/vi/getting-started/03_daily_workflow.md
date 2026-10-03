@@ -192,7 +192,7 @@ flutter build apk --flavor dev --debug --dart-define-from-file=env.dev
 | Chạy `flutter build apk` từ gốc repo | `Target file "lib\main.dart" not found` | `cd apps/mobile` trước |
 | Hardcode version trong pubspec của package | `dependency_sync --check` báo lỗi | Đưa version về `pubspec_dependencies.yaml`, sync lại |
 | Import package mà không khai báo | Compile được cục bộ (workspace dùng chung `package_config.json`), gãy khi tách package | Khai vào `pubspec.yaml` của package đó (`dependencies:`, không phải `dev_dependencies:`); kiểm tra bằng `dart tools/arch_check/check.dart` (R5). Unused checker lo chiều ngược lại — khai mà không import |
-| Đăng ký controller màn hình là singleton | State rò rỉ giữa các lần mở màn hình | Controller của feature phải là `@injectable` (factory) — xem [../guides/05_di.md](../guides/05_di.md) |
+| Đăng ký controller màn hình là singleton | State rò rỉ giữa các lần mở màn hình | Controller của feature là `@injectable` (RULE-10) — xem [../guides/05_di.md](../guides/05_di.md) |
 
 ---
 

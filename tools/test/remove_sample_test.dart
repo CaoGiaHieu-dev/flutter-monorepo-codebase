@@ -143,6 +143,46 @@ void main() {
     );
   });
 
+  group('composer sync after --apply', () {
+    // A stand-in composer: records that it ran, exits with the code a file asks.
+    String stub(int exitCode) =>
+        "import 'dart:io';\n"
+        'void main(List<String> args) {\n'
+        "  File('composer_ran.txt').writeAsStringSync(args.join(' '));\n"
+        '  exit($exitCode);\n'
+        '}\n';
+
+    test('runs it, so the generated regions follow the manifests', () async {
+      final ws = workspace(bImportsApi: false);
+      ws.write({'tools/composer/composer.dart': stub(0)});
+      final apply = await run(ws, ['a', '--apply']);
+      expect(apply, exitsWith(0));
+      expect(ws.read('composer_ran.txt'), 'sync');
+      expect(apply.output, contains('composer sync: ok'));
+      // Done: the next steps no longer ask for a sync the tool just did.
+      expect(apply.output, isNot(contains('composer.dart sync')));
+      expect(apply.output, contains('composer.dart verify'));
+    });
+
+    test('exits 1 with the next step when the composer refuses', () async {
+      final ws = workspace(bImportsApi: false);
+      ws.write({'tools/composer/composer.dart': stub(2)});
+      final apply = await run(ws, ['a', '--apply']);
+      expect(apply, exitsWith(1));
+      expect(apply.output, contains('composer sync failed'));
+      expect(apply.output, contains('dart tools/composer/composer.dart sync'));
+    });
+
+    test('a workspace without the composer lists it as a next step', () async {
+      final apply = await run(workspace(bImportsApi: false), [
+        'a',
+        '--apply',
+      ]);
+      expect(apply, exitsWith(0));
+      expect(apply.output, contains('dart tools/composer/composer.dart sync'));
+    });
+  });
+
   group('capabilities the bundle alone provided', () {
     TempWorkspace withCapabilities() {
       final ws = workspace(bImportsApi: false);

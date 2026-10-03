@@ -180,7 +180,8 @@ feature-removal guide cannot give you.
 `--apply` also edits each app's `app_manifest.yaml` `capabilities:` block: a contract the bundle was
 the only provider of (`capabilities:` in the bundle, e.g. `splash` for the splash sample) flips from
 `provided` to `{ state: absent, reason: "sample <bundle> removed" }`, so `composer verify` stays
-green after `composer sync`. Contracts the bundle shared with another module (`shared_capabilities:`)
+green: `--apply` runs `composer sync` itself (when the workspace has the composer), so the generated
+regions follow the manifests, and exits `1` with the composer's reason if it refuses. Contracts the bundle shared with another module (`shared_capabilities:`)
 are named in the next steps; an app's DI smoke test names any that lost their last provider.
 
 Both the dry-run and `--apply` count the documentation references (`docs/`, `.claude/`, every

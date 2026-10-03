@@ -5,6 +5,7 @@ import 'package:glob/list_local_fs.dart';
 import 'package:yaml/yaml.dart';
 
 import '../shared/app_locator.dart';
+import '../shared/toolchain.dart';
 import '../shared/workspace.dart';
 
 /// Removes a sample bundle — the feature package *and* everything that travels
@@ -385,9 +386,24 @@ Future<void> _removeBundle({
     return;
   }
 
+  // The manifests changed, so the regions generated from them (workspace and
+  // deps lists, `injection.dart`, `app_profile.dart` facts, the README report)
+  // are stale until `composer sync` runs. Leaving that to the reader left the
+  // tree red under `composer verify`; a workspace without the composer (a
+  // partial checkout) skips it and lists it as a next step instead.
+  final synced = _runComposerSync();
+
   stdout.writeln('');
   stdout.writeln('Done. Next steps:');
-  stdout.writeln('  dart tools/composer/composer.dart sync');
+  if (synced == null) {
+    stdout.writeln('  dart tools/composer/composer.dart sync');
+  } else if (!synced) {
+    stdout.writeln(
+      '  # composer sync refused the manifests (see above). Fix them, then:',
+    );
+    stdout.writeln('  dart tools/composer/composer.dart sync');
+    exitCode = 1;
+  }
   stdout.writeln('  dart tools/composer/composer.dart verify');
   final shared = (bundle['shared_capabilities'] as YamlList?) ?? const [];
   if (shared.isNotEmpty) {
@@ -414,6 +430,30 @@ Future<void> _removeBundle({
   _reportDocReferences(docRefs, applied: true);
   _reportKept(kept, packages, bundleName, applied: true);
   stdout.writeln('');
+}
+
+/// Runs `composer sync` so the generated regions follow the edited manifests.
+///
+/// `null` when the workspace has no composer, `true` when it regenerated,
+/// `false` when it refused (its output is printed so the reason is visible).
+bool? _runComposerSync() {
+  const composer = 'tools/composer/composer.dart';
+  if (!File(composer).existsSync()) return null;
+  stdout.writeln('');
+  stdout.writeln('Regenerating from the manifests (composer sync)...');
+  final result = Process.runSync(dartExecutable, [
+    ...dartArgs,
+    composer,
+    'sync',
+  ], runInShell: true);
+  if (result.exitCode == 0) {
+    stdout.writeln('  composer sync: ok');
+    return true;
+  }
+  stdout.write(result.stdout);
+  stderr.write(result.stderr);
+  stderr.writeln('[ERROR] composer sync failed (exit ${result.exitCode}).');
+  return false;
 }
 
 /// Each API package of [bundle] that a package outside the bundle still

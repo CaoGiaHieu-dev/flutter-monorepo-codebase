@@ -177,7 +177,7 @@ gỡ feature thủ công không có.
 `--apply` còn sửa khối `capabilities:` trong `app_manifest.yaml` của mỗi app: contract mà bundle là
 nơi cung cấp duy nhất (`capabilities:` trong bundle, ví dụ `splash` cho sample splash) chuyển từ
 `provided` sang `{ state: absent, reason: "sample <bundle> removed" }`, để `composer verify` vẫn
-xanh sau `composer sync`. Các contract bundle dùng chung với module khác (`shared_capabilities:`)
+xanh: `--apply` tự chạy `composer sync` (khi workspace có composer) để các vùng sinh ra theo kịp manifest, và thoát mã `1` kèm lý do của composer nếu nó từ chối. Các contract bundle dùng chung với module khác (`shared_capabilities:`)
 được nêu trong các bước tiếp theo; DI smoke test của app sẽ chỉ ra contract nào mất nơi cung cấp cuối cùng.
 
 Cả dry-run lẫn `--apply` đều đếm các tham chiếu trong tài liệu (`docs/`, `.claude/`,

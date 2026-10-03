@@ -52,12 +52,30 @@ void main() {
         registerAppProfile(appProfile, platform: _platform);
         await configureDependencies(environment: flavor.name);
 
-        // Every `@lazySingleton` in the graph, built now instead of on first
-        // use — a missing dependency throws here rather than on some screen.
-        final singletons = getIt.findAll<Object>(
-          instantiateLazySingletons: true,
-        );
-        expect(singletons, isNotEmpty);
+        // Every `@lazySingleton` in the graph built now instead of on first
+        // use, and every `@injectable` factory called once — a missing
+        // dependency throws here rather than on some screen (RULE-63).
+        //
+        // A factory takes its `@factoryParam` arguments from the screen that
+        // creates it, and here there is none: it is called with `null`. So a
+        // parameter must be nullable (HomeProfileBloc's is — `null` reads "no
+        // session contract registered"); a non-nullable one makes GetIt throw
+        // an ArgumentError, which is reported below with the way out.
+        final List<Object> built;
+        try {
+          built = getIt.findAll<Object>(
+            instantiateLazySingletons: true,
+            callFactories: true,
+          );
+        } on ArgumentError catch (error) {
+          fail(
+            'A factory could not be built without its @factoryParam argument: '
+            'make that parameter nullable (the boot check passes null), or '
+            'build the factory by hand in this test and give it a reason.\n'
+            '$error',
+          );
+        }
+        expect(built, isNotEmpty);
 
         // The graph is built from the sections the profile registered before
         // it: the router got the app's own `RouterProfile`, not a default.

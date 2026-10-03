@@ -29,13 +29,13 @@ Năm tham số vị trí được đọc bởi [`tools/module_generator/src/inpu
 
 | Vị trí | Giá trị | Ý nghĩa |
 | :-- | :-- | :-- |
-| 1 | `1` | Loại module — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom |
+| 1 | `1` | Loại module — `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom, `6` API (`modules/<tên>/api`, package `<tên>_api`; bước 7) |
 | 2 | `profile` | Tên module (snake_case). Package thành `feature_profile` tại `modules/profile/feature` |
-| 3 | `""` | Tiền tố package tuỳ chỉnh — chỉ dùng khi loại là `5` (`<tiền_tố>_<tên>` tại `platform/<nhóm>/<tên>`). Truyền `""` cho loại 1–4 |
+| 3 | `""` | Tiền tố package tuỳ chỉnh — chỉ dùng khi loại là `5` (`<tiền_tố>_<tên>` tại `platform/<nhóm>/<tên>`). Truyền `""` cho mọi loại khác |
 | 4 | `1` | State management — `1` Provider, `2` BLoC, `3` không dùng |
 | 5 | `1` | Kiểu route — `1` `IFeatureRouteModule`, `2` `INavDestinationModule`, `3` không sinh |
 
-Chạy không kèm tham số trên terminal thì tool sẽ hỏi tương tác từng bước. Không có terminal thì thiếu một tham số là thoát với mã 64, chứ không đoán. `--help` in ra cách dùng.
+Chạy không kèm tham số trên terminal thì tool sẽ hỏi tương tác từng bước. Không có terminal thì thiếu một tham số là thoát với mã 64, chứ không đoán. `--help` in ra cách dùng. Loại 4 và 5 nhận thêm `--group <nhóm>` (mặc định `infra`) để chọn thư mục nhóm dưới `platform/`; feature thì không.
 
 Tuỳ chọn `--apps <id,id>` đặt sau các tham số vị trí chỉ ghép module vào những app đó. Các id là `app.id` trong `apps/*/app_manifest.yaml`, ví dụ `--apps mobile`. Không có nó thì module vào mọi app. Một id lạ khiến tool thoát với mã 64 trước khi ghi bất cứ thứ gì.
 
@@ -57,14 +57,15 @@ Tuỳ chọn `--apps <id,id>` đặt sau các tham số vị trí chỉ ghép mo
 
 **Tự động** (xem [`tools/module_generator/generate.dart`](../../../tools/module_generator/generate.dart)):
 
-1. Tạo cây thư mục và `pubspec.yaml`.
-2. Ghi `lib/di/module.dart` với `@InjectableInit.microPackage()`.
-3. Thêm module vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — trừ khi `--apps` chỉ định một tập con.
-   - Rồi nó tự chạy `dart tools/composer/composer.dart sync`. Lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc cùng path dependency và `injection.dart` của từng app.
+1. Tạo cây thư mục, `pubspec.yaml`, `lib/di/module.dart` (`@InjectableInit.microPackage()`), phần khung l10n (§6), page, controller và các template route.
+2. Thêm module vào mục `modules:` của **mọi** `apps/<id>/app_manifest.yaml` — cả `admin` lẫn `mobile` — trừ khi `--apps` chỉ định một tập con.
+3. Tự chạy `dart tools/composer/composer.dart sync`. Lệnh này sinh lại danh sách `workspace:` ở `pubspec.yaml` gốc và, với từng app, path dependency, `injection.dart` cùng vùng `report` của `README.md`.
    - Bạn không phải chạy tay gì cả — nhưng xem ghi chú bên dưới nếu module không thuộc về mọi app.
    - Nếu module đăng ký một contract mà shell có trong catalog (splash, tab, session, reporter), mỗi app ghép nó phải khai contract đó là `provided` trong `capabilities:`: generator in lời nhắc, và `composer verify` nêu tên key cùng dòng cần dán ([`13_app_composition.md`](13_app_composition.md) § 6). `remove_sample` tự lật các contract chỉ có một nơi cung cấp về `absent` giúp bạn.
-4. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator, `build_runner build --workspace`, rồi `dart fix --apply`.
-5. Ghi sẵn các test pass ngay khi sinh ra: `test/profile_page_test.dart` và `test/profile_provider_test.dart` (`test/<name>_bloc_test.dart` với BLoC, không có test controller với SM `3`). Test page dựng page dưới `ResponsiveInit` và localization của nó, với controller được cung cấp đúng như route cung cấp. CI Gate 3 chạy các test này.
+4. Chạy `dependency_sync.dart`, `flutter pub get`, `flutter gen-l10n`, barrel generator, `build_runner build --workspace`, barrel generator lần nữa (nó export cả những gì codegen vừa ghi), rồi `dart fix --apply`.
+5. Ghi sẵn các test pass ngay khi sinh ra: `test/profile_page_test.dart` và `test/profile_provider_test.dart` (`test/<name>_bloc_test.dart` với BLoC, không có test controller với SM `3`). Test page dựng page dưới `ResponsiveInit` và localization của nó, với controller được cung cấp đúng như route cung cấp, trên cửa sổ cỡ điện thoại và cỡ tablet. CI Gate 3 chạy các test này.
+
+Nếu một bước thất bại, generator khôi phục mọi file dùng chung nó đã sửa, xoá package dựng dở và sinh lại các file sinh tự động không được git theo dõi, rồi thoát với mã 1.
 
 > [!IMPORTANT]
 > **Không có `--apps` thì mọi app đều ghép module mới — kể cả `apps/admin`.** `apps/admin` cố ý chỉ là một tập con (auth + settings). Với module chỉ dành cho `mobile`, hãy nói rõ ngay khi sinh:
@@ -85,38 +86,40 @@ Tuỳ chọn `--apps <id,id>` đặt sau các tham số vị trí chỉ ghép mo
 
 1. Hoàn thiện `TypedGoRoute` / navigator trong `lib/src/routing/`.
 2. Điền nội dung cho stub route module (`routes`, và với tab thì thêm `order`, `path`, `destination`).
-3. Mục 3 vẫn nhắc tới hợp đồng navigator trong `core_di`. Giờ navigator nằm trong package API của module (bước 7, RULE-22); hãy chạy barrel generator cho package đó.
-4. Chạy lại `build_runner`, rồi **khởi động lại hẳn** app — hot reload không nhận đăng ký DI mới.
+3. Module khác tới module này qua một navigator trong package API của module. Nếu `profile_api` chưa tồn tại, `dart tools/module_generator/generate.dart 6 profile` tạo nó và cài đặt nó trong feature này; nếu đã có, generator đã ghi sẵn `lib/src/routing/profile_navigator_impl.dart` (bước 7).
+4. Dịch `assets/language/vi.arb` — nó bắt đầu là bản sao của chữ tiếng Anh.
+5. Chạy lại `build_runner`, rồi **khởi động lại hẳn** app — hot reload không nhận đăng ký DI mới.
 
 > [!NOTE]
 > FVM được tự phát hiện (`useFvm` trong `tools/shared/toolchain.dart`, RULE-73). Tool chỉ thêm tiền tố `fvm ` vào lệnh khi có đủ cả hai: một file cấu hình (`.fvmrc` hoặc `.fvm/fvm_config.json`) và `fvm --version` chạy được. Nếu không, nó gọi thẳng `dart` / `flutter` toàn cục. Xem [`../getting-started/03_daily_workflow.md`](../getting-started/03_daily_workflow.md).
 
 ## 3. Làm quen với package
 
-Generator sinh ra cây thư mục dưới đây, cùng các file sinh tự động `gen/`, `*.g.dart` và `module.module.dart`. `widgets/` được tạo **rỗng**. Git không theo dõi thư mục rỗng, nên nó biến mất khỏi commit hay bản clone mới cho tới khi widget con đầu tiên được đặt vào.
+Generator sinh ra cây thư mục dưới đây cho một feature Provider với route kiểu stack, cùng các file sinh tự động `module.module.dart`, `*.g.dart` và `gen/`. `widgets/` được tạo **rỗng**. Git không theo dõi thư mục rỗng, nên nó biến mất khỏi commit hay bản clone mới cho tới khi widget con đầu tiên được đặt vào.
 
 ```
 modules/profile/feature/
-├── assets/language/          en.arb, vi.arb  — bản dịch riêng của feature
-├── l10n.yaml                 cấu hình gen-l10n (tên class, thư mục output)
+├── assets/language/              en.arb, vi.arb  — bản dịch riêng của feature
+├── l10n.yaml                     cấu hình gen-l10n (tên class, thư mục output)
 ├── lib/
-│   ├── di/
-│   │   ├── module.dart       @InjectableInit.microPackage()
-│   │   └── localization.dart implementation của IFeatureLocalization
-│   ├── feature_profile.dart  barrel công khai
+│   ├── di/module.dart            @InjectableInit.microPackage()
+│   ├── feature_profile.dart      barrel của package (được sinh, export mọi file bên dưới)
 │   └── src/
-│       ├── pages/            widget *Page / *Screen
-│       ├── widgets/          widget con *Widget / *Card (được tạo rỗng)
-│       ├── provider/         controller (Provider) — là `bloc/` nếu bạn chọn BLoC
-│       ├── routing/          route module + navigator impl
-│       ├── extensions/       extension l10n
-│       ├── gen/language/     localisation sinh tự động (không sửa tay)
-│       └── utils/            hằng số thuộc sở hữu của package này
-└── pubspec.yaml
+│       ├── extensions/           l10n_profile_extension.dart — context.l10nProfile
+│       ├── gen/language/         output của gen-l10n (không sửa tay)
+│       ├── localization/         profile_localization_impl.dart — IFeatureLocalization
+│       ├── pages/                profile_page.dart — widget *Page / *Screen
+│       ├── provider/             profile_provider.dart — là `bloc/` (bloc, event, state) nếu bạn chọn BLoC
+│       ├── routing/              profile_route_module.dart (route có kiểu), rồi
+│       │                         profile_feature_route_module.dart hoặc profile_nav_destination.dart
+│       ├── utils/                profile_path.dart — hằng số thuộc sở hữu của package này
+│       └── widgets/              widget con *Widget / *Card (được tạo rỗng)
+├── pubspec.yaml
+└── test/                         profile_page_test.dart, profile_provider_test.dart
 ```
 
 > [!NOTE]
-> Thư mục controller là **số ít** — `src/provider/` (như `feature_auth`) hoặc `src/bloc/` (như `feature_home`). Đặt tên số nhiều `providers/` / `blocs/` là vi phạm quy ước (RULE-78); xem [`../reference/02_naming.md`](../reference/02_naming.md).
+> Thư mục controller là **số ít** — `src/provider/` (như `feature_auth`) hoặc `src/bloc/` (như `feature_home`). Đặt tên số nhiều `providers/` / `blocs/` là vi phạm quy ước; xem [`../reference/02_naming.md`](../reference/02_naming.md).
 
 Hằng số path đã có sẵn: generator ghi chúng vào `lib/src/utils/<name>_path.dart`, và mọi thứ khác đều tham chiếu tới đó (RULE-09). **Hãy sửa file đã được sinh** để đổi hoặc thêm path; đừng tạo file thứ hai:
 
@@ -145,7 +148,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../bloc/home_profile_bloc.dart';
-import '../pages/pages.dart';
+import '../pages/home_page.dart';
 import '../utils/home_path.dart';
 
 part 'home_route_module.g.dart';
@@ -178,10 +181,15 @@ import 'package:go_router/go_router.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../extensions/extensions.dart';
+import '../extensions/l10n_home_extension.dart';
 import '../utils/home_path.dart';
 import 'home_route_module.dart';
 
+/// SAMPLE — a module contributing one primary navigation destination.
+///
+/// It describes the destination ([NavDestination]) rather than building a
+/// widget, so the same module works in an app that renders a bottom bar, a
+/// rail or a sidebar.
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
@@ -202,7 +210,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-`order` quyết định vị trí tab và **bắt buộc phải duy nhất** giữa mọi tab đã đăng ký. `AppRouter` sắp xếp theo nó để dựng danh sách `StatefulShellBranch`.
+`order` quyết định vị trí tab và **bắt buộc phải duy nhất** giữa mọi tab đã đăng ký. `AppRouter` sắp xếp theo nó để dựng danh sách `StatefulShellBranch`. Stub được sinh chọn giá trị lớn hơn `order` cao nhất hiện có 10 đơn vị, nên các tab được sinh không bao giờ trùng nhau.
 
 ### Phương án B — chồng màn hình push (`IFeatureRouteModule`)
 
@@ -218,7 +226,7 @@ import 'auth_route_module.dart';
 @LazySingleton(as: IFeatureRouteModule)
 class AuthFeatureRouteModule implements IFeatureRouteModule {
   @override
-  List<RouteBase> get routes => [$authShellRoute];
+  List<RouteBase> get routes => [$loginRoute];
 }
 ```
 
@@ -257,7 +265,7 @@ return ChangeNotifierProvider(
 > state mà không ai ghi vào, còn instance thứ nhất bị rò rỉ. Đây là lỗi phổ biến nhất với pattern
 > này.
 
-Controller gắn màn hình dùng `@injectable`: một factory, huỷ theo route. Chỉ controller toàn app — `AuthProvider`, `ThemeProvider`, `LanguageProvider` — mới dùng `@lazySingleton`. Đăng ký controller màn hình thành singleton sẽ làm nó rò rỉ suốt vòng đời process (RULE-10). Chi tiết ở [`05_di.md`](05_di.md).
+Controller gắn màn hình dùng `@injectable`: một factory, huỷ theo route. Chỉ controller toàn app — `AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider` — mới dùng `@lazySingleton`. Đăng ký controller màn hình thành singleton sẽ làm nó rò rỉ suốt vòng đời process (RULE-10). Chi tiết ở [`05_di.md`](05_di.md).
 
 ## 6. Sửa bản dịch
 
@@ -300,15 +308,17 @@ extension ContextHomeExtension on BuildContext {
 }
 ```
 
-Phần đăng ký delegate qua DI — được sinh thành `lib/di/localization.dart`, giống code thật này từ [`modules/home/feature/lib/src/localization/home_localization_impl.dart`](../../../modules/home/feature/lib/src/localization/home_localization_impl.dart):
+Phần đăng ký delegate qua DI — được sinh thành `lib/src/localization/profile_localization_impl.dart`, giống code thật này từ [`modules/home/feature/lib/src/localization/home_localization_impl.dart`](../../../modules/home/feature/lib/src/localization/home_localization_impl.dart):
 
 ```dart
 import 'package:core_di/core_di.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 
-import '../feature_home.dart';
+import '../extensions/l10n_home_extension.dart';
 
+/// Hands this feature's translations to the app shell, which collects every
+/// `IFeatureLocalization` into `MaterialApp.localizationsDelegates`.
 @Injectable(as: IFeatureLocalization)
 class HomeLocalizationImpl implements IFeatureLocalization {
   @override
@@ -317,7 +327,7 @@ class HomeLocalizationImpl implements IFeatureLocalization {
 }
 ```
 
-[`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/src/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`. Vì vậy **không sửa `root_app.dart`** (hay wrapper đó).
+[`app_material_wrapper.dart`](../../../platform/shell/app_shell/lib/src/app_material_wrapper.dart) của app shell gom mọi `IFeatureLocalization` đã đăng ký bằng `getAllOrEmpty`. Vì vậy **không sửa `root_app.dart`** (hay wrapper đó). Với chữ của một thao tác thất bại, `AppFailure.message` là chẩn đoán tiếng Anh và không bao giờ được hiển thị (RULE-34): hãy bắt đầu từ `context.l10n.failureMessage(failure.code)`, thứ `core_base_ui` diễn đạt theo mã của failure, và chỉ thêm key ARB riêng khi màn hình nói được điều cụ thể hơn ([`03_state_management.md`](03_state_management.md) § 8).
 
 Sinh lại sau mỗi lần đổi `.arb`:
 
@@ -331,7 +341,15 @@ cd modules/profile/feature && flutter gen-l10n
 
 ## 7. Phơi navigator cho feature khác
 
-Feature khác không được import `feature_profile` (RULE-04). Hãy khai hợp đồng trong **package API** của module bạn, `modules/<name>/api` — ở đây là `profile_api`, chỉ phụ thuộc foundation và Flutter (`arch_check` R3). Cách tạo: [`12_module_isolation.md` § 4](12_module_isolation.md#4-tạo-package-api-cho-module). Bên gọi phụ thuộc `profile_api`, không bao giờ phụ thuộc `feature_profile`; `core_di` không chứa navigator của module nào (RULE-22):
+Feature khác không được import `feature_profile` (RULE-04). Hợp đồng nằm trong **package API** của module bạn, `modules/<name>/api` — ở đây là `profile_api`, chỉ được phụ thuộc foundation và Flutter (`arch_check` R3). Bên gọi phụ thuộc `profile_api`, không bao giờ phụ thuộc `feature_profile`; `core_di` không chứa navigator của module nào (RULE-22). Loại `6` của generator ghi nó ra:
+
+```bash
+dart tools/module_generator/generate.dart 6 profile                 # thêm --apps mobile cho khớp với feature
+```
+
+Nó tạo package `profile_api` — một `pubspec.yaml` mà Flutter là dependency duy nhất, `lib/src/navigators/profile_navigator.dart` và barrel `lib/profile_api.dart` — và ghi layer `api` vào các manifest. Khi `feature_profile` đã tồn tại cùng route được sinh của nó, cũng lần chạy đó thêm `profile_api` vào `dependencies:` của feature và ghi phần cài đặt, `lib/src/routing/profile_navigator_impl.dart`; sinh theo thứ tự ngược lại thì `generate.dart 1 profile` tự nối với `profile_api` có sẵn theo cách tương tự. Package API không có DI module và không cần mục `di_groups`. Cách bố trí một package API và những gì `arch_check` ép nó tuân theo: [`12_module_isolation.md` § 4](12_module_isolation.md#4-tạo-package-api-cho-module).
+
+Hợp đồng được sinh, cùng hình dạng với [`home_navigator.dart`](../../../modules/home/api/lib/src/navigators/home_navigator.dart) trong `home_api`:
 
 ```dart
 // modules/profile/api/lib/src/navigators/profile_navigator.dart
@@ -342,40 +360,40 @@ abstract class ProfileNavigator {
 }
 ```
 
-Đúng hình dạng của [`home_navigator.dart`](../../../modules/home/api/lib/src/navigators/home_navigator.dart) trong `home_api`.
-
-Cài đặt nó ngay trong `routing/` của bạn — code thật từ [`home_navigator_impl.dart`](../../../modules/home/feature/lib/src/routing/home_navigator_impl.dart):
+và phần cài đặt nằm ngay trong `routing/` của bạn:
 
 ```dart
-import 'package:home_api/home_api.dart';
+// modules/profile/feature/lib/src/routing/profile_navigator_impl.dart
+import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:profile_api/profile_api.dart';
 
-import 'home_route_module.dart';
+import 'profile_route_module.dart';
 
-@Singleton(as: HomeNavigator)
-class HomeNavigatorImpl implements HomeNavigator {
+@LazySingleton(as: ProfileNavigator)
+class ProfileNavigatorImpl implements ProfileNavigator {
   @override
-  void toHome(BuildContext context) => const HomeRoute().go(context);
+  void toProfile(BuildContext context) => const ProfileRoute().go(context);
 }
 ```
 
-Bên gọi ở package khác dùng `getItOrNull<ProfileNavigator>()?.toProfile(context)` (RULE-12, `arch_check` R8). Không hardcode path, không `context.go('/profile')`. Luôn truyền `BuildContext` từ widget gọi, đừng lấy từ `NavigatorKeys` (RULE-23).
+Thêm một method cho mỗi route module sở hữu, ở cả hai file, và giữ chúng khớp nhau. Bên gọi ở package khác khai `profile_api` trong `dependencies:` và dùng `getItOrNull<ProfileNavigator>()?.toProfile(context)` (RULE-12, `arch_check` R8). Không hardcode path, không `context.go('/profile')`. Luôn truyền `BuildContext` từ widget gọi, đừng lấy từ `NavigatorKeys` (RULE-23).
 
 ## 8. Sinh lại code và khởi động lại app
 
+Generator đã chạy `build_runner` và barrel generator. Hãy chạy lại sau khi bạn thêm, đổi tên hoặc xoá một file, hay đổi một annotation:
+
 ```bash
-# 1. Export ProfileNavigator mới từ barrel của package API (§7 đã thêm một file vào modules/profile/api/lib)
+# 1. Export lại các file bạn đã thêm — ở mọi package bạn đụng tới, kể cả package API
 dart tools/barrel_generator/generate.dart modules/profile/api/lib
+dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 # 2. Sinh lại DI / route — injectable phải thấy ProfileNavigator qua `package:profile_api/profile_api.dart`
 dart run build_runner build --workspace
-# 3. Export lại các file mới của feature (và các file được sinh) từ barrel của nó
-dart tools/barrel_generator/generate.dart modules/profile/feature/lib
 flutter analyze
 ```
 
 > [!IMPORTANT]
-> Bỏ bước 1 thì `flutter analyze` báo `Undefined name 'ProfileNavigator'` ở navigator impl và ở phần đăng ký được sinh của nó. Barrel của package API là file được sinh, nên một file thêm vào `modules/profile/api/lib/src/` sẽ vô hình với package khác cho tới khi chạy barrel generator cho `modules/profile/api/lib`. Điều này đúng với mọi package bạn thêm file vào: chạy lại barrel generator cho `lib/` của nó (RULE-75).
+> Thêm file của một method vào `modules/profile/api/lib/src/` mà bỏ bước 1 thì `flutter analyze` báo `Undefined name` ở mọi nơi tiêu thụ. Mỗi package có một barrel được sinh, và một file dưới `lib/src/` vô hình với package khác cho tới khi chạy barrel generator cho `lib/` của package đó. Điều này đúng với mọi package bạn thêm file vào (RULE-75).
 
 Sau đó **khởi động lại hẳn** app (không phải hot reload) để đồ thị DI mới được dựng.
 
@@ -408,8 +426,8 @@ Phần *Dọn dẹp* của tutorial đi con đường thủ công một lần, c
 >
 > | Nơi tiêu thụ | Kiểu phụ thuộc | Hậu quả |
 > |---|---|---|
-> | `feature_home` (`home_route_module.dart:25`) | `getItOrNull<ISessionStatusStream>()` truyền vào dưới dạng **factory param** | Home hiển thị trạng thái chưa đăng nhập |
-> | `feature_settings` (`settings_page.dart:47`) | `getItOrNull<IAuthActionHandler>()` (từ `auth_api`, được `remove_sample` giữ lại khi còn bị import) | Dòng logout đơn giản bị ẩn đi |
+> | `feature_home` (`HomeRoute.build`) | `getItOrNull<ISessionStatusStream>()` truyền vào dưới dạng **factory param** | Home hiển thị trạng thái chưa đăng nhập |
+> | `feature_settings` (`SettingsPage`) | `getItOrNull<IAuthActionHandler>()` (từ `auth_api`, được `remove_sample` giữ lại khi còn bị import) | Dòng logout đơn giản bị ẩn đi |
 > | `feature_onboarding` (`OnboardingPage`) | `getItOrNull<AuthNavigator>()` (từ `auth_api`, cũng được giữ lại) | Nút bấm chuyển sang Home (`HomeNavigator`); không có cả hai thì nút không làm gì |
 >
 > Dry-run in ra mọi liên kết nó biết — `breaks` và `safe_couplings` trong
@@ -421,7 +439,7 @@ Phần *Dọn dẹp* của tutorial đi con đường thủ công một lần, c
 > composition root — nơi lắp ráp thì buộc phải biết nó lắp cái gì. Đó cũng là chỗ duy nhất: không
 > file nào khác trong app import module (`arch_check` R10 giữ điều đó), và shell dùng chung ở `platform/shell/app_shell/` là
 > package `platform/`, nên R1 cấm nó import module ngay từ đầu. Shell có import `core_ui_kit` ở vài
-> nơi, và điều đó hoàn toàn ổn — đó là package core, không phải feature có thể gỡ.
+> nơi, và điều đó hoàn toàn ổn — đó là package platform, không phải feature có thể gỡ.
 
 ---
 
@@ -432,7 +450,7 @@ flutter analyze                                           # No issues found!
 dart tools/arch_check/check.dart                          # ✅ All architecture rules hold across N packages.
 dart tools/composer/composer.dart verify                  # ✅ Generated artifacts are up to date.
 cd modules/profile/feature && flutter test && cd -        # All tests passed!
-cd apps/mobile && flutter test test/di_smoke_test.dart    # All tests passed! — đăng ký mới resolve được
+cd apps/mobile && flutter test test/di_smoke_test.dart    # All tests passed! — mọi lazy singleton và factory đều build được
 dart tools/unused_checker/check_unused_packages.dart      # ✅ Success! No unused packages found …
 ```
 

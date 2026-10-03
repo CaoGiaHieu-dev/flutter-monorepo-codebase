@@ -33,17 +33,13 @@ class AuthProvider extends BaseProvider<UserEntity>
   AuthProvider(
     this._loginUseCase,
     this._logoutUseCase,
-    this._refreshTokenUseCase,
+    this._restoreSessionUseCase,
     this._authStream,
   ) : super();
 
-  final LoginUseCase _loginUseCase;
-  final LogoutUseCase _logoutUseCase;
-  final RefreshTokenUseCase _refreshTokenUseCase;
-  final AuthStatusStreamImpl _authStream;
+  // …
 
   Future<void> login(String email, String password) async {
-    updateState(state: const ViewState.loading());
     await executeOperation(
       OperationConfig(
         operation: () =>
@@ -76,9 +72,9 @@ class OperationConfig<R, T> {
 
   final FutureOr<Result<R>> Function() operation;
   final FutureOr<void> Function(T? data)? onSuccess;
-  final FutureOr<void> Function(AppFailure failure)? onFailure;
+  final FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure;
   final bool showLoading;
-  final ErrorState? Function(AppFailure failure)? errorStateBuilder;
+  final ErrorState? Function(AppFailure<dynamic> failure)? errorStateBuilder;
 }
 ```
 
@@ -87,8 +83,8 @@ class OperationConfig<R, T> {
 1. the global `onStart` hook;
 2. an optional loading state;
 3. `await operation()`;
-4. dispatch across the four `Result` branches;
-5. the global `onFinish` hook.
+4. dispatch across the four `Result` branches — a failure sets the error state with `force: true`, so a repeated identical failure still reaches a listener;
+5. the global `onFinish` hook, on every path, so it always pairs with `onStart`.
 
 ### Convert a result of another type — `convert:`
 
@@ -133,7 +129,7 @@ How the success value becomes the provider's data (`OperationExecutor._handleSuc
 > }
 > ```
 >
-> Once the provider holds data, later calls **skip** the loading state. That is deliberate for pull-to-refresh: you keep showing stale content instead of flashing a spinner. There is **no flag to override it**. If a refresh must show a spinner, call `updateState(state: const ViewState.loading())` yourself first — exactly what `AuthProvider.login` does above.
+> Once the provider holds data, later calls **skip** the loading state. That is deliberate for pull-to-refresh: you keep showing stale content instead of flashing a spinner. There is **no flag to override it**. If a refresh must show a spinner, call `updateState(state: const ViewState.loading())` yourself first — as `AuthProvider.initialize` does before it restores the session (§5).
 
 ## 3. Render the Provider states
 
@@ -158,6 +154,7 @@ abstract class ViewState with _$ViewState {
 ```dart
 @Freezed(genericArgumentFactories: true)
 abstract class ViewStateModel<T> with _$ViewStateModel<T> {
+  const ViewStateModel._();
   const factory ViewStateModel({
     @Default(ViewState.initial()) ViewState state,
     T? data,
@@ -179,6 +176,11 @@ import 'package:provider_state_management/provider_state_management.dart';
 
 part 'auth_error_state.freezed.dart';
 
+/// Why a sign-in failed, as far as this feature can tell.
+///
+/// Carries no text: `AppFailure.message` is an English diagnostic, and what
+/// the user reads comes from the ARBs — see `SessionFailure`, which the app
+/// shell turns into a translated toast.
 @freezed
 abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
@@ -187,31 +189,86 @@ abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
 
   const factory AuthErrorState.userNotFound() = _UserNotFound;
 
-  const factory AuthErrorState.serverError({
-    required String message,
-    int? code,
-  }) = _ServerError;
+  /// Anything else — offline, a timeout, a 5xx, a locked account (403).
+  /// [code] is the failure's `ErrorCodes` / HTTP status, which picks the
+  /// translated sentence.
+  const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```
 
-`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`. It turns an `AppFailure` into one of these, or `null` for a generic error.
+`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`: it turns an `AppFailure` into one of these, and its fallback `AuthErrorState.failed(code: failure.code)` carries the code on. An `errorStateBuilder` returns `null` for "no feature-specific error"; the state is then a plain `ViewState.error()`.
+
+The error state carries no text: `AppFailure.message` is an English diagnostic and never reaches the screen (RULE-34). A screen words a failure from its code — see § 4 for the Provider branch, § 8 for BLoC.
 
 ### Render with `BaseViewWidget`
 
-`BaseViewWidget<P, T>` selects on the provider's `ViewStateModel<T>` and renders per phase. Variants exist up to `BaseViewWidget6` (six providers), plus `PaginatedViewWidget*` for `PaginatedEntity<T>`.
+`BaseViewWidget<P, T>` selects on one provider's `ViewStateModel<T>` and renders per phase: `initialWidget` and `loadingWidget` while there is nothing to show, `builder` once there is data, `emptyWidget` when there is none, and `onErrorBuilder` on an error. It reads one provider; a screen that depends on several nests them or listens with a [`MultiProviderStateListener`](#4-react-to-side-effects-with-providerstatelistener).
 
 ```dart
-BaseViewWidget<ProfileProvider, UserEntity>(
-  builder: (context, user, child) => Text(user.name ?? ''),
+BaseViewWidget<ProfileProvider, ProfileViewData>(
+  builder: (context, profile, child) => Text(profile.displayName),
   loadingWidget: (context, child) => const MyBrandedSpinner(),
   emptyWidget: (context, child) => const MyEmptyState(),
+  onErrorBuilder: (context, profile, message, child) => const MyErrorState(),
 )
 ```
 
+`builder` receives the non-null data (`T extends Object`). On an error `onErrorBuilder` receives the data the provider still holds and the failure's `message`, which is an English diagnostic: do not show it (RULE-34). The screen words the failure from the code its `ErrorState` carries (`AuthErrorState.failed(code:)`), through `context.l10n.failureMessage(code)`.
+
 > [!WARNING]
-> **Omit `emptyWidget` and you get a blank screen.** The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()`.
+> **Omit `emptyWidget` and you get a blank screen** — and so does an error with no data yet when `onErrorBuilder` is also omitted, because the error path falls back to the same builder. The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()`.
 >
-> They are minimal on purpose. `provider_state_management` is a **core** package, and core never depends on a feature package, so it cannot reach the branded widgets in `core_ui_kit`. See `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` on any user-facing screen.**
+> They are minimal on purpose. `provider_state_management` is a **platform** package and never depends on a feature package, so it cannot reach the branded widgets in `core_ui_kit`. See `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` / `onErrorBuilder` on any user-facing screen.**
+
+### Page through a list with `LoadMoreMixin`
+
+Mix `LoadMoreMixin<T>` into the provider for the page counters (`currentPage`, `totalPage`, `nextPage`, `isLoadingMore`, `canLoadMore`), and render the list with `LoadMoreListView<P>`, which appends a spinner slot after the last item while `isLoadingMore` is true. The mixin holds the paging state only: the screen's `ScrollController` decides when to call `loadMore()`.
+
+```dart
+@injectable
+class OrdersProvider extends BaseProvider<List<OrderEntity>>
+    with LoadMoreMixin<List<OrderEntity>> {
+  OrdersProvider(this._getOrders);
+
+  final GetOrdersUseCase _getOrders; // BaseUseCase<PaginatedEntity<OrderEntity>, OrdersParams>
+
+  Future<void> refresh() => _load(1);
+
+  Future<void> loadMore() async {
+    if (!canLoadMore) return; // not already loading, and nextPage <= totalPage
+    isLoadingMore = true;
+    try {
+      await _load(nextPage);
+    } finally {
+      isLoadingMore = false;
+    }
+  }
+
+  Future<void> _load(int page) =>
+      executeOperation<PaginatedEntity<OrderEntity>>(
+        OperationConfig(
+          operation: () => _getOrders(OrdersParams(page: page)),
+          showLoading: page == 1,
+        ),
+        convert: (result) {
+          if (result == null) return data;
+          setTotalPage(result.meta.totalPages);
+          setCurrentPage(result.meta.currentPage);
+          return [if (page > 1) ...?data, ...result.data];
+        },
+      );
+}
+```
+
+```dart
+BaseViewWidget<OrdersProvider, List<OrderEntity>>(
+  builder: (context, orders, child) => LoadMoreListView<OrdersProvider>(
+    controller: _scrollController, // calls context.read<OrdersProvider>().loadMore() near the end
+    itemCount: orders.length,
+    itemBuilder: (context, index) => OrderTile(orders[index]),
+  ),
+)
+```
 
 ## 4. React to side effects with `ProviderStateListener`
 
@@ -228,11 +285,16 @@ ProviderStateListener<AuthProvider, UserEntity>(
       (previous.state != current.state || current.isError) &&
       (current.isSuccess || current.isError),
   onError: (context, error, message) {
+    // `message` is an English diagnostic (RULE-34): word the failure from
+    // the code the error state carries, through the global ARB.
     if (error is AuthErrorState) {
-      error.maybeWhen(
-        invalidCredentials: () =>
-            AppOverlay.showToast(content: context.l10n.invalidCredentials),
-        orElse: () => AppOverlay.showToast(content: message ?? ''),
+      AppOverlay.showToast(
+        content: error.maybeWhen(
+          invalidCredentials: () => context.l10n.invalidCredentials,
+          userNotFound: () => context.l10n.userNotFound,
+          failed: (code) => context.l10n.failureMessage(code),
+          orElse: () => context.l10n.somethingWentWrong,
+        ),
       );
     }
   },
@@ -247,9 +309,9 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-This is an illustrative listener, as a screen inside `feature_auth` would write it. It navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages.
+This is an illustrative listener, as a screen inside `feature_auth` would write it. It navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages. `context.l10n.failureMessage(code)` is `core_base_ui`'s mapping from a failure's code (an `ErrorCodes` value or an HTTP status) to a translated sentence, so every screen words the same fault the same way. It is an extension on `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` and `CONNECTION_ERROR` read as no connection, the two timeout codes as a timeout, the rest of the network range as a network error, an HTTP 5xx as the server being unavailable, and anything else — a `null` code included — as "something went wrong".
 
-The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator.
+The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator. `AuthProvider` publishes each failed sign-in as a `SessionFailure` — a `SessionServerFailure(code:)` for everything it cannot name — and the shell words it from the same `failureMessage(code)`.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 
@@ -281,8 +343,9 @@ class HomeProfileBloc
     extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
   HomeProfileBloc(@factoryParam this._sessionStatusStream)
     : super(const BlocViewState.initial()) {
-    on<_HomeProfileStarted>(_onStarted);
-    on<_HomeProfileRefreshed>(_onRefreshed);
+    // `started` and `refreshed` do the same thing: read the current user.
+    on<_HomeProfileStarted>(_onLoad);
+    on<_HomeProfileRefreshed>(_onLoad);
     on<_HomeProfileAuthStatusChanged>(_onAuthStatusChanged);
 
     add(const HomeProfileEvent.started());
@@ -291,15 +354,26 @@ class HomeProfileBloc
   final ISessionStatusStream? _sessionStatusStream;
   StreamSubscription<SessionPrincipal?>? _subscription;
 
-  Future<void> _onStarted(
-    _HomeProfileStarted event,
+  /// Subscribes to session changes once, then shows the current user.
+  ///
+  /// A broadcast stream does not replay, so a change made while nobody was
+  /// listening is only picked up by re-reading `currentUser` — which is what
+  /// `refreshed` is for.
+  Future<void> _onLoad(
+    HomeProfileEvent event,
     Emitter<BlocViewState<SessionPrincipal?>> emit,
   ) async {
-    await _subscription?.cancel();
-    _subscription = _sessionStatusStream?.sessionStatusStream.listen((user) {
-      add(HomeProfileEvent.authStatusChanged(user));
-    });
+    _subscription ??= _sessionStatusStream?.sessionStatusStream.listen(
+      (user) => add(HomeProfileEvent.authStatusChanged(user)),
+    );
     emit(BlocViewState.success(_sessionStatusStream?.currentUser));
+  }
+
+  Future<void> _onAuthStatusChanged(
+    _HomeProfileAuthStatusChanged event,
+    Emitter<BlocViewState<SessionPrincipal?>> emit,
+  ) async {
+    emit(BlocViewState.success(event.user));
   }
 
   @override
@@ -310,7 +384,7 @@ class HomeProfileBloc
 }
 ```
 
-Note the `close()` override that cancels the subscription. The base class does not help here: resource cleanup is entirely yours.
+This sample maps a stream another module publishes, so it emits its states by hand. A bloc that runs a use case settles it with `emitResult` instead (§7) — which is also what the module generator's BLoC template (`generate.dart 1 <name> "" 2 <route>`) writes. Note the `close()` override that cancels the subscription. The base class does not help here: resource cleanup is entirely yours.
 
 ### Declare the events as private Freezed subclasses
 
@@ -427,7 +501,7 @@ abstract class BlocViewState<T> with _$BlocViewState<T> {
   const factory BlocViewState.initial() = _Initial<T>;
   const factory BlocViewState.loading() = _Loading<T>;
   const factory BlocViewState.success(T data) = _Success<T>;
-  const factory BlocViewState.error(AppFailure error) = _Error<T>;
+  const factory BlocViewState.error(AppFailure<dynamic> error) = _Error<T>;
 
   T? get data => mapOrNull(success: (s) => s.data);
 }
@@ -443,7 +517,9 @@ BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
     initial: () => const SizedBox.shrink(),
     loading: () => const Center(child: CircularProgressIndicator.adaptive()),
     success: (user) => Text(user?.displayName ?? ''),
-    error: (failure) => Text(failure.message),
+    // `failure.message` is an English diagnostic (RULE-34): word the
+    // failure from its code.
+    error: (failure) => Text(context.l10n.failureMessage(failure.code)),
   ),
 )
 ```
@@ -484,7 +560,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 > [!CAUTION]
 > **Do not double-wrap.** The route already provides the controller, so the page must **not** wrap itself in another `BlocProvider` / `ChangeNotifierProvider`. That creates a second instance: the page reads one while your events go to the other. The state silently never updates, and the first instance leaks.
 
-Global controllers such as `AuthProvider` are the exception. Routes do **not** wrap them: they are provided once near the app root and read with `Consumer<AuthProvider>` / `context.watch`.
+Global controllers such as `AuthProvider` are the exception. Routes do **not** wrap them: they are provided once near the app root (`AuthTreeWrapper`, an `IAppTreeWrapper`, mounts `AuthProvider`) and read with `Consumer<AuthProvider>` / `context.watch`.
 
 ---
 
@@ -494,7 +570,7 @@ Global controllers such as `AuthProvider` are the exception. Routes do **not** w
 dart run build_runner build --workspace     # Freezed events/states and the DI registration
 flutter analyze                             # No issues found!
 cd modules/<name>/feature && flutter test   # All tests passed!
-cd apps/mobile && flutter test test/di_smoke_test.dart   # the controller resolves from the real graph
+cd apps/mobile && flutter test test/di_smoke_test.dart   # every @injectable factory, the controller included, builds from the real graph
 ```
 
 Model your tests on the real ones: `modules/auth/feature/test/auth_provider_test.dart` (a provider with hand-written fakes), `modules/home/feature/test/home_profile_bloc_test.dart` (a bloc), and `platform/state/bloc/test/result_emitter_test.dart` (`emitResult`).
@@ -526,7 +602,7 @@ Review checklist:
 
 ## Related
 
-- Rules: RULE-10 (screen controllers are factories), RULE-11 (constructor injection), RULE-21 (created at the route), RULE-50 (base classes), RULE-51 (private Freezed events), RULE-52 (async handlers), RULE-53 (`emitResult`) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Rules: RULE-10 (screen controllers are factories), RULE-11 (constructor injection), RULE-21 (created at the route), RULE-34 (translated failure text), RULE-50 (base classes), RULE-51 (private Freezed events), RULE-52 (async handlers), RULE-53 (`emitResult`) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`../architecture/02_core.md` § 10](../architecture/02_core.md#10-state-management--two-branches-not-at-parity) — the two branches compared
 - [`04_routing.md`](04_routing.md) — where controllers get instantiated
 - [`05_di.md`](05_di.md) — scopes, module order, and resolution helpers

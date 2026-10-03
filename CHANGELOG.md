@@ -60,9 +60,30 @@ with the architecture rules enforced by CI instead of review alone.
   a boot-error screen. `runShellApp` takes an optional `profile:` and `hooks:`; with a profile, an
   undeclared platform stops at that screen before dependency injection instead of a blank window.
   `runShellApp(configureDependencies: ...)` and `onError:` behave exactly as before.
+- Apps declare themselves (the apps layer, step 2 of 6): `app_manifest.yaml` now also says what the
+  app is — `app.name`, `flavors` (with an `ssl_pinning` decision per flavor where a platform can
+  pin: `pins` or `disabled` with a reason), `env` keys, `platforms` (`runner: committed | scaffold`),
+  `capabilities` (every optional contract the shell resolves is `provided` or `absent` with a
+  reason) and a `why` per DI group. `composer sync` turns that into the `facts` region of
+  `apps/<id>/lib/app/app_profile.dart`, a `report` region in the app's `README.md` and the
+  `configureDependencies` entry point of `injection.dart` (now fully generated); `composer verify`
+  refuses an incomplete declaration and any drift; `composer describe --app <id>` prints the report
+  and `describe --catalog` every key. Both apps pass `profile: appProfile` and `hooks: appHooks`,
+  and their DI smoke tests hold `checkAppContract` and `validate` for every declared flavor and
+  platform. `remove_sample` flips the capabilities a removed bundle alone provided to `absent`.
 
 ### Changed
 
+- **Breaking, for forks of the template** (apps layer, step 2): `runShellApp` requires `profile:`
+  and no longer takes `onError:` (pass `hooks: ShellHooks(onError: ...)`); `app.kind` is refused
+  (delete the line) and `app.name`, `flavors`, `platforms` and `capabilities` are required in every
+  manifest — `composer verify` prints the YAML to paste. Behaviour: an app started on a platform or
+  flavor its manifest does not declare stops at the boot-error screen before dependency injection;
+  a non-debug build with an empty required `--dart-define` (`BASE_URL` in prod, `APP_NAME` in
+  staging and prod) does too; SSL pinning stays off but is now a stated per-flavor decision
+  (`NetworkConfigImpl` reads it from the manifest, desktop and web log INFO instead of an ERROR);
+  in a production release a mismatch between an app's `capabilities` and what it registers is
+  logged and reported, never thrown.
 - Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is now the
   single rule registry — 65 rules with stable ids `RULE-01`…`RULE-79`, each with its reason, what
   enforces it (`arch_check` R1–R15, analyzer, a test, a CI gate, `composer verify`, `docs_check` or

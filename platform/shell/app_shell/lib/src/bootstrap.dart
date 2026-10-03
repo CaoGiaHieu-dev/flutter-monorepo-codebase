@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
@@ -17,10 +16,10 @@ import 'shell_hooks.dart';
 
 /// Boots an app built on this shell.
 ///
-/// Every app's `main.dart` is one call to this, passing the
-/// `configureDependencies` generated for that app from its
-/// `app_manifest.yaml`, and — for an app that declares itself — its [profile]
-/// and [hooks]:
+/// Every app's `main.dart` is one call to this, passing what the app *is* —
+/// its [profile], whose facts are generated from `app_manifest.yaml` — the
+/// code it runs at fixed points ([hooks]) and the `configureDependencies`
+/// generated for it from the same manifest:
 ///
 /// ```dart
 /// void main() => runShellApp(
@@ -38,8 +37,9 @@ import 'shell_hooks.dart';
 ///
 /// ## The app profile
 ///
-/// Without a [profile] the boot is the one every app had before apps could
-/// declare themselves. With one, the shell does three more things:
+/// The [profile] is required: an app that does not say where it runs and what
+/// it provides is the problem the declaration exists to remove. The shell does
+/// three things with it:
 ///
 /// 1. **Before DI**, [AppProfile.validate] runs for the platform
 ///    (`resolveAppPlatform`) and flavor this build is. A problem — an
@@ -62,16 +62,16 @@ import 'shell_hooks.dart';
 ///    call [checkAppContract] on the graph it boots, so CI finds the mismatch
 ///    before a release does.
 ///
-/// With a profile the Dart splash is chosen by the platform's declared
-/// `splash` rather than by `Platform.isIOS`.
+/// The Dart splash is chosen by the platform's declared `splash`
+/// (`platforms.<p>.splash` in the manifest), not by a fork on the operating
+/// system.
 ///
 /// ## Hooks
 ///
 /// [hooks] carries an app's code for fixed points: the two error channels
 /// ([ShellHooks.onError], [ShellHooks.onNonFatalError]),
 /// [ShellHooks.beforeDependencies] and [ShellHooks.afterBoot]. The last two
-/// receive an [AppRuntime], which needs a [profile]: passing either without
-/// one throws [ArgumentError].
+/// receive an [AppRuntime].
 ///
 /// ## Errors
 ///
@@ -85,96 +85,73 @@ import 'shell_hooks.dart';
 ///
 /// To plug in Crashlytics or Sentry, register an `IErrorReporter` in the app
 /// (`getItOrNull`, so none is fine too); the fatal hook stays for an app that
-/// wants the raw callback — [ShellHooks.onError], or the older [onError]
-/// parameter, which is honoured when [ShellHooks.onError] is not set. Errors
-/// thrown by `configureDependencies` itself reach the fatal hook only — the
-/// reporter is not registered yet.
+/// wants the raw callback — [ShellHooks.onError]. Errors thrown by
+/// `configureDependencies` itself reach the fatal hook only — the reporter is
+/// not registered yet.
 void runShellApp({
+  required AppProfile profile,
   required Future<void> Function() configureDependencies,
-  AppProfile? profile,
   ShellHooks hooks = const ShellHooks(),
-  ShellErrorCallback? onError,
 }) {
-  if (profile == null &&
-      (hooks.beforeDependencies != null || hooks.afterBoot != null)) {
-    throw ArgumentError.value(
-      hooks,
-      'hooks',
-      'beforeDependencies and afterBoot receive an AppRuntime, which needs '
-          'a profile: pass `profile:` to runShellApp.',
-    );
-  }
-  assert(
-    onError == null || hooks.onError == null,
-    'Pass the fatal error callback once: ShellHooks.onError, or the older '
-    'onError parameter.',
-  );
-
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       installShellErrorHooks(
-        onError: hooks.onError ?? onError,
+        onError: hooks.onError,
         onNonFatalError: hooks.onNonFatalError,
       );
       registerBaseUiLicenses();
 
-      AppRuntime? runtime;
-      if (profile != null) {
-        runtime = AppRuntime(
-          profile: profile,
-          flavor: AppConfig.appFlavor,
-          platform: resolveAppPlatform(),
-          isDebug: kDebugMode,
-        );
+      final runtime = AppRuntime(
+        profile: profile,
+        flavor: AppConfig.appFlavor,
+        platform: resolveAppPlatform(),
+        isDebug: kDebugMode,
+      );
 
-        final problems = validateBoot(runtime);
-        if (problems.isNotEmpty) {
-          runBootError(
-            problems,
-            detailed: showsBootDiagnostics(runtime.flavor),
-          );
-          return;
-        }
-
-        // Before DI: an eager singleton built while the graph initialises can
-        // inject a section, and nothing registered later can shadow it.
-        registerAppProfile(profile, platform: runtime.platform);
-        _registerHooks(hooks);
-        await hooks.beforeDependencies?.call(runtime);
+      final problems = validateBoot(runtime);
+      if (problems.isNotEmpty) {
+        runBootError(problems, detailed: showsBootDiagnostics(runtime.flavor));
+        return;
       }
+
+      // Before DI: an eager singleton built while the graph initialises can
+      // inject a section, and nothing registered later can shadow it.
+      registerAppProfile(profile, platform: runtime.platform);
+      _registerHooks(hooks);
+      await hooks.beforeDependencies?.call(runtime);
 
       await configureDependencies();
 
-      if (runtime != null) {
-        final report = checkAppContract(
-          runtime.profile,
-          flavor: runtime.flavor,
-          platform: runtime.platform,
-        );
-        final goesOn = handleCompositionReport(
-          report,
-          onNonFatalError: hooks.onNonFatalError,
-        );
-        if (!goesOn) return;
-      }
+      final report = checkAppContract(
+        runtime.profile,
+        flavor: runtime.flavor,
+        platform: runtime.platform,
+      );
+      final goesOn = handleCompositionReport(
+        report,
+        onNonFatalError: hooks.onNonFatalError,
+      );
+      if (!goesOn) return;
 
       // Before anything is built. The splash below is already wrapped in every
       // feature's `IAppTreeWrapper`, and a controller created there may open
       // a connection straight away (auth restores the session with a token
       // refresh). Dio keeps the first `HttpClient` it creates, so pinning
       // installed any later — in `initService` — would never reach it.
-      AppInitializer.initBeforeRunApp();
+      AppInitializer.initBeforeRunApp(
+        profile: profile,
+        platform: runtime.platform,
+        flavor: runtime.flavor,
+      );
 
-      // With a profile the platform's declared `splash` decides. Without one:
-      // iOS keeps its native splash for the whole boot, so no Dart splash is
-      // built there. `kIsWeb` is checked first because `Platform.isIOS` throws
-      // on web.
-      final usesDartSplash = runtime != null
-          ? (getItOrNull<PlatformFacts>() ?? const PlatformFacts.today())
-                    .splash ==
-                SplashMode.dart
-          : kIsWeb || !Platform.isIOS;
+      // The platform's declared `splash` decides — iOS keeps its native splash
+      // for the whole boot by default, so no Dart splash is built there.
+      final usesDartSplash =
+          (profile.facts.platformFor(runtime.platform) ??
+                  const PlatformFacts.today())
+              .splash ==
+          SplashMode.dart;
 
       await MainScope(
         // Resolved through `core_di` rather than importing the splash feature:
@@ -187,8 +164,11 @@ void runShellApp({
         initService: () async {
           await AppInitializer.init(
             routeObserver: getIt<AppRouter>().routeObserver,
+            profile: profile,
+            platform: runtime.platform,
+            flavor: runtime.flavor,
           );
-          if (runtime != null) await hooks.afterBoot?.call(runtime);
+          await hooks.afterBoot?.call(runtime);
         },
       ).run();
     },

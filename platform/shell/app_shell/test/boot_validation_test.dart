@@ -9,8 +9,7 @@ import 'support/profile_fakes.dart';
 
 /// `runShellApp(profile:)`: the app's declaration is checked before any
 /// dependency is built, held to the graph afterwards, and chooses the splash.
-/// `runShellApp(configureDependencies:)` — the call every app made before
-/// profiles existed — is the same boot it always was.
+/// The profile is required — there is no boot without one.
 void main() {
   final harness = BootHarness();
   setUp(harness.setUp);
@@ -295,61 +294,6 @@ void main() {
     });
   });
 
-  group('without a profile', () {
-    testWidgets('the boot is the one every app had: no profile, same DI', (
-      tester,
-    ) async {
-      var diCalls = 0;
-      var splashBuilt = false;
-      final errors = <Object>[];
-
-      runShellApp(
-        configureDependencies: () async {
-          diCalls++;
-          registerRequiredShell();
-          getIt.registerSingleton<IAppSplashScreen>(
-            FakeSplash(() => splashBuilt = true),
-          );
-        },
-        onError: (error, _) => errors.add(error),
-      );
-      await pumpUntil(tester, () => splashBuilt);
-
-      expect(diCalls, 1);
-      expect(splashBuilt, isTrue);
-      expect(getIt.isRegistered<AppProfile>(), isFalse);
-      expect(getIt.isRegistered<PlatformFacts>(), isFalse);
-      expect(getIt.isRegistered<ShellHooks>(), isFalse);
-      expect(find.byType(BootErrorApp), findsNothing);
-      expect(errors, isEmpty);
-
-      await settleAndTearDown(tester);
-    });
-
-    test('hooks that need an AppRuntime need a profile', () {
-      for (final hooks in [
-        ShellHooks(beforeDependencies: (_) async {}),
-        ShellHooks(afterBoot: (_) async {}),
-      ]) {
-        expect(
-          () => runShellApp(hooks: hooks, configureDependencies: () async {}),
-          throwsArgumentError,
-        );
-      }
-    });
-
-    test('the fatal callback is passed once, not twice', () {
-      expect(
-        () => runShellApp(
-          hooks: const ShellHooks(onError: _ignore),
-          onError: _ignore,
-          configureDependencies: () async {},
-        ),
-        throwsA(isA<AssertionError>()),
-      );
-    });
-  });
-
   group('validateBoot', () {
     AppRuntime runtime({
       required AppPlatform platform,
@@ -467,5 +411,3 @@ void main() {
     });
   });
 }
-
-void _ignore(Object error, StackTrace stack) {}

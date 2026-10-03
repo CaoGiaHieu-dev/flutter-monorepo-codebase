@@ -6,7 +6,10 @@ import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:injectable/injectable.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Concrete implementation of NetworkConfig, shared by every app.
+/// Concrete implementation of NetworkConfig, shared by every app. What differs
+/// per app — the certificate pinning decision of each flavor — comes from the
+/// app's [SslPinningPolicy] (`flavors.<f>.ssl_pinning` in its manifest), which
+/// `runShellApp` registers before the graph is built.
 ///
 /// This fulfills dependencies of core_network, using core_ui_kit's
 /// `RetryDialog` for the retry prompt — the only reason
@@ -30,9 +33,13 @@ import 'package:material_ui/material_ui.dart';
 /// module-initialisation ordering matters.
 @LazySingleton(as: NetworkConfig)
 class NetworkConfigImpl implements NetworkConfig {
-  NetworkConfigImpl(this._languageStorage);
+  NetworkConfigImpl(
+    this._languageStorage, [
+    this._pinning = const SslPinningPolicy.none(),
+  ]);
 
   final ILanguageStorage _languageStorage;
+  final SslPinningPolicy _pinning;
 
   /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
@@ -101,15 +108,15 @@ class NetworkConfigImpl implements NetworkConfig {
     );
   }
 
-  /// SPKI SHA-256 pins applied on staging and production.
+  /// The SPKI SHA-256 pins of the current flavor, as the app's manifest decided
+  /// them (`flavors.<f>.ssl_pinning`).
   ///
-  /// **An empty list disables pinning.** `AppInitializer._setupHttpOverrides`
-  /// only installs `HttpSecurityPinningClient` when this is non-empty, so
-  /// until it is filled in the app accepts any certificate a device trusts —
-  /// including one injected by an intercepting proxy. The initializer logs an
-  /// ERROR on non-dev flavors while this stays empty.
-  ///
-  /// Populate it before shipping. To read the pin for a host:
+  /// **Empty means this flavor does not pin** — the decision is `disabled` (its
+  /// reason is logged at boot by `AppInitializer`), or the policy is the
+  /// hand-built `SslPinningPolicy.none()`. Pins are set in the manifest, never
+  /// here: `pins: ["<leaf>", "<backup>"]`, at least two so a certificate
+  /// rotation does not lock every installed client out of the API. To read the
+  /// pin for a host:
   /// ```sh
   /// openssl s_client -servername <host> -connect <host>:443 </dev/null \
   ///   | openssl x509 -pubkey -noout \
@@ -117,8 +124,6 @@ class NetworkConfigImpl implements NetworkConfig {
   ///   | openssl dgst -sha256 -binary \
   ///   | openssl enc -base64
   /// ```
-  /// Pin at least two keys — the leaf plus a backup — so certificate rotation
-  /// does not lock every installed client out of the API.
   @override
-  List<String> get sslPinningHashes => const [];
+  List<String> get sslPinningHashes => _pinning.hashesFor(AppConfig.appFlavor);
 }

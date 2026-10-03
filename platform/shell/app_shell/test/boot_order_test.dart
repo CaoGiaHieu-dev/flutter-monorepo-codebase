@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui' show PlatformDispatcher;
 
-import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
 import 'package:flutter/services.dart';
@@ -9,14 +8,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
 
-import 'support/shell_fakes.dart';
+import 'support/profile_fakes.dart';
 
-class _Pins implements SslPinningConfig {
-  @override
-  List<String> get sslPinningHashes => const [
-    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-  ];
-}
+/// The pins the test profile decides for every flavor.
+const _pinned = SslPinning.pinned(
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
+);
 
 class _Splash implements IAppSplashScreen {
   @override
@@ -72,23 +70,25 @@ void main() {
 
     await tester.runAsync(() async {
       runShellApp(
+        profile: testProfile(
+          capabilities: declare(
+            provided: const {'routes', 'splash', 'tree_wrappers'},
+          ),
+          sslPinning: const SslPinningPolicy({
+            Flavor.dev: _pinned,
+            Flavor.staging: _pinned,
+            Flavor.prod: _pinned,
+          }),
+        ),
+        hooks: ShellHooks(onError: (error, _) => errors.add(error)),
         configureDependencies: () async {
+          getIt.enableRegisteringMultipleInstancesOfOneType();
+          registerRequiredShell();
           getIt
-            ..registerSingleton<SslPinningConfig>(_Pins())
-            ..registerSingleton<ThemeProvider>(
-              ThemeProvider(FakeThemeStorage()),
-            )
-            ..registerSingleton<LanguageProvider>(
-              LanguageProvider(FakeLanguageStorage()),
-            )
-            ..registerSingleton<AppRouter>(AppRouter())
-            ..registerSingleton<DeeplinkProvider>(
-              FakeDeeplinkProvider(getIt<AppRouter>()),
-            )
+            ..registerSingleton<IFeatureRouteModule>(aRoute())
             ..registerSingleton<IAppSplashScreen>(_Splash())
             ..registerSingleton<IAppTreeWrapper>(probe);
         },
-        onError: (error, _) => errors.add(error),
       );
 
       // Let the zone reach `runApp(splash)` and build its first frame.

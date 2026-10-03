@@ -119,7 +119,7 @@ void main() {
       expect(injection, contains('Future<void> configureDependencies('));
       expect(
         injection,
-        contains('getIt.enableRegisteringMultipleInstancesOfOneType();'),
+        contains('target.enableRegisteringMultipleInstancesOfOneType();'),
       );
       expect(injection, contains('@InjectableInit('));
       expect(injection, contains('Future<void> resetDependencies()'));
@@ -791,8 +791,8 @@ void main() {
         injectionPath: ws
             .read(injectionPath)
             .replaceFirst(
-              'getIt.enableRegisteringMultipleInstancesOfOneType();',
-              'getIt.allowReassignment = true;',
+              'target.enableRegisteringMultipleInstancesOfOneType();',
+              'target.allowReassignment = true;',
             ),
       });
 
@@ -803,7 +803,7 @@ void main() {
       expect(await run(ws, ['sync']), exitsWith(0));
       expect(
         ws.read(injectionPath),
-        contains('getIt.enableRegisteringMultipleInstancesOfOneType();'),
+        contains('target.enableRegisteringMultipleInstancesOfOneType();'),
       );
     });
 

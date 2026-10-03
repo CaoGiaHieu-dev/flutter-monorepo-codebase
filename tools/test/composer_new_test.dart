@@ -175,7 +175,10 @@ void main() {
       // fail it.
       final smoke = ws.read('apps/reports/test/di_smoke_test.dart');
       expect(smoke, contains('instantiateLazySingletons: true'));
-      expect(smoke, contains('callFactories: true'));
+      expect(smoke, contains('FactoryRecorder(getIt)'));
+      expect(smoke, contains('recorder.buildEvery('));
+      expect(smoke, contains('_factoriesNeedingArguments'));
+      expect(smoke, isNot(contains('callFactories')));
 
       expect(await run(ws, ['verify']), exitsWith(0));
       final describe = await run(ws, ['describe', '--app', 'reports']);

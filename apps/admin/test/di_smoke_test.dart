@@ -34,6 +34,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// device.
 const _platform = AppPlatform.linux;
 
+/// Factories this check does not build: those with a non-nullable
+/// `@factoryParam`, which only the screen that creates them can supply — a
+/// detail screen's controller takes the id its route passes. Key: the type name
+/// (`DetailBloc`). Value: why it cannot be built here. An entry that matches no
+/// factory, or one that needs no argument, fails the test, so the list cannot
+/// rot. Empty: every factory of this app takes nullable parameters or none.
+const _factoriesNeedingArguments = <String, String>{};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -50,32 +58,30 @@ void main() {
       'declaration matches it',
       () async {
         registerAppProfile(appProfile, platform: _platform);
-        await configureDependencies(environment: flavor.name);
+        // The recorder stands in for the locator while the graph registers,
+        // so each factory is seen — and built — one at a time.
+        final recorder = FactoryRecorder(getIt);
+        await configureDependencies(
+          environment: flavor.name,
+          locator: recorder,
+        );
 
         // Every `@lazySingleton` in the graph built now instead of on first
-        // use, and every `@injectable` factory called once — a missing
+        // use, and every `@injectable` factory built once — a missing
         // dependency throws here rather than on some screen (RULE-63).
         //
         // A factory takes its `@factoryParam` arguments from the screen that
-        // creates it, and here there is none: it is called with `null`. So a
-        // parameter must be nullable (HomeProfileBloc's is — `null` reads "no
-        // session contract registered"); a non-nullable one makes GetIt throw
-        // an ArgumentError, which is reported below with the way out.
-        final List<Object> built;
-        try {
-          built = getIt.findAll<Object>(
-            instantiateLazySingletons: true,
-            callFactories: true,
-          );
-        } on ArgumentError catch (error) {
-          fail(
-            'A factory could not be built without its @factoryParam argument: '
-            'make that parameter nullable (the boot check passes null), or '
-            'build the factory by hand in this test and give it a reason.\n'
-            '$error',
-          );
-        }
+        // creates it, and here there is none: a nullable parameter gets
+        // `null` (HomeProfileBloc's reads "no session contract registered"),
+        // an async factory is awaited, and a non-nullable parameter is F01
+        // unless the factory is listed in `_factoriesNeedingArguments`. A
+        // failure names the factory's type.
+        final built = getIt.findAll<Object>(instantiateLazySingletons: true);
         expect(built, isNotEmpty);
+        final factories = await recorder.buildEvery(
+          notBuilt: _factoriesNeedingArguments,
+        );
+        expect(factories.problems, isEmpty, reason: factories.explain());
 
         // The graph is built from the sections the profile registered before
         // it: the router got the app's own `RouterProfile`, not a default.

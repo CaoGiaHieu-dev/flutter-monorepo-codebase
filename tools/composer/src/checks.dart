@@ -393,7 +393,7 @@ String _origin(AppView view, PackageFacts facts) {
 /// | V3  | `capabilities:` equals the code, both directions; every required row has an implementer |
 /// | V10 | what a composed package needs the app to register (`composition.app_provides`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares, and none exists for a flavor the manifest does not declare |
-/// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`callFactories: true`) |
+/// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`) |
 /// | V15 | the `productFlavors` of a committed Android runner and the flavor schemes of a committed iOS runner are the flavors the manifest declares |
 /// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
 ///
@@ -800,13 +800,16 @@ void _entryAndSmokeTest(
             'flavor: flavor, platform: platform).problems, isEmpty)`',
       );
     }
-    if (!RegExp(r'\bcallFactories\s*:\s*true\b').hasMatch(code)) {
+    if (!RegExp(r'\bFactoryRecorder\s*\(').hasMatch(code) ||
+        !RegExp(r'\.buildEvery\s*\(').hasMatch(code)) {
       bad(
         smoke,
-        'callFactories',
-        'never `true` — the smoke test must build every @injectable factory, '
-            'not only the lazy singletons (RULE-63): `getIt.findAll<Object>('
-            'instantiateLazySingletons: true, callFactories: true)`',
+        'buildEvery',
+        'never builds the factories — the smoke test must build every '
+            '@injectable factory, not only the lazy singletons (RULE-63): '
+            '`final recorder = FactoryRecorder(getIt); await '
+            'configureDependencies(environment: ..., locator: recorder); ... '
+            'await recorder.buildEvery(notBuilt: ...)` (platform_app_shell)',
       );
     }
   }

@@ -155,6 +155,11 @@ class AppMaterialWrapper extends StatelessWidget {
     final delegates = [
       ...getAllOrEmpty<IFeatureLocalization>().map((e) => e.delegate),
       ...AppLocalizations.localizationsDelegates,
+      // The list above carries the SDK's Material and Cupertino delegates,
+      // which provide the SDK's types. `material_ui` and `cupertino_ui` widgets
+      // read their own, and have English alone without these, so a `vi` app
+      // would find no MaterialLocalizations (and logs a debug warning).
+      ...GlobalMaterialLocalizations.delegates,
     ];
     final supportedLocales = languages.supported;
 

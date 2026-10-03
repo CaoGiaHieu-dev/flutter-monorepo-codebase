@@ -212,6 +212,8 @@ with the architecture rules enforced by CI instead of review alone.
 - Boot: TLS overrides installed before the first widget; returning users skip onboarding; the
   route observer is attached; boot crashes in apps without onboarding or home.
 - Storage: no key wipe on first launch or on a transient secure-store error.
+- Localization: the Material wrapper wires `material_ui`'s own localization delegates, so an app
+  in Vietnamese (or any non-English locale) no longer lacks `MaterialLocalizations`.
 - Database: the cache database opens after its own migrations register; read-pool connections
   get a busy timeout.
 - UI: dark-mode colours in `ui_kit`, theme text scaling, split-view overflow, responsive edge cases.

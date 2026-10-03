@@ -688,6 +688,74 @@ void main() {
     });
   });
 
+  group('R7 receivers and declarations', () {
+    Future<ToolRun> lib(String source) => check({
+      'platform/infra/foo/pubspec.yaml': pubspec('core_foo'),
+      'platform/infra/foo/lib/foo.dart': source,
+    });
+
+    for (final bad in const {
+      'a receiver and its dot on different lines': 'final a = 16\n    .w;\n',
+      'a parenthesised sum split from its dot': 'final a = (4 + 4)\n    .h;\n',
+      'a decimal receiver': 'final a = 1.5.sp;\n',
+      'a leading-dot decimal': 'final a = .5.w;\n',
+      'a sum with a variable': 'final a = (gap * 2).w;\n',
+      'a sum after return': 'double f() {\n  return (4 + 4).r;\n}\n',
+      'a nested group': 'final a = ((1 + 2) * 3).h;\n',
+      'a spaced dot': 'final a = 16 . w;\n',
+    }.entries) {
+      test('${bad.key} fails', () async {
+        final run = await lib(bad.value);
+        expect(run, exitsWith(1));
+        expect(run.output, contains('R7 — '));
+        expect(run.output, contains('platform/infra/foo/lib/foo.dart:'));
+      });
+    }
+
+    for (final ok in const {
+      'Color.fromARGB(...).r': 'final a = Color.fromARGB(255, 0, 0, 0).r;\n',
+      'a color after withValues': 'final a = c.withValues(alpha: .5).r;\n',
+      'Size(a, b).h': 'final a = Size(a, b).h;\n',
+      'a cast group': 'final a = (c as Color).r;\n',
+      'a null-coalescing group': 'final a = (c ?? other).r;\n',
+      'a ternary group': 'final a = (x ? one : two).h;\n',
+      'an identifier ending in a digit': 'final a = pad2.w;\n',
+      'a version-looking chain': 'final a = v1.2.r;\n',
+      'a call of the extension (skipped on purpose)': 'final a = 16.w(c);\n',
+      'a member that merely starts with the letter': 'final a = 4.hashCode;\n',
+      'the real API': 'final a = context.w(16) + context.h(8);\n',
+    }.entries) {
+      test('${ok.key} passes', () async {
+        final run = await lib(ok.value);
+        expectClean(run, 'R7');
+      });
+    }
+
+    test('a num extension named like a sizing extension is reported at its '
+        'declaration', () async {
+      final run = await lib(
+        'extension SizeX on num {\n'
+        '  double get w => this * 2;\n'
+        '  double h(Object c) => this * 3;\n'
+        '  String get label => "x";\n'
+        '}\n',
+      );
+      expectViolation(run, 'R7', 'platform/infra/foo/lib/foo.dart:2');
+      expect(run.output, contains('platform/infra/foo/lib/foo.dart:3'));
+      expect(run.output, contains('an extension on `num` declares `w`'));
+    });
+
+    test('other extensions, and other members of a num one, pass', () async {
+      final run = await lib(
+        'extension Money on num {\n  String get label => "x";\n'
+        '  double get half => this / 2;\n}\n'
+        'extension Words on String {\n  int get w => 1;\n  int get r => 2;\n}\n'
+        'extension Ints on int {\n  bool get isHuge => this > 9;\n}\n',
+      );
+      expectClean(run, 'R7');
+    });
+  });
+
   group('R8 removable contracts resolve optionally', () {
     /// `IFooContract` is declared in core_di and implemented only in
     /// `modules/foo`, so it disappears when that module is removed.
@@ -755,6 +823,59 @@ void main() {
         });
       }
 
+      for (final spelling in const {
+        'a private GetIt field':
+            'final GetIt _getIt;\nShell(this._getIt);\n'
+            'void f() { _getIt.get<IFooContract>(); }',
+        'a private GetIt field called directly':
+            'final GetIt _getIt = GetIt.I;\n'
+            'void f() { _getIt<IFooContract>(); }',
+        'this._field.get<T>()':
+            'class S {\n  S(this._locator);\n  final GetIt _locator;\n'
+            '  void f() { this._locator.get<IFooContract>(); }\n}',
+        'an injected GetIt parameter':
+            'void wire(GetIt locator) {\n'
+            '  final foo = locator.get<IFooContract>();\n}',
+        'a nullable GetIt parameter':
+            'void wire(GetIt? sl) {\n  sl!.get<IFooContract>();\n}',
+        'a local alias of GetIt.instance':
+            'void f() {\n  final sl = GetIt.instance;\n'
+            '  sl<IFooContract>();\n}',
+        'a late alias of getIt':
+            'late final loc = getIt;\nvoid f() { loc.getAll<IFooContract>(); }',
+        'an untyped lookup through an alias':
+            'final GetIt locator = GetIt.I;\n'
+            'final IFooContract foo = locator();',
+        'a prefixed type argument': 'final foo = getIt<c.IFooContract>();',
+        'a lookup behind another object':
+            'final foo = ctx.getIt<IFooContract>();',
+      }.entries) {
+        test('${spelling.key} fails', () async {
+          final run = await check(contractFixture(spelling.value));
+          expect(run, exitsWith(1));
+          expect(run.output, contains('R8 — '));
+          expect(
+            run.output,
+            contains('platform/shell/app_shell/lib/shell.dart:'),
+          );
+        });
+      }
+
+      test('names that merely look like a locator pass', () async {
+        final run = await check(
+          contractFixture(
+            'final a = getItOrNull<IFooContract>();\n'
+            'final b = getItem<IFooContract>();\n'
+            'final c = forgetIt<IFooContract>();\n'
+            'final GetIt locator = GetIt.I;\n'
+            'final d = locator.getItOrNull<IFooContract>();\n'
+            'bool e(int sl, int other) => sl < IFooContract.limit;\n'
+            'class GetItem { GetIt get registry => GetIt.I; }',
+          ),
+        );
+        expectClean(run, 'R8');
+      });
+
       test('the optional spellings and a lookup in a comment pass', () async {
         final run = await check(
           contractFixture(
@@ -774,6 +895,83 @@ void main() {
           contractFixture('final foo = getIt.get<SomethingElse>();'),
         );
         expectClean(run, 'R8');
+      });
+    });
+
+    group('who implements a contract is read from code, not prose', () {
+      Map<String, String> theme(String implementers) => {
+        'platform/foundation/contracts/pubspec.yaml': pubspec('core_di'),
+        'platform/foundation/contracts/lib/i_theme_storage.dart':
+            'abstract class IThemeStorage {}\n',
+        'platform/ui/design_system/pubspec.yaml': pubspec(
+          'core_base_ui',
+          deps: ['core_di'],
+        ),
+        'platform/ui/design_system/lib/theme.dart':
+            "import 'package:core_di/core_di.dart';\n"
+            'final s = getIt<IThemeStorage>();\n',
+        'modules/settings/feature/pubspec.yaml': pubspec('feature_settings'),
+        'modules/settings/feature/lib/s.dart': implementers,
+      };
+
+      test('a doc comment, a commented-out class and a string are not '
+          'implementers', () async {
+        final run = await check(
+          theme(
+            '/// Mirrors ThemeStorageImpl: implements IThemeStorage\n'
+            '// class Old implements IThemeStorage {}\n'
+            '/* class Older implements IThemeStorage {} */\n'
+            "const s = 'works with IThemeStorage';\n"
+            '// @LazySingleton(as: IThemeStorage)\n',
+          ),
+        );
+        expectClean(run, 'R8');
+      });
+
+      test('a real implementer makes the contract removable', () async {
+        final run = await check(
+          theme('class T implements IThemeStorage {}\n'),
+        );
+        expectViolation(
+          run,
+          'R8',
+          'platform/ui/design_system/lib/theme.dart:2',
+        );
+      });
+
+      test('an import-prefixed implements counts like the plain one', () async {
+        final run = await check(
+          theme(
+            "import 'package:core_di/core_di.dart' as c;\n"
+            'class T implements c.IThemeStorage {}\n',
+          ),
+        );
+        expectViolation(
+          run,
+          'R8',
+          'platform/ui/design_system/lib/theme.dart:2',
+        );
+      });
+
+      test('a prefixed as: binding and a generic supertype count', () async {
+        final run = await check(
+          theme(
+            '@LazySingleton(as: c.IThemeStorage)\nclass T {}\n',
+          ),
+        );
+        expectViolation(
+          run,
+          'R8',
+          'platform/ui/design_system/lib/theme.dart:2',
+        );
+        final generic = await check(
+          theme('class T implements IOther<int>, IThemeStorage {}\n'),
+        );
+        expectViolation(
+          generic,
+          'R8',
+          'platform/ui/design_system/lib/theme.dart:2',
+        );
       });
     });
 
@@ -2469,6 +2667,110 @@ void main() {
         expect(run.output, isNot(contains('R5 — ')));
       });
     }
+  });
+
+  group('R19 and R20 read apps too', () {
+    test(
+      'print, debugPrint and raw layout numbers in apps/*/lib fail',
+      () async {
+        final run = await check({
+          'apps/demo/app_manifest.yaml': 'app:\n  id: demo\n',
+          'apps/demo/pubspec.yaml': pubspec('demo_app'),
+          'apps/demo/lib/zz.dart':
+              "void f() { print('x'); debugPrint('y'); }\n"
+              'final a = const SizedBox(width: 16);\n',
+        });
+        expectViolation(run, 'R19', 'apps/demo/lib/zz.dart:1');
+        expect(run.output, contains('R20 — '));
+        expect(run.output, contains('apps/demo/lib/zz.dart:2'));
+      },
+    );
+
+    test('an app test, tool and integration_test may print', () async {
+      final run = await check({
+        'apps/demo/app_manifest.yaml': 'app:\n  id: demo\n',
+        'apps/demo/pubspec.yaml': pubspec('demo_app'),
+        'apps/demo/test/t_test.dart': "void main() => print('x');\n",
+        'apps/demo/integration_test/i_test.dart':
+            'final a = EdgeInsets.all(16);\n',
+        'apps/demo/tool/t.dart': "void main() => print('x');\n",
+      });
+      expectClean(run, 'R19');
+      expectClean(run, 'R20');
+    });
+  });
+
+  group('R20 magnitude arguments of known widgets', () {
+    Future<ToolRun> widget(String body) => check({
+      'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+      'platform/ui/foo/lib/box.dart': 'final w = $body;\n',
+    });
+
+    for (final bad in const [
+      'Container(width: 100, height: 50)',
+      'Container(child: c, height: 50)',
+      'AnimatedContainer(duration: d, width: 10)',
+      'BoxConstraints(maxWidth: 300, minHeight: 48)',
+      'BoxConstraints.tightFor(width: 40)',
+      'Icon(Icons.add, size: 24)',
+      'IconButton(onPressed: f, iconSize: 20)',
+      'Positioned(top: 8, left: 8)',
+      'Positioned.fill(top: 8)',
+      'PositionedDirectional(start: 8)',
+      'BorderSide(width: 1)',
+      'Border.all(width: 2)',
+      'Divider(height: 1, thickness: 1)',
+      'VerticalDivider(width: 4)',
+      'CircleAvatar(radius: 20)',
+      'Image.asset("a", width: 20)',
+      'SvgPicture.asset("a", height: 20)',
+      'LinearProgressIndicator(minHeight: 4)',
+      'Radius.elliptical(8, 4)',
+      'Size(100, 50)',
+      'Size.square(24)',
+      'Rect.fromLTWH(0, 0, 100, 50)',
+      'BoxShadow(spreadRadius: 2)',
+      'Offset(0, 4)',
+      'Offset(-2, 0)',
+    ]) {
+      test('$bad fails', () async {
+        final run = await widget(bad);
+        expectViolation(run, 'R20', 'platform/ui/foo/lib/box.dart:1');
+      });
+    }
+
+    test('assigning a raw stroke width fails, zero and a token pass', () async {
+      final bad = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/lib/p.dart':
+            'void f(p) {\n  p.strokeWidth = 2;\n  p.strokeWidth = 0;\n'
+            '  p.strokeWidth = context.w(2);\n  if (p.strokeWidth == 2) {}\n}\n',
+      });
+      expectViolation(bad, 'R20', 'platform/ui/foo/lib/p.dart:2');
+      expect(bad.output, isNot(contains('p.dart:3')));
+      expect(bad.output, isNot(contains('p.dart:4')));
+      expect(bad.output, isNot(contains('p.dart:5')));
+    });
+
+    test('scaled values, tokens, fractions and ratios pass', () async {
+      final run = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/lib/box.dart':
+            'final a = Container(width: context.w(100), height: AppSpacing.xl);\n'
+            'final b = BoxConstraints(maxWidth: double.infinity, minHeight: 0);\n'
+            'final c = Icon(Icons.add, size: context.w(24));\n'
+            'final d = Positioned(top: context.h(8), left: 0);\n'
+            'final e = BorderSide(width: AppSpacing.hairline);\n'
+            'final f = Tween<Offset>(begin: Offset(0, 1), end: Offset.zero);\n'
+            'final g = Offset(0.5, 0.5);\n'
+            'final h = Offset(-1, 0);\n'
+            'final i = TextStyle(height: 1.2, letterSpacing: 0.5);\n'
+            'final j = Photo(width: 4000, height: 3000);\n'
+            'final k = Divider(height: context.h(1));\n'
+            'final l = Size.zero;\n',
+      });
+      expectClean(run, 'R20');
+    });
   });
 
   group('R3 / R8 module API packages', () {

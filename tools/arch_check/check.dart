@@ -456,19 +456,6 @@ String _layerOf(MonorepoPackage pkg, String root) {
   return 'core';
 }
 
-/// Matches a bare sizing extension — a number or a closing paren followed by
-/// `.w`, `.h`, `.sp`, `.r`, `.spMin`, `.dg`, `.dm`.
-///
-/// `core_responsive` declares no such extension on `num`, so these do not
-/// resolve against it. This catches one declared elsewhere, which would
-/// type-check while reading a value that never notifies anyone.
-///
-/// Anchored on the receiver so ordinary members (`rect.width`, `state.hasData`)
-/// never match, and the trailing boundary keeps `.hour` or `.round()` out.
-final RegExp _bareSizingExtension = RegExp(
-  r'[\d)]\.(spMin|sp|dg|dm|w|h|r)\b(?!\s*\()',
-);
-
 /// Every `.dart` file under `<packageRoot>/<dir>` (`test`, say), POSIX paths.
 /// Empty when the folder does not exist.
 List<String> _dartFilesUnder(String packageRoot, String dir) {
@@ -1112,17 +1099,31 @@ void main(List<String> args) {
     // the same name.
     for (final file in files) {
       final scanned = _scanFile(file);
-      // A numeric or closing-paren receiver followed by a sizing extension.
-      for (final m in _bareSizingExtension.allMatches(scanned.code)) {
+      final rel = p.posix.relative(file, from: root);
+      // A number, or a parenthesised sum, followed by a sizing extension.
+      for (final f in bareSizingExtensionsIn(scanned)) {
         blocking.add(
           Violation(
             'R7',
-            '${p.posix.relative(file, from: root)}:${scanned.lineOf(m.start)}',
-            'bare `.${m.group(1)}` sizing extension — use '
-                '`context.${m.group(1)}(value)` so the widget rebuilds when '
+            '$rel:${f.line}',
+            'bare `.${f.text}` sizing extension — use '
+                '`context.${f.text}(value)` so the widget rebuilds when '
                 'screen metrics change. If no BuildContext is reachable, '
                 'read the value from one before the first `await` and pass '
                 'it in.',
+          ),
+        );
+      }
+      // The extension that would make the bare form compile.
+      for (final f in sizingExtensionDeclarationsIn(scanned)) {
+        blocking.add(
+          Violation(
+            'R7',
+            '$rel:${f.line}',
+            'an extension on `num` declares `${f.text}`: it makes a bare '
+                '`16.${f.text}` type-check while reading a value that never '
+                'notifies anyone. Scaling goes through '
+                '`context.${f.text}(value)`; rename or delete it.',
           ),
         );
       }
@@ -1785,6 +1786,15 @@ RULES CHECKED
       Checked in every hand-written Dart file under lib/ of every package
       (comments and string literals blanked), not only in files that import
       core_responsive: an extension declared elsewhere type-checks too.
+      The receiver is a number literal (`16.w`, `1.5.sp`, `.5.h`), or a
+      parenthesised arithmetic group (`(4 + 4).h`, `(gap * 2).w`), with the
+      dot on the same line or the next (`16\n  .w`). A call's result is not a
+      receiver: `Color.fromARGB(...).r`, `c.withValues(alpha: .5).r` and
+      `Size(a, b).h` are members of the result, not sizing. Also reported: a
+      workspace `extension ... on num|int|double` that declares a member named
+      w, h, r, sp, spMin, dg or dm — what would make the bare form compile.
+      Limitation: a *variable* receiver (`final p = 8; p.w`, `Pad.md.w`) is
+      not followed, since without types `.r` there may be `Color.r`.
 
   R8  Removable contracts resolve optionally
       A `core_di` contract or a module API type (declared in any <id>_api
@@ -1798,6 +1808,15 @@ RULES CHECKED
       getIt<T>(), getIt.get<T>(), getIt.getAll<T>(), getIt.getAsync<T>(),
       GetIt.I<T>(), GetIt.instance<T>(), a type argument split over lines, and
       an untyped `final T x = getIt();` (the declared type is the lookup).
+      Also through any alias of a GetIt declared or initialised in the same
+      file: a `final GetIt _getIt;` field (`_getIt.get<T>()`, `_getIt<T>()`,
+      `this._getIt...`), an injected `GetIt locator` parameter, a local
+      `final sl = GetIt.instance;`. An alias that crosses files (a `locator`
+      inherited from a base class elsewhere) cannot be placed.
+      Who implements a contract is read from code too, never from prose: a
+      comment saying "implements IThemeStorage" makes nothing an implementer,
+      and `implements c.IFoo` (an import prefix) or `@LazySingleton(as: c.IFoo)`
+      counts like the plain spelling.
       Also: an `@injectable` / `@lazySingleton` / `@singleton` class outside
       every module whose constructor takes such a contract as a required
       parameter (non-nullable, not `@factoryParam`) is reported — injectable
@@ -1922,20 +1941,36 @@ RULES CHECKED
 
   R19 Runtime diagnostics go through DynamicLogger  (RULE-65)
       No `print(`, `debugPrint(` or `debugPrintStack(` call in lib/ of any
-      platform/ or modules/ package (comments and strings blanked, so a doc
-      example does not count; a method merely *named* print is not a call).
-      Use `DynamicLogger.log`. Tests are not scanned, and tools/ have their
-      own rule: they write with stdout.writeln / stderr.writeln.
+      platform/ or modules/ package or of an app (apps/<id>/lib; comments and
+      strings blanked, so a doc example does not count; a method merely
+      *named* print is not a call). Use `DynamicLogger.log`. Tests are not
+      scanned, and tools/ have their own rule: they write with
+      stdout.writeln / stderr.writeln.
 
   R20 No raw numeric literals for layout and paint  (RULE-30, RULE-33)
-      In lib/ of every platform/ and modules/ package, outside any styles/
-      or utils/ folder and generated files, a number literal may not be the
-      value of: SizedBox(width:|height:), SizedBox.square(dimension:),
-      EdgeInsets.all/symmetric/only/fromLTRB (and the Directional forms),
-      BorderRadius.circular(, Radius.circular(, Offset(, fontSize:,
-      blurRadius: or strokeWidth:. Take it from `context.w/h/sp/r` or a design
-      token; `context.w(16)` is fine, `0` is fine, `16` is not. Constants
-      belong in styles/ (tokens) or utils/. Blocking: the tree has none.
+      In lib/ of every platform/ and modules/ package and of every app
+      (apps/<id>/lib), outside any styles/ or utils/ folder and generated
+      files, a number literal may not be the value of: SizedBox(width:|height:),
+      SizedBox.square(dimension:), EdgeInsets.all/symmetric/only/fromLTRB (and
+      the Directional forms), BorderRadius.circular(, Radius.circular(,
+      Radius.elliptical(, Size(, Size.square(, Rect.fromLTWH(, fontSize:,
+      blurRadius:, spreadRadius:, strokeWidth: or `.strokeWidth =`; nor the
+      size/width/height/radius/thickness/offset arguments of the known
+      widgets Container, AnimatedContainer, BoxConstraints (min/max
+      width/height), Icon (size), IconButton (iconSize, splashRadius),
+      Positioned / PositionedDirectional (top, left, right, bottom, start, end,
+      width, height), BorderSide and Border.all (width), Divider and
+      VerticalDivider (height, width, thickness, indent), CircleAvatar
+      (radius), Image and SvgPicture (width, height), LinearProgressIndicator
+      (minHeight). `Offset(x, y)` is flagged only for an argument above 1: a
+      fraction (`Offset(0, 1)` for a slide, `Offset(.5, .5)`) is not a pixel
+      distance. Take it from `context.w/h/sp/r` or a design token;
+      `context.w(16)` is fine, `0` is fine, `16` is not. Constants belong in
+      styles/ (tokens) or utils/. Blocking: the tree has none.
+      A PARTIAL check, by design: a lexical scan of the constructors above, not
+      a type check. A raw double reached through a variable
+      (`final w = 100.0; Container(width: w)`) or a widget not listed (a data
+      class with a `width` field is deliberately not one) is a review matter.
 
   R12, R13, R15 and R17-R20 read every file in the working tree that git does not
   ignore (tracked files and new ones about to be added; modules checked out

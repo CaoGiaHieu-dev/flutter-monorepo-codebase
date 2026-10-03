@@ -170,6 +170,13 @@ void main() {
         expect(ws.exists('apps/reports/$file'), isTrue, reason: file);
       }
 
+      // The smoke test builds every @injectable factory, not only the lazy
+      // singletons (RULE-63): a factory with an unregistered dependency must
+      // fail it.
+      final smoke = ws.read('apps/reports/test/di_smoke_test.dart');
+      expect(smoke, contains('instantiateLazySingletons: true'));
+      expect(smoke, contains('callFactories: true'));
+
       expect(await run(ws, ['verify']), exitsWith(0));
       final describe = await run(ws, ['describe', '--app', 'reports']);
       expect(describe, exitsWith(0));

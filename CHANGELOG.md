@@ -51,6 +51,15 @@ with the architecture rules enforced by CI instead of review alone.
   guides, reference and operations; English + Vietnamese READMEs for the state-management,
   responsive and tooling packages; agent skills under `.claude/skills/`.
 - Tests in 16 packages; the Plus Jakarta Sans font bundled so bold text uses the bold face.
+- App profile and shell hooks (the apps layer, step 1 of 6; no app changes yet): `platform_kernel`
+  gains `AppProfile` / `AppFacts` (what an app is and where it runs: platforms, flavors, env keys,
+  capabilities, SSL pinning per flavor), `AppProfile.validate` (problems `P01`–`P05`) and
+  `registerAppProfile`; `core_common` gains `resolveAppPlatform()`; `platform_app_shell` gains the
+  22-row catalog of what the shell resolves (`kShellContracts`), `checkAppContract` (problems
+  `C01`–`C09`), `ShellHooks` (`onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`) and
+  a boot-error screen. `runShellApp` takes an optional `profile:` and `hooks:`; with a profile, an
+  undeclared platform stops at that screen before dependency injection instead of a blank window.
+  `runShellApp(configureDependencies: ...)` and `onError:` behave exactly as before.
 
 ### Changed
 

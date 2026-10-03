@@ -307,29 +307,61 @@ List<String> checkPlatformSwitches(AppView view) {
   return problems;
 }
 
-/// V7: every platform the app declares is one every composed package works on.
+/// V7: every platform the app declares is one every package it links works on.
 ///
 /// A package says where it works in its own pubspec (`platforms:`, a key pub
 /// accepts and validates nothing about — this is the check). `core_database`
 /// lists no `web` because `drift/native` needs `dart:ffi`; an app that composes
 /// it and declares `web` would compile for a platform that cannot link it.
-/// Names the package and what pulled it in, so the fix is one edit.
+///
+/// The check follows `dependencies:` from every composed package, so a package
+/// reached only through another one (a feature that depends on
+/// `core_database`) is held to the same platforms; the message then names the
+/// chain. Names the package and what pulled it in, so the fix is one edit.
 List<String> checkPackagePlatforms(AppView view) {
   final problems = <String>[];
+  final chains = _dependencyChains(view);
   for (final platform in view.declaration.platforms) {
-    for (final name in view.composed.toList()..sort()) {
+    for (final name in chains.keys.toList()..sort()) {
       final facts = view.packageFacts[name];
       if (facts == null || facts.supports(platform.name)) continue;
+      final chain = chains[name]!;
+      final how = chain.length == 1
+          ? 'the app composes it ${_origin(view, facts)}'
+          : 'the app links it through ${chain.join(' -> ')}';
       problems.add(
         '${view.manifestPath}: platforms.${platform.name}: '
         '$name does not support ${platform.name} (its pubspec `platforms:` '
-        'lists ${facts.platforms!.join(', ')}) but the app composes it '
-        '${_origin(view, facts)} — declare only platforms every composed '
-        'package supports, or stop composing it',
+        'lists ${facts.platforms!.join(', ')}) but $how — declare only '
+        'platforms every linked package supports, or stop depending on it',
       );
     }
   }
   return problems;
+}
+
+/// For every package the app links, the shortest chain from a composed package
+/// to it (`[feature_foo, core_database]`); a composed package's chain is just
+/// itself. Only `dependencies:` count, and only packages composer has facts for
+/// (the workspace's own).
+Map<String, List<String>> _dependencyChains(AppView view) {
+  final chains = <String, List<String>>{
+    for (final name in view.composed) name: [name],
+  };
+  final queue = [...view.composed.toList()..sort()];
+  for (var i = 0; i < queue.length; i++) {
+    final from = queue[i];
+    final facts = view.packageFacts[from];
+    if (facts == null) continue;
+    for (final dep in facts.dependencies) {
+      if (chains.containsKey(dep) || !view.packageFacts.containsKey(dep)) {
+        continue;
+      }
+      chains[dep] = [...chains[from]!, dep];
+      queue.add(dep);
+    }
+  }
+  return chains;
 }
 
 /// How a composed package got into the app: its module, else its DI group.

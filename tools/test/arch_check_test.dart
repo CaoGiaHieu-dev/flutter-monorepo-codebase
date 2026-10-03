@@ -820,6 +820,21 @@ void main() {
       expect(run.output, contains('no longer forks'));
     });
 
+    test('an allow-listed file that is gone fails in the tree that owns '
+        'the list, and is not asked for elsewhere', () async {
+      // A fixture has none of the shipped files and is not asked for them.
+      expectClean(await check(forkFixture({})), 'R17');
+
+      // The tree that carries the list is: every entry must exist.
+      final run = await check(
+        forkFixture({
+          'tools/arch_check/platform_forks.dart': '// the list lives here\n',
+        }),
+      );
+      expectViolation(run, 'R17', resolver);
+      expect(run.output, contains('does not exist'));
+    });
+
     test('every shipped allow-list entry says why', () {
       expect(kPlatformForkAllowList, isNotEmpty);
       expect(allowListProblems(kPlatformForkAllowList), isEmpty);

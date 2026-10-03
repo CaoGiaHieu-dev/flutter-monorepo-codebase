@@ -21,52 +21,40 @@ Package này loại bỏ các đoạn code lặp lại (boilerplate) trong việ
 
 ## 🚀 1. Quản lý Tự động hóa qua `executeOperation`
 
-ViewModel không tự viết các câu lệnh đóng mở loading hay map kết quả. Thay vào đó, ViewModel ủy quyền cho hàm `executeOperation` tích hợp sẵn trong `BaseProvider`:
+ViewModel không tự viết các câu lệnh đóng mở loading hay map kết quả. Thay vào đó, ViewModel ủy quyền cho hàm `executeOperation`, một phương thức protected của `BaseProvider` (mẫu là `AuthProvider`):
 
 ```dart
-import 'package:domain_auth/domain_auth.dart'; // LoginUseCase, LoginParams, UserEntity
-import 'package:injectable/injectable.dart';
-import 'package:provider_state_management/provider_state_management.dart';
+// modules/auth/feature/lib/src/provider/auth_provider.dart (abridged)
+Future<void> login(String email, String password) async {
+  await executeOperation(
+    OperationConfig(
+      operation: () =>
+          _loginUseCase(LoginParams(email: email, password: password)),
+      onSuccess: (user) async {
+        DynamicLogger.log('Login successful for user: ${user?.name}');
+      },
+      // Map lỗi Domain sang error state của feature.
+      errorStateBuilder: mapAuthFailure,
+    ),
+  );
+}
 
-import 'auth_error_state.dart';
-
-@injectable
-class LoginProvider extends BaseProvider<UserEntity> {
-  LoginProvider(this._loginUseCase);
-
-  final LoginUseCase _loginUseCase;
-
-  Future<void> login(String email, String password) async {
-    await executeOperation(
-      OperationConfig(
-        operation: () =>
-            _loginUseCase(LoginParams(email: email, password: password)),
-        // Mặc định là true. Chỉ chuyển sang `loading` khi provider CHƯA có
-        // data — đã có data thì giữ nguyên để UI không nháy spinner đè lên.
-        showLoading: true,
-        onSuccess: (user) async {
-          // Xử lý khi thành công (ví dụ: log, analytics).
-        },
-        // (Tùy chọn) map lỗi Domain sang lỗi giao diện (Custom Error State).
-        errorStateBuilder: (failure) => failure.whenOrNull(
-          // ErrorHandler: HTTP 401/403 → AuthFailure, 4xx/5xx khác → ServerFailure.
-          auth: (message, code, data) => code == 401
-              ? const AuthErrorState.invalidCredentials()
-              : AuthErrorState.serverError(message: message, code: code),
-          server: (message, code, data) => code == 404
-              ? const AuthErrorState.userNotFound()
-              : AuthErrorState.serverError(message: message, code: code),
-        ),
-      ),
-    );
-  }
+/// ErrorHandler: HTTP 401/403 tới dưới dạng AuthFailure, mọi 4xx/5xx khác là
+/// ServerFailure; lỗi mạng không có HTTP status.
+static ErrorState? mapAuthFailure(AppFailure<dynamic> failure) {
+  return switch (failure) {
+    AuthFailure(code: 401) => const AuthErrorState.invalidCredentials(),
+    ServerFailure(code: 404) => const AuthErrorState.userNotFound(),
+    _ => AuthErrorState.failed(code: failure.code),
+  };
 }
 ```
 
 Hành vi cần biết (`platform/state/provider/lib/src/management/operation_executor.dart`):
 
+- **Loading** → `showLoading` (mặc định `true`) chỉ chuyển sang `loading` khi provider CHƯA có data — đã có data thì UI giữ nguyên, không nháy spinner đè lên.
 - **Success** → `ViewState.success()` kèm data. Nếu kiểu kết quả `R` khác kiểu state `T` của provider, truyền `convert:` cho `executeOperation`.
-- **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))`, `message = failure.message`. Lần emit này được **ép** (force), nên hai lỗi giống hệt nhau liên tiếp (người dùng bấm Retry khi vẫn offline) vẫn tới được listener.
+- **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))`, `message = failure.message` (chẩn đoán tiếng Anh dùng cho log, không phải chữ hiển thị cho người dùng — hãy hiện câu đã dịch, RULE-34). Lần emit này được **ép** (force), nên hai lỗi giống hệt nhau liên tiếp (người dùng bấm Retry khi vẫn offline) vẫn tới được listener.
 - **`none` / `cancel`** → không đổi state — kể cả `loading` mà `showLoading` vừa đặt.
 - `executeOperation` **không** try-catch: nó xử lý `Result.failure`, còn exception bị ném ra từ `operation` sẽ lan lên người gọi. Bắt exception là việc của `BaseRepository.execute()` ở tầng Data.
 - `onSuccess` / `onFailure` cục bộ **thay thế** callback toàn cục của `OperationGlobalConfig.instance.setup(...)` cho lần gọi đó; `onStart` / `onFinish` toàn cục luôn chạy.
@@ -136,36 +124,26 @@ Hãy dùng **`ProviderStateListener`** (hoặc `MultiProviderStateListener` vớ
 - `listenWhen: (previous, current) => …` lọc thêm; `onStateChanged` chạy trước các callback riêng; ngoài ra có `onLoading`, `onLoadingMore`.
 
 ```dart
+// modules/auth/feature/lib/src/pages/login_page.dart (abridged)
+void _onLoginFailed(BuildContext context, ErrorState? error, String? _) {
+  if (error == const AuthErrorState.invalidCredentials()) {
+    _passwordController.clear();
+  }
+}
+
 @override
 Widget build(BuildContext context) {
   return ProviderStateListener<AuthProvider, UserEntity>(
-    // Bắt và hiển thị thông báo lỗi nghiệp vụ chuyên biệt
-    onError: (context, error, message) {
-      final l10n = context.l10n; // chuỗi toàn cục của core_base_ui
-      if (error is AuthErrorState) {
-        error.maybeWhen(
-          invalidCredentials: () =>
-              AppOverlay.showToast(content: l10n.invalidCredentials),
-          serverError: (serverMessage, code) =>
-              AppOverlay.showToast(content: serverMessage),
-          orElse: () =>
-              AppOverlay.showToast(content: message ?? l10n.somethingWentWrong),
-        );
-      } else {
-        AppOverlay.showToast(content: message ?? l10n.somethingWentWrong);
-      }
-    },
-    // Kích hoạt khi thành công. Không điều hướng ở đây: app shell lắng nghe
-    // phiên đăng nhập và tự chuyển route (xem LoginPage của feature_auth).
-    onSuccess: (context, user) {
-      AppOverlay.showToast(content: context.l10nAuth.welcomeBack);
-    },
+    onError: _onLoginFailed,
     child: Scaffold(
       body: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
-          return MyLoginForm(
+        builder: (context, authProvider, _) {
+          return AuthFormWidget(
+            emailController: _emailController,
+            passwordController: _passwordController,
+            submitButtonText: context.l10nAuth.signIn,
             isLoading: authProvider.isLoading,
-            onSubmit: (email, password) => authProvider.login(email, password),
+            onSubmit: _onLoginPressed,
           );
         },
       ),
@@ -174,7 +152,7 @@ Widget build(BuildContext context) {
 }
 ```
 
-> Trong template, `AuthProvider` là singleton toàn cục và app shell (`NavigatorWrapperWidget`) **đã** hiện toast cho lỗi đăng nhập qua `ISessionState`. Đoạn trên minh họa API; áp dụng nguyên văn cho `AuthProvider` sẽ hiện toast hai lần.
+> Trang này chỉ xóa ô mật khẩu: app shell (`NavigatorWrapperWidget`) **đã** hiện mọi lỗi đăng nhập dưới dạng toast đã dịch, qua `ISessionState`, nên thêm toast ở đây sẽ lặp lại. Muốn toast riêng, gọi `AppOverlay.showToast(content: ...)` với chuỗi đã dịch.
 
 ---
 
@@ -184,6 +162,7 @@ Mặc định khi gọi API thất bại, tầng Domain trả về một `AppFai
 
 **File `auth_error_state.dart` bằng Freezed** (bản thật: `modules/auth/feature/lib/src/provider/auth_error_state.dart`):
 ```dart
+// modules/auth/feature/lib/src/provider/auth_error_state.dart
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:provider_state_management/provider_state_management.dart';
 
@@ -194,11 +173,13 @@ abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
+
   const factory AuthErrorState.userNotFound() = _UserNotFound;
-  const factory AuthErrorState.serverError({
-    required String message,
-    int? code,
-  }) = _ServerError;
+
+  /// Mọi trường hợp còn lại — offline, timeout, 5xx, tài khoản bị khóa (403).
+  /// [code] là `ErrorCodes` / HTTP status của failure, dùng để chọn câu
+  /// đã dịch.
+  const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```
 
@@ -211,6 +192,7 @@ abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
 Khi `NewsProvider` cần tải lại dữ liệu mỗi khi người dùng đổi ngôn ngữ, hãy tạo lại nó ở tầng Routing, gắn key theo giá trị nó phụ thuộc. `LanguageProvider` thuộc `core_base_ui` và được mount sẵn ở gốc app (`AppMaterialWrapper`), nên feature nào cũng được phép đọc nó:
 
 ```dart
+// Minh họa: repo này không có NewsRoute hay NewsProvider.
 @TypedGoRoute<NewsRoute>(path: NewsPath.NEWS)
 class NewsRoute extends GoRouteDataCustom with $NewsRoute {
   const NewsRoute();

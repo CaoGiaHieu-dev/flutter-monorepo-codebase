@@ -25,22 +25,20 @@ All scaling goes through `BuildContext`. That is not a style convention — it i
 
 ## 🚀 1. Setup
 
-Already wired in `platform/shell/app_shell/lib/src/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. The app's real configuration (comments trimmed) — it passes no `designSize`, so the package default, the `375x812` phone artboard, is the one artboard in the repository:
+Already wired in `platform/shell/app_shell/lib/src/main_scope.dart`. A feature **never** mounts its own `ResponsiveInit`. What it passes is the app's `DisplayProfile` (`AppProfile.display`, set in the app's `lib/app/app_profile.dart`): the artboard, the scale policy of each window class and split-screen mode. The template's own default is the `375x812` phone artboard, the `expanded` class drawn 1:1 (`ScaleBounds.fixed()`), every other class shrink-only:
 
 ```dart
-// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build
+// platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build (comments trimmed)
 return ResponsiveInit(
-  // No `designSize`: the 375x812 default is the app's artboard.
-  // …
-  profiles: const {
-    // …
-    WindowSizeClass.expanded: ResponsiveProfile(
-      scaleBounds: ScaleBounds.fixed(),
-      textScaleBounds: ScaleBounds.fixed(),
-    ),
+  designSize: Size(display.designSize.width, display.designSize.height),
+  profiles: {
+    for (final entry in display.scale.entries)
+      WindowSizeClass.values.byName(entry.key.name): _profileOf(
+        entry.value,
+      ),
   },
   // Keeps height scaling sane when the app is a short split-screen pane.
-  splitScreenMode: true,
+  splitScreenMode: display.splitScreenMode,
   child: child,
 );
 ```
@@ -169,6 +167,6 @@ The assert is deliberate. Silently falling back to unscaled values would ship a 
 
 ## 🤖 6. Machine-enforced
 
-`dart tools/arch_check/check.dart` — rule **R7**, Gate 1 of `pr_quality_check.yml` — scans every file under `lib/` that mentions `core_responsive` (in practice: imports it) and **blocks the merge** (exit 1) on any bare sizing extension (`16.w`, `(x).sp`, …), printing `file:line`. The rule does not depend on review.
+`dart tools/arch_check/check.dart` — Gate 1 of `pr_quality_check.yml` — **blocks the merge** (exit 1), printing `file:line`, on two things (RULE-30): **R7**, any bare sizing extension (`16.w`, `(x).sp`, …) or an extension on `num` that would make one compile, in every hand-written file under `lib/` of every package; and **R20**, a raw number in a layout or paint constructor (`SizedBox(height: 16)`, `EdgeInsets.all(8)`, `fontSize: 14`) outside a package's `styles/` and `utils/`. R20 is lexical: a raw number reached through a variable or an unlisted widget is left to review.
 
 The package's tests live in `platform/ui/responsive/test/`.

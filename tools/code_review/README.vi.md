@@ -152,7 +152,7 @@ Sử dụng checklist này để tự review code của bạn.
 - [ ] **Lớp Domain Thuần Túy**: Lớp Domain có import `flutter`, `dart:ui`, `dio`, `retrofit` hay bất kỳ package `core_*` nào không? (Cấm).
 
 ### 🧬 Theo Từng Lớp
-- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `platform/*` KHÔNG được phụ thuộc `feature_*`, `data_*` hay `domain_*` — ngoại trừ ba cạnh đã duyệt tới `domain_core` (arch_check R1).
+- **Core**: Không sử dụng trực tiếp `SharedPreferences` (phải đi qua `StorageManager` + `StorageValue<T>` của `core_storage`). `platform/*` KHÔNG được phụ thuộc một package nào dưới `modules/`, cũng không được phụ thuộc `domain_core` / `data_core` ngoài bốn cạnh đã duyệt (arch_check R1, RULE-01).
 - **Domain**: `Entity` phải thuần túy (không có `statusCode`, `message`). `Repository` phải trả về `Future<Result<T>>`.
 - **Data**: `RepositoryImpl` phải `implement` interface từ Domain và bọc mọi lệnh gọi trong `execute()` / `executeSync()` của `BaseRepository` (`data_core`).
 - **Presentation**: `Provider` KHÔNG được chứa controller UI. Các lệnh gọi bất đồng bộ phải dùng `executeOperation`.

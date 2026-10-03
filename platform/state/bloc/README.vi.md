@@ -32,6 +32,8 @@ Barrel `package:bloc_state_management/bloc_state_management.dart` re-export toà
 
 Kết hợp Pattern Matching (`when` / `maybeWhen`) trên Freezed state để UI type-safe. Các biến thể của `BlocViewState` là private, nên với nó hãy dùng `when` / `maybeWhen` / `whenOrNull` thay vì `switch`.
 
+> Các đoạn `LoginBloc` trong trang này chỉ để minh họa: màn login của template dùng Provider. Mẫu BLoC thật là `HomeProfileBloc` (§ 4), và template BLoC của module generator minh họa `emitResult`.
+
 **Khai báo Bloc với `BlocViewState` (mẫu đơn giản):**
 ```dart
 import 'package:bloc_state_management/bloc_state_management.dart';
@@ -119,7 +121,7 @@ Widget build(BuildContext context) {
           getItOrNull<HomeNavigator>()?.toHome(context);
         },
         error: (failure) {
-          AppOverlay.showToast(content: failure.message);
+          AppOverlay.showToast(content: context.l10n.failureMessage(failure.code));
         },
         orElse: () {},
       );
@@ -195,7 +197,7 @@ class LoginBloc extends BaseBloc<LoginEvent, LoginState> {
   ///
   /// `ErrorHandler` biến HTTP 401/403 thành `AuthFailure`, lỗi kết nối /
   /// timeout thành `NetworkFailure`.
-  static LoginError _toLoginError(AppFailure failure) => switch (failure) {
+  static LoginError _toLoginError(AppFailure<dynamic> failure) => switch (failure) {
     AuthFailure() || ValidationFailure() => LoginError.invalidCredentials,
     NetworkFailure() => LoginError.network,
     _ => LoginError.unknown,

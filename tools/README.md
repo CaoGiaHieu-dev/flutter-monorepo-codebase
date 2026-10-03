@@ -19,8 +19,9 @@ tools/
 │   ├── check.dart                   # R1-R17: dependency direction, pure-Dart domain, feature boundaries, scaling through context, the shell catalog, platform forks…
 │   └── platform_forks.dart          # R17's allow-list (every entry with its reason) and the fork scan
 ├── composer/                        # 🧩 Composes apps from app_manifest.yaml (CI Gate 0)
-│   ├── composer.dart                # sync / verify / list / describe — generates the workspace list, app dependencies, injection.dart, facts, report
-│   ├── src/                         # manifest_v2 (schema), catalog, package_facts, provisions, facts_emit, report, checks (V3, V7, V8, V10-V12…), platform_notes
+│   ├── composer.dart                # sync / verify / list / describe / new — generates the workspace list, app dependencies, injection.dart, facts, report; creates an app
+│   ├── src/                         # manifest_v2 (schema), catalog, package_facts, provisions, facts_emit, report, checks (V3, V7, V8, V10-V12…), platform_notes, new_app
+│   ├── app_template/                # Mustache files `composer new` renders into apps/<id>/ (manifest, pubspec, README, lib/, test/, env.dev)
 │   └── bootstrap.dart               # Partial checkout: prunes absent members so `pub get` resolves (no package imports)
 ├── docs_check/                      # 📚 Every path the docs name must exist (CI Gate 5)
 │   ├── check.dart
@@ -109,6 +110,13 @@ dart tools/composer/composer.dart verify
 
 # Show what an app composes (--app narrows to one app; works with list/sync/verify):
 dart tools/composer/composer.dart list --app admin
+
+# What an app declares and what the shell resolves from it, and every manifest key:
+dart tools/composer/composer.dart describe --app admin
+dart tools/composer/composer.dart describe --catalog
+
+# A third app, by command (never runs flutter create — it prints the line):
+dart tools/composer/composer.dart new reports --name "Codebase Reports" --platforms web,windows --modules auth,settings
 ```
 
 Only the region between the `composer:managed` and `composer:end` markers is generated; the rest
@@ -456,7 +464,8 @@ R5 is the mirror image of `unused_checker`: that tool finds dependencies *declar
 dart tools/composer/composer.dart list              # every app and its composition
 dart tools/composer/composer.dart list --app admin  # one app only
 dart tools/composer/composer.dart describe --app mobile # the app report (what the README report region holds)
-dart tools/composer/composer.dart describe --catalog    # every manifest key, the shell contract catalog, the derived defaults
+dart tools/composer/composer.dart describe --catalog    # every manifest key, the shell contract catalog, the derived defaults, the pubspec keys, the checks V1–V14 and the problem codes
+dart tools/composer/composer.dart new reports --platforms web,windows --modules auth,settings   # create apps/reports from tools/composer/app_template/
 dart tools/composer/composer.dart sync --app mobile # regenerate
 dart tools/composer/composer.dart verify            # CI gate 0 — fails on drift
 dart tools/composer/bootstrap.dart                  # partial checkout only — run before `flutter pub get`
@@ -479,6 +488,8 @@ Every `app_manifest.yaml` is also **validated before any command runs**; each pr
 | V12 | `app.entrypoint` exists and calls `runShellApp(` with `profile:`; `test/di_smoke_test.dart` exists and calls `checkAppContract(` |
 
 V3, V10, V11 and V12 are source checks: `verify` fails on them, `sync` prints them as warnings and still writes, because the generated files do not depend on them and a half-finished edit must stay possible to regenerate. The registration scan (`tools/shared/contract_scan.dart`) reads source, not the graph, and applies GetIt's exact-type rule (RULE-14): a class carrying `@Injectable` / `@Singleton` / `@LazySingleton` is registered as itself, or as what `as:` binds it to; a member of an `@module` class as its declared type. `implements X` registers nothing. A hand-written `getIt.register…` is invisible to it — `checkAppContract` (the smoke test, and a debug boot) re-derives the truth from the real graph and is the authority. The scan also fills the **Implemented by** column of the report's § 4 (the packages registering each contract, or `—`).
+
+**`composer new` creates an app.** `new <id> --platforms <a,b> [--modules <x,y>] [--name "<text>"]` renders `tools/composer/app_template/` — Mustache files for `app_manifest.yaml`, `pubspec.yaml`, `README.md`, `lib/main.dart`, `lib/app/app_profile.dart` and `app_hooks.dart`, `lib/di/injection.dart`, `test/di_smoke_test.dart`, `test/app_profile_test.dart`, `env.dev` and `.gitignore` — into `apps/<id>/`. The composition is `apps/admin`'s: the `core`, `shell`, `ui`, `domain`, `data`, `feature` and `other` groups, every layer each requested module has on disk, and `core_database` in `core` only when a requested module links it. `capabilities:` is **derived** by the registration scan from what those packages register — `provided` where something registers the contract, otherwise `absent` with the catalog's `whenAbsent` text as the reason (truthful, never `TODO`, which V14 refuses) — and dependency versions come from `pubspec_dependencies.yaml`, so Gates 0 and 4 pass at once. Everything that can refuse runs first and writes nothing: the id (a package-name segment that is not an existing app, folder or `<id>_app` package), the name (no quotes, backslash or `$`), the platforms, the modules, a module that links `core_notifications` (push needs `FirebaseOptions` — copy `apps/mobile`), a platform a linked package does not support (`--platforms web` with a module that opens a database: the message names the module and the chain) and the rendered manifest, through the same parser and checks `sync` runs. Then it writes the files, runs `sync` and `verify`, and prints what to run next (`flutter pub get`, `build_runner`, the smoke test). It **never runs `flutter create`**: every platform is `runner: scaffold`, and the line to run is printed. Exit `0` · `1` a refusal, or a failing `verify` after the write · `64` bad arguments.
 
 Three things had to agree and were maintained by hand: the root `workspace:` list, an app's path dependencies, and its `lib/di/injection.dart`. Adding a module meant editing all three in step, and getting it wrong fails at boot with `"<Type> is not registered"` — invisible to `flutter analyze`.
 
@@ -822,6 +833,7 @@ Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` �
 | `contract_scan_test.dart` | The scanner `arch_check` and `composer` share: registrations by the exact-type rule (annotated class, `as:` binding only, `@module` members, `Future<X>`, environments), what is not code (comment, string, block comment), `implements` registering nothing; the implementer scan R8 uses, unchanged by the extraction; declared types, generated files, optional lookups |
 | `composer_checks_test.dart` | V3, V7, V10, V11, V12 — a clean and a violating fixture each (declared `provided` with nothing registering it, with the registering package not composed, declared `absent` while registered, a half-registered bundle, `implements` is not registering, a required contract nobody registers; web with `core_database`, the module that pulled a package in, a package reached only through another one (the chain is named) and a dev dependency not followed; `FirebaseOptions` missing for `prod`; an undeclared and a missing env key; an entry point without `profile:`, a deleted smoke test, one that never calls `checkAppContract`); `sync` warns and `verify` fails; on the committed apps the static scan reproduces the runtime matrix (mobile lacks `IErrorReporter` and `IAnalytics`; admin also the splash, entry, dashboard and post-sign-in contracts) |
 | `app_sync_test.dart` | composer's spelled enums, the catalog (8 required, 14 optional), `PlatformFacts.today()` and `WindowClass` equal their sources; the dead-key guard (every manifest key and both pubspec keys have a reader); the shipped `platforms:` / `app_provides` of `core_notifications` and `core_database`; every R17 allow-list entry names a file that exists |
+| `composer_new_test.dart` | `composer new` in a throwaway workspace that carries the real `app_template/`: the app passes `verify` at once, its `capabilities:` follow what the modules register (the catalog's `whenAbsent` text, never `TODO`), `core_database` joins `core` only when linked, staging and prod get a pin decision where a platform can pin, the smoke test's imports are sorted for the id; it refuses an existing id, a platform a module blocks, an unknown module or platform, a bad id or name, a missing `--platforms`, a missing template — each leaving the workspace byte-identical — and never creates a runner folder |
 | `composer_test.dart` | `sync` then `verify` passes; an `api` layer is a workspace member only, an API package reached only through a feature joins the workspace, a missing one fails `verify`; a hand-edited region, a module missing from disk, `phase: befor`, an unknown layer and a duplicate module exit `1` naming the key path; a package on disk that no app composes fails `verify` and only warns under `sync` |
 | `dependency_sync_test.dart` | `--check`: in step passes; a version mismatch, a malformed catalog and invalid YAML exit `1` |
 | `docs_check_test.dart` | A dead path or link exits `1`; a `<placeholder>` span, an allowlisted path and a removed sample bundle (INFO) exit `0`; the root comes from the script, not the cwd; en ↔ vi parity: a missing heading, code block or table row exits `1` with both counts, fences are ignored, an allowlisted difference passes, a stale entry warns, an entry without a reason is refused |

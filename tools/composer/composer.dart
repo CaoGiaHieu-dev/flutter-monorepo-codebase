@@ -9,6 +9,7 @@ import 'src/catalog.dart';
 import 'src/checks.dart';
 import 'src/facts_emit.dart';
 import 'src/manifest_v2.dart';
+import 'src/new_app.dart';
 import 'src/package_facts.dart';
 import 'src/provisions.dart';
 import 'src/report.dart';
@@ -33,6 +34,7 @@ import 'src/report.dart';
 /// dart tools/composer/composer.dart verify
 /// dart tools/composer/composer.dart list
 /// dart tools/composer/composer.dart describe [--app <id>] [--catalog]
+/// dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]
 /// ```
 ///
 /// The manifest also **declares** the app — its name, flavors (and the pinning
@@ -47,6 +49,12 @@ import 'src/report.dart';
 /// register (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10),
 /// env files (V11) and the entry point and smoke test (V12). The registration
 /// scan is `tools/shared/contract_scan.dart`, the one `arch_check` shares.
+///
+/// `new` creates a whole app from `app_template/`: the manifest (with
+/// `capabilities:` derived from the modules asked for), the generated-file
+/// shells, a profile, hooks, an entry point, a smoke test — then `sync` and
+/// `verify`. It refuses an id that exists or a platform a requested module
+/// blocks before it writes anything, and never runs `flutter create`.
 ///
 /// `sync` skips a module that is not on disk and says so loudly; `--strict`
 /// makes that an error. CI runs `--strict`, which is what stops a release
@@ -67,10 +75,27 @@ void main(List<String> args) {
   }
 
   final command = args.first;
-  if (!const {'list', 'sync', 'verify', 'describe'}.contains(command)) {
+  if (!const {'list', 'sync', 'verify', 'describe', 'new'}.contains(command)) {
     OutputFormatter.printError('Unknown command `$command`.');
     _printHelp(stderr);
     exit(64);
+  }
+
+  final root = p.posix.normalize(
+    Directory.current.path.replaceAll(r'\', '/'),
+  );
+
+  // `new` has its own arguments: an id and three flags.
+  if (command == 'new') {
+    final NewAppRequest request;
+    try {
+      request = parseNewArgs(args.sublist(1));
+    } on FormatException catch (e) {
+      OutputFormatter.printError(e.message);
+      exit(64);
+    }
+    _guardYaml(root, () => _newApp(root, request));
+    return;
   }
 
   // Every argument after the command must be one this tool knows. An
@@ -97,12 +122,17 @@ void main(List<String> args) {
     }
   }
 
-  final root = p.posix.normalize(
-    Directory.current.path.replaceAll(r'\', '/'),
+  _guardYaml(
+    root,
+    () => _run(command, root, appFilter, strict, catalogOnly: catalogOnly),
   );
+}
 
+/// Runs [body], turning a YAML parse error into the one-line refusal every
+/// command prints.
+void _guardYaml(String root, void Function() body) {
   try {
-    _run(command, root, appFilter, strict, catalogOnly: catalogOnly);
+    body();
   } on YamlException catch (e) {
     // A pubspec or manifest that is not valid YAML — a duplicate key is the
     // usual one. A pubspec, pub rejects too, so nothing resolves until it is
@@ -1201,6 +1231,118 @@ void _describeApps(
   }
 }
 
+/// `new`: creates `apps/<id>/` from `app_template/`, then runs `sync` and
+/// `verify` over the workspace.
+///
+/// Everything that can refuse runs first, on nothing but the workspace and the
+/// text about to be written: the request, the composition the modules imply,
+/// and the rendered manifest through the same parser and checks every manifest
+/// goes through (a platform a composed package cannot run on is V7). A refusal
+/// writes nothing. `flutter create` is never run — the native runners are the
+/// Flutter tool's.
+void _newApp(String root, NewAppRequest request) {
+  OutputFormatter.printHeader(
+    'Composer — new',
+    subtitle: 'apps/${request.id} from app_template/',
+  );
+
+  final packages = _discoverPackages(root);
+  final catalogProblems = <String>[];
+  final catalog = readCatalog(packages, why: catalogProblems.add);
+  if (catalog == null) {
+    for (final problem in catalogProblems) {
+      OutputFormatter.printError(problem);
+    }
+    exit(1);
+  }
+  final apps = _discoverApps(root, packages, catalog, catalogProblems);
+  final provisions = ProvisionIndex.scan(root, packages);
+
+  void refuse(List<String> problems) {
+    for (final problem in problems) {
+      OutputFormatter.printError(problem);
+    }
+    OutputFormatter.printError(
+      'Refusing to create apps/${request.id}: ${problems.length} problem(s). '
+      'Nothing was written.',
+    );
+    exit(1);
+  }
+
+  final planned = planNewApp(
+    request: request,
+    root: root,
+    packages: packages,
+    existingIds: {for (final app in apps) app.id},
+    catalog: catalog,
+    provisions: provisions,
+    modulePackage: (module, layer) => _modulePackage(packages, module, layer),
+  );
+  if (planned.plan == null) refuse(planned.problems);
+  final plan = planned.plan!;
+
+  final Map<String, String> files;
+  try {
+    files = renderAppFiles(
+      plan,
+      templateDir: p.join(root, kAppTemplateDir),
+      root: root,
+    );
+  } on FileSystemException catch (e) {
+    refuse([e.message]);
+    return;
+  }
+
+  // The manifest goes through the parser and the checks `sync` and `verify`
+  // run, before any file exists.
+  final dir = p.posix.join(root, 'apps', plan.id);
+  final rel = 'apps/${plan.id}/app_manifest.yaml';
+  final problems = <String>[];
+  final manifest = _parseManifest(
+    loadYaml(files['app_manifest.yaml']!),
+    rel,
+    dir,
+    problems,
+  );
+  if (manifest != null) {
+    problems.addAll(
+      checkDeclaration(
+        rel: rel,
+        decl: manifest.declaration,
+        catalog: catalog,
+        appDir: dir,
+        appRel: 'apps/${plan.id}',
+      ),
+    );
+    final resolved = _resolve(manifest, packages, <String>[]);
+    for (final missing in resolved.missing) {
+      problems.add('$rel: `$missing` is not on disk');
+    }
+    final view = _view(root, manifest, resolved, packages, catalog, provisions);
+    problems
+      ..addAll(checkPlatformSwitches(view))
+      ..addAll(checkPackagePlatforms(view));
+  }
+  if (problems.isNotEmpty) refuse(problems);
+
+  for (final entry in files.entries) {
+    final file = File(p.join(dir, entry.key));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(entry.value);
+    stdout.writeln('    wrote apps/${plan.id}/${entry.key}');
+  }
+
+  // Generates what the manifest says (the regions of the files above and the
+  // root workspace list), then holds the whole workspace to it.
+  _run('sync', root, plan.id, false, catalogOnly: false);
+  _run('verify', root, null, true, catalogOnly: false);
+
+  stdout.writeln();
+  for (final line in nextSteps(plan)) {
+    stdout.writeln(line);
+  }
+}
+
 void _sync(
   String root,
   List<AppManifest> apps,
@@ -1679,6 +1821,13 @@ COMMANDS
                     region of its README.md. With --catalog: the manifest keys
                     (type, default, what refuses and what reads each), the
                     shell's contract catalog and the derived defaults.
+  new               Create a whole app: `new <id> --platforms <a,b>
+                    [--modules <x,y>] [--name "<Display Name>"]` renders
+                    tools/composer/app_template/ into apps/<id>/, derives its
+                    `capabilities:` from what the modules register, runs `sync`
+                    and `verify`, and prints what to run next. Refuses an id
+                    that exists or a platform a module blocks, writing
+                    nothing. It never runs `flutter create`: it prints the line.
   sync              Regenerate the managed regions of:
                       - the root pubspec.yaml `workspace:` list
                       - each app's path dependencies
@@ -1699,6 +1848,10 @@ OPTIONS
   --app <id>        Only this app (list, describe, sync, verify). The root
                     `workspace:` list is still computed from every app.
   --catalog         With `describe`: the schema and catalog, not an app.
+  --platforms <a,b> With `new`: where the app runs (android, ios, web,
+                    windows, macos, linux), each `runner: scaffold`.
+  --modules <x,y>   With `new`: the modules it composes, every layer each has.
+  --name <text>     With `new`: the display name (default: the id, title-cased).
   --strict          A module declared in a manifest but absent from disk is an
                     error instead of a warning. CI runs with this, so a release
                     can never silently ship without a module.

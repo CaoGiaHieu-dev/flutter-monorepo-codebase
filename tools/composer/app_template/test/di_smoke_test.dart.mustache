@@ -1,0 +1,109 @@
+{{#smokeImports}}
+{{{line}}}
+{{/smokeImports}}
+
+/// Boots this app's real, generated DI graph — the one `main.dart` runs.
+///
+/// `flutter analyze` cannot see a DI ordering bug: an eager `@Singleton`
+/// injecting a type a later group registers, a `@preResolve` that throws, a
+/// lazy singleton whose dependency no composed module provides. Each one only
+/// surfaces at boot as `"<Type> is not registered"`. This test is that boot,
+/// minus the widgets, with the platform plugins replaced by their in-memory
+/// test doubles.
+///
+/// The graph touches the storage plugins only. A package that needs more
+/// brings its own doubles: an app that composes `core_database` (a module that
+/// opens a Drift database) or `core_notifications` (Firebase, messaging, local
+/// notifications) copies the `path_provider`, Firebase and notification
+/// doubles from `apps/mobile/test/di_smoke_test.dart`.
+///
+/// It names no module on purpose (only `injection.dart` may — arch_check
+/// R10): it checks what the shell resolves, however the manifest composes
+/// the app.
+///
+/// For every flavor the manifest declares, the graph is booted with the app's
+/// profile registered, as `runShellApp` does, and then held to what
+/// `app_manifest.yaml` declares: `checkAppContract` compares each optional
+/// contract's `provided` / `absent` with what the graph registered, and
+/// asserts the required ones, a screen, unique tab orders and a router that
+/// assembles (RULE-63, RULE-81).
+///
+/// A VM test reports Android and never the web, so the platform is named
+/// explicitly instead of read from the device: any platform the manifest
+/// declares.
+const _platform = AppPlatform.{{smokePlatform}};
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
+  tearDown(resetDependencies);
+
+  for (final flavor in appFacts.flavors) {
+    test(
+      'the ${flavor.name} graph boots, every lazy singleton builds and the '
+      'declaration matches it',
+      () async {
+        registerAppProfile(appProfile, platform: _platform);
+        await configureDependencies(environment: flavor.name);
+
+        // Every `@lazySingleton` in the graph, built now instead of on first
+        // use — a missing dependency throws here rather than on some screen.
+        final singletons = getIt.findAll<Object>(
+          instantiateLazySingletons: true,
+        );
+        expect(singletons, isNotEmpty);
+
+        // The graph is built from the sections the profile registered before
+        // it: the router got the app's own `RouterProfile`, not a default.
+        expect(getIt<AppRouter>().profile, same(appProfile.router));
+
+        // The same for the locale: the language set is the profile's, and
+        // every localization delegate a feature contributes supports every
+        // language the app offers — a language the app declares but a feature
+        // has no translations for would show that feature's raw keys.
+        final languages = getIt<LanguageProvider>().languageSet;
+        expect(
+          languages.fallback.languageCode,
+          appProfile.locale.fallback,
+        );
+        for (final feature in getAllOrEmpty<IFeatureLocalization>()) {
+          for (final locale in languages.supported) {
+            expect(
+              feature.delegate.isSupported(locale),
+              isTrue,
+              reason: '${feature.runtimeType} / ${locale.languageCode}',
+            );
+          }
+        }
+
+        final report = checkAppContract(
+          appProfile,
+          flavor: flavor,
+          platform: _platform,
+        );
+        expect(report.problems, isEmpty, reason: report.explain());
+      },
+    );
+  }
+
+  test('every declared platform and flavor is a valid way to start', () {
+    for (final platform in appFacts.platforms.keys) {
+      for (final flavor in appFacts.flavors) {
+        expect(
+          appProfile.validate(
+            platform: platform,
+            flavor: flavor,
+            checkEnv: false,
+          ),
+          isEmpty,
+          reason: '${platform.name} / ${flavor.name}',
+        );
+      }
+    }
+  });
+}

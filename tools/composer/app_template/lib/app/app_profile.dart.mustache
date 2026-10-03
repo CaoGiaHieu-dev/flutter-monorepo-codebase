@@ -1,0 +1,22 @@
+import 'package:core_common/core_common.dart';
+
+// The `facts` region below is generated from app_manifest.yaml by
+//   dart tools/composer/composer.dart sync --app {{id}}
+// and checked by `composer verify`: edit the manifest, never the region.
+
+// composer:managed:facts — generated from app_manifest.yaml
+// composer:end:facts
+
+/// How the shell behaves for this app — typed, const, template defaults
+/// wherever a section is left out. Facts (platforms, flavors, env,
+/// capabilities, pins) come from app_manifest.yaml, never from here.
+///
+/// The sections to tune — each documents its defaults and ranges:
+/// `display:` (`DisplayProfile` — the design artboard, the scale policy of
+/// each window class, the OS font-size cap), `router:` (`RouterProfile` —
+/// the entry-location policy, the fallback location), `locale:`
+/// (`LocaleProfile` — the languages offered, the fallback and first-launch
+/// language), `theme:` (`ThemeProfile` — the mode a first launch opens in, the
+/// palette overrides) and `network:` (`NetworkProfile` — the default HTTP
+/// client's timeouts, extra headers and redirect policy).
+const AppProfile appProfile = AppProfile(facts: appFacts);

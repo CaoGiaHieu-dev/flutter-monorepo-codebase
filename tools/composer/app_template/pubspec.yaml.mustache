@@ -1,0 +1,35 @@
+name: {{pubspecName}}
+description: "{{name}} — composed from the shared modules"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: "{{sdk}}"
+  flutter: "{{flutter}}"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # composer:managed:deps — generated from app_manifest.yaml
+  # composer:end:deps
+
+  # External packages this app itself uses. Everything else belongs to
+  # `platform_app_shell` and the composed modules.
+  injectable: {{v.injectable}}           # lib/di/injection.dart
+
+dev_dependencies:
+  # test/di_smoke_test.dart: boots the generated DI graph with the storage
+  # plugins' in-memory doubles.
+  flutter_test:
+    sdk: flutter
+  flutter_secure_storage: {{v.flutter_secure_storage}}
+  shared_preferences: {{v.shared_preferences}}
+  flutter_lints: {{v.flutter_lints}}
+  build_runner: {{v.build_runner}}
+  injectable_generator: {{v.injectable_generator}}
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,35 @@
+# `apps/{{id}}` — {{name}}
+
+An app composed from the shared modules{{#hasModules}} ({{modulesText}}){{/hasModules}}, created with
+`dart tools/composer/composer.dart new {{id}}`. Everything it is — platforms, flavors,
+environment keys, what the shell may use from it, what it composes — is declared in
+`app_manifest.yaml`; the report below is generated from it and says what that adds up to.
+
+## How to read this app
+
+1. **The report below** — generated from the manifest: identity and flavors, the platforms and what
+   each enables, the composition in boot order, what the shell resolves from this app (required vs
+   optional, and why anything is absent), and the decisions to revisit before shipping.
+2. [`app_manifest.yaml`](app_manifest.yaml) — what you *declare*: name, flavors, environment keys,
+   platforms, capabilities, DI groups, modules.
+3. [`lib/app/app_profile.dart`](lib/app/app_profile.dart) — the manifest as const Dart (a generated
+   `facts` region) and `appProfile`, how the shell behaves for this app.
+4. [`lib/app/app_hooks.dart`](lib/app/app_hooks.dart) — code the app runs at fixed points of the boot.
+
+```bash
+dart tools/composer/composer.dart describe --app {{id}}   # the report below, on stdout
+dart tools/composer/composer.dart sync --app {{id}}       # regenerate everything generated from the manifest
+dart tools/composer/composer.dart verify                 # CI Gate 0: fails when any of it has drifted
+```
+
+<!-- composer:managed:report — generated from app_manifest.yaml -->
+<!-- composer:end:report -->
+
+## What checks it
+
+`composer verify` (CI Gate 0) regenerates this app's composition, facts and report and fails on
+drift — and refuses a manifest whose declaration is incomplete — and
+`arch_check` R10 fails if anything under `lib/` other than `injection.dart` imports a module.
+CI Gate 3 runs `test/di_smoke_test.dart`, which boots this app's real DI graph for every flavor —
+so a missing registration or a DI ordering mistake in this composition fails the PR. CI builds no
+binary of it: the build job builds `apps/mobile` only.

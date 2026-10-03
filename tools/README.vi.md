@@ -19,8 +19,9 @@ tools/
 │   ├── check.dart                   # R1-R17: hướng phụ thuộc, domain thuần Dart, ranh giới feature, scale qua context, catalog của shell, nhánh theo platform…
 │   └── platform_forks.dart          # Danh sách cho phép của R17 (mỗi mục kèm lý do) và phép quét nhánh theo platform
 ├── composer/                        # 🧩 Ghép app từ app_manifest.yaml (Gate 0 của CI)
-│   ├── composer.dart                # sync / verify / list / describe — sinh workspace list, dependency của app, injection.dart, facts, report
-│   ├── src/                         # manifest_v2 (schema), catalog, package_facts, provisions, facts_emit, report, checks (V3, V7, V8, V10-V12…), platform_notes
+│   ├── composer.dart                # sync / verify / list / describe / new — sinh workspace list, dependency của app, injection.dart, facts, report; tạo một app
+│   ├── src/                         # manifest_v2 (schema), catalog, package_facts, provisions, facts_emit, report, checks (V3, V7, V8, V10-V12…), platform_notes, new_app
+│   ├── app_template/                # File Mustache mà `composer new` render vào apps/<id>/ (manifest, pubspec, README, lib/, test/, env.dev)
 │   └── bootstrap.dart               # Checkout từng phần: bỏ member vắng mặt để `pub get` resolve được (không import package)
 ├── docs_check/                      # 📚 Mọi đường dẫn docs nhắc tới phải tồn tại (Gate 5 của CI)
 │   ├── check.dart
@@ -109,6 +110,13 @@ dart tools/composer/composer.dart verify
 
 # Xem app ghép những gì (--app lọc một app, dùng được cho cả list/sync/verify):
 dart tools/composer/composer.dart list --app admin
+
+# Một app khai gì và shell resolve gì từ nó, và mọi key của manifest:
+dart tools/composer/composer.dart describe --app admin
+dart tools/composer/composer.dart describe --catalog
+
+# App thứ ba, bằng một lệnh (không bao giờ chạy flutter create — nó in dòng lệnh):
+dart tools/composer/composer.dart new reports --name "Codebase Reports" --platforms web,windows --modules auth,settings
 ```
 
 Chỉ vùng giữa marker `composer:managed` và `composer:end` được sinh; phần còn lại của các file
@@ -450,7 +458,8 @@ R5 là ảnh gương của `unused_checker`: tool kia tìm dependency *đã khai
 dart tools/composer/composer.dart list              # liệt kê app và thành phần
 dart tools/composer/composer.dart list --app admin  # chỉ một app
 dart tools/composer/composer.dart describe --app mobile # báo cáo của app (nội dung vùng report trong README)
-dart tools/composer/composer.dart describe --catalog    # mọi key manifest, catalog contract của shell, các giá trị mặc định suy ra
+dart tools/composer/composer.dart describe --catalog    # mọi key manifest, catalog contract của shell, các giá trị mặc định suy ra, các key trong pubspec, các check V1–V14 và các mã vấn đề
+dart tools/composer/composer.dart new reports --platforms web,windows --modules auth,settings   # tạo apps/reports từ tools/composer/app_template/
 dart tools/composer/composer.dart sync --app mobile # sinh lại
 dart tools/composer/composer.dart verify            # gate 0 của CI — fail khi lệch
 dart tools/composer/bootstrap.dart                  # chỉ cho checkout từng phần — chạy trước `flutter pub get`
@@ -473,6 +482,8 @@ Mọi `app_manifest.yaml` cũng được **kiểm tra trước khi bất kỳ l�
 | V12 | `app.entrypoint` tồn tại và gọi `runShellApp(` kèm `profile:`; `test/di_smoke_test.dart` tồn tại và gọi `checkAppContract(` |
 
 V3, V10, V11 và V12 là các check về source: `verify` fail vì chúng, còn `sync` in chúng thành cảnh báo và vẫn ghi, vì các file sinh ra không phụ thuộc vào chúng và một chỉnh sửa dang dở phải còn sinh lại được. Phép quét đăng ký (`tools/shared/contract_scan.dart`) đọc source, không đọc đồ thị, và áp dụng luật đúng-type của GetIt (RULE-14): class mang `@Injectable` / `@Singleton` / `@LazySingleton` được đăng ký là chính nó, hoặc là thứ `as:` gán cho nó; thành viên của class `@module` được đăng ký là type nó khai. `implements X` không đăng ký gì. Một `getIt.register…` viết tay thì nó không thấy — `checkAppContract` (smoke test, và một lần boot debug) suy lại sự thật từ đồ thị thật và là nguồn quyết định. Phép quét này cũng điền cột **Implemented by** của § 4 trong báo cáo (các package đăng ký từng contract, hoặc `—`).
+
+**`composer new` tạo một app.** `new <id> --platforms <a,b> [--modules <x,y>] [--name "<text>"]` render `tools/composer/app_template/` — các file Mustache cho `app_manifest.yaml`, `pubspec.yaml`, `README.md`, `lib/main.dart`, `lib/app/app_profile.dart` và `app_hooks.dart`, `lib/di/injection.dart`, `test/di_smoke_test.dart`, `test/app_profile_test.dart`, `env.dev` và `.gitignore` — vào `apps/<id>/`. Phần ghép là của `apps/admin`: các nhóm `core`, `shell`, `ui`, `domain`, `data`, `feature` và `other`, mọi layer mà từng module được yêu cầu có trên đĩa, và `core_database` nằm trong `core` chỉ khi một module được yêu cầu liên kết nó. `capabilities:` được **suy ra** bằng phép quét đăng ký từ những gì các package đó đăng ký — `provided` ở nơi có thứ đăng ký contract, còn lại là `absent` kèm văn bản `whenAbsent` của catalog làm lý do (trung thực, không bao giờ là `TODO`, thứ V14 từ chối) — và version dependency lấy từ `pubspec_dependencies.yaml`, nên Gate 0 và 4 qua ngay. Mọi thứ có thể từ chối đều chạy trước và không ghi gì: id (một đoạn tên package, không phải app, thư mục hay package `<id>_app` đã có), tên (không dấu nháy, backslash hay `$`), các platform, các module, một module liên kết `core_notifications` (push cần `FirebaseOptions` — hãy theo mẫu `apps/mobile`), một platform mà package được liên kết không hỗ trợ (`--platforms web` với module mở database: thông báo nêu tên module và chuỗi phụ thuộc) và manifest đã render, qua cùng parser và các check mà `sync` chạy. Sau đó nó ghi file, chạy `sync` và `verify`, và in những gì cần chạy tiếp (`flutter pub get`, `build_runner`, smoke test). Nó **không bao giờ chạy `flutter create`**: mỗi platform là `runner: scaffold`, và dòng lệnh cần chạy được in ra. Mã thoát `0` · `1` bị từ chối, hoặc `verify` fail sau khi ghi · `64` tham số sai.
 
 Ba thứ phải khớp nhau và trước đây đều sửa tay: danh sách `workspace:` ở root, dependency dạng path của app, và `lib/di/injection.dart` của nó. Thêm một module nghĩa là sửa cả ba cho khớp, và sai thì vỡ lúc boot với `"<Type> is not registered"` — thứ `flutter analyze` không thấy được.
 
@@ -816,6 +827,7 @@ Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp
 | `contract_scan_test.dart` | Bộ quét `arch_check` và `composer` dùng chung: đăng ký theo luật đúng-type (class có annotation, chỉ phần `as:` gán, thành viên `@module`, `Future<X>`, environment), thứ không phải code (comment, chuỗi, block comment), `implements` không đăng ký gì; phép quét nơi hiện thực R8 dùng, không đổi sau khi tách; type đã khai, file sinh, lookup tuỳ chọn |
 | `composer_checks_test.dart` | V3, V7, V10, V11, V12 — mỗi check một fixture sạch và một fixture vi phạm (khai `provided` mà không ai đăng ký, mà package đăng ký không được ghép, khai `absent` mà vẫn có đăng ký, bundle đăng ký nửa chừng, `implements` không phải đăng ký, contract required không ai đăng ký; web với `core_database`, module đã kéo một package vào, package chỉ được tới qua package khác (chuỗi được nêu) và dev dependency không bị đi theo; thiếu `FirebaseOptions` cho `prod`; key env chưa khai và key thiếu; entry point không có `profile:`, smoke test bị xoá, smoke test không bao giờ gọi `checkAppContract`); `sync` cảnh báo còn `verify` fail; trên các app đã commit, phép quét tĩnh tái hiện đúng ma trận lúc chạy (mobile thiếu `IErrorReporter` và `IAnalytics`; admin còn thiếu thêm contract splash, entry, dashboard và post-sign-in) |
 | `app_sync_test.dart` | Các enum composer viết lại, catalog (8 required, 14 optional), `PlatformFacts.today()` và `WindowClass` bằng nguồn của chúng; dead-key guard (mọi key manifest và cả hai key pubspec đều có nơi đọc); `platforms:` / `app_provides` đang phát hành của `core_notifications` và `core_database`; mỗi mục allow-list R17 nêu một file tồn tại |
+| `composer_new_test.dart` | `composer new` trong một workspace dùng một lần chứa `app_template/` thật: app qua `verify` ngay, `capabilities:` của nó theo những gì các module đăng ký (văn bản `whenAbsent` của catalog, không bao giờ `TODO`), `core_database` chỉ vào `core` khi được liên kết, staging và prod có quyết định pin ở nơi một platform pin được, import của smoke test được sắp theo id; nó từ chối một id đã có, một platform bị module chặn, module hay platform lạ, id hay tên sai, thiếu `--platforms`, thiếu template — mỗi trường hợp để workspace nguyên từng byte — và không bao giờ tạo thư mục runner |
 | `composer_test.dart` | `sync` rồi `verify` thì qua; layer `api` chỉ là workspace member, package API chỉ được chạm tới qua một feature vẫn vào workspace, thiếu nó thì `verify` fail; vùng managed bị sửa tay, module không có trên đĩa, `phase: befor`, layer lạ và module trùng exit `1` kèm đường dẫn key; package có trên đĩa mà không app nào lắp ráp làm `verify` fail và chỉ cảnh báo khi `sync` |
 | `dependency_sync_test.dart` | `--check`: khớp thì qua; lệch version, catalog sai định dạng và YAML hỏng exit `1` |
 | `docs_check_test.dart` | Đường dẫn hay link chết exit `1`; span `<placeholder>`, đường dẫn trong allowlist và sample bundle đã gỡ (INFO) exit `0`; gốc repo lấy từ script chứ không từ cwd; tương đương en ↔ vi: thiếu heading, code block hay dòng bảng exit `1` kèm cả hai con số, fence bị bỏ qua, chênh lệch có trong allowlist thì qua, entry cũ thì cảnh báo, entry không lý do bị từ chối |

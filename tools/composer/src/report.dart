@@ -71,7 +71,7 @@ const List<CodedLine> kComposerChecks = [
   ),
   CodedLine(
     'V12',
-    'the entry point passes `profile:`; test/di_smoke_test.dart exists and calls checkAppContract',
+    'the entry point passes `profile:`; test/di_smoke_test.dart exists, calls checkAppContract and builds every factory (`callFactories: true`)',
   ),
   CodedLine(
     'V13',

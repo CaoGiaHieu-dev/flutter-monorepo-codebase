@@ -1,184 +1,145 @@
 ---
 name: create_feature_module
-description: Use when the user asks to create, scaffold or add a new package or module — a feature (feature_<name>), domain_<name>, data_<name>, core_<name> or custom platform package. Runs tools/module_generator/generate.dart with every argument, picks the state management and route contribution, and chooses which apps compose it.
+description: Use when the user asks to create, scaffold or add a new package or module — a feature (feature_<name>), domain_<name>, data_<name>, <name>_api, core_<name> or a custom platform package. Runs tools/module_generator/generate.dart with every argument, picks the state management and route contribution, chooses which apps compose it, then walks the follow-up (translations, capabilities, tests, verify).
 ---
 
-# 🛠️ Skill: Create New Module (Create Module)
+# Skill: Create a module or package
 
-Use this skill when the developer requests to create a new package/module in the monorepo (e.g., `feature_profile`, `domain_payment`, `data_payment`, `core_logging`, etc.).
+Use this skill when asked to create a package in the monorepo: `feature_profile`, `domain_payment`,
+`data_payment`, `payment_api`, `core_logging`, and so on.
 
 **Guide:** [`docs/en/guides/01_new_feature.md`](../../../docs/en/guides/01_new_feature.md) ·
 [`02_new_domain_data.md`](../../../docs/en/guides/02_new_domain_data.md) · generator reference:
-[`03_tooling.md` § module_generator](../../../docs/en/reference/03_tooling.md).
+[`03_tooling.md` § module_generator](../../../docs/en/reference/03_tooling.md#module_generator).
 **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-04, RULE-05, RULE-09, RULE-16,
-RULE-20, RULE-24, RULE-34, RULE-75, RULE-81 — cite them, do not restate them.
+RULE-20, RULE-24, RULE-34, RULE-81 — cite them, do not restate them.
 
----
+## Ask first (if the request does not say)
 
-## 📋 Step-by-Step Instructions
+1. What type? `1` Feature, `2` Domain, `3` Data, `4` Core, `5` Custom, `6` API (`<name>_api`).
+2. A feature: which state management? `1` Provider, `2` BLoC, `3` none.
+3. A feature: how do its routes join the app shell? `1` `IFeatureRouteModule` (stack), `2`
+   `INavDestinationModule` (bottom-nav tab), `3` none.
+   - `2` only for a **primary authenticated bottom-nav destination**; read
+     [`04_routing.md` § 1](../../../docs/en/guides/04_routing.md#1-pick-the-routing-contract) first (RULE-24).
+     Login / detail / onboarding / push screens are `1`.
+4. Which apps compose it? Without `--apps` the module joins **every** `apps/<id>/app_manifest.yaml`, `apps/admin`
+   included.
 
-### MANDATORY STEP (MOST IMPORTANT): IDENTIFY MODULE TYPE AND STATE MANAGEMENT
-Before creating the module, the Agent **MUST** ask the user if they have not provided clear specifications:
-1. *What type of module do you want to create? (1. Feature, 2. Domain, 3. Data, 4. Core, 5. Custom)*
-2. *If creating a Feature: Which State Management do you want to use? (1. Provider, 2. BLoC, 3. None)*
-3. *If creating a Feature: How should routes join the App Shell? (1. `IFeatureRouteModule` stack/standalone, 2. `INavDestinationModule` bottom-nav tab, 3. None)*
-   - Choose **2** only for a **primary authenticated bottom-nav destination**. Read `docs/{en,vi}/guides/04_routing.md` § Dashboard before choosing tab.
-   - Login / detail / onboarding / push screens → **1**, never **2**.
+The agent runs the command directly; it never answers the interactive prompts.
 
-Once the answers are obtained, run the corresponding command (the Agent runs the command directly instead of interactive execution):
-
-### Step 1: Initialize Structure using the Automated Tool
+## Step 1: Generate
 
 ```bash
-# Syntax: dart tools/module_generator/generate.dart <type> <module_name> [prefix] [sm] [route_contribution] [--group <g>] [--apps <id,id>]
-# <type>: 1 (Feature), 2 (Domain), 3 (Data), 4 (Core → core_<name> at platform/<group>/<name>), 5 (Custom)
-# <module_name>: Business entity name (e.g., profile, payment, logging)
-# [prefix]: pass "" except for Custom — there it is the package-name PREFIX, not a directory:
-#           the package is <prefix>_<name>, always at platform/<group>/<name>. A layer word
-#           (feature, domain, data, core) is refused.
-# [sm]: (Feature only) 1 (Provider), 2 (BLoC), 3 (None)
-# [route_contribution]: (Feature only) 1 (IFeatureRouteModule), 2 (INavDestinationModule), 3 (none)
-# --group: (Core/Custom only) foundation|layers|infra|ui|state|shell — the platform/ group folder.
-#         Default: infra. See docs/en/architecture/02_core.md for what belongs where.
-# --apps: (optional, any type) compose into these apps only — app.id from apps/*/app_manifest.yaml.
-#         Default: EVERY app, admin included.
+# dart tools/module_generator/generate.dart <type> <name> [prefix] [sm] [route] [--group <g>] [--apps <id,id>]
+# <type>    1 Feature · 2 Domain · 3 Data · 4 Core (core_<name> at platform/<group>/<name>) · 5 Custom · 6 API (modules/<name>/api, package <name>_api)
+# <name>    Dart package name: lowercase letters, digits, _, starting with a letter, not a keyword
+# [prefix]  pass "" except for Custom, where it is the package-name PREFIX (<prefix>_<name>); a layer word is refused
+# [sm]      Feature only: 1 Provider, 2 BLoC, 3 none
+# [route]   Feature only: 1 IFeatureRouteModule, 2 INavDestinationModule, 3 none
+# --group   Core/Custom only: foundation|layers|infra|ui|state|shell (default infra) — see docs/en/architecture/02_core.md
+# --apps    any type: compose into these app.ids only (default every app); an unknown id exits 64 before anything is written
 ```
 
-> [!IMPORTANT]
-> For a **feature, always pass all five arguments**. A feature missing `[sm]` or
-> `[route_contribution]` prompts for it on a terminal, which blocks an agent, and without a
-> terminal (or with stdin at end of input) exits `64` instead of picking a default. Types 2–4
-> need only `<type> <module_name>` — a non-empty third argument is refused for them; type 5
-> needs the prefix as the third argument (prompted for on a terminal, exit `64` otherwise).
+> **For a feature, always pass all five positional arguments.** A feature missing `[sm]` or `[route]` prompts on a
+> terminal, which blocks an agent, and without a terminal exits `64`. Types 2–4 and 6 take only `<type> <name>`
+> (a non-empty third argument is refused); type 5 needs the prefix.
 >
-> Arguments are checked **before anything is written**, each refusal exiting `64` with the
-> usage: `<module_name>` and a prefix must be Dart package names (lowercase letters, digits,
-> `_`, starting with a letter, not a Dart keyword — `Bad-Name` is refused); `[sm]` and
-> `[route_contribution]` accept only `1`/`2`/`3` and only for type 1; unknown flags are
-> refused; and the resulting package name must not already be declared by any `pubspec.yaml` in
-> the repository (`5 shell platform_app` = `platform_app_shell`, `2 core` = `domain_core`).
+> Arguments are checked **before anything is written**; each refusal exits `64` with the usage: a bad package name,
+> `[sm]` / `[route]` outside `1`–`3` or on a non-feature, an unknown flag, a package name already declared by any
+> `pubspec.yaml`. An existing module directory, a missing toolchain or a failed step exits `1`.
 > `dart tools/module_generator/generate.dart --help` prints the usage.
 
-> [!IMPORTANT]
-> **Decide which apps compose the module before generating.** Without `--apps` it joins every
-> `apps/<id>/app_manifest.yaml` — `apps/admin` (auth + settings only) included. A module meant for
-> `mobile` only is `... --apps mobile`; an unknown id exits `64` before anything is written.
+Examples:
 
-> [!IMPORTANT]
-> **A module that registers a contract the shell catalogues changes each composing app's
-> `capabilities:`.** The generator prints a reminder; `composer verify` (V3) then names the key and the
-> line to paste (a nav tab → `tabs: provided`, routes → `routes: provided`, a splash →
-> `splash: provided`, …; `composer describe --catalog` lists the 14 optional contracts). Declare it in
-> every app that composes the module (RULE-81). A whole new *app* is not a module: use `composer new`
-> (the `configure_app` skill).
-
-**Examples:**
-
-1. Feature `profile` with Provider + stack routes:
 ```bash
-dart tools/module_generator/generate.dart 1 profile "" 1 1
+dart tools/module_generator/generate.dart 1 profile "" 1 1               # Provider feature, stack routes
+dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile    # BLoC feature as a bottom-nav tab, mobile only
+dart tools/module_generator/generate.dart 2 payment                      # domain_payment
+dart tools/module_generator/generate.dart 3 payment                      # data_payment
+dart tools/module_generator/generate.dart 6 payment                      # payment_api
+dart tools/module_generator/generate.dart 4 analytics --group infra      # core_analytics at platform/infra/analytics
+dart tools/module_generator/generate.dart 5 billing acme                 # acme_billing at platform/infra/billing
 ```
 
-2. Feature `chat` as a dashboard bottom-nav tab with BLoC:
-```bash
-dart tools/module_generator/generate.dart 1 chat "" 2 2
-```
+**A complete module is generated in the order `2` → `3` → `1`** (and `6` whenever another feature must reach
+it), all with the **same `--apps`**: the data package then depends on `domain_<name>` and registers
+`@LazySingleton(as: I<Name>Repository)`, and the feature starts from the same manifest entry
+(`- { id: payment, layers: [feature, data, domain] }`). `6` works before or after `1`: the generator wires
+whichever exists ([`create_api_package`](../create_api_package/SKILL.md)). Flows to build on top:
+[`implement_domain_data_flow`](../implement_domain_data_flow/SKILL.md).
 
-   The same, composed into the mobile app only:
-```bash
-dart tools/module_generator/generate.dart 1 chat "" 2 2 --apps mobile
-```
+> **A module that registers a contract the shell catalogues changes each composing app's `capabilities:`.** The
+> generator prints a reminder; `composer verify` (V3) names the key and the line to paste (a nav tab is
+> `tabs: provided`, routes `routes: provided`, a splash `splash: provided`, …; `composer describe --catalog` lists
+> the 14 optional contracts). Declare it in every app that composes the module (RULE-81). A second tab also needs
+> `feature_dashboard` composed (check C12). A whole new *app* is not a module: `composer new`
+> ([`configure_app`](../configure_app/SKILL.md)).
 
-3. Domain micro-package `payment`:
-```bash
-dart tools/module_generator/generate.dart 2 payment
-```
-
-4. Custom platform package `acme_billing` (created at platform/infra/billing):
-```bash
-dart tools/module_generator/generate.dart 5 billing acme
-```
-
-### What the tool guarantees
+## What the tool guarantees
 
 | Behaviour | Detail |
 | :--- | :--- |
-| `lib/src/utils/` | Created for **every** module type, because a package's constants belong there (a package that ends up with none may drop the empty folder — `arch_check` R4 never asks for one). For every feature, `<name>_path.dart` is written into `utils/` (not `routing/`) together with `routing/<name>_route_module.dart` — both regardless of the route choice; delete them if the feature contributes no routes. |
-| State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, matching `feature_auth` / `feature_home`. |
-| Toolchain detection | Auto-detects FVM: uses it only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise falls back to global `dart` / `flutter`. |
-| Fail-safe | `assertToolchainAvailable()` runs **before any write**; an existing module directory aborts instead of being silently overwritten. |
-| Rollback | The shared files it touches — every `app_manifest.yaml`, plus what `composer sync` rewrites (the root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) — are snapshotted first; any later failure restores them and deletes the new module directory, and the tool exits `1`. |
-| Registration check | Presence in each `app_manifest.yaml` is decided by parsing the YAML, not by substring (`core_net` is no longer taken as registered because `core_network` exists). Every edit is re-parsed; a manifest the module could not be added to rolls everything back and exits `1`. |
-| Starts clean | A new package declares only the workspace packages its templates import, so `check_unused_packages` passes at once. Domain gets `domain_core` + an `I<Name>Repository` stub; data gets `data_core` + a `<Name>RepositoryImpl extends BaseRepository` stub, implementing and registered as the domain's contract when `domain_<name>` already exists (generate the domain first); core/custom get no workspace dependency. |
-| Nav order | A `[route_contribution]` `2` destination gets `order` = highest existing `INavDestinationModule.order` under `modules/*/feature` + 10 (10 when none), so generated tabs never tie. |
-| Tests from the start | A feature gets `test/<name>_page_test.dart` (page under `ResponsiveInit` + its localizations, controller provided as the route provides it, phone and tablet windows) and `test/<name>_provider_test.dart` or `test/<name>_bloc_test.dart` (none for SM `3`), passing as generated. Keep them green as you build: `cd modules/<name>/feature && flutter test`. Swap the real controller for one built from fakes once it takes use cases. |
-| Composition | Every `app_manifest.yaml`, or only those `--apps` names. |
-| Barrels around codegen | The barrel generator runs before `build_runner` (the templates import sibling barrels) and again after it, so generated files (`module.module.dart`, `lib/src/gen/**`) are exported too. |
+| `lib/src/utils/` | Created for every package type but API, because a package's constants belong there (RULE-09). Every feature gets `utils/<name>_path.dart` and `routing/<name>_route_module.dart`, whatever the route choice; delete them if the feature contributes no routes. |
+| State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, like `feature_auth` / `feature_home`. |
+| Toolchain | FVM is used only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise the global `dart` / `flutter` (RULE-73). |
+| Fail-safe | The toolchain is checked **before any write**; an existing module directory aborts instead of overwriting. |
+| Rollback | Every `app_manifest.yaml` and what `composer sync` rewrites (root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) is snapshotted first; any later failure restores them, deletes the new directory and exits `1`. |
+| Registration | A module layer (`1`, `2`, `3`, `6`) is added to `modules:` in each manifest; a core or custom package (`4`, `5`) is added to the `core` DI group's `packages:` — move it to the right group by hand when it belongs elsewhere ([`implement_dependency_injection`](../implement_dependency_injection/SKILL.md)). The entry is decided by parsing the YAML and re-parsed after the edit; a manifest the tool cannot edit rolls everything back. |
+| Starts clean | A new package declares only the workspace packages its templates import, so `check_unused_packages` passes at once. Domain gets `domain_core` and an `I<Name>Repository` stub with a placeholder `ping()`; data gets `data_core` and `<Name>RepositoryImpl extends BaseRepository`, implementing the domain's interface when `domain_<name>` already exists; core, custom and API packages get no product dependency. |
+| Nav order | A tab (`2`) gets `order` = the highest existing `INavDestinationModule.order` under `modules/*/feature` + 10 (10 when none), so generated tabs never tie. |
+| Tests from the start | A feature gets `test/<name>_page_test.dart` and `test/<name>_provider_test.dart` / `<name>_bloc_test.dart` (none for SM `3`), passing as generated; keep them green as you build. |
+| Pipeline | Manifest edit, `composer sync`, `dependency_sync`, `flutter pub get`, `gen-l10n` (features), the package barrel, `build_runner`, the barrel again, `dart fix --apply` — you do not run these for the first generation. |
 
-### Step 2: Implement Boilerplate & Route Definition (for Feature)
-The tool generates the basic directory structure (including `assets/language` and `l10n.yaml`), registers `IFeatureLocalization`, and scaffolds either `*_feature_route_module.dart` or `*_nav_destination.dart` according to `[route_contribution]`.
+Barrels after your own edits: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator).
 
-**Boundaries:** one bounded UI concern per package and a chrome-only dashboard (RULE-24); reach
-another module through its `<id>_api` navigator or action handler, never its feature (RULE-04,
-RULE-22, RULE-25); no platform package may depend on yours (RULE-01).
+## Step 2: Review and fill what the generator left (a feature)
 
-For Features, complete the TypedGoRoute file (e.g. `lib/src/routing/*_route_module.dart`) and fill the DI contribution stub:
+The generator wrote a working page, controller, route and tests. What is yours:
 
-**If using Provider:** the generated `*Provider` already overrides `initialize()` — the hook
-`BaseProvider` calls after construction. Put setup there; a method named anything else (e.g.
-`init()`) never runs.
-```dart
-@TypedGoRoute<ProfileRoute>(path: ProfilePath.PROFILE)
-class ProfileRoute extends GoRouteDataCustom with $ProfileRoute {
-  const ProfileRoute();
+1. **Routes.** Review `routing/<name>_route_module.dart` (the `@TypedGoRoute`; the controller is created there,
+   RULE-21) and the contract stub — `*_feature_route_module.dart` (`routes`) or `*_nav_destination.dart` (`order`,
+   `path`, `routes`, `destination`: change the placeholder icon). Never edit `app_router.dart` (RULE-20).
+   More routes and parameters: [`implement_navigation_route`](../implement_navigation_route/SKILL.md).
+2. **Controller.** Replace the placeholder: [`implement_provider_ui`](../implement_provider_ui/SKILL.md) or
+   [`implement_bloc_ui`](../implement_bloc_ui/SKILL.md). Provider: the generated `initialize()` is the hook
+   `BaseProvider` calls after construction; a method named anything else never runs.
+3. **Translations.** `assets/language/vi.arb` starts as a copy of the English text: translate it, add the
+   feature's strings to both files, run `gen-l10n` — [`localize_feature`](../localize_feature/SKILL.md) (RULE-34).
+4. **Navigator for other features.** `dart tools/module_generator/generate.dart 6 <name>` if `<name>_api` does
+   not exist.
+5. **First launch.** Optional: `@LazySingleton(as: IAppEntryLocation)` (later cold starts land on the first tab).
+6. **Re-run codegen and restart.** After your edits `dart run build_runner build --workspace`, then a **full
+   restart** — hot reload does not apply new DI registrations. If you changed a `lib/` file list, regenerate the barrel.
 
-  @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return ChangeNotifierProvider(
-      create: (context) => getIt<ProfileProvider>(),
-      child: const ProfilePage(),
-    );
-  }
-}
-```
+## Step 3: Keep the module removable
 
-**If using BLoC:** prefer `BaseBloc` with `BlocViewState<T>` (Cubit only when events are
-unnecessary). Note the BLoC branch has no `executeOperation` — see `implement_bloc_ui`.
+The app must still build after any feature package is deleted. Confirm:
 
-### Step 3: Expose routes via DI (do **not** edit `app_router.dart` lists)
-- Fill `IFeatureRouteModule.routes` **or** `INavDestinationModule` (`order`, `path`, `routes`, `destination`).
-- Optional first-launch location: `@LazySingleton(as: IAppEntryLocation)` (later cold starts land on the first tab).
-- Host already collects with `getAllOrEmpty` / `getItOrNull`. Follow `implement_navigation_route` Step 6.
+- nothing outside the feature imports `package:feature_<name>/…` except each composing app's generated
+  `apps/<id>/lib/di/injection.dart` (RULE-05, `arch_check` R10);
+- what another feature consumes from you is a contract in your module's `<id>_api`; what the shell consumes is a
+  product-neutral `core_di` contract (RULE-08), both resolved with `getItOrNull` / `getAllOrEmpty` and a fallback
+  (RULE-12, `arch_check` R8).
 
-### Step 4: Run Code Generation & Sync
+To remove a module (manifest line, `composer sync`, **delete `modules/<name>/<layer>/`**, `pub get`, `build_runner`,
+or `remove_sample` for a shipped sample): [`remove_module`](../remove_module/SKILL.md).
+
+## Related
+
+- [`implement_navigation_route`](../implement_navigation_route/SKILL.md), [`implement_dependency_injection`](../implement_dependency_injection/SKILL.md),
+  [`run_repo_tooling`](../run_repo_tooling/SKILL.md), [`configure_app`](../configure_app/SKILL.md)
+- [`create_api_package`](../create_api_package/SKILL.md), [`localize_feature`](../localize_feature/SKILL.md),
+  [`remove_module`](../remove_module/SKILL.md)
+
+## Verify
+
 ```bash
-dart tools/dependency_sync.dart
-dart run build_runner build --workspace
-dart tools/barrel_generator/generate.dart modules/<name>/feature/lib   # after build_runner: barrels export generated files too
+flutter analyze                                          # 0 issues (RULE-70)
+dart tools/arch_check/check.dart
+dart tools/composer/composer.dart verify                 # manifests vs generated regions, capabilities (V3)
+dart tools/unused_checker/check_unused_packages.dart     # declared-but-unused dependencies
+cd modules/<name>/feature && flutter test                # also each package you added tests to
+cd apps/mobile && flutter test test/di_smoke_test.dart   # and apps/admin if it composes the module
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77
 ```
-Then **hot restart** the app (new DI registrations are not applied by hot reload).
-
-### Step 5: Keep the module removable
-
-The app must still build after any feature package is deleted. Before finishing, confirm:
-
-- Nothing outside the feature imports `package:feature_<name>/...` except each composing app's
-  generated `apps/<id>/lib/di/injection.dart` (RULE-05, arch_check R10).
-- What another feature consumes from you is a contract in your module's `<id>_api` package; what
-  the shell consumes is a product-neutral `core_di` contract (RULE-08). Consumers resolve either with
-  `getItOrNull` / `getAllOrEmpty` and a fallback (RULE-12, arch_check R8).
-- Removal procedure: drop its line from `modules:` in every `apps/<id>/app_manifest.yaml` →
-  `dart tools/composer/composer.dart sync` (regenerates `injection.dart`, the app pubspecs, the root
-  `workspace:` list, the `facts` and the README report) → `flutter pub get` + `build_runner`; then
-  `composer verify` names any capability that lost its last provider — declare it `absent` with a reason.
-  For a shipped sample only, run `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` — it
-  accepts only the bundles listed in `tools/sample_manifest.yaml` (not a module you generated), is a dry
-  run without `--apply`, flips the capabilities the bundle was the sole provider of and runs `sync` itself.
-
----
-
-## 🔗 Related
-
-- `docs/{en,vi}/guides/01_new_feature.md` — the long-form walkthrough
-- `docs/{en,vi}/guides/02_new_domain_data.md` — domain + data packages
-- `implement_navigation_route`, `implement_dependency_injection`, `run_repo_tooling`, `configure_app`

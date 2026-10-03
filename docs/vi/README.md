@@ -3,7 +3,7 @@
 
 🌍 *Ngôn ngữ:* [English](../en/README.md) | **Tiếng Việt**
 
-Mọi thứ bạn cần để làm việc trong monorepo Flutter này, sắp xếp theo **việc bạn đang muốn làm** chứ không theo package nào tình cờ chứa chủ đề đó. Mọi code sample trong các trang này đều trích từ source thật kèm đường dẫn file, nên bạn luôn mở được bản gốc.
+Mọi thứ bạn cần để làm việc trong monorepo Flutter này, sắp xếp theo **việc bạn đang muốn làm** chứ không theo package nào tình cờ chứa chủ đề đó. Code sample nào đến từ một file thì ghi tên file đó, nên bạn luôn mở được bản gốc.
 
 ---
 
@@ -62,11 +62,11 @@ Thực hành, từng bước, có code chạy được. Đây là phần "how to
 | [`05_di.md`](guides/05_di.md) | Dùng annotation nào, module đăng ký ở đâu, và vì sao app ném "not registered" lúc khởi động? |
 | [`06_storage.md`](guides/06_storage.md) | Làm sao lưu một giá trị sống sót qua khởi động lại — mà không package nào khác đọc/ghi đè được? |
 | [`07_database.md`](guides/07_database.md) | Làm sao lưu dữ liệu quan hệ để xoá package của tôi là xoá luôn database của nó? |
-| [`08_networking.md`](guides/08_networking.md) | Làm sao để gọi endpoint mới, cho một request bỏ qua auth hoặc retry, cắm token refresh và bật SSL pinning? |
+| [`08_networking.md`](guides/08_networking.md) | Làm sao để gọi endpoint mới, cho một request bỏ qua auth hoặc retry, cắm token refresh và bật certificate pinning? |
 | [`09_localization_theming.md`](guides/09_localization_theming.md) | Một feature tự mang bản dịch của nó ra sao, và màu/font/kích thước giữ nhất quán thế nào? |
 | [`10_cross_feature.md`](guides/10_cross_feature.md) | Feature A cần thứ gì đó từ feature B — làm sao, mà không import nó? |
 | [`11_design_system.md`](guides/11_design_system.md) | Mọi màu, font, bước spacing và bo góc định nghĩa ở đâu — sửa file nào để đổi nhận diện cho app, và giao diện scale cũng như thích ứng ra sao trên tablet, máy gập và chia đôi màn hình? |
-| [`12_module_isolation.md`](guides/12_module_isolation.md) | Làm sao để một team chỉ checkout module của mình, build được cả app từ đó, và không bao giờ thấy source của team khác? |
+| [`12_module_isolation.md`](guides/12_module_isolation.md) | Làm sao để một team chỉ checkout module của mình, build được cả app từ đó, và không bao giờ thấy source của team khác — và một module phơi package API ra sao? |
 | [`13_app_composition.md`](guides/13_app_composition.md) | Một app ghép, đăng ký và bật gì theo từng platform, sửa file nào để đổi điều đó, và tạo app thứ ba bằng một lệnh thế nào? |
 
 ---
@@ -109,7 +109,7 @@ Build, ký và phát hành.
 | Đổi theme, màu hoặc spacing | [`guides/11_design_system.md`](guides/11_design_system.md) | [`architecture/02_core.md`](architecture/02_core.md) |
 | Dàn layout một màn hình cho tablet, máy gập hoặc chia đôi màn hình | [`guides/11_design_system.md`](guides/11_design_system.md) § 7 | [`architecture/05_features.md`](architecture/05_features.md) § dashboard |
 | Chia sẻ state giữa hai feature | [`guides/10_cross_feature.md`](guides/10_cross_feature.md) | [`guides/05_di.md`](guides/05_di.md) |
-| Gỡ một feature khỏi app | [`guides/01_new_feature.md`](guides/01_new_feature.md) § gỡ feature | [`reference/01_rules.md`](reference/01_rules.md) |
+| Gỡ một feature khỏi app | [`guides/01_new_feature.md`](guides/01_new_feature.md) § 9 | [`reference/01_rules.md`](reference/01_rules.md) |
 | Chọn Provider hay BLoC | [`guides/03_state_management.md`](guides/03_state_management.md) | — |
 | Sửa lỗi "not registered" lúc khởi động | [`guides/05_di.md`](guides/05_di.md) | [`architecture/06_app_shell.md`](architecture/06_app_shell.md) |
 | Sửa CI đang đỏ | [`operations/01_cicd.md`](operations/01_cicd.md) | [`reference/03_tooling.md`](reference/03_tooling.md) |
@@ -135,7 +135,7 @@ Lịch sử không còn là hướng dẫn hiện hành nằm ở [`../history/`
 ## Quy ước trong bộ tài liệu này
 
 - **Mọi link đều là đường dẫn tương đối.** Chúng chạy đúng trên GitHub, trong bản xem trước của IDE, và trên docs server chạy cục bộ.
-- **Mọi code block đều ghi tên file nguồn** ở dòng comment đầu — mở ra để xem bản hiện tại.
+- **Code block nào đến từ một file thì ghi tên file đó** ở dòng comment đầu — mở file ra để xem bản hiện tại.
 - Các callout có trọng lượng khác nhau: `> [!NOTE]` là bối cảnh, `> [!WARNING]` là thứ sẽ cắn bạn, `> [!CAUTION]` là thứ có thể làm mất dữ liệu hoặc ship một bản build hỏng.
 - Nơi nào một luật có ngoại lệ đã được duyệt, ngoại lệ đó được ghi lại kèm lý do — để lần audit sau không ai "sửa" nhầm.
 

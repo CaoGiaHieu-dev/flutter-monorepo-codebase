@@ -14,20 +14,20 @@ Follow [`docs/en/getting-started/01_setup.md`](docs/en/getting-started/01_setup.
 [`docs/vi/getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md)). In short:
 
 ```bash
-dart tools/workspace_setup/configure.dart   # pub get → gen-l10n → build_runner → barrels
+dart tools/workspace_setup/configure.dart --stub-firebase   # pub get → gen-l10n → build_runner → barrels
 ```
 
-`flutter pub get` + `build_runner` alone is not enough — the gitignored `lib/src/gen/gen.dart`
-barrels only exist after the barrel pass. Building the app also needs the gitignored Firebase
-files (setup guide § 3 has compile-only stubs). FVM is optional: write commands bare and add
-`fvm ` yourself if you use it.
+Building the app needs the gitignored Firebase files: `--stub-firebase` writes compile-only stubs
+for them (setup guide § 3 has the real ones). The barrel pass is needed again only after you add,
+rename or delete a `lib/` file: `dart tools/barrel_generator/generate.dart <package>/lib`. FVM is
+optional: write commands bare and add `fvm ` yourself if you use it.
 
 ## 2. Branches and commits
 
 - Branch from `main`; name the branch `<type>/<short-topic>` (e.g. `fix/refresh-deadlock`).
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org/), as the history does:
   `<type>(<scope>): <summary>` — lowercase, imperative or descriptive, no trailing period.
-  - Types in use: `feat`, `fix`, `refactor`, `docs`, `chore`, `build`, `ci`, `style`.
+  - Types in use: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `build`, `ci`, `style`.
   - Scope is the package or area touched: `network`, `app_shell`, `base_ui`, `tools`, `composer`,
     `module_generator`, `fastlane`, `ci`, `docs_check`, … Omit it for cross-cutting changes.
   - The body says **why**, and lists each distinct change as a bullet when there are several.
@@ -37,23 +37,27 @@ files (setup guide § 3 has compile-only stubs). FVM is optional: write commands
 ## 3. Checks to run before opening a PR
 
 These mirror [`.github/workflows/pr_quality_check.yml`](.github/workflows/pr_quality_check.yml)
-in its order. Run them from the repository root after `configure.dart`:
+in its order. Run them from the repository root:
 
 ```bash
 flutter pub get --enforce-lockfile                   # CI fails if pubspec.lock is stale
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R17
+dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R20
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
+dart tools/workspace_setup/configure.dart --stub-firebase   # codegen (skip if you just ran it)
+# CI then fails on barrel drift (RULE-75): on a clean checkout, the line above must leave no tracked
+# `*.dart` file changed and no untracked one — commit a regenerated barrel with the change that caused it
 flutter analyze                                      # Gate 2 — static analysis
-# Gate 3 — flutter test in every package that has a test/ directory
+# Gate 3 — flutter test in every package that has a test/ directory, except ./tools (it ran above)
 for p in $(find . -name pubspec.yaml -not -path './.git/*' -not -path '*/build/*' \
              -not -path '*/.dart_tool/*' | sort); do
   d=$(dirname "$p"); [ -d "$d/test" ] || continue
+  [ "$d" = "./tools" ] && continue
   (cd "$d" && flutter test) || echo "FAILED: $d"
 done
 dart tools/dependency_sync.dart --check              # Gate 4 — version catalog in sync
-dart tools/docs_check/check.dart                     # Gate 5 — every repo path the docs name exists
-dart tools/unused_checker/check_unused_packages.dart # advisory — declared but never imported
+dart tools/docs_check/check.dart                     # Gate 5 — doc paths exist, en↔vi parity, RULE-ID citations
+dart tools/unused_checker/check_unused_packages.dart # declared but never imported (exit 2 = findings; blocking in CI)
 
 # The separate `build` job — the only proof generated code compiles
 cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev

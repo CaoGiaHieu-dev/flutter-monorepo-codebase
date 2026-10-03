@@ -14,240 +14,181 @@ independent of the template's.
 ## [Unreleased]
 
 The first large refactor of the template: a Pub Workspaces monorepo organised by bounded context,
-with the architecture rules enforced by CI instead of review alone.
+apps composed from a manifest, and the architecture rules enforced by CI instead of review alone.
+The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Added
 
-- `apps/admin`, a second app composing only auth + settings, to prove that modules compose per app.
-- `platform_app_shell` (`platform/shell/app_shell`): boot, dynamic router, material wrapper and
-  app state, shared by every app instead of copied into each; its storage adapters and
-  `NetworkConfigImpl` live beside it in `platform_shell_adapters` (`platform/shell/adapters`).
-- `platform_kernel` (`platform/foundation/kernel`): a pure-Dart foundation (`getIt` helpers,
-  `ErrorHandler`, `AppException`, extensions) that non-Flutter packages depend on.
-- Composer: each app is generated from `apps/<id>/app_manifest.yaml` (`composer sync`,
-  `composer verify`), plus `tools/composer/bootstrap.dart` for partial checkouts.
-- Sample management: `tools/sample_manifest.yaml` and `tools/sample_cleanup/remove_sample.dart`
-  delete a sample bundle safely — keeping a module API package that another package still
-  imports, and saying so.
+- **Apps layer.** Every app is `apps/<id>/`: an `app_manifest.yaml` (manifest v2) that says what the
+  app is — `app.name`, `flavors` (with an `ssl_pinning` decision per flavor: `pins` or `disabled`
+  with a reason), `env` keys, `platforms` (`runner: committed | scaffold`, plus `splash`, `push`,
+  `deep_links`, `orientation`, `window`), `capabilities` (every optional contract the shell resolves
+  is `provided` or `absent` with a reason) and a `why` per DI group — and what it composes. From it
+  `composer sync` generates the root `workspace:` list, the app's path dependencies, all of
+  `lib/di/injection.dart`, the `facts` region of `lib/app/app_profile.dart` and a `report` region in the
+  app's `README.md`. `apps/mobile` and `apps/admin` (auth + settings only, to prove that modules compose
+  per app) are the two shipped apps.
+- `AppProfile` / `AppFacts` in `platform_kernel` and typed tuning in each app's `lib/app/app_profile.dart`:
+  `display` (`DisplayProfile`: design artboard, scale policy per window class, the OS font-size cap),
+  `router` (`RouterProfile`: `EntryPolicy`, fallback path), `locale` (`LocaleProfile`, `LanguageSet`),
+  `theme` (`ThemeProfile`: first-launch mode, palette overrides) and `network` (`NetworkProfile`:
+  timeouts, headers, redirects). `ShellHooks` in `lib/app/app_hooks.dart` (`onError`, `onNonFatalError`,
+  `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow`);
+  `runShellApp(profile:, hooks:, configureDependencies:)` boots it, and an app started on a platform or
+  flavor its manifest does not declare stops at a boot-error screen before dependency injection
+  (problems `P01`–`P05`).
+- The shell contract catalog `SHELL_CONTRACTS` (`platform_app_shell`; 21 rows, 7 required and 14
+  optional) and `checkAppContract` (problems `C01`–`C12`), which each app's DI smoke test runs for
+  every declared flavor.
+- `composer describe [--app <id>] [--catalog]` prints an app's report or every manifest key, shell
+  contract and check; `composer new <id> --platforms <a,b> [--modules <x,y>]` renders
+  `tools/composer/app_template/` into a whole new app (manifest, profile, hooks, entry point, smoke and
+  profile tests), derives its `capabilities:` and runs `sync` and `verify`, never `flutter create`;
+  `composer list`; `tools/composer/bootstrap.dart` for partial checkouts.
+- Rules RULE-80 (everything per-app is declared in `apps/<id>/`), RULE-81 (every optional shell contract
+  has a declared state) and RULE-82 (a platform difference is an app decision), and `arch_check` **R16**
+  (the shell catalog is complete) and **R17** (platform forks only in an allow-list, each with a reason).
+  Guide `docs/en/guides/13_app_composition.md` and skill `configure_app`.
 - Module API packages, `modules/<id>/api` → `<id>_api`: a module's contracts for other features
-  (`auth_api`: `AuthNavigator`, `IAuthActionHandler`; `home_api`: `HomeNavigator`). Composed as
-  the manifest layer `api` — a workspace member with no DI group and no app dependency.
-- `core_di` location contracts `ISignInLocation` / `IPostSignInLocation`: where the app shell
-  sends a signed-out / signed-in user (contributed by `feature_auth` / `feature_home`; with none,
-  no sign-in redirect / `AppRouter.fallbackLocation`).
-- `arch_check` **R11** — platform group direction, read from `platform/<group>/<package>`,
-  `dependencies:` only; R3 extended to module API packages (foundation + Flutter only; features
-  may import another module's API, never its feature), R1/R8/R10 cover them too.
-- CI merge gate `pr_quality_check.yml`: composer verify, `arch_check` (rules R1–R15, including
-  R8 optional contract lookup, R10 app-level removability and R11 platform group direction),
-  analyze, per-package tests,
-  catalog sync, `docs_check`, an unused-dependency advisory, and a debug APK build job.
-- `core_responsive`: window size classes and breakpoints, a per-window-class scale policy
-  (down by default, up on opt-in), and adaptive widgets (`AdaptiveLayout`, `AdaptiveSplitView`,
-  `AdaptiveContent`, fold postures).
-- `DisposeGuard` mixin; `DefaultLoadingWidget` / `DefaultEmptyWidget` in
-  `provider_state_management`.
-- Bilingual documentation hub (`docs/en`, `docs/vi`) grouped as getting-started, architecture,
-  guides, reference and operations; English + Vietnamese READMEs for the state-management,
-  responsive and tooling packages; agent skills under `.claude/skills/`.
-- Tests in 16 packages; the Plus Jakarta Sans font bundled so bold text uses the bold face.
-- App profile and shell hooks (the apps layer, step 1 of 6; no app changes yet): `platform_kernel`
-  gains `AppProfile` / `AppFacts` (what an app is and where it runs: platforms, flavors, env keys,
-  capabilities, SSL pinning per flavor), `AppProfile.validate` (problems `P01`–`P05`) and
-  `registerAppProfile`; `core_common` gains `resolveAppPlatform()`; `platform_app_shell` gains the
-  21-row catalog of what the shell resolves (`SHELL_CONTRACTS`: 7 required, 14 optional), `checkAppContract` (problems
-  `C01`–`C09`), `ShellHooks` (`onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`) and
-  a boot-error screen. `runShellApp` takes an optional `profile:` and `hooks:`; with a profile, an
-  undeclared platform stops at that screen before dependency injection instead of a blank window.
-  `runShellApp(configureDependencies: ...)` and `onError:` behave exactly as before.
-- Apps declare themselves (the apps layer, step 2 of 6): `app_manifest.yaml` now also says what the
-  app is — `app.name`, `flavors` (with an `ssl_pinning` decision per flavor where a platform can
-  pin: `pins` or `disabled` with a reason), `env` keys, `platforms` (`runner: committed | scaffold`),
-  `capabilities` (every optional contract the shell resolves is `provided` or `absent` with a
-  reason) and a `why` per DI group. `composer sync` turns that into the `facts` region of
-  `apps/<id>/lib/app/app_profile.dart`, a `report` region in the app's `README.md` and the
-  `configureDependencies` entry point of `injection.dart` (now fully generated); `composer verify`
-  refuses an incomplete declaration and any drift; `composer describe --app <id>` prints the report
-  and `describe --catalog` every key. Both apps pass `profile: appProfile` and `hooks: appHooks`,
-  and their DI smoke tests hold `checkAppContract` and `validate` for every declared flavor and
-  platform. `remove_sample` flips the capabilities a removed bundle alone provided to `absent`.
-- App-owned values on the shell side (the apps layer, step 3 of 6): an app can now say how the
-  shell sizes and routes it, and what each platform enables. `AppProfile` gains `display`
-  (`DisplayProfile`: design artboard, scale policy per window class, split-screen mode, the OS
-  font-size cap — a compile error below 200 %, RULE-38 — and the phone threshold) and `router`
-  (`RouterProfile`: `EntryPolicy` and a fallback path). The manifest gains
-  `platforms.<p>.push`, `.deep_links`, `.orientation` (`phones_portrait | free | portrait |
-  landscape`) and `.window` (`{ initial, min }`, desktop only), checked by `composer verify` (V8).
-  `ShellHooks` gains `navigatorObservers`, `redirect` and `configureWindow`. Every default is
-  today's behaviour; a platform that switches push or deep links off logs one INFO line naming the
-  manifest key, and a declared `window` with no `configureWindow` hook stops the boot (`P05`).
-- App-owned values on the ui and infra side (the apps layer, step 4 of 6): `AppProfile` gains
-  `locale` (`LocaleProfile`: the languages the app offers, its fallback and its first-launch
-  language), `theme` (`ThemeProfile`: the mode a first launch opens in and overrides for the 17
-  palette tokens — `context.colors`, the `ColorScheme` and the gradients all follow) and `network`
-  (`NetworkProfile`: the default HTTP client's three timeouts, extra headers and redirect policy).
-  `core_base_ui` gains `LanguageSet`, which `LanguageProvider`, `AppMaterialWrapper`, the language
-  picker in settings and the `language` header all read. Every default is today's behaviour; each
-  DI smoke test also checks that every feature's localization delegate supports every language the
-  app offers.
-- Gate 0 and Gate 1 hold an app's declaration to its source (the apps layer, step 5 of 6):
-  `composer verify` now checks that `capabilities:` equals what the composed packages and the
-  app's own `lib/` register, both directions (V3, with the registering package named when it is not
-  composed), that every composed package supports every declared platform (V7), that the app
-  registers `FirebaseOptions` for every declared flavor when it composes `core_notifications`
-  (V10), that the env files hold exactly the declared keys (V11), and that the entry point passes
-  `profile:` and the smoke test calls `checkAppContract` (V12). The report's contract table gains an
-  **Implemented by** column. `arch_check` gains R16 (every contract the shell resolves optionally
-  has a row in the shell catalog) and R17 (platform forks — `Platform.isX`, `kIsWeb`,
-  `defaultTargetPlatform`, `TargetPlatform.x` — only in an allow-list, each entry with its reason).
-  `tools/shared/contract_scan.dart` is the one scanner `arch_check` and `composer` share.
-  `apps/admin/env.dev` drops two keys the app never declared (`WEB_DOMAIN`, `APP_LINK_MODE`).
-- A third app by command, and the docs sweep (the apps layer, step 6 of 6): `composer new <id>
-  --platforms <a,b> [--modules <x,y>] [--name <text>]` renders `tools/composer/app_template/` into
-  `apps/<id>/` — manifest, profile, hooks, entry point, smoke and profile tests — derives its
-  `capabilities:` from what the requested modules register (an absent contract carries what the
-  shell does without it as its reason, never `TODO`), then runs `sync` and `verify`. It refuses an
-  existing id or a platform a requested module blocks before writing anything, and never runs
-  `flutter create`: it prints the line. `composer describe --catalog` now also lists the
-  per-package pubspec keys, checks V1–V16 and problem codes `P01`–`P05` / `C01`–`C12`. New guide
-  `docs/en/guides/13_app_composition.md` (+ `docs/vi`) and skill `configure_app`; registry group
-  80–89 with RULE-80 (everything per-app is declared in `apps/<id>/`), RULE-81 (every optional
-  contract has a declared state) and RULE-82 (platform differences are an app decision), 68 rules
-  in all; the guides, the shell architecture page, `SECURITY.md` and the setup, CI/CD and tooling
-  pages follow the apps layer (profile, hooks, pins in the manifest, generated `injection.dart`,
-  `describe` / `new`, R16 / R17).
+  (`auth_api`: `AuthNavigator`, `IAuthActionHandler`; `home_api`: `HomeNavigator`), composed as the
+  manifest layer `api` — a workspace member with no DI group and no app dependency.
+  `generate.dart 6 <name>` creates one.
+- Session and location contracts in `core_di`: `ISessionState`, `ISessionStatusStream`,
+  `ISessionRefreshListenable`, `ISessionGateway`, `SessionPrincipal`, and `ISignInLocation` /
+  `IPostSignInLocation` — where the shell sends a signed-out / signed-in user (contributed by
+  `feature_auth` / `feature_home`; with none, no sign-in redirect / `AppRouter.fallbackLocation`).
+- `platform_app_shell` (`platform/shell/app_shell`: boot, router, material wrapper, app state) and
+  `platform_shell_adapters` (`platform/shell/adapters`: storage adapters, `NetworkConfigImpl`), shared by
+  every app instead of copied into each; `platform_kernel` (`platform/foundation/kernel`), a pure-Dart
+  foundation (`getIt` helpers, `ErrorHandler`, `AppException`, extensions).
+- Sample management: `tools/sample_manifest.yaml` and `tools/sample_cleanup/remove_sample.dart` delete a
+  sample bundle safely — keeping a module API package another package still imports, and saying so —
+  and run `composer sync` after `--apply`.
+- **Gates, hardened.** `arch_check` rules R1–R20 are all blocking: **R11** platform group direction;
+  **R18** `on<Event>` handlers are `async`; **R19** no `print` / `debugPrint` in `lib/`; **R20** no raw
+  numeric literal in layout and paint constructors; R1–R3, R5, R9 and R10 read imports with a lexer,
+  classify a package by its workspace location, and also hold `dev_dependencies:` and test imports;
+  R7 and R8 read every `lib/` file and every spelling of a `getIt` lookup. `composer verify` fails on drift
+  in any generated region, on a package under `modules/` or `platform/` that no app composes, on a
+  second `workspace:` node (V17) and on a smoke test that does not build every factory (V12).
+  `dependency_sync --check` also fails on a hosted dependency missing from the catalog.
+  `pr_quality_check.yml` gains a barrel-drift step (RULE-75), a blocking unused-dependency audit
+  (RULE-06), a generator smoke job and an advisory coverage report. Each app's DI smoke test builds every
+  lazy singleton and every `@injectable` factory, one by one, and names the one that fails.
+- `core_responsive`: window size classes and breakpoints, a per-window-class scale policy (down by
+  default, up on opt-in), and adaptive widgets (`AdaptiveLayout`, `AdaptiveSplitView`, `AdaptiveContent`,
+  fold postures).
+- `AppLocalizations.failureMessage(code)` (`core_base_ui`) words a failure by its code for the user;
+  `DisposeGuard`, `DefaultLoadingWidget` / `DefaultEmptyWidget` in `provider_state_management`.
+- Bilingual documentation hub (`docs/en`, `docs/vi`) grouped as getting-started, architecture, guides,
+  reference and operations, with a rule registry (68 rules, `RULE-01`…`RULE-82`); English + Vietnamese
+  READMEs for the state-management, responsive, ui_kit and tooling packages; eleven agent skills under
+  `.claude/skills/`; `docs_check` (paths, en↔vi parity, RULE-ID citations, translation stamps).
+- Tests across the platform, module and app packages and for the gate tools in `tools/test/`; the Plus
+  Jakarta Sans font bundled so bold text uses the bold face.
 
 ### Changed
 
-- **Breaking, for forks of the template** (apps layer, step 2): `runShellApp` requires `profile:`
-  and no longer takes `onError:` (pass `hooks: ShellHooks(onError: ...)`); `app.kind` is refused
-  (delete the line) and `app.name`, `flavors`, `platforms` and `capabilities` are required in every
-  manifest — `composer verify` prints the YAML to paste. Behaviour: an app started on a platform or
-  flavor its manifest does not declare stops at the boot-error screen before dependency injection;
-  a non-debug build with an empty required `--dart-define` (`BASE_URL` in prod, `APP_NAME` in
-  staging and prod) does too; SSL pinning stays off but is now a stated per-flavor decision
-  (`NetworkConfigImpl` reads it from the manifest, desktop and web log INFO instead of an ERROR);
-  in a production release a mismatch between an app's `capabilities` and what it registers is
-  logged and reported, never thrown.
-- **Breaking, for forks of the template** (apps layer, step 3): `AppShellUiConstants` (its only
-  member, `MAX_TEXT_SCALE_FACTOR`) is gone — the cap is `DisplayProfile.textScaleMax`;
-  `AppInitializer.preferredOrientationsFor` takes an optional `policy` and phone threshold;
-  `PushNotificationService` and `DeeplinkProvider` take the platform's `PlatformFacts`, `AppRouter`
-  a `RouterProfile` (all optional, defaulting to today's behaviour); `core_notifications` now
-  depends on `platform_kernel`. `registerAppProfile` also registers `AppPlatform` and
-  `RouterProfile`; `runShellApp` registers the `AppRuntime` beside the `ShellHooks`.
-- **Breaking, for forks of the template** (apps layer, step 4): `BaseUiConstants.FALLBACK_LANGUAGE_CODE`,
-  `NetworkConstants.DEFAULT_LANGUAGE_CODE` and the three `NetworkConstants` timeouts are gone — the
-  fallback language is `LocaleProfile.fallback`, the timeouts are `NetworkProfile`'s;
-  `ThemeSystemExtension.withMode` is replaced by `ThemeProvider.paletteFor`; `AppLanguages`
-  statics answer for the template's languages only, an app asks its `LanguageSet`. `ApiClient`,
-  `LanguageProvider`, `ThemeProvider`, `NetworkConfigImpl`, `LanguageStorageImpl` and
-  `ThemeStorageImpl` take their section as an optional last parameter (defaults as before);
-  `registerAppProfile` also registers `LocaleProfile`, `ThemeProfile` and `NetworkProfile`.
-- Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is now the
-  single rule registry — 65 rules with stable ids `RULE-01`…`RULE-79`, each with its reason, what
-  enforces it (`arch_check` R1–R15, analyzer, a test, a CI gate, `composer verify`, `docs_check` or
-  review) and a command to verify it. New rules for testing, logging, error reporting and
-  accessibility. Every other document cites ids instead of restating rules, and `docs_check`
-  fails on an undefined id. Drift fixed on the way: DI ordering is proven by each app's
-  `test/di_smoke_test.dart` (CI Gate 3), not by reading `injection.config.dart`; navigators and
-  action handlers live in the owning module's `<id>_api`, not `core_di`; the BLoC branch has
-  `emitResult`.
-- `CLAUDE.md` is a ~200-line agent brief (was 938 lines) — top rules by id first, layout,
-  essential commands, where to look; `.agents/AGENTS.md` is a short pointer for other AI tools.
-- Agent skills moved from .agents/skills/ to `.claude/skills/`, where Claude Code discovers
-  them; every description starts with "Use when…", each skill links its guide and cites rule ids;
-  `run_ai_code_review`, `run_barrel_generator`, `run_dependency_sync` and `run_unused_checker`
-  merged into `run_repo_tooling`.
-- The documentation contract moved to `CONTRIBUTING.md` § 5; the restructure runbook moved from
-  .agents/RESTRUCTURE.md to `docs/history/restructure-log.md`.
-- `tools/code_review/review_prompt.md` checks against the registry (ids + one-liners), now
-  including BLoC, database, optional lookups, ARB casing, double-wrapping, accessibility and testing.
-
-- Repository layout: `packages/core/*` → `platform/*`, product packages → vertical slices
-  `modules/<name>/{domain,data,feature}`, `app/` → `apps/mobile/` (package `mobile_app`).
-- `platform/` regrouped into six role folders — `foundation/` (`kernel`, `contracts` = `core_di`,
-  `common`), `layers/` (`domain` = `domain_core`, `data` = `data_core`), `infra/` (`network`,
-  `storage`, `database`, `notifications`), `ui/` (`responsive`, `design_system` = `core_base_ui`,
-  `ui_kit`), `state/` (`provider`, `bloc` = the two `*_state_management` packages) and `shell/`
-  (`app_shell`). Package names are unchanged, so imports and manifests are untouched; a fork
-  updates its own relative `path:` dependencies and any hard-coded `platform/<pkg>` path.
-  `module_generator` types 4/5 take `--group` (default `infra`). The allowed direction between
-  groups is documented in `docs/en/architecture/02_core.md` § 0 and enforced by `arch_check` R11.
-- The platform package graph now follows that group direction with no exception (stage 2):
-  `LoadMoreListView` / `LoadingMoreWidget` moved from `core_ui_kit` to
-  `provider_state_management` (`core_ui_kit` no longer depends on a state package);
-  `BottomTransitionPage` moved from `core_common` to `core_ui_kit` (`navigation/`), and
-  `AppInitializer`'s portrait threshold became a private constant, so `core_common` no longer
-  depends on `core_responsive`; `core_storage` depends on `platform_kernel` instead of
-  `core_common`; `data_auth` drops its unused `flutter` dependency. Imports through the package
-  barrels resolve unchanged except for code that imported these two widgets' old file paths.
-- `ErrorHandler` (`platform_kernel`) no longer imports Dio. The `DioException` → `AppFailure`
-  mapping moved, unchanged, to `core_network`'s `DioFailureClassifier`, which registers itself
-  through the new `ErrorClassifier` / `ErrorHandler.registerClassifier` seam while the `core` DI
-  group initialises. A unit test that classifies `DioException`s without running DI must call
-  `DioFailureClassifier.ensureRegistered()` first.
-- `platform_app_shell` split (stage 3): its infrastructure adapters — `NetworkConfigImpl`,
-  `NetworkBindingModule`, `LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage` and their
-  storage-key classes — moved to the new `platform_shell_adapters` (`platform/shell/adapters`),
-  listed first in every app's `shell` DI group. `platform_app_shell` keeps boot, router,
-  wrappers and app state, and depends on the adapters. Storage keys are unchanged, so stored
-  values survive the update. A fork adds `platform_shell_adapters` to the `shell` group of each
-  `app_manifest.yaml` and runs `composer sync`.
-- Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere.
-- `core_database` and `core_storage` are mechanism only: each package owns its own Drift database
-  and its own storage keys. The Drift cache example moved to the `cache` sample module.
-- `core_di` contracts carry their own value types (`SessionPrincipal`) instead of domain entities;
-  domain packages depend only on `domain_core`, and `AppFailure` lives there.
-- **Breaking — the shell no longer knows the auth/home flow (stage 4).** The shell-facing
-  contracts in `core_di` are product-neutral and renamed, semantics unchanged: `AuthPrincipal` →
-  `SessionPrincipal`, `IAuthStatusStream` → `ISessionStatusStream` (`authStatusStream` →
-  `sessionStatusStream`), `IAuthSessionState` → `ISessionState`, `AuthSessionFailure` →
-  `SessionFailure` (variants `Session{InvalidCredentials,UserNotFound,Server,Unknown}Failure`),
-  `IAuthRefreshListenable` → `ISessionRefreshListenable`, `IAuthSessionGateway` →
-  `ISessionGateway`; they moved from `lib/src/agnostic_streams/` to `lib/src/session/`.
-  `NavigatorWrapperWidget` routes through `ISignInLocation` / `IPostSignInLocation` instead of
-  `AuthNavigator` / `HomeNavigator`. `AuthNavigator`, `IAuthActionHandler` and `HomeNavigator`
-  left `core_di` for `auth_api` / `home_api`: a fork renames the session types, adds `<id>_api`
-  to each consumer's `dependencies:` and imports it, and adds `api` to the module's `layers:` in
-  every `app_manifest.yaml`.
-- Every module is removable: the shell reaches features only through `core_di` contracts with
-  `getItOrNull` / `getAllOrEmpty` fallbacks.
-- Each app owns its Firebase configuration; tools take `--app` instead of assuming one app.
-- Sample code trimmed to what teaches the patterns (single-screen auth; the language
-  domain/data packages removed); unused utilities, colour slots and assets dropped.
-- The workspace `pubspec.lock` is committed and enforced in CI; versions come from the
-  `pubspec_dependencies.yaml` catalog.
-- Fastlane runs through Bundler, from the repository root or `apps/mobile`.
-- `data_core` no longer depends on Flutter.
+- **Layout.** `packages/core/*` → `platform/*`, product packages → vertical slices
+  `modules/<name>/{api,domain,data,feature}`, `app/` → `apps/mobile/` (package `mobile_app`).
+  `platform/` is regrouped into six role folders — `foundation/` (`kernel`, `contracts` = `core_di`,
+  `common`), `layers/` (`domain` = `domain_core`, `data` = `data_core`), `infra/` (`network`, `storage`,
+  `database`, `notifications`), `ui/` (`responsive`, `design_system` = `core_base_ui`, `ui_kit`), `state/`
+  (`provider`, `bloc` = the two `*_state_management` packages) and `shell/` (`adapters`, `app_shell`).
+  Package names are unchanged; a fork updates its own relative `path:` dependencies and any hard-coded
+  `platform/<pkg>` path. `module_generator` types 4/5 take `--group` (default `infra`); the direction
+  between groups is `docs/en/architecture/02_core.md` § 0 and `arch_check` R11. Core packages follow that
+  direction with no exception: `LoadMoreListView` moved to `provider_state_management`,
+  `BottomTransitionPage` to `core_ui_kit`, `core_storage` depends on `platform_kernel`, `core_common` no
+  longer on `core_responsive`.
+- **One barrel per package**: `lib/<package_name>.dart`, regenerated by
+  `dart tools/barrel_generator/generate.dart <package>/lib`, which exports every library file under
+  `lib/` and deletes directory barrels and hand-added exports. Inside a package files import concrete
+  files, never a barrel. There is no `lib/src/src.dart` and no `lib/src/gen/gen.dart`; setup is
+  `pub get`, `gen-l10n`, `build_runner` and the barrel pass (`configure.dart`).
+- **Breaking, for forks of the template — the shell no longer knows the auth/home flow.** The shell-facing
+  contracts in `core_di` are product-neutral and renamed: `AuthPrincipal` → `SessionPrincipal`,
+  `IAuthStatusStream` → `ISessionStatusStream`, `IAuthSessionState` → `ISessionState`,
+  `AuthSessionFailure` → `SessionFailure`, `IAuthRefreshListenable` → `ISessionRefreshListenable`,
+  `IAuthSessionGateway` → `ISessionGateway`. `NavigatorWrapperWidget` routes through `ISignInLocation` /
+  `IPostSignInLocation`. `AuthNavigator`, `IAuthActionHandler` and `HomeNavigator` left `core_di` for
+  `auth_api` / `home_api`: a fork renames the session types, adds `<id>_api` to each consumer's
+  `dependencies:` and adds `api` to the module's `layers:` in every `app_manifest.yaml`.
+- **Breaking, for forks — the app declares itself.** `runShellApp` requires `profile:` and no longer takes
+  `onError:` (pass `hooks: ShellHooks(onError: ...)`); `app.kind` is refused and `app.name`, `flavors`,
+  `platforms` and `capabilities` are required in every manifest (`composer verify` prints the YAML to
+  paste). `AppShellUiConstants` is gone (the cap is `DisplayProfile.textScaleMax`);
+  `BaseUiConstants.FALLBACK_LANGUAGE_CODE` and the `NetworkConstants` timeouts moved to `LocaleProfile`
+  and `NetworkProfile`; `ThemeSystemExtension.withMode` is replaced by `ThemeProvider.paletteFor`.
+  `AppInitializer.initBeforeRunApp` and `init` require `platform` and `flavor`. `APP_NAME` is not
+  `required_in`: the title falls back to `app.name`. A non-debug build with an empty required
+  `--dart-define` stops at the boot-error screen.
+- **Breaking, for forks — certificate pinning.** The decision is the app's, per flavor
+  (`flavors.<f>.ssl_pinning`), installed by `AppInitializer` from the profile before dependency injection
+  starts; the `SslPinningConfig` supertype, its `@module` binding and `NetworkConfig.sslPinningHashes`
+  are gone, so a missing registration can no longer switch pinning off. The template ships a stated
+  placeholder decision for staging and prod, listed under *decisions to revisit* in each app's report.
+- `ErrorHandler` (`platform_kernel`) no longer imports Dio: the `DioException` → `AppFailure` mapping is
+  `core_network`'s `DioFailureClassifier`, registered through `ErrorClassifier` /
+  `ErrorHandler.registerClassifier` while the `core` DI group initialises. `AppFailure.message` is an
+  English diagnostic, never shown to users — the UI words a failure by its code.
+- `core_database` and `core_storage` are mechanism only: each package owns its own Drift database and its
+  own storage keys. `core_storage` writes are serialized and logged (`StorageValue.save` returns
+  `Future<void>`, `delete()` became `remove()`), with one encryption base, `EncryptedStorage`.
+- `core_di` contracts carry their own value types (`SessionPrincipal`) instead of domain entities; domain
+  packages depend only on `domain_core` and their own module's domain, and `AppFailure` lives in
+  `domain_core`. `data_core` no longer depends on Flutter.
+- Design system: one palette-built `ColorScheme` (every slot), one language source (`AppLanguages`),
+  shadow and scrim tokens; the dialog and overlay systems merged into `AppOverlay` in `core_ui_kit`;
+  `CustomButton` is rectangle-only and non-generic; default design size 375×812.
+- App shell internals: `lib/src/` layout, `AppRouter.destinations` computed once,
+  `IDashboardRouteModule.builder` takes the destinations, `AppBootStorage.viewedOnboard`. Notifications:
+  the permission prompt is opt-in (`PushNotificationService.requestPermission()`) and the background
+  handler initialises Firebase without DI.
+- Samples follow the rules they teach: a simpler auth sample (an offline start keeps the stored session;
+  `RestoreSessionUseCase`; `session/` folder), `lib/di/` holds the DI module only, settings reads
+  `LanguageProvider` / `ThemeProvider` from the tree, the module generator's templates match.
+- Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere. The workspace
+  `pubspec.lock` is committed and enforced in CI; versions come from the `pubspec_dependencies.yaml`
+  catalog. Fastlane runs through Bundler, from the repository root or `apps/mobile`.
 - The analyzer runs strict: `strict-casts`, `strict-inference` and `strict-raw-types`, plus
-  `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls` and
-  `empty_catches` (`analysis_options.yaml`, whose header now explains each). Code built on the
-  template may need explicit type arguments and casts to pass Gate 2. The phantom type parameter
-  of `InitialWidgetBuilder` / `LoadingWidgetBuilder` / `EmptyWidgetBuilder` is gone, and
-  `CustomButton`'s `T` is bounded by `Object?` so plain buttons need no type argument.
-- `flutter_secure_storage` 10.3.1 → 11.2.0 (`flutter_secure_storage_darwin` 0.4.x: iOS 13+,
-  Android minSdk 24). Values written by 10.x are read unchanged — same pinned RSA-OAEP + AES-GCM
-  pair; see `docs/en/guides/06_storage.md` § 3 for apps that once shipped 9.x.
-- Apps layer follow-up: `AppInitializer.initBeforeRunApp` and `init` require `platform` and
-  `flavor` (no private `kIsWeb` fork, R17 allow-list entry removed); `APP_NAME` is no longer
-  `required_in` — the title falls back to `app.name`, so a production release is not stopped at the
-  boot-error screen over a cosmetic key (`BASE_URL` stays required in prod); `checkAppContract`
-  gains `C11` (`router.fallbackPath` is not a registered route) and `C12` (two or more tabs and no
-  dashboard); the shell catalog cites the file of each lookup instead of a line number.
+  `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls` and `empty_catches`
+  (`analysis_options.yaml`, whose header explains each). Code built on the template may need explicit type
+  arguments and casts to pass Gate 2.
+- `flutter_secure_storage` 10.3.1 → 11.2.0 (iOS 13+, Android minSdk 24). Values written by 10.x are read
+  unchanged; an app that once shipped 9.x must ship a 10.x release first — see
+  `docs/en/architecture/02_core.md` § 7.
+- Tooling: one workspace discovery walk (`tools/shared/workspace.dart`); `unused_checker` has no blanket
+  allowlist and does not treat a barrel export as a use; the 16 KB check is `16kb_check.{sh,bat}`; the
+  unused root `build.yaml` is gone; `.vscode/launch.json` runs from `apps/mobile`.
+- Documentation restructure: `docs/en/reference/01_rules.md` (and its `docs/vi` twin) is the single rule
+  registry — every rule once, with its reason, what enforces it and a command to verify it; every other
+  document cites ids, and `docs_check` fails on an undefined id. `CLAUDE.md` is a short agent brief and
+  `.agents/AGENTS.md` a pointer; skills moved to `.claude/skills/` and merged into eleven; the
+  documentation contract is `CONTRIBUTING.md` § 5.
+
+### Removed
+
+- Dead and duplicated code across the platform packages: `BaseViewWidget2`…`6`, `PaginatedViewWidget`,
+  `BaseProxyWidget`, `ErrorStateRegistry`, `AppProvider`, `AppRouter.currentContext` / `push` /
+  `replace` / `back`, `ThemeSystemInterface`, the `ContextExtension` getters `core_responsive` already
+  answers, `AppDialogController`, `ErrorDialog`, `WarningDialog`, `KeepAliveWidget`, `BaseResult`,
+  `ExtraRequest`, `LoadMoreControllerBinding`, `MessageQueue`, `device_info_plus` and other unused
+  dependencies (`get_it` from 14 packages, `json_annotation`, `cupertino_icons`), the per-package
+  `.gitignore` files, and the language domain/data sample packages.
 
 ### Fixed
 
-- Networking: token-refresh deadlocks and recursion (a `401` from login or refresh no longer
-  starts a refresh; a late `401` for an old token replays), and retry/refresh failures reported
-  accurately to the UI.
-- Boot: TLS overrides installed before the first widget; returning users skip onboarding; the
-  route observer is attached; boot crashes in apps without onboarding or home.
+- Networking: token-refresh deadlocks and recursion (a `401` from login or refresh no longer starts a
+  refresh; a late `401` for an old token replays), retry decisions that could lose an error, and
+  retry/refresh failures reported accurately to the UI.
+- Boot: TLS overrides installed before the first widget; returning users skip onboarding; the route
+  observer is attached; boot crashes in apps without onboarding or home; no artificial two-second splash.
 - Storage: no key wipe on first launch or on a transient secure-store error.
-- Localization: the Material wrapper wires `material_ui`'s own localization delegates, so an app
-  in Vietnamese (or any non-English locale) no longer lacks `MaterialLocalizations`.
-- Database: the cache database opens after its own migrations register; read-pool connections
-  get a busy timeout.
+- Localization: the Material wrapper wires `material_ui`'s own localization delegates, so an app in
+  Vietnamese (or any non-English locale) no longer lacks `MaterialLocalizations`.
+- Database: the cache database opens after its own migrations register; read-pool connections get a busy
+  timeout.
 - UI: dark-mode colours in `ui_kit`, theme text scaling, split-view overflow, responsive edge cases.
 - Tooling: dozens of silent failures, hangs and hazards across the module generator, composer,
   `dependency_sync`, `docs_check`, the unused checker and Fastlane lanes; tool output in English.
@@ -255,17 +196,12 @@ with the architecture rules enforced by CI instead of review alone.
 
 ### Security
 
-- Certificate validation is bypassed only in a debug build that explicitly declared
-  `--flavor dev`; a missing or unknown flavor is treated as prod.
-- Certificate pinning is the app's declared decision per flavor (`flavors.<f>.ssl_pinning`),
-  installed by `AppInitializer` from the profile before dependency injection starts; there is one
-  pin source, so the `SslPinningConfig` supertype, its `@module` binding and
-  `NetworkConfig.sslPinningHashes` are gone and a missing registration can no longer switch
-  pinning off.
+- Certificate validation is bypassed only in a debug build that explicitly declared `--flavor dev`; a
+  missing or unknown flavor is treated as prod.
 - `LoggingInterceptor` redacts credentials in bodies as well as headers and logs only in debug.
-- The AI code-review tool sends the Gemini key in a header, redacts it from errors, and stores
-  it in a gitignored file instead of tracked config.
-- Release keystores, `key*.properties` (except the public dev key) and `env.prod` are ignored by
-  broad patterns; see [SECURITY.md](SECURITY.md).
+- The AI code-review tool sends the Gemini key in a header, redacts it from errors, and stores it in a
+  gitignored file instead of tracked config.
+- Release keystores, `key*.properties` (except the public dev key) and `env.prod` are ignored by broad
+  patterns; see [SECURITY.md](SECURITY.md).
 
 [Unreleased]: https://github.com/CaoGiaHieu-dev/flutter-monorepo-codebase/commits/main

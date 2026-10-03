@@ -1,58 +1,113 @@
 ---
 name: implement_domain_data_flow
-description: Use when wiring a new business flow end to end — "integrate a new API endpoint", "load X from the server and show it", "add a use case / repository / model". Walks Model (Freezed + json) → data source → RepositoryImpl with execute() → repository interface → UseCase returning Result<T> → Provider or BLoC consumer.
+description: Use when wiring a new business flow end to end — "integrate a new API endpoint", "load X from the server and show it", "add a use case / repository / model". Builds it domain first (entity, repository interface, use case) then data (model, Retrofit data source, RepositoryImpl with execute()), replaces the generated ping() stubs, declares the dependencies, and hands the use case to a Provider or BLoC consumer with its tests.
 ---
 
-# 🔄 Skill: Implement Domain & Data Flow (Implement Domain & Data Flow)
+# Skill: Implement a domain and data flow
 
-Use this skill when requested to: "create a new business flow/API call to display data on the UI", "integrate a new API endpoint", etc.
+Use this skill to put a new business operation behind a use case: "load products from the server and
+show them", "integrate a new endpoint", "add a use case / repository / model".
 
----
+**Guide:** [`docs/en/guides/02_new_domain_data.md`](../../../docs/en/guides/02_new_domain_data.md) (the
+long form), [`08_networking.md`](../../../docs/en/guides/08_networking.md) (Retrofit, interceptors).
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-03, RULE-06, RULE-09, RULE-40,
+RULE-41, RULE-42, RULE-43, RULE-49, RULE-61, RULE-74, RULE-77. Cite them; do not restate them.
 
-## 🧭 Rules this flow touches
+The examples use a `product` module; substitute yours.
 
-**Guide:** [`docs/en/guides/02_new_domain_data.md`](../../../docs/en/guides/02_new_domain_data.md).
-**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-03 (pure domain), RULE-06,
-RULE-09 (endpoints in `utils/*_api_constants.dart`), RULE-40, RULE-41 (data sources return Models),
-RULE-42 (`execute()`, no throw to UI), RULE-43 (`ErrorHandler`), RULE-49 (entities, use cases),
-RULE-77 (import a type used by generated code from its real home — `AppFailure` from
-`package:domain_core/domain_core.dart`, not `core_common`'s shim).
+## Order of work
 
----
+Each step only depends on the ones above it: **domain first** (entity, repository interface, use case),
+**then data** (model, data source, RepositoryImpl), then the consumer.
 
-## 📋 Data Flow Overview
+### Step 0: Generate the packages, domain first
 
-```mermaid
-sequenceDiagram
-    participant UI as Presentation (UI Page / ViewWidget)
-    participant VM as Presentation (ViewModel / Bloc)
-    participant UC as Domain (UseCase)
-    participant RepoImpl as Data (RepositoryImpl)
-    participant Remote as Data (RemoteDataSource - Retrofit)
-    participant Server as Backend / Server API
-
-    UI->>VM: Call business method (e.g., loadProducts())
-    VM->>VM: executeOperation() transitions state to Loading
-    VM->>UC: Execute UseCase
-    UC->>RepoImpl: Call Repository Interface
-    RepoImpl->>Remote: Call Remote DataSource
-    Remote->>Server: HTTP request (REST API)
-    Server-->>Remote: Returns JSON (Response DTO)
-    Remote-->>RepoImpl: Returns Model/DTO
-    RepoImpl->>RepoImpl: Map Model to clean Entity
-    RepoImpl-->>UC: Returns Result<Entity>
-    UC-->>VM: Returns Result<Entity>
-    VM-->>UI: Update view state (Success with Entity, or Failure)
+```bash
+dart tools/module_generator/generate.dart 2 product   # domain_product
+dart tools/module_generator/generate.dart 3 product   # data_product (implements the domain's interface)
 ```
 
----
+Without `--apps` both join every `apps/<id>/app_manifest.yaml`. Each run also composes the package,
+resolves dependencies, runs `build_runner` and writes the package barrel. The generator leaves **one
+stub each** — `I<Product>Repository` with a placeholder `ping()` and `ProductRepositoryImpl extends
+BaseRepository` — so **replace `ping()`**, never create a second interface or implementation.
+Details: [`create_feature_module`](../create_feature_module/SKILL.md).
 
-## 📋 Detailed Steps
+### Step 1: Entity (domain)
 
-### Step 1: Define the API Response DTO in the `Data` Layer
-Create the DTO class to deserialize JSON from the server under `modules/<module>/data/lib/src/models/`:
+`modules/<module>/domain/lib/src/entities/product_entity.dart`. Freezed, with `const Class._()`
+(RULE-49). The first entity brings `freezed_annotation:` under `dependencies:` and `freezed:` under
+`dev_dependencies:` (versions stay empty — see Step 8).
+
+```dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'product_entity.freezed.dart';
+
+@freezed
+abstract class ProductEntity with _$ProductEntity {
+  const ProductEntity._();
+
+  const factory ProductEntity({
+    required int id,
+    required String name,
+    required double price,
+  }) = _ProductEntity;
+}
+```
+
+The domain stays pure Dart (RULE-03): no Flutter, Dio, Retrofit, `core_*`. A use case with no input
+takes `NoParams` from `domain_core`; with input, add a Freezed params class under `src/params/`.
+
+### Step 2: Repository interface (domain)
+
+Edit the generated `modules/<module>/domain/lib/src/repositories/i_product_repository.dart` — drop
+`ping()`, declare the real operations. Every method returns `Result<T>`:
+
+```dart
+import 'package:domain_core/domain_core.dart';
+
+import '../entities/product_entity.dart';
+
+abstract class IProductRepository {
+  Future<Result<List<ProductEntity>>> getProducts();
+}
+```
+
+### Step 3: Use case (domain)
+
+`modules/<module>/domain/lib/src/usecases/get_products_usecase.dart`. `@injectable`, one operation,
+returns `Result<T>` (RULE-49):
+
+```dart
+import 'package:domain_core/domain_core.dart';
+import 'package:injectable/injectable.dart';
+
+import '../entities/product_entity.dart';
+import '../repositories/i_product_repository.dart';
+
+@injectable
+class GetProductsUseCase extends BaseUseCase<List<ProductEntity>, NoParams> {
+  GetProductsUseCase(this._repository);
+
+  final IProductRepository _repository;
+
+  @override
+  Future<Result<List<ProductEntity>>> call(NoParams params) =>
+      _repository.getProducts();
+}
+```
+
+### Step 4: Model (data)
+
+`modules/<module>/data/lib/src/models/product_model.dart`. Freezed + `json_serializable`,
+`implements BaseModel<Entity>` with `toEntity()` (RULE-41). Declare `domain_product` (the generator
+already did when the domain existed first), `freezed_annotation:` and `json_annotation:` under
+`dependencies:`, `freezed:` and `json_serializable:` under `dev_dependencies:`.
+
 ```dart
 import 'package:data_core/data_core.dart';
+import 'package:domain_product/domain_product.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'product_model.freezed.dart';
@@ -72,20 +127,46 @@ abstract class ProductModel with _$ProductModel implements BaseModel<ProductEnti
       _$ProductModelFromJson(json);
 
   @override
-  ProductEntity toEntity() {
-    return ProductEntity(id: id, name: name, price: price);
-  }
+  ProductEntity toEntity() => ProductEntity(id: id, name: name, price: price);
 }
 ```
 
-> [!NOTE]
-> For a **database-backed** source the model wraps the Drift row instead of JSON — see
-> `modules/cache/data/lib/src/models/cache_entry_model.dart`, which exposes
-> `CacheEntryModel.fromRow(CacheEntry)` so Drift's generated class never leaves the package.
+A database-backed source wraps the Drift row instead of JSON and converts it at the boundary:
+`CacheEntryModel.fromRow` in `modules/cache/data/lib/src/models/cache_entry_model.dart` —
+[`implement_package_database`](../implement_package_database/SKILL.md).
 
-### Step 2: Configure Retrofit API Service
-Define the API endpoint inside the Remote DataSource under `modules/<module>/data/lib/src/data_sources/remote/`, taking the path from the package's own constants file. A list read is a `GET`; the response stays wrapped in the `BaseEntity` envelope (modelled on `modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart`):
+### Step 5: Endpoint constants (data)
+
+Endpoints live in the owning package's `utils/` (RULE-09), `modules/<module>/data/lib/src/utils/product_api_constants.dart`
+(shape of `modules/auth/data/lib/src/utils/auth_api_constants.dart`):
+
 ```dart
+class ProductApiConstants {
+  ProductApiConstants._();
+
+  static const String PRODUCTS = '/products';
+}
+```
+
+### Step 6: Retrofit data source and its registration (data)
+
+Add `dio:` and `retrofit:` under `dependencies:` and `retrofit_generator:` under `dev_dependencies:`,
+each with an empty value (Step 8 fills the versions). A data source returns Models, wrapped in the
+`BaseEntity<T>` envelope, and exposes no other generated type (RULE-41). Directory is
+`data_sources/remote/` (RULE-40). Import a type the generated code names — `BaseEntity` — from its real
+home, `package:domain_core/domain_core.dart` (RULE-77). Modelled on
+`modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart`:
+
+```dart
+import 'package:dio/dio.dart';
+import 'package:domain_core/domain_core.dart';
+import 'package:retrofit/retrofit.dart';
+
+import '../../models/product_model.dart';
+import '../../utils/product_api_constants.dart';
+
+part 'product_remote_data_source.g.dart';
+
 @RestApi()
 abstract class ProductRemoteDataSource {
   factory ProductRemoteDataSource(Dio dio, {String? baseUrl}) =
@@ -95,45 +176,39 @@ abstract class ProductRemoteDataSource {
   Future<BaseEntity<List<ProductModel>>> getProducts();
 }
 ```
-Register it like `data_auth` does, in the package's `lib/di/register_module.dart`:
-`@lazySingleton ProductRemoteDataSource productRemoteDataSource(Dio dio) => ProductRemoteDataSource(dio);`
 
-### Step 3: Define the Clean Entity in the `Domain` Layer
-Create the pure business object representation under `modules/<module>/domain/lib/src/entities/`:
+A Retrofit class is a factory constructor, not an `@injectable` class, so register it through a
+`@module` in the **existing** `modules/<module>/data/lib/di/module.dart`, beside the generated
+`@InjectableInit.microPackage()` marker (as `modules/auth/data/lib/di/module.dart` does):
+
 ```dart
-import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 
-part 'product_entity.freezed.dart';
+import '../src/data_sources/remote/product_remote_data_source.dart';
 
-@freezed
-abstract class ProductEntity with _$ProductEntity {
-  const ProductEntity._();
+@InjectableInit.microPackage()
+void initMicroPackage() {}
 
-  const factory ProductEntity({
-    required int id,
-    required String name,
-    required double price,
-  }) = _ProductEntity;
+@module
+abstract class ProductDataDiModule {
+  @lazySingleton
+  ProductRemoteDataSource productRemoteDataSource(Dio dio) =>
+      ProductRemoteDataSource(dio);
 }
 ```
 
-### Step 4: Declare the Repository Interface in the `Domain` Layer
-Define the contract under `modules/<module>/domain/lib/src/repositories/i_<module>_repository.dart`:
-```dart
-import 'package:domain_core/domain_core.dart';
-import '../entities/product_entity.dart';
+The `Dio` is `core_network`'s client with the interceptor chain; the package needs no `core_network`
+dependency for that unless it imports its types (`NetworkConstants`, `ApiClient`).
 
-abstract class IProductRepository {
-  Future<Result<List<ProductEntity>>> getProducts();
-}
-```
+### Step 7: RepositoryImpl (data)
 
-### Step 5: Implement the Repository in the `Data` Layer (RepositoryImpl)
-Extend `BaseRepository` from `data_core` so exceptions become `AppFailure` automatically.
-`execute<R, T>`'s `R` is what the request returns — here the whole envelope — and `T` is the
-entity. `successCondition` turns a 200 with an error body into a `Failure` (without it any
-response that did not throw counts as success); `mapper` unwraps the envelope. Same shape as
-`_authenticate` in `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart`:
+Edit the generated `modules/<module>/data/lib/src/repositories_impl/product_repository_impl.dart`:
+inject the data source, drop `ping()`, wrap every call in `execute()` (async) or `executeSync()`
+(RULE-42). `R` is what the request returns — here the whole envelope — and `T` the entity.
+`successCondition` turns a 200 with an error body into a `Failure`; `mapper` unwraps the envelope.
+Same shape as `_authenticate` in `modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart`:
+
 ```dart
 import 'package:data_core/data_core.dart';
 import 'package:domain_core/domain_core.dart';
@@ -145,100 +220,73 @@ import '../models/product_model.dart';
 
 @LazySingleton(as: IProductRepository)
 class ProductRepositoryImpl extends BaseRepository implements IProductRepository {
-  ProductRepositoryImpl(this._remoteDataSource);
+  ProductRepositoryImpl(this._remote);
 
-  final ProductRemoteDataSource _remoteDataSource;
+  final ProductRemoteDataSource _remote;
 
   @override
-  Future<Result<List<ProductEntity>>> getProducts() async {
+  Future<Result<List<ProductEntity>>> getProducts() {
     return execute<BaseEntity<List<ProductModel>>, List<ProductEntity>>(
-      _remoteDataSource.getProducts,
+      _remote.getProducts,
       successCondition: (response) =>
           response.isSuccess && response.data != null,
-      mapper: (response) =>
-          response.data!.map((m) => m.toEntity()).toList(),
+      mapper: (response) => response.data!.map((m) => m.toEntity()).toList(),
     );
   }
 }
 ```
 
-Use `execute()` for async work and `executeSync()` for synchronous work; it converts errors
-through `ErrorHandler.handleError(e)` (RULE-42, RULE-43).
+Errors are classified by `ErrorHandler.handleError(e)` (RULE-43), never an invented
+`AppFailure.fromException()`. `ErrorHandler` has no Firebase branch: a flow on Firebase registers an
+`ErrorClassifier` first ([guide 02 § 9](../../../docs/en/guides/02_new_domain_data.md#9-implement-the-repository)).
 
-> [!WARNING]
-> **`ErrorHandler` has no Firebase branch.** `platform/foundation/kernel/lib/src/error/error_handler.dart`
-> recognises `AppException`, whatever a registered `ErrorClassifier` claims (`core_network`'s
-> `DioFailureClassifier` maps `DioException`), `SocketException`, `HttpException` and
-> `FormatException`; everything else — including `FirebaseException`,
-> `FirebaseAuthException` and `PlatformException` — falls through to:
-> ```dart
-> // Handle generic exceptions
-> // (_unknownMessage = 'Unknown error occurred'; ErrorCodes.UNKNOWN = 9999)
-> return ServerFailure(
->   message: _isDebug ? error.toString() : _unknownMessage,
->   code: ErrorCodes.UNKNOWN,
-> );
-> ```
-> So in a release build every Firebase error surfaces as *"Unknown error occurred"*, and any
-> UI branching on specific codes is unreachable. If your flow uses Firebase, register an
-> `ErrorClassifier` (`ErrorHandler.registerClassifier`, from your package's DI module)
-> or map the error inside your repository before it reaches `ErrorHandler`.
+### Step 8: Dependencies and codegen
 
-### Step 6: Define the UseCase in the `Domain` Layer
-Extend `BaseUseCase<RType, Params>` (`FutureOr<Result<RType>> call(Params params)`). Use
-`NoParams` when the use case takes no input:
-```dart
-import 'package:domain_core/domain_core.dart';
-import 'package:injectable/injectable.dart';
+Write every third-party entry with an empty value (`dio:`); versions live only in the catalog
+(RULE-74), so `dart tools/dependency_sync.dart` fills them in and runs `pub get`. Commit the
+`pubspec.lock` change that results. Add a dependency **as your code starts importing it**: `arch_check`
+R5 fails an import that is not declared, `check_unused_packages` a declaration nothing imports.
 
-import '../entities/product_entity.dart';
-import '../repositories/i_product_repository.dart';
-
-@injectable
-class GetProductsUseCase extends BaseUseCase<List<ProductEntity>, NoParams> {
-  GetProductsUseCase(this._repository);
-
-  final IProductRepository _repository;
-
-  @override
-  Future<Result<List<ProductEntity>>> call(NoParams params) {
-    return _repository.getProducts();
-  }
-}
-```
-
-### Step 7: Consume it in the Presentation layer
-- Provider branch → `executeOperation(OperationConfig(operation: () => _useCase(const NoParams())))`, see `implement_provider_ui`.
-- BLoC branch → with `BlocViewState<T>`, `BlocResultMixin<T>` and `=> emitResult(emit, () => _useCase(const NoParams()))`; with a custom state, unwrap `Result` by hand — see `implement_bloc_ui`.
-
-### Step 8: Run Code Generation & Regenerate Barrel Files
 ```bash
+dart tools/dependency_sync.dart
 dart run build_runner build --workspace
-dart tools/barrel_generator/generate.dart modules/<module>/domain/lib
-dart tools/barrel_generator/generate.dart modules/<module>/data/lib
 ```
-Barrels come **after** `build_runner`: the generator also exports generated files present on
-disk (`lib/di/module.module.dart`), so run first it would miss them.
 
-Then declare the new packages in the consuming `pubspec.yaml` files, under `dependencies:`
-(RULE-06). Verify with
-`dart tools/arch_check/check.dart` (rule R5: imported but not declared); the reverse —
-declared but never imported — is `dart tools/unused_checker/check_unused_packages.dart`.
+Barrels: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator) says when to regenerate them.
 
----
+### Step 9: Consume it
 
-## 📌 Reference implementation caveat
+The feature declares `domain_product` and `domain_core` under `dependencies:` **before** codegen, takes
+the use case through its controller's constructor, and never imports `data_product` (RULE-04, `arch_check`
+R3). `executeOperation` unwraps the `Result` for Provider
+(`OperationConfig(operation: () => _useCase(const NoParams()))`), `emitResult` for a BLoC — see
+[`implement_provider_ui`](../implement_provider_ui/SKILL.md) and [`implement_bloc_ui`](../implement_bloc_ui/SKILL.md).
+Then rerun `build_runner`: the controller's constructor, and so its DI registration, changed.
 
-`data_auth` is the shipped sample and follows the layering above end to end:
-`AuthRepositoryImpl` calls the Retrofit `AuthRemoteDataSource` inside `execute()`, maps the
-`UserModel` to a `UserEntity`, and persists the session through `AuthLocalDataSource`. The
-endpoints in `AuthApiConstants` are placeholders — point them at your backend, or swap the
-transport inside the repository and keep the shape.
+### Step 10: Tests
 
----
+- Controller: the generated `test/<name>_provider_test.dart` / `<name>_bloc_test.dart` and
+  `<name>_page_test.dart` build the controller with no argument and stop compiling. Rebuild it from the
+  use case over a **hand-written fake** of `IProductRepository` (RULE-61), as
+  `modules/auth/feature/test/auth_provider_test.dart` does.
+- Repository: a fake data source — one test maps models to entities, one where the data source throws and
+  the repository returns a `Failure`.
 
-## 🔗 Related
+## Related
 
-- `docs/{en,vi}/guides/02_new_domain_data.md` — long-form walkthrough
-- `docs/{en,vi}/architecture/03_domain.md` and `04_data.md`
-- `implement_package_storage` — key-value persistence; `implement_package_database` — Drift tables (`docs/{en,vi}/guides/07_database.md`)
+- [`docs/en/architecture/03_domain.md`](../../../docs/en/architecture/03_domain.md) and [`04_data.md`](../../../docs/en/architecture/04_data.md)
+- [`implement_package_storage`](../implement_package_storage/SKILL.md) — key-value persistence;
+  [`implement_package_database`](../implement_package_database/SKILL.md) — Drift tables
+- [`implement_dependency_injection`](../implement_dependency_injection/SKILL.md) — "not registered" at boot
+
+## Verify
+
+```bash
+flutter analyze                                          # 0 issues (RULE-70)
+dart tools/arch_check/check.dart                         # R2 pure domain, R3 no feature -> data, R5 declared deps
+dart tools/composer/composer.dart verify                 # the new packages are composed
+dart tools/unused_checker/check_unused_packages.dart     # no declared-but-unused dependency
+cd modules/<module>/feature && flutter test               # and every package you added a test to
+cd apps/mobile && flutter test test/di_smoke_test.dart   # use case, repository and data source resolve
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77
+```

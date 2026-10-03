@@ -3,212 +3,169 @@ name: implement_dependency_injection
 description: Use when registering or wiring anything in GetIt/injectable — "register a service/repository", "inject a provider or bloc", "fix <Type> is not registered", adding a package's DI module, binding a second interface, choosing @injectable vs @lazySingleton, or placing a package in an app manifest's di_groups.
 ---
 
-# 💉 Skill: Implement Dependency Injection (Implement Dependency Injection)
+# Skill: Implement dependency injection
 
-Use this skill when requested to: "register a new Service/Repository in DI", "inject a ViewModel/Provider", "fix a GetIt instance not found error", etc.
+Use this skill to register a class, wire a package into an app, bind a second interface, or find the
+cause of "`<Type>` is not registered".
 
-**Guide:** [`docs/en/guides/05_di.md`](../../../docs/en/guides/05_di.md).
+**Guide:** [`docs/en/guides/05_di.md`](../../../docs/en/guides/05_di.md); module order and why it
+matters: [`06_app_shell.md` § 3](../../../docs/en/architecture/06_app_shell.md#3-di-assembly--and-why-the-order-matters).
 **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-06, RULE-10, RULE-11, RULE-12,
-RULE-13, RULE-14, RULE-15, RULE-16, RULE-45, RULE-47, RULE-63, RULE-80, RULE-81.
+RULE-13, RULE-14, RULE-15, RULE-16, RULE-45, RULE-47, RULE-63, RULE-80, RULE-81. Cite them; do not
+restate them.
 
----
+## 1. Choose the annotation
 
-## 📋 Choosing the annotation
+| Class | Annotation |
+| :--- | :--- |
+| Screen controller (Provider, Bloc, Cubit) | `@injectable` factory (RULE-10 — it also lists the few app-wide `@lazySingleton` controllers) |
+| Use case | `@injectable` — a factory, never a singleton |
+| Repository, service, data source | `@lazySingleton`; for an interface `@LazySingleton(as: IMyRepository)` |
+| Stateless contribution resolved on demand (`IFeatureLocalization`, an action handler) | `@Injectable(as: I…)` |
+| Storage owner (a class holding `StorageValue` fields) | `@lazySingleton` / `@singleton` + `@PostConstruct(preResolve: true)` (RULE-45) — [`implement_package_storage`](../implement_package_storage/SKILL.md) |
+| Third-party or async object you do not own | a `@module` getter, `@preResolve` only where construction is async |
 
-1. **Screen controllers** (Provider, Bloc, Cubit) — `@injectable` (RULE-10).
-2. **Global app controllers** (`AuthProvider`, `ThemeProvider`, `LanguageProvider`, `DeeplinkProvider`) — `@lazySingleton`.
-3. **Repositories / Services**:
-   - Use `@lazySingleton` (lazily instantiated and cached) or `@singleton`.
-   - If registering an implementation class for an interface: `@LazySingleton(as: IMyRepository)`.
-   - **UseCases are `@injectable`** — a use case is a factory, never a singleton (every one in the template is).
-4. **Storage owners** (a class holding `StorageValue` fields) — singleton + `@PostConstruct(preResolve: true)` (RULE-45). See `implement_package_storage`.
+Prefer `@LazySingleton`: `@Singleton` is **eager**, built while the module registers, and may only depend
+on types an earlier DI group registered (RULE-13). Constructor injection only (RULE-11): no `getIt<T>()`
+inside a view model, bloc, repository or use case; the lookup sites are a route's `build` and the shell's
+composition code.
 
----
+## 2. Trap 1: an eager `@Singleton` that depends on a later module
 
-## ⚠️ Trap 1 — eager `@Singleton` that depends on a later module
+If its constructor needs a type a later module registers, boot throws `… is not registered inside GetIt`.
+Make it lazy — `@LazySingleton(as: NetworkConfig)` on `NetworkConfigImpl`
+(`platform/shell/adapters/lib/src/network_config_impl.dart`) is the shape to copy; it also resolves
+`ISessionGateway` at call time with `getItOrNull`, so it builds whether or not an auth module is composed.
 
-`@Singleton` is **eager**: GetIt constructs it while the owning module registers. If its
-constructor needs a type registered by a module that runs *later* in
-`configureDependencies()`, boot throws `... is not registered inside GetIt`.
+`flutter analyze` cannot see this (RULE-13). Each app's `test/di_smoke_test.dart` boots the real graph for
+every flavor, builds every lazy singleton, builds every `@injectable` factory one by one (`FactoryRecorder.buildEvery`
+in `platform_app_shell`; GetIt's own `findAll(callFactories: true)` builds them all-or-nothing with `null`
+arguments and names no registration), and holds the graph to the app's declaration with `checkAppContract`
+(RULE-63). A failure names the type:
 
-The historical case: `NetworkConfigImpl` once injected `AuthLocalDataSource` (from
-`data_auth`, a later module) and had to be lazy for it. It now resolves `ISessionGateway`
-at call time and has no such dependency, but it keeps the lazy annotation — the shape is the
-one to copy whenever a constructor needs something from a later group:
+- a factory with a non-nullable `@factoryParam` cannot be built without its screen — list its type, with the
+  reason, in `_factoriesNeedingArguments` in the test, or the test fails with `F01`; what a factory throws is `F02`;
+- a contract registered but declared `absent`, or declared `provided` and not registered, fails with
+  `C03` / `C02` (step 6);
+- a plugin the graph touches during DI (`@preResolve`, `@PostConstruct(preResolve: true)`) needs its test double there.
 
-```dart
-// platform/shell/adapters/lib/src/network_config_impl.dart
-@LazySingleton(as: NetworkConfig)   // NOT @Singleton
-class NetworkConfigImpl implements NetworkConfig { ... }
+To diagnose, read the generated files after `build_runner`: `apps/<id>/lib/di/injection.config.dart` holds the
+module order (one `…PackageModule().init(gh)` per package); a type's registration, and the `gh<Dep>()` calls
+its constructor makes, are in its package's `lib/di/module.module.dart`. Every `gh<Dep>()` of an eager
+singleton must be registered on an earlier line there, or by a module whose `init` runs earlier.
+
+```bash
+grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart   # module order
+grep -rn -A4 "YourType" modules/*/*/lib/di/module.module.dart platform/*/*/lib/di/module.module.dart
 ```
 
-Deferring is safe whenever every consumer is itself lazy — nothing resolves it during startup.
+## 3. Trap 2: GetIt does not resolve supertypes
 
-> [!CAUTION]
-> **`flutter analyze` cannot catch this** (RULE-13) — it is a runtime ordering fault. **Verify with
-> the DI smoke test**, which boots the real graph for every flavor (RULE-63; CI Gate 3):
-> ```bash
-> cd apps/mobile && flutter test test/di_smoke_test.dart
-> cd apps/admin && flutter test test/di_smoke_test.dart
-> ```
-> The smoke test also calls `checkAppContract`: it holds the graph to the app's `capabilities:`, so a
-> contract registered but declared `absent` (or declared `provided` and not registered) fails it too
-> (C02 / C03) — see step 3b below.
-> If you added a plugin that DI touches (`@preResolve`, `@PostConstruct(preResolve: true)`), add its
-> test double there. To **diagnose** a failure, read the generated files after `build_runner`:
-> `apps/mobile/lib/di/injection.config.dart` holds only the **module order** (one
-> `…PackageModule().init(gh)` per package); your type's registration, and the `gh<Dep>()` calls its
-> constructor makes, are in its package's `lib/di/module.module.dart`:
-> ```bash
-> grep -n "PackageModule().init" apps/mobile/lib/di/injection.config.dart   # module order
-> grep -rn -A4 "YourType" modules/*/*/lib/di/module.module.dart platform/*/*/lib/di/module.module.dart
-> ```
-> Check that every `gh<Dep>()` your eager singleton makes is registered on an *earlier* line of
-> the same file, or by a module whose `init` runs earlier.
-
-## ⚠️ Trap 2 — GetIt does not resolve supertypes
-
-GetIt looks up the **exact** type a binding was registered under; it never walks the
-supertype chain. Registering `@lazySingleton` on `AuthProvider` therefore leaves
-`getItOrNull<ISessionState>()` returning `null` even though `AuthProvider implements
-ISessionState` — and the shell then treats every user as signed out.
-
-Bind the second type explicitly with a `@module` (`modules/auth/feature/lib/di/module.dart`):
+GetIt looks up the **exact** registered type. Registering `AuthProvider` as a `@lazySingleton` leaves
+`getItOrNull<ISessionState>()` returning `null` although `AuthProvider implements ISessionState`, and the shell
+then treats every user as signed out (RULE-14). Bind each further interface with a `@module` — the live example is
+`modules/auth/feature/lib/di/module.dart`:
 
 ```dart
 @module
 abstract class AuthDiModule {
+  @singleton
+  ISessionStatusStream bindISessionStatusStream(AuthStatusStreamImpl impl) => impl;
+
   @lazySingleton
   ISessionState bindISessionState(AuthProvider provider) => provider;
-}
-```
 
-Typing the parameter as `AuthProvider` makes the upcast compiler-checked — no `as` needed.
-The same dual-registration pattern binds `ISessionStatusStream` and
-`ISessionRefreshListenable` in that file.
-
-### Third-party SDKs go through `@module` too
-
-Never call `SomeSdk.instance` inside a repository — it hides the dependency from the
-container and leaves no seam for a fake. Register it, then take it as a constructor
-parameter. `modules/auth/data/lib/di/module.dart`:
-
-```dart
-@module
-abstract class RegisterModule {
   @lazySingleton
-  AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
-      AuthRemoteDataSource(dio);
+  ISessionRefreshListenable bindISessionRefreshListenable(AuthProvider provider) =>
+      provider;
 }
 ```
 
-And where construction is genuinely async, `platform/infra/storage/lib/di/module.dart`:
+The parameter is typed with the concrete class, so the upcast is compiler-checked. Match the scope of what you
+bind: `AuthProvider` is lazy, so its bindings are lazy; `AuthStatusStreamImpl` is eager, so its binding is too.
+
+### Third-party objects go through `@module`
+
+Never call `SomeSdk.instance` or construct `Dio` inside a repository: it hides the dependency from the
+container and leaves no seam for a fake. `modules/auth/data/lib/di/module.dart` builds the module's Retrofit
+client from the shared `Dio`:
 
 ```dart
 @module
-abstract class CoreStorageDiModule {
-  @preResolve
-  Future<SharedPreferences> getSharedPreferences() async {
-    return SharedPreferences.getInstance();
-  }
+abstract class AuthDataDiModule {
+  @lazySingleton
+  AuthRemoteDataSource authRemoteDataSource(Dio dio) => AuthRemoteDataSource(dio);
 }
 ```
 
-Use `@preResolve` only where construction is genuinely async; the rest are plain
-`@lazySingleton` getters.
+Where construction is genuinely async, `platform/infra/storage/lib/di/module.dart` uses
+`@preResolve Future<SharedPreferences> getSharedPreferences() async => SharedPreferences.getInstance();`.
 
-## ⚠️ Trap 3 — `getAll` throws when nothing is registered
+## 4. Trap 3: `getAll` throws when nothing is registered
 
 `platform_kernel` (`platform/foundation/kernel/lib/src/service_locator.dart`, re-exported by `core_common`)
-exposes four lookups; picking the wrong one breaks feature removal:
+has four lookups:
 
 | Function | Missing registration |
 | :--- | :--- |
 | `getIt<T>()` | **throws** |
 | `getItOrNull<T>()` | returns `null` |
 | `getAll<T>()` | **throws** |
-| `getAllOrEmpty<T>()` | returns empty iterable |
+| `getAllOrEmpty<T>()` | returns an empty iterable |
 
-A module-owned contract is resolved with the `…OrNull` / `…OrEmpty` variants plus a fallback
-outside its own module (RULE-12, arch_check R8).
+A contract implemented only under `modules/` is resolved outside its module with the `…OrNull` / `…OrEmpty`
+variants plus a fallback, and never as a required constructor parameter of an injectable class (RULE-12,
+`arch_check` R8).
 
----
+## 5. Add a package to DI, and compose it into an app
 
-## 📋 Steps for setting up DI in a New Package
+1. `lib/di/module.dart` with `@InjectableInit.microPackage()` and no arguments (RULE-15); the module
+   generator writes it. `lib/di/` holds DI only; the classes you annotate live under `lib/src/`.
 
-### Step 1: Initialize Micro-package DI Module
-Inside the sub-package (`modules/<module>/<layer>`), create the file `lib/di/module.dart`:
-```dart
-import 'package:injectable/injectable.dart';
+   ```dart
+   import 'package:injectable/injectable.dart';
 
-@InjectableInit.microPackage()
-void initMicroPackage() {}
-```
+   @InjectableInit.microPackage()
+   void initMicroPackage() {}
+   ```
 
-### Step 2: Annotate Classes for Injection
-```dart
-@lazySingleton
-class MyService { ... }
+2. Annotate the classes (step 1) and declare every import under `dependencies:` (RULE-06).
+3. Compose it through the **manifest**, never `injection.dart` (generated in full, RULE-16). A module package
+   (`domain_*`, `data_*`, `feature_*`) is a line under `modules:` with the layers the app takes
+   (`- { id: payment, layers: [domain, data, feature] }`; the generator adds it); its group comes from
+   `from_modules:`. A **platform** package goes into the right `di_groups` entry by name:
 
-@injectable
-class MyProvider extends BaseProvider<MyEntity> {
-  final MyService _service;
-  MyProvider(this._service); // Injected via constructor
-}
-```
+   | Group | Phase | When to use |
+   |------|-------|-------------|
+   | `core` | `before` | Mechanism that depends on nothing the app or shell registers (`core_common`, `core_network`, `core_storage`, `core_database`, `core_di`) |
+   | *(the app's own `lib/`)* | between | Only what identifies the app — its per-flavor `FirebaseOptions` (`lib/firebase/firebase_module.dart`) |
+   | `notifications` | after, **first** | `core_notifications` — its eager `PushNotificationService` injects the app's `FirebaseOptions` (mobile only) |
+   | `shell` | after | `platform_shell_adapters` first (storage adapters, `AppBootStorage`, `NetworkConfig`), then `platform_app_shell` |
+   | `ui` | after | `core_base_ui` only — injects the shell's `ILanguageStorage` / `IThemeStorage` |
+   | `domain` | after | `domain_core`, then the modules' `domain` layers |
+   | `data` | after | `data_core`, then the modules' `data` layers |
+   | `feature` | after | the modules' `feature` layers |
+   | `other` | after | `provider_state_management`, `bloc_state_management` |
 
-Constructor injection only (RULE-11).
+   Every group carries a `why` and the template's groups keep their relative order (check V16). Then:
 
-### Step 3: Compose the package into the app — through its manifest
-*Note: `module_generator` adds a new module to every `app_manifest.yaml` for you.*
+   ```bash
+   dart tools/composer/composer.dart sync --app <id>
+   ```
 
-`apps/<id>/lib/di/injection.dart` is **generated** between `composer:managed` markers — never
-edit it. The order lives in `apps/<id>/app_manifest.yaml`:
+   Never put `core_base_ui` in `core` or `core_notifications` in `core`: both break RULE-13 and the smoke test
+   catches it. An API package (`<id>_api`) needs no group: it is a workspace member only.
 
-- A **module** package (`domain_*`, `data_*`, `feature_*`) is listed under `modules:` with
-  the layers the app takes, e.g. `- { id: payment, layers: [domain, data, feature] }`. Its
-  group comes from `from_modules:` in `di_groups`.
-- A **platform** package goes into the right `di_groups` entry by name:
+4. `dart run build_runner build --workspace`, then **hot restart** — hot reload does not apply new DI
+   registrations. Barrels: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator).
 
-| Group | Phase | When to use |
-|------|-------|-------------|
-| `core` | `before` | Core infra that depends on nothing the app or shell registers (`core_common`, `core_network`, `core_storage`, `core_database`, `core_di`) |
-| *(the app's own `lib/`)* | between | Only what identifies the app — its per-flavour `FirebaseOptions` (`lib/firebase/firebase_module.dart`) |
-| `notifications` | after, **first** | `core_notifications` — its eager `PushNotificationService` injects the app's `FirebaseOptions` |
-| `shell` | after | `platform_shell_adapters` first — the storage adapters, `AppBootStorage`, `NetworkConfig`; then `platform_app_shell` — the router and app providers |
-| `ui` | after | **`core_base_ui` only** — injects the shell's `ILanguageStorage` / `IThemeStorage` |
-| `domain` | after | `domain_core`, then modules' `domain` layers |
-| `data` | after | `data_core`, then modules' `data` layers |
-| `feature` | after | modules' `feature` layers |
-| `other` | after | State-management cores (`provider_state_management`, `bloc_state_management`) |
+### A type that reads the app's profile
 
-Then regenerate:
-
-```bash
-dart tools/composer/composer.dart sync --app <id>
-```
-
-`injection.dart` is generated **in full** — the imports, the module lists and the
-`configureDependencies()` entry point (with `enableRegisteringMultipleInstancesOfOneType()`) — so a
-third app cannot write it wrong and a hand edit is drift (`composer verify`).
-
-**Do not** put `core_base_ui` in `core` (its providers inject the shell's storage adapters) or
-`core_notifications` in `core` (it injects the app's `FirebaseOptions`) — both break RULE-13 and the
-smoke test catches it. Never hand-edit the generated regions (RULE-16).
-
-App-shell adapters (`LanguageStorageImpl`, `ThemeStorageImpl`, `AppBootStorage`,
-`NetworkConfigImpl`, `NetworkBindingModule`) live in `platform_shell_adapters` and register through
-its own micro-package module, first in the `shell` group (before `platform_app_shell`) — early in `after` (after `notifications` where an app has one), so they exist **before**
-`_uiModules` run.
-
-### Step 3a: A type that reads the app's profile
-
-`runShellApp` registers the app's `AppProfile` and each section — `PlatformFacts`,
-`SslPinningPolicy`, `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile` — **by exact
-type, before `getIt.init`** (RULE-14). A DI-built class takes the section it needs as an *optional*
-constructor parameter with a `const` default equal to the template's behaviour: injectable still
-injects it, and a class built by hand in a test falls back to the same default. Because the
-registration comes first, even an eager `@Singleton` can inject one without breaking RULE-13.
+`runShellApp` registers `AppProfile`, `AppPlatform` and each section — `PlatformFacts`, `SslPinningPolicy`,
+`RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile` — **by exact type, before** the graph
+(`registerAppProfile`, `platform/foundation/kernel/lib/src/profile/register_app_profile.dart`); the generated
+`configureDependencies` adds `registerProfileDefaults` for any section still missing. A DI-built class takes the
+section it needs as a constructor parameter, optional with a `const` default for a hand-built object:
 
 ```dart
 @lazySingleton
@@ -218,56 +175,42 @@ class MyAdapter {
 }
 ```
 
+Because the sections are registered first, even an eager `@Singleton` can inject one without breaking RULE-13.
 A new per-app value is a profile section or a manifest key, never a constant in a `platform/` package
-(RULE-80) — see the `configure_app` skill. Replacing a shell-owned type by registering your own is
-**unsupported**: GetIt keeps the *first* registration of a type, so it only works for types in the
-`after` groups and silently loses to the `before` groups.
+(RULE-80) — [`configure_app`](../configure_app/SKILL.md). Replacing a shell-owned type by registering your own is
+unsupported: GetIt keeps the **first** registration of a type, so an app registration beats a type from an `after`
+group and loses to one from `before`.
 
-### Step 3b: Declare what the app registers for the shell
+### Ordering when a module opens a database
 
-If the package registers a contract the shell catalogues (`SHELL_CONTRACTS`: a splash, tabs, routes,
-a session, an entry location, an `IErrorReporter`, `IAnalytics`, …), every app that composes it
-declares the contract `provided` under `capabilities:` in `app_manifest.yaml`, and `absent` with a
-reason where it does not (RULE-81). `composer verify` (V3) names the key and prints the line to paste;
-`dart tools/composer/composer.dart describe --app <id>` shows who implements each contract. A class
-under an app's own `lib/app/` (a crash reporter, say) counts. What a composed package needs the app to
-register — `FirebaseOptions` per flavor for `core_notifications` — is checked by V10.
+A package that opens a database with `@preResolve` runs its collected `IDatabaseMigration` steps during its own
+initialisation, so every step must be registered before the open. Inside the owning package `@Order(1)` on the
+open guarantees that; across packages the contributing package must sit in an earlier DI group.
+[`implement_package_database`](../implement_package_database/SKILL.md).
 
-### Step 3c: Ordering when a module opens a database
+## 6. Declare what the app registers for the shell
 
-A module that opens a database with `@preResolve` runs its collected `IDatabaseMigration`
-steps **during its own initialisation**, so every step must be registered before the open.
-Inside the owning package, `@Order(1)` on the `@preResolve` open guarantees that (the step keeps
-the default order 0) — copy it onto your own database's open. Across packages it cannot help:
-a contributing package must be registered before the owning one. `data_cache` opens `CacheDatabase` inside `_dataModules`, which means a
-migration contributed by a *feature* would not be seen — features initialise afterwards.
+If the package registers a contract the shell catalogues (`SHELL_CONTRACTS`: a splash, tabs, routes, a session,
+an entry location, `IErrorReporter`, `IAnalytics`, …), every app that composes it declares the capability
+`provided` under `capabilities:` in `app_manifest.yaml`, and `absent` with a reason where it does not (RULE-81).
+`composer verify` (V3) names the key and the line to paste; `dart tools/composer/composer.dart describe --app <id>`
+shows who implements each contract; a class under the app's own `lib/app/` counts. What a composed package
+needs the app to register (`FirebaseOptions` per flavor for `core_notifications`) is check V10.
 
-Nothing in the template hits this yet. When it does: move that feature's module ahead of the
-module owning the database, or give the feature its own database. `core_database` itself
-registers nothing — it is mechanism only and owns no database.
+## Related
 
-### Step 4: Run Code Generation
-Run the following command at the root of the monorepo to regenerate the DI graph:
+- [`docs/en/guides/13_app_composition.md`](../../../docs/en/guides/13_app_composition.md) — what an app declares; [`configure_app`](../configure_app/SKILL.md)
+- [`implement_package_storage`](../implement_package_storage/SKILL.md) — why storage owners are singletons
+- [`implement_package_database`](../implement_package_database/SKILL.md) — `@Order(1) @preResolve`, typed migration registrations
+
+## Verify
+
 ```bash
 dart run build_runner build --workspace
+flutter analyze                                          # 0 issues (RULE-70)
+dart tools/arch_check/check.dart                         # R5 declared deps, R8 optional lookups, R10
+dart tools/composer/composer.dart verify                 # generated regions, capabilities, V16 group order
+dart tools/unused_checker/check_unused_packages.dart     # the reverse of R5: declared but never imported
+cd apps/mobile && flutter test test/di_smoke_test.dart   # and cd apps/admin for every app that composes the package
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77: a DI change is proven by a build too
 ```
-Then **hot restart** — new DI registrations are not applied by hot reload.
-
-### Step 5: Declare the dependency explicitly
-
-Every import needs a `dependencies:` entry (RULE-06). Verify with:
-
-```bash
-dart tools/arch_check/check.dart                      # R5: imported but not in `dependencies:` (blocking)
-dart tools/unused_checker/check_unused_packages.dart  # the reverse: declared but never imported
-```
-
----
-
-## 🔗 Related
-
-- `docs/{en,vi}/guides/05_di.md` — the full DI guide
-- `docs/{en,vi}/architecture/06_app_shell.md` — boot sequence and module assembly
-- `docs/{en,vi}/guides/13_app_composition.md` — what an app declares; `configure_app` skill
-- `implement_package_storage` — why storage owners must be singletons
-- `implement_package_database` — why a package's database open is `@Order(1) @preResolve`, and typed migration registrations

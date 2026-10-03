@@ -3,7 +3,7 @@ name: configure_app
 description: Use when changing what an app is or how the shell behaves for it — "add a platform", "turn push or deep links off on web", "pin certificates", "offer other languages", "change the palette, text-scale cap, design size or HTTP timeouts for one app", "add a hook", "declare a capability absent", "what does this app register?", or "create a third app". Picks the right channel (manifest, profile, hook, contract), edits it, runs composer sync and verify, and proves it with the smoke test.
 ---
 
-# ⚙️ Skill: Configure an app
+# Skill: Configure an app
 
 Use this skill when a per-app decision must change, or when asked to read an app, or to create one.
 Nothing per-app is ever a constant in `platform/` (RULE-80).
@@ -57,20 +57,7 @@ Never edit the `facts` region or the README `report` region (RULE-16: `composer:
 - **Add an env key.** Under `env:` (`required_in: [flavor…]`, or `native_only: true`) **and** in the
   `env.<flavor>` files (V11).
 
-## 4. Prove it
-
-```bash
-dart tools/composer/composer.dart sync --app <id>     # after any manifest edit
-dart tools/composer/composer.dart verify              # Gate 0 — declaration vs generated regions vs source
-dart tools/arch_check/check.dart                      # R16 (catalog complete), R17 (platform forks)
-cd apps/<id> && flutter test                          # di_smoke_test (checkAppContract per flavor), app_profile_test
-```
-
-A profile value you changed gets a line in `apps/<id>/test/app_profile_test.dart` that says what it
-changes. A DI or dependency change also needs the debug APK build (RULE-77):
-`cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev`.
-
-## 5. A third app
+## 4. A third app
 
 ```bash
 dart tools/composer/composer.dart new reports --name "Codebase Reports" --platforms web,windows --modules auth,settings
@@ -86,8 +73,21 @@ runs `sync` and `verify`. It refuses an existing id or a platform a module block
 `core_database` copies `apps/mobile`'s smoke-test doubles. The two files to edit afterwards:
 `app_manifest.yaml` and `lib/app/app_profile.dart`.
 
-## 🔗 Related
+## Related
 
 - `docs/{en,vi}/guides/13_app_composition.md` — the full guide, the Gate 0 check list, troubleshooting
 - `implement_dependency_injection` (registering a contract), `create_feature_module` (a module that
   registers one), `run_repo_tooling` (`describe`, `new`)
+
+## Verify
+
+```bash
+dart tools/composer/composer.dart sync --app <id>     # after any manifest edit
+dart tools/composer/composer.dart verify              # Gate 0 — declaration vs generated regions vs source
+dart tools/arch_check/check.dart                      # R16 (catalog complete), R17 (platform forks)
+flutter analyze                                       # 0 issues (RULE-70)
+cd apps/<id> && flutter test                          # di_smoke_test (checkAppContract per flavor), app_profile_test
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # a DI or dependency change (RULE-77)
+```
+
+A profile value you changed gets a line in `apps/<id>/test/app_profile_test.dart` that says what it changes.

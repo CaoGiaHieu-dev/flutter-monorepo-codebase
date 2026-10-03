@@ -1,210 +1,203 @@
 ---
 name: implement_package_storage
-description: Use when a value must survive app restarts as a key-value entry — "save a setting", "persist the login token", "remember a flag across launches", "add a storage key". Declares the key in the owning package's utils/, a StorageValue<T> inside the owning singleton hydrated at startup by @PostConstruct(preResolve), and a core_di interface when another package needs it.
+description: Use when a value must survive app restarts as a key-value entry — "save a setting", "persist the login token", "remember a flag across launches", "add a storage key". Declares the key in the owning package's utils/, a StorageValue<T> inside the owning singleton hydrated at startup by @PostConstruct(preResolve), and a published interface when another package needs the value (core_di if product-neutral, the owner's <id>_api if module-owned).
 ---
 
-# 💾 Skill: Implement a Package-Owned Storage Value
+# Skill: Implement a package-owned storage value
 
-Use this skill when requested to: "save new config settings", "persist login tokens", "create a new cache storage", "remember a flag across launches", etc.
+Use this skill to persist a key-value entry: "save a setting", "persist a token", "remember a flag across
+launches".
 
-> [!IMPORTANT]
-> **There is no `StorageValuePresets` and no `StorageKeyConstants`.** `core_storage` ships the
-> mechanism only (`StorageManager`, `StorageValue<T>`, `StorageType`) — **you** declare the value in
-> the class that owns it (RULE-44), registered as a singleton (RULE-45).
-> **Guide:** [`docs/en/guides/06_storage.md`](../../../docs/en/guides/06_storage.md).
-> **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-09, RULE-44, RULE-45, RULE-75.
+> **There is no `StorageValuePresets` and no `StorageKeyConstants`.** `core_storage` ships the mechanism only
+> (`StorageManager`, `StorageValue<T>`, `StorageType`); **you** declare the value in the class that owns it
+> (RULE-44), registered as a singleton (RULE-45).
 
----
+**Guide:** [`docs/en/guides/06_storage.md`](../../../docs/en/guides/06_storage.md).
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-06, RULE-09, RULE-44, RULE-45, RULE-74.
+Cite them; do not restate them.
 
-## 🧭 Decide the owner first
+## Decide the owner first
 
-Before writing code, answer: **which package owns this value?**
+The owner is the package whose business logic reads and writes the value. **Never** put a key in `core_common`,
+and never let another package import the owner's key class.
 
 | Value | Owner | Keys file |
 | :--- | :--- | :--- |
 | Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| Theme mode (pure UI pref) | app shell → `ThemeStorageImpl` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
-| Locale (pure UI pref) | app shell → `LanguageStorageImpl` | `platform/shell/adapters/lib/src/utils/language_storage_keys.dart` |
-| Onboarding-seen boot flag | app shell → `AppBootStorage` | `platform/shell/adapters/lib/src/utils/app_boot_storage_keys.dart` |
+| Theme mode (pure UI preference) | the shell → `ThemeStorageImpl` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
+| Locale (pure UI preference) | the shell → `LanguageStorageImpl` | `platform/shell/adapters/lib/src/utils/language_storage_keys.dart` |
+| Onboarding-seen boot flag | the shell → `AppBootStorage` | `platform/shell/adapters/lib/src/utils/app_boot_storage_keys.dart` |
 
-The owner is the package whose business logic reads/writes the value. **Never** put a key in
-`core_common`, and never let another package import the owner's key class.
+**Key-value only.** Rows, relations or SQL belong in a Drift database —
+[`implement_package_database`](../implement_package_database/SKILL.md).
 
-> [!NOTE]
-> **Key-value only.** For rows, relations, or SQL queries use a Drift database instead —
-> see `implement_package_database` and `docs/{en,vi}/guides/07_database.md`. `core_storage`
-> and `core_database` are separate mechanisms; neither owns your keys or your tables.
+## Steps
 
----
+The examples add a `bioLocked` flag to a hypothetical `profile` data package.
 
-## 📋 Detailed Steps
+### Step 1: Depend on `core_storage`
 
-### Step 1: Declare the key in the owning package's `utils/`
+The owning package declares it (an undeclared import still compiles in a Pub workspace, but `arch_check` R5
+fails it), with `injectable` for the registration. Leave the versions off — they live in the catalog
+(RULE-74) and `dart tools/dependency_sync.dart` fills an empty entry — then `flutter pub get`:
 
-Create or extend `<owning_package>/lib/src/utils/<owner>_storage_keys.dart`:
+```yaml
+dependencies:
+  core_storage:
+    path: ../../../platform/infra/storage   # adjust to your package's depth
+  injectable:
+
+dev_dependencies:
+  build_runner:
+  injectable_generator:
+```
+
+### Step 2: Declare the key in the owning package's `utils/`
+
+`<package>/lib/src/utils/<owner>_storage_keys.dart` — `UPPER_SNAKE_CASE`, private constructor (RULE-09):
 
 ```dart
-/// Physical storage keys owned exclusively by `feature_auth`'s data layer.
-class AuthStorageKeys {
-  AuthStorageKeys._();
+/// Physical storage keys owned exclusively by `data_profile`.
+class ProfileStorageKeys {
+  ProfileStorageKeys._();
 
-  static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
-  static const String USER_BIO_LOCKED = 'userBioLocked'; // new key
+  static const String BIO_LOCKED = 'bioLocked';
 }
 ```
 
-Constants are `UPPER_SNAKE_CASE` with a private constructor (RULE-09).
+Pick a key that does not start with `_internal_` and is not `firstTimeOpenApp` (the backends refuse them).
 
-### Step 2: Declare the `StorageValue<T>` inside the owner
-
-Inject `StorageManager`, then declare a `late final` field per value:
+### Step 3: Declare the `StorageValue<T>` inside the owner, hydrate it, register a singleton
 
 ```dart
+import 'package:core_storage/core_storage.dart';
+import 'package:injectable/injectable.dart';
+
+import '../../utils/profile_storage_keys.dart';
+
 @lazySingleton
-class AuthLocalDataSource {
-  AuthLocalDataSource(this._storageManager);
+class ProfileLocalDataSource {
+  ProfileLocalDataSource(this._storageManager);
 
   final StorageManager _storageManager;
 
-  late final _token = StorageValue<String>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.TOKEN,
+  late final _bioLocked = StorageValue<bool>(
+    _storageManager.getStorage(StorageType.pref),
+    ProfileStorageKeys.BIO_LOCKED,
   );
 
-  late final _isBioLocked = StorageValue<bool>(
-    _storageManager.getStorage(StorageType.pref),
-    AuthStorageKeys.USER_BIO_LOCKED,
-    reviver: (key, value) {
-      if (value == null) return false;
-      return bool.tryParse(value.toString()) ?? false;
-    },
-  );
+  /// Fills the in-memory cache from disk before anything reads it.
+  @PostConstruct(preResolve: true)
+  Future<void> initialize() async {
+    await Future.wait([_bioLocked.readFromStorage()]);
+  }
+
+  bool get isBioLocked => _bioLocked.value ?? false;
+
+  Future<void> setBioLocked(bool locked) => _bioLocked.save(locked);
+
+  Future<void> clearBioLock() => _bioLocked.remove();
 }
 ```
 
-**Storage types:**
-* `StorageType.pref` — SharedPreferences (settings, flags)
-* `StorageType.secure` — encrypted secure storage (tokens, sensitive data)
+`AuthLocalDataSource` (`modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart`) is the
+real one, with two `secure` values. Storage types: `StorageType.pref` (SharedPreferences — settings, flags)
+and `StorageType.secure` (Keychain / KeyStore — tokens, PII). Both seal every value with AES-256-CBC.
 
-Use a `reviver` callback for Enums and custom types (stored through their `toJson()`). `String`/`num`/`bool`/`Map<String, dynamic>` and typed lists such as `List<String>` read back without one. The reviver is called once, with the decoded root value.
+- `String`, `num`, `bool`, `Map<String, dynamic>` and typed lists read back without a `reviver`. An enum or a
+  custom type needs `reviver: (key, value) { … }`, called **once** per decode with the decoded root, never with
+  `null`, and kept free of side effects (`ThemeStorageImpl` revives a `ThemeMode` from its name).
+- **Singleton, never `@injectable`** (RULE-45): a factory builds a fresh instance with an empty cache, and the
+  synchronous getters return `null` although the value is on disk. A second value goes into the same
+  `readFromStorage` list.
 
-### Step 3: Hydrate at startup — and register as a **singleton**
+### Step 4: Read and write
 
-Add the new value to the owner's `@PostConstruct(preResolve: true)` method so its in-memory cache is filled from disk before anything reads it:
+| Member | Behaviour |
+| :--- | :--- |
+| `value` (get) | the in-memory cache, synchronous; `null` before hydration |
+| `value = x` | updates the cache and listeners at once, **starts** the disk write without waiting |
+| `save(x)` | the same, returning a `Future<void>` that completes when the value is on disk |
+| `remove()` | clears the cache and notifies at once; the `Future<void>` completes when the key is deleted |
+| `readFromStorage()` | hydrates from disk; `await` it in `@PostConstruct` |
+| `addListener(cb)` / `listen(cb)` | `ChangeNotifier` / broadcast `Stream<T?>` |
 
-```dart
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([
-      _token.readFromStorage(),
-      _authUser.readFromStorage(),
-      _isBioLocked.readFromStorage(),
-    ]);
-  }
-```
+Writes are serialised and a failed write is logged, never thrown. Where the caller must know the value is
+persisted, return and await the `save` / `remove` `Future` (`AuthLocalDataSource.saveUserToken` does).
 
-> [!CAUTION]
-> Singleton, never `@injectable` (RULE-45): a factory builds a fresh instance with an empty cache,
-> and synchronous getters silently return `null`.
-
-### Step 4: Run Build Runner
+### Step 5: Codegen
 
 ```bash
 dart run build_runner build --workspace
 ```
 
-If you created a new file, refresh the barrels **after** `build_runner` (they also export generated files present on disk):
+The registration, including the awaited `initialize()`, lands in the package's generated
+`lib/di/module.module.dart`; until it is regenerated the owner is not registered and the first injection fails
+at boot. Barrels: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator).
 
-```bash
-dart tools/barrel_generator/generate.dart modules/<module>/<layer>/lib
-```
+## Crossing a package boundary
 
-### Step 5: Expose it — through the owner's own API
+**Never** hand another package your `StorageValue` or your keys class (RULE-44). Publish a narrow interface,
+implement it in the owner, and let the consumer depend on the interface only. Where it goes depends on whose
+value it is:
 
-Consumers inside the owning package use the field directly:
+- **Product-neutral** (every app has it, no module owns it): an interface in `core_di`
+  (`platform/foundation/contracts/lib/src/`). `IThemeStorage` / `ILanguageStorage` are implemented by the shell
+  adapters and read by `core_base_ui`'s `ThemeProvider` / `LanguageProvider`, which never see a key or a backend.
+- **Belongs to a module:** an interface in that module's own `<id>_api` package, next to its navigator and
+  action handlers, so the neutral `core_di` never learns about a removable module (RULE-04, RULE-08). The
+  consumer lists `<id>_api` in its `dependencies:` and resolves it with `getItOrNull` ([`create_api_package`](../create_api_package/SKILL.md)).
 
-```dart
-  bool get isBioLocked => _isBioLocked.value ?? false;
-
-  void setBioLock(bool locked) => _isBioLocked.save(locked);
-```
-
-**Reactive access:**
-
-```dart
-_isBioLocked.value = true;              // Write (auto-encrypted, async to disk)
-final locked = _isBioLocked.value;      // Read (instant from RAM, de-obfuscated)
-_isBioLocked.addListener(() { ... });   // Listen (ChangeNotifier)
-_isBioLocked.listen((val) { ... });     // Stream
-await _isBioLocked.readFromStorage();   // Re-hydrate from disk
-```
-
----
-
-## 🌉 Crossing a package boundary
-
-**Never** hand another package your `StorageValue` or your keys class. Publish a narrow interface on `core_di`, implement it in the owner, and let the consumer depend on the interface only — the pattern already used for theme and language:
+The theme is the live example of the first kind (`platform/shell/adapters/lib/src/theme_storage_impl.dart`; the
+interface is `platform/foundation/contracts/lib/src/i_theme_storage.dart`):
 
 ```dart
-// 1. Interface in core_di (platform/foundation/contracts/lib/src/i_theme_storage.dart)
 abstract class IThemeStorage {
   ThemeMode getThemeMode();
   void saveThemeMode(ThemeMode mode);
 }
 
-// 2. Implementation owns the StorageValue (platform/shell/adapters/lib/src/theme_storage_impl.dart)
 @Singleton(as: IThemeStorage)
 class ThemeStorageImpl implements IThemeStorage {
-  ThemeStorageImpl(this._storageManager);
-  final StorageManager _storageManager;
-
-  late final _themeMode = StorageValue<ThemeMode>(
-    _storageManager.getStorage(StorageType.pref),
-    ThemeStorageKeys.THEME_MODE,
-    reviver: (key, value) {
-      if (value == null) return ThemeMode.system;
-      return ThemeMode.values.byName(value.toString());
-    },
-  );
-
-  @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await _themeMode.readFromStorage();
-  }
+  // constructor over StorageManager and the app's ThemeProfile; `_themeMode` is a StorageValue<ThemeMode>
+  // with a reviver, hydrated in @PostConstruct(preResolve: true)
 
   @override
-  ThemeMode getThemeMode() {
-    return _themeMode.value ?? ThemeMode.system;
-  }
+  ThemeMode getThemeMode() => _themeMode.value ?? _defaultMode;
 
   @override
-  void saveThemeMode(ThemeMode mode) {
-    _themeMode.save(mode);
-  }
+  void saveThemeMode(ThemeMode mode) => _themeMode.save(mode);
 }
 ```
 
-`ThemeProvider` / `LanguageProvider` (in `core_base_ui`) inject only `IThemeStorage` / `ILanguageStorage` — they never see a key or a backend. These impls live in `platform/shell/adapters/lib/src/` — shared by every app — **not** in `core_storage`.
+Registering an implementation `as: IThemeStorage` makes it resolvable only as that interface; a second interface
+on the same instance needs a `@module` binding ([`implement_dependency_injection`](../implement_dependency_injection/SKILL.md)).
+These implementations live in `platform/shell/adapters`, shared by every app — not in `core_storage`.
 
----
+## Checklist
 
-## ✅ Checklist
+- [ ] Key lives in the owning package's `utils/`, not `core_common`
+- [ ] `StorageValue` is private and declared inside the class that owns the data
+- [ ] `secure` for tokens and PII, `pref` for settings and flags
+- [ ] `reviver` for enums and custom types
+- [ ] Added to the `@PostConstruct(preResolve: true)` hydration
+- [ ] Owner registered as a singleton, never `@injectable`
+- [ ] A write the caller must be sure of returns and awaits `save` / `remove`
+- [ ] Cross-package access goes through an interface (`core_di` or the owner's `<id>_api`), never the raw `StorageValue`
 
-- [ ] Key lives in the **owning package's** `utils/` folder — not `core_common`
-- [ ] `StorageValue` is declared inside the class that owns the data
-- [ ] Correct `StorageType` (`secure` for tokens/PII, `pref` for settings/flags)
-- [ ] `reviver` supplied for Enums / custom types
-- [ ] Added to `@PostConstruct(preResolve: true)` hydration
-- [ ] Owner registered as a **singleton**, never `@injectable`
-- [ ] Cross-package access goes through a `core_di` interface, never the raw `StorageValue`
-- [ ] Barrels regenerated + `build_runner` run
+## Related
 
----
+- [`docs/en/guides/06_storage.md`](../../../docs/en/guides/06_storage.md) — backends, AES-256 and RAM obfuscation, `reviver` recipes
+- [`implement_dependency_injection`](../implement_dependency_injection/SKILL.md) — singleton scopes and `@PostConstruct(preResolve: true)`
 
-## 🔗 Related
+## Verify
 
-- `docs/{en,vi}/guides/06_storage.md` — the full storage guide (backends, AES-256 + RAM
-  obfuscation, `reviver` recipes)
-- [`docs/en/reference/01_rules.md`](../../../docs/en/reference/01_rules.md) — RULE-09, RULE-44, RULE-45
-- `implement_dependency_injection` — singleton scopes and `@PostConstruct(preResolve: true)`
+```bash
+dart run build_runner build --workspace                  # the owner's registration with its awaited initialize()
+flutter analyze                                          # 0 issues (RULE-70)
+dart tools/arch_check/check.dart                         # R5 core_storage declared
+dart tools/composer/composer.dart verify
+cd modules/<module>/<layer> && flutter test              # a test of the owner over in-memory storage (setup: platform/infra/storage/test/storage_test.dart)
+cd apps/mobile && flutter test test/di_smoke_test.dart   # the owner resolves and hydrates (storage mocked in memory)
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77
+```

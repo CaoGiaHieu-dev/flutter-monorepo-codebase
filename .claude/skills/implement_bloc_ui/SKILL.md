@@ -1,269 +1,232 @@
 ---
 name: implement_bloc_ui
-description: Use when a screen's logic is written with BLoC — "create a bloc", "implement UI logic using BLoC", "listen to bloc state to show a dialog". Covers BaseBloc with private Freezed events, BlocViewState<T> with emitResult or a custom Freezed state, BlocBuilder/BlocListener, and route-level BlocProvider. Cubit only when events are unnecessary.
+description: Use when a screen's logic is written with BLoC — "create a bloc", "implement UI logic using BLoC", "listen to bloc state to show a toast or dialog". Covers BaseBloc with private Freezed events (part / part of), BlocViewState<T> settled by emitResult or a custom Freezed state, BlocBuilder / BlocListener with translated errors, the route-level BlocProvider and the bloc's tests. Cubit only when events are unnecessary.
 ---
 
-# 🧠 Skill: UI State Management with BLoC (Implement BLoC UI)
+# Skill: Screen logic with BLoC
 
-Use this skill when requested to: "implement UI logic using BLoC", "create a bloc", "listen to bloc state changes to display warnings/dialogs", etc.
+Use this skill to give a screen a `BaseBloc` controller: load data through a use case, render
+loading / success / error, react to failures.
 
-**Guide:** [`docs/en/guides/03_state_management.md`](../../../docs/en/guides/03_state_management.md).
-**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-10, RULE-21, RULE-34, RULE-36,
-RULE-50, RULE-51, RULE-52, RULE-53.
+**Guide:** [`docs/en/guides/03_state_management.md`](../../../docs/en/guides/03_state_management.md) § 6–9
+(the long form); the package README is `platform/state/bloc/README.md`.
+**Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-10, RULE-21, RULE-34, RULE-35,
+RULE-36, RULE-50, RULE-51, RULE-52, RULE-53, RULE-61. Cite them; do not restate them.
 
-## Default choice
+Default is `BaseBloc` + Freezed events. `BaseCubit` only when events are unnecessary (one method, no
+concurrent intents) — say why in a comment; the file stays `*_cubit.dart` / `*Cubit`.
 
-- **Default: `BaseBloc` + Freezed `Event`** (event-driven) — private event subclasses via `part` / `part of` (RULE-51), `async (event, emit)` handlers (RULE-52).
-- **`BaseCubit` only when truly necessary** — e.g. a tiny local UI toggle with no meaningful events, no stream fan-in, and no multi-step workflows. Do **not** default new feature controllers to Cubit.
+> `BaseBloc` and `BaseCubit` are extension points only. The counterpart of Provider's `executeOperation`
+> is **opt-in**: mix in `BlocResultMixin<T>` (`CubitResultMixin<T>`) when the state is `BlocViewState<T>`
+> and call `emitResult(emit, () => useCase(params))`. A bloc with its own Freezed state unwraps the
+> `Result` by hand (§ 5). Read `platform/state/bloc/lib/src/result_emitter.dart` for the exact rules.
 
-Reference sample in the template: `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`.
+## 1. What the generator gave you
 
-> [!WARNING]
->  **`BaseBloc` and `BaseCubit` are *extension points only*** — they add nothing on top of
-> `Bloc` / `Cubit`. The counterpart of Provider's `executeOperation` is **opt-in**: mix in
-> `BlocResultMixin<T>` (or `CubitResultMixin<T>`) when the state is `BlocViewState<T>` and call
-> `emitResult(emit, () => useCase(params))` — it emits loading (skipped once a success is on
-> screen), success (via `convert` when the payload type differs), `error(AppFailure)`, restores
-> the previous state on none/cancel, and turns a thrown exception into
-> `error(ErrorHandler.handleError(e))`. With a custom Freezed state you still:
-> - unwrap `Result<T>` (`success` / `failure` / `none` / `cancel`)
-> - map `AppFailure` into your UI state
-> - emit the loading state before the async work and a terminal state after
->
-> Read `platform/state/bloc/lib/src/result_emitter.dart` before choosing.
+`generate.dart 1 <name> "" 2 <route>` writes, under `modules/<name>/feature/lib/src/`:
 
----
+- `bloc/<name>_bloc.dart` — an `@injectable` `<Name>Bloc extends BaseBloc<<Name>Event, BlocViewState<<Name>StateData>>
+  with BlocResultMixin<<Name>StateData>`, with `part` lines for the event, the state and `.freezed.dart`;
+- `bloc/<name>_event.dart` (`part of`) — a Freezed event whose subclasses are private (`= _<Name>Started`);
+- `bloc/<name>_state.dart` (`part of`) — `<Name>StateData`, a Freezed placeholder payload;
+- `pages/<name>_page.dart` — a `BlocBuilder` over `BlocViewState<<Name>StateData>`;
+- the route that creates the bloc **and dispatches `started`** (§ 7), and tests that pass as generated
+  (`test/<name>_page_test.dart`, `test/<name>_bloc_test.dart`).
 
-## 📋 Core Components
+Everything below **replaces those placeholders**; keep the file names and the `part` structure.
 
-### 1. UI State — `BlocViewState<T>` (optional) or a custom Freezed state
+## 2. Declare the dependencies
 
-> [!IMPORTANT]
-> The class is `BlocViewState<T>`, **not** `ViewState`. `provider_state_management` exports
-> its own, semantically different `ViewState`; both barrels are public, so sharing the name
-> would collide in any file importing both.
+Declare every package your code imports under `dependencies:` (`arch_check` R5). The generated feature
+already lists `bloc_state_management` (it re-exports `flutter_bloc`), `domain_core`, `core_ui_kit`
+(`LoadingWidget`, `AppOverlay`), `core_base_ui` and `core_responsive`. Add `domain_<name>` for the use case
+and entity you inject — a feature never imports `data_<name>` (RULE-04). Path entries only, no versions;
+then `flutter pub get`, before codegen.
 
-`platform/state/bloc/lib/src/bloc_view_state.dart`:
+## 3. Events: private Freezed subclasses
 
 ```dart
-@freezed
-abstract class BlocViewState<T> with _$BlocViewState<T> {
-  const BlocViewState._();
-  const factory BlocViewState.initial() = _Initial<T>;
-  const factory BlocViewState.loading() = _Loading<T>;
-  const factory BlocViewState.success(T data) = _Success<T>;
-  const factory BlocViewState.error(AppFailure error) = _Error<T>;
+// product_event.dart
+part of 'product_bloc.dart';
 
-  T? get data => mapOrNull(success: (s) => s.data);
+@freezed
+abstract class ProductEvent with _$ProductEvent {
+  const factory ProductEvent.started() = _ProductStarted;
+  const factory ProductEvent.refreshed() = _ProductRefreshed;
 }
 ```
 
-How it differs from the Provider `ViewState`:
+The bloc file holds `part 'product_event.dart';`, `part 'product_state.dart';` and
+`part 'product_bloc.freezed.dart';` (RULE-51). Handlers are `async (event, emit)` method references
+(RULE-52, `arch_check` R18); a sync closure that starts async work ends in "emit was called after an
+event handler completed normally".
 
-| | `BlocViewState<T>` (BLoC) | `ViewState` (Provider) |
-| :--- | :--- | :--- |
-| Generic | yes | no |
-| Carries payload | yes — `success(T data)` | no — data lives on `ViewStateModel<T>` |
-| `error` argument | `AppFailure` (required) | `ErrorState?` (nullable) |
-| `loadingMore` variant | no | yes |
+## 4. A bloc that loads through a use case
 
-`BlocViewState<T>` is **optional**. For richer screens (forms, wizards, filters + pagination)
-declare a Freezed state in the feature and use `BaseBloc<Event, YourState>`.
-
-### 2. BaseBloc + Freezed Events (preferred)
-
-Real sample — `modules/home/feature/lib/src/bloc/home_profile_bloc.dart`:
+`BlocViewState<T>` (`platform/state/bloc/lib/src/bloc_view_state.dart`) has `initial`, `loading`,
+`success(T data)` and `error(AppFailure)`, plus `T? get data`; it is **not** the Provider branch's
+`ViewState`. `emitResult` emits `loading` (skipped once a `success` is on screen), settles the
+`Result` into `success` / `error`, restores the previous state on `none` / `cancel` and turns a thrown
+error into `error(ErrorHandler.handleError(e))` (RULE-53).
 
 ```dart
-import 'dart:async';
-
-import 'package:bloc_state_management/bloc_state_management.dart';
-import 'package:core_di/core_di.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:injectable/injectable.dart';
-
-part 'home_profile_event.dart';
-part 'home_profile_bloc.freezed.dart';
-
 @injectable
-class HomeProfileBloc
-    extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
-  HomeProfileBloc(@factoryParam this._sessionStatusStream)
-    : super(const BlocViewState.initial()) {
-    on<_HomeProfileStarted>(_onStarted);
-    on<_HomeProfileRefreshed>(_onRefreshed);
-    on<_HomeProfileAuthStatusChanged>(_onAuthStatusChanged);
-
-    add(const HomeProfileEvent.started());
+class ProductBloc
+    extends BaseBloc<ProductEvent, BlocViewState<List<ProductEntity>>>
+    with BlocResultMixin<List<ProductEntity>> {
+  ProductBloc(this._getProducts) : super(const BlocViewState.initial()) {
+    on<_ProductStarted>(_load);
+    on<_ProductRefreshed>(_load);
   }
 
-  final ISessionStatusStream? _sessionStatusStream;
-  StreamSubscription<SessionPrincipal?>? _subscription;
+  final GetProductsUseCase _getProducts;
 
-  Future<void> _onStarted(
-    _HomeProfileStarted event,
-    Emitter<BlocViewState<SessionPrincipal?>> emit,
-  ) async {
-    await _subscription?.cancel();
-    _subscription = _sessionStatusStream?.sessionStatusStream.listen((user) {
-      add(HomeProfileEvent.authStatusChanged(user));
-    });
-    emit(BlocViewState.success(_sessionStatusStream?.currentUser));
-  }
-
-  Future<void> _onRefreshed(
-    _HomeProfileRefreshed event,
-    Emitter<BlocViewState<SessionPrincipal?>> emit,
-  ) async {
-    emit(BlocViewState.success(_sessionStatusStream?.currentUser));
-  }
-
-  Future<void> _onAuthStatusChanged(
-    _HomeProfileAuthStatusChanged event,
-    Emitter<BlocViewState<SessionPrincipal?>> emit,
-  ) async {
-    emit(BlocViewState.success(event.user));
-  }
-
-  @override
-  Future<void> close() async {
-    await _subscription?.cancel();
-    return super.close();
-  }
+  Future<void> _load(
+    ProductEvent event,
+    Emitter<BlocViewState<List<ProductEntity>>> emit,
+  ) async => emitResult(emit, () async => _getProducts(const NoParams()));
 }
 ```
 
-`home_profile_event.dart` (`part of 'home_profile_bloc.dart';`) — real file:
+When the use case returns another type than the state's payload, pass `convert:` (the payload `R` to `T`).
+Use the generated `<Name>StateData` as the payload only while it is a placeholder: replace it with your
+entity or view data and delete `<name>_state.dart` with its `part` line. Generic code writes the type
+argument (`BlocViewState<T>.loading()`, never `const BlocViewState.loading()`), or the state is
+`BlocViewState<Never>` and never compares equal.
 
-```dart
-part of 'home_profile_bloc.dart';
+Reference sample: `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` — a **stream-mapping** bloc
+with no use case; it emits `BlocViewState.success` by hand and reads a nullable
+`@factoryParam ISessionStatusStream?` that its route passes with `getItOrNull`.
 
-@freezed
-abstract class HomeProfileEvent with _$HomeProfileEvent {
-  const factory HomeProfileEvent.started() = _HomeProfileStarted;
-  const factory HomeProfileEvent.refreshed() = _HomeProfileRefreshed;
-  const factory HomeProfileEvent.authStatusChanged(SessionPrincipal? user) =
-      _HomeProfileAuthStatusChanged;
-}
-```
+## 5. A custom Freezed state, unwrapped by hand
 
-### 3. Unwrapping a `Result<T>` by hand
-
-With `BlocViewState<T>`, prefer `BlocResultMixin<T>` and `=> emitResult(emit, () => _useCase(params))`
-(RULE-53). Without the mixin — or with a custom state — this is the shape you write in every
-handler that calls a use case (the same example as the doc comment in
-`platform/state/bloc/lib/src/base_bloc.dart`):
-
-```dart
-Future<void> _onStarted(
-  _Started event,
-  Emitter<BlocViewState<Foo>> emit,
-) async {
-  emit(const BlocViewState.loading());
-  final result = await _useCase(const NoParams());
-  result.when(
-    // `Result.success` carries a nullable payload (`Result.success([T? data])`):
-    // decide what "no data" means for this screen instead of forcing it non-null.
-    success: (data) => data == null
-        ? emit(const BlocViewState.initial())
-        : emit(BlocViewState.success(data)),
-    failure: (f) => emit(BlocViewState.error(f)),
-    none: () => emit(const BlocViewState.initial()),
-    cancel: () {},
-  );
-}
-```
-
-`emit(BlocViewState.success(data))` with the nullable `data` does not compile for a
-non-nullable `Foo`.
-
-> [!NOTE]
-> `Result.none()` and `Result.cancel()` are declared in `domain_core` but no repository in
-> the template returns them today. Handle them anyway — `when` is exhaustive.
-
-### 4. Rendering UI: `BlocBuilder` & Pattern Matching
-
-```dart
-BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
-  builder: (context, state) {
-    return state.when(
-      initial: () => const SizedBox.shrink(),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      success: (user) => Text(user?.displayName ?? ''),
-      error: (failure) => Text(failure.message),
-    );
-  },
-)
-```
-
-### 5. Side-effects: `BlocListener`
-
-```dart
-BlocListener<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
-  listener: (context, state) {
-    state.maybeWhen(
-      error: (failure) {
-        // `core_ui_kit`'s AppDialog: static, no BuildContext, both strings required.
-        AppDialog.showErrorDialog(
-          title: context.l10nHome.errorTitle, // your feature's ARB key — never a raw string
-          message: failure.message,           // AppFailure.message is a non-null String
-        );
-      },
-      orElse: () {},
-    );
-  },
-  child: const HomePageContent(),
-)
-```
-
-### 6. Route-level instantiation (auto-dispose)
-
-```dart
-@override
-Widget build(BuildContext context, GoRouterState state) {
-  return BlocProvider(
-    // Auth is optional: an app composed without `feature_auth` registers
-    // no ISessionStatusStream, and Home then shows the signed-out state.
-    create: (_) => getIt<HomeProfileBloc>(
-      param1: getItOrNull<ISessionStatusStream>(),
-    ),
-    child: const HomePage(),
-  );
-}
-```
-
-> [!CAUTION]
-> The `Page` widget must **not** wrap itself in another `BlocProvider` (RULE-21).
-
-### 7. When Cubit is acceptable
-
-Only if the flow has **no events worth modelling** (single method, no concurrent intents).
-Document why Cubit was chosen in a short comment. Naming stays `_cubit.dart` / `*Cubit`.
-
-### 8. Custom state example (allowed)
+For forms, wizards and filters declare a state in the feature and extend `BaseBloc<Event, YourState>`. The
+state carries the failure's **code**, not its text (`AppFailure.message` is developer text, RULE-34):
 
 ```dart
 @freezed
 abstract class CheckoutState with _$CheckoutState {
   const factory CheckoutState({
-    required CartEntity cart,
+    @Default([]) List<CartLine> lines,
     @Default(false) bool isSubmitting,
-    AppFailure? error,
+    int? failureCode,
   }) = _CheckoutState;
-}
-
-@injectable
-class CheckoutBloc extends BaseBloc<CheckoutEvent, CheckoutState> {
-  CheckoutBloc(...) : super(const CheckoutState(cart: CartEntity.empty())) {
-    on<_CheckoutSubmitted>(_onSubmitted);
-  }
 }
 ```
 
----
+Every handler emits a loading state before the async work, unwraps `Result<T>` (`success` / `failure` /
+`none` / `cancel` — `when` is exhaustive) and ends in a terminal state:
 
-## 🔗 Related
+```dart
+Future<void> _onSubmitted(
+  _CheckoutSubmitted event,
+  Emitter<CheckoutState> emit,
+) async {
+  emit(state.copyWith(isSubmitting: true, failureCode: null));
+  final result = await _submit(SubmitParams(lines: state.lines));
+  result.when(
+    success: (_) => emit(state.copyWith(isSubmitting: false)),
+    failure: (f) => emit(state.copyWith(isSubmitting: false, failureCode: f.code)),
+    none: () => emit(state.copyWith(isSubmitting: false)),
+    cancel: () => emit(state.copyWith(isSubmitting: false)),
+  );
+}
+```
 
-- `docs/{en,vi}/guides/03_state_management.md` — full comparison of both branches
-- `implement_provider_ui` — the Provider branch, with `executeOperation`
-- `implement_navigation_route` — route-level instantiation
+## 6. Render and react
+
+```dart
+BlocBuilder<ProductBloc, BlocViewState<List<ProductEntity>>>(
+  builder: (context, state) => state.when(
+    initial: () => const Center(child: LoadingWidget()),
+    loading: () => const Center(child: LoadingWidget()),
+    success: (products) => ProductList(products: products),
+    // `failure.message` is an English diagnostic, never shown (RULE-34): word the failure from its code.
+    error: (failure) => Center(child: Text(context.l10n.failureMessage(failure.code))),
+  ),
+)
+```
+
+`LoadingWidget` is `core_ui_kit`'s; `context.l10n.failureMessage` is `core_base_ui`'s. For a side effect
+(a toast, navigation) use a `BlocListener` — never `build`:
+
+```dart
+BlocListener<ProductBloc, BlocViewState<List<ProductEntity>>>(
+  listenWhen: (previous, current) => current.maybeWhen(error: (_) => true, orElse: () => false),
+  listener: (context, state) => state.maybeWhen(
+    error: (failure) => AppOverlay.showToast(content: context.l10n.failureMessage(failure.code)),
+    orElse: () {},
+  ),
+  child: const ProductListContent(),
+)
+```
+
+A dialog is its own widget class (`*_dialog.dart`, extending `OverlayDialogWidget`, shown with
+`AppOverlay.showDialog` — RULE-36); `RetryDialog` in `core_ui_kit` is the example. Dispatch events with
+`context.read<ProductBloc>().add(const ProductEvent.refreshed())`.
+
+## 7. Create it at the route, and dispatch the first event in one place
+
+The route creates the bloc; the `Page` never wraps itself in a second `BlocProvider` (RULE-21). The
+generated route already dispatches the first event:
+
+```dart
+create: (context) => getIt<ProductBloc>()..add(const ProductEvent.started()),
+```
+
+Dispatch `started` **either** there **or** in the bloc's constructor (`HomeProfileBloc` does, its route
+does not) — never both. The route snippet, factory parameters and the `@injectable` rule (RULE-10) live
+once: [`implement_navigation_route`](../implement_navigation_route/SKILL.md) and
+[`implement_dependency_injection`](../implement_dependency_injection/SKILL.md).
+
+## 8. Translated text
+
+Every user-facing string is translated (RULE-34, RULE-35): add the keys to the feature's
+`assets/language/en.arb` **and** `vi.arb` (`lowerCamelCase`), then `cd modules/<name>/feature && flutter gen-l10n`
+and read them through `context.l10n<Name>`. Steps: [`localize_feature`](../localize_feature/SKILL.md).
+
+## 9. Update the tests
+
+Once the bloc takes a use case, the generated tests (`<Name>Bloc()` with no argument) stop compiling and the
+page test shows a bloc that never settles. Build the bloc from the use case over a **hand-written fake**
+repository (RULE-61), as `modules/home/feature/test/home_profile_bloc_test.dart` builds its bloc from a fake
+stream:
+
+```dart
+test('started emits loading, then success', () async {
+  final bloc = ProductBloc(GetProductsUseCase(FakeProductRepository()));
+  addTearDown(bloc.close);
+
+  bloc.add(const ProductEvent.started());
+
+  await expectLater(
+    bloc.stream,
+    emitsInOrder([
+      const BlocViewState<List<ProductEntity>>.loading(),
+      BlocViewState<List<ProductEntity>>.success(FakeProductRepository.products),
+    ]),
+  );
+});
+```
+
+The page test provides a bloc built the same way, above the page under `ResponsiveInit`, as `Route.build` does.
+
+## Related
+
+- [`implement_provider_ui`](../implement_provider_ui/SKILL.md) — the Provider branch, with `executeOperation`
+- [`implement_domain_data_flow`](../implement_domain_data_flow/SKILL.md) — the use case this bloc calls
+
+## Verify
+
+```bash
+cd modules/<name>/feature && flutter gen-l10n            # after ARB edits
+dart run build_runner build --workspace                  # events, state and the DI registration
+flutter analyze                                          # 0 issues (RULE-70)
+dart tools/arch_check/check.dart                         # R5 declared deps, R18 async handlers, R7 / R20 no raw sizes
+dart tools/composer/composer.dart verify
+cd modules/<name>/feature && flutter test
+cd apps/mobile && flutter test test/di_smoke_test.dart   # the bloc factory builds from the real graph
+cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev   # RULE-77, after a DI or dependency change
+```
+
+Barrels: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator) says when to regenerate them.

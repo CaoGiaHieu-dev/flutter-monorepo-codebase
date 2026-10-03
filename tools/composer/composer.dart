@@ -1887,8 +1887,8 @@ WHAT VERIFY HOLDS THE DECLARATION TO
   V10  what a composed package needs the app to register (`FirebaseOptions`,
        per flavor) is registered under the app's lib/
   V11  the env files that exist hold exactly the keys `env:` declares
-  V12  the entry point passes `profile:`; test/di_smoke_test.dart exists and
-       calls checkAppContract
+  V12  the entry point passes `profile:`; test/di_smoke_test.dart exists,
+       calls checkAppContract and builds every factory (`callFactories: true`)
   V17  no member pubspec but the root's has a top-level `workspace:` key
        (a nested workspace node, RULE-16)
   V7 refuses before anything is written, in `sync` too. V3, V10, V11, V12 and

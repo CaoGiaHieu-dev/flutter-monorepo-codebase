@@ -12,7 +12,7 @@ import 'support/tool_harness.dart';
 /// | V7  | every declared platform is one every composed package supports |
 /// | V10 | what a composed package needs the app to register (`FirebaseOptions`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares |
-/// | V12 | the entry point passes the profile; the DI smoke test exists and calls `checkAppContract` |
+/// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`callFactories: true`) |
 /// | V17 | no member pubspec but the root's has a top-level `workspace:` key (RULE-16) |
 ///
 /// Each has a clean fixture and a violating one. The workspace is the `demo`
@@ -631,6 +631,25 @@ void main() {
       expectRefused(await syncAndVerify(ws), [
         'apps/demo/test/di_smoke_test.dart: checkAppContract: never called',
       ]);
+    });
+
+    test('a smoke test that does not call the factories fails', () async {
+      for (final dropped in [
+        // Absent, false, or only in a comment: none builds a factory.
+        kFixtureSmokeTest.replaceFirst('callFactories: true,\n', ''),
+        kFixtureSmokeTest.replaceFirst('callFactories: true', 'callFactories: false'),
+        kFixtureSmokeTest.replaceFirst(
+          'callFactories: true,\n',
+          '// callFactories: true\n',
+        ),
+      ]) {
+        final ws = demo(extra: {'apps/demo/test/di_smoke_test.dart': dropped});
+
+        expectRefused(await syncAndVerify(ws), [
+          'apps/demo/test/di_smoke_test.dart: callFactories: never `true`',
+          'RULE-63',
+        ]);
+      }
     });
   });
 

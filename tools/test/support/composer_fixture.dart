@@ -150,6 +150,10 @@ import '../lib/app/app_profile.dart';
 
 void main() {
   test('the declared contract holds', () {
+    getIt.findAll<Object>(
+      instantiateLazySingletons: true,
+      callFactories: true,
+    );
     final report = checkAppContract(
       appProfile,
       flavor: Flavor.dev,

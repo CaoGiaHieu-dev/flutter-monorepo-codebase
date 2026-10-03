@@ -251,7 +251,7 @@ APP_LINK_MODE=
 APP_NAME=
 ```
 
-Dart đọc chúng qua `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), nơi khai ba key bằng `String.fromEnvironment`:
+Dart đọc chúng qua `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), nơi khai hai key mà Dart đọc bằng `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
@@ -260,16 +260,13 @@ class EnvConstants {
   /// The base URL for all API endpoints.
   static const String BASE_URL = String.fromEnvironment('BASE_URL');
 
-  /// The web domain whose links open the app (universal / app links).
-  static const String WEB_DOMAIN = String.fromEnvironment('WEB_DOMAIN');
-
   /// The name of the application.
   static const String APP_NAME = String.fromEnvironment('APP_NAME');
 }
 ```
 
 > [!NOTE]
-> `WEB_DOMAIN` và `APP_LINK_MODE` là `native_only: true` trong manifest: Gradle và Xcode đọc chúng, không có code Dart nào đọc. `APP_LINK_MODE` hoàn toàn không được khai trong `EnvConstants`; entitlements iOS đọc nó (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Giữ cả hai trong file env. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env, mục `env:` của manifest và `EnvConstants`.
+> `WEB_DOMAIN` và `APP_LINK_MODE` là `native_only: true` trong manifest: Gradle và Xcode đọc chúng, không có code Dart nào đọc. Cả hai đều không được khai trong `EnvConstants`; Gradle đọc `WEB_DOMAIN`, còn entitlements iOS đọc cả hai (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Giữ cả hai trong file env. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env, mục `env:` của manifest và, nếu Dart đọc nó, cả `EnvConstants`.
 
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.

@@ -94,7 +94,7 @@ If a step fails, the generator restores every shared file it edited, removes the
 
 ## 3. Find your way around the package
 
-The generator produces this tree for a Provider feature with a stack route, plus the generated `module.module.dart`, `*.g.dart` and `gen/` files. `widgets/` is created **empty**. Git does not track an empty directory, so it disappears from a commit or a fresh clone until your first sub-widget lands in it.
+The generator produces this tree for a Provider feature with a stack route, plus the generated `module.module.dart`, `*.g.dart` and `gen/` files. The generator creates no `widgets/` directory: the barrel pass deletes empty directories, so create `lib/src/widgets/` with your first sub-widget.
 
 ```
 modules/profile/feature/
@@ -112,7 +112,7 @@ modules/profile/feature/
 │       ├── routing/              profile_route_module.dart (the typed route), then
 │       │                         profile_feature_route_module.dart or profile_nav_destination.dart
 │       ├── utils/                profile_path.dart — constants owned by this package
-│       └── widgets/              *Widget / *Card sub-widgets (created empty)
+│       └── widgets/              *Widget / *Card sub-widgets (create it when you need it)
 ├── pubspec.yaml
 └── test/                         profile_page_test.dart, profile_provider_test.dart
 ```
@@ -398,7 +398,7 @@ The app must keep running when any feature is deleted (RULE-05). Remove in this 
 
 1. Its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it
 2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list
-3. The `modules/<name>/feature/` directory
+3. The module's package directories — `modules/<name>/<layer>/` for each layer it has (`api`, `domain`, `data`, `feature`), then `modules/<name>/`. `composer verify` fails on a package left on disk that no app composes. A module that is only a feature has just `modules/<name>/feature/`
 4. `flutter pub get && dart run build_runner build --workspace`
 
 **For a sample, let the tool do it.** `remove_sample.dart` performs these steps. More importantly, it tells you what the manual list above cannot:

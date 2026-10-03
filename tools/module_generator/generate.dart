@@ -81,7 +81,6 @@ void main(List<String> args) async {
           CommonHelpers.createDir('${config.modulePath}/lib/src/bloc');
         }
         CommonHelpers.createDir('${config.modulePath}/lib/src/routing');
-        CommonHelpers.createDir('${config.modulePath}/lib/src/widgets');
 
         // 3.1 Create assets and localization
         CommonHelpers.createDir('${config.modulePath}/assets/language');

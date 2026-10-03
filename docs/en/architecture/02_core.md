@@ -51,7 +51,7 @@ The bottom of the infrastructure stack is two packages, split by one question: *
 | App profile | `profile/` | The types an app uses to tell the shell about itself — `AppProfile`, `AppFacts`, `AppPlatform`, `PlatformFacts`, `SslPinningPolicy`, and the typed tuning sections (`DisplayProfile`, `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile`); `registerAppProfile` puts them in the locator. What each field means: [`06_app_shell.md`](06_app_shell.md#the-app-profile), [`13_app_composition`](../guides/13_app_composition.md) |
 | Helpers | `helpers/` | `TypeHelper`, `ValidationHelper` |
 | String extension | `string_extension.dart` | `StringExtension` (`capitalize`, `isValidEmail`, `truncate`, …) and `StringPriceExtension` — no `DateTime` or `num` formatting: dates, times and currency are locale-dependent, so format them with `intl`'s `DateFormat` / `NumberFormat` and the current locale |
-| Constants | `utils/` | `EnvConstants` (`BASE_URL`, `WEB_DOMAIN`, `APP_NAME`), `ErrorCodes`, `ProfileConstants` (the `ALLOW_UNDECLARED_PLATFORM` and `APP_FLAVOR` defines) |
+| Constants | `utils/` | `EnvConstants` (`BASE_URL`, `APP_NAME`), `ErrorCodes`, `ProfileConstants` (the `ALLOW_UNDECLARED_PLATFORM` and `APP_FLAVOR` defines) |
 
 **`core_common`** is the Flutter-bound half. It declares two workspace dependencies — `platform_kernel`, which it re-exports wholesale (`src/kernel.dart`) so a `package:core_common/core_common.dart` import still resolves everything above; and `core_di`, for the optional `IAnalytics` that `RouteAwareWidget` reports screen views to. It depends on nothing in the `ui` group.
 

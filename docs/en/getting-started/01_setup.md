@@ -250,7 +250,7 @@ APP_LINK_MODE=
 APP_NAME=
 ```
 
-Dart reads them through `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), which declares three with `String.fromEnvironment`:
+Dart reads them through `EnvConstants` (`platform/foundation/kernel/lib/src/utils/env_constants.dart`), which declares the two keys Dart reads with `String.fromEnvironment`:
 
 ```dart
 class EnvConstants {
@@ -259,16 +259,13 @@ class EnvConstants {
   /// The base URL for all API endpoints.
   static const String BASE_URL = String.fromEnvironment('BASE_URL');
 
-  /// The web domain whose links open the app (universal / app links).
-  static const String WEB_DOMAIN = String.fromEnvironment('WEB_DOMAIN');
-
   /// The name of the application.
   static const String APP_NAME = String.fromEnvironment('APP_NAME');
 }
 ```
 
 > [!NOTE]
-> `WEB_DOMAIN` and `APP_LINK_MODE` are `native_only: true` in the manifest: Gradle and Xcode read them, no Dart code does. `APP_LINK_MODE` is not declared in `EnvConstants` at all; the iOS entitlements read it (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep both in the env file. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files, to the manifest's `env:` and to `EnvConstants` together.
+> `WEB_DOMAIN` and `APP_LINK_MODE` are `native_only: true` in the manifest: Gradle and Xcode read them, no Dart code does. Neither is declared in `EnvConstants`; Gradle reads `WEB_DOMAIN` and the iOS entitlements read both (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep both in the env file. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files, to the manifest's `env:` and, if Dart reads it, to `EnvConstants` together.
 
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.

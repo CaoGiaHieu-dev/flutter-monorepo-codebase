@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/reference/03_tooling.md@a5b62df -->
+<!-- translated-from: docs/en/reference/03_tooling.md@d759833 -->
 # Tra cứu công cụ
 
 **Trang này trả lời:** chạy script nào, với tham số gì, mã thoát của nó nghĩa là gì, và CI gate nào chạy nó?

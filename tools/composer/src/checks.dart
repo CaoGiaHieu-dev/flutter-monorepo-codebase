@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'catalog.dart';
+import 'facts_emit.dart';
 import 'manifest_v2.dart';
 
 /// The checks `composer verify` (CI Gate 0) holds an app's declaration to,
@@ -16,6 +17,7 @@ import 'manifest_v2.dart';
 /// | V4  | the members of a bundle share one state |
 /// | V5  | `splash: dart` needs capability `splash` provided |
 /// | V6  | `committed` => the runner folder exists; `scaffold` => it does not |
+/// | V8  | `push: true` needs `core_notifications` composed and supporting the platform; `window` only on a desktop platform |
 /// | V9  | a pinning decision per flavor where a declared platform can pin |
 /// | V14 | no reason is empty, `TODO` or `TBD` |
 ///
@@ -249,3 +251,50 @@ void _pinning(
 
 String _yaml(String text) =>
     text.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+
+/// V8: what a platform switches on must be something the app composes and the
+/// platform has.
+///
+/// - `push: true` needs `core_notifications` composed, and its `platforms:`
+///   to list the platform — otherwise the service would be asked to start
+///   where Firebase Messaging has no implementation;
+/// - `window` is for the desktop platforms, the only ones with a resizable
+///   window.
+///
+/// Needs the composed packages, so it runs where the app's view is built
+/// (`sync` / `verify`), not at manifest discovery.
+List<String> checkPlatformSwitches(AppView view) {
+  final problems = <String>[];
+  void bad(String key, String problem) =>
+      problems.add('${view.manifestPath}: $key: $problem');
+
+  final notifications = view.packageFacts[kNotificationsPackage];
+  for (final platform in view.declaration.platforms) {
+    final name = platform.name;
+    if (platform.push == true) {
+      if (!view.composesNotifications) {
+        bad(
+          'platforms.$name.push',
+          'push is on, but $kNotificationsPackage is not composed — add it to '
+              'a di_groups entry, or delete the key (push is off without it)',
+        );
+      } else if (notifications != null && !notifications.supports(name)) {
+        bad(
+          'platforms.$name.push',
+          'push is on, but $kNotificationsPackage does not support $name '
+              '(its pubspec `platforms:` lists '
+              '${notifications.platforms?.join(', ')}) — set `push: false`, '
+              'or delete the key',
+        );
+      }
+    }
+    if (platform.window != null && !kDesktopPlatforms.contains(name)) {
+      bad(
+        'platforms.$name.window',
+        'only a desktop platform (${kDesktopPlatforms.join(', ')}) has a '
+            'resizable window — delete the key',
+      );
+    }
+  }
+  return problems;
+}

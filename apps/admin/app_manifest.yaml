@@ -24,7 +24,7 @@ platforms: # no runner is committed yet: `scaffold` says so and the report print
   windows: { runner: scaffold }
   macos: { runner: scaffold }
   linux: { runner: scaffold }
-  web: { runner: scaffold } # derived, not written: splash native (capability absent), push off (core_notifications not composed), deep links on
+  web: { runner: scaffold } # derived, not written: splash native (capability absent), push off (core_notifications not composed), deep links on, orientation phones_portrait, no window (a desktop platform may set `window: { initial: [w, h], min: [w, h] }` and pass ShellHooks.configureWindow)
 
 capabilities:
   session: provided

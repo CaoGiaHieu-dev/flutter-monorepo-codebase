@@ -83,9 +83,9 @@ String renderReport(AppView view) {
   line('### 2. Platforms (c) — effective values, `value (source)`');
   line(
     '| Platform | Runner | Splash | Push | Deep links | Orientation | '
-    'TLS pinning |',
+    'TLS pinning | Window |',
   );
-  line('|:--|:--|:--|:--|:--|:--|:--|');
+  line('|:--|:--|:--|:--|:--|:--|:--|:--|');
   for (final platform in derived) {
     line(
       '| ${platform.name} '
@@ -95,8 +95,10 @@ String renderReport(AppView view) {
       '(${_cell(platform.push.source)}) '
       '| ${platform.deepLinks.value ? 'on' : 'off'} '
       '(${platform.deepLinks.source}) '
-      '| phone-sized displays portrait, larger free (${platform.orientation.source}) '
-      '| ${_tls(platform.name)} |',
+      '| ${_orientation(platform.orientation.value)} '
+      '(${platform.orientation.source}) '
+      '| ${_tls(platform.name)} '
+      '| ${_window(platform.window)} |',
     );
   }
   line();
@@ -234,9 +236,13 @@ String renderReport(AppView view) {
   line('### 5. Behaviour values (profile)');
   line(
     'Typed Dart in `lib/app/app_profile.dart`, below the generated facts. '
-    'Nothing is tunable there yet beyond the facts themselves: display, '
-    'locale, theme, network limits and router locations are still shell '
-    'defaults (see the locked list below).',
+    'A section left out is the template default, and every section type '
+    'documents its defaults and ranges: `display:` (`DisplayProfile` — the '
+    'design artboard, the scale policy of each window class, the OS '
+    'font-size cap, split-screen mode, the phone threshold) and `router:` '
+    '(`RouterProfile` — when the entry location is used, the fallback '
+    'location). Locale, theme and network limits are still shell defaults '
+    '(see the locked list below).',
   );
   line();
 
@@ -275,15 +281,15 @@ String renderReport(AppView view) {
     'Channels: manifest sections (`platforms`, `capabilities`, `flavors`, '
     '`env`, `di_groups`, `modules`) · the profile (`lib/app/app_profile.dart`) '
     '· hooks (`lib/app/app_hooks.dart`, type `const ShellHooks(`: the error '
-    'channels, `beforeDependencies`, `afterBoot`) · contracts the app '
-    'registers under `lib/app/`.',
+    'channels, `beforeDependencies`, `afterBoot`, `navigatorObservers`, '
+    '`redirect`, `configureWindow`) · contracts the app registers under '
+    '`lib/app/`.',
   );
   line();
   line(
     '**Locked** — changing one means editing the shared package, for every '
-    'app: design size and scale policy, the text-scale cap, supported '
-    'locales, the palette, request timeouts and headers, router fallback '
-    'locations, breakpoints, component themes, page transitions, the default '
+    'app: supported locales, the palette, request timeouts and headers, '
+    'breakpoints, component themes, page transitions, the default '
     'interceptor chain, the 404 page, push channel and icon, deep-link '
     'allow-lists, logger limits, system UI overlay, secure-storage options. '
     'Replacing a shell-owned type by registration order is unsupported: the '
@@ -292,6 +298,26 @@ String renderReport(AppView view) {
     'types registered in the `after` groups.',
   );
   return b.toString();
+}
+
+/// What the kernel's `OrientationPolicy` constant [policy] does.
+String _orientation(String policy) => switch (policy) {
+  'phonesPortrait' => 'phone-sized displays portrait, larger free',
+  'free' => 'free',
+  'portrait' => 'always portrait',
+  'landscape' => 'always landscape',
+  _ => policy,
+};
+
+/// The declared window of a platform, or `—`.
+String _window(Sourced<WindowDecl>? window) {
+  if (window == null) return '—';
+  final decl = window.value;
+  final min = decl.min == null
+      ? ''
+      : ', min ${decl.min!.width} x ${decl.min!.height}';
+  return '${decl.initial.width} x ${decl.initial.height}$min '
+      '(${window.source}; needs the `configureWindow` hook)';
 }
 
 String _tls(String platform) {
@@ -369,7 +395,15 @@ String renderCatalog(ShellCatalog catalog) {
     'and supports the platform; off on web (no service worker is shipped)',
   );
   line('  deep links                 on');
-  line('  orientation                phone-sized displays locked to portrait');
+  line(
+    '  orientation                phones_portrait: displays under the phone '
+    'threshold locked to portrait',
+  );
+  line('  window                     none: the shell does not touch it');
+  line(
+    '  (every platform key above can be set in the manifest; what it sets is '
+    'printed with `manifest` as its source)',
+  );
   line('  ssl_pinning, dev flavor    disabled — "$kDevPinReason"');
   return b.toString();
 }

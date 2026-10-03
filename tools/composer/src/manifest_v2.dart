@@ -44,6 +44,28 @@ const List<String> kRunnerKinds = ['committed', 'scaffold'];
 /// `SplashMode` in `platform_kernel`.
 const List<String> kSplashModes = ['dart', 'native'];
 
+/// `OrientationPolicy` in `platform_kernel`, spelled snake_case as the
+/// manifest writes it (`phones_portrait` is `OrientationPolicy.phonesPortrait`).
+const List<String> kOrientationPolicies = [
+  'phones_portrait',
+  'free',
+  'portrait',
+  'landscape',
+];
+
+/// The orientation policy of a platform that says nothing.
+const String kDefaultOrientation = 'phones_portrait';
+
+/// `AppPlatform.isDesktop` in `platform_kernel`: the platforms with a
+/// resizable window, the only ones that can declare a `window`.
+const Set<String> kDesktopPlatforms = {'windows', 'macos', 'linux'};
+
+/// `phones_portrait` as the kernel's `OrientationPolicy` constant.
+String orientationConstant(String policy) => switch (policy) {
+  'phones_portrait' => 'phonesPortrait',
+  _ => policy,
+};
+
 /// The `dev` flavor's pinning decision when the manifest says nothing: the dev
 /// flavor exists to talk to local servers with self-signed certificates.
 const String kDevPinReason =
@@ -87,10 +109,10 @@ class KeySpec {
 
 /// The parse table: every key of the declaration half, with its consumer.
 ///
-/// A key exists only together with its consumer. `platforms.<p>.push`,
-/// `.deep_links`, `.orientation` and `.window` are not here: their consumers
-/// land in a later stage, and until then the generated facts carry the
-/// derived value of each (`facts_emit.dart`).
+/// A key exists only together with its consumer. Where a platform's
+/// `push`, `deep_links`, `orientation` or `window` is left out, the generated
+/// facts carry the derived default of each (`facts_emit.dart`), so a generated
+/// app never depends on a Dart default.
 const List<KeySpec> kManifestKeys = [
   KeySpec(
     key: 'app.id',
@@ -185,6 +207,51 @@ const List<KeySpec> kManifestKeys = [
     replaces: 'usesDartSplash = kIsWeb || !Platform.isIOS',
   ),
   KeySpec(
+    key: 'platforms.<p>.push',
+    type: 'bool',
+    defaultValue:
+        'true when core_notifications is composed and supports the platform '
+        '(web: false, no service worker is shipped), else false',
+    validation: 'true needs core_notifications composed and supporting <p>',
+    consumer:
+        'platform/infra/notifications/lib/src/push_notification_service.dart',
+    reads: 'push',
+    replaces: 'push was initialised on every platform the package compiled for',
+  ),
+  KeySpec(
+    key: 'platforms.<p>.deep_links',
+    type: 'bool',
+    defaultValue: 'true',
+    validation: 'none',
+    consumer:
+        'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart',
+    reads: 'deepLinks',
+    replaces: 'deep links were subscribed on every platform',
+  ),
+  KeySpec(
+    key: 'platforms.<p>.orientation',
+    type: 'phones_portrait | free | portrait | landscape',
+    defaultValue:
+        'phones_portrait: displays under the phone threshold are '
+        'locked to portrait, larger ones rotate freely',
+    validation: 'closed vocabulary (OrientationPolicy)',
+    consumer: 'platform/foundation/common/lib/src/config/app_initializer.dart',
+    reads: 'orientation',
+    replaces: 'the portrait lock hardcoded in AppInitializer',
+  ),
+  KeySpec(
+    key: 'platforms.<p>.window',
+    type: '{ initial: [width, height], min: [width, height] }',
+    defaultValue: 'none: the shell does not touch the window',
+    validation:
+        'desktop platforms only (windows, macos, linux); every side '
+        'positive; min no larger than initial; the app must pass a '
+        'ShellHooks.configureWindow hook (boot problem P05 otherwise)',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart',
+    reads: 'configureWindow',
+    replaces: 'no seam at all: a desktop window opened at the OS default',
+  ),
+  KeySpec(
     key: 'capabilities.<id>',
     type: 'provided, or { state: absent, reason: "..." }',
     defaultValue: 'required for every optional contract in the catalog',
@@ -235,15 +302,59 @@ class EnvDecl {
   final bool nativeOnly;
 }
 
+/// A width x height as the manifest writes it, `[width, height]`.
+class SizeDecl {
+  const SizeDecl(this.width, this.height);
+
+  final num width;
+  final num height;
+
+  /// Whether this is no larger than [other] on both sides.
+  bool fitsWithin(SizeDecl other) =>
+      width <= other.width && height <= other.height;
+}
+
+/// The `window` of one desktop platform.
+class WindowDecl {
+  const WindowDecl(this.initial, this.min);
+
+  final SizeDecl initial;
+
+  /// The smallest the window may be resized to, or null for no floor.
+  final SizeDecl? min;
+}
+
 /// One declared platform.
 class PlatformDecl {
-  const PlatformDecl(this.name, this.runner, this.splash);
+  const PlatformDecl(
+    this.name,
+    this.runner,
+    this.splash, {
+    this.push,
+    this.deepLinks,
+    this.orientation,
+    this.window,
+  });
 
   final String name;
   final String runner;
 
   /// `dart` / `native`, or null when the manifest leaves it to the default.
   final String? splash;
+
+  /// Whether push is on, or null when the manifest leaves it to the default.
+  final bool? push;
+
+  /// Whether deep links are on, or null when the manifest leaves it to the
+  /// default.
+  final bool? deepLinks;
+
+  /// One of [kOrientationPolicies], or null when the manifest leaves it to the
+  /// default.
+  final String? orientation;
+
+  /// The declared desktop window, or null.
+  final WindowDecl? window;
 }
 
 /// One `capabilities` entry as written (a bundle or a single contract).
@@ -306,6 +417,96 @@ bool isEmptyReason(String reason) {
 }
 
 final _envKey = RegExp(r'^[A-Z][A-Z0-9_]*$');
+
+/// The keys a `platforms.<p>` map may hold.
+const _platformKeys = [
+  'runner',
+  'splash',
+  'push',
+  'deep_links',
+  'orientation',
+  'window',
+];
+
+/// A boolean switch (`push`, `deep_links`) of platform [map], or null when it
+/// is left out. A value that is not a boolean is reported to [fail].
+bool? _parseSwitch(
+  YamlMap map,
+  String key,
+  String path,
+  void Function(String key, String problem) fail,
+) {
+  final value = map[key];
+  if (value == null) return null;
+  if (value is bool) return value;
+  fail('$path.$key', 'expected true or false, got ${describeValue(value)}');
+  return null;
+}
+
+/// `{ initial: [w, h], min: [w, h] }`, or null after reporting why not.
+WindowDecl? _parseWindow(
+  Object? raw,
+  String path,
+  void Function(String key, String problem) fail,
+) {
+  if (raw is! YamlMap) {
+    fail(
+      path,
+      'expected `{ initial: [width, height], min: [width, height] }`, got '
+      '${describeValue(raw)}',
+    );
+    return null;
+  }
+  var ok = true;
+  for (final key in raw.keys) {
+    if (key != 'initial' && key != 'min') {
+      fail('$path.$key', 'unknown key — expected initial, min');
+      ok = false;
+    }
+  }
+  SizeDecl? size(String key, {required bool required}) {
+    final value = raw[key];
+    if (value == null) {
+      if (required) {
+        fail(
+          '$path.$key',
+          'expected `[width, height]` in logical pixels, got nothing',
+        );
+        ok = false;
+      }
+      return null;
+    }
+    if (value is YamlList &&
+        value.length == 2 &&
+        value[0] is num &&
+        value[1] is num &&
+        (value[0] as num) > 0 &&
+        (value[1] as num) > 0) {
+      return SizeDecl(value[0] as num, value[1] as num);
+    }
+    fail(
+      '$path.$key',
+      'expected `[width, height]` in logical pixels, two positive numbers, '
+          'got ${describeValue(value)}',
+    );
+    ok = false;
+    return null;
+  }
+
+  final initial = size('initial', required: true);
+  final min = size('min', required: false);
+  if (initial != null && min != null && !min.fitsWithin(initial)) {
+    fail(
+      '$path.min',
+      'the minimum size must not exceed the initial size: '
+          '${min.width} x ${min.height} does not fit within '
+          '${initial.width} x ${initial.height}',
+    );
+    ok = false;
+  }
+  if (!ok || initial == null) return null;
+  return WindowDecl(initial, min);
+}
 
 /// `a string (`x`)`, `a list`, `nothing` — for "expected X, got Y".
 String describeValue(Object? value) => switch (value) {
@@ -547,8 +748,11 @@ AppDeclaration? parseDeclaration(
         continue;
       }
       for (final key in value.keys) {
-        if (key != 'runner' && key != 'splash') {
-          fail('$path.$key', 'unknown key — expected runner, splash');
+        if (!_platformKeys.contains(key)) {
+          fail(
+            '$path.$key',
+            'unknown key — expected ${_platformKeys.join(', ')}',
+          );
         }
       }
       final runner = value['runner'];
@@ -572,7 +776,32 @@ AppDeclaration? parseDeclaration(
         );
         continue;
       }
-      written[platform] = PlatformDecl(platform, runner, splash as String?);
+      final push = _parseSwitch(value, 'push', path, fail);
+      final deepLinks = _parseSwitch(value, 'deep_links', path, fail);
+      final orientation = value['orientation'];
+      if (orientation != null &&
+          (orientation is! String ||
+              !kOrientationPolicies.contains(orientation))) {
+        fail(
+          '$path.orientation',
+          'expected one of ${kOrientationPolicies.join(', ')}, got '
+              '${describeValue(orientation)}',
+        );
+        continue;
+      }
+      final window = value.containsKey('window')
+          ? _parseWindow(value['window'], '$path.window', fail)
+          : null;
+      if (value.containsKey('window') && window == null) continue;
+      written[platform] = PlatformDecl(
+        platform,
+        runner,
+        splash as String?,
+        push: push,
+        deepLinks: deepLinks,
+        orientation: orientation as String?,
+        window: window,
+      );
     }
     for (final platform in kPlatformNames) {
       final decl = written[platform];

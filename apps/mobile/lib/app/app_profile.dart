@@ -108,4 +108,9 @@ const AppFacts appFacts = AppFacts(
 /// How the shell behaves for this app — typed, const, template defaults
 /// wherever a section is left out. Facts (platforms, flavors, env,
 /// capabilities, pins) come from app_manifest.yaml, never from here.
+///
+/// The sections to tune — each documents its defaults and ranges:
+/// `display:` (`DisplayProfile` — the design artboard, the scale policy of
+/// each window class, the OS font-size cap) and `router:` (`RouterProfile` —
+/// the entry-location policy, the fallback location).
 const AppProfile appProfile = AppProfile(facts: appFacts);

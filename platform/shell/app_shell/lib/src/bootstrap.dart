@@ -70,8 +70,18 @@ import 'shell_hooks.dart';
 ///
 /// [hooks] carries an app's code for fixed points: the two error channels
 /// ([ShellHooks.onError], [ShellHooks.onNonFatalError]),
-/// [ShellHooks.beforeDependencies] and [ShellHooks.afterBoot]. The last two
-/// receive an [AppRuntime].
+/// [ShellHooks.beforeDependencies] and [ShellHooks.afterBoot], the router's
+/// [ShellHooks.navigatorObservers] and [ShellHooks.redirect], and
+/// [ShellHooks.configureWindow] for a desktop window the manifest declares.
+/// Those that take it receive an [AppRuntime].
+///
+/// ## What the profile tunes
+///
+/// Beside the generated facts, the profile's sections reach the shell:
+/// `profile.display` (artboard, scale policy, OS font-size cap) goes to
+/// [MainScope] and the app tree, `profile.router` to [AppRouter], and each
+/// platform's `orientation`, `deep_links`, `push` and `window` to the code
+/// that acts on them. All default to the template's own behaviour.
 ///
 /// ## Errors
 ///
@@ -109,7 +119,10 @@ void runShellApp({
         isDebug: kDebugMode,
       );
 
-      final problems = validateBoot(runtime);
+      final problems = validateBoot(
+        runtime,
+        hasWindowHook: hooks.configureWindow != null,
+      );
       if (problems.isNotEmpty) {
         runBootError(problems, detailed: showsBootDiagnostics(runtime.flavor));
         return;
@@ -118,7 +131,7 @@ void runShellApp({
       // Before DI: an eager singleton built while the graph initialises can
       // inject a section, and nothing registered later can shadow it.
       registerAppProfile(profile, platform: runtime.platform);
-      _registerHooks(hooks);
+      _registerHooks(hooks, runtime);
       await hooks.beforeDependencies?.call(runtime);
 
       await configureDependencies();
@@ -147,11 +160,10 @@ void runShellApp({
 
       // The platform's declared `splash` decides — iOS keeps its native splash
       // for the whole boot by default, so no Dart splash is built there.
-      final usesDartSplash =
-          (profile.facts.platformFor(runtime.platform) ??
-                  const PlatformFacts.today())
-              .splash ==
-          SplashMode.dart;
+      final platformFacts =
+          profile.facts.platformFor(runtime.platform) ??
+          const PlatformFacts.today();
+      final usesDartSplash = platformFacts.splash == SplashMode.dart;
 
       await MainScope(
         // Resolved through `core_di` rather than importing the splash feature:
@@ -160,7 +172,8 @@ void runShellApp({
         splashScreen: usesDartSplash
             ? getItOrNull<IAppSplashScreen>()?.build()
             : null,
-        root: const RootApp(),
+        root: RootApp(display: profile.display),
+        display: profile.display,
         initService: () async {
           await AppInitializer.init(
             routeObserver: getIt<AppRouter>().routeObserver,
@@ -168,6 +181,11 @@ void runShellApp({
             platform: runtime.platform,
             flavor: runtime.flavor,
           );
+          // Only a platform that declares a `window` has one to apply; with
+          // no hook that platform never got here (`P05`).
+          final window = platformFacts.window;
+          if (window != null)
+            await hooks.configureWindow?.call(runtime, window);
           await hooks.afterBoot?.call(runtime);
         },
       ).run();
@@ -194,15 +212,20 @@ void runShellApp({
 ///
 /// With [allowUndeclaredPlatform] (the `ALLOW_UNDECLARED_PLATFORM` define by
 /// default) an undeclared platform (`P01`) is logged as a warning instead.
+///
+/// [hasWindowHook] is whether the app passed [ShellHooks.configureWindow]: a
+/// platform that declares a `window` without one is `P05`.
 @visibleForTesting
 List<ProfileProblem> validateBoot(
   AppRuntime runtime, {
   bool allowUndeclaredPlatform = ProfileConstants.ALLOW_UNDECLARED_PLATFORM,
+  bool hasWindowHook = false,
 }) {
   final problems = runtime.profile.validate(
     platform: runtime.platform,
     flavor: runtime.flavor,
     checkEnv: !runtime.isDebug,
+    hasWindowHook: hasWindowHook,
   );
   if (!allowUndeclaredPlatform) return problems;
 
@@ -269,18 +292,24 @@ bool handleCompositionReport(
   return true;
 }
 
-/// Binds [hooks] under its exact type before DI, so a class the graph builds
-/// can read them with `getItOrNull<ShellHooks>()`.
+/// Binds [hooks] and [runtime] under their exact types before DI, so a class
+/// the graph builds can read them — `AppRouter` reads the router hooks with
+/// `getItOrNull<ShellHooks>()` and hands the hook the `AppRuntime`.
 ///
-/// Idempotent, like [registerAppProfile]: the same set again changes nothing,
-/// and a different one replaces the earlier registration — a harness that
-/// boots several apps in one process starts each from its own hooks.
-void _registerHooks(ShellHooks hooks) {
-  if (getIt.isRegistered<ShellHooks>()) {
-    if (identical(getIt<ShellHooks>(), hooks)) return;
-    getIt.unregister<ShellHooks>();
+/// Idempotent, like [registerAppProfile]: the same instance again changes
+/// nothing, and a different one replaces the earlier registration — a harness
+/// that boots several apps in one process starts each from its own.
+void _registerHooks(ShellHooks hooks, AppRuntime runtime) {
+  _register<ShellHooks>(hooks);
+  _register<AppRuntime>(runtime);
+}
+
+void _register<T extends Object>(T instance) {
+  if (getIt.isRegistered<T>()) {
+    if (identical(getIt<T>(), instance)) return;
+    getIt.unregister<T>();
   }
-  getIt.registerSingleton<ShellHooks>(hooks);
+  getIt.registerSingleton<T>(instance);
 }
 
 const String _library = 'platform_app_shell';

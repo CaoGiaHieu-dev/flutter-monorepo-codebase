@@ -11,19 +11,24 @@ void main() {
   tearDown(() => locator.reset());
 
   group('registerAppProfile', () {
-    test('registers the profile, the platform facts and the pin policy', () {
-      final profile = mobileProfile();
+    test(
+      'registers the profile, the platform, its facts and the pin policy',
+      () {
+        final profile = mobileProfile();
 
-      registerAppProfile(
-        profile,
-        platform: AppPlatform.ios,
-        locator: locator,
-      );
+        registerAppProfile(
+          profile,
+          platform: AppPlatform.ios,
+          locator: locator,
+        );
 
-      expect(locator<AppProfile>(), same(profile));
-      expect(locator<PlatformFacts>(), same(iosFacts));
-      expect(locator<SslPinningPolicy>(), same(profile.facts.sslPinning));
-    });
+        expect(locator<AppProfile>(), same(profile));
+        expect(locator<AppPlatform>(), AppPlatform.ios);
+        expect(locator<PlatformFacts>(), same(iosFacts));
+        expect(locator<SslPinningPolicy>(), same(profile.facts.sslPinning));
+        expect(locator<RouterProfile>(), same(profile.router));
+      },
+    );
 
     test('each section is bound under its own exact type', () {
       registerAppProfile(
@@ -33,12 +38,15 @@ void main() {
       );
 
       expect(locator.isRegistered<AppProfile>(), isTrue);
+      expect(locator.isRegistered<AppPlatform>(), isTrue);
       expect(locator.isRegistered<PlatformFacts>(), isTrue);
       expect(locator.isRegistered<SslPinningPolicy>(), isTrue);
-      // Nothing else is bound: the facts and the platform enum are read
-      // through the sections, never registered themselves.
+      expect(locator.isRegistered<RouterProfile>(), isTrue);
+      // Nothing else is bound: the facts are read through the profile, and a
+      // section a class is not DI-built for (`DisplayProfile`) is handed to
+      // it by `runShellApp`.
       expect(locator.isRegistered<AppFacts>(), isFalse);
-      expect(locator.isRegistered<AppPlatform>(), isFalse);
+      expect(locator.isRegistered<DisplayProfile>(), isFalse);
     });
 
     test('is idempotent: the same profile twice changes nothing', () {

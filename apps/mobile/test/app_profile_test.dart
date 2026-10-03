@@ -109,14 +109,21 @@ void main() {
   });
 
   group('the profile', () {
-    test(
-      'adds nothing to the facts yet: every tuning value is the default',
-      () {
-        // `AppProfile` has no tuning section in this version; when one is added
-        // its default must equal today's behaviour, and this is where the app
-        // proves it passes the default.
-        expect(const AppProfile(facts: appFacts).facts, same(appFacts));
-      },
-    );
+    test('tunes nothing: every section is the template default', () {
+      // What the shell did before an app could tune it. A section an app sets
+      // is a behaviour change, so the value here and the app move together.
+      const defaults = DisplayProfile();
+      final display = appProfile.display;
+      expect(display.designSize.width, defaults.designSize.width);
+      expect(display.designSize.height, defaults.designSize.height);
+      expect(display.textScaleMax, defaults.textScaleMax);
+      expect(display.splitScreenMode, defaults.splitScreenMode);
+      expect(display.phoneMaxShortestSide, defaults.phoneMaxShortestSide);
+      expect(display.scale.keys, defaults.scale.keys);
+      expect(display.scale[WindowClass.expanded], isA<FixedScale>());
+
+      expect(appProfile.router.entry, EntryPolicy.firstLaunch);
+      expect(appProfile.router.fallbackPath, isNull);
+    });
   });
 }

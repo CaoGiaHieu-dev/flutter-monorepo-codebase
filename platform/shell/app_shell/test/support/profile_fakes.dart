@@ -49,14 +49,17 @@ class FakeTreeWrapper extends IAppTreeWrapper {
 
 /// What a platform declares in these tests: the template's own behaviour,
 /// with the splash chosen per test.
-PlatformFacts platformFacts({SplashMode splash = SplashMode.dart}) =>
-    PlatformFacts(
-      runner: RunnerKind.committed,
-      splash: splash,
-      orientation: OrientationPolicy.phonesPortrait,
-      deepLinks: true,
-      push: true,
-    );
+PlatformFacts platformFacts({
+  SplashMode splash = SplashMode.dart,
+  WindowFacts? window,
+}) => PlatformFacts(
+  runner: RunnerKind.committed,
+  splash: splash,
+  orientation: OrientationPolicy.phonesPortrait,
+  deepLinks: true,
+  push: true,
+  window: window,
+);
 
 /// The `capabilities:` declaration for every optional catalog row: the ids in
 /// [provided] are `provided`, every other one `absent`. [overrides] replace a
@@ -79,7 +82,9 @@ AppProfile testProfile({
   Map<AppPlatform, PlatformFacts>? platforms,
   Map<String, CapabilityExpectation>? capabilities,
   SslPinningPolicy? sslPinning,
+  DisplayProfile display = const DisplayProfile(),
 }) => AppProfile(
+  display: display,
   facts: AppFacts(
     id: 'test_app',
     name: 'Test App',

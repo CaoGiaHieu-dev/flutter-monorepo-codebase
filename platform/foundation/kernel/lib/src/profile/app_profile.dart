@@ -1,7 +1,9 @@
 import '../flavor.dart';
 import 'app_facts.dart';
 import 'app_platform.dart';
+import 'display_profile.dart';
 import 'profile_problem.dart';
+import 'router_profile.dart';
 
 /// Everything an app tells the shell about itself.
 ///
@@ -9,11 +11,26 @@ import 'profile_problem.dart';
 /// `lib/app/app_profile.dart` wraps it in a `const AppProfile`, and
 /// `runShellApp` registers it (`registerAppProfile`) before dependency
 /// injection starts, so anything built during DI can read it.
+///
+/// The split: [facts] say what the app *is* and where it runs (generated from
+/// the manifest, which tools read before any code compiles); the sections
+/// beside it say how the shell *behaves* (typed const Dart, defaults equal to
+/// the template's own behaviour). An app that sets no section is the template.
 final class AppProfile {
-  const AppProfile({required this.facts});
+  const AppProfile({
+    required this.facts,
+    this.display = const DisplayProfile(),
+    this.router = const RouterProfile(),
+  });
 
   /// What the app is and where it runs. Generated from the manifest.
   final AppFacts facts;
+
+  /// The design artboard, scale policy and OS font-size cap.
+  final DisplayProfile display;
+
+  /// Where the router starts and where it falls back to.
+  final RouterProfile router;
 
   /// The problems with starting this app on [platform] in [flavor] — pure and
   /// pre-DI, so the shell can stop before any dependency is built.

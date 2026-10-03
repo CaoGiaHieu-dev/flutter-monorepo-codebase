@@ -81,7 +81,11 @@ void main() {
   });
 
   group('text scaling in RootApp', () {
-    Future<TextScaler> scalerSeenAt(WidgetTester tester, double osScale) async {
+    Future<TextScaler> scalerSeenAt(
+      WidgetTester tester,
+      double osScale, {
+      DisplayProfile display = const DisplayProfile(),
+    }) async {
       tester.platformDispatcher.textScaleFactorTestValue = osScale;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
@@ -111,7 +115,7 @@ void main() {
         );
 
       await tester.pumpWidget(
-        const ResponsiveInit(child: RootApp()),
+        ResponsiveInit(child: RootApp(display: display)),
       );
       await tester.pumpAndSettle();
       await _unmount(tester);
@@ -123,11 +127,37 @@ void main() {
       expect(scaler.scale(10), 15);
     });
 
-    testWidgets('the OS setting is capped at MAX_TEXT_SCALE_FACTOR', (
+    testWidgets('the OS setting is capped at DisplayProfile.textScaleMax', (
       tester,
     ) async {
       final scaler = await scalerSeenAt(tester, 3.0);
-      expect(scaler.scale(10), 10 * AppShellUiConstants.MAX_TEXT_SCALE_FACTOR);
+      expect(scaler.scale(10), 10 * const DisplayProfile().textScaleMax);
+    });
+
+    testWidgets('an app that allows more raises the cap', (tester) async {
+      final scaler = await scalerSeenAt(
+        tester,
+        3.0,
+        display: const DisplayProfile(textScaleMax: 3.0),
+      );
+      expect(scaler.scale(10), 30);
+    });
+
+    testWidgets('an app\'s higher cap still caps what goes past it', (
+      tester,
+    ) async {
+      final scaler = await scalerSeenAt(
+        tester,
+        3.5,
+        display: const DisplayProfile(textScaleMax: 3.0),
+      );
+      expect(scaler.scale(10), 30);
+    });
+
+    testWidgets('the default cap is 200 %, the RULE-38 floor', (tester) async {
+      expect(const DisplayProfile().textScaleMax, 2.0);
+      final scaler = await scalerSeenAt(tester, 3.0);
+      expect(scaler.scale(10), 20);
     });
 
     testWidgets('the splash MaterialApp is capped too', (tester) async {
@@ -150,7 +180,33 @@ void main() {
       );
       await _unmount(tester);
 
-      expect(seen.scale(10), 10 * AppShellUiConstants.MAX_TEXT_SCALE_FACTOR);
+      expect(seen.scale(10), 10 * const DisplayProfile().textScaleMax);
+    });
+
+    testWidgets('the splash MaterialApp follows the app\'s cap', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 3.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      _registerProviders(AppRouter());
+
+      late TextScaler seen;
+      await tester.pumpWidget(
+        ResponsiveInit(
+          child: AppMaterialWrapper(
+            display: const DisplayProfile(textScaleMax: 3.0),
+            home: Builder(
+              builder: (context) {
+                seen = MediaQuery.textScalerOf(context);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      await _unmount(tester);
+
+      expect(seen.scale(10), 30);
     });
 
     testWidgets('a smaller-than-default setting is honoured too', (

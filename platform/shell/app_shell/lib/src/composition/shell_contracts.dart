@@ -110,8 +110,8 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/shell/app_shell/lib/src/navigation/app_router.dart:110, '
-        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:136',
+        'platform/shell/app_shell/lib/src/navigation/app_router.dart:132, '
+        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:139',
     whenAbsent: 'the first-launch rule cannot run',
   ),
   ShellContract<SslPinningConfig>(
@@ -130,8 +130,8 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/shell/app_shell/lib/src/root_app.dart:48, '
-        'platform/shell/app_shell/lib/src/bootstrap.dart:166',
+        'platform/shell/app_shell/lib/src/root_app.dart:54, '
+        'platform/shell/app_shell/lib/src/bootstrap.dart:179',
     whenAbsent: 'boot throws "AppRouter is not registered"',
   ),
   ShellContract<DeeplinkProvider>(
@@ -139,7 +139,7 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/shell/app_shell/lib/src/app_material_wrapper.dart:110, '
+        'platform/shell/app_shell/lib/src/app_material_wrapper.dart:122, '
         'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:41',
     whenAbsent: 'boot throws "DeeplinkProvider is not registered"',
   ),
@@ -147,14 +147,14 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'theme_provider',
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:98',
+    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:110',
     whenAbsent: 'boot throws "ThemeProvider is not registered"',
   ),
   ShellContract<LanguageProvider>(
     id: 'language_provider',
     need: ShellNeed.required,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:99',
+    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:111',
     whenAbsent: 'boot throws "LanguageProvider is not registered"',
   ),
   ShellContract<ISessionState>(
@@ -164,7 +164,7 @@ const List<ShellContract<Object>> kShellContracts = [
     cardinality: ContractCardinality.one,
     consumer:
         'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:40, '
-        'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart:46, '
+        'platform/shell/app_shell/lib/src/provider/deeplink_provider.dart:74, '
         'platform/shell/adapters/lib/src/network_config_impl.dart:94',
     whenAbsent:
         'the navigation wrapper treats the app as signed out, every deep '
@@ -183,7 +183,7 @@ const List<ShellContract<Object>> kShellContracts = [
     bundle: 'session',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:139',
+    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:168',
     whenAbsent: 'the router never re-resolves its location on a session change',
   ),
   ShellContract<ISignInLocation>(
@@ -192,29 +192,29 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:154, '
-        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:190',
+        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:157, '
+        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:193',
     whenAbsent: 'the shell never redirects a signed-out user',
   ),
   ShellContract<IFeatureRouteModule>(
     id: 'routes',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.many,
-    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:51',
+    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:65',
     whenAbsent: 'the router has no stack routes',
   ),
   ShellContract<INavDestinationModule>(
     id: 'tabs',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.many,
-    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:45',
+    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:59',
     whenAbsent: 'the router opens one placeholder route (`/_empty_dashboard`)',
   ),
   ShellContract<IDashboardRouteModule>(
     id: 'dashboard',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:161',
+    consumer: 'platform/shell/app_shell/lib/src/navigation/app_router.dart:190',
     whenAbsent: 'the destinations render without any chrome',
   ),
   ShellContract<IAppEntryLocation>(
@@ -222,8 +222,8 @@ const List<ShellContract<Object>> kShellContracts = [
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
     consumer:
-        'platform/shell/app_shell/lib/src/navigation/app_router.dart:105, '
-        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:133',
+        'platform/shell/app_shell/lib/src/navigation/app_router.dart:126, '
+        'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:136',
     whenAbsent:
         'there is no first-launch entry; boot goes to the sign-in check',
   ),
@@ -231,35 +231,35 @@ const List<ShellContract<Object>> kShellContracts = [
     id: 'post_sign_in',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:175',
+    consumer: 'platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart:178',
     whenAbsent: 'after sign-in the router opens its fallback, the first tab',
   ),
   ShellContract<IAppSplashScreen>(
     id: 'splash',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:161',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:173',
     whenAbsent: 'the native splash is kept through boot',
   ),
   ShellContract<IAppTreeWrapper>(
     id: 'tree_wrappers',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.many,
-    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:84',
+    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:96',
     whenAbsent: 'the widget tree is built unwrapped',
   ),
   ShellContract<IFeatureLocalization>(
     id: 'localization',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.many,
-    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:142',
+    consumer: 'platform/shell/app_shell/lib/src/app_material_wrapper.dart:154',
     whenAbsent: 'only core_base_ui\'s own strings are translated',
   ),
   ShellContract<IErrorReporter>(
     id: 'error_reporter',
     need: ShellNeed.optional,
     cardinality: ContractCardinality.one,
-    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:363',
+    consumer: 'platform/shell/app_shell/lib/src/bootstrap.dart:392',
     whenAbsent: 'errors are printed and sent nowhere (RULE-67)',
   ),
   ShellContract<IAnalytics>(

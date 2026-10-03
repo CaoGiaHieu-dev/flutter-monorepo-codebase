@@ -28,17 +28,45 @@ import '../navigation/app_router.dart';
 /// screen over the sign-in page. The session is read through
 /// [ISessionState] with `getItOrNull`; a build composing no session owner
 /// has no session to guard, and routes every link.
+///
+/// An app can switch deep links off for a platform
+/// (`platforms.<p>.deep_links: false` in its manifest, handed over as
+/// [PlatformFacts.deepLinks]): [initAppLink] then logs one INFO line naming
+/// the key and subscribes to nothing.
 @lazySingleton
 class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
-  DeeplinkProvider(this._router);
+  /// [_platform] is what the app declared for the platform it runs on
+  /// (`registerAppProfile` registers it before DI); the template default —
+  /// deep links on — when none is given.
+  DeeplinkProvider(
+    this._router, [
+    this._platform = const PlatformFacts.today(),
+  ]);
 
   final AppRouter _router;
+  final PlatformFacts _platform;
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
+  bool _loggedOff = false;
 
   /// Starts listening. Idempotent: a second call would otherwise add a second
   /// listener and route every link twice.
+  ///
+  /// With deep links switched off for this platform it logs once and returns,
+  /// however often it is called: the `app_links` stream is never touched.
   void initAppLink() {
+    if (!_platform.deepLinks) {
+      if (!_loggedOff) {
+        _loggedOff = true;
+        DynamicLogger.log(
+          'Deep links are off: ${platformSwitchKey('deep_links')} is false, '
+          'so incoming links are not listened to.',
+          tag: 'DeepLink',
+          level: LogLevel.INFO,
+        );
+      }
+      return;
+    }
     _linkSubscription ??= _appLinks.uriLinkStream.listen(_handleDeepLink);
   }
 

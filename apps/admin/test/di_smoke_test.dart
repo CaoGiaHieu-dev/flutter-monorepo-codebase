@@ -56,6 +56,10 @@ void main() {
         );
         expect(singletons, isNotEmpty);
 
+        // The graph is built from the sections the profile registered before
+        // it: the router got the app's own `RouterProfile`, not a default.
+        expect(getIt<AppRouter>().profile, same(appProfile.router));
+
         final report = checkAppContract(
           appProfile,
           flavor: flavor,

@@ -104,7 +104,7 @@ class AppInitializer {
     }
 
     // Configure System Settings (Orientation & UI Overlay)
-    await _configureSystemSettings();
+    await _configureSystemSettings(profile, platform);
   }
 
   static void _setupDynamicLogger() {
@@ -248,41 +248,68 @@ class AppInitializer {
     }
   }
 
-  static Future<void> _configureSystemSettings() async {
+  static Future<void> _configureSystemSettings(
+    AppProfile? profile,
+    AppPlatform? platform,
+  ) async {
+    final facts = platform == null
+        ? null
+        : profile?.facts.platformFor(platform);
     await SystemChrome.setPreferredOrientations(
-      preferredOrientationsFor(_shortestSideAtLaunch()),
+      preferredOrientationsFor(
+        _shortestSideAtLaunch(),
+        policy: facts?.orientation ?? OrientationPolicy.phonesPortrait,
+        phoneMaxShortestSide: profile?.display.phoneMaxShortestSide,
+      ),
     );
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
   }
 
   /// The orientations to allow on a display whose shortest side is
-  /// [shortestSide] logical pixels (`null` when it could not be measured).
+  /// [shortestSide] logical pixels (`null` when it could not be measured),
+  /// under the platform's declared [policy]
+  /// (`platforms.<p>.orientation` in the app manifest).
   ///
-  /// A phone-sized display (shortest side below the Material 3 `medium`
-  /// breakpoint, 600) is locked to portrait: the phone layouts are designed
-  /// for it. Anything larger — a tablet, an unfolded foldable, a desktop —
-  /// gets every orientation (an empty list means "no preference"), so it is
-  /// never letterboxed and its landscape and rail layouts are reachable.
-  /// Locking every device to portrait did both. An unmeasurable display is
-  /// left unlocked too, rather than guessed to be a phone.
+  /// - [OrientationPolicy.phonesPortrait], the default: a phone-sized display
+  ///   (shortest side below [phoneMaxShortestSide] — the app's
+  ///   `DisplayProfile.phoneMaxShortestSide`, 600 by default, the Material 3
+  ///   `medium` breakpoint) is locked to portrait: the phone layouts are
+  ///   designed for it. Anything larger — a tablet, an unfolded foldable, a
+  ///   desktop — gets every orientation (an empty list means "no
+  ///   preference"), so it is never letterboxed and its landscape and rail
+  ///   layouts are reachable. An unmeasurable display is left unlocked too,
+  ///   rather than guessed to be a phone.
+  /// - [OrientationPolicy.free]: never locked.
+  /// - [OrientationPolicy.portrait]: always portrait.
+  /// - [OrientationPolicy.landscape]: always landscape.
   ///
   /// This is a device question — whether to lock at all — so it is decided
   /// once from the display at launch. Layout still follows the window size
   /// class, never this.
   static List<DeviceOrientation> preferredOrientationsFor(
-    double? shortestSide,
-  ) {
-    if (shortestSide == null) return const [];
-    final phoneSized = shortestSide < _phoneMaxShortestSide;
-    return phoneSized ? const [DeviceOrientation.portraitUp] : const [];
+    double? shortestSide, {
+    OrientationPolicy policy = OrientationPolicy.phonesPortrait,
+    double? phoneMaxShortestSide,
+  }) {
+    switch (policy) {
+      case OrientationPolicy.free:
+        return const [];
+      case OrientationPolicy.portrait:
+        return const [DeviceOrientation.portraitUp];
+      case OrientationPolicy.landscape:
+        return const [
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ];
+      case OrientationPolicy.phonesPortrait:
+        if (shortestSide == null) return const [];
+        final threshold =
+            phoneMaxShortestSide ?? const DisplayProfile().phoneMaxShortestSide;
+        return shortestSide < threshold
+            ? const [DeviceOrientation.portraitUp]
+            : const [];
+    }
   }
-
-  /// The Material 3 `medium` breakpoint, in logical pixels — the same value
-  /// as `core_responsive`'s `ResponsiveConstants.BREAKPOINT_MEDIUM`. Spelled
-  /// out here because `core_common` is foundation and must not depend on the
-  /// ui group; the lock is a fixed device question, not a configurable
-  /// window-size-class boundary.
-  static const double _phoneMaxShortestSide = 600;
 
   /// Shortest side, in logical pixels, of the display the first view is on
   /// — or of the view itself when the display reports no size. `null` when

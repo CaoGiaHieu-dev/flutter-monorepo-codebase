@@ -130,6 +130,9 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// this returned early, and the login redirect below never ran. The very
   /// first launch of such an app opened signed-out on a protected screen.
   bool _goToOnboarding() {
+    // `EntryPolicy.never`: the app ignores the entry location, so the boot
+    // redirect must not keep a first launch on it either.
+    if (!getIt<AppRouter>().usesEntryLocation) return false;
     if (getItOrNull<IAppEntryLocation>() == null) return false;
     // `getItOrNull`, like `AppRouter.entryLocation`: without the boot flag
     // every launch counts as a first one.

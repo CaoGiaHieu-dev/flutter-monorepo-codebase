@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/04_routing.md@e5b7f09 -->
+<!-- translated-from: docs/en/guides/04_routing.md@d6a34fc -->
 # Routing & Điều hướng
 
 ## Mục tiêu

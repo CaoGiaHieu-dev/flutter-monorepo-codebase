@@ -729,4 +729,42 @@ modules: []
       );
     }, skip: skip);
   });
+
+  group('the generated navigator keeps its imports sorted', () {
+    test('a name that sorts before flutter and injectable', () {
+      final out = CommonHelpers.sortLeadingPackageImports(
+        "import 'package:flutter/widgets.dart';\n"
+        "import 'package:injectable/injectable.dart';\n"
+        "import 'package:alpha_api/alpha_api.dart';\n"
+        '\n'
+        "import '../route.dart';\n",
+      );
+      expect(
+        out.split('\n').take(3),
+        [
+          "import 'package:alpha_api/alpha_api.dart';",
+          "import 'package:flutter/widgets.dart';",
+          "import 'package:injectable/injectable.dart';",
+        ],
+      );
+      expect(out, endsWith("import '../route.dart';\n"));
+    });
+
+    test('a name that sorts between them, and source without imports', () {
+      final out = CommonHelpers.sortLeadingPackageImports(
+        "import 'package:flutter/widgets.dart';\n"
+        "import 'package:injectable/injectable.dart';\n"
+        "import 'package:home_api/home_api.dart';\n",
+      );
+      expect(out.split('\n').take(3), [
+        "import 'package:flutter/widgets.dart';",
+        "import 'package:home_api/home_api.dart';",
+        "import 'package:injectable/injectable.dart';",
+      ]);
+      expect(
+        CommonHelpers.sortLeadingPackageImports('class A {}'),
+        'class A {}',
+      );
+    });
+  });
 }

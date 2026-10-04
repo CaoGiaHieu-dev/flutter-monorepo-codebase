@@ -689,6 +689,26 @@ class CommonHelpers {
   static String navigatorImplPath(String featurePath, String nameInput) =>
       '$featurePath/lib/src/routing/${nameInput}_navigator_impl.dart';
 
+  /// Sorts the first run of consecutive `import 'package:…';` lines of
+  /// [source] by URI, the order the `directives_ordering` lint wants. A
+  /// template cannot place `<name>_api` itself, because where it falls among
+  /// `flutter` and `injectable` depends on the name the user picked.
+  static String sortLeadingPackageImports(String source) {
+    final lines = source.split('\n');
+    final start = lines.indexWhere((l) => l.startsWith("import 'package:"));
+    if (start < 0) return source;
+    var end = start;
+    while (end < lines.length && lines[end].startsWith("import 'package:")) {
+      end++;
+    }
+    final block = lines.sublist(start, end)..sort();
+    return [
+      ...lines.sublist(0, start),
+      ...block,
+      ...lines.sublist(end),
+    ].join('\n');
+  }
+
   static void writeNavigatorImpl(String featurePath, String nameInput) {
     final tpl = Template(
       File(
@@ -696,11 +716,13 @@ class CommonHelpers {
       ).readAsStringSync(),
     );
     File(navigatorImplPath(featurePath, nameInput)).writeAsStringSync(
-      tpl.renderString({
-        'moduleName': 'feature_$nameInput',
-        'snakeNameInput': nameInput,
-        'pascalNameInput': toPascalCase(nameInput),
-      }),
+      sortLeadingPackageImports(
+        tpl.renderString({
+          'moduleName': 'feature_$nameInput',
+          'snakeNameInput': nameInput,
+          'pascalNameInput': toPascalCase(nameInput),
+        }),
+      ),
     );
     stdout.writeln(
       '  -> Implemented ${toPascalCase(nameInput)}Navigator in '

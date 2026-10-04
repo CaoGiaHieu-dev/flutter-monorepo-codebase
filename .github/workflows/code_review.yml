@@ -242,7 +242,8 @@ jobs:
             const fileSections = report.split('## 📄 ').slice(1);
 
             for (const section of fileSections) {
-              const pathMatch = section.match(/\*\*Đường dẫn:\*\* `(.+?)`/);
+              // The label is translated (Path, Đường dẫn, …): match any bold label.
+              const pathMatch = section.match(/\*\*[^*\n:]+:\*\* `(.+?)`/);
               if (!pathMatch) continue;
               const filePath = pathMatch[1];
 
@@ -279,7 +280,7 @@ jobs:
             // 3. Create a summary comment and post the review
             const summaryHeader = `## 🤖 AI Code Review Results\n\n`;
             const summaryFooter = `\n\n---\n\n*Các gợi ý chi tiết đã được thêm trực tiếp vào các dòng code liên quan.*\n\n🔗 **Xem báo cáo đầy đủ và workflow run tại đây:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            let summaryBody = (report.match(/# 📊 PHẦN 1: TỔNG QUAN[\s\S]+?(?=# 🔍 PHẦN 2:)/) || [""])[0];
+            let summaryBody = (report.match(/# 📊 [^\n]+\n[\s\S]+?(?=\n# 🔍 )/) || [""])[0];
 
             if (generalIssues.length > 0) {
               summaryBody += `\n\n### ⚠️ Các vấn đề ngoài phạm vi thay đổi\n\n*Một số vấn đề được tìm thấy trong các file nhưng nằm ngoài những dòng code bạn đã thay đổi. Các vấn đề này đã được gộp lại và bình luận riêng trên PR.*`;

@@ -11,7 +11,8 @@ part of '../base/base_provider.dart';
 /// - Handles loading state management
 /// - Processes success and error responses
 /// - Manages state transitions during operations
-/// - Provides comprehensive error handling
+/// - Provides comprehensive error handling: a failed [Result] and an operation
+///   that throws both end in the error state, never in a stuck `loading`
 class OperationExecutor<T> {
   const OperationExecutor(this._stateManager);
 
@@ -45,7 +46,30 @@ class OperationExecutor<T> {
       }
 
       // Execute operation
-      final result = await config.operation();
+      final Result<R> result;
+      try {
+        result = await config.operation();
+      } catch (error, stackTrace) {
+        // Repositories already turn exceptions into `Result.failure`; one
+        // that escapes is a bug. Still settle the screen — rethrowing here
+        // would leave it on `loading` for good — as `emitResult` does for a
+        // bloc: the failure state, and the error surfaced where a bug is
+        // looked for.
+        if (_stateManager.isDisposed) return;
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'provider_state_management',
+            context: ErrorDescription('while running an operation'),
+          ),
+        );
+        await _handleFailure(
+          ErrorHandler.handleError(error, stackTrace),
+          config,
+        );
+        return;
+      }
 
       if (_stateManager.isDisposed) return;
 

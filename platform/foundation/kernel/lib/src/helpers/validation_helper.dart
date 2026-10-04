@@ -239,51 +239,76 @@ class ValidationHelper {
     return null;
   }
 
-  /// Validates a date string in YYYY-MM-DD format
+  /// Validates a date string in YYYY-MM-DD format.
+  ///
+  /// The date has to exist: `2026-13-45` and `2026-02-30` are refused (Dart's
+  /// `DateTime.parse` would roll them over into the next month or year and
+  /// accept them), and a leap day only in a leap year.
+  ///
   /// Returns null if valid, error message if invalid
   static String? validateDate(String? date) {
     if (date == null || date.isEmpty) {
       return 'Date is required';
     }
 
-    try {
-      DateTime.parse(date);
-      return null;
-    } catch (e) {
+    if (_parseDate(date) == null) {
       return 'Please enter a valid date (YYYY-MM-DD)';
     }
+    return null;
   }
 
-  /// Validates that a date is not in the past
+  /// Validates that a date is not in the past: today and later pass.
+  ///
+  /// Compared by calendar day, not by instant — a date-only string reads as
+  /// midnight, which is before "now" for the whole of today.
+  ///
   /// Returns null if valid, error message if invalid
   static String? validateFutureDate(String? date) {
     final dateValidation = validateDate(date);
     if (dateValidation != null) return dateValidation;
 
-    final parsedDate = DateTime.parse(date!);
-    final now = DateTime.now();
-
-    if (parsedDate.isBefore(now)) {
+    if (_parseDate(date!)!.isBefore(_today())) {
       return 'Date cannot be in the past';
     }
 
     return null;
   }
 
-  /// Validates that a date is not in the future
+  /// Validates that a date is not in the future: today and earlier pass.
+  ///
   /// Returns null if valid, error message if invalid
   static String? validatePastDate(String? date) {
     final dateValidation = validateDate(date);
     if (dateValidation != null) return dateValidation;
 
-    final parsedDate = DateTime.parse(date!);
-    final now = DateTime.now();
-
-    if (parsedDate.isAfter(now)) {
+    if (_parseDate(date!)!.isAfter(_today())) {
       return 'Date cannot be in the future';
     }
 
     return null;
+  }
+
+  /// [date] (`YYYY-MM-DD`) as local midnight, or null when it is not a real
+  /// calendar date.
+  static DateTime? _parseDate(String date) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(date);
+    if (match == null) return null;
+
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final parsed = DateTime(year, month, day);
+    // `DateTime` normalises an overflowing month or day instead of failing.
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      return null;
+    }
+    return parsed;
+  }
+
+  /// Local midnight of the current day.
+  static DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
   }
 
   /// Combines multiple validators into a single validation function.

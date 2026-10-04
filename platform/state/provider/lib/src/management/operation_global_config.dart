@@ -44,7 +44,10 @@ class OperationGlobalConfig {
   /// Example:
   /// ```dart
   /// OperationGlobalConfig.instance.setup(
-  ///   onFailure: (failure) => AppOverlay.showToast(content: failure.message),
+  ///   // For logs and crash reports. A message for the user is translated
+  ///   // where a `BuildContext` exists: `context.l10n.failureMessage(code)`
+  ///   // (RULE-34), never `failure.message`.
+  ///   onFailure: (failure) => DynamicLogger.log(failure.message),
   /// );
   /// ```
   void setup({

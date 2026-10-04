@@ -24,9 +24,14 @@ extension StringExtension on String {
     return split(' ').map((word) => word.capitalize()).join(' ');
   }
 
-  /// Checks if the string is a valid email address
+  /// Checks if the string looks like an email address: a local part, an `@`
+  /// and a domain with at least one dot whose last label has two or more
+  /// characters (`.io`, `.store`, `.technology` — top-level domains are not
+  /// limited to four letters).
+  ///
+  /// A shape check, not a delivery check.
   bool get isValidEmail {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(this);
+    return RegExp(r'^[\w.+-]+@([\w-]+\.)+[\w-]{2,}$').hasMatch(this);
   }
 
   /// Checks if the string is a valid phone number

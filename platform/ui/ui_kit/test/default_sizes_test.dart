@@ -68,21 +68,36 @@ void main() {
       expect(box.height, equals(box.width));
     });
 
-    testWidgets('CustomButton.rectangle scales its default height', (
-      tester,
-    ) async {
+    testWidgets('CustomButton.rectangle never scales below the 48 dp tap '
+        'target', (tester) async {
       await _pump(
         tester,
         CustomButton.rectangle(onPressed: () {}, child: const Text('go')),
       );
 
       final button = tester.widget<MaterialButton>(find.byType(MaterialButton));
-      expect(button.height, equals(SharedUiConstants.BUTTON_HEIGHT / 2));
+      expect(button.height, equals(kMinInteractiveDimension));
+      expect(
+        tester.getSize(find.byType(MaterialButton)).height,
+        greaterThanOrEqualTo(kMinInteractiveDimension),
+      );
     });
 
-    testWidgets('CustomButton.rectangle keeps a caller height as-is', (
-      tester,
-    ) async {
+    testWidgets('CustomButton.rectangle keeps a caller height above 48 as-is, '
+        'and lifts a smaller one to 48', (tester) async {
+      await _pump(
+        tester,
+        CustomButton.rectangle(
+          height: 60,
+          onPressed: () {},
+          child: const Text('go'),
+        ),
+      );
+      expect(
+        tester.widget<MaterialButton>(find.byType(MaterialButton)).height,
+        equals(60),
+      );
+
       await _pump(
         tester,
         CustomButton.rectangle(
@@ -91,9 +106,42 @@ void main() {
           child: const Text('go'),
         ),
       );
-
-      final button = tester.widget<MaterialButton>(find.byType(MaterialButton));
-      expect(button.height, equals(30));
+      expect(
+        tester.widget<MaterialButton>(find.byType(MaterialButton)).height,
+        equals(kMinInteractiveDimension),
+      );
     });
+
+    // RULE-39: the hit area, at the common phone sizes where `context.h`
+    // scales a 48 dp design height down (360x640 -> 38 dp, 320x568 -> 34 dp).
+    for (final size in const [Size(320, 568), Size(360, 640), Size(375, 812)]) {
+      testWidgets('CustomButton.rectangle hit area is >= 48 dp tall at '
+          '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(extensions: [ThemeSystemExtension.light]),
+            home: ResponsiveInit(
+              child: Scaffold(
+                body: Center(
+                  child: CustomButton.rectangle(
+                    onPressed: () {},
+                    child: const Text('Sign in'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(
+          tester.getSize(find.byType(MaterialButton)).height,
+          greaterThanOrEqualTo(kMinInteractiveDimension),
+        );
+      });
+    }
   });
 }

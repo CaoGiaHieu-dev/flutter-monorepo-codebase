@@ -87,6 +87,9 @@ class TestProvider extends BaseProvider<String> {
     await executeOperation(OperationConfig(operation: operation));
   }
 
+  Future<void> runConfig(OperationConfig<String, String> config) =>
+      executeOperation<String>(config);
+
   void exposeUpdateState({
     ViewState? state,
     String? data,
@@ -494,14 +497,68 @@ void main() {
 
     test('onFinish runs when the operation throws', () async {
       final provider = TestProvider();
+      final reported = <FlutterErrorDetails>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previous);
 
-      await expectLater(
-        provider.runOperation(() async => throw StateError('boom')),
-        throwsStateError,
-      );
+      await provider.runOperation(() async => throw StateError('boom'));
 
       expect(starts, equals(1));
       expect(finishes, equals(1));
+      expect(reported.single.exception, isA<StateError>());
+      provider.dispose();
+    });
+  });
+
+  group('an operation that throws', () {
+    late List<FlutterErrorDetails> reported;
+    late FlutterExceptionHandler? previous;
+
+    setUp(() {
+      reported = [];
+      previous = FlutterError.onError;
+      FlutterError.onError = reported.add;
+    });
+
+    tearDown(() => FlutterError.onError = previous);
+
+    test('leaves loading: the provider settles on an error state', () async {
+      final provider = TestProvider();
+
+      await provider.runOperation(() async => throw StateError('mapper bug'));
+
+      expect(provider.isLoading, isFalse);
+      expect(provider.isError, isTrue);
+      expect(reported.single.exception, isA<StateError>());
+      provider.dispose();
+    });
+
+    test('reaches the config\'s onFailure and errorStateBuilder like a '
+        'failed Result', () async {
+      final provider = TestProvider();
+      AppFailure<dynamic>? seen;
+
+      await provider.runConfig(
+        OperationConfig(
+          operation: () async => throw StateError('bug'),
+          onFailure: (failure) async => seen = failure,
+        ),
+      );
+
+      expect(seen, isNotNull);
+      expect(provider.isError, isTrue);
+      provider.dispose();
+    });
+
+    test('the provider still works afterwards', () async {
+      final provider = TestProvider();
+      await provider.runOperation(() async => throw StateError('bug'));
+
+      await provider.runSuccessOperation('fine');
+
+      expect(provider.isSuccess, isTrue);
+      expect(provider.data, 'fine');
       provider.dispose();
     });
   });

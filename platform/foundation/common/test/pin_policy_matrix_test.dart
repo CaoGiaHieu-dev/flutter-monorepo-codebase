@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:core_common/core_common.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http_security_pinning/http_security_pinning.dart';
 
 class _Sentinel extends HttpOverrides {}
 
@@ -79,7 +80,12 @@ void main() {
   bool logsAt(int level, Pattern text) =>
       logged.any((l) => l.level == level && l.message.contains(text));
 
-  bool installedPinning() => !identical(HttpOverrides.current, sentinel);
+  /// Whether the client the global overrides hand out *is* the pinning
+  /// client. "Not the sentinel" would also be true of the accept-all bypass
+  /// the dev flavor installs, which is the opposite of pinning.
+  bool installedPinning() =>
+      HttpOverrides.current?.createHttpClient(null)
+          is HttpSecurityPinningClient;
 
   const info = 700;
   const warning = 900;

@@ -56,6 +56,64 @@ void main() {
         '/',
       );
     });
+
+    test('a custom-scheme link with an empty host keeps its path as it is', () {
+      expect(
+        DeeplinkProvider.locationOf(Uri.parse('myapp:///settings')),
+        '/settings',
+      );
+      expect(
+        DeeplinkProvider.locationOf(Uri.parse('myapp:///settings/detail?a=1')),
+        '/settings/detail?a=1',
+      );
+    });
+
+    test('a bare custom-scheme link goes to the root', () {
+      expect(DeeplinkProvider.locationOf(Uri.parse('myapp://')), '/');
+      expect(DeeplinkProvider.locationOf(Uri.parse('myapp:///')), '/');
+    });
+
+    test('a query key given twice keeps both values, in order', () {
+      expect(
+        DeeplinkProvider.locationOf(
+          Uri.parse('https://example.com/items?tab=1&tab=2&sort=asc'),
+        ),
+        '/items?tab=1&tab=2&sort=asc',
+      );
+      expect(
+        DeeplinkProvider.locationOf(Uri.parse('myapp://items?tag=a&tag=b')),
+        '/items?tag=a&tag=b',
+      );
+    });
+
+    test('a fragment is kept', () {
+      expect(
+        DeeplinkProvider.locationOf(
+          Uri.parse('https://example.com/docs?x=1#section-2'),
+        ),
+        '/docs?x=1#section-2',
+      );
+      expect(
+        DeeplinkProvider.locationOf(Uri.parse('myapp://docs#top')),
+        '/docs#top',
+      );
+    });
+
+    test('an encoded value and a path with an escaped space survive', () {
+      expect(
+        DeeplinkProvider.locationOf(
+          Uri.parse('https://example.com/a%20b?q=x%26y'),
+        ),
+        '/a%20b?q=x%26y',
+      );
+    });
+
+    test('an empty query or fragment adds nothing', () {
+      expect(
+        DeeplinkProvider.locationOf(Uri.parse('https://example.com/a?#')),
+        '/a',
+      );
+    });
   });
 }
 

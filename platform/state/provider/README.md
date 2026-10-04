@@ -56,7 +56,7 @@ Behaviour worth knowing (`platform/state/provider/lib/src/management/operation_e
 - **Success** → `ViewState.success()` with the data. When the result type `R` differs from the provider's state type `T`, pass `convert:` to `executeOperation`.
 - **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))` with `message = failure.message` (an English diagnostic for logs, not user text — show a translated sentence, RULE-34). This emission is **forced**, so two identical failures in a row (the user taps Retry while still offline) both reach listeners.
 - **`none` / `cancel`** → the state is left untouched — including a `loading` state `showLoading` just set.
-- `executeOperation` does **not** try-catch: it handles `Result.failure`, while an exception thrown by `operation` propagates to the caller. Catching exceptions is the job of `BaseRepository.execute()` in the Data layer.
+- An exception thrown by `operation` is a bug — catching exceptions is the job of `BaseRepository.execute()` in the Data layer — but it never leaves the screen on `loading`: the executor reports it (`FlutterError.reportError`) and settles on `error` through `ErrorHandler.handleError`, exactly like a `Result.failure` (local / global `onFailure` included), the way `emitResult` does for a BLoC. It is not rethrown.
 - A local `onSuccess` / `onFailure` **replaces** the global callback installed through `OperationGlobalConfig.instance.setup(...)` for that call; the global `onStart` / `onFinish` always run.
 
 ---

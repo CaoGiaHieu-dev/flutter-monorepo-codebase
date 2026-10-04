@@ -45,6 +45,8 @@ CustomInputField(
 AppOverlay.showToast(content: context.l10n.somethingWentWrong);
 ```
 
+`CustomButton.rectangle` không bao giờ thấp hơn 48 dp (`kMinInteractiveDimension`, RULE-39), dù cửa sổ hay `height` do người gọi truyền ra sao — `context.h` chỉ thu nhỏ, nên `context.h(48)` trơn chỉ còn 38 dp trên điện thoại 360x640. Spinner của `LoadingWidget` mang nhãn `loading` đã dịch cho trình đọc màn hình.
+
 ## Overlay
 
 `AppOverlay` là hệ thống overlay duy nhất. App shell mount `AppOverlayInitializer` trong `MaterialApp.builder`; từ đó bất cứ đâu — một callback mạng, một listener phiên đăng nhập — đều có thể hiện overlay mà không cần `BuildContext`. Thứ tự xếp lớp, từ dưới lên: loading < dialog < toast.
@@ -54,7 +56,7 @@ AppOverlay.showToast(content: context.l10n.somethingWentWrong);
 | `AppOverlay.showDialog<T>(builder: …)` | Đưa dialog vào hàng đợi; mỗi lúc chỉ hiện một dialog. Trả về kết quả khi dialog đóng (`null` nếu bị bỏ qua). `identity` dùng để chống trùng. |
 | `OverlayDialogState.closeDialog([result])` | Đóng *chính* dialog này — gọi muộn không bao giờ đóng dialog kế tiếp. |
 | `AppOverlay.dismissDialog(result: …)` / `clearDialogs()` | Đóng dialog đang hiện / đóng nó cùng mọi dialog trong hàng đợi. |
-| `AppOverlay.showToast(content: …)` / `removeToastOverlay()` | Toast tự biến mất sau `SharedUiConstants.TOAST_DURATION`. |
+| `AppOverlay.showToast(content: …)` / `removeToastOverlay()` | Toast tự biến mất sau `SharedUiConstants.TOAST_DURATION`. Nó là một live region: trình đọc màn hình đọc to nội dung khi toast xuất hiện. |
 | `AppOverlay.showLoading()` / `removeLoadingOverlay()` | Lớp loading toàn màn hình. |
 
 Nút back hệ thống khi đang có dialog sẽ đóng dialog `barrierDismissible`, còn với dialog khác thì bị nuốt, nên trang phía sau không bao giờ bị pop. Barrier và lớp loading dùng token `scrim` của bảng màu (`colorScheme.scrim`). Mỗi dialog là một lớp con `OverlayDialogWidget` riêng trong file `*_dialog.dart` (RULE-36).

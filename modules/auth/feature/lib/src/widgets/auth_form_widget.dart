@@ -41,10 +41,11 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
   bool _obscurePassword = true;
 
   String? _validateEmail(String? value) {
-    if (value == null || value.isEmpty) {
-      return context.l10nAuth.emailIsRequired;
-    }
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+    // Validated as it will be sent: trimmed. A trailing space from a
+    // keyboard's autocomplete is not part of the address.
+    final email = value?.trim() ?? '';
+    if (email.isEmpty) return context.l10nAuth.emailIsRequired;
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
       return context.l10nAuth.invalidEmail;
     }
     return null;
@@ -99,6 +100,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
           TextFormField(
             controller: widget.emailController,
             keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
             textInputAction: TextInputAction.next,
             validator: _validateEmail,
             decoration: _decoration(
@@ -111,6 +113,7 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
           TextFormField(
             controller: widget.passwordController,
             obscureText: _obscurePassword,
+            autofillHints: const [AutofillHints.password],
             textInputAction: TextInputAction.done,
             validator: _validatePassword,
             onFieldSubmitted: (_) => _onSubmit(),
@@ -140,6 +143,9 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
                 ? SizedBox.square(
                     dimension: context.r(AuthUiConstants.SUBMIT_SPINNER_SIZE),
                     child: CircularProgressIndicator(
+                      // Announced by a screen reader in place of the label
+                      // the spinner replaced.
+                      semanticsLabel: context.l10n.loading,
                       strokeWidth: context.r(
                         AuthUiConstants.SUBMIT_SPINNER_STROKE,
                       ),

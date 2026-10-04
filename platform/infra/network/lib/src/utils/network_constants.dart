@@ -34,6 +34,13 @@ class NetworkConstants {
   /// Set `false` to opt a request out of [RetryInterceptor].
   static const String EXTRA_CAN_RETRY = 'canRetry';
 
+  /// Set `true` on a `POST` / `PATCH` that is safe to send twice — the server
+  /// deduplicates it, typically by an idempotency key — so [RetryHandler] may
+  /// replay it after a send or receive timeout. Without it such a request is
+  /// never replayed on a timeout: the server may already have processed it.
+  /// `GET`, `HEAD`, `PUT`, `DELETE` and `OPTIONS` need no flag.
+  static const String EXTRA_IDEMPOTENT = 'idempotent';
+
   /// Set `false` on a request whose `401` must never start a token refresh —
   /// the login and refresh calls themselves. The bearer token is still
   /// attached; only the refresh reaction is skipped. Without it a `401` from

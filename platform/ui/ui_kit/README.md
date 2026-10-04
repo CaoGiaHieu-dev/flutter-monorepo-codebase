@@ -45,6 +45,8 @@ CustomInputField(
 AppOverlay.showToast(content: context.l10n.somethingWentWrong);
 ```
 
+`CustomButton.rectangle` is never shorter than 48 dp (`kMinInteractiveDimension`, RULE-39), whatever the window or a caller's `height` — `context.h` only scales down, so a plain `context.h(48)` would be 38 dp on a 360x640 phone. `LoadingWidget`'s spinner carries the translated `loading` label for screen readers.
+
 ## Overlays
 
 `AppOverlay` is the only overlay system. The app shell mounts `AppOverlayInitializer` in `MaterialApp.builder`; from then on anything — a network callback, a session listener — can raise an overlay without a `BuildContext`. Stacking, bottom to top: loading < dialog < toast.
@@ -54,7 +56,7 @@ AppOverlay.showToast(content: context.l10n.somethingWentWrong);
 | `AppOverlay.showDialog<T>(builder: …)` | Queues a dialog; one is visible at a time. Returns the result it is closed with (`null` when dismissed). `identity` de-duplicates. |
 | `OverlayDialogState.closeDialog([result])` | Closes *this* dialog — a late call never closes the next one. |
 | `AppOverlay.dismissDialog(result: …)` / `clearDialogs()` | Closes the visible dialog / it and every queued one. |
-| `AppOverlay.showToast(content: …)` / `removeToastOverlay()` | A toast that removes itself after `SharedUiConstants.TOAST_DURATION`. |
+| `AppOverlay.showToast(content: …)` / `removeToastOverlay()` | A toast that removes itself after `SharedUiConstants.TOAST_DURATION`. It is a live region: a screen reader announces its text when it appears. |
 | `AppOverlay.showLoading()` / `removeLoadingOverlay()` | The full-screen loading layer. |
 
 A system back while a dialog is visible dismisses a `barrierDismissible` dialog and is swallowed by any other, so the page behind is never popped. The barrier and the loading layer use the palette's `scrim` token (`colorScheme.scrim`). Each dialog is its own `OverlayDialogWidget` subclass in a `*_dialog.dart` file (RULE-36).

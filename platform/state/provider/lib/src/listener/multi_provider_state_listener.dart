@@ -14,12 +14,12 @@ import 'provider_state_listener.dart';
 ///   listeners: [
 ///     ProviderStateListenerEntry<AuthProvider, UserEntity>(
 ///       onError: (context, error, message) {
-///         showToast(message ?? 'Auth error');
+///         showToast(context.l10n.somethingWentWrong);
 ///       },
 ///     ),
 ///     ProviderStateListenerEntry<CartProvider, Cart>(
 ///       onSuccess: (context, data) {
-///         showToast('Cart updated!');
+///         showToast(context.l10nCart.cartUpdated);
 ///       },
 ///     ),
 ///   ],

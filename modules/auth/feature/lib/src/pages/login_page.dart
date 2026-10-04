@@ -51,8 +51,11 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// The email is sent trimmed: a trailing space from a keyboard's
+  /// autocomplete would reach the server as another identity. The password is
+  /// sent exactly as typed — a space in it is part of it.
   Future<void> _onLoginPressed() => context.read<AuthProvider>().login(
-    _emailController.text,
+    _emailController.text.trim(),
     _passwordController.text,
   );
 

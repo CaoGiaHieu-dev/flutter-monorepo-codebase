@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -15,8 +17,12 @@ import '../utils/shared_ui_constants.dart';
 ///
 /// Sizes left `null` fall back to the kit's defaults, scaled here — the
 /// height from [SharedUiConstants.BUTTON_HEIGHT], the radius from
-/// `AppRadius.md`. A size the caller passes is taken as already scaled and
-/// used as-is.
+/// `AppRadius.md`. A size the caller passes is taken as already scaled.
+///
+/// The height never drops below [kMinInteractiveDimension] (48 dp, RULE-39),
+/// whatever the window or the caller asks for: `context.h` only scales down,
+/// so on a 360x640 phone a plain `context.h(48)` is 38 dp — a target too small
+/// to hit reliably.
 class CustomButton extends StatelessWidget {
   const CustomButton.rectangle({
     super.key,
@@ -73,7 +79,10 @@ class CustomButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = this.radius ?? AppRadius.md(context);
-    final height = this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT);
+    final height = math.max(
+      kMinInteractiveDimension,
+      this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT),
+    );
     final gradient = gradientFillColors;
     final backgroundColor = gradient == null
         ? color ?? context.colors.primary

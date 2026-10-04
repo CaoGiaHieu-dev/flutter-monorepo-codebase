@@ -15,7 +15,12 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
+  /// Whether the envelope reports success: any 2xx. A create answered `201`
+  /// or an action answered `204` is as successful as a `200`; only an
+  /// envelope reporting a 1xx, 3xx, 4xx or 5xx is [hasError].
+  bool get isSuccess =>
+      statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
+      statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
   bool get hasError => !isSuccess;
 
   factory BaseEntity.fromJson(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
@@ -11,9 +13,14 @@ import 'package:provider/provider.dart';
 class _FakeAuthRepository implements IAuthRepository {
   final logins = <LoginParams>[];
 
+  /// When set, `login` waits for it instead of answering at once.
+  Future<Result<UserEntity>>? pendingLogin;
+
   @override
   Future<Result<UserEntity>> login(LoginParams params) async {
     logins.add(params);
+    final pending = pendingLogin;
+    if (pending != null) return pending;
     return const Result.success(UserEntity(id: '1', name: 'Ada'));
   }
 
@@ -143,6 +150,64 @@ void main() {
     expect(repository.logins, [
       const LoginParams(email: 'ada@example.com', password: 'secret1'),
     ]);
+  });
+
+  testWidgets('the email is sent trimmed (a keyboard autocomplete leaves a '
+      'trailing space), the password exactly as typed', (tester) async {
+    await pumpLogin(tester);
+
+    await submit(
+      tester,
+      email: '  ada@example.com ',
+      password: ' secret1 ',
+    );
+
+    expect(repository.logins, [
+      const LoginParams(email: 'ada@example.com', password: ' secret1 '),
+    ]);
+  });
+
+  testWidgets('an email with a space inside is refused', (tester) async {
+    await pumpLogin(tester);
+
+    await submit(
+      tester,
+      email: 'ada lovelace@example.com',
+      password: 'secret1',
+    );
+
+    expect(find.text(l10nOf(tester).invalidEmail), findsOneWidget);
+    expect(repository.logins, isEmpty);
+  });
+
+  testWidgets('while signing in the spinner has a spoken label, and the '
+      'button swallows a second tap', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final slow = Completer<Result<UserEntity>>();
+    repository.pendingLogin = slow.future;
+    await pumpLogin(tester);
+
+    // `submit` settles the frame; a spinner never does.
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.first, 'ada@example.com');
+    await tester.enterText(fields.last, 'secret1');
+    final signIn = find.text(l10nOf(tester).signIn).last;
+    await tester.ensureVisible(signIn);
+    await tester.tap(signIn);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading'), findsOneWidget);
+
+    final button = find.byType(MaterialButton);
+    await tester.tap(button);
+    await tester.pump();
+    expect(repository.logins, hasLength(1));
+
+    slow.complete(const Result.success(UserEntity(id: '1', name: 'Ada')));
+    await tester.pumpAndSettle();
+    semantics.dispose();
   });
 
   testWidgets('the password field is obscured until its toggle is tapped', (

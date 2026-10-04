@@ -94,6 +94,22 @@ void main() {
     },
   );
 
+  test('a success envelope without a token is no session: a failure, and '
+      'an old token is not wiped by it', () async {
+    local.token = 'old';
+    for (final token in [null, '']) {
+      remote.response = BaseEntity(
+        data: UserModel(id: 'u1', token: token),
+      );
+
+      final result = await repository.login(params);
+
+      expect(result.isFailure, isTrue, reason: 'token: "$token"');
+      expect(local.token, 'old');
+      expect(local.user, isNull);
+    }
+  });
+
   test('an HTTP 401 is an AuthFailure and stores nothing', () async {
     final options = RequestOptions(path: '/login');
     remote.error = DioException(

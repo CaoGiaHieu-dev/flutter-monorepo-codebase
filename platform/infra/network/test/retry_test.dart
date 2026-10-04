@@ -65,10 +65,12 @@ Never _timeout(RequestOptions options) => throw DioException(
 DioException _error(
   DioExceptionType type, {
   String path = '/items',
+  String method = 'GET',
   Map<String, dynamic>? extra,
 }) => DioException(
   requestOptions: RequestOptions(
     path: path,
+    method: method,
     baseUrl: 'https://api.test',
     extra: extra ?? {},
   ),
@@ -300,6 +302,97 @@ void main() {
 
       expect(dialogs, hasLength(1));
       expect(a.rejected.single.type, DioExceptionType.badResponse);
+    });
+
+    test('a dialog callback that throws fails the caller and does not wedge '
+        'the handler for the next failure', () {
+      var calls = 0;
+      final shown = <_Dialog>[];
+      final fragile = RetryHandler(
+        Dio()..httpClientAdapter = adapter,
+        onRetryCallback: ({required onRetry, required onCancel}) {
+          calls++;
+          // The overlay is not built yet on the first failure.
+          if (calls == 1) throw StateError('no overlay yet');
+          shown.add((onRetry: onRetry, onCancel: onCancel));
+        },
+      );
+
+      final first = _RecordingErrorHandler();
+      final firstError = _error(DioExceptionType.connectionError);
+      expect(() => fragile.handleRetry(firstError, first), throwsStateError);
+      expect(
+        first.rejected,
+        [firstError],
+        reason:
+            'the caller is not left '
+            'waiting',
+      );
+
+      final second = _RecordingErrorHandler();
+      fragile.handleRetry(_error(DioExceptionType.connectionError), second);
+
+      expect(shown, hasLength(1), reason: 'a later failure reaches a prompt');
+      shown.single.onCancel();
+      expect(second.rejected, hasLength(1));
+    });
+
+    group('replaying a request that timed out after it was sent', () {
+      DioException timeout(
+        String method, {
+        DioExceptionType type = DioExceptionType.receiveTimeout,
+        Map<String, dynamic>? extra,
+      }) => _error(type, method: method, extra: extra);
+
+      test('a POST or PATCH is not replayed: it fails with the timeout, no '
+          'dialog', () {
+        for (final method in ['POST', 'PATCH', 'post']) {
+          for (final type in [
+            DioExceptionType.receiveTimeout,
+            DioExceptionType.sendTimeout,
+          ]) {
+            final caller = _RecordingErrorHandler();
+            final error = timeout(method, type: type);
+            retry.handleRetry(error, caller);
+
+            expect(caller.passedOn, 1, reason: '$method $type');
+            expect(caller.rejected, isEmpty);
+          }
+        }
+        expect(dialogs, isEmpty);
+      });
+
+      test('a POST that never connected is still replayed', () {
+        for (final type in [
+          DioExceptionType.connectionTimeout,
+          DioExceptionType.connectionError,
+        ]) {
+          final caller = _RecordingErrorHandler();
+          retry.handleRetry(timeout('POST', type: type), caller);
+          expect(caller.passedOn, 0, reason: '$type');
+        }
+        expect(dialogs, hasLength(1));
+      });
+
+      test('a POST that opted in with EXTRA_IDEMPOTENT is replayed', () {
+        final caller = _RecordingErrorHandler();
+        retry.handleRetry(
+          timeout('POST', extra: {NetworkConstants.EXTRA_IDEMPOTENT: true}),
+          caller,
+        );
+
+        expect(caller.passedOn, 0);
+        expect(dialogs, hasLength(1));
+      });
+
+      test('GET, HEAD, PUT, DELETE and OPTIONS are replayed', () {
+        for (final method in ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) {
+          final caller = _RecordingErrorHandler();
+          retry.handleRetry(timeout(method), caller);
+          expect(caller.passedOn, 0, reason: method);
+        }
+        expect(dialogs, hasLength(1), reason: 'one dialog for the batch');
+      });
     });
 
     test('with no dialog callback every request is cancelled', () {

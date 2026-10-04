@@ -317,6 +317,49 @@ class _MyHttpSecurityPinningHttpOverrides extends HttpOverrides {
 
   @override
   HttpClient createHttpClient(SecurityContext? context) {
-    return HttpSecurityPinningClient(pins);
+    // Built under the plain overrides: the pinning client creates an
+    // `HttpClient()` of its own in a field initializer, and that call is
+    // answered by the *global* overrides — this class.
+    return HttpOverrides.runWithHttpOverrides(
+      () => _PinningClient(pins),
+      _plainOverrides,
+    );
   }
+}
+
+/// The default `HttpClient` factory, ignoring the global overrides.
+final HttpOverrides _plainOverrides = _PlainHttpOverrides();
+
+class _PlainHttpOverrides extends HttpOverrides {}
+
+/// [HttpSecurityPinningClient] made safe to install as `HttpOverrides.global`.
+///
+/// The plugin's client wraps real `HttpClient`s: `HttpClient()` when it is
+/// built and `HttpClient(context: pinnedContext)` each time it reads a new
+/// host's chain. Both calls ask [HttpOverrides.current] — which, once pinning
+/// is installed globally, makes another pinning client, which asks again:
+/// the first request of the process ended in a stack overflow. Every call
+/// that can create a wrapped client therefore runs under the plain overrides,
+/// so the wrapped clients are the real ones and the pins stay enforced for
+/// every host (`open` and `openUrl` are what the other request methods use).
+class _PinningClient extends HttpSecurityPinningClient {
+  _PinningClient(super.spkiHashes);
+
+  @override
+  Future<HttpClientRequest> open(
+    String method,
+    String host,
+    int port,
+    String path,
+  ) => HttpOverrides.runWithHttpOverrides(
+    () => super.open(method, host, port, path),
+    _plainOverrides,
+  );
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) =>
+      HttpOverrides.runWithHttpOverrides(
+        () => super.openUrl(method, url),
+        _plainOverrides,
+      );
 }

@@ -36,6 +36,17 @@ void main() {
     expect(await gateway.refreshToken(), 'fresh-token');
   });
 
+  test('a renewal that omits the token keeps the stored one instead of '
+      'deleting it', () async {
+    remote.respond = () async => const BaseEntity(
+      data: UserModel(id: 'u1', name: 'Ada'),
+    );
+
+    expect(await gateway.refreshToken(), 'stale-token');
+    expect(local.token, 'stale-token');
+    expect(local.user?.name, 'Ada', reason: 'the user data is still updated');
+  });
+
   test(
     'a 200 whose envelope reports failure is a refusal, not a 5xx',
     () async {

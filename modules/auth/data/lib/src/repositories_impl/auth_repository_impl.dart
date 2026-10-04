@@ -30,6 +30,7 @@ class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   Future<Result<UserEntity>> login(LoginParams params) {
     return _authenticate(
       () => _remote.login({'email': params.email, 'password': params.password}),
+      requiresToken: true,
     );
   }
 
@@ -72,16 +73,27 @@ class AuthRepositoryImpl extends BaseRepository implements IAuthRepository {
   /// `successCondition` is what turns a 200-with-error-body into a `Failure`.
   /// Without it `execute` treats any response that did not throw as a success,
   /// and an API that reports failure in the payload would log the user in.
+  ///
+  /// The token: a sign-in answer without one is no session ([requiresToken]),
+  /// and a renewal that omits it (a backend that does not rotate) keeps the
+  /// stored one — `saveUserToken(null)` would delete it, signing the user out
+  /// over a response the server called a success.
   Future<Result<UserEntity>> _authenticate(
-    Future<BaseEntity<UserModel>> Function() request,
-  ) {
+    Future<BaseEntity<UserModel>> Function() request, {
+    bool requiresToken = false,
+  }) {
+    bool hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
+
     return execute<BaseEntity<UserModel>, UserEntity>(
       request,
-      successCondition: (response) =>
-          response.isSuccess && response.data != null,
+      successCondition: (response) {
+        final user = response.data;
+        if (!response.isSuccess || user == null) return false;
+        return !requiresToken || hasToken(user);
+      },
       onSuccess: (response) async {
         final user = response.data!;
-        await _local.saveUserToken(user.token);
+        if (hasToken(user)) await _local.saveUserToken(user.token);
         await _local.saveUserData(user);
       },
       mapper: (response) => response.data!.toEntity(),

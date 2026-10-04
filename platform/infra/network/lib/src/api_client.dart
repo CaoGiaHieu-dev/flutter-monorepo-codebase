@@ -94,6 +94,7 @@ class ApiClient {
           getToken: _config.getToken,
           getLocale: _config.getLocale,
           defaultLanguageCode: _locale.fallback,
+          authorizedHosts: _profile.authorizedHosts,
         ),
       );
 

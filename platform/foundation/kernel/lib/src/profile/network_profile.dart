@@ -16,6 +16,7 @@ final class NetworkProfile {
     this.sendTimeout = const Duration(seconds: 20),
     this.headers = const {},
     this.followRedirects = false,
+    this.authorizedHosts = const {},
   });
 
   /// How long a connection may take to open. Default 20 s.
@@ -37,6 +38,14 @@ final class NetworkProfile {
 
   /// Whether the client follows HTTP redirects. Default false.
   final bool followRedirects;
+
+  /// Hosts, besides the one in the client's base URL (`BASE_URL`), that
+  /// receive the bearer token — for an API that is split over several
+  /// sub-domains. Default: none, so a request to any other host (a CDN, a
+  /// presigned storage URL) goes out without credentials.
+  ///
+  /// Hosts only (`files.example.com`): no scheme, port or path.
+  final Set<String> authorizedHosts;
 
   /// The names in [headers] an app may not set — compared case-insensitively:
   /// `authorization`, `cookie`, `set-cookie`, `proxy-authorization` (a

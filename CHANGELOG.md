@@ -23,6 +23,8 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - **V15 checks native flavors.** On a committed Android or iOS runner it requires a `productFlavor` per declared flavor and an Xcode scheme plus `Debug-`/`Release-`/`Profile-<flavor>` configurations; the failure names the flavor and the recipe in guide 13.
 - **CI `generator-smoke-compose`** generates a Provider feature, its API package, a domain/data pair and a new app with `composer new`, then holds them to verify, analyze, arch_check, the new tests and the apps' DI smoke tests.
 - Docs: a "native flavors for a new mobile runner" recipe, "a fully stripped template" section, "what you will see on the first run" and the sample sign-in contract (en and vi).
+- Docs: the "make it yours" rename and placeholder checklist (`01_setup` § 8), the first-feature tutorial (`04_first_feature_tutorial`, a module end to end) and the iOS `CFBundleLocalizations` step for a new locale (guide 09).
+- **`NetworkProfile.authorizedHosts`** (hosts besides the API base URL that may receive the bearer token, default none), **`NetworkConstants.EXTRA_IDEMPOTENT`** (opt a POST or PATCH into replay after a timeout) and `runBootFailure` / `bootFailureCode` (the boot failure screen, code `B01`).
 - **`arch_check` R21** holds every ARB to the keys of `en.arb` in `lowerCamelCase` (RULE-34, RULE-35); `composer verify` V13 also fails on code outside the two generated regions of `lib/di/injection.dart`.
 - `ExportOptions.example.plist` for the iOS lanes (`apps/mobile/fastlane/`) and admin launch configurations in `.vscode/launch.json`.
 - Tests for `check_unused_assets`, `check_unused_translate` and `check_script`, rendered-output tests for the module generator, and a CI generator smoke that also covers a feature without state management or route, a data package without a domain, and core and custom packages.
@@ -157,11 +159,12 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   `IDashboardRouteModule.builder` takes the destinations, `AppBootStorage.viewedOnboard`. Notifications:
   the permission prompt is opt-in (`PushNotificationService.requestPermission()`) and the background
   handler initialises Firebase without DI.
+- `DioFailureClassifier` maps an unknown error caused by bad JSON to `ParseFailure` and one caused by a TLS error or a pin mismatch to a non-transient certificate failure (`BAD_CERTIFICATE`); unread fastlane keys (`app_store_connect.username` / `team_id`, `google_play.account_id`) and the ineffective bundler Dependabot block are removed.
 - Samples follow the rules they teach: a simpler auth sample (an offline start keeps the stored session;
   `RestoreSessionUseCase`; `session/` folder), `lib/di/` holds the DI module only, settings reads
   `LanguageProvider` / `ThemeProvider` from the tree, the module generator's templates match.
-- Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere. The workspace
-  `pubspec.lock` is committed and enforced in CI; versions come from the `pubspec_dependencies.yaml`
+- Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere. Lock files are
+  generated and git-ignored (see above); versions come from the `pubspec_dependencies.yaml`
   catalog. Fastlane runs through Bundler, from the repository root or `apps/mobile`.
 - The analyzer runs strict: `strict-casts`, `strict-inference` and `strict-raw-types`, plus
   `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `avoid_dynamic_calls` and `empty_catches`
@@ -188,6 +191,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   `ExtraRequest`, `LoadMoreControllerBinding`, `MessageQueue`, `device_info_plus` and other unused
   dependencies (`get_it` from 14 packages, `json_annotation`, `cupertino_icons`), the per-package
   `.gitignore` files, and the language domain/data sample packages.
+- The unused `dev/` and `staging/` `MainActivity.kt` files (the manifest resolves `.MainActivity` under the namespace).
 
 ### Fixed
 
@@ -208,7 +212,17 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - UI: dark-mode colours in `ui_kit`, theme text scaling, split-view overflow, responsive edge cases.
 - Tooling: dozens of silent failures, hangs and hazards across the module generator, composer,
   `dependency_sync`, `docs_check`, the unused checker and Fastlane lanes; tool output in English.
-- Stopped tracking 163 MB of build output.
+- Stopped tracking the committed Gradle, iOS and tools build output (tens of MB, two copies of a large `kernel_blob.bin` among it).
+- Boot no longer freezes on a splash or blank window when `configureDependencies`, an initializer or a hook throws: a boot error screen with Retry appears and the error is still reported.
+- Certificate pinning no longer overflows the stack on the first request when pins are declared; the pinning tests verify the installed client and real pin matching.
+- The splash waits (up to the connect timeout) for the stored-session restore, so a returning user does not see the signed-out home.
+- The retry handler recovers when its prompt callback throws and no longer replays timed-out POST and PATCH requests (opt in with `EXTRA_IDEMPOTENT`).
+- `CustomButton` keeps a 48 dp tap target, the toast is announced by screen readers and spinners are labelled (new global `loading` string, en and vi).
+- A throwing `executeOperation` leaves loading for the error state; a sign-in or refresh answer without a token no longer wipes the stored credential; the login email is trimmed.
+- Deep links keep repeated query keys, fragments and `myapp:///path`; `BaseEntity.isSuccess` accepts any 2xx; `ValidationHelper` dates and `isValidEmail` (any-length TLD, `+`); `EncryptedStorage.encryptData('')` no longer throws.
+- The iOS runner uses the UIScene lifecycle (the first iOS build no longer rewrites tracked files) and each flavored Xcode configuration uses its own icon set.
+- `code_review.yml` stubs Firebase like the other workflows; the generated Provider page renders a translated error and ships a failing-load test; a rolled-back generator or `remove_sample` run restores each app's README report and `app_profile.dart` facts; `firebase_config.dart` refuses to run without terminals.
+- The CI step that annotated critical review findings was named "Fail on Critical Issues" but never failed; it is now named as advisory.
 
 ### Security
 
@@ -217,6 +231,8 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - `LoggingInterceptor` redacts credentials in bodies as well as headers and logs only in debug.
 - The AI code-review tool sends the Gemini key in a header, redacts it from errors, and stores it in a
   gitignored file instead of tracked config.
+- The bearer token is sent only to the API base-URL host or `NetworkProfile.authorizedHosts`; a request refused the token is also marked not refreshable.
+- Debug logs redact more credential keys and URL query values and no longer print the FCM token; the storage encryption docs state confidentiality only, no integrity.
 - Release keystores, `key*.properties` (except the public dev key) and `env.prod` are ignored by broad
   patterns; see [SECURITY.md](SECURITY.md).
 

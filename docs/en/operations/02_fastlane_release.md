@@ -81,9 +81,7 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `firebase.app_ids.<platform>.<flavor>` | Firebase App ID per platform and flavor, plus a `default` key for flavor-less builds. A flavor with no entry falls back to `default` with a warning — which uploads to the default app, so give every flavor you distribute its own entry |
 | `firebase.credentials_map.<flavor>` | Path to the Firebase service-account JSON per flavor; a flavor with no entry falls back to `default` (the same fallback `fastlane.yml` uses when it writes the file) |
 | `app_store_connect.api_key_id` / `.issuer_id` | App Store Connect API key identifiers |
-| `app_store_connect.username` / `.team_id` | Apple ID and team, fallback for actions that do not take an API key |
 | `app_store_connect.apple_ids.<flavor>` | Numeric Apple ID per flavor — **required** by the TestFlight upload, which errors with *"Unknown flavor for apple-id mapping"* if the flavor is missing |
-| `google_play.account_id` | Used only to build console links |
 | `paths.firebase_testers_file` | Text file of tester emails for Firebase App Distribution |
 | `paths.google_play_key_prod` / `_dev` | Google Play service-account JSON files |
 | `paths.app_store_connect_key_filepath` | The `.p8` API key file. Its name **must be `AuthKey_<app_store_connect.api_key_id>.p8`** — the name App Store Connect gives the download. The TestFlight upload runs `xcrun altool --apiKey <id>`, which takes no key path: it looks only for that file name, in `$API_PRIVATE_KEYS_DIR` (the lane sets it to this file's directory) or in `./private_keys`, `~/private_keys`, `~/.private_keys`, `~/.appstoreconnect/private_keys`. Locally, a differently named file still uploads, through a temporary renamed copy and a warning; `fastlane.yml` refuses it |

@@ -360,11 +360,14 @@ this boundary. Nothing above this layer ever sees a `CacheEntryModel`.
 // modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart — _authenticate
 return execute<BaseEntity<UserModel>, UserEntity>(
   request,
-  successCondition: (response) =>
-      response.isSuccess && response.data != null,
+  successCondition: (response) {
+    final user = response.data;
+    if (!response.isSuccess || user == null) return false;
+    return !requiresToken || hasToken(user);
+  },
   onSuccess: (response) async {
     final user = response.data!;
-    await _local.saveUserToken(user.token);
+    if (hasToken(user)) await _local.saveUserToken(user.token);
     await _local.saveUserData(user);
   },
   mapper: (response) => response.data!.toEntity(),
@@ -562,7 +565,7 @@ void main() {
 ```
 
 In `payment_page_test.dart`, create the provider with `PaymentProvider(ChargeUseCase(FakePaymentRepository()))`,
-`await provider.charge(...)` before pumping, and pass that instance to the `ChangeNotifierProvider`.
+`await provider.charge(...)` before pumping, and pass that instance to the `ChangeNotifierProvider`. The generated page test also declares a `_FailingProvider extends PaymentProvider` for its failing-load case; it needs the same constructor argument now, so give it a constructor that passes `ChargeUseCase(FakePaymentRepository())` to `super` (its own `initialize()` still forces the failure). Keep that case: it is what proves a failed load shows `somethingWentWrong` and not the diagnostic.
 
 **5. Regenerate** — the controller's constructor changed, so its DI registration did too:
 

@@ -1,12 +1,17 @@
 ---
 name: implement_navigation_route
-description: Use when adding a screen or route, linking navigation between features, or adding a tab — "create a new page and navigate to it", "navigate from feature A to feature B", "add a bottom-nav tab", "add route parameters". Covers GoRouteDataCustom typed routes (path and query parameters), path constants in utils/, the navigator contract in the owner's <id>_api (generator type 6), the controller created at the route, and IFeatureRouteModule / INavDestinationModule registration.
+description: Use when adding a screen or route, linking navigation between features, or adding a tab — "create a new page and navigate to it", "navigate from feature A to feature B", "add a bottom-nav tab", "add route parameters". Covers GoRouteDataCustom typed routes (path and query parameters), path constants in utils/, the navigator contract in the owner's <id>_api (generator type 6), the controller created at the route, and IFeatureRouteModule / INavDestinationModule registration. Not for creating an <id>_api package (use create_api_package) or for triggering another feature's dialog or provider method (use implement_action_handler).
 ---
 
 # Skill: Implement navigation and routes
 
 Use this skill to add a screen inside a feature, link navigation between features, add a bottom-nav tab,
 or pass route parameters.
+
+> **Use [`create_api_package`](../create_api_package/SKILL.md) instead when** the task is to create the `<id>_api` package itself
+> (generator type 6, the manifest `api` layer); Step 5 below covers only the navigator code once it exists. **Use
+> [`implement_action_handler`](../implement_action_handler/SKILL.md) instead when** feature A must trigger a dialog, a sheet or a
+> provider method of feature B rather than show B's screen.
 
 **Guide:** [`docs/en/guides/04_routing.md`](../../../docs/en/guides/04_routing.md) — read § 1
 (Pick the routing contract) first: when `INavDestinationModule` and when `IFeatureRouteModule`; what

@@ -95,7 +95,7 @@ Where a platform leaves `splash`, `push`, `deep_links` or `orientation` out, the
 | `router` | `RouterProfile` | when the entry location is used (`firstLaunch`, `always`, `never`), the fallback location | first launch only, first tab |
 | `locale` | `LocaleProfile` | the languages offered (`supported`; null = every ARB the template ships), the fallback and the first-launch language | every shipped language, `en`, the device's language |
 | `theme` | `ThemeProfile` | the theme mode a first launch opens in, palette overrides by `PaletteToken` (ARGB) | system mode, the template palettes |
-| `network` | `NetworkProfile` | the default HTTP client's connect, receive and send timeouts, extra headers, redirects | 20 s each, no extra headers, no redirects |
+| `network` | `NetworkProfile` | the default HTTP client's connect, receive and send timeouts, extra headers, redirects, and `authorizedHosts` (hosts besides the API base URL that may receive the bearer token) | 20 s each, no extra headers, no redirects, no extra authorized host |
 
 ```dart
 const AppProfile appProfile = AppProfile(
@@ -117,11 +117,14 @@ const AppProfile appProfile = AppProfile(
     connectTimeout: Duration(seconds: 5),
     receiveTimeout: Duration(seconds: 60),
     headers: {'x-client': 'reports'},
+    authorizedHosts: {'files.example.com'},
   ),
 );
 ```
 
 What a section cannot say is refused where it can be: `DisplayProfile(textScaleMax: 1.5)` does not compile (`const_eval_throws_exception` — RULE-38), a `NetworkProfile` header named `authorization`, `cookie`, `set-cookie`, `proxy-authorization` or `content-type` makes the default client throw at boot (RULE-66), and a `LocaleProfile` that offers no shipped language or whose fallback it does not offer throws at boot naming the field. The palette's `shadow` and `scrim`, and the two gradients, are not overridable: the gradients derive from `primary`, `primaryContainer`, `info` and `error`.
+
+`authorizedHosts` is a set of bare host names (`files.example.com`: no scheme, port or path). The bearer token goes only to the host of `BASE_URL` and to these; a request to any other host (a CDN, a presigned storage URL) leaves without credentials ([`08_networking.md`](08_networking.md) § 6).
 
 After editing the profile run `composer sync`: the README report's § 5 prints the sections the app sets, and `verify` (V13) re-reads the file to keep it current. Each app's `test/app_profile_test.dart` is where you assert what you changed, so a later edit that moves it is visible. What each section means for a screen: [`09_localization_theming.md`](09_localization_theming.md) (`locale`, `theme`) and [`11_design_system.md`](11_design_system.md) (`display`, `theme`).
 
@@ -305,6 +308,7 @@ cd apps/<id> && flutter test                             # the smoke test (check
 | `verify`: `<package> does not support <platform>` | A composed package, or one it links, lacks the platform | Declare only platforms every linked package supports, or stop depending on it |
 | Boot stops: *`<id>` is running on `<platform>`, which its manifest does not declare* | The platform is not under `platforms:` | Declare it (above), run on a declared one, or `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` for a quick look |
 | Boot stops: `P03` on a release build | A required `--dart-define` is empty | Pass `--dart-define-from-file=env.<flavor>` |
+| Boot ends on a screen with a **Retry** button and problem `B01` | The boot itself threw — `configureDependencies`, an initializer or a hook — not a wrong declaration | Read the error (shown in a dev or staging flavor and in debug and profile builds), fix its cause, tap Retry; the same error was reported to `onError` and `IErrorReporter` |
 | Boot stops on a desktop platform: `P05` | `window` is declared and no `configureWindow` hook is set | Add the hook (section 5), or drop the `window` |
 | Smoke test: `C02` / `C03` | The graph disagrees with the declaration | The test names the contract — fix the manifest or the composition |
 | `new` refuses | The id exists, or a platform is blocked by a module | The message names which; nothing was written |

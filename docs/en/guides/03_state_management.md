@@ -82,7 +82,7 @@ class OperationConfig<R, T> {
 
 1. the global `onStart` hook;
 2. an optional loading state;
-3. `await operation()`;
+3. `await operation()` — normally it returns a `Result`; an exception that escapes it is a bug, but it never leaves the screen on `loading`: the executor reports it (`FlutterError.reportError`) and settles on `error` through `ErrorHandler.handleError`, exactly like a `Result.failure` (the local or global `onFailure` still runs), and does **not** rethrow it;
 4. dispatch across the four `Result` branches — a failure sets the error state with `force: true`, so a repeated identical failure still reaches a listener;
 5. the global `onFinish` hook, on every path, so it always pairs with `onStart`.
 
@@ -216,7 +216,7 @@ BaseViewWidget<ProfileProvider, ProfileViewData>(
 `builder` receives the non-null data (`T extends Object`). On an error `onErrorBuilder` receives the data the provider still holds and the failure's `message`, which is an English diagnostic: do not show it (RULE-34). The screen words the failure from the code its `ErrorState` carries (`AuthErrorState.failed(code:)`), through `context.l10n.failureMessage(code)`.
 
 > [!WARNING]
-> **Omit `emptyWidget` and you get a blank screen** — and so does an error with no data yet when `onErrorBuilder` is also omitted, because the error path falls back to the same builder. The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()`.
+> **Omit `emptyWidget` and you get a blank screen** — and so does an error with no data yet when `onErrorBuilder` is also omitted, because the error path falls back to the same builder. The built-in fallback is `DefaultEmptyWidget`, which returns `SizedBox.shrink()`. Its sibling `DefaultLoadingWidget` returns a `CircularProgressIndicator.adaptive()` labelled with the translated global `loading` string for screen readers (an unlabelled spinner when the host has no localisation delegates). The page the module generator writes for a Provider feature already passes an `onErrorBuilder` that shows the translated `somethingWentWrong`.
 >
 > They are minimal on purpose. `provider_state_management` is a **platform** package and never depends on a feature package, so it cannot reach the branded widgets in `core_ui_kit`. See `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Pass your own `emptyWidget` / `loadingWidget` / `onErrorBuilder` on any user-facing screen.**
 

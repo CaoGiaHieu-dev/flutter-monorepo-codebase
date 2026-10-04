@@ -59,7 +59,9 @@ dart tools/workspace_setup/configure.dart
 ```
 
 > [!TIP]
-> Lịch sử cũ của template mang theo khoảng 82 MB kết quả build Gradle từng bị commit một lần và từ lâu đã được ignore. Clone nông (`git clone --depth 1 <repo-url>`) bỏ qua phần đó; bắt đầu repository riêng của bạn với một lịch sử mới khi bạn dùng template (§8.4) cũng vậy. Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
+> Lịch sử cũ của template mang theo vài chục MB kết quả build (Gradle, iOS và tools) từng bị commit một lần và từ lâu đã được ignore. Clone nông (`git clone --depth 1 <repo-url>`) bỏ qua phần đó; bắt đầu repository riêng của bạn với một lịch sử mới khi bạn dùng template (§8.4) cũng vậy.
+
+**`configure.dart` là bước setup.** Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
 
 1. `dart pub global activate flutterfire_cli`. Chỉ nhánh Firebase thật ở [§3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được) dùng tới nó.
 2. `flutter clean` tại root.
@@ -128,7 +130,7 @@ Sau đó chạy từ thư mục gốc repo:
 dart tools/firebase/firebase_config.dart --app mobile
 ```
 
-Script yêu cầu Firebase CLI đã được cài và đã đăng nhập. Nếu thiếu, script in hướng dẫn cài đặt rồi thoát với mã 1; nó thử `firebase login` tối đa hai lần, từ chối chạy khi không có terminal, và `--help` in ra cách dùng. `configure.dart` đã activate `flutterfire_cli` từ trước. Script hỏi ba thứ: **Firebase project ID**, **base bundle ID / package name** (`com.example.codebase`) và danh sách flavor (mặc định `dev staging prod`). Sau đó nó chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode. Các file được ghi ra là `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`, đều tính tương đối với `apps/mobile/`. Package Android nhận hậu tố `.dev` / `.stg` / không hậu tố. Bundle ID iOS nhận `.dev` / `.staging` / không hậu tố. `--app` là bắt buộc vì workspace có nhiều hơn một app.
+Script yêu cầu Firebase CLI đã được cài và đã đăng nhập. Nếu thiếu, script in hướng dẫn cài đặt rồi thoát với mã 1; nó thử `firebase login` tối đa hai lần, từ chối chạy trừ khi cả stdin và stdout đều là terminal (chạy mà một trong hai bị chuyển hướng, đi qua pipe hay là `</dev/null` — agent hoặc CI — thì thoát với mã 1 trước mọi câu hỏi), và `--help` in ra cách dùng. `configure.dart` đã activate `flutterfire_cli` từ trước. Script hỏi ba thứ: **Firebase project ID**, **base bundle ID / package name** (`com.example.codebase`) và danh sách flavor (mặc định `dev staging prod`). Sau đó nó chạy `flutterfire configure` bên trong `apps/mobile/` cho mọi flavor và build mode. Các file được ghi ra là `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` và `android/app/src/<flavor>/google-services.json`, đều tính tương đối với `apps/mobile/`. Package Android nhận hậu tố `.dev` / `.stg` / không hậu tố. Bundle ID iOS nhận `.dev` / `.staging` / không hậu tố. `--app` là bắt buộc vì workspace có nhiều hơn một app.
 
 > [!NOTE]
 > Script hỗ trợ đặt **mọi flavor vào cùng một project ID** mà bạn nhập. Muốn dev, staging và prod nằm ở các Firebase project riêng thì hãy chạy FlutterFire bằng tay, một lần cho mỗi môi trường, **từ `apps/mobile/`**:
@@ -376,6 +378,10 @@ Lý do là tầng bảo mật của `core_storage`. `flutter_secure_storage` gi�
 
 Hãy xác nhận tên file trên thiết bị trước (`adb shell run-as <applicationId> ls shared_prefs`) — nó phụ thuộc phiên bản và tuỳ chọn của `flutter_secure_storage`.
 
+### iOS: vòng đời UIScene
+
+`apps/mobile/ios` dùng vòng đời UIScene mà template app của chính Flutter ship: `Runner/AppDelegate.swift` tuân theo `FlutterImplicitEngineDelegate` và đăng ký plugin trong `didInitializeImplicitFlutterEngine`, `Runner/SceneDelegate.swift` là một `FlutterSceneDelegate` được biên dịch vào target Runner, và `Runner/Info.plist` khai báo nó dưới `UIApplicationSceneManifest`. Hãy giữ cả ba đi cùng nhau. Một Runner còn ở vòng đời cũ chỉ có `AppDelegate` sẽ bị công cụ của Flutter viết lại ở lần build iOS đầu tiên, để lại các file đã được theo dõi bị sửa, và iOS cảnh báo rằng scene sắp trở thành bắt buộc. Thiết lập deep link cho iOS: [`04_routing.md` § 9](../guides/04_routing.md#cấu-hình-ios).
+
 ### Từ VS Code
 
 `.vscode/launch.json` đã định nghĩa sẵn năm cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)** cho `apps/mobile`, và **Admin (Web, Dev)**, **Admin (Desktop, Dev)** cho `apps/admin`. Chọn một trong panel Run and Debug. Các cấu hình App tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `apps/mobile/`, vì đó là nơi Dart extension neo project); các cấu hình Admin chạy `apps/admin/lib/main.dart` với `env.dev` của nó, trên Chrome hoặc trên desktop, và cần runner `web/` hay desktop tương ứng đã được scaffold trước: công thức nằm trong [`apps/admin/README.md`](../../../apps/admin/README.md).
@@ -415,7 +421,7 @@ Template được phát hành với các tên giữ chỗ, và vài định danh
 | Scheme và domain của deep link | `DEEP_LINK_SCHEME` theo từng flavor, ở cả `build.gradle.kts` lẫn `project.pbxproj` (hai nơi phải khớp nhau); `WEB_DOMAIN` trong các file env; tên package và bundle ID bên trong các file bạn phục vụ dưới `/.well-known/` ([`04_routing.md` § 9](../guides/04_routing.md#9-thiết-lập-deep-link)) |
 | Firebase | các ID bạn đăng ký: chạy `dart tools/firebase/firebase_config.dart --app mobile` với base bundle ID mới (§3.1), hoặc đặt `package_name` mới vào các file `google-services.json` stub ở §3.2 |
 | Fastlane | `app_bundle_ids.ios` và `.android` trong `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-id)); hậu tố flavor ở đó phải khớp với Gradle và Xcode |
-| Icon và splash | các ảnh dưới `assets/branding/`, rồi `dart tools/theme_generator/theme_setting.dart --app mobile` (nó đọc `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở thư mục gốc repo) |
+| Icon và splash | các ảnh dưới `assets/branding/`, rồi `dart tools/theme_generator/theme_setting.dart --app mobile` (nó đọc `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở thư mục gốc repo). Trên iOS, các build configuration có flavor dùng bộ icon riêng — `devAppIcon`, `stagingAppIcon`, `prodAppIcon` trong `Runner/Assets.xcassets`, do `icons_launcher` ghi từ yaml của từng flavor — qua `ASSETCATALOG_COMPILER_APPICON_NAME` trong `project.pbxproj`; các configuration không có flavor giữ `AppIcon` mặc định. Vì vậy một ảnh đã đổi chỉ tới được build iOS qua một flavor |
 | Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb`, và chữ trên splash `appName` ("Codebase") cùng `tagline` ("Ứng dụng Flutter, sẵn sàng để phát triển") trong `modules/splash/feature/assets/language/{en,vi}.arb` — giữ cùng các key ở cả hai file (`arch_check` R21) |
 
 `apps/admin` chưa có project native. Khi tạo runner cho nó ([`13_app_composition.md` § 7](../guides/13_app_composition.md#thêm-một-platform)), hãy truyền reverse domain của bạn cho `flutter create --org` thay vì `com.example`.

@@ -7,7 +7,7 @@ You persist a value — a token, a flag, a preference — so that it survives ap
 ## Prerequisites
 
 - A package that will own the value (data layer, or the app shell for UI preferences).
-- **How `core_storage` works**: it ships a mechanism and no keys, it encrypts twice, it masks values in RAM, and it never wipes the store on a platform error — [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--encrypted-keyvalue-storage). The rules behind it: RULE-44 (no shared keys), RULE-45 (singleton owner).
+- **How `core_storage` works**: it ships a mechanism and no keys, it encrypts twice, it masks values in RAM (hygiene, not protection), and it never wipes the store on a platform error — [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--encrypted-keyvalue-storage). The rules behind it: RULE-44 (no shared keys), RULE-45 (singleton owner).
 - Need rows, queries or relations rather than one value per key? Use a database instead — [`07_database.md`](07_database.md).
 
 ---
@@ -31,7 +31,7 @@ enum StorageType {
 | Cached user profile / PII | "Has seen onboarding" flags |
 | Anything an attacker with the device would want | Non-sensitive UI preferences |
 
-`secure` is backed by Keychain (iOS) / KeyStore (Android) and is slower. `pref` is backed by SharedPreferences. Both backends (`SecureStorageImpl`, `PrefStorageImpl`) extend `EncryptedStorage`, which seals every value with AES-256-CBC before it is written, so `pref` is not plaintext on disk. You never touch a backend directly: you ask `StorageManager.getStorage(type)` for the `StorageInterface` and wrap it in a `StorageValue`.
+`secure` is backed by Keychain (iOS) / KeyStore (Android) and is slower. `pref` is backed by SharedPreferences. Both backends (`SecureStorageImpl`, `PrefStorageImpl`) extend `EncryptedStorage`, which seals every value with AES-256-CBC before it is written, so `pref` is not plaintext on disk. The sealing is confidentiality only — AES-CBC has no authentication, so a modified value is not detected as tampered with; do not use storage to prove who wrote a value. You never touch a backend directly: you ask `StorageManager.getStorage(type)` for the `StorageInterface` and wrap it in a `StorageValue`.
 
 ## 2. Depend on `core_storage`
 

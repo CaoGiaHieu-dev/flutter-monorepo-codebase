@@ -1,12 +1,16 @@
 ---
 name: localize_feature
-description: Use when a screen shows text the user reads — "add a translated string", "translate this feature", "add an ARB key", "the l10n getter does not exist", "add Vietnamese", "show an error message", "add a language". Covers the feature's ARB files (en and vi, lowerCamelCase keys), flutter gen-l10n, the IFeatureLocalization delegate and the context.l10n<Name> extension, failure text from error codes, global strings in core_base_ui, and what a new locale touches.
+description: Use when a screen shows text the user reads — "add a translated string", "translate this feature", "add an ARB key", "the l10n getter does not exist", "add Vietnamese", "show an error message", "add a language". Covers the feature's ARB files (en and vi, lowerCamelCase keys), flutter gen-l10n, the IFeatureLocalization delegate and the context.l10n<Name> extension, failure text from error codes, global strings in core_base_ui, and what a new locale touches. Not for deciding when a toast or dialog appears on a state change (use implement_provider_ui or implement_bloc_ui).
 ---
 
 # Skill: Localize a feature
 
 Use this skill whenever the UI gains or changes user-facing text, a feature gets its translations, or a language is
 added. Every user-facing string is translated — toasts, dialogs, error messages and button labels included.
+
+> **Use [`implement_provider_ui`](../implement_provider_ui/SKILL.md) or [`implement_bloc_ui`](../implement_bloc_ui/SKILL.md)
+> instead when** the question is when a toast or dialog is shown on a state change or how a controller surfaces an error; this
+> skill decides the text (ARB key, getter, which failure sentence). A screen that shows an error normally needs both.
 
 **Guide:** [`docs/en/guides/09_localization_theming.md`](../../../docs/en/guides/09_localization_theming.md) § 1–2;
 how the delegates reach `MaterialApp`: [`06_app_shell.md` § 7](../../../docs/en/architecture/06_app_shell.md#how-feature-translations-reach-materialapp).

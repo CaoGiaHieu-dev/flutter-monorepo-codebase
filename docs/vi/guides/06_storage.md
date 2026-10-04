@@ -8,7 +8,7 @@ Bạn lưu một giá trị — token, cờ, tuỳ chọn — sao cho nó sống
 ## Điều kiện cần
 
 - Một package sẽ sở hữu giá trị (tầng data, hoặc app shell với tuỳ chọn UI).
-- **`core_storage` hoạt động thế nào**: nó chỉ cấp cơ chế và không có key nào, nó mã hoá hai lần, nó che giá trị trong RAM, và nó không bao giờ xoá sạch kho khi gặp lỗi platform — [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--lưu-trữ-keyvalue-có-mã-hoá). Các luật đứng sau: RULE-44 (không có key dùng chung), RULE-45 (owner là singleton).
+- **`core_storage` hoạt động thế nào**: nó chỉ cấp cơ chế và không có key nào, nó mã hoá hai lần, nó che giá trị trong RAM (vệ sinh dữ liệu, không phải bảo vệ), và nó không bao giờ xoá sạch kho khi gặp lỗi platform — [`../architecture/02_core.md` § 7](../architecture/02_core.md#7-core_storage--lưu-trữ-keyvalue-có-mã-hoá). Các luật đứng sau: RULE-44 (không có key dùng chung), RULE-45 (owner là singleton).
 - Cần bản ghi, truy vấn hay quan hệ thay vì một giá trị cho mỗi key? Hãy dùng database — [`07_database.md`](07_database.md).
 
 ---
@@ -32,7 +32,7 @@ enum StorageType {
 | Profile người dùng được cache / dữ liệu cá nhân | Cờ "đã xem onboarding" |
 | Mọi thứ kẻ tấn công cầm máy sẽ muốn lấy | Tuỳ chọn UI không nhạy cảm |
 
-`secure` dựa trên Keychain (iOS) / KeyStore (Android), chậm hơn. `pref` dựa trên SharedPreferences. Cả hai backend (`SecureStorageImpl`, `PrefStorageImpl`) đều kế thừa `EncryptedStorage`, thứ niêm phong mọi giá trị bằng AES-256-CBC trước khi ghi, nên `pref` không phải plaintext trên đĩa. Bạn không bao giờ chạm trực tiếp vào backend: bạn xin `StorageManager.getStorage(type)` một `StorageInterface` rồi bọc nó trong một `StorageValue`.
+`secure` dựa trên Keychain (iOS) / KeyStore (Android), chậm hơn. `pref` dựa trên SharedPreferences. Cả hai backend (`SecureStorageImpl`, `PrefStorageImpl`) đều kế thừa `EncryptedStorage`, thứ niêm phong mọi giá trị bằng AES-256-CBC trước khi ghi, nên `pref` không phải plaintext trên đĩa. Việc niêm phong chỉ là bảo mật nội dung — AES-CBC không có xác thực, nên một giá trị bị sửa không bị phát hiện là bị giả mạo; đừng dùng storage để chứng minh ai đã ghi một giá trị. Bạn không bao giờ chạm trực tiếp vào backend: bạn xin `StorageManager.getStorage(type)` một `StorageInterface` rồi bọc nó trong một `StorageValue`.
 
 ## 2. Phụ thuộc vào `core_storage`
 

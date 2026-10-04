@@ -95,7 +95,7 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 ### Ghim phiên bản Flutter
 
-Bước cài dependency chạy `dart tools/workspace_setup/configure.dart`. Flutter lấy từ `.fvmrc` (`flutter-version-file`) ở mọi lần chạy — kể cả pull request — trừ khi lần chạy tay điền tham số tuỳ chọn `flutter_version`.
+Bước cài dependency chạy `dart tools/workspace_setup/configure.dart --stub-firebase`: các file `firebase_options_*.dart` bị git bỏ qua không có trên bản checkout sạch và `build_runner` phải resolve được các import của `firebase_module.dart`, như trong `pr_quality_check.yml`; bản review chỉ đọc Dart nên các stub chỉ-để-biên-dịch là đủ. Flutter lấy từ `.fvmrc` (`flutter-version-file`) ở mọi lần chạy — kể cả pull request — trừ khi lần chạy tay điền tham số tuỳ chọn `flutter_version`.
 
 ### Bước "Annotate critical issues (advisory)" không hề fail
 

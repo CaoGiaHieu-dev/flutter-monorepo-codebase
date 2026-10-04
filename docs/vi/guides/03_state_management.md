@@ -83,7 +83,7 @@ class OperationConfig<R, T> {
 
 1. hook toàn cục `onStart`;
 2. trạng thái loading (nếu đủ điều kiện);
-3. `await operation()`;
+3. `await operation()` — bình thường nó trả một `Result`; một exception lọt ra khỏi nó là bug, nhưng không bao giờ để màn hình kẹt ở `loading`: executor báo cáo nó (`FlutterError.reportError`) và chốt ở `error` qua `ErrorHandler.handleError`, y như một `Result.failure` (`onFailure` cục bộ hay toàn cục vẫn chạy), và **không** ném lại;
 4. phân nhánh theo 4 nhánh của `Result` — một failure đặt error state với `force: true`, nên một failure lặp lại y hệt vẫn tới được listener;
 5. hook toàn cục `onFinish`, trên mọi đường đi, để luôn đi cặp với `onStart`.
 
@@ -217,7 +217,7 @@ BaseViewWidget<ProfileProvider, ProfileViewData>(
 `builder` nhận dữ liệu không null (`T extends Object`). Khi lỗi, `onErrorBuilder` nhận dữ liệu mà provider còn giữ và `message` của failure, vốn là chẩn đoán tiếng Anh: đừng hiển thị nó (RULE-34). Màn hình diễn đạt failure từ mã mà `ErrorState` của nó mang (`AuthErrorState.failed(code:)`), qua `context.l10n.failureMessage(code)`.
 
 > [!WARNING]
-> **Bỏ qua `emptyWidget` là bạn nhận màn hình trắng** — một lỗi khi chưa có dữ liệu cũng vậy nếu `onErrorBuilder` bị bỏ qua nốt, vì đường lỗi rơi về cùng builder đó. Fallback mặc định là `DefaultEmptyWidget`, trả về `SizedBox.shrink()`. Còn `DefaultLoadingWidget` trả về `CircularProgressIndicator.adaptive()`.
+> **Bỏ qua `emptyWidget` là bạn nhận màn hình trắng** — một lỗi khi chưa có dữ liệu cũng vậy nếu `onErrorBuilder` bị bỏ qua nốt, vì đường lỗi rơi về cùng builder đó. Fallback mặc định là `DefaultEmptyWidget`, trả về `SizedBox.shrink()`. Còn `DefaultLoadingWidget` trả về `CircularProgressIndicator.adaptive()` mang nhãn `loading` toàn cục đã dịch cho trình đọc màn hình (spinner không nhãn khi host không có localisation delegate). Page mà module generator viết cho một feature Provider đã truyền sẵn một `onErrorBuilder` hiện câu `somethingWentWrong` đã dịch.
 >
 > Chúng cố ý tối giản. `provider_state_management` là package **platform** và không bao giờ phụ thuộc package feature, nên nó không thể dùng widget đã thiết kế trong `core_ui_kit`. Xem `platform/state/provider/lib/src/base_view/default_state_widgets.dart`. **Hãy luôn truyền `emptyWidget` / `loadingWidget` / `onErrorBuilder` của riêng bạn trên màn hình người dùng thấy.**
 

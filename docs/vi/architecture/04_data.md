@@ -366,15 +366,21 @@ Cả hai endpoint đều đi qua một helper, vì chúng làm cùng bốn việ
 
 ```dart
 Future<Result<UserEntity>> _authenticate(
-  Future<BaseEntity<UserModel>> Function() request,
-) {
+  Future<BaseEntity<UserModel>> Function() request, {
+  bool requiresToken = false,
+}) {
+  bool hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
+
   return execute<BaseEntity<UserModel>, UserEntity>(
     request,
-    successCondition: (response) =>
-        response.isSuccess && response.data != null,
+    successCondition: (response) {
+      final user = response.data;
+      if (!response.isSuccess || user == null) return false;
+      return !requiresToken || hasToken(user);
+    },
     onSuccess: (response) async {
       final user = response.data!;
-      await _local.saveUserToken(user.token);
+      if (hasToken(user)) await _local.saveUserToken(user.token);
       await _local.saveUserData(user);
     },
     mapper: (response) => response.data!.toEntity(),
@@ -387,7 +393,7 @@ Ba chi tiết gánh toàn bộ sức nặng:
 | Chi tiết | Vì sao quan trọng |
 |:---|:---|
 | `successCondition` | Thiếu nó, `execute` coi **mọi** response không ném exception là thành công. Một API báo lỗi trong body 200 sẽ cho người dùng đăng nhập được. Response bị từ chối trả về `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)` — không phải `500` — nên session gateway coi đó là server từ chối, không phải sự cố |
-| `onSuccess` lưu token | `NetworkConfig.getToken()` đọc lại token qua `ISessionGateway`, do `data_auth` hiện thực trên nền `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt |
+| `onSuccess` lưu token | `NetworkConfig.getToken()` đọc lại token qua `ISessionGateway`, do `data_auth` hiện thực trên nền `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt. Một câu trả lời đăng nhập không có token là một lỗi (`requiresToken`) và không lưu gì; một lần gia hạn không có token giữ token đã lưu, vì lưu `null` sẽ xoá nó |
 | `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên — có hẳn một test khẳng định điều đó |
 
 `logout` là `execute<void, void>(_local.clearAllAuthData)`: xoá storage là bất đồng bộ, nên một lần ghi thất bại đến tay bên gọi dưới dạng `Result` thay vì bị mất.

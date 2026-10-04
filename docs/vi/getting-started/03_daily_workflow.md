@@ -105,7 +105,7 @@ Tool cũng tự sửa các mục `path:` bị gãy của package trong workspace
 | :--- | :--- | :--- |
 | **Module generator** | `dart tools/module_generator/generate.dart <loại> <tên> [<prefix>] [<SM>] [<route>] [--apps <id,id>]` | Dựng khung package Feature / Domain / Data / Core / Custom / API mới (`<loại>` 1–6). Nó thêm module vào **mọi** `app_manifest.yaml` (hoặc chỉ các app trong `--apps`) rồi chạy `composer sync` để đăng ký package vào workspace và vào từng app. `apps/admin` chỉ ghép auth + settings, nên hãy truyền `--apps mobile` cho module không thuộc về đó. Luôn truyền đủ mọi tham số: feature thiếu `<SM>` hoặc `<route>` thì thoát với mã `64` khi không có terminal. `--help` in cú pháp; mọi tham số có trong [`../reference/03_tooling.md`](../reference/03_tooling.md#module_generator). |
 | **Composer** | `dart tools/composer/composer.dart sync` / `verify` / `describe --app <id>` | `sync` sau khi sửa một `app_manifest.yaml`; `verify` là CI Gate 0; `describe` in ra thứ app khai báo và thứ shell resolve. [`../guides/13_app_composition.md`](../guides/13_app_composition.md). |
-| **Unused checker** | `dart tools/unused_checker/check_script.dart` | Dọn dẹp định kỳ. Có lệnh con riêng cho asset, file, package, translation. Kiểm tra package là một bước của CI. |
+| **Unused checker** | `dart tools/unused_checker/check_script.dart` | Dọn dẹp định kỳ. Nó chạy cả bốn kiểm tra và không có lệnh con; muốn chạy riêng một kiểm tra thì gọi script của nó (`check_unused_assets.dart`, `check_unused_file.dart`, `check_unused_packages.dart`, `check_unused_translate.dart`: asset, file, package, translation). Kiểm tra package là một bước của CI. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Trước một đợt nâng version. Tool liệt kê thứ pub.dev đã có bản mới. Trên terminal, nó hiện tiếp một checklist tương tác: `a` ghi các version đã chọn vào catalog rồi chạy `dependency_sync` + `pub get`, còn `q` để thoát. Không có terminal (CI, pipe) thì nó chỉ báo cáo. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Rà soát tuỳ chọn trước khi mở PR, không bao giờ là gate chặn merge. Cần Gemini API key (`GEMINI_API_KEY`, `--api-key`, hoặc lưu khi tool hỏi). Hỗ trợ thêm `--all`, `--file <đường_dẫn>`, `--focus architecture,security`, và `--language <mã>` chỉ cho lần chạy đó. |
 | **Workspace setup** | `dart tools/workspace_setup/configure.dart` | Lần setup đầu tiên của một bản clone, sau một lần rebase lớn, hoặc khi mọi thứ hỏng không rõ lý do. Script chạy theo thứ tự: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `flutter gen-l10n` trong mọi package có `l10n.yaml` → `dart run build_runner build --workspace` → barrel generator cho mọi package có `lib/` (bỏ qua các app). Dừng ngay ở bước đầu tiên bị lỗi. `--stub-firebase` còn ghi thêm các file Firebase chỉ-để-biên-dịch ([`01_setup.md`](01_setup.md#32-chưa-có-firebase-project-dùng-stub)). |
@@ -145,7 +145,7 @@ dart tools/arch_check/check.dart
 flutter analyze
 
 # Gate 3 — test nằm theo từng package, nên chạy mọi package có thư mục test/
-#         (cùng cách CI tìm; bash — Git Bash trên Windows)
+#         (cùng quy tắc CI dùng để tìm package; bash — Git Bash trên Windows)
 for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort); do
   dir=$(dirname "$pubspec")
   [ -d "$dir/test" ] || continue
@@ -162,7 +162,7 @@ dart tools/docs_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Vòng lặp tự tìm chứ không liệt kê cứng, nên vẫn đúng khi bạn thêm một package có test hay gỡ một sample từng có test — CI cũng tìm theo cách đó. Vòng lặp dừng ở package fail đầu tiên và in tên package; hãy viết test của bạn ngay cạnh code bạn viết, với fake tự viết (repo không dùng mockito/mocktail) — `flutter_test` trong package Flutter, `package:test` trong package Dart thuần. Vòng lặp phủ `apps/`, `modules/` và `platform/`; `tools/` có bộ test riêng, nằm ở Gate 1. Trên Windows, chạy nó trong Git Bash (đi kèm Git for Windows) — PowerShell và `cmd` không có `find`/`dirname` kiểu này.
+Test nằm ở `<package>/test/`, ở bất cứ đâu package đó nằm. Vòng lặp tự tìm chứ không liệt kê cứng, nên vẫn đúng khi bạn thêm một package có test hay gỡ một sample từng có test — CI áp dụng cùng quy tắc (mọi thư mục có `pubspec.yaml` và `test/`) nhưng khác ở ba điểm: nó tìm từ root của repository, chạy hết mọi package rồi mới báo fail thay vì dừng lại, và báo fail nếu không tìm thấy package nào. Vòng lặp dừng ở package fail đầu tiên và in tên package; hãy viết test của bạn ngay cạnh code bạn viết, với fake tự viết (repo không dùng mockito/mocktail) — `flutter_test` trong package Flutter, `package:test` trong package Dart thuần. Vòng lặp phủ `apps/`, `modules/` và `platform/`; `tools/` có bộ test riêng, nằm ở Gate 1. Trên Windows, chạy nó trong Git Bash (đi kèm Git for Windows) — PowerShell và `cmd` không có `find`/`dirname` kiểu này.
 
 Import thiếu khai báo bị `arch_check` (R5) bắt; unused checker lo chiều ngược lại.
 

@@ -188,7 +188,7 @@ A fresh clone needs `pub get`, `gen-l10n` and `build_runner`; the barrel pass is
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/firebase/firebase_config.dart [--app <id>]` | Run `flutterfire configure` for each flavor and build mode of one app | `0` · `1` no terminal, Firebase CLI missing or not logged in, not run from the root · `64` bad argument | — |
+| `dart tools/firebase/firebase_config.dart [--app <id>]` | Run `flutterfire configure` for each flavor and build mode of one app | `0` · `1` stdin or stdout is not a terminal, Firebase CLI missing or not logged in, not run from the root · `64` bad argument | — |
 
 Interactive only; needs the Firebase CLI installed and logged in. `--app` is required while the workspace holds two apps. Details: [`firebase`](../../../tools/README.md#firebase).
 

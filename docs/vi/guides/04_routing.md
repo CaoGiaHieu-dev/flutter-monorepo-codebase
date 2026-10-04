@@ -367,6 +367,8 @@ Có hai dạng link đi vào app, và cả hai đều về cùng một location 
 
 Nền tảng đưa URI cho `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/src/provider/deeplink_provider.dart`) đổi nó thành location bằng `locationOf` rồi điều hướng. Nó chỉ làm vậy sau khi `canRoute` đã kiểm tra phiên đăng nhập, và chỉ khi `NavigatorWrapperWidget` đã khởi động nó — không bao giờ đè lên onboarding hay login. Path không module nào đăng ký sẽ rơi vào `UndefinedRouteWidget`, như mọi location lạ khác.
 
+`locationOf` giữ mọi thứ mà link mang theo: path, **mọi** query parameter (một key xuất hiện hai lần giữ cả hai giá trị: `?tag=a&tag=b`) và fragment (`#section`). Một link custom-scheme có host rỗng (`<scheme>:///settings`) được đọc là path `/settings`, giống `<scheme>://settings`.
+
 ### Giữ deep linking có sẵn của Flutter ở trạng thái tắt
 
 Từ Flutter 3.27, engine mặc định cũng tự xử lý deep link. Nó đẩy thẳng URI vào `GoRouter`, bỏ qua `DeeplinkProvider` cùng bước kiểm tra phiên: người dùng chưa đăng nhập có thể mở màn hình cần đăng nhập, và mỗi link bị điều hướng hai lần. Vì vậy cả hai nền tảng đều tắt nó:
@@ -445,6 +447,8 @@ adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settin
 ```
 
 ### Cấu hình iOS
+
+**Vòng đời scene.** Runner dùng UIScene, vòng đời mà template của chính Flutter ship: `AppDelegate.swift` tuân theo `FlutterImplicitEngineDelegate` và đăng ký plugin trong `didInitializeImplicitFlutterEngine`, `SceneDelegate.swift` (một `FlutterSceneDelegate`, thuộc target Runner trong `project.pbxproj`) là delegate của window scene, và `Info.plist` khai báo nó dưới `UIApplicationSceneManifest`. Hãy giữ cả ba đi cùng nhau. Với vòng đời cũ chỉ có `AppDelegate`, công cụ của Flutter tự migrate các file này ở lần build iOS đầu tiên, làm bẩn các file đã được theo dõi bằng một diff chưa ai review.
 
 **Custom scheme.** `Info.plist` đăng ký nó dưới `CFBundleURLTypes`, với `CFBundleURLSchemes` = `$(DEEP_LINK_SCHEME)` và `CFBundleURLName` = `$(PRODUCT_BUNDLE_IDENTIFIER)`. Không cần gì thêm: `xcrun simctl openurl booted "codebase-dev://settings?tab=2"` mở bản dev.
 

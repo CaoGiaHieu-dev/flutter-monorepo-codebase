@@ -642,6 +642,6 @@ Checklist review — máy giữ phần nào của mỗi luật được ghi ở 
 
 ## Liên quan
 
-- Luật: RULE-30, RULE-31, RULE-32, RULE-33, RULE-38 (chữ theo cỡ chữ của OS) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Luật: RULE-30, RULE-31, RULE-32, RULE-33, RULE-38 (chữ theo cỡ chữ của OS), RULE-39 (vùng chạm 48 dp; `CustomButton` giữ 48 dp ở mọi độ rộng cửa sổ, có test) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`09_localization_theming.md`](09_localization_theming.md) — dùng token trong code widget, và bản dịch theo feature
 - [`../architecture/02_core.md`](../architecture/02_core.md) — `core_base_ui` nằm ở đâu, và vì sao nó không có widget nào; API công khai của `core_responsive`

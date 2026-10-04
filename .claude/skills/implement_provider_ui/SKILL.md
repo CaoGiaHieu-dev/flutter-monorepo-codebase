@@ -1,12 +1,15 @@
 ---
 name: implement_provider_ui
-description: Use when a screen's logic is written with Provider — "implement screen logic using Provider", "automate loading/error states", "show a toast or dialog when state changes", "paginate with load-more". Covers BaseProvider<T> with executeOperation, BaseViewWidget rendering, ProviderStateListener side effects, LoadMoreMixin + LoadMoreListView, translated errors and the controller's tests; the route creates the provider.
+description: Use when a screen's logic is written with Provider — "implement screen logic using Provider", "automate loading/error states", "show a toast or dialog when state changes", "paginate with load-more". Covers BaseProvider<T> with executeOperation, BaseViewWidget rendering, ProviderStateListener side effects, LoadMoreMixin + LoadMoreListView, translated errors and the controller's tests; the route creates the provider. For the translated text itself (ARB key, getter) use localize_feature.
 ---
 
 # Skill: Screen logic with Provider
 
 Use this skill to give a screen a `BaseProvider<T>` controller: load data through a use case, render
 loading / success / empty / error, react to failures, page through a list.
+
+> **Use [`localize_feature`](../localize_feature/SKILL.md) for** the text a toast, dialog or error state shows (ARB key, getter,
+> `failureMessage`); this skill decides when it appears.
 
 **Guide:** [`docs/en/guides/03_state_management.md`](../../../docs/en/guides/03_state_management.md) —
 the long form; the package README is `platform/state/provider/README.md`.
@@ -21,7 +24,8 @@ The BLoC branch is [`implement_bloc_ui`](../implement_bloc_ui/SKILL.md): it has 
 
 `generate.dart 1 <name> "" 1 <route>` writes `provider/<name>_provider.dart`
 (`BaseProvider<Object>` whose `initialize()` settles a placeholder `Result.success(Object())`),
-`pages/<name>_page.dart` (`BaseViewWidget<<Name>Provider, Object>`), the route that creates the
+`pages/<name>_page.dart` (`BaseViewWidget<<Name>Provider, Object>` with an `onErrorBuilder` that shows the translated
+`somethingWentWrong`), the route that creates the
 provider, and tests that pass as generated (`test/<name>_page_test.dart`, `test/<name>_provider_test.dart`).
 Everything below **replaces those placeholders**; keep the file names.
 
@@ -82,6 +86,9 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
   (`platform/state/provider/lib/src/management/operation_executor.dart`). A **refresh** on a populated
   screen shows no spinner and there is no flag; call `updateState(state: const ViewState.loading())` first
   when one is needed, as `AuthProvider.initialize` does.
+- An operation that *throws* is a bug (repositories return `Result.failure`), but it does not leave the screen on `loading`: the
+  executor reports it (`FlutterError.reportError`) and settles on `error` through `ErrorHandler.handleError`, with `onFailure` and
+  `errorStateBuilder` applied as for a `Result.failure`. It is not rethrown, so do not wrap `executeOperation` in a try/catch.
 - `AppFailure.message` is an English diagnostic and never reaches the screen (RULE-34). To word a failure
   carry its `code` in a feature error state — a Freezed union that extends `CustomErrorState` — and map it
   with `errorStateBuilder`. `ProductErrorState.fromFailure` above is a static you write; model the union on
@@ -198,6 +205,9 @@ constructor takes a use case, and the provider test asserts the placeholder `ini
 - **Page test** — pump the page under `ResponsiveInit` with a provider that already holds data
   (`ChangeNotifierProvider.value`), because the page renders its body only then. The generated assertion
   `find.text(title)` `findsNWidgets(2)` counts the app bar **and** the body, so update it when the body no longer repeats the title.
+- **Failing-load case** — the generated page test also declares `_FailingProvider extends <Name>Provider` and asserts that a
+  failed first load shows `somethingWentWrong`, never the diagnostic. Once the constructor takes a use case, give
+  `_FailingProvider` a constructor that passes one to `super`, and keep the case.
 
 ## Related
 

@@ -1,12 +1,16 @@
 ---
 name: create_feature_module
-description: Use when the user asks to create, scaffold or add a new package or module — a feature (feature_<name>), domain_<name>, data_<name>, <name>_api, core_<name> or a custom platform package. Runs tools/module_generator/generate.dart with every argument, picks the state management and route contribution, chooses which apps compose it, then walks the follow-up (translations, capabilities, tests, verify).
+description: Use when the user asks to create, scaffold or add a new package or module — a feature (feature_<name>), domain_<name>, data_<name>, core_<name> or a custom platform package. Runs tools/module_generator/generate.dart with every argument, picks the state management and route contribution, chooses which apps compose it, then walks the follow-up (translations, capabilities, tests, verify). An <name>_api package is create_api_package instead.
 ---
 
 # Skill: Create a module or package
 
 Use this skill when asked to create a package in the monorepo: `feature_profile`, `domain_payment`,
 `data_payment`, `payment_api`, `core_logging`, and so on.
+
+> **Use [`create_api_package`](../create_api_package/SKILL.md) instead when** the package is `<name>_api` (generator type 6) or
+> the task is "let feature A reach module B": it wires the feature and says what belongs in an API package. This skill covers
+> generator types 1-5.
 
 **Guide:** [`docs/en/guides/01_new_feature.md`](../../../docs/en/guides/01_new_feature.md) ·
 [`02_new_domain_data.md`](../../../docs/en/guides/02_new_domain_data.md) · generator reference:
@@ -84,11 +88,11 @@ whichever exists ([`create_api_package`](../create_api_package/SKILL.md)). Flows
 | State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, like `feature_auth` / `feature_home`. |
 | Toolchain | FVM is used only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise the global `dart` / `flutter` (RULE-73). |
 | Fail-safe | The toolchain is checked **before any write**; an existing module directory aborts instead of overwriting. |
-| Rollback | Every `app_manifest.yaml` and what `composer sync` rewrites (root `pubspec.yaml`, each app's `pubspec.yaml` and `lib/di/injection.dart`) is snapshotted first; any later failure restores them, deletes the new directory and exits `1`. |
+| Rollback | Every `app_manifest.yaml` and what `composer sync` rewrites (root `pubspec.yaml`, and per app `pubspec.yaml`, `lib/di/injection.dart`, `lib/app/app_profile.dart` and `README.md`) is snapshotted first (no lock file: they are git-ignored); any later failure restores them, deletes the new directory and exits `1`. |
 | Registration | A module layer (`1`, `2`, `3`, `6`) is added to `modules:` in each manifest; a core or custom package (`4`, `5`) is added to the `core` DI group's `packages:` — move it to the right group by hand when it belongs elsewhere ([`implement_dependency_injection`](../implement_dependency_injection/SKILL.md)). The entry is decided by parsing the YAML and re-parsed after the edit; a manifest the tool cannot edit rolls everything back. |
 | Starts clean | A new package declares only the workspace packages its templates import, so `check_unused_packages` passes at once. Domain gets `domain_core` and an `I<Name>Repository` stub with a placeholder `ping()`; data gets `data_core` and `<Name>RepositoryImpl extends BaseRepository`, implementing the domain's interface when `domain_<name>` already exists; core, custom and API packages get no product dependency. |
 | Nav order | A tab (`2`) gets `order` = the highest existing `INavDestinationModule.order` under `modules/*/feature` + 10 (10 when none), so generated tabs never tie. |
-| Tests from the start | A feature gets `test/<name>_page_test.dart` and `test/<name>_provider_test.dart` / `<name>_bloc_test.dart` (none for SM `3`), passing as generated; keep them green as you build. |
+| Tests from the start | A feature gets `test/<name>_page_test.dart` and `test/<name>_provider_test.dart` / `<name>_bloc_test.dart` (none for SM `3`), passing as generated (a Provider feature's page test includes a failing-load case: the page's `onErrorBuilder` must show `somethingWentWrong`, never the diagnostic); keep them green as you build. |
 | Pipeline | Manifest edit, `composer sync`, `dependency_sync`, `flutter pub get`, `gen-l10n` (features), the package barrel, `build_runner`, the barrel again, `dart fix --apply` — you do not run these for the first generation. |
 
 Barrels after your own edits: [`run_repo_tooling`](../run_repo_tooling/SKILL.md#barrel-generator).

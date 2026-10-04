@@ -1,9 +1,13 @@
 ---
 name: run_repo_tooling
-description: Use when a task needs one of the repo's maintenance tools — regenerating the package barrel after adding, renaming or deleting a lib/ file; composer sync / verify / describe / new; syncing or checking dependency versions; docs_check and translation stamps; remove_sample; finding unused files, assets, translations or packages; coverage_report; setting up a fresh or partial checkout; the tools' own tests; or the Gemini AI code review. Covers which tool to run, from where, and how to read its exit code.
+description: Use when a task needs one of the repo's maintenance tools — regenerating the package barrel after adding, renaming or deleting a lib/ file; composer sync / verify / describe / new; syncing or checking dependency versions; docs_check and translation stamps; finding unused files, assets, translations or packages; coverage_report; setting up a fresh or partial checkout; the tools' own tests; or the Gemini AI code review. Covers which tool to run, from where, and how to read its exit code. Removing a module or a sample is remove_module, not this skill.
 ---
 
 # Run repo tooling
+
+> **Use [`remove_module`](../remove_module/SKILL.md) instead when** the task is to remove a module or a shipped sample (it covers
+> `remove_sample` and the follow-up). For per-app decisions use [`configure_app`](../configure_app/SKILL.md); to scaffold a package
+> use [`create_feature_module`](../create_feature_module/SKILL.md).
 
 Every tool runs from the **repository root** with plain `dart` (no `fvm` prefix — RULE-73), prints with
 `stdout.writeln` / `stderr.writeln` (RULE-65), and takes `--help`. An unknown argument exits `64`; the

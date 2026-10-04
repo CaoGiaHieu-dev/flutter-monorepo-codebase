@@ -1,12 +1,16 @@
 ---
 name: implement_dependency_injection
-description: Use when registering or wiring anything in GetIt/injectable — "register a service/repository", "inject a provider or bloc", "fix <Type> is not registered", adding a package's DI module, binding a second interface, choosing @injectable vs @lazySingleton, or placing a package in an app manifest's di_groups.
+description: Use when registering or wiring anything in GetIt/injectable — "register a service/repository", "inject a provider or bloc", "fix <Type> is not registered", adding a package's DI module, binding a second interface, choosing @injectable vs @lazySingleton, or placing a package in an app manifest's di_groups. Declaring the contract provided or absent in the manifest is configure_app.
 ---
 
 # Skill: Implement dependency injection
 
 Use this skill to register a class, wire a package into an app, bind a second interface, or find the
 cause of "`<Type>` is not registered".
+
+> **Capabilities have three owners.** This skill registers the contract; declaring it `provided` or `absent` by decision is
+> [`configure_app`](../configure_app/SKILL.md), and flipping the ones that lost their last provider is
+> [`remove_module`](../remove_module/SKILL.md).
 
 **Guide:** [`docs/en/guides/05_di.md`](../../../docs/en/guides/05_di.md); module order and why it
 matters: [`06_app_shell.md` § 3](../../../docs/en/architecture/06_app_shell.md#3-di-assembly--and-why-the-order-matters).

@@ -103,11 +103,12 @@ const List<ProfileSection> kProfileSections = [
   ProfileSection(
     key: 'network',
     type: 'NetworkProfile',
-    tunes: 'the default HTTP client\'s timeouts, extra headers, redirects',
+    tunes: 'the default HTTP client\'s timeouts, extra headers, redirects, hosts besides the API host that may receive the session token',
     defaults: [
       'connect, receive and send timeout $kDefaultTimeout each',
       'no extra headers',
       'redirects are not followed',
+      'the session token goes only to the API host',
     ],
   ),
 ];

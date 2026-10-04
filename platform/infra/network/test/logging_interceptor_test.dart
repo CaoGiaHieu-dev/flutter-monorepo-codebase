@@ -90,5 +90,91 @@ void main() {
       });
       expect(out, {'password_hint': 'pet name', 'tokenType': 'Bearer'});
     });
+
+    test('masks the other credential names a real API uses, in any case', () {
+      final out = LoggingInterceptor.redactBody({
+        'newPassword': 'a',
+        'OLD_PASSWORD': 'b',
+        'confirmPassword': 'c',
+        'otp': '123456',
+        'OTP': '123456',
+        'pin': '1234',
+        'newPin': '5678',
+        'cvv': '123',
+        'cardCvv': '123',
+        'apiKey': 'k',
+        'X-Api-Key': 'k',
+        'authorization': 'Bearer x',
+        'csrfToken': 't',
+        'privateKey': 'p',
+        'card number': '4111111111111111',
+        'passcode': 'z',
+      }) as Map;
+
+      expect(out.keys, hasLength(16));
+      expect(out.values, everyElement(redacted));
+    });
+
+    test('does not mask names that only contain a short credential word', () {
+      final out = LoggingInterceptor.redactBody({
+        'shipping': 'standard',
+        'mapping': 'x',
+        'pinned': true,
+        'spinner': 'on',
+        'otpExpiresIn': 60,
+        'keyboard': 'qwerty',
+        'tokenType': 'Bearer',
+      });
+
+      expect(out, {
+        'shipping': 'standard',
+        'mapping': 'x',
+        'pinned': true,
+        'spinner': 'on',
+        'otpExpiresIn': 60,
+        'keyboard': 'qwerty',
+        'tokenType': 'Bearer',
+      });
+    });
+  });
+
+  group('LoggingInterceptor.redactUri', () {
+    test('masks every query value and keeps the keys', () {
+      expect(
+        LoggingInterceptor.redactUri(
+          Uri.parse('https://api.test/v1/reset?token=abc123&email=a%40b.c'),
+        ),
+        'https://api.test/v1/reset?token=***&email=***',
+      );
+    });
+
+    test('a repeated key shows once per use, never its value', () {
+      final out = LoggingInterceptor.redactUri(
+        Uri.parse('https://api.test/items?tab=1&tab=2'),
+      );
+
+      expect(out, 'https://api.test/items?tab=***');
+      expect(out, isNot(contains('1')));
+    });
+
+    test('drops user-info and the fragment, keeps host, port and path', () {
+      expect(
+        LoggingInterceptor.redactUri(
+          Uri.parse('https://user:pw@api.test:8443/a/b#frag'),
+        ),
+        'https://api.test:8443/a/b',
+      );
+    });
+
+    test('a URL with no query is printed as it is', () {
+      expect(
+        LoggingInterceptor.redactUri(Uri.parse('https://api.test/me')),
+        'https://api.test/me',
+      );
+      expect(
+        LoggingInterceptor.redactUri(Uri.parse('https://api.test/me?')),
+        'https://api.test/me',
+      );
+    });
   });
 }

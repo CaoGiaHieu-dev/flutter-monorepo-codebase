@@ -12,7 +12,8 @@ import 'storage_codec.dart';
 /// A reactive wrapper around a single key-value pair in [StorageInterface].
 ///
 /// Provides:
-/// - In-memory cache with [value] getter/setter (obfuscated in RAM)
+/// - In-memory cache with [value] getter/setter (XOR-masked in RAM — see
+///   `ObfuscatedBytes`: hygiene, not protection from a memory reader)
 /// - Persistence on every change: [save] / [remove] return a future that
 ///   completes once the value is on disk; the [value] setter starts the same
 ///   write without waiting for it
@@ -72,7 +73,8 @@ class StorageValue<T> extends ChangeNotifier {
   })
   get listen => _streamController.stream.listen;
 
-  /// Obfuscated value stored in memory to prevent RAM dumping.
+  /// The cached value, XOR-masked so it is not held as plain JSON. Obfuscation
+  /// only: `value` rebuilds a plain `String` on every read.
   ObfuscatedBytes? _obfuscatedValue;
 
   /// The last write started; the next one chains onto it.

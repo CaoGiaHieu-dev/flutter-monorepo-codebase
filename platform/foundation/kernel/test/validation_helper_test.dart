@@ -191,6 +191,89 @@ void main() {
       });
     });
 
+    group('dates', () {
+      String two(int n) => n.toString().padLeft(2, '0');
+      String ymd(DateTime d) => '${d.year}-${two(d.month)}-${two(d.day)}';
+
+      final today = DateTime.now();
+      final yesterday = DateTime(today.year, today.month, today.day - 1);
+      final tomorrow = DateTime(today.year, today.month, today.day + 1);
+
+      test('validateDate requires a value', () {
+        expect(ValidationHelper.validateDate(null), 'Date is required');
+        expect(ValidationHelper.validateDate(''), 'Date is required');
+      });
+
+      test('validateDate accepts a real date, a leap day only in a leap '
+          'year', () {
+        expect(ValidationHelper.validateDate('2026-10-04'), isNull);
+        expect(ValidationHelper.validateDate('2024-02-29'), isNull);
+        expect(ValidationHelper.validateDate('2026-12-31'), isNull);
+      });
+
+      test(
+        'validateDate refuses dates that DateTime.parse would roll over',
+        () {
+          const invalid = 'Please enter a valid date (YYYY-MM-DD)';
+          for (final date in [
+            '2026-13-45',
+            '2026-13-01',
+            '2026-02-30',
+            '2026-02-29',
+            '2026-04-31',
+            '2026-00-10',
+            '2026-10-00',
+            '2026-10-32',
+          ]) {
+            expect(ValidationHelper.validateDate(date), invalid, reason: date);
+          }
+        },
+      );
+
+      test('validateDate refuses anything that is not YYYY-MM-DD', () {
+        const invalid = 'Please enter a valid date (YYYY-MM-DD)';
+        for (final date in [
+          'tomorrow',
+          '2026/10/04',
+          '04-10-2026',
+          '2026-1-4',
+          '2026-10-04T10:00:00',
+          ' 2026-10-04',
+        ]) {
+          expect(ValidationHelper.validateDate(date), invalid, reason: date);
+        }
+      });
+
+      test('validateFutureDate: today and later pass, yesterday does not', () {
+        expect(ValidationHelper.validateFutureDate(ymd(today)), isNull);
+        expect(ValidationHelper.validateFutureDate(ymd(tomorrow)), isNull);
+        expect(
+          ValidationHelper.validateFutureDate(ymd(yesterday)),
+          'Date cannot be in the past',
+        );
+      });
+
+      test('validatePastDate: today and earlier pass, tomorrow does not', () {
+        expect(ValidationHelper.validatePastDate(ymd(today)), isNull);
+        expect(ValidationHelper.validatePastDate(ymd(yesterday)), isNull);
+        expect(
+          ValidationHelper.validatePastDate(ymd(tomorrow)),
+          'Date cannot be in the future',
+        );
+      });
+
+      test('both range checks report an invalid date first', () {
+        expect(
+          ValidationHelper.validateFutureDate('2026-02-30'),
+          'Please enter a valid date (YYYY-MM-DD)',
+        );
+        expect(
+          ValidationHelper.validatePastDate(null),
+          'Date is required',
+        );
+      });
+    });
+
     group('combineValidators', () {
       test('should return first error encountered', () {
         final result = ValidationHelper.combineValidators('', [

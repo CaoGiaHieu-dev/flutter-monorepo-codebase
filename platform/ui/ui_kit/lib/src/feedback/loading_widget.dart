@@ -70,11 +70,17 @@ class LoadingWidget extends StatelessWidget {
             dimension:
                 dimension ??
                 context.r(SharedUiConstants.LOADING_WIDGET_DIMENSION),
-            child: const UnconstrainedBox(
+            child: UnconstrainedBox(
               // Adaptive progress indicator that follows platform conventions
               // - Material design on Android
               // - Cupertino design on iOS
-              child: CircularProgressIndicator.adaptive(),
+              //
+              // Labelled: a bare spinner is silent to a screen reader, which
+              // would leave the user not knowing the app is busy. Optional
+              // lookup: a host with no localisation delegates still builds.
+              child: CircularProgressIndicator.adaptive(
+                semanticsLabel: AppLocalizations.of(context)?.loading,
+              ),
             ),
           ),
         ),

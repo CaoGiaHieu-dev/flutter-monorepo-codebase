@@ -12,6 +12,14 @@ import '../utils/storage_constants.dart';
 /// AES-CBC sealing with a random IV, the reserved-key guard, and the
 /// secure-storage plumbing their master keys live in.
 ///
+/// The sealing is **confidentiality only**. CBC carries no authentication tag:
+/// a changed ciphertext or IV is not detected as tampering — it decrypts to
+/// different bytes, or fails on padding about 255 times in 256 — so a sealed
+/// value proves nothing about who wrote it. The master key is held XOR-masked
+/// in memory so it does not sit in the heap as a plain, greppable array; the
+/// mask lives in the same heap, so this is hygiene against casual inspection,
+/// not protection from an attacker who can read the process's memory.
+///
 /// A backend implements [init] (establishing the key with [setMasterKey])
 /// and the storage calls, sealing through [encryptData] / [decryptData].
 abstract class EncryptedStorage implements StorageInterface {
@@ -52,10 +60,13 @@ abstract class EncryptedStorage implements StorageInterface {
   }
 
   /// Encrypts [data] with AES-CBC and a random IV; returns
-  /// `"iv_base64:ciphertext_base64"`.
+  /// `"iv_base64:ciphertext_base64"`. An empty [data] seals to the IV with an
+  /// empty ciphertext (`"iv_base64:"`), which [decryptData] reads back as `''`
+  /// — the cipher itself cannot pad zero bytes.
   String encryptData(String data) {
     return _withKey((enc) {
       final iv = encrypter.IV.fromSecureRandom(StorageConstants.IV_BYTES);
+      if (data.isEmpty) return '${iv.base64}:';
       return '${iv.base64}:${enc.encrypt(data, iv: iv).base64}';
     });
   }
@@ -67,6 +78,7 @@ abstract class EncryptedStorage implements StorageInterface {
     if (parts.length != 2) {
       throw const FormatException('Invalid encrypted data format');
     }
+    if (parts[1].isEmpty) return '';
     return _withKey(
       (enc) => enc.decrypt64(parts[1], iv: encrypter.IV.fromBase64(parts[0])),
     );

@@ -110,6 +110,29 @@ void main() {
       expect(() => vault.decryptData('a:b:c'), throwsFormatException);
     });
 
+    test('an empty string round-trips (the cipher cannot pad zero bytes)', () {
+      final sealed = vault.encryptData('');
+
+      expect(sealed, matches(RegExp(r'^[A-Za-z0-9+/=]+:$')));
+      expect(vault.decryptData(sealed), '');
+      // Each seal still gets its own IV.
+      expect(vault.encryptData(''), isNot(sealed));
+    });
+
+    test('the seal is confidentiality only: a flipped IV bit is not detected, '
+        'it silently changes the first plaintext block', () {
+      final sealed = vault.encryptData('secret payload');
+      final parts = sealed.split(':');
+      final iv = base64.decode(parts[0]);
+      iv[0] ^= 0x01;
+
+      final altered = vault.decryptData('${base64.encode(iv)}:${parts[1]}');
+
+      expect(altered, isNot('secret payload'));
+      expect(altered.codeUnitAt(0), 's'.codeUnitAt(0) ^ 0x01);
+      expect(altered.substring(1), 'ecret payload');
+    });
+
     test('a tampered ciphertext does not decrypt to the original', () {
       final sealed = vault.encryptData('secret payload');
       final parts = sealed.split(':');

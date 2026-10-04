@@ -32,22 +32,82 @@ class LoggingInterceptor extends Interceptor {
     return {
       for (final entry in headers.entries)
         entry.key: redactedKeys.contains(entry.key.toLowerCase())
-            ? '***REDACTED***'
+            ? _mask
             : entry.value,
     };
   }
 
-  /// Body keys whose values are credentials, compared lower-case with `_` and
-  /// `-` removed — so `password`, `access_token` and `refreshToken` all match.
-  static const _redactedBodyKeys = {
+  /// Key endings that mark a credential, compared lower-case with `_` and `-`
+  /// removed — so `password`, `newPassword`, `confirm_password`,
+  /// `access_token`, `refreshToken`, `clientSecret` and `X-Api-Key` all match,
+  /// while `tokenType` and `password_hint` (which do not end in one) do not.
+  static const _redactedKeyEndings = [
     'password',
+    'passwd',
+    'passcode',
+    'pwd',
     'token',
-    'accesstoken',
-    'refreshtoken',
-    'idtoken',
     'secret',
-    'clientsecret',
+    'apikey',
+    'authorization',
+    'privatekey',
+    'cardnumber',
+  ];
+
+  /// Short credential names, matched whole — as a suffix `pin` would also hit
+  /// `shipping` and `mapping` — alone or after one of [_redactedKeyPrefixes]
+  /// (`otp`, `newPin`, `cardCvv`).
+  static const _redactedWholeKeys = {
+    'otp',
+    'pin',
+    'cvv',
+    'cvc',
+    'ssn',
+    'cardno',
   };
+
+  static const _redactedKeyPrefixes = [
+    'new',
+    'old',
+    'confirm',
+    'current',
+    'user',
+    'card',
+  ];
+
+  static const _mask = '***REDACTED***';
+
+  /// Whether [key] names a credential — see [_redactedKeyEndings].
+  static bool _isCredentialKey(String key) {
+    final normalized = key.toLowerCase().replaceAll(RegExp('[_\\- ]'), '');
+    if (_redactedKeyEndings.any(normalized.endsWith)) return true;
+    if (_redactedWholeKeys.contains(normalized)) return true;
+    return _redactedKeyPrefixes.any(
+      (prefix) =>
+          normalized.startsWith(prefix) &&
+          _redactedWholeKeys.contains(normalized.substring(prefix.length)),
+    );
+  }
+
+  /// [uri] as it is safe to print: scheme, host, port and path, with every
+  /// query *value* masked and the user-info and fragment dropped. A token or
+  /// an e-mail address in a query string (`?token=…`, `?email=…`) would
+  /// otherwise reach the console in clear — the request headers and body were
+  /// masked, the URL was not.
+  @visibleForTesting
+  static String redactUri(Uri uri) {
+    final base = StringBuffer();
+    if (uri.hasScheme) base.write('${uri.scheme}:');
+    if (uri.hasAuthority) {
+      base.write('//${uri.host}');
+      if (uri.hasPort) base.write(':${uri.port}');
+    }
+    base.write(uri.path);
+    if (!uri.hasQuery || uri.query.isEmpty) return base.toString();
+
+    final keys = uri.queryParametersAll.keys;
+    return '$base?${keys.map((key) => '$key=***').join('&')}';
+  }
 
   /// Returns [data] with credential values masked, at any depth.
   ///
@@ -59,14 +119,8 @@ class LoggingInterceptor extends Interceptor {
     if (data is Map) {
       return {
         for (final entry in data.entries)
-          entry.key:
-              _redactedBodyKeys.contains(
-                entry.key.toString().toLowerCase().replaceAll(
-                  RegExp('[_-]'),
-                  '',
-                ),
-              )
-              ? '***REDACTED***'
+          entry.key: _isCredentialKey(entry.key.toString())
+              ? _mask
               : redactBody(entry.value),
       };
     }
@@ -81,7 +135,7 @@ class LoggingInterceptor extends Interceptor {
       // DynamicLogger has built-in support for formatting RequestOptions.
       DynamicLogger.log(
         {
-          'request_url': '[${options.method}] ${options.uri}',
+          'request_url': '[${options.method}] ${redactUri(options.uri)}',
           'request_header': redactHeaders(options.headers),
           'request_data': redactBody(options.data),
         },
@@ -103,7 +157,8 @@ class LoggingInterceptor extends Interceptor {
       DynamicLogger.log(
         {
           'request_url':
-              '[${response.requestOptions.method}] ${response.requestOptions.uri}',
+              '[${response.requestOptions.method}] '
+              '${redactUri(response.requestOptions.uri)}',
           'request_header': redactHeaders(response.requestOptions.headers),
           'request_data': redactBody(response.requestOptions.data),
           'status_code': response.statusCode,
@@ -135,12 +190,14 @@ class LoggingInterceptor extends Interceptor {
           // Log the request that caused the error — headers redacted so the
           // bearer token is never printed.
           'request_url':
-              '[${err.requestOptions.method}] ${err.requestOptions.uri}',
+              '[${err.requestOptions.method}] '
+              '${redactUri(err.requestOptions.uri)}',
           'request_header': redactHeaders(err.requestOptions.headers),
           'request_data': redactBody(err.requestOptions.data),
         },
         tag:
-            '$tag - ERROR [${err.requestOptions.method}] ${err.requestOptions.uri}', // More descriptive tag
+            '$tag - ERROR [${err.requestOptions.method}] '
+            '${redactUri(err.requestOptions.uri)}', // More descriptive tag
         level: LogLevel.ERROR,
         stackTrace: err.stackTrace, // Pass the stack trace for better debugging
       );

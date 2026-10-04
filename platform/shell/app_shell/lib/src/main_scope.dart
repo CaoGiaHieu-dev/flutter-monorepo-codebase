@@ -51,7 +51,15 @@ class MainScope {
 
       // The splash stays exactly as long as initialization takes — no
       // artificial minimum on top of it.
-      await initService();
+      try {
+        await initService();
+      } catch (_) {
+        // Hand the screen back before the error reaches the caller: a native
+        // splash that is still preserved would hide the boot error screen
+        // for good.
+        _removeNativeSplash();
+        rethrow;
+      }
 
       // Remove the splash screen after initialization.
       _removeNativeSplash();

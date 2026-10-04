@@ -2,7 +2,13 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-/// Bytes kept XOR-masked in RAM, so a memory dump does not show them as-is.
+/// Bytes kept XOR-masked in RAM, so the secret is not a plain, greppable array
+/// in the heap.
+///
+/// Obfuscation, not protection: the random mask is stored beside the masked
+/// bytes in the same heap, so whoever can read the process's memory can undo
+/// it. What it buys is that a casual dump or a log of a buffer does not show
+/// the value as-is.
 ///
 /// The one obfuscation used by this package: the backends' master keys and
 /// `StorageValue`'s cached JSON (through [ObfuscatedBytes.fromString]).

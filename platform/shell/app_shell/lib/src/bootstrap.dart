@@ -107,6 +107,24 @@ import 'shell_hooks.dart';
 /// wants the raw callback — [ShellHooks.onError]. Errors thrown by
 /// `configureDependencies` itself reach the fatal hook only — the reporter is
 /// not registered yet.
+///
+/// ## When the boot itself throws
+///
+/// `configureDependencies` (a storage or database that cannot open, a missing
+/// Firebase configuration), [AppInitializer.init] and the hooks run before
+/// any screen exists, so an exception there used to leave a frozen splash or
+/// a blank window. Now it is reported as above and the boot ends on
+/// [runBootFailure]'s screen: the error text in a debug, profile or non-prod
+/// build ([showsBootDiagnostics]), a generic translated message in a
+/// production release, and in both a retry button that resets the dependency
+/// graph and runs the boot again.
+///
+/// ## The session restore
+///
+/// With a session owner in the build ([ISessionState]), the boot holds the
+/// splash until its first restore has finished — at most
+/// `NetworkProfile.connectTimeout` — so the router never opens on a protected
+/// screen with a stored session still being validated ([awaitSessionRestore]).
 void runShellApp({
   required AppProfile profile,
   required Future<void> Function() configureDependencies,
@@ -137,70 +155,12 @@ void runShellApp({
         return;
       }
 
-      // Before DI: an eager singleton built while the graph initialises can
-      // inject a section, and nothing registered later can shadow it.
-      registerAppProfile(profile, platform: runtime.platform);
-      _registerHooks(hooks, runtime);
-      await hooks.beforeDependencies?.call(runtime);
-
-      // Before the graph is built, not after it. Certificate handling is
-      // `HttpOverrides.global`, and Dio keeps the first `HttpClient` it
-      // creates, so it must be in place before anything the graph
-      // instantiates can open a connection: an eager singleton while it
-      // initialises, a contract implementation `checkAppContract` resolves
-      // right after, the controller of a feature's `IAppTreeWrapper` on the
-      // splash (auth restores its session with a token refresh). It reads the
-      // profile only — the declared pins — and needs no registration.
-      AppInitializer.initBeforeRunApp(
+      await _bootRecovering(
         profile: profile,
-        platform: runtime.platform,
-        flavor: runtime.flavor,
+        hooks: hooks,
+        runtime: runtime,
+        configureDependencies: configureDependencies,
       );
-
-      await configureDependencies();
-
-      final report = checkAppContract(
-        runtime.profile,
-        flavor: runtime.flavor,
-        platform: runtime.platform,
-      );
-      final goesOn = handleCompositionReport(
-        report,
-        onNonFatalError: hooks.onNonFatalError,
-      );
-      if (!goesOn) return;
-
-      // The platform's declared `splash` decides — iOS keeps its native splash
-      // for the whole boot by default, so no Dart splash is built there.
-      final platformFacts =
-          profile.facts.platformFor(runtime.platform) ??
-          const PlatformFacts.today();
-      final usesDartSplash = platformFacts.splash == SplashMode.dart;
-
-      await MainScope(
-        // Resolved through `core_di` rather than importing the splash feature:
-        // with no implementation registered this stays null and `MainScope`
-        // falls back to the native splash.
-        splashScreen: usesDartSplash
-            ? getItOrNull<IAppSplashScreen>()?.build()
-            : null,
-        root: RootApp(display: profile.display),
-        display: profile.display,
-        initService: () async {
-          await AppInitializer.init(
-            routeObserver: getIt<AppRouter>().routeObserver,
-            profile: profile,
-            platform: runtime.platform,
-            flavor: runtime.flavor,
-          );
-          // Only a platform that declares a `window` has one to apply; with
-          // no hook that platform never got here (`P05`).
-          final window = platformFacts.window;
-          if (window != null)
-            await hooks.configureWindow?.call(runtime, window);
-          await hooks.afterBoot?.call(runtime);
-        },
-      ).run();
     },
     // Through `FlutterError.reportError`, so a zone error takes the same
     // path as every other: printed, then reported exactly once.
@@ -213,6 +173,178 @@ void runShellApp({
       ),
     ),
   );
+}
+
+/// Runs [_boot]; when it throws, shows [runBootFailure]'s screen instead of
+/// leaving a frozen splash or a blank window, with a retry that starts the
+/// boot over.
+///
+/// The failure is reported first, through [FlutterError.reportError] — the
+/// path every other error takes — so the app's error hook and a registered
+/// `IErrorReporter` still see it exactly once. What fails here is outside any
+/// widget: `configureDependencies` (a storage or database that cannot open,
+/// a missing Firebase configuration), [ShellHooks.beforeDependencies],
+/// [AppInitializer.init], [ShellHooks.configureWindow] and
+/// [ShellHooks.afterBoot].
+///
+/// A retry resets the dependency graph first: a failed `configureDependencies`
+/// leaves it half built, and registering over it again would only fail
+/// differently. Everything registered before DI (profile, hooks, runtime) is
+/// registered again by the boot itself.
+Future<void> _bootRecovering({
+  required AppProfile profile,
+  required ShellHooks hooks,
+  required AppRuntime runtime,
+  required Future<void> Function() configureDependencies,
+}) async {
+  try {
+    await _boot(
+      profile: profile,
+      hooks: hooks,
+      runtime: runtime,
+      configureDependencies: configureDependencies,
+    );
+  } catch (error, stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: _library,
+        context: ErrorDescription('while starting the app'),
+      ),
+    );
+    runBootFailure(
+      error,
+      detailed: showsBootDiagnostics(runtime.flavor),
+      onRetry: () async {
+        try {
+          await getIt.reset();
+        } catch (resetError) {
+          DynamicLogger.log(
+            'Resetting the dependency graph before a retry failed: '
+            '$resetError',
+            tag: 'Boot',
+            level: LogLevel.WARNING,
+          );
+        }
+        await _bootRecovering(
+          profile: profile,
+          hooks: hooks,
+          runtime: runtime,
+          configureDependencies: configureDependencies,
+        );
+      },
+    );
+  }
+}
+
+Future<void> _boot({
+  required AppProfile profile,
+  required ShellHooks hooks,
+  required AppRuntime runtime,
+  required Future<void> Function() configureDependencies,
+}) async {
+  // Before DI: an eager singleton built while the graph initialises can
+  // inject a section, and nothing registered later can shadow it.
+  registerAppProfile(profile, platform: runtime.platform);
+  _registerHooks(hooks, runtime);
+  await hooks.beforeDependencies?.call(runtime);
+
+  // Before the graph is built, not after it. Certificate handling is
+  // `HttpOverrides.global`, and Dio keeps the first `HttpClient` it
+  // creates, so it must be in place before anything the graph
+  // instantiates can open a connection: an eager singleton while it
+  // initialises, a contract implementation `checkAppContract` resolves
+  // right after, the controller of a feature's `IAppTreeWrapper` on the
+  // splash (auth restores its session with a token refresh). It reads the
+  // profile only — the declared pins — and needs no registration.
+  AppInitializer.initBeforeRunApp(
+    profile: profile,
+    platform: runtime.platform,
+    flavor: runtime.flavor,
+  );
+
+  await configureDependencies();
+
+  final report = checkAppContract(
+    runtime.profile,
+    flavor: runtime.flavor,
+    platform: runtime.platform,
+  );
+  final goesOn = handleCompositionReport(
+    report,
+    onNonFatalError: hooks.onNonFatalError,
+  );
+  if (!goesOn) return;
+
+  // The platform's declared `splash` decides — iOS keeps its native splash
+  // for the whole boot by default, so no Dart splash is built there.
+  final platformFacts =
+      profile.facts.platformFor(runtime.platform) ??
+      const PlatformFacts.today();
+  final usesDartSplash = platformFacts.splash == SplashMode.dart;
+
+  await MainScope(
+    // Resolved through `core_di` rather than importing the splash feature:
+    // with no implementation registered this stays null and `MainScope`
+    // falls back to the native splash.
+    splashScreen: usesDartSplash
+        ? getItOrNull<IAppSplashScreen>()?.build()
+        : null,
+    root: RootApp(display: profile.display),
+    display: profile.display,
+    initService: () async {
+      await AppInitializer.init(
+        routeObserver: getIt<AppRouter>().routeObserver,
+        profile: profile,
+        platform: runtime.platform,
+        flavor: runtime.flavor,
+      );
+      // Only a platform that declares a `window` has one to apply; with
+      // no hook that platform never got here (`P05`).
+      final window = platformFacts.window;
+      if (window != null) await hooks.configureWindow?.call(runtime, window);
+      await hooks.afterBoot?.call(runtime);
+      // Last: the session restore has been running since the splash (or
+      // starts here), and the router must not show a protected screen
+      // signed out while it is still pending.
+      await awaitSessionRestore(
+        getItOrNull<ISessionState>(),
+        timeout: profile.network.connectTimeout,
+      );
+    },
+  ).run();
+}
+
+/// Holds the boot until the session owner's first restore has finished, or
+/// [timeout] has passed — whichever comes first.
+///
+/// Without it the splash ends as soon as the shell's own setup is done and the
+/// router shows its initial location while a stored session is still being
+/// validated by a network call: a returning user sees the signed-out state of
+/// the first screen, and a visitor who is signed out sees a protected one,
+/// for as long as that call takes. With [session] `null` (no module owns a
+/// session) there is nothing to wait for.
+///
+/// A restore that outlasts [timeout] (a captive portal, a dead connection) is
+/// not an error: the boot goes on and `NavigatorWrapperWidget` routes the user
+/// when the restore does land, as it always did.
+@visibleForTesting
+Future<void> awaitSessionRestore(
+  ISessionState? session, {
+  required Duration timeout,
+}) async {
+  if (session == null) return;
+  try {
+    await session.ensureInitialized().timeout(timeout);
+  } on TimeoutException {
+    DynamicLogger.log(
+      'The session restore took longer than ${timeout.inSeconds}s; the app '
+      'starts while it is still pending.',
+      tag: 'Boot',
+      level: LogLevel.WARNING,
+    );
+  }
 }
 
 /// What stops [runtime]'s app before dependency injection starts: the

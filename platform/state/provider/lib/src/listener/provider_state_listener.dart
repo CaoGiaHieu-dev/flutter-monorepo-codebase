@@ -54,8 +54,10 @@ typedef ListenWhenCallback<T> = bool Function(
 ///   onError: (context, error, message) {
 ///     if (error is AuthErrorState) {
 ///       error.maybeWhen(
-///         invalidCredentials: () => showToast('Invalid credentials'),
-///         orElse: () => showToast(message ?? 'Error'),
+///         invalidCredentials: () =>
+///             showToast(context.l10n.invalidCredentials),
+///         // `message` is an English diagnostic (RULE-34): translate.
+///         orElse: () => showToast(context.l10n.somethingWentWrong),
 ///       );
 ///     }
 ///   },
@@ -181,10 +183,11 @@ abstract class ProviderStateListenerBase {
 /// MultiProviderStateListener(
 ///   listeners: [
 ///     ProviderStateListenerEntry<AuthProvider, UserEntity>(
-///       onError: (context, error, message) => showToast(message),
+///       onError: (context, error, message) =>
+///           showToast(context.l10n.somethingWentWrong),
 ///     ),
 ///     ProviderStateListenerEntry<CartProvider, Cart>(
-///       onSuccess: (context, data) => showToast('Cart updated'),
+///       onSuccess: (context, data) => showToast(context.l10nCart.cartUpdated),
 ///     ),
 ///   ],
 ///   child: Scaffold(...),

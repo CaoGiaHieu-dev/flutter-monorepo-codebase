@@ -14,6 +14,13 @@ import 'request_replay.dart';
 /// The retry handler will show a dialog to the user asking them if they want to retry the
 /// request. If the user clicks "retry", the handler will retry all requests in the queue.
 /// If the user clicks "cancel", the handler will reject all requests in the queue.
+///
+/// A request that timed out *after* it was sent ([DioExceptionType.sendTimeout],
+/// [DioExceptionType.receiveTimeout]) may already have been processed, so a
+/// non-idempotent one — `POST` or `PATCH` without
+/// [NetworkConstants.EXTRA_IDEMPOTENT] — is never replayed: it fails with the
+/// timeout instead of offering a retry that could charge or create twice. A
+/// failure to connect never reached the server and is replayed for any method.
 class RetryHandler {
   /// Constructs a [RetryHandler] object.
   ///
@@ -59,6 +66,11 @@ class RetryHandler {
   /// request. If the user clicks "retry", the handler will retry all requests in the queue.
   /// If the user clicks "cancel", the handler will reject all requests in the queue.
   void handleRetry(DioException err, ErrorInterceptorHandler handler) {
+    if (!_canReplay(err)) {
+      handler.next(err);
+      return;
+    }
+
     // One entry per caller. Matching on anything coarser (path + method)
     // silently dropped a second caller's request — `/items?page=1` and
     // `?page=2` share a path — leaving its Future pending forever.
@@ -76,10 +88,36 @@ class RetryHandler {
       _cancelAllRequests();
       return;
     }
-    onRetryCallback?.call(
-      onRetry: _retryAllRequests,
-      onCancel: _cancelAllRequests,
-    );
+    try {
+      onRetryCallback?.call(
+        onRetry: _retryAllRequests,
+        onCancel: _cancelAllRequests,
+      );
+    } catch (_) {
+      // A prompt that cannot be shown (the overlay is not built yet, say)
+      // must not leave `_isPending` set: no later failure would ever reach a
+      // prompt again and every offline request would wait forever. The
+      // queued callers fail with their own errors instead.
+      _cancelAllRequests();
+      rethrow;
+    }
+  }
+
+  /// Whether [err]'s request may be sent again: anything that never reached
+  /// the server, and a timed-out request only when its method is idempotent
+  /// or the caller opted in with [NetworkConstants.EXTRA_IDEMPOTENT].
+  bool _canReplay(DioException err) {
+    final timedOutAfterSending =
+        err.type == DioExceptionType.sendTimeout ||
+        err.type == DioExceptionType.receiveTimeout;
+    if (!timedOutAfterSending) return true;
+
+    final request = err.requestOptions;
+    if (request.extra[NetworkConstants.EXTRA_IDEMPOTENT] == true) return true;
+    return switch (request.method.toUpperCase()) {
+      'GET' || 'HEAD' || 'PUT' || 'DELETE' || 'OPTIONS' => true,
+      _ => false,
+    };
   }
 
   /// Retries all requests in the queue.

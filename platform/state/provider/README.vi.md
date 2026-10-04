@@ -56,7 +56,7 @@ Hành vi cần biết (`platform/state/provider/lib/src/management/operation_exe
 - **Success** → `ViewState.success()` kèm data. Nếu kiểu kết quả `R` khác kiểu state `T` của provider, truyền `convert:` cho `executeOperation`.
 - **Failure** → `ViewState.error(error: errorStateBuilder?.call(failure))`, `message = failure.message` (chẩn đoán tiếng Anh dùng cho log, không phải chữ hiển thị cho người dùng — hãy hiện câu đã dịch, RULE-34). Lần emit này được **ép** (force), nên hai lỗi giống hệt nhau liên tiếp (người dùng bấm Retry khi vẫn offline) vẫn tới được listener.
 - **`none` / `cancel`** → không đổi state — kể cả `loading` mà `showLoading` vừa đặt.
-- `executeOperation` **không** try-catch: nó xử lý `Result.failure`, còn exception bị ném ra từ `operation` sẽ lan lên người gọi. Bắt exception là việc của `BaseRepository.execute()` ở tầng Data.
+- Exception bị ném ra từ `operation` là một bug — bắt exception là việc của `BaseRepository.execute()` ở tầng Data — nhưng nó không bao giờ để màn hình kẹt ở `loading`: executor báo lỗi (`FlutterError.reportError`) rồi chuyển sang `error` qua `ErrorHandler.handleError`, y như một `Result.failure` (kể cả `onFailure` cục bộ / toàn cục), giống cách `emitResult` xử lý với BLoC. Exception không được ném lại.
 - `onSuccess` / `onFailure` cục bộ **thay thế** callback toàn cục của `OperationGlobalConfig.instance.setup(...)` cho lần gọi đó; `onStart` / `onFinish` toàn cục luôn chạy.
 
 ---

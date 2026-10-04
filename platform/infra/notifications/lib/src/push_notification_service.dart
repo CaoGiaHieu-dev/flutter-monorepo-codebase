@@ -252,7 +252,14 @@ class PushNotificationService {
   Future<void> _registerTokenSafely() async {
     try {
       await registerToken();
-      DynamicLogger.log(fcmToken, tag: 'PushNotificationService.Fcm token');
+      // Never the token itself: it addresses this device, and the console is
+      // shared (bug reports, CI logs).
+      DynamicLogger.log(
+        fcmToken == null
+            ? 'FCM token unavailable'
+            : 'FCM token registered (${fcmToken!.length} characters)',
+        tag: 'PushNotificationService.Fcm token',
+      );
     } catch (e, s) {
       DynamicLogger.log(
         'Registering the FCM token failed: $e',
@@ -368,7 +375,7 @@ class PushNotificationService {
         _fcmToken = newToken;
         _tokenStreamController.sink.add(newToken);
         DynamicLogger.log(
-          newToken,
+          'FCM token refreshed (${newToken.length} characters)',
           tag: 'PushNotificationService.Fcm onTokenRefresh',
         );
       }),

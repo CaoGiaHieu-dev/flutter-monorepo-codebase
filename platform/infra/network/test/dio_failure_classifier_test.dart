@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:core_network/core_network.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,6 +89,88 @@ void main() {
           );
           expect(failure?.code, code, reason: '$type');
         }
+      });
+    });
+
+    group('an unknown Dio error is read from the exception it wraps', () {
+      AppFailure<dynamic> classify(Object cause, {String? message}) {
+        return ErrorHandler.handleError(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.unknown,
+            error: cause,
+            message: message,
+          ),
+        );
+      }
+
+      test('a FormatException is a ParseFailure, not the network', () {
+        final failure = classify(const FormatException('Unexpected <'));
+
+        expect(failure, isA<ParseFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.INVALID_FORMAT);
+        expect(failure, isNot(isA<NetworkFailure<dynamic>>()));
+      });
+
+      test('a TLS failure is a rejected certificate, and not a '
+          'NetworkFailure (callers read those as "offline")', () {
+        for (final cause in [
+          const HandshakeException('CERTIFICATE_VERIFY_FAILED'),
+          const CertificateException('bad cert'),
+        ]) {
+          final failure = classify(cause);
+
+          expect(failure, isA<ServerFailure<dynamic>>(), reason: '$cause');
+          expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+        }
+      });
+
+      test('a certificate-pin mismatch is a rejected certificate too', () {
+        // The pinning client's exception, which core_network does not
+        // import: recognised by the message it has always carried.
+        final failure = classify(
+          _PinException('No valid SPKI pins found for host: api.example.com'),
+        );
+
+        expect(failure, isA<ServerFailure<dynamic>>());
+        expect(failure, isNot(isA<NetworkFailure<dynamic>>()));
+        expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+      });
+
+      test('failing to read the certificate chain at all is not a pin '
+          'mismatch', () {
+        final failure = classify(
+          _PinException('Failed to fetch certificate chain. Reason: timeout'),
+        );
+
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+      });
+
+      test('anything else stays NETWORK_UNKNOWN, with the Dio message', () {
+        final failure = classify(StateError('x'), message: 'odd');
+
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+        expect(failure.message, 'odd');
+      });
+
+      test('through a real Dio: a 200 with a non-JSON body is a '
+          'ParseFailure', () async {
+        final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+          ..httpClientAdapter = _HtmlAdapter();
+
+        Object? caught;
+        try {
+          await dio.get<dynamic>('/me');
+        } catch (e) {
+          caught = e;
+        }
+
+        expect(caught, isA<DioException>());
+        final failure = ErrorHandler.handleError(caught);
+        expect(failure, isA<ParseFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.INVALID_FORMAT);
       });
     });
 
@@ -239,4 +324,35 @@ void main() {
       });
     });
   });
+}
+
+/// Stands in for `http_security_pinning`'s exceptions, whose `toString` is
+/// `CertificatePinningException: <message>`.
+class _PinException implements Exception {
+  _PinException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'CertificatePinningException: $message';
+}
+
+/// Answers every request with an HTML page declared as JSON — what a captive
+/// portal or a maintenance page does to a client that expects JSON.
+class _HtmlAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    '<html>maintenance</html>',
+    200,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
+
+  @override
+  void close({bool force = false}) {}
 }

@@ -13,6 +13,8 @@ part of '../base/base_provider.dart';
 /// final config = OperationConfig<UserEntity>(
 ///   operation: () => _getUserUseCase(params),
 ///   onSuccess: (user) => print('Success: ${user.name}'),
+///   // `failure.message` is an English diagnostic for logs, never for a
+///   // screen (RULE-34): show `context.l10n.failureMessage(failure.code)`.
 ///   onFailure: (failure) => print('Error: ${failure.message}'),
 /// );
 /// ```

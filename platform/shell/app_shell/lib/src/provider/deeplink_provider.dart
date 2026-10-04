@@ -89,14 +89,25 @@ class DeeplinkProvider extends ChangeNotifier with DisposeGuard {
   static bool canRoute(ISessionState? session) =>
       session == null || session.signedInUser != null;
 
-  /// The router location an app link points at.
+  /// The router location an app link points at: its path, every query
+  /// parameter (a key given twice keeps both values) and its fragment.
+  ///
+  /// A custom-scheme link carries its first path segment in the host position
+  /// (`myapp://settings/detail` is `/settings/detail`); with an empty host
+  /// (`myapp:///settings`) the path is already complete.
   static String locationOf(Uri uri) {
     final isWebLink = uri.scheme == 'http' || uri.scheme == 'https';
-    // A custom-scheme link carries its first segment in the host position.
-    final path = isWebLink ? uri.path : '/${uri.host}${uri.path}';
+    final path = isWebLink || uri.host.isEmpty
+        ? uri.path
+        : '/${uri.host}${uri.path}';
     return Uri(
       path: path.isEmpty ? '/' : path,
-      queryParameters: uri.queryParameters.isEmpty ? null : uri.queryParameters,
+      queryParameters: uri.hasQuery && uri.queryParametersAll.isNotEmpty
+          ? uri.queryParametersAll
+          : null,
+      fragment: uri.hasFragment && uri.fragment.isNotEmpty
+          ? uri.fragment
+          : null,
     ).toString();
   }
 

@@ -1,3 +1,4 @@
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Minimal built-in loading fallback.
@@ -9,7 +10,13 @@ class DefaultLoadingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: CircularProgressIndicator.adaptive());
+    // Labelled, so a screen reader says what the screen is doing; an optional
+    // lookup, so a host without localisation delegates still builds.
+    return Center(
+      child: CircularProgressIndicator.adaptive(
+        semanticsLabel: AppLocalizations.of(context)?.loading,
+      ),
+    );
   }
 }
 

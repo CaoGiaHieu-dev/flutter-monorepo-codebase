@@ -543,7 +543,7 @@ void main() {
     );
   });
 
-  group('Security & RAM Obfuscation', () {
+  group('In-memory obfuscation (hygiene, not RAM protection)', () {
     late PrefStorageImpl prefStorage;
     late SecureStorageImpl secureStorage;
 

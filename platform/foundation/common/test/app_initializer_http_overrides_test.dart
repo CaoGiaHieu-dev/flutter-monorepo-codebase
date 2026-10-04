@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http_security_pinning/http_security_pinning.dart';
 
 class _Sentinel extends HttpOverrides {}
 
@@ -52,7 +53,11 @@ void main() {
     );
 
     expect(HttpOverrides.current, isNot(same(before)));
-    expect(HttpOverrides.current, isNotNull);
+    expect(
+      HttpOverrides.current?.createHttpClient(null),
+      isA<HttpSecurityPinningClient>(),
+      reason: 'a new override is not enough: the accept-all bypass is one too',
+    );
   });
 
   test('is idempotent: a second call installs nothing', () {

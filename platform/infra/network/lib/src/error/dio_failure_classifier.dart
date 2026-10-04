@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import 'package:platform_kernel/platform_kernel.dart';
@@ -78,12 +80,52 @@ final class DioFailureClassifier implements ErrorClassifier {
         );
 
       case DioExceptionType.unknown:
-        return NetworkFailure(
-          message: error.message ?? 'Unknown network error',
-          code: ErrorCodes.NETWORK_UNKNOWN,
-        );
+        return _failureFromCause(error);
     }
   }
+
+  /// What a [DioExceptionType.unknown] really was, read from the exception
+  /// Dio wrapped ([DioException.error]) — Dio files anything it did not
+  /// recognise itself there, and "unknown" is not "the network":
+  ///
+  /// - a [FormatException] — a `200` whose body is not the JSON the client
+  ///   expects (a maintenance or captive-portal HTML page, say) — is a
+  ///   [ParseFailure] ([ErrorCodes.INVALID_FORMAT]);
+  /// - a TLS failure ([TlsException]) or a certificate-pinning mismatch (the
+  ///   pinning client's `NoValidPinsFoundException`) is a rejected
+  ///   certificate: a [ServerFailure] coded [ErrorCodes.BAD_CERTIFICATE]. Not
+  ///   a [NetworkFailure] — callers treat those as "offline, keep the
+  ///   session", and an intercepted connection is the opposite of offline;
+  /// - anything else stays [ErrorCodes.NETWORK_UNKNOWN].
+  static AppFailure<dynamic> _failureFromCause(DioException error) {
+    final cause = error.error;
+    if (cause is FormatException) {
+      return ParseFailure(
+        message: 'Invalid data format: ${cause.message}',
+        code: ErrorCodes.INVALID_FORMAT,
+      );
+    }
+    if (cause is TlsException || _isPinMismatch(cause)) {
+      return const ServerFailure(
+        message: 'Certificate rejected',
+        code: ErrorCodes.BAD_CERTIFICATE,
+      );
+    }
+    return NetworkFailure(
+      message: error.message ?? 'Unknown network error',
+      code: ErrorCodes.NETWORK_UNKNOWN,
+    );
+  }
+
+  /// Whether [cause] is the pinning client's "no valid SPKI pins found" — the
+  /// exception of `http_security_pinning`, which this package does not
+  /// depend on. Recognised by its message, which a release build keeps even
+  /// when it obfuscates class names.
+  static bool _isPinMismatch(Object? cause) =>
+      cause != null &&
+      cause.toString().startsWith(
+        'CertificatePinningException: No valid SPKI pins',
+      );
 
   /// The failure for an HTTP error response: 401/403 → [AuthFailure],
   /// any other status → [ServerFailure] carrying it, no status →

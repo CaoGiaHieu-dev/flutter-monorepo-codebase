@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/operations/01_cicd.md@48abab5 -->
+<!-- translated-from: docs/en/operations/01_cicd.md@5c37761 -->
 # CI/CD
 
 Tài liệu này trả lời: **có những pipeline nào, mỗi cái làm gì, cần secret gì, và hiện đang hỏng chỗ nào.** Đọc xong bạn cấu hình được secret cho repo, chạy được build, và tái hiện được mọi bước CI ở máy local trước khi push.

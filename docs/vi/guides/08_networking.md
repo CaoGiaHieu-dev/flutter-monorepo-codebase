@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/08_networking.md@70566f7 -->
+<!-- translated-from: docs/en/guides/08_networking.md@5c37761 -->
 # Hướng dẫn: Networking
 
 ## Mục tiêu

@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/03_domain.md@511da6f -->
+<!-- translated-from: docs/en/architecture/03_domain.md@5c37761 -->
 # Tầng Domain
 
 **File này trả lời:** nghiệp vụ nằm ở đâu trong `modules/*/domain`, vì sao code ở đây bị cấm chạm tới Flutter, và `Result<T>` thực sự cho bạn những gì.

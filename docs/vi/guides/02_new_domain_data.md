@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/02_new_domain_data.md@358e85b -->
+<!-- translated-from: docs/en/guides/02_new_domain_data.md@5c37761 -->
 # Hướng dẫn: Tạo package Domain + Data
 
 ## Mục tiêu

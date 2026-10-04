@@ -194,14 +194,21 @@ void main() {
   });
 
   group('isTransientFailure', () {
-    test('only network faults, real 5xx and cancellation are transient', () {
+    test('network faults, a rejected certificate, real 5xx and cancellation '
+        'are transient', () {
       expect(
         isTransientFailure(
           const NetworkFailure(message: 'offline', code: 1005),
         ),
         isTrue,
       );
-      for (final code in [500, 502, 599, ErrorCodes.REQUEST_CANCELLED]) {
+      for (final code in [
+        500,
+        502,
+        599,
+        ErrorCodes.REQUEST_CANCELLED,
+        ErrorCodes.BAD_CERTIFICATE,
+      ]) {
         expect(
           isTransientFailure(
             ServerFailure(message: 'x', code: code),

@@ -76,7 +76,7 @@ Typed Dart in `lib/app/app_profile.dart`, below the generated facts: five sectio
 | `router:` (`RouterProfile`) | when the entry location is used, the fallback location | default | entry location: first launch only · fallback location: the first navigation destination, else the placeholder route of an app with none |
 | `locale:` (`LocaleProfile`) | the languages offered, the fallback and the first-launch language | default | languages: every language the template ships · fallback: en · first launch: the device language when offered, else the fallback |
 | `theme:` (`ThemeProfile`) | the mode a first launch opens in, the palette overrides | default | mode: follows the OS (system) · palette: the template's own, light and dark |
-| `network:` (`NetworkProfile`) | the default HTTP client's timeouts, extra headers, redirects | default | connect, receive and send timeout 20 s each · no extra headers · redirects are not followed |
+| `network:` (`NetworkProfile`) | the default HTTP client's timeouts, extra headers, redirects, hosts besides the API host that may receive the session token | default | connect, receive and send timeout 20 s each · no extra headers · redirects are not followed · the session token goes only to the API host |
 
 ### 6. Decisions to revisit before shipping
 None.

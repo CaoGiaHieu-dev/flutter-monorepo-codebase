@@ -4,7 +4,9 @@ import 'package:platform_kernel/platform_kernel.dart';
 /// request never got the server's verdict — so the session must be kept.
 ///
 /// Only a failure that never reached a decision counts: no network
-/// ([NetworkFailure]), a real HTTP 5xx, or a cancelled request. Every other
+/// ([NetworkFailure]), a certificate or pin rejection
+/// ([ErrorCodes.BAD_CERTIFICATE], raised by the handshake before any request
+/// is sent), a real HTTP 5xx, or a cancelled request. Every other
 /// failure means the server answered and refused — a 401/403, another 4xx,
 /// or a 200 whose envelope reports an error (`ErrorCodes.RESPONSE_REJECTED`).
 ///
@@ -16,5 +18,7 @@ bool isTransientFailure(AppFailure<dynamic>? failure) {
   if (failure is! ServerFailure) return false;
   final code = failure.code;
   if (code == null) return false;
-  return (code >= 500 && code < 600) || code == ErrorCodes.REQUEST_CANCELLED;
+  return (code >= 500 && code < 600) ||
+      code == ErrorCodes.REQUEST_CANCELLED ||
+      code == ErrorCodes.BAD_CERTIFICATE;
 }

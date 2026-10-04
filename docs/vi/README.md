@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/README.md@7eb5c43 -->
+<!-- translated-from: docs/en/README.md@358e85b -->
 # Tài liệu
 
 🌍 *Ngôn ngữ:* [English](../en/README.md) | **Tiếng Việt**

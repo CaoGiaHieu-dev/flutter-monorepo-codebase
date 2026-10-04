@@ -4,7 +4,14 @@ import 'package:path/path.dart' as path;
 
 /// Core constants for the code review tool
 class CodeReviewConstants {
-  static String get toolDir => path.dirname(Platform.script.toFilePath());
+  /// Where the tool's own files live (config, saved key, prompt): the
+  /// directory of the entry script.
+  static String get toolDir =>
+      toolDirOverride ?? path.dirname(Platform.script.toFilePath());
+
+  /// Points [toolDir] somewhere else. Only the tests set it: a test is not
+  /// run from a `file:` script, and must not read or write the real config.
+  static String? toolDirOverride;
 
   static const String geminiApiUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';

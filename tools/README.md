@@ -864,6 +864,14 @@ Each test builds a throwaway workspace with `Directory.systemTemp.createTemp` â€
 | `coverage_report_test.dart` | lcov parsing, the table, `--min` / `--min-package`, the exit codes |
 | `barrel_generator_test.dart` | One barrel per package; every export spelling replaced; directory barrels deleted; a re-export of another package kept |
 | `bootstrap_test.dart` | `--dry-run` and the pruning of managed regions |
+| `configure_test.dart` | `configure.dart` as a process with fake `flutter` / `dart` on `PATH`: `--help`, an unknown flag exits 64 before anything runs, the six steps in order and from the repository root, `gen-l10n` per package, no barrel for an app, stop at the first failing command with its exit code, `--stub-firebase` writing before the first command |
+| `check_outdated_test.dart` | `check_outdated`: which catalog entries are outdated and how an update rewrites a line (quotes, `^` and comments kept), the checklist toggling, and the process against a fake `dart` â€” `--help`, exit 64, no catalog, a sandbox that does not resolve, report-only without a terminal |
+| `theme_setting_test.dart` | `theme_setting`: `--help`, exit 64, `--app` selection, the preflight (android/ios, generator dependencies, config files), both generators run in the app, and a failing generator restores `android/` `ios/` `web/` and removes the copied configs |
+| `firebase_config_test.dart` | `firebase_config`: `--help`, exit 64, app selection, the not-a-terminal exit before any prompt, and the per-flavor bundle ids (`staging` is `.staging` on iOS, `.stg` on Android) |
+| `android_16kb_check_test.dart` | `16kb_check.sh` on real minimal ELF and APK fixtures: aligned passes, 2**12 fails (exit 1), the 2**14 boundary, a non-critical architecture, no native library, a corrupt APK, temp files removed, every refusal; the `.bat` wrapper checked statically. Skipped, naming the tool, without `objdump` / `unzip` / `file` |
+| `code_review_test.dart` | `code_review` below the command line: file type and layer, glob matching, generated-file filter, prompt building, config and key handling, `ApiService` against a mock client (headers, status codes, key never in an error), batch retry, report rendering, parsing a review |
+| `code_review_cli_test.dart` | `code_review.dart` as a process: `--help`, exit 64 on a bad flag or value, `--show-config`, `--config` from stdin, not-found and not-a-project exits, where the API key comes from |
+| `code_review_files_test.dart` | Which files a review reads: `--all` from the root and from a package, generated / test / gitignored files left out, `--exclude`, `--file`, `--folder`, `--changed`, `--staged`, outside a git repository |
 
 When you change a gate, add the case that would have caught the bug (RULE-64).
 

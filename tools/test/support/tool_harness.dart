@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -81,27 +82,52 @@ class CompiledTool {
   /// Runs the tool with [args] in [workingDirectory]. With [scriptPath] the
   /// snapshot is first copied there, so a tool that locates the repository
   /// from its own script location (`docs_check`) finds the temp workspace.
+  ///
+  /// [scriptRoot] is what [scriptPath] is relative to (default: the working
+  /// directory) — for a tool run from a subdirectory of its workspace.
+  ///
+  /// [environment] is added to the parent's (a `PATH` in it replaces the
+  /// parent's: that is how the tests put a fake `dart` / `flutter` in front).
+  /// [stdin], when given, is written to the tool's standard input, which is
+  /// then closed — the answers of an interactive prompt.
   Future<ToolRun> run(
     List<String> args, {
     required String workingDirectory,
     String? scriptPath,
+    String? scriptRoot,
+    Map<String, String>? environment,
+    String? stdin,
   }) async {
     var entry = dill;
     if (scriptPath != null) {
-      entry = p.join(workingDirectory, scriptPath);
+      entry = p.join(scriptRoot ?? workingDirectory, scriptPath);
       Directory(p.dirname(entry)).createSync(recursive: true);
       File(dill).copySync(entry);
     }
-    final result = await Process.run(
+    if (stdin == null) {
+      final result = await Process.run(
+        dartExecutable,
+        [entry, ...args],
+        workingDirectory: workingDirectory,
+        environment: environment,
+      );
+      return ToolRun(
+        result.exitCode,
+        '${result.stdout}',
+        '${result.stderr}',
+      );
+    }
+    final process = await Process.start(
       dartExecutable,
       [entry, ...args],
       workingDirectory: workingDirectory,
+      environment: environment,
     );
-    return ToolRun(
-      result.exitCode,
-      '${result.stdout}',
-      '${result.stderr}',
-    );
+    final out = process.stdout.transform(utf8.decoder).join();
+    final err = process.stderr.transform(utf8.decoder).join();
+    process.stdin.write(stdin);
+    await process.stdin.close();
+    return ToolRun(await process.exitCode, await out, await err);
   }
 
   Future<void> dispose() async {

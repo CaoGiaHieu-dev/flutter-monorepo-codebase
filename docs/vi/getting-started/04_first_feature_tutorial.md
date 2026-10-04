@@ -655,7 +655,7 @@ dart tools/barrel_generator/generate.dart modules/notes/feature/lib
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
-Trong app mẫu, Home nằm sau màn đăng nhập của module auth. File `env.dev` đã commit để trống `BASE_URL`, nên đăng nhập không thể thành công cho tới khi bạn trỏ nó vào một backend. Với tutorial này thì không sao: widget test ở bước 8 chứng minh page chạy đúng, và lần build APK bên dưới chứng minh app compile được cùng nó.
+Trong app mẫu, Home nằm sau màn đăng nhập của module auth. File `env.dev` đã commit để trống `BASE_URL`, nên đăng nhập không thể thành công cho tới khi bạn trỏ nó vào một backend ([`01_setup.md` § 6](01_setup.md#những-gì-bạn-sẽ-thấy-ở-lần-chạy-đầu) cho biết bạn sẽ thấy gì và hai cách đi tiếp). Với tutorial này thì không sao: widget test ở bước 8 chứng minh page chạy đúng, và lần build APK bên dưới chứng minh app compile được cùng nó.
 
 Nếu có backend: bấm **Mở ghi chú** trên Home. Hai ghi chú hiện ra, và nút quay lại đưa bạn về Home.
 

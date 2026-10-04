@@ -266,6 +266,119 @@ jobs:
           fi
           exit "$code"
 
+  # Second template regression check, independent of the first: the generator
+  # paths `generator-smoke` does not touch. A Provider feature with a stack
+  # route (a different state-management template and a different route
+  # contribution), the API package (type 6, which wires the feature that
+  # already exists), a domain and a data package (types 2 and 3), and a whole
+  # new app made by `composer new` that composes them. It holds the result to
+  # the same gates and then to the new app's own smoke test, so a template or a
+  # composer change that leaves a new app unable to boot fails here. Names are
+  # `smoke_p` / `smoke_d` / `smoke_app` so they never collide with the other
+  # job. Nothing here is committed; the checkout is thrown away.
+  generator-smoke-compose:
+    name: Generator smoke test (Provider, API, domain/data, new app)
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: .fvmrc
+          channel: "stable"
+          cache: true
+
+      - name: Get dependencies from the committed lockfile
+        run: flutter pub get --enforce-lockfile
+
+      - name: Workspace setup
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
+
+      # The same order a developer follows: the feature first, then the API
+      # package that wires it (generated after the feature, it implements the
+      # navigator there), then a domain/data pair. Each registers itself in
+      # every existing app_manifest.yaml and runs composer sync.
+      - name: Generate a Provider feature, its API package, a domain and a data package
+        run: |
+          set -e
+          dart tools/module_generator/generate.dart 1 smoke_p "" 1 1
+          dart tools/module_generator/generate.dart 6 smoke_p
+          dart tools/module_generator/generate.dart 2 smoke_d
+          dart tools/module_generator/generate.dart 3 smoke_d
+
+      # A whole app composing the new modules. Without --modules it composes
+      # nothing with a screen, and its own smoke test fails with C05 by design.
+      # composer never runs `flutter create`, so the app has no native runner;
+      # that is enough for everything below.
+      - name: Create a new app
+        run: dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+
+      # composer new does not run pub get or codegen (its output says so).
+      # The barrel pass is per package and must follow codegen (RULE-75); an
+      # app has no barrel.
+      - name: Resolve, generate code, regenerate barrels
+        run: |
+          set -e
+          flutter pub get
+          dart run build_runner build --workspace
+          for lib in modules/smoke_p/feature/lib modules/smoke_p/api/lib modules/smoke_d/domain/lib modules/smoke_d/data/lib; do
+            dart tools/barrel_generator/generate.dart "$lib"
+          done
+
+      - name: Composition in sync with manifest
+        run: dart tools/composer/composer.dart verify
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Architecture rules
+        run: dart tools/arch_check/check.dart
+
+      - name: Dependency catalog in sync
+        run: dart tools/dependency_sync.dart --check
+
+      # The Provider feature ships a page test and a controller test; the new
+      # app ships a DI smoke test and a profile test. All must pass untouched.
+      # The API, domain and data packages generate no tests, so `flutter test`
+      # would fail there with "Test directory not found" — they are not run.
+      - name: The generated feature's own tests
+        working-directory: modules/smoke_p/feature
+        run: flutter test
+
+      - name: The new app's own tests
+        working-directory: apps/smoke_app
+        run: flutter test
+
+      # The existing apps now compose the new modules too: their smoke tests
+      # prove the generators left their DI graphs bootable.
+      - name: The existing apps still boot with the new modules
+        run: |
+          set -e
+          for app in apps/mobile apps/admin; do
+            ( cd "$app" && flutter test )
+          done
+
+      - name: No unused dependency in the generated packages
+        run: |
+          set +e
+          out="$(dart tools/unused_checker/check_unused_packages.dart 2>&1)"
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -eq 2 ] && ! grep -Eq "Package: (feature_smoke_p|smoke_p_api|domain_smoke_d|data_smoke_d|smoke_app)$" <<<"$out"; then
+            echo "::warning::Unused dependencies outside the generated packages (advisory — see the quality job)."
+            exit 0
+          fi
+          if [ "$code" -ne 0 ]; then
+            echo "::error::A generated package declares a dependency it never uses, or the check failed (exit $code)."
+          fi
+          exit "$code"
+
   # Not a gate: the proof that the app actually builds. Gate 2 cannot give it
   # (analysis_options.yaml excludes every generated file), and the release
   # workflows run on demand only — without this job a PR that breaks a

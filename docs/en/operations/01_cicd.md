@@ -16,10 +16,10 @@ Five pipelines ship with the template — four on GitHub Actions, one on Azure D
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Manual (`workflow_dispatch`) | Signed release APK → Firebase App Distribution, plus its obfuscation symbols as an artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR to `main`/`develop`/`master` + manual | Markdown report artifact + PR comments |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Manual (`workflow_dispatch`) | Delegates to Fastlane lanes |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — the merge gate; then a debug dev APK build and a module-generator smoke test |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR to `main`/`develop`/`master`** + manual | Pass/fail — the merge gate; then a debug dev APK build and two module-generator smoke tests |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (manual only) | Prod APK + obfuscation symbols artifacts → Firebase |
 
-`pr_quality_check.yml` is the only pipeline that gates a merge. Its first job runs six numbered gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — with the gate tools' own test suite right after Gate 1, a barrel-drift check after code generation, a blocking unused-dependency audit, and one advisory step (the coverage report). Two more jobs build the app (a debug `dev` APK), which no gate can prove, and smoke-test the module generator. See [§6](#6-the-quality-gate).
+`pr_quality_check.yml` is the only pipeline that gates a merge. Its first job runs six numbered gates in order — composition drift, architecture rules, `flutter analyze`, per-package tests, dependency-catalog drift, documentation accuracy — with the gate tools' own test suite right after Gate 1, a barrel-drift check after code generation, a blocking unused-dependency audit, and one advisory step (the coverage report). Three more jobs build the app (a debug `dev` APK), which no gate can prove, and smoke-test the module generator twice. See [§6](#6-the-quality-gate).
 
 ---
 
@@ -212,7 +212,19 @@ dart tools/module_generator/generate.dart 1 smoke "" 2 2   # BLoC feature, botto
 
 — the widest template: routing, localization, DI and every `app_manifest.yaml` — and holds the result to the gates: `flutter analyze`, the generated module's own tests (`flutter test` in the new `feature_smoke` package — the page and BLoC tests the generator writes must pass untouched), `arch_check`, `composer verify`, and `check_unused_packages`, which fails only when the unused dependency is in `feature_smoke` (anywhere else it is the quality job's audit that owns it, shown here as a warning). Nothing is committed; the checkout is thrown away.
 
-Make **all three** jobs required status checks in the branch protection rule.
+The fourth job, **`generator-smoke-compose`**, also `needs: quality` and is independent of the third: it covers the generator paths the first smoke test does not touch. After the same pub get and `configure.dart --stub-firebase` it generates, in the order a developer follows,
+
+```bash
+dart tools/module_generator/generate.dart 1 smoke_p "" 1 1   # Provider feature, stack route
+dart tools/module_generator/generate.dart 6 smoke_p          # its API package (wires the feature that already exists)
+dart tools/module_generator/generate.dart 2 smoke_d          # domain package
+dart tools/module_generator/generate.dart 3 smoke_d          # data package
+dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+```
+
+— a different state-management template and route contribution, the API-package wiring, a domain/data pair, and a whole new app that composes them. `composer new` runs neither `pub get` nor codegen, so the job then runs `flutter pub get`, `dart run build_runner build --workspace` and the barrel generator for the four new packages (RULE-75), and holds the result to `composer verify`, `flutter analyze`, `arch_check`, `dependency_sync --check`, the new `feature_smoke_p` package's own tests, the new app's `flutter test` (its DI smoke test and profile test), the DI smoke tests of `apps/mobile` and `apps/admin` (which now compose the new modules too), and `check_unused_packages`, which fails only when the unused dependency is in one of the generated packages. The API, domain and data packages generate no `test/`, so they are not run. Nothing is committed; the checkout is thrown away.
+
+Make **all four** jobs required status checks in the branch protection rule.
 
 **Still missing:** the release pipelines (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) are all `workflow_dispatch` and run **no** gates of their own. A manual dispatch from a branch that never opened a PR will build, sign and distribute unverified code. If that matters to you, add gates 0–5 to `flutter_build.yml` between "Install Dependencies" and "Build APK", or require that releases only ever be cut from a merged branch.
 
@@ -300,6 +312,16 @@ dart tools/unused_checker/check_unused_packages.dart
 #    dart tools/module_generator/generate.dart 1 smoke "" 2 2
 #    flutter analyze && (cd modules/smoke/feature && flutter test)
 #    dart tools/arch_check/check.dart && dart tools/composer/composer.dart verify
+#    The generator-smoke-compose job, same way (it also rewrites the lockfile):
+#    dart tools/module_generator/generate.dart 1 smoke_p "" 1 1
+#    dart tools/module_generator/generate.dart 6 smoke_p
+#    dart tools/module_generator/generate.dart 2 smoke_d
+#    dart tools/module_generator/generate.dart 3 smoke_d
+#    dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+#    flutter pub get && dart run build_runner build --workspace
+#    (for each of modules/smoke_p/{feature,api} modules/smoke_d/{domain,data}: barrel_generator <dir>/lib)
+#    dart tools/composer/composer.dart verify && flutter analyze && dart tools/arch_check/check.dart
+#    (cd modules/smoke_p/feature && flutter test) && (cd apps/smoke_app && flutter test)
 
 # 5. The build job of pr_quality_check.yml (needs the Firebase stubs or real
 #    files — see below) — note the cd

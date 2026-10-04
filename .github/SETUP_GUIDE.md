@@ -5,11 +5,13 @@ only what you have to configure once in the repository settings.
 
 ## 1. The merge gate — nothing to configure
 
-`pr_quality_check.yml` needs no secrets. To make it actually block merges, add its three jobs as
+`pr_quality_check.yml` needs no secrets. To make it actually block merges, add its four jobs as
 required status checks: **Settings → Branches → Branch protection rules → Require status checks
 to pass**, and select **PR Quality Check / Analyze, test and audit** (the gates),
-**PR Quality Check / Build the dev APK (debug)** (the only check that proves the app builds) and
-**PR Quality Check / Module generator smoke test** (the only check that runs the module templates).
+**PR Quality Check / Build the dev APK (debug)** (the only check that proves the app builds),
+**PR Quality Check / Module generator smoke test** and
+**PR Quality Check / Generator smoke test (Provider, API, domain/data, new app)** (the only checks that run
+the module and app templates).
 
 ## 2. AI code review — optional
 

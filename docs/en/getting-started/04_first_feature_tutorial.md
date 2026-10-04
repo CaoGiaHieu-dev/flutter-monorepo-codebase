@@ -654,7 +654,7 @@ dart tools/barrel_generator/generate.dart modules/notes/feature/lib
 cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
-In the sample app, Home sits behind the auth module's sign-in. The committed `env.dev` leaves `BASE_URL` empty, so sign-in cannot succeed until you point it at a backend. That is fine for this tutorial: the widget tests of step 8 prove the page, and the APK build below proves the app compiles with it.
+In the sample app, Home sits behind the auth module's sign-in. The committed `env.dev` leaves `BASE_URL` empty, so sign-in cannot succeed until you point it at a backend ([`01_setup.md` § 6](01_setup.md#what-you-will-see-on-the-first-run) shows what you will see and the two ways forward). That is fine for this tutorial: the widget tests of step 8 prove the page, and the APK build below proves the app compiles with it.
 
 With a backend: tap **Open notes** on Home. The two notes appear, and the back arrow returns to Home.
 

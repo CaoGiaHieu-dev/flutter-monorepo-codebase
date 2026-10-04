@@ -17,10 +17,10 @@ Template có **năm** pipeline — bốn trên GitHub Actions, một trên Azure
 | Build and Distribute | `.github/workflows/flutter_build.yml` | Thủ công (`workflow_dispatch`) | APK release đã ký → Firebase App Distribution, kèm symbol obfuscation làm artifact |
 | AI Code Review | `.github/workflows/code_review.yml` | PR vào `main`/`develop`/`master` + thủ công | Báo cáo Markdown + comment trên PR |
 | Fastlane build and distribute | `.github/workflows/fastlane.yml` | Thủ công (`workflow_dispatch`) | Uỷ quyền cho các lane Fastlane |
-| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — gate merge; sau đó build một APK dev bản debug và smoke test module generator |
+| **PR Quality Check** | `.github/workflows/pr_quality_check.yml` | **PR vào `main`/`develop`/`master`** + thủ công | Đạt/không — gate merge; sau đó build một APK dev bản debug và hai smoke test module generator |
 | Azure Build + Distribute | `azure-ci-cd.yml` | `trigger: none` (chỉ chạy tay) | Artifact APK prod + symbol obfuscation → Firebase |
 
-`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Job đầu của nó chạy sáu gate có số theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cùng bộ test riêng của các tool gate ngay sau Gate 1, một bước kiểm tra barrel lệch sau khi sinh code, một audit dependency thừa có chặn merge, và một bước chỉ tham khảo (báo cáo coverage). Hai job nữa build app (APK `dev` bản debug), điều mà không gate nào chứng minh được, và smoke test module generator. Xem [§6](#6-quality-gate).
+`pr_quality_check.yml` là pipeline duy nhất chặn được merge. Job đầu của nó chạy sáu gate có số theo thứ tự — lệch composition, luật kiến trúc, `flutter analyze`, test từng package, lệch catalog, độ chính xác của docs — cùng bộ test riêng của các tool gate ngay sau Gate 1, một bước kiểm tra barrel lệch sau khi sinh code, một audit dependency thừa có chặn merge, và một bước chỉ tham khảo (báo cáo coverage). Ba job nữa build app (APK `dev` bản debug), điều mà không gate nào chứng minh được, và smoke test module generator hai lần. Xem [§6](#6-quality-gate).
 
 ---
 
@@ -212,7 +212,19 @@ dart tools/module_generator/generate.dart 1 smoke "" 2 2   # feature BLoC, tab b
 
 — template rộng nhất: routing, localization, DI và mọi `app_manifest.yaml` — và bắt kết quả qua các gate: `flutter analyze`, test riêng của module được sinh (`flutter test` trong package `feature_smoke` mới sinh — test page và test BLoC mà generator ghi ra phải pass mà không cần sửa), `arch_check`, `composer verify`, và `check_unused_packages`, chỉ fail khi dependency thừa nằm trong `feature_smoke` (ở chỗ khác là audit của job quality lo, ở đây chỉ hiện dưới dạng warning). Không commit gì; bản checkout bị bỏ đi.
 
-Hãy đặt **cả ba** job là required status check trong branch protection rule.
+Job thứ tư, **`generator-smoke-compose`**, cũng `needs: quality` và độc lập với job thứ ba: nó phủ những đường đi của generator mà smoke test đầu tiên không chạm tới. Sau cùng bước pub get và `configure.dart --stub-firebase`, nó sinh, theo đúng thứ tự một developer làm,
+
+```bash
+dart tools/module_generator/generate.dart 1 smoke_p "" 1 1   # feature Provider, route dạng stack
+dart tools/module_generator/generate.dart 6 smoke_p          # package API của nó (nối với feature đã có)
+dart tools/module_generator/generate.dart 2 smoke_d          # package domain
+dart tools/module_generator/generate.dart 3 smoke_d          # package data
+dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+```
+
+— một template quản lý state và cách đóng góp route khác, việc nối package API, một cặp domain/data, và một app mới hoàn chỉnh ghép chúng lại. `composer new` không chạy `pub get` lẫn codegen, nên job sau đó chạy `flutter pub get`, `dart run build_runner build --workspace` và barrel generator cho bốn package mới (RULE-75), rồi bắt kết quả qua `composer verify`, `flutter analyze`, `arch_check`, `dependency_sync --check`, test riêng của package `feature_smoke_p` mới sinh, `flutter test` của app mới (DI smoke test và profile test của nó), các DI smoke test của `apps/mobile` và `apps/admin` (nay cũng ghép các module mới), và `check_unused_packages`, chỉ fail khi dependency thừa nằm trong một package vừa sinh. Các package API, domain và data không sinh `test/`, nên không chạy test cho chúng. Không commit gì; bản checkout bị bỏ đi.
+
+Hãy đặt **cả bốn** job là required status check trong branch protection rule.
 
 **Vẫn còn thiếu:** các pipeline phát hành (`flutter_build.yml`, `fastlane.yml`, `azure-ci-cd.yml`) đều là `workflow_dispatch` và **không** chạy gate nào của riêng chúng. Một lần dispatch thủ công từ nhánh chưa từng mở PR vẫn sẽ build, ký và phân phối code chưa được kiểm. Nếu điều đó quan trọng với bạn, hãy thêm gate 0–5 vào `flutter_build.yml` giữa "Install Dependencies" và "Build APK", hoặc quy định chỉ phát hành từ nhánh đã merge.
 
@@ -300,6 +312,16 @@ dart tools/unused_checker/check_unused_packages.dart
 #    dart tools/module_generator/generate.dart 1 smoke "" 2 2
 #    flutter analyze && (cd modules/smoke/feature && flutter test)
 #    dart tools/arch_check/check.dart && dart tools/composer/composer.dart verify
+#    Job generator-smoke-compose, cùng cách (nó cũng ghi lại lockfile):
+#    dart tools/module_generator/generate.dart 1 smoke_p "" 1 1
+#    dart tools/module_generator/generate.dart 6 smoke_p
+#    dart tools/module_generator/generate.dart 2 smoke_d
+#    dart tools/module_generator/generate.dart 3 smoke_d
+#    dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
+#    flutter pub get && dart run build_runner build --workspace
+#    (với từng modules/smoke_p/{feature,api} modules/smoke_d/{domain,data}: barrel_generator <dir>/lib)
+#    dart tools/composer/composer.dart verify && flutter analyze && dart tools/arch_check/check.dart
+#    (cd modules/smoke_p/feature && flutter test) && (cd apps/smoke_app && flutter test)
 
 # 5. Job build của pr_quality_check.yml (cần stub Firebase hoặc file thật —
 #    xem bên dưới) — chú ý cd

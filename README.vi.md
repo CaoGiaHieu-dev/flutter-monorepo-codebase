@@ -554,6 +554,15 @@ cd apps/mobile   # bắt buộc — thư mục gốc workspace không có projec
 flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
+> [!NOTE]
+> **Hãy chờ một màn hình đăng nhập không đăng nhập được.** App sample hiện splash, rồi onboarding,
+> rồi form đăng nhập. `env.dev` đã commit để `BASE_URL` rỗng và repository không kèm backend nào, nên
+> gửi form sẽ kết thúc bằng toast "A network error occurred". Muốn đi tiếp, đặt `BASE_URL` trong
+> `apps/mobile/env.dev` thành một server trả lời lời gọi đăng nhập của sample, hoặc thay data source
+> của sample bằng của bạn. Mỗi màn hình hiện gì, cùng request và response mà sample mong đợi:
+> [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 6 và
+> [`guides/08_networking.md`](docs/vi/guides/08_networking.md#hợp-đồng-đăng-nhập-của-sample).
+
 ### 5. Build APK
 ```bash
 cd apps/mobile   # bắt buộc — build từ thư mục gốc workspace sẽ lỗi Gradle khó hiểu

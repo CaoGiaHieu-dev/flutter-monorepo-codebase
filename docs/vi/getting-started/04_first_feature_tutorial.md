@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/04_first_feature_tutorial.md@70566f7 -->
+<!-- translated-from: docs/en/getting-started/04_first_feature_tutorial.md@48abab5 -->
 # 04 · Tutorial: Feature đầu tiên của bạn trong 30 phút
 
 ## Mục tiêu

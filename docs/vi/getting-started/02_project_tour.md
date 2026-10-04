@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/02_project_tour.md@3f5c79f -->
+<!-- translated-from: docs/en/getting-started/02_project_tour.md@48abab5 -->
 # 02 · Dạo quanh dự án
 
 **Trang này trả lời:** mỗi thư mục để làm gì, package nào sở hữu cái gì, và muốn sửa một thứ cụ thể thì vào đâu?

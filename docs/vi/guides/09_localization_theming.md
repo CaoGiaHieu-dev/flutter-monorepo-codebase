@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/09_localization_theming.md@358e85b -->
+<!-- translated-from: docs/en/guides/09_localization_theming.md@48abab5 -->
 # Hướng dẫn: Đa ngôn ngữ, Theme & Responsive UI
 
 ## Mục tiêu

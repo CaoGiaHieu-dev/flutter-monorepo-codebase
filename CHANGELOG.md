@@ -195,6 +195,9 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Fixed
 
+- Gate 5 no longer fails on a fresh checkout: the fastlane guide names the git-ignored `Gemfile.lock` files, which are now allowlisted with a reason.
+- The generated feature navigator keeps its imports sorted whatever the feature is called (a name sorting before `injectable` used to trip `directives_ordering`).
+- The `code_review` workflow parses the report in any language, so the default English report is posted.
 - `GoRouteDataCustom` reports screen views on the web and honours `canPop` / `pageKey` on every platform.
 - The generator-smoke unused-dependency step matches the generated app's package; `check_unused_translate` no longer flags bare getters inside `extension on AppLocalizations`.
 - Removed the unused `package_rename` dev dependency and the unused `APP_ID` Android resource; Xcode scheme comments are in English; 14 files end with a newline; the `LoadingWidget` doc example compiles.

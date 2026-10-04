@@ -72,8 +72,12 @@ jobs:
           channel: "stable"
           cache: true
 
+      # --stub-firebase: the gitignored firebase_options_<flavor>.dart files
+      # are absent on a clean checkout and build_runner must resolve
+      # firebase_module.dart's imports (same reason as pr_quality_check.yml).
+      # The review only reads Dart, so the compile-only stubs are enough.
       - name: 📦 Get dependencies
-        run: dart tools/workspace_setup/configure.dart
+        run: dart tools/workspace_setup/configure.dart --stub-firebase
 
       # Pinned to a commit, not a tag: tags of this action were rewritten in
       # the March 2025 supply-chain compromise (CVE-2025-30066).

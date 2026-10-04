@@ -48,25 +48,6 @@ updates:
       gradle-minor-patch:
         update-types: ["minor", "patch"]
 
-  # --- Ruby (fastlane, cocoapods) -------------------------------------------
-  # Two Gemfiles with an identical gem list: the root one (fastlane run from
-  # the repo root / CI) and apps/mobile's. Both are listed so they move
-  # together; keep them identical when merging.
-  - package-ecosystem: "bundler"
-    directories:
-      - "/"
-      - "/apps/mobile"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "chore(deps)"
-    labels: ["dependencies", "ruby"]
-    groups:
-      bundler-minor-patch:
-        update-types: ["minor", "patch"]
-
   # --- GitHub Actions used by .github/workflows -----------------------------
   - package-ecosystem: "github-actions"
     directory: "/"

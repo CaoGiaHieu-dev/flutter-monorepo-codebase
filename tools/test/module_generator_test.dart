@@ -6,6 +6,7 @@ import 'package:test/test.dart';
 import '../module_generator/src/common_helpers.dart';
 import '../module_generator/src/module_type.dart';
 import '../module_generator/src/pubspec_generator.dart';
+import 'support/composer_fixture.dart';
 import 'support/fake_bin.dart';
 import 'support/tool_harness.dart';
 
@@ -637,6 +638,95 @@ modules: []
 
       expect(run, exitsWith(1));
       expect(ws.read('apps/mobile/app_manifest.yaml'), before);
+    }, skip: skip);
+  });
+
+  // `composer sync` rewrites each app's README `report` region and
+  // `app_profile.dart` `facts` region as well as the manifests' children, so
+  // a run killed after the sync must restore those too — otherwise the
+  // rolled-back tree is red under `composer verify`.
+  group('a rolled-back run leaves composer verify green', () {
+    final skip = skipWithoutPosixShell();
+    late CompiledTool composer;
+
+    setUpAll(() async {
+      composer = await CompiledTool.compile('tools/composer/composer.dart');
+    });
+    tearDownAll(() => composer.dispose());
+
+    /// The `demo` workspace of the composer tests, plus the generator's own
+    /// templates, synced once the way a repository is.
+    Future<TempWorkspace> syncedWorkspace() async {
+      final templateRoot = p.join(
+        repoRoot,
+        'tools',
+        'module_generator',
+        'templates',
+      );
+      final ws = TempWorkspace.create({
+        ...demoWorkspaceFiles(),
+        for (final file in Directory(templateRoot).listSync(recursive: true))
+          if (file is File)
+            'tools/module_generator/templates/${p.relative(file.path, from: templateRoot).replaceAll(r'\', '/')}':
+                file.readAsStringSync(),
+      });
+      expect(
+        await composer.run(['sync'], workingDirectory: ws.root),
+        exitsWith(0),
+      );
+      return ws;
+    }
+
+    test('killed after composer sync, before the toolchain', () async {
+      final ws = await syncedWorkspace();
+      expect(
+        await composer.run(['verify'], workingDirectory: ws.root),
+        exitsWith(0),
+      );
+      const tracked = [
+        'pubspec.yaml',
+        'apps/demo/app_manifest.yaml',
+        'apps/demo/pubspec.yaml',
+        'apps/demo/lib/di/injection.dart',
+        'apps/demo/lib/app/app_profile.dart',
+        'apps/demo/README.md',
+      ];
+      final before = {for (final path in tracked) path: ws.read(path)};
+
+      // `dart` runs the real composer, so `sync` rewrites the regions for
+      // real; dependency_sync, the step after it, is the one that dies.
+      final bin = FakeBin.create({
+        'dart':
+            'case "\$1" in\n'
+            '  tools/composer/composer.dart) shift\n'
+            '    exec "$dartExecutable" "${composer.dill}" "\$@" ;;\n'
+            '  tools/dependency_sync.dart) exit 1 ;;\n'
+            'esac\n'
+            'exit 0',
+        'flutter': 'exit 0',
+      });
+
+      final run = await tool.run(
+        ['2', 'chat'],
+        workingDirectory: ws.root,
+        scriptPath: 'tools/module_generator/generate.dill',
+        environment: bin.environment,
+      );
+
+      expect(run, exitsWith(1));
+      // The sync really ran: it registered the module before the failure.
+      expect(bin.argsOf('dart'), contains('tools/composer/composer.dart sync'));
+      for (final path in tracked) {
+        expect(ws.read(path), before[path], reason: '$path was not restored');
+      }
+      expect(
+        Directory(p.join(ws.root, 'modules', 'chat')).existsSync(),
+        isFalse,
+      );
+      expect(
+        await composer.run(['verify'], workingDirectory: ws.root),
+        exitsWith(0),
+      );
     }, skip: skip);
   });
 }

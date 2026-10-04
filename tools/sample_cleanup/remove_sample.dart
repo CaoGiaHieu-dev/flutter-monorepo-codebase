@@ -51,11 +51,14 @@ const String _manifestPath = 'tools/sample_manifest.yaml';
 /// Snapshotted before the first mutation so a failure partway through restores
 /// them rather than leaving a workspace that references a deleted package.
 /// Same contract as `CommonHelpers.sharedMutatedFiles` in the module generator.
-/// `app_manifest.yaml` is the one that matters now: the other three are
-/// generated between `composer:managed` markers, so removing lines from them
-/// only holds until the next `composer sync`. They stay in the list so the tree
-/// is consistent the moment this tool finishes, rather than referencing a
-/// package that no longer exists until someone runs the generator.
+/// `app_manifest.yaml` is the one that matters now: the others are generated
+/// between `composer:managed` markers (the `facts` region of `app_profile.dart`
+/// and the `report` region of `README.md` included — `composer sync` rewrites
+/// both), so removing lines from them only holds until the next `composer
+/// sync`. They stay in the list so the tree is consistent the moment this tool
+/// finishes, and so a rollback leaves `composer verify` green, rather than
+/// referencing a package that no longer exists until someone runs the
+/// generator.
 ///
 /// Computed from every app in the workspace rather than naming
 /// `apps/mobile/`: a sample removed from one app's manifest but left in
@@ -66,6 +69,8 @@ List<String> get _sharedMutatedFiles => [
     '${app.dir}/app_manifest.yaml',
     '${app.dir}/pubspec.yaml',
     '${app.dir}/lib/di/injection.dart',
+    '${app.dir}/lib/app/app_profile.dart',
+    '${app.dir}/README.md',
   ],
 ];
 

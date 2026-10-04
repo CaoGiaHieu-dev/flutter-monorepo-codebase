@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:test/test.dart';
 
 import '../firebase/firebase_config.dart';
+import 'support/fake_bin.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/firebase/firebase_config.dart` — per-app FlutterFire configuration.
@@ -156,8 +159,39 @@ void main() {
           run0.output,
           contains('Configuring app "mobile" in apps/mobile/'),
         );
-        expect(run0.output, contains('stdin is not a terminal'));
+        expect(run0.output, contains('needs a terminal on both stdin'));
       },
+    );
+
+    test(
+      'stdin from /dev/null, which hasTerminal reports as a terminal, is '
+      'refused too',
+      () async {
+        final ws = single();
+
+        // Process.run pipes stdin, so the shell redirects it to the character
+        // device the way an agent or harness does.
+        final result = await Process.run(
+          'sh',
+          [
+            '-c',
+            'exec "\$0" "\$@" </dev/null',
+            dartExecutable,
+            tool.dill,
+            '--app',
+            'mobile',
+          ],
+          workingDirectory: ws.root,
+        );
+
+        expect(result.exitCode, 1);
+        expect(
+          '${result.stderr}',
+          contains('needs a terminal on both stdin'),
+        );
+        expect('${result.stdout}', isNot(contains('Checking Firebase login')));
+      },
+      skip: skipWithoutPosixShell(),
     );
 
     test(

@@ -183,7 +183,7 @@ final RegExp typeDeclaration = RegExp(
 ///
 /// Comma lists are captured whole (`implements A, B`) and split by the caller,
 /// which is what makes a dual-registering controller like `AuthProvider` —
-/// `implements IAuthSessionState, IAuthRefreshListenable` — register both.
+/// `implements ISessionState, ISessionRefreshListenable` — register both.
 ///
 /// A supertype may carry an import prefix (`implements c.IFoo`) and type
 /// arguments (`implements IFoo<Bar>, IBaz`); the caller strips the prefix.

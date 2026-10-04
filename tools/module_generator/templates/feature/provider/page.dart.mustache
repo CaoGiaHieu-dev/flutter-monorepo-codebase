@@ -16,6 +16,14 @@ class {{pascalNameInput}}Page extends StatelessWidget {
         title: Text(context.l10n{{pascalNameInput}}.title),
       ),
       body: BaseViewWidget<{{pascalNameInput}}Provider, Object>(
+        // Without this a failed first load renders nothing at all: the error
+        // path falls back to the success / empty builder. `message` is an
+        // English diagnostic and is never shown (RULE-34); the user reads a
+        // translated sentence. To word a failure by its code, carry the code
+        // in a feature error state (see AuthErrorState) and pick the sentence
+        // with `context.l10n.failureMessage(code)`.
+        onErrorBuilder: (context, data, message, child) =>
+            Center(child: Text(context.l10n.somethingWentWrong)),
         builder: (context, data, child) {
           // AdaptiveContent (core_responsive) caps the column at a readable
           // width on a tablet or desktop window and changes nothing on a

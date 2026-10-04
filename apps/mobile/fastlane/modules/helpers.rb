@@ -67,8 +67,6 @@ APP_STORE_CONNECT_APPLE_IDS = CONFIG.dig('app_store_connect', 'apple_ids') || {}
 # App Store Credentials (now loaded from YAML)
 APP_STORE_CONNECT_API_KEY_ID = CONFIG.dig('app_store_connect', 'api_key_id') || ""
 APP_STORE_CONNECT_ISSUER_ID = CONFIG.dig('app_store_connect', 'issuer_id') || ""
-APP_STORE_USERNAME = CONFIG.dig('app_store_connect', 'username') || ""
-APP_STORE_TEAM_ID = CONFIG.dig('app_store_connect', 'team_id') || ""
 
 # Valid options
 VALID_FLAVORS = (CONFIG.dig('valid_flavors') || []) + ['none']
@@ -1012,6 +1010,5 @@ def run_build(platform:, options:)
 
 rescue => exception
   UI.error("Error in #{platform.to_s} lane: #{exception.message}")
-  # Optional: Send error notification to Discord
   raise # Re-raise the error to fail the lane
 end

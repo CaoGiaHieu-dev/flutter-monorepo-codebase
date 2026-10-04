@@ -50,7 +50,7 @@ Exit codes follow one convention across the tools: `0` success, `1` the check fa
 | — | `dart tools/unused_checker/check_unused_packages.dart` | Yes |
 | — | `dart tools/code_review/code_review.dart` (own workflow) | No (advisory) |
 
-Gates 0 and 1 run before any codegen. The `generator-smoke` and `build` jobs run after the `quality` job; the debug APK build is the proof for RULE-77.
+Gates 0 and 1 run before any codegen. The `generator-smoke`, `generator-smoke-compose` and `build` jobs run after the `quality` job; the debug APK build is the proof for RULE-77.
 
 ---
 
@@ -73,7 +73,8 @@ Gates 0 and 1 run before any codegen. The `generator-smoke` and `build` jobs run
 | `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | Print an app's report — what it declares and what the shell resolves from it (the text of its README `report` region) — or, with `--catalog`, every manifest key, the contract catalog, the derived defaults, the pubspec keys, the checks V1–V17 and the problem codes | `0` · `1` unknown app or broken catalog · `64` bad flag | — |
 | `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Create `apps/<id>/` from `tools/composer/app_template/`, derive its `capabilities:` from what the modules register, run `sync` and `verify`; **never runs `flutter create`** | `0` · `1` a refusal (id exists, platform blocked by a module, unknown module or platform) writing nothing, or a failing `verify` · `64` bad arguments | — |
 | `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Regenerate the root `workspace:` list, each app's path dependencies, `injection.dart` (all of it), the `facts` region of `lib/app/app_profile.dart` and the `report` region of the app's `README.md` from `app_manifest.yaml` | `0` · `1` invalid manifest or YAML, a lost `composer:managed` marker, a managed package declared by hand · `64` bad flag | — |
-| `dart tools/composer/composer.dart verify [--app <id>]` | Same, but write nothing and fail on drift; implies `--strict`. Also fails on a module or platform package no app composes, and holds each app's declaration to the source: capabilities against what is registered (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10), env files (V11), entry point and a smoke test that builds every factory (V12), the root as the only workspace node (V17) | `0` · `1` drift, a module missing from disk, or any `sync` refusal · `64` bad flag | 0 |
+| `dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]` | Declare `absent` every optional capability a manifest still says is `provided` although nothing it composes registers the contract (the V3 failure a removed module leaves), with the reason `<text>: <what the shell does without it>`; run `sync` after it | `0` · `1` a key it cannot edit · `64` bad flag | — |
+| `dart tools/composer/composer.dart verify [--app <id>]` | Same, but write nothing and fail on drift; implies `--strict`. Also fails on a module or platform package no app composes, and holds each app's declaration to the source: capabilities against what is registered (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10), env files (V11), entry point and a smoke test that builds every factory (V12), the native flavors of a committed Android or iOS runner (V15 — [recipe](../guides/13_app_composition.md#native-flavors-for-a-new-mobile-runner)), the root as the only workspace node (V17) | `0` · `1` drift, a module missing from disk, or any `sync` refusal · `64` bad flag | 0 |
 
 - Only the regions between `composer:managed:<region>` and `composer:end:<region>` are generated; never hand-edit them (RULE-16).
 - A non-strict `sync` that skipped a missing module prints a `PARTIAL COMPOSITION` block and the `git checkout --` line that restores the files.
@@ -98,7 +99,7 @@ It imports no package, so it runs before pub has ever resolved. The full sequenc
 | `dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md` | Stamp a synced translation | `0` | — |
 
 - Correctly absent paths live in `tools/docs_check/allowlist.txt`, each with its reason; intentional shape differences in `tools/docs_check/parity_allowlist.txt`.
-- References into a sample bundle removed with `remove_sample` are summarised as one INFO line per bundle, never a failure.
+- References into a sample bundle removed with `remove_sample` are summarised as one INFO line per bundle, never a failure; a glob such as `modules/*/feature` passes while `modules/` is empty (a fully stripped template, [§ 9](../guides/01_new_feature.md#a-fully-stripped-template)).
 - Path resolution, placeholders, parity metrics and translation stamps: [details](../../../tools/README.md#docs_check).
 
 ## `sample_cleanup`
@@ -107,7 +108,7 @@ It imports no package, so it runs before pub has ever resolved. The full sequenc
 |:--|:--|:--|:--|
 | `dart tools/sample_cleanup/remove_sample.dart --list` | Classify every package as `framework`, `sample` or `shell`, and list the bundles | `0` | — |
 | `dart tools/sample_cleanup/remove_sample.dart <bundle> [--verbose]` | Dry run: what would be removed, what breaks, what degrades safely, which docs go dead | `0` · `64` unknown flag or bundle, or more than one bundle | — |
-| `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` | Remove the bundle, flip the capabilities only it provided to `absent`, run `composer sync` | `0` · `1` failed partway (shared files rolled back; deleted directories are not) · `64` as above | — |
+| `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` | Remove the bundle, run `composer reconcile` (every capability whose last provider went becomes `absent`, in every app manifest) and `composer sync`; the last module gone leaves `modules/.gitkeep` | `0` · `1` failed partway (shared files rolled back; deleted directories are not) · `64` as above | — |
 
 - Source of truth: [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml). The tool never edits it, which is how `docs_check` recognises a removed bundle.
 - A bundle's `<id>_api` package is kept while another package still imports it.

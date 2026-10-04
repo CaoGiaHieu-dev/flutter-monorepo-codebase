@@ -19,6 +19,10 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Added
 
+- **`composer reconcile`** declares `absent` every optional capability whose last provider is gone (the V3 scan, not a list); `remove_sample --apply` runs it and then `sync`, so `composer verify` stays green for every bundle and for all bundles together. A fully stripped template keeps `modules/.gitkeep`.
+- **V15 checks native flavors.** On a committed Android or iOS runner it requires a `productFlavor` per declared flavor and an Xcode scheme plus `Debug-`/`Release-`/`Profile-<flavor>` configurations; the failure names the flavor and the recipe in guide 13.
+- **CI `generator-smoke-compose`** generates a Provider feature, its API package, a domain/data pair and a new app with `composer new`, then holds them to verify, analyze, arch_check, the new tests and the apps' DI smoke tests.
+- Docs: a "native flavors for a new mobile runner" recipe, "a fully stripped template" section, "what you will see on the first run" and the sample sign-in contract (en and vi).
 - **Apps layer.** Every app is `apps/<id>/`: an `app_manifest.yaml` (manifest v2) that says what the
   app is — `app.name`, `flavors` (with an `ssl_pinning` decision per flavor: `pins` or `disabled`
   with a reason), `env` keys, `platforms` (`runner: committed | scaffold`, plus `splash`, `push`,
@@ -179,6 +183,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Fixed
 
+- `docs_check` accepts a glob over an empty directory (e.g. `modules/*/feature` in a fully stripped template); a glob over a non-empty directory must still match.
 - Networking: token-refresh deadlocks and recursion (a `401` from login or refresh no longer starts a
   refresh; a late `401` for an old token replays), retry decisions that could lose an error, and
   retry/refresh failures reported accurately to the UI.

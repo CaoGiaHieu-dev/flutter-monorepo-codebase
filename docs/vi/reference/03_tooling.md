@@ -51,7 +51,7 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 | — | `dart tools/unused_checker/check_unused_packages.dart` | Có |
 | — | `dart tools/code_review/code_review.dart` (workflow riêng) | Không (tư vấn) |
 
-Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke` và `build` chạy sau job `quality`; bản build debug APK là bằng chứng cho RULE-77.
+Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke`, `generator-smoke-compose` và `build` chạy sau job `quality`; bản build debug APK là bằng chứng cho RULE-77.
 
 ---
 
@@ -74,7 +74,8 @@ Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke` và `build` ch
 | `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | In báo cáo của một app — nó khai gì và shell resolve gì từ nó (đúng nội dung vùng `report` trong README của nó) — hoặc, với `--catalog`, mọi key manifest, catalog contract, các giá trị mặc định suy ra, các key trong pubspec, các check V1–V17 và các mã vấn đề | `0` · `1` app lạ hoặc catalog hỏng · `64` cờ sai | — |
 | `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Tạo `apps/<id>/` từ `tools/composer/app_template/`, suy ra `capabilities:` của nó từ những gì các module đăng ký, chạy `sync` và `verify`; **không bao giờ chạy `flutter create`** | `0` · `1` bị từ chối (id đã có, platform bị module chặn, module hoặc platform lạ) và không ghi gì, hoặc `verify` fail · `64` tham số sai | — |
 | `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Sinh lại danh sách `workspace:` ở root, path dependency của từng app, `injection.dart` (toàn bộ), vùng `facts` của `lib/app/app_profile.dart` và vùng `report` trong `README.md` của app từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
-| `dart tools/composer/composer.dart verify [--app <id>]` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Cũng fail khi có module hoặc package platform không app nào lắp ráp, và đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào cùng smoke test dựng mọi factory (V12), root là workspace node duy nhất (V17) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
+| `dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]` | Khai `absent` mọi capability tuỳ chọn mà manifest vẫn nói là `provided` dù không còn gì nó ghép đăng ký contract đó (lỗi V3 mà một module bị gỡ để lại), với lý do `<text>: <thứ shell làm khi thiếu nó>`; chạy `sync` sau đó | `0` · `1` một key không sửa được · `64` cờ sai | — |
+| `dart tools/composer/composer.dart verify [--app <id>]` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Cũng fail khi có module hoặc package platform không app nào lắp ráp, và đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào cùng smoke test dựng mọi factory (V12), các flavor native của runner Android hay iOS đã commit (V15 — [công thức](../guides/13_app_composition.md#flavor-native-cho-runner-mobile-mới)), root là workspace node duy nhất (V17) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
 
 - Chỉ các vùng giữa `composer:managed:<region>` và `composer:end:<region>` là được sinh ra; không bao giờ sửa tay chúng (RULE-16).
 - Một lần `sync` không strict mà bỏ qua module thiếu sẽ in khối `PARTIAL COMPOSITION` kèm dòng `git checkout --` để khôi phục các file.
@@ -99,7 +100,7 @@ Nó không import package nào, nên chạy được trước khi pub từng res
 | `dart tools/docs_check/check.dart --stamp-translations docs/vi/<file>.md` | Đóng dấu một bản dịch vừa đồng bộ | `0` | — |
 
 - Đường dẫn vắng mặt hợp lệ nằm trong `tools/docs_check/allowlist.txt`, mỗi mục kèm lý do; khác biệt hình dạng có chủ đích nằm trong `tools/docs_check/parity_allowlist.txt`.
-- Tham chiếu vào một bundle mẫu đã gỡ bằng `remove_sample` được tóm lại thành một dòng INFO cho mỗi bundle, không bao giờ làm fail.
+- Tham chiếu vào một bundle mẫu đã gỡ bằng `remove_sample` được tóm lại thành một dòng INFO cho mỗi bundle, không bao giờ làm fail; một glob như `modules/*/feature` vẫn qua khi `modules/` rỗng (một template đã gỡ sạch, [§ 9](../guides/01_new_feature.md#một-template-đã-gỡ-sạch)).
 - Cách resolve đường dẫn, placeholder, chỉ số parity và dấu bản dịch: [chi tiết](../../../tools/README.vi.md#docs_check).
 
 ## `sample_cleanup`
@@ -108,7 +109,7 @@ Nó không import package nào, nên chạy được trước khi pub từng res
 |:--|:--|:--|:--|
 | `dart tools/sample_cleanup/remove_sample.dart --list` | Phân loại mọi package là `framework`, `sample` hay `shell`, và liệt kê các bundle | `0` | — |
 | `dart tools/sample_cleanup/remove_sample.dart <bundle> [--verbose]` | Chạy thử: sẽ gỡ gì, cái gì vỡ, cái gì xuống cấp an toàn, tài liệu nào sẽ chết | `0` · `64` cờ hoặc bundle lạ, hoặc nhiều hơn một bundle | — |
-| `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` | Gỡ bundle, chuyển các capability chỉ nó cung cấp sang `absent`, chạy `composer sync` | `0` · `1` hỏng giữa chừng (file dùng chung được khôi phục; thư mục đã xoá thì không) · `64` như trên | — |
+| `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` | Gỡ bundle, chạy `composer reconcile` (mọi capability vừa mất nơi cung cấp cuối cùng thành `absent`, trong mọi manifest app) và `composer sync`; module cuối cùng đi rồi thì để lại `modules/.gitkeep` | `0` · `1` hỏng giữa chừng (file dùng chung được khôi phục; thư mục đã xoá thì không) · `64` như trên | — |
 
 - Nguồn sự thật: [`tools/sample_manifest.yaml`](../../../tools/sample_manifest.yaml). Tool không bao giờ sửa file này, và đó là cách `docs_check` nhận ra một bundle đã gỡ.
 - Package `<id>_api` của một bundle được giữ lại chừng nào còn package khác import nó.

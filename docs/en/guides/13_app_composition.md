@@ -179,9 +179,58 @@ What an app must register for a package it composes — `FirebaseOptions` for `c
 
 1. See what blocks it: the report's *Not targeted — and what blocks it* names every composed package whose pubspec `platforms:` does not list it (`core_database` has no web, `core_notifications` no Windows or Linux).
 2. Declare it, runner still to be created: `platforms.<p>: { runner: scaffold }`, then `dart tools/composer/composer.dart sync --app <id>`.
-3. Create the runner once, with the line the report prints, e.g. `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .` (put your own reverse domain in `--org`: a platform that has an application or bundle ID builds it from this value), and change the declaration to `runner: committed`. A declared `committed` runner needs its folder, a `scaffold` one must not have it (V6).
+3. Create the runner once, with the line the report prints, e.g. `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .` (put your own reverse domain in `--org`: a platform that has an application or bundle ID builds it from this value), and change the declaration to `runner: committed`. A declared `committed` runner needs its folder, a `scaffold` one must not have it (V6). For `android` or `ios`, the runner `flutter create` writes has no flavors yet: wire them before the first `--flavor` build ([Native flavors for a new mobile runner](#native-flavors-for-a-new-mobile-runner)); V15 refuses a committed runner that lacks one.
 4. Set what the platform enables, if the default is not right: `push`, `deep_links`, `orientation`, and for a desktop platform `window: { initial: [1440, 900], min: [1024, 700] }`, which needs the `configureWindow` hook (`P05` otherwise). A platform that switches push or deep links off logs one line naming the key and initialises nothing.
 5. Run `composer verify` and the smoke test. On the web there is no `--flavor` option: pass `--dart-define=APP_FLAVOR=<flavor>` — the Flutter tool refuses the framework's own `FLUTTER_APP_FLAVOR`, and the shell reads `APP_FLAVOR` on the web only.
+
+### Native flavors for a new mobile runner
+
+`flutter create` writes a runner with no flavors, so `flutter run --flavor dev` fails on it, and `composer verify` (V15) refuses a committed Android or iOS runner that lacks a flavor `flavors:` declares — it names the flavor and this section. `apps/mobile` is the reference; everything below is copied from its files. `flavors:` is a closed set (`dev`, `staging`, `prod`), and each name is the Gradle flavor, the Xcode scheme and the key of the env file at once:
+
+| Flavor | Android `applicationIdSuffix` | iOS `PRODUCT_BUNDLE_IDENTIFIER` | Env file | Xcode scheme, configurations |
+|:--|:--|:--|:--|:--|
+| `dev` | `.dev` | `<id>.dev` | `env.dev` | `dev`, `Debug-dev` / `Profile-dev` / `Release-dev` |
+| `staging` | `.stg` | `<id>.staging` | `env.stg` | `staging`, `Debug-staging` / `Profile-staging` / `Release-staging` |
+| `prod` | none | `<id>` | `env.prod` | `prod`, `Debug-prod` / `Profile-prod` / `Release-prod` |
+
+1. **Env files.** Create `apps/<id>/env.dev`, `env.stg` and `env.prod` with the keys `env:` declares (V11); `composer new` writes only `env.dev`, and `env.prod` is gitignored in `apps/mobile`. Pass one with `--dart-define-from-file=env.<file>`.
+2. **Android, `android/app/build.gradle.kts`.** Copy from `apps/mobile`: `buildFeatures { resValues = true }`; the `envs` map at the top, which decodes `-Pdart-defines`; in `defaultConfig`, the `resValue("string", "WEB_DOMAIN", …)` and `resValue("string", "app_name", …)` lines that `AndroidManifest.xml` reads as `@string/WEB_DOMAIN` and `@string/app_name`; and the flavors, one `DEEP_LINK_SCHEME` each — the scheme of the manifest's deep-link intent filter (`@string/DEEP_LINK_SCHEME`), so the three installs never compete for a link:
+
+```kotlin
+flavorDimensions += "environment"
+
+productFlavors {
+    create("dev") {
+        dimension = "environment"
+        applicationIdSuffix = ".dev"
+        resValue("string", "DEEP_LINK_SCHEME", "myapp-dev")
+    }
+    create("staging") {
+        dimension = "environment"
+        applicationIdSuffix = ".stg"
+        resValue("string", "DEEP_LINK_SCHEME", "myapp-stg")
+    }
+    create("prod") {
+        dimension = "environment"
+        resValue("string", "DEEP_LINK_SCHEME", "myapp")
+    }
+}
+```
+
+   `apps/mobile` also gives each flavor a `signingConfig` (a properties file per flavor, and a guard that refuses a staging or prod release signed with the public dev key — [`02_fastlane_release.md` § 4](../operations/02_fastlane_release.md)) and an `android/app/src/<flavor>/` folder with that flavor's `google-services.json` and launcher icons; copy them when the app signs or uses Firebase. Its `APP_ID` string in `defaultConfig` is read by nothing: leave it out.
+3. **iOS, Xcode** (open `ios/Runner.xcworkspace`). *Project → Info → Configurations*: duplicate `Debug`, `Profile` and `Release` once per flavor and name the copies `Debug-dev`, `Profile-dev`, `Release-dev` and so on. `Debug-<flavor>` takes `Flutter/Debug.xcconfig` as its base configuration, `Profile-<flavor>` and `Release-<flavor>` take `Flutter/Release.xcconfig` (the Pods-generated files follow after `pod install`). On the *Runner* target, set per configuration `PRODUCT_BUNDLE_IDENTIFIER` (the table), `APP_DISPLAY_NAME` and `DEEP_LINK_SCHEME`, which `Info.plist` reads as `$(APP_DISPLAY_NAME)` and in `CFBundleURLSchemes`; `apps/mobile` also sets `LAUNCH_SCREEN_STORYBOARD` per flavor. *Product → Scheme → Manage Schemes*: duplicate `Runner` into `dev`, `staging` and `prod`, tick **Shared** (they are saved under `ios/Runner.xcodeproj/xcshareddata/xcschemes/`, which is where V15 reads them) and, in each, point Run and Test at `Debug-<flavor>`, Profile at `Profile-<flavor>`, Analyze at `Debug-<flavor>` and Archive at `Release-<flavor>`. Copy the *Build → Pre-actions* "Run Script" of `apps/mobile`'s `dev.xcscheme` into each scheme: it writes `Flutter/Environment.xcconfig` from `$DART_DEFINES` (`WEB_DOMAIN`, `APP_LINK_MODE`), which `Flutter/Debug.xcconfig` and `Flutter/Release.xcconfig` include with `#include?`; add the same include line to both of yours.
+4. **CocoaPods, `ios/Podfile`.** CocoaPods treats a configuration it is not told about as release, so name every one, as `apps/mobile/ios/Podfile` does, then run `pod install` in `ios/`:
+
+```ruby
+project 'Runner', {
+  'Debug' => :debug, 'Debug-dev' => :debug, 'Debug-staging' => :debug, 'Debug-prod' => :debug,
+  'Profile' => :release, 'Profile-dev' => :release, 'Profile-staging' => :release, 'Profile-prod' => :release,
+  'Release' => :release, 'Release-dev' => :release, 'Release-staging' => :release, 'Release-prod' => :release,
+}
+```
+
+5. **fastlane, if you ship the app with it.** The lanes live in `apps/mobile/fastlane` and read the flavor from `Config.yaml`; copy the folder for another app and keep its conventions, which the lanes hard-code in `apps/mobile/fastlane/modules/helpers.rb`: `valid_flavors` lists the flavors you wired, `app_bundle_ids` holds the base ID per platform, and the lanes append the suffixes of the table (`.dev`, `.stg` on Android, `.staging` on iOS, nothing for prod) and pass `env.dev`, `env.stg` or `env.prod`. A suffix that differs from the one in Gradle or Xcode uploads to the wrong application.
+6. **Check.** `dart tools/composer/composer.dart verify` (V15 holds the Gradle flavors, the shared schemes and the three configurations per flavor to `flavors:`), then `cd apps/<id> && flutter run --flavor dev --dart-define-from-file=env.dev`. V15 reads the files as text — it cannot see a wrong base configuration or a missing Podfile entry, only the build can.
 
 ### Pin certificates
 
@@ -197,7 +246,7 @@ At least two pins, each the base64 of 32 bytes (V9). How to compute them: [`08_n
 
 ### Add or remove a module
 
-Add the line to `modules:` and run `sync`. If the module registers a catalogued contract, `verify` now says so — *declared absent but ISessionState is registered at …* — and you declare it `provided`. Remove one and `verify` names the key that lost its provider and prints the `absent` line to paste. `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` does both flips for the sole providers and runs `sync` itself.
+Add the line to `modules:` and run `sync`. If the module registers a catalogued contract, `verify` now says so — *declared absent but ISessionState is registered at …* — and you declare it `provided`. Remove one and `verify` names the key that lost its provider and prints the `absent` line to paste — or run `dart tools/composer/composer.dart reconcile --reason "module x removed"`, which declares `absent` every `provided` capability, in every app manifest, that nothing registers any more (the reason is your text, then what the shell does without it), and then `sync`. `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` runs both for you. The other direction stays yours: a module you add that registers a contract an app declared `absent` makes `verify` ask for `provided`.
 
 ### Offer other languages, change the palette or the limits
 
@@ -223,7 +272,7 @@ Then, from the repository root: `flutter pub get`, `dart run build_runner build 
 
 ## 9. What Gate 0 checks
 
-`composer verify` regenerates every generated file and fails on drift (V13), and holds the declaration to the source: the vocabularies and ranges (V1, V14), the capability states against what the composed packages and the app register (V2–V4), the platform switches against what the app composes and what each package supports (V5–V8), the pin decision per flavor (V9), what a composed package needs the app to register (V10), the env files (V11), the entry point and the smoke test (V12), the native runners (V6, V15), the DI group order (V16) and the single workspace node (V17, RULE-16). `dart tools/composer/composer.dart describe --catalog` prints the live list of checks; this guide does not copy it.
+`composer verify` regenerates every generated file and fails on drift (V13), and holds the declaration to the source: the vocabularies and ranges (V1, V14), the capability states against what the composed packages and the app register (V2–V4), the platform switches against what the app composes and what each package supports (V5–V8), the pin decision per flavor (V9), what a composed package needs the app to register (V10), the env files (V11), the entry point and the smoke test (V12), the native runners (V6, and V15: a committed Android or iOS runner holds a flavor for each one the manifest declares), the DI group order (V16) and the single workspace node (V17, RULE-16). `dart tools/composer/composer.dart describe --catalog` prints the live list of checks; this guide does not copy it.
 
 Read a message from left to right: `<file>: <key>: <problem> — <the fix>`. The scan behind V3 and V10 reads source, not the graph — a hand-written `getIt.register…` is invisible to it — so `checkAppContract` stays the authority. V3, V10, V11, V12 and V17 fail `verify` while `sync` only warns and still writes, so a half-finished edit can be regenerated; V7 and V8 refuse in both, before anything is written.
 
@@ -252,6 +301,7 @@ cd apps/<id> && flutter test                             # the smoke test (check
 | `verify`: `declared absent but … is registered at <file>:<line>` | A composed package registers it | Declare it `provided`, or stop composing what registers it |
 | `verify`: `out of date: … (facts)` | The manifest changed, or the generated region was edited by hand | `dart tools/composer/composer.dart sync --app <id>`; never edit a `composer:managed` region (RULE-16) |
 | `verify`: `flavors.prod.ssl_pinning: decide …` | A flavor of an app with an Android or iOS platform has no pin decision | `pins: [...]` or `disabled: "reason"` (above) |
+| `verify`: `flavors.<f>: declared, but … has no productFlavor / scheme / build configuration named …` | A committed mobile runner lacks a flavor the manifest declares | Wire it (the recipe above), or delete the flavor from `flavors:` |
 | `verify`: `<package> does not support <platform>` | A composed package, or one it links, lacks the platform | Declare only platforms every linked package supports, or stop depending on it |
 | Boot stops: *`<id>` is running on `<platform>`, which its manifest does not declare* | The platform is not under `platforms:` | Declare it (above), run on a declared one, or `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` for a quick look |
 | Boot stops: `P03` on a release build | A required `--dart-define` is empty | Pass `--dart-define-from-file=env.<flavor>` |

@@ -401,7 +401,7 @@ The app must keep running when any feature is deleted (RULE-05). Remove in this 
 3. The module's package directories — `modules/<name>/<layer>/` for each layer it has (`api`, `domain`, `data`, `feature`), then `modules/<name>/`. `composer verify` fails on a package left on disk that no app composes. A module that is only a feature has just `modules/<name>/feature/`
 4. `flutter pub get && dart run build_runner build --workspace`
 
-**For a sample, let the tool do it.** `remove_sample.dart` performs these steps. More importantly, it tells you what the manual list above cannot:
+**For a sample, let the tool do it.** `remove_sample.dart` performs these steps, then runs `composer reconcile`, which declares `absent` — with the reason `sample <bundle> removed: <what the shell does without it>` — every capability, in every app's manifest, whose last provider went with the bundle (composer's own scan decides, not a list), and `composer sync`; `composer verify` is green when it finishes. More importantly, it tells you what the manual list above cannot:
 
 ```bash
 dart tools/sample_cleanup/remove_sample.dart --list   # what is sample vs framework
@@ -424,6 +424,27 @@ The tutorial's *Clean up* section walks the manual path once, for a module that 
 
 > [!NOTE]
 > `injection.dart` naming feature packages is the composition root's **one intentional hard reference** — a composition root must name what it composes. It is also the only one, and a machine holds that: `arch_check` R10 fails any other file in an app that imports a module, and the shared shell in `platform/shell/app_shell/` is a `platform/` package, which R1 forbids from importing one at all. The shell does import `core_ui_kit`, which is fine — that is a platform package, not a removable feature.
+
+
+### A fully stripped template
+
+Removing all seven bundles (`settings`, `onboarding`, `home`, `dashboard`, `splash`, `cache`, then `auth`; run `auth` last, or twice — `auth_api` is kept while a package that is still there imports it) leaves the framework and no product at all. What the tool did: dropped every module from both `app_manifest.yaml` files, deleted `modules/<id>/`, flipped every capability that lost its last provider to `absent` with a reason, ran `composer sync`, and left a `modules/.gitkeep` so the empty directory survives a commit.
+
+What you have now, and what to expect:
+
+- `platform/` untouched; `apps/mobile` and `apps/admin` compose no module, so each declares every capability a sample provided (`routes`, `tabs`, `session`, `localization`, …) `absent`. `composer verify`, `arch_check`, `unused_checker` and `flutter analyze` (after `flutter pub get` and `dart run build_runner build --workspace`) pass.
+- `docs_check` passes: a documented glob such as `modules/*/feature` has nothing to fit in an empty `modules/` and is accepted there, and a reference into a removed sample is an INFO line. Update or delete those documents at your leisure.
+- Two things in each app's tests fail, and the tool edits no test. The DI smoke test fails with `C05` — *the app has no route module and no navigation tab, so it has no screen to show* — until your first feature exists; that is the shell asking for one. `test/app_profile_test.dart` pins the capabilities the samples provided: update or delete those expectations.
+
+Add the first feature with the generator, which registers it in every manifest (`--apps <id>` limits that):
+
+```bash
+dart tools/module_generator/generate.dart 2 notes
+dart tools/module_generator/generate.dart 3 notes
+dart tools/module_generator/generate.dart 1 notes "" 1 2   # Provider, bottom-nav tab
+```
+
+Then `composer verify` names the capabilities the new module registers (`tabs`, `localization`): declare each `provided` in every manifest that composes it, run `dart tools/composer/composer.dart sync`, `flutter pub get`, `dart run build_runner build --workspace` and the smoke test of each app ([`../getting-started/04_first_feature_tutorial.md`](../getting-started/04_first_feature_tutorial.md) walks the same path with every gate).
 
 ---
 

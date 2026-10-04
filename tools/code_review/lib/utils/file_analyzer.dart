@@ -58,10 +58,16 @@ class FileAnalyzer {
 
   /// Check if file matches a pattern (supports * wildcard)
   static bool matchesPattern(String text, String pattern) {
+    // `**/` is "any directories" (`.*/`). It is swapped for a placeholder
+    // first: left as `.*/`, the `*` pass below turned it into `.[^/]*/`,
+    // which spans one directory only — `modules/**/routing/**` then missed
+    // `modules/a/b/routing/x.dart`.
+    const anyDirs = '\u0000';
     final regexPattern = pattern
-        .replaceAll('**/', '.*/')
+        .replaceAll('**/', anyDirs)
         .replaceAll('*', '[^/]*')
-        .replaceAll('?', '.');
+        .replaceAll('?', '.')
+        .replaceAll(anyDirs, '.*/');
     return RegExp(regexPattern).hasMatch(text);
   }
 

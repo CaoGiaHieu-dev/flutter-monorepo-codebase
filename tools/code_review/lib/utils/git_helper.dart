@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 /// Utility class for Git operations
@@ -5,7 +6,13 @@ class GitHelper {
   /// Get files changed in git (both staged and unstaged)
   static Future<List<String>> getChangedFiles() async {
     try {
-      final result = await Process.run('git', ['diff', '--name-only', 'HEAD']);
+      // `--diff-filter=d`: not the deleted files — there is nothing to review.
+      final result = await Process.run('git', [
+        'diff',
+        '--name-only',
+        '--diff-filter=d',
+        'HEAD',
+      ]);
       if (result.exitCode == 0) {
         return (result.stdout as String)
             .split('\n')
@@ -25,6 +32,7 @@ class GitHelper {
         'diff',
         '--cached',
         '--name-only',
+        '--diff-filter=d',
       ]);
       if (result.exitCode == 0) {
         return (result.stdout as String)
@@ -46,8 +54,17 @@ class GitHelper {
     if (paths.isEmpty) return {};
     try {
       final process = await Process.start('git', ['check-ignore', '--stdin']);
-      process.stdin.writeln(paths.join('\n'));
-      await process.stdin.close();
+      // Outside a repository git exits (128) without reading stdin, and the
+      // write then fails with a broken pipe — on the `done` future as well as
+      // on the write. That is "nothing is ignored", not a crash: `--all`
+      // outside a git checkout used to die here.
+      unawaited(process.stdin.done.catchError((Object _) {}));
+      try {
+        process.stdin.writeln(paths.join('\n'));
+        await process.stdin.close();
+      } on SocketException {
+        // git is gone already; its exit code below says why.
+      }
       final out = await process.stdout
           .transform(const SystemEncoding().decoder)
           .join();

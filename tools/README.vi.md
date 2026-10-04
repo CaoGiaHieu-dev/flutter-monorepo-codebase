@@ -858,6 +858,14 @@ Mỗi test dựng một workspace dùng một lần bằng `Directory.systemTemp
 | `coverage_report_test.dart` | Parse lcov, bảng, `--min` / `--min-package`, các mã thoát |
 | `barrel_generator_test.dart` | Một barrel mỗi package; mọi cách viết export bị thay thế; directory barrel bị xoá; re-export của package khác được giữ |
 | `bootstrap_test.dart` | `--dry-run` và việc cắt các vùng managed |
+| `configure_test.dart` | `configure.dart` chạy như một process với `flutter` / `dart` giả trên `PATH`: `--help`, flag lạ thoát 64 trước khi chạy gì, sáu bước đúng thứ tự và từ gốc repo, `gen-l10n` theo từng package, không tạo barrel cho app, dừng ở lệnh fail đầu tiên với đúng mã thoát của nó, `--stub-firebase` ghi trước lệnh đầu tiên |
+| `check_outdated_test.dart` | `check_outdated`: mục catalog nào đã cũ và một bản cập nhật viết lại dòng ra sao (giữ dấu nháy, `^` và comment), bật tắt checklist, và process chạy với `dart` giả — `--help`, exit 64, thiếu catalog, sandbox không resolve được, chỉ báo cáo khi không có terminal |
+| `theme_setting_test.dart` | `theme_setting`: `--help`, exit 64, chọn `--app`, preflight (android/ios, dependency của generator, file config), cả hai generator chạy trong app, và generator lỗi thì khôi phục `android/` `ios/` `web/` và xoá config đã chép |
+| `firebase_config_test.dart` | `firebase_config`: `--help`, exit 64, chọn app, thoát khi không có terminal trước mọi câu hỏi, và bundle id theo flavor (`staging` là `.staging` trên iOS, `.stg` trên Android) |
+| `android_16kb_check_test.dart` | `16kb_check.sh` trên fixture ELF và APK tối giản thật: căn chỉnh đúng thì pass, 2**12 fail (exit 1), ranh giới 2**14, kiến trúc không critical, không có thư viện native, APK hỏng, file tạm được xoá, mọi lần từ chối; wrapper `.bat` kiểm tra tĩnh. Bị bỏ qua, nêu tên tool, khi thiếu `objdump` / `unzip` / `file` |
+| `code_review_test.dart` | `code_review` bên dưới dòng lệnh: loại file và layer, khớp glob, bộ lọc file sinh ra, dựng prompt, config và key, `ApiService` với client giả (header, mã trạng thái, key không bao giờ nằm trong lỗi), retry theo batch, dựng báo cáo, parse một review |
+| `code_review_cli_test.dart` | `code_review.dart` chạy như một process: `--help`, exit 64 với flag hoặc giá trị sai, `--show-config`, `--config` từ stdin, thoát khi không tìm thấy file hoặc không phải project, nguồn của API key |
+| `code_review_files_test.dart` | Review đọc những file nào: `--all` từ gốc và từ một package, file sinh ra / test / bị gitignore bị loại, `--exclude`, `--file`, `--folder`, `--changed`, `--staged`, ngoài git repository |
 
 Khi sửa một gate, hãy thêm case lẽ ra đã bắt được bug đó (RULE-64).
 

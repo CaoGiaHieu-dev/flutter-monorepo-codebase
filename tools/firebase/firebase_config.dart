@@ -188,11 +188,9 @@ void main(List<String> args) async {
     // `applicationIdSuffix` is `.stg`, the Xcode bundle id `.staging`. Each
     // Firebase client must match the id its platform actually builds, or
     // Gradle fails with "No matching client found".
-    final isProd = flavor == 'prod' || flavor == 'production';
-    final iosBundleId = isProd ? baseBundleId : '$baseBundleId.$flavor';
-    final androidPackage = isProd
-        ? baseBundleId
-        : '$baseBundleId.${_androidSuffix[flavor] ?? flavor}';
+    final ids = flavorBundleIds(baseBundleId, flavor);
+    final iosBundleId = ids.ios;
+    final androidPackage = ids.android;
 
     for (final buildMode in ['Debug', 'Profile', 'Release']) {
       stdout.writeln('=> Setting up $buildMode-$flavor');
@@ -259,6 +257,23 @@ Future<void> _runCommand(
     );
     exit(exitCode);
   }
+}
+
+/// The bundle id each platform builds for [flavor] from [baseBundleId]: prod
+/// (`prod` or `production`) is the base id itself, every other flavor adds
+/// `.<flavor>` on iOS and `.<suffix>` on Android, where the suffix is the
+/// flavor name unless [_androidSuffix] says otherwise (`staging` -> `stg`).
+({String ios, String android}) flavorBundleIds(
+  String baseBundleId,
+  String flavor,
+) {
+  final isProd = flavor == 'prod' || flavor == 'production';
+  return (
+    ios: isProd ? baseBundleId : '$baseBundleId.$flavor',
+    android: isProd
+        ? baseBundleId
+        : '$baseBundleId.${_androidSuffix[flavor] ?? flavor}',
+  );
 }
 
 /// Android `applicationIdSuffix` per flavor where it differs from the flavor

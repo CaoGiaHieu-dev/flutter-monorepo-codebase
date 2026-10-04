@@ -14,6 +14,104 @@ report only otherwise) and re-runs dependency_sync + pub get.
 
 Exits non-zero when resolution, `pub outdated` or applying an update fails.''';
 
+/// One catalog entry whose pinned version is not the latest on pub.dev.
+class OutdatedPackage {
+  OutdatedPackage({
+    required this.name,
+    required this.current,
+    required this.latest,
+    required this.pattern,
+  });
+
+  final String name;
+  final String current;
+  final String latest;
+
+  /// Matches the entry's `name: "^version"` line; group 2 is the version.
+  final RegExp pattern;
+
+  /// Whether the interactive checklist will apply it.
+  bool selected = true;
+}
+
+/// The pubspec the sandbox resolves: the catalog wrapped in the minimum
+/// metadata that makes it a valid package.
+String sandboxPubspec(String dependenciesContent) =>
+    '''
+name: outdated_check
+description: A temporary pubspec to check outdated shared dependencies.
+publish_to: 'none'
+environment:
+  sdk: '>=3.13.3 <4.0.0'
+  flutter: ">=3.47.4"
+
+$dependenciesContent
+''';
+
+/// The catalog entries that [packages] (the `packages` list of
+/// `pub outdated --json`) report a newer version for.
+///
+/// A package the catalog does not pin, or already at its latest version, is
+/// not listed. The version is read up to the closing quote, a space or a
+/// comment, so `http: ^1.6.0  # why` is not mistaken for a different version.
+List<OutdatedPackage> findOutdated(
+  String dependenciesContent,
+  List<Map<String, dynamic>> packages,
+) {
+  final outdated = <OutdatedPackage>[];
+  for (final pkg in packages) {
+    final name = pkg['package'] as String?;
+    final latest =
+        (pkg['latest'] as Map<String, dynamic>?)?['version'] as String?;
+    if (name == null || latest == null) continue;
+    final pattern = RegExp(
+      '^(\\s*${RegExp.escape(name)}\\s*:\\s*["\']?\\^?)([^"\'\\s#]+)(["\']?)',
+      multiLine: true,
+    );
+    final match = pattern.firstMatch(dependenciesContent);
+    if (match == null) continue;
+    final current = match.group(2)!;
+    if (current != latest) {
+      outdated.add(
+        OutdatedPackage(
+          name: name,
+          current: current,
+          latest: latest,
+          pattern: pattern,
+        ),
+      );
+    }
+  }
+  return outdated;
+}
+
+/// [dependenciesContent] with each of [selected] bumped to its latest
+/// version; the `^`, the quotes and everything else on the line are kept.
+String applyUpdates(
+  String dependenciesContent,
+  Iterable<OutdatedPackage> selected,
+) {
+  var content = dependenciesContent;
+  for (final item in selected) {
+    content = content.replaceAllMapped(
+      item.pattern,
+      (match) => '${match.group(1)}${item.latest}${match.group(3)}',
+    );
+  }
+  return content;
+}
+
+/// Flips the selection of the 1-based numbers in [input] (`1,3`); anything
+/// that is not a number in range is ignored.
+void toggleSelection(List<OutdatedPackage> list, String input) {
+  for (final part in input.split(',')) {
+    final number = int.tryParse(part.trim());
+    if (number != null && number > 0 && number <= list.length) {
+      list[number - 1].selected = !list[number - 1].selected;
+    }
+  }
+}
+
 void main(List<String> args) async {
   if (args.contains('--help') || args.contains('-h')) {
     stdout.writeln(_usage);
@@ -63,18 +161,7 @@ void main(List<String> args) async {
     final pubspecFile = File(p.join(sandboxDir.path, 'pubspec.yaml'));
     final dependenciesContent = dependenciesFile.readAsStringSync();
 
-    // Add the minimum metadata that makes it a valid pubspec
-    final dummyPubspecContent =
-        '''
-name: outdated_check
-description: A temporary pubspec to check outdated shared dependencies.
-publish_to: 'none'
-environment:
-  sdk: '>=3.13.3 <4.0.0'
-  flutter: ">=3.47.4"
-
-$dependenciesContent
-''';
+    final dummyPubspecContent = sandboxPubspec(dependenciesContent);
 
     pubspecFile.writeAsStringSync(dummyPubspecContent);
 
@@ -135,33 +222,10 @@ $dependenciesContent
           final packages = data['packages'] as List<dynamic>? ?? [];
 
           String depsContent = dependenciesFile.readAsStringSync();
-          final List<Map<String, dynamic>> outdatedList = [];
-
-          for (final pkg in packages.cast<Map<String, dynamic>>()) {
-            final name = pkg['package'] as String?;
-            final latest =
-                (pkg['latest'] as Map<String, dynamic>?)?['version'] as String?;
-
-            if (name != null && latest != null) {
-              final regex = RegExp(
-                '^(\\s*$name\\s*:\\s*["\']?\\^?)([^"\']+)(["\']?)',
-                multiLine: true,
-              );
-              final match = regex.firstMatch(depsContent);
-              if (match != null) {
-                final currentVersion = match.group(2);
-                if (currentVersion != latest) {
-                  outdatedList.add({
-                    'name': name,
-                    'current': currentVersion,
-                    'latest': latest,
-                    'selected': true,
-                    'regex': regex,
-                  });
-                }
-              }
-            }
-          }
+          final outdatedList = findOutdated(
+            depsContent,
+            packages.cast<Map<String, dynamic>>(),
+          );
 
           if (outdatedList.isEmpty) {
             stdout.writeln(
@@ -175,7 +239,7 @@ $dependenciesContent
             );
             for (final item in outdatedList) {
               stdout.writeln(
-                '  - ${item['name']} (${item['current']} -> ${item['latest']})',
+                '  - ${item.name} (${item.current} -> ${item.latest})',
               );
             }
           } else {
@@ -185,9 +249,9 @@ $dependenciesContent
               stdout.writeln('\n📦 Outdated Packages Checklist:');
               for (int i = 0; i < outdatedList.length; i++) {
                 final item = outdatedList[i];
-                final checkbox = (item['selected'] as bool) ? '[x]' : '[ ]';
+                final checkbox = item.selected ? '[x]' : '[ ]';
                 stdout.writeln(
-                  '  $checkbox ${i + 1}. ${item['name']} (${item['current']} -> ${item['latest']})',
+                  '  $checkbox ${i + 1}. ${item.name} (${item.current} -> ${item.latest})',
                 );
               }
 
@@ -217,39 +281,28 @@ $dependenciesContent
                 proceed = true;
                 break;
               } else if (input == 'all') {
-                for (var item in outdatedList) {
-                  item['selected'] = true;
+                for (final item in outdatedList) {
+                  item.selected = true;
                 }
               } else if (input == 'none') {
-                for (var item in outdatedList) {
-                  item['selected'] = false;
+                for (final item in outdatedList) {
+                  item.selected = false;
                 }
               } else {
-                final parts = input.split(',');
-                for (final p in parts) {
-                  final num = int.tryParse(p.trim());
-                  if (num != null && num > 0 && num <= outdatedList.length) {
-                    final idx = num - 1;
-                    outdatedList[idx]['selected'] =
-                        !(outdatedList[idx]['selected'] as bool);
-                  }
-                }
+                toggleSelection(outdatedList, input);
               }
             }
 
             if (proceed) {
-              int updateCount = 0;
-              for (final item in outdatedList) {
-                if (item['selected'] as bool) {
-                  final regex = item['regex'] as RegExp;
-                  depsContent = depsContent.replaceAllMapped(regex, (match) {
-                    return '${match.group(1)}${item['latest']}${match.group(3)}';
-                  });
-                  updateCount++;
-                  stdout.writeln(
-                    '⬆️  Updated ${item['name']}: ${item['current']} -> ${item['latest']}',
-                  );
-                }
+              final chosen = outdatedList
+                  .where((item) => item.selected)
+                  .toList();
+              final updateCount = chosen.length;
+              depsContent = applyUpdates(depsContent, chosen);
+              for (final item in chosen) {
+                stdout.writeln(
+                  '⬆️  Updated ${item.name}: ${item.current} -> ${item.latest}',
+                );
               }
 
               if (updateCount > 0) {

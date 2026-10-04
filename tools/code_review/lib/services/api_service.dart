@@ -137,6 +137,10 @@ class ApiService {
           }
 
           return text;
+        } on ApiException {
+          // The blocked-prompt error above is already the right message; it
+          // used to be re-wrapped as "Failed to parse successful API response".
+          rethrow;
         } catch (e) {
           // This catches JSON parsing errors or unexpected structure.
           throw ApiException(

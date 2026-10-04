@@ -100,6 +100,27 @@ class ProfileDetailRoute extends GoRouteDataCustom with $ProfileDetailRoute {
 
 Navigate with the typed class — `const ProfileDetailRoute(id: '42', tab: 2).go(context)` — never by building the string. The controller takes the id as a factory parameter, `ProfileDetailProvider(@factoryParam this._id)`, passed from the route as above (RULE-11, RULE-21). A factory with a **non-nullable** `@factoryParam` is the one kind the DI smoke test cannot build without its screen: list its type in `_factoriesNeedingArguments` in `apps/<id>/test/di_smoke_test.dart`, with the reason (`F01`, [`05_di.md`](05_di.md)). Another feature reaches the screen through a navigator method that takes the parameter — `void toProfileDetail(BuildContext context, {required String id})` in `profile_api` (step 6).
 
+### Page behaviour: screen analytics, back gesture, page key
+
+`GoRouteDataCustom` builds the page for you, on every platform including the web: it wraps `build()`'s result in a `RouteAwareWidget`, so each screen is reported to the optional `IAnalytics` as a screen view, and it picks the transition the platform expects (a `CupertinoPage` on iOS, a plain `MaterialPage` on the web, a Cupertino-style slide elsewhere). Two getters change that page, and both apply on every platform:
+
+```dart
+class CheckoutRoute extends GoRouteDataCustom with $CheckoutRoute {
+  const CheckoutRoute();
+
+  @override
+  bool get canPop => false; // the system back gesture or button does not dismiss it
+
+  @override
+  ValueKey<Object?>? get pageKey => const ValueKey('checkout'); // two locations share one page
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) => const CheckoutPage();
+}
+```
+
+`canPop` defaults to `true`. `pageKey` defaults to `null`, which uses `state.pageKey`; return a stable key only when go_router should update one page in place instead of replacing it. Do not override `buildPage`, and do not call `routePageFor`, the function behind it: it is public for tests only.
+
 ## 4. Create the controller in the route
 
 The route's `build()` is where a screen controller is created and bound to the tree (RULE-21).

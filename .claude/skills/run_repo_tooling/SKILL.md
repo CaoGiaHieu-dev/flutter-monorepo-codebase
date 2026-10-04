@@ -8,8 +8,8 @@ description: Use when a task needs one of the repo's maintenance tools — regen
 Every tool runs from the **repository root** with plain `dart` (no `fvm` prefix — RULE-73), prints with
 `stdout.writeln` / `stderr.writeln` (RULE-65), and takes `--help`. An unknown argument exits `64`; the
 convention is `0` success, `1` the check failed or the work could not be done, `64` a bad argument. The
-exceptions are the individual `unused_checker` scripts (`2` = findings) and `composer` with no argument at all
-(`1`, usage on stderr). The full reference, with each tool's edge cases, is
+exception is the individual `unused_checker` scripts (`2` = findings); `composer` with no command at all exits `64`
+(usage on stderr). The full reference, with each tool's edge cases, is
 [`docs/en/reference/03_tooling.md`](../../../docs/en/reference/03_tooling.md).
 
 | Situation | Command | Rule |
@@ -23,7 +23,7 @@ exceptions are the individual `unused_checker` scripts (`2` = findings) and `com
 | Verify versions only (CI, pre-commit) | `dart tools/dependency_sync.dart --check` | RULE-74 |
 | An import is used but maybe not declared | `dart tools/arch_check/check.dart` (R5) | RULE-06 |
 | A dependency is declared but maybe unused | `dart tools/unused_checker/check_unused_packages.dart` | RULE-06 |
-| Check the layering and hygiene rules (R1–R20) | `dart tools/arch_check/check.dart` | — |
+| Check the layering and hygiene rules (R1–R21) | `dart tools/arch_check/check.dart` | — |
 | Docs reference a path or rule that does not exist; en/vi parity | `dart tools/docs_check/check.dart` | RULE-79 |
 | Changed a gate tool | `cd tools && dart test` (add the case that would have caught the bug) | RULE-64 |
 | Delete a shipped sample module | `dart tools/sample_cleanup/remove_sample.dart <bundle> [--apply]` | — |
@@ -56,14 +56,14 @@ concrete file, never the barrel (RULE-75).
 ## Composer: sync, verify, describe, new
 
 - `sync [--app <id>] [--strict]` regenerates the `composer:managed` regions: the root `workspace:` list, each app's
-  path dependencies, `lib/di/injection.dart` (all of it), the `facts` region of `lib/app/app_profile.dart` and the
+  path dependencies, the `imports` and `modules` regions of `lib/di/injection.dart` (outside them only comments), the `facts` region of `lib/app/app_profile.dart` and the
   `report` region of the app's `README.md`. Never hand-edit them (RULE-16). Exit `1`: invalid manifest, a lost
   marker, a refused declaration. A non-strict `sync` that skipped a module missing on disk prints a `PARTIAL
   COMPOSITION` block.
 - `verify [--app <id>]` is Gate 0: the same resolution, writes nothing, exit `1` on drift; implies `--strict`; fails
   on a module or platform package no app composes, and holds the declaration to the source (V3 capabilities, V7
-  platforms, V10 `FirebaseOptions`, V11 env files, V12 the smoke test builds every factory, V17 the root as the only
-  workspace node). `sync` prints those as warnings and still writes.
+  platforms, V10 `FirebaseOptions`, V11 env files, V12 the smoke test builds every factory, V13 no code outside the generated regions of
+  `injection.dart`, V15 native flavors, V16 DI group `why` and order, V17 the root as the only workspace node). `sync` prints those as warnings and still writes.
 - `describe --app <id>` prints the report that also sits in the app's `README.md`; `describe --catalog` is the key
   reference — every manifest key with its default and reader, the 21-row contract catalog, the derived defaults,
   checks V1–V17 and problem codes P01–P05 / C01–C12. Do not copy that table into prose.
@@ -79,8 +79,8 @@ concrete file, never the barrel (RULE-75).
 - The catalog `pubspec_dependencies.yaml` holds shared pub.dev versions only; workspace packages use `path:` entries,
   which the tool repairs when they point at the wrong directory. A package writes a third-party dependency with an
   empty value (`dio:`) and the sync fills it in. Native Gradle / CocoaPods dependencies are edited by hand.
-- A plain run rewrites drifted versions **and runs `pub get` itself**; tell the user to commit the updated
-  `pubspec.lock`. `--check` only reports. Exit `1` on drift, an invalid catalog, or a member's hosted dependency the
+- A plain run rewrites drifted versions **and runs `pub get` itself**; `pubspec.lock` is generated and
+  git-ignored, so there is nothing of it to commit. `--check` only reports. Exit `1` on drift, an invalid catalog, or a member's hosted dependency the
   catalog does not pin.
 
 ## docs_check

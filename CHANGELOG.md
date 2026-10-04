@@ -23,13 +23,17 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - **V15 checks native flavors.** On a committed Android or iOS runner it requires a `productFlavor` per declared flavor and an Xcode scheme plus `Debug-`/`Release-`/`Profile-<flavor>` configurations; the failure names the flavor and the recipe in guide 13.
 - **CI `generator-smoke-compose`** generates a Provider feature, its API package, a domain/data pair and a new app with `composer new`, then holds them to verify, analyze, arch_check, the new tests and the apps' DI smoke tests.
 - Docs: a "native flavors for a new mobile runner" recipe, "a fully stripped template" section, "what you will see on the first run" and the sample sign-in contract (en and vi).
+- **`arch_check` R21** holds every ARB to the keys of `en.arb` in `lowerCamelCase` (RULE-34, RULE-35); `composer verify` V13 also fails on code outside the two generated regions of `lib/di/injection.dart`.
+- `ExportOptions.example.plist` for the iOS lanes (`apps/mobile/fastlane/`) and admin launch configurations in `.vscode/launch.json`.
+- Tests for `check_unused_assets`, `check_unused_translate` and `check_script`, rendered-output tests for the module generator, and a CI generator smoke that also covers a feature without state management or route, a data package without a domain, and core and custom packages.
+- Tests for the lifecycle and network mixins, `BaseViewWidget`, `UndefinedRouteWidget`, `TextScaleDown`, `BottomTransitionPage`, `BaseUseCase`, `ErrorClassifier`, `TypeHelper`, `EncryptedStorage` and the `GoRouteDataCustom` pages; the app profile tests read the display name from the manifest.
 - **Apps layer.** Every app is `apps/<id>/`: an `app_manifest.yaml` (manifest v2) that says what the
   app is — `app.name`, `flavors` (with an `ssl_pinning` decision per flavor: `pins` or `disabled`
   with a reason), `env` keys, `platforms` (`runner: committed | scaffold`, plus `splash`, `push`,
   `deep_links`, `orientation`, `window`), `capabilities` (every optional contract the shell resolves
   is `provided` or `absent` with a reason) and a `why` per DI group — and what it composes. From it
-  `composer sync` generates the root `workspace:` list, the app's path dependencies, all of
-  `lib/di/injection.dart`, the `facts` region of `lib/app/app_profile.dart` and a `report` region in the
+  `composer sync` generates the root `workspace:` list, the app's path dependencies, the `imports` and
+  `modules` regions of `lib/di/injection.dart`, the `facts` region of `lib/app/app_profile.dart` and a `report` region in the
   app's `README.md`. `apps/mobile` and `apps/admin` (auth + settings only, to prove that modules compose
   per app) are the two shipped apps.
 - `AppProfile` / `AppFacts` in `platform_kernel` and typed tuning in each app's `lib/app/app_profile.dart`:
@@ -68,7 +72,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - Sample management: `tools/sample_manifest.yaml` and `tools/sample_cleanup/remove_sample.dart` delete a
   sample bundle safely — keeping a module API package another package still imports, and saying so —
   and run `composer sync` after `--apply`.
-- **Gates, hardened.** `arch_check` rules R1–R20 are all blocking: **R11** platform group direction;
+- **Gates, hardened.** `arch_check` rules R1–R21 are all blocking: **R11** platform group direction;
   **R18** `on<Event>` handlers are `async`; **R19** no `print` / `debugPrint` in `lib/`; **R20** no raw
   numeric literal in layout and paint constructors; R1–R3, R5, R9 and R10 read imports with a lexer,
   classify a package by its workspace location, and also hold `dev_dependencies:` and test imports;
@@ -93,6 +97,10 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Changed
 
+- Lock files (`pubspec.lock`, `Gemfile.lock`, `Podfile.lock`) are git-ignored and no longer committed; CI resolves with plain `flutter pub get`.
+- `composer` with no command exits 64; its help lists V13, V15, V16 and V17; `16kb_check.sh` exits 1 when `zipalign` verification fails.
+- CI workflows run with `contents: read`; the fastlane workflow reads the Flutter version from `.fvmrc`; `code_review` defaults to English with no author in the footer.
+- Generated package descriptions say what the layer is, and five shipped pubspecs got real descriptions; the freezed constraint is `^4.0.1`; the splash shows "Codebase" and a neutral tagline (en, vi); `LoadMoreListView` takes its spinner padding from `AppSpacing`.
 - **Layout.** `packages/core/*` → `platform/*`, product packages → vertical slices
   `modules/<name>/{api,domain,data,feature}`, `app/` → `apps/mobile/` (package `mobile_app`).
   `platform/` is regrouped into six role folders — `foundation/` (`kernel`, `contracts` = `core_di`,
@@ -183,6 +191,9 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Fixed
 
+- `GoRouteDataCustom` reports screen views on the web and honours `canPop` / `pageKey` on every platform.
+- The generator-smoke unused-dependency step matches the generated app's package; `check_unused_translate` no longer flags bare getters inside `extension on AppLocalizations`.
+- Removed the unused `package_rename` dev dependency and the unused `APP_ID` Android resource; Xcode scheme comments are in English; 14 files end with a newline; the `LoadingWidget` doc example compiles.
 - `docs_check` accepts a glob over an empty directory (e.g. `modules/*/feature` in a fully stripped template); a glob over a non-empty directory must still match.
 - Networking: token-refresh deadlocks and recursion (a `401` from login or refresh no longer starts a
   refresh; a late `401` for an old token replays), retry decisions that could lose an error, and

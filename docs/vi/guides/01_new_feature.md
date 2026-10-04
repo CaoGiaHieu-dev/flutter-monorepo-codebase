@@ -402,9 +402,10 @@ Sau đó **khởi động lại hẳn** app (không phải hot reload) để đ�
 App phải chạy được khi xoá bất kỳ feature nào (RULE-05). Gỡ theo đúng thứ tự:
 
 1. Dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó
-2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root
-3. Các thư mục package của module — `modules/<tên>/<layer>/` cho từng tầng nó có (`api`, `domain`, `data`, `feature`), rồi `modules/<tên>/`. `composer verify` báo lỗi với package còn trên đĩa mà không app nào ghép. Module chỉ là một feature thì chỉ có `modules/<tên>/feature/`
-4. `flutter pub get && dart run build_runner build --workspace`
+2. Nếu một capability mất nơi cung cấp cuối cùng (chẳng hạn `IAppSplashScreen` duy nhất), `dart tools/composer/composer.dart reconcile --reason "<why>"` khai nó `absent` trong các manifest, hoặc tự viết dòng `{ state: absent, reason }` — `composer verify` (V3) từ chối `provided` cho contract không còn gì đăng ký
+3. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app và danh sách `workspace:` ở root
+4. Các thư mục package của module — `modules/<tên>/<layer>/` cho từng tầng nó có (`api`, `domain`, `data`, `feature`), rồi `modules/<tên>/`. `composer verify` báo lỗi với package còn trên đĩa mà không app nào ghép. Module chỉ là một feature thì chỉ có `modules/<tên>/feature/`
+5. `flutter pub get && dart run build_runner build --workspace`
 
 **Với module mẫu, hãy để tool làm.** `remove_sample.dart` thực hiện các bước trên, rồi chạy `composer reconcile`, lệnh khai `absent` — với lý do `sample <bundle> removed: <thứ shell làm khi thiếu nó>` — mọi capability, trong manifest của mọi app, mà nơi cung cấp cuối cùng đã đi cùng bundle (phép quét của chính composer quyết định, không phải một danh sách), và `composer sync`; xong thì `composer verify` xanh. Quan trọng hơn, nó cho bạn biết điều mà danh sách thủ công ở trên không thể:
 

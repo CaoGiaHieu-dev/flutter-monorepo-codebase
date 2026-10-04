@@ -4,7 +4,7 @@
 
 One table per tool. Every tool lives in `tools/`, is plain Dart (bar the 16 KB check), and runs from the **repository root**. A tool that shells out to `dart` / `flutter` detects FVM itself (`tools/shared/toolchain.dart`, RULE-73) and prints with `stdout.writeln` / `stderr.writeln` (RULE-65). The long form — every argument, refusal and failure mode — is in [`tools/README.md` § Full reference](../../../tools/README.md#-full-reference-tool-by-tool).
 
-Exit codes follow one convention across the tools: `0` success, `1` the check failed or the work could not be done, `64` a bad argument (nothing was run or written). Two exceptions: the individual `unused_checker` scripts use `2` for "findings", and `composer` with no argument at all exits `1` (usage on stderr).
+Exit codes follow one convention across the tools: `0` success, `1` the check failed or the work could not be done, `64` a bad argument (nothing was run or written). One exception: the individual `unused_checker` scripts use `2` for "findings". `composer` with no command at all is a bad argument too: usage on stderr, exit `64`.
 
 ---
 
@@ -36,7 +36,7 @@ Exit codes follow one convention across the tools: `0` success, `1` the check fa
 
 ## CI gates at a glance
 
-`.github/workflows/pr_quality_check.yml` runs these, in this order, after `flutter pub get --enforce-lockfile`. Pipelines in full: [`../operations/01_cicd.md`](../operations/01_cicd.md).
+`.github/workflows/pr_quality_check.yml` runs these, in this order, after `flutter pub get`. Pipelines in full: [`../operations/01_cicd.md`](../operations/01_cicd.md).
 
 | Gate | Command | Blocks the merge? |
 |:--|:--|:--|
@@ -58,12 +58,12 @@ Gates 0 and 1 run before any codegen. The `generator-smoke`, `generator-smoke-co
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/arch_check/check.dart` | Enforce the layering and hygiene rules R1–R20 on imports, pubspecs, file names and source | `0` clean · `1` a violation (every rule blocks) · `64` any argument but `--help` | 1 |
+| `dart tools/arch_check/check.dart` | Enforce the layering and hygiene rules R1–R21 on imports, pubspecs, file names and source | `0` clean · `1` a violation (every rule blocks) · `64` any argument but `--help` | 1 |
 | `dart tools/arch_check/check.dart --help` | Describe every rule | `0` | — |
 
 - Reads imports (through a lexer, not a line match) and `pubspec.yaml` files, needs no codegen, and finishes in a few seconds.
 - The approved upward edges are printed on every run. Another one needs the allow-list in `check.dart` and RULE-01 updated together.
-- Each rule, with why it exists: [details](../../../tools/README.md#arch_check). The registry row each rule enforces: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (every shell lookup is in the contract catalog) · R17 RULE-82 (a platform fork needs an allow-list entry with a reason, in `tools/arch_check/platform_forks.dart`) · R18 RULE-52 (async `on<Event>` handlers) · R19 RULE-65 (no `print` in `lib/`) · R20 RULE-30 / RULE-33 (no raw layout numbers).
+- Each rule, with why it exists: [details](../../../tools/README.md#arch_check). The registry row each rule enforces: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (every shell lookup is in the contract catalog) · R17 RULE-82 (a platform fork needs an allow-list entry with a reason, in `tools/arch_check/platform_forks.dart`) · R18 RULE-52 (async `on<Event>` handlers) · R19 RULE-65 (no `print` in `lib/`) · R20 RULE-30 / RULE-33 (no raw layout numbers) · R21 RULE-34 / RULE-35 (every locale has the keys of `en.arb`, `lowerCamelCase`).
 
 ## `composer`
 
@@ -72,9 +72,9 @@ Gates 0 and 1 run before any codegen. The `generator-smoke`, `generator-smoke-co
 | `dart tools/composer/composer.dart list [--app <id>] [--strict]` | Print each app's composition | `0` · `1` invalid manifest · `64` bad flag | — |
 | `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | Print an app's report — what it declares and what the shell resolves from it (the text of its README `report` region) — or, with `--catalog`, every manifest key, the contract catalog, the derived defaults, the pubspec keys, the checks V1–V17 and the problem codes | `0` · `1` unknown app or broken catalog · `64` bad flag | — |
 | `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Create `apps/<id>/` from `tools/composer/app_template/`, derive its `capabilities:` from what the modules register, run `sync` and `verify`; **never runs `flutter create`** | `0` · `1` a refusal (id exists, platform blocked by a module, unknown module or platform) writing nothing, or a failing `verify` · `64` bad arguments | — |
-| `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Regenerate the root `workspace:` list, each app's path dependencies, `injection.dart` (all of it), the `facts` region of `lib/app/app_profile.dart` and the `report` region of the app's `README.md` from `app_manifest.yaml` | `0` · `1` invalid manifest or YAML, a lost `composer:managed` marker, a managed package declared by hand · `64` bad flag | — |
+| `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Regenerate the root `workspace:` list, each app's path dependencies, the `imports` and `modules` regions of `injection.dart` (outside them only comments), the `facts` region of `lib/app/app_profile.dart` and the `report` region of the app's `README.md` from `app_manifest.yaml` | `0` · `1` invalid manifest or YAML, a lost `composer:managed` marker, a managed package declared by hand · `64` bad flag | — |
 | `dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]` | Declare `absent` every optional capability a manifest still says is `provided` although nothing it composes registers the contract (the V3 failure a removed module leaves), with the reason `<text>: <what the shell does without it>`; run `sync` after it | `0` · `1` a key it cannot edit · `64` bad flag | — |
-| `dart tools/composer/composer.dart verify [--app <id>]` | Same, but write nothing and fail on drift; implies `--strict`. Also fails on a module or platform package no app composes, and holds each app's declaration to the source: capabilities against what is registered (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10), env files (V11), entry point and a smoke test that builds every factory (V12), the native flavors of a committed Android or iOS runner (V15 — [recipe](../guides/13_app_composition.md#native-flavors-for-a-new-mobile-runner)), the root as the only workspace node (V17) | `0` · `1` drift, a module missing from disk, or any `sync` refusal · `64` bad flag | 0 |
+| `dart tools/composer/composer.dart verify [--app <id>]` | Same, but write nothing and fail on drift; implies `--strict`. Also fails on a module or platform package no app composes, and holds each app's declaration to the source: capabilities against what is registered (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10), env files (V11), entry point and a smoke test that builds every factory (V12), code outside the two generated regions of `injection.dart` (V13), the native flavors of a committed Android or iOS runner (V15 — [recipe](../guides/13_app_composition.md#native-flavors-for-a-new-mobile-runner)), a `why` on every DI group and the group order (V16), the root as the only workspace node (V17) | `0` · `1` drift, a module missing from disk, or any `sync` refusal · `64` bad flag | 0 |
 
 - Only the regions between `composer:managed:<region>` and `composer:end:<region>` are generated; never hand-edit them (RULE-16).
 - A non-strict `sync` that skipped a missing module prints a `PARTIAL COMPOSITION` block and the `git checkout --` line that restores the files.
@@ -204,7 +204,7 @@ Interactive only; needs the Firebase CLI installed and logged in. `--app` is req
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `./tools/android_compliance/16kb_check.sh <apk\|apex\|dir>` | Check Android 15+ 16 KB page-size compliance (zip and ELF alignment) | `0` every native library is 16 KB aligned (or there are none) · `1` an unaligned library, no argument, a wrong file type, an unreadable APK or a missing SDK tool | — |
+| `./tools/android_compliance/16kb_check.sh <apk\|apex\|dir>` | Check Android 15+ 16 KB page-size compliance (zip and ELF alignment) | `0` every native library is 16 KB aligned (or there are none) · `1` an unaligned library, an APK `zipalign -c -P 16` rejects (a missing or too-old `zipalign` is only a warning), no argument, a wrong file type, an unreadable APK or a missing SDK tool | — |
 | `.\tools\android_compliance\16kb_check.bat <apk>` | The same on Windows, through Git Bash | as above | — |
 
 Build a release APK of one flavor first. Details: [`android_compliance`](../../../tools/README.md#android_compliance).

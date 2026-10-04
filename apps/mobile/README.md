@@ -161,7 +161,7 @@ apps/mobile/
 │                          app_profile_test.dart (what the facts must keep saying) and
 │                          boot_undeclared_platform_test.dart (an undeclared platform stops the boot)
 ├── android/  ios/         native projects, three flavors each
-├── Gemfile  Gemfile.lock  Ruby gems for Fastlane
+├── Gemfile                Ruby gems for Fastlane (Gemfile.lock is generated, not committed)
 └── fastlane/              release lanes (see docs/en/operations/02_fastlane_release.md)
 ```
 
@@ -217,9 +217,10 @@ VS Code users can pick **App (Dev)**, **App (Staging)** or **App (Prod)** from `
 
 `android/key-dev.properties` and `android/keystore-dev.jks` are **committed on purpose**, so a
 fresh clone builds and runs `dev` with no setup. Staging and prod read `key-stg.properties` and
-`key.properties`. **If either file is absent, Gradle silently signs with the dev key.** Never ship
-a production release with the dev keystore: it is public. Creating a release key, and the check to
-run before a prod build, are in
+`key.properties`. If either file is absent, debug and profile builds of that flavor fall back to the
+dev key, so a fresh clone runs every flavor; a `--release` build of staging or prod **fails** instead
+(staging has an opt-in escape hatch, prod has none). Never ship a production release with the dev
+keystore: it is public. Creating a release key, and the check to run before a prod build, are in
 [`02_fastlane_release.md` § 4](../../docs/en/operations/02_fastlane_release.md).
 
 ## More

@@ -72,7 +72,6 @@ flutter-monorepo-codebase/
 │
 ├── pubspec.yaml            # Gốc workspace — liệt kê đủ 31 thành viên
 ├── pubspec_dependencies.yaml  # Catalog version — nguồn chân lý duy nhất
-├── pubspec.lock            # MỘT file lock cho cả workspace — được commit
 └── analysis_options.yaml
 ```
 
@@ -220,7 +219,7 @@ Những hệ quả bạn bắt buộc phải biết:
 
 | Hệ quả | Nghĩa là với bạn |
 | :--- | :--- |
-| Chỉ một `pubspec.lock` ở root, và được commit | Chỉ chạy `flutter pub get` **tại root**, và commit file lock khi thay đổi dependency làm nó đổi theo |
+| Chỉ một `pubspec.lock` ở root, được sinh ra và bị git bỏ qua | Chỉ chạy `flutter pub get` **tại root**; không bao giờ commit file lock, version được ghim trong `pubspec_dependencies.yaml` |
 | Chung một `.dart_tool/package_config.json` | Package **quên** khai dependency vẫn compile được — kiến trúc hỏng trong im lặng. Luôn khai đủ mọi import vào `pubspec.yaml` của bạn. |
 | Mỗi dependency chỉ một version cho cả repo | Không hardcode version; sửa `pubspec_dependencies.yaml` rồi chạy `dart tools/dependency_sync.dart` |
 | `build_runner` chạy kèm `--workspace` | Codegen quét một lượt qua mọi package |

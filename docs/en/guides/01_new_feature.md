@@ -397,9 +397,10 @@ Then **full restart** the app (not hot reload), so the new DI graph is built.
 The app must keep running when any feature is deleted (RULE-05). Remove in this order:
 
 1. Its line under `modules:` in every `apps/<id>/app_manifest.yaml` that composes it
-2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list
-3. The module's package directories — `modules/<name>/<layer>/` for each layer it has (`api`, `domain`, `data`, `feature`), then `modules/<name>/`. `composer verify` fails on a package left on disk that no app composes. A module that is only a feature has just `modules/<name>/feature/`
-4. `flutter pub get && dart run build_runner build --workspace`
+2. If a capability lost its last provider (the only `IAppSplashScreen`, say), `dart tools/composer/composer.dart reconcile --reason "<why>"` declares it `absent` in the manifests, or write the `{ state: absent, reason }` line yourself — `composer verify` (V3) refuses `provided` for a contract nothing registers
+3. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path dependencies and the root `workspace:` list
+4. The module's package directories — `modules/<name>/<layer>/` for each layer it has (`api`, `domain`, `data`, `feature`), then `modules/<name>/`. `composer verify` fails on a package left on disk that no app composes. A module that is only a feature has just `modules/<name>/feature/`
+5. `flutter pub get && dart run build_runner build --workspace`
 
 **For a sample, let the tool do it.** `remove_sample.dart` performs these steps, then runs `composer reconcile`, which declares `absent` — with the reason `sample <bundle> removed: <what the shell does without it>` — every capability, in every app's manifest, whose last provider went with the bundle (composer's own scan decides, not a list), and `composer sync`; `composer verify` is green when it finishes. More importantly, it tells you what the manual list above cannot:
 

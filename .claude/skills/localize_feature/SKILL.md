@@ -127,7 +127,7 @@ steps: [guide 09 § 2](../../../docs/en/guides/09_localization_theming.md#2-add-
 cd modules/<name>/feature && flutter gen-l10n            # then check untranslated-messages.txt is empty
 dart tools/unused_checker/check_unused_translate.dart    # advisory: keys no code uses (exit 2 = findings)
 flutter analyze                                          # 0 issues (RULE-70)
-dart tools/arch_check/check.dart                         # R7 / R20: no raw layout number beside the new text
+dart tools/arch_check/check.dart                         # R7 / R20: no raw layout number beside the new text; R21: every ARB has en.arb's keys
 dart tools/composer/composer.dart verify
 cd modules/<name>/feature && flutter test
 cd apps/mobile && flutter test test/di_smoke_test.dart   # every feature delegate supports every language the app offers

@@ -200,7 +200,7 @@ Mọi thứ nằm dưới `lib/src/`, sau barrel duy nhất của package (`lib/
 Nó phụ thuộc `core_base_ui` và `core_responsive` — không bao giờ phụ thuộc một package quản lý state, infra, một feature hay `data_*`.
 
 > [!NOTE]
-> Phụ thuộc chạy **một chiều**: `state -> ui`. `provider_state_management` được phụ thuộc nhóm ui (`LoadMoreListView` của nó scale qua `core_responsive`); `core_ui_kit` không phụ thuộc package quản lý state nào. Vì vậy widget gắn với `LoadMoreMixin` hay `ViewState` nằm ở `provider_state_management`, không ở đây. `provider_state_management` cũng tự mang `DefaultLoadingWidget` / `DefaultEmptyWidget` thay vì mượn widget có thương hiệu từ đây.
+> Phụ thuộc chạy **một chiều**: `state -> ui`. `provider_state_management` được phụ thuộc nhóm ui (`LoadMoreListView` của nó lấy padding của spinner từ token `AppSpacing` trong `core_base_ui`); `core_ui_kit` không phụ thuộc package quản lý state nào. Vì vậy widget gắn với `LoadMoreMixin` hay `ViewState` nằm ở `provider_state_management`, không ở đây. `provider_state_management` cũng tự mang `DefaultLoadingWidget` / `DefaultEmptyWidget` thay vì mượn widget có thương hiệu từ đây.
 
 ### Quy tắc UI-agnostic
 
@@ -1067,7 +1067,7 @@ Chưa app nào commit thư mục `web/`. `apps/admin` khai platform web với `r
 
 Điều gì giúp đường boot dùng chung an toàn trên web:
 
-- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Platform được đọc ở đúng một chỗ, `resolveAppPlatform()`, và các quyết định lúc boot đến từ `PlatformFacts` mà app đã khai (splash bằng Dart là chế độ `splash` của platform, không phải một nhánh theo `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` trả về một page thường trước nhánh `Platform.isIOS` (nên trên web nó cũng bỏ qua `RouteAwareWidget`: không có analytics màn hình), `MainScope` bỏ qua `FlutterNativeSplash.remove()`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
+- `dart:io` **biên dịch được** trên web; chỉ *gọi* phần lớn API của nó mới lỗi. Platform được đọc ở đúng một chỗ, `resolveAppPlatform()`, và các quyết định lúc boot đến từ `PlatformFacts` mà app đã khai (splash bằng Dart là chế độ `splash` của platform, không phải một nhánh theo `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` bọc mọi page trong `RouteAwareWidget` trên mọi platform, nên analytics màn hình cũng chạy trên web, và trên web chỉ khác ở loại page (một `MaterialPage` thường, vì trình duyệt lo phần chuyển cảnh), `MainScope` bỏ qua `FlutterNativeSplash.remove()`, còn `core_network` chỉ dùng `dart:io` cho hằng tên header và phép kiểm tra `is SocketException` — bản thân Dio tự chuyển sang adapter của trình duyệt.
 - `AppInitializer` **không** cài `HttpOverrides` trên web và ghi log một lần, mức `INFO`, rằng trình duyệt tự xác thực chứng chỉ: trình duyệt nắm TLS, nên cả pinning lẫn bypass của flavor dev đều không áp dụng được. Trong test, truyền `platform: AppPlatform.web` cho `initBeforeRunApp`.
 
 Các lỗ hổng đã biết:
@@ -1095,7 +1095,7 @@ Chỉ liệt kê phụ thuộc cục bộ (trong workspace) — bỏ qua package
 | `data_core` | `platform_kernel`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive`, `platform_kernel` |
 | `bloc_state_management` | `platform_kernel`, `domain_core` *(ngoại lệ đã duyệt — `AppFailure` cho `BlocViewState.error`)* |
-| `provider_state_management` | `core_common`, `core_responsive`, `domain_core` *(ngoại lệ đã duyệt)* |
+| `provider_state_management` | `core_base_ui`, `core_common`, `domain_core` *(ngoại lệ đã duyệt)* — `core_responsive` là dev dependency, cho test của nó |
 | `core_ui_kit` | `core_base_ui`, `core_responsive` |
 | `platform_shell_adapters` | `core_base_ui` (`LanguageSet`), `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (`RetryDialog`, `AppOverlay`) |
 | `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |

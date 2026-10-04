@@ -30,8 +30,8 @@ Read the registry row before touching the area. Enforcement first: a gate will c
 | RULE-21 | Controllers are created at the route; a `Page` never double-wraps its provider | review |
 | RULE-51 | Freezed BLoC events are private subclasses, via `part` / `part of` | review |
 | RULE-52 | `on<Event>` handlers are `async (event, emit)` — no sync closure calling async | arch_check R18, review |
-| RULE-34 | Every user-facing string translated via the feature's ARB + `IFeatureLocalization` | review |
-| RULE-35 | ARB keys are `lowerCamelCase` | review |
+| RULE-34 | Every user-facing string translated via the feature's ARB + `IFeatureLocalization` | arch_check R21 (key parity), review |
+| RULE-35 | ARB keys are `lowerCamelCase` | arch_check R21 |
 | RULE-36 | Dialogs / bottom sheets are their own widget classes, never inline builders | review |
 | RULE-80 | Everything per-app lives in `apps/<id>/` (manifest, `lib/app/app_profile.dart`, `app_hooks.dart`) — never a constant in `platform/` | composer verify, test, analyzer, review |
 | RULE-81 | Every optional shell contract is `provided` or `absent` + reason in the app's `capabilities:` | composer verify, arch_check R16, test (`di_smoke_test`) |
@@ -57,7 +57,7 @@ apps/<id>/                 composition roots — mobile, admin; `composer new` m
   README.md                reading path + a GENERATED report (`composer describe --app <id>`)
   lib/app/                 app_profile.dart (generated `facts` + typed tuning), app_hooks.dart (ShellHooks)
   lib/main.dart            runShellApp(profile:, hooks:, configureDependencies:)
-  lib/di/injection.dart    100 % generated; lib/firebase/ (mobile only); test/ smoke + profile tests
+  lib/di/injection.dart    imports + modules regions generated, only comments outside; lib/firebase/ (mobile only); test/ smoke + profile tests
 modules/<id>/
   api/                     <id>_api — contracts other features use (navigator, action handlers)
   domain/                  domain_<id> — pure Dart: entities, use cases, repository interfaces
@@ -94,7 +94,7 @@ cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev   # t
 
 # The gates, in CI order (.github/workflows/pr_quality_check.yml)
 dart tools/composer/composer.dart verify   # Gate 0 — composition matches the manifests
-dart tools/arch_check/check.dart           # Gate 1 — R1–R20; --help describes each
+dart tools/arch_check/check.dart           # Gate 1 — R1–R21; --help describes each
 cd tools && dart test                      # Gate 1 — the gate tools' own tests
 flutter analyze                            # Gate 2 — 0 issues, infos included
 cd <package> && flutter test               # Gate 3 — every package with a test/ except tools/ (incl. apps/*: DI smoke test)
@@ -134,8 +134,9 @@ interface → use cases → models → data sources → repository impl → `bui
 `cd apps/<id> && flutter test`; then edit only `app_manifest.yaml` and `lib/app/app_profile.dart`.
 Guide: [`13_app_composition`](docs/en/guides/13_app_composition.md).
 
-**Drop a module.** Delete its line from every `apps/<id>/app_manifest.yaml`, then
-`composer sync` → **delete the leftover `modules/<id>/` directory** (`composer verify` fails on a package
+**Drop a module.** Delete its line from every `apps/<id>/app_manifest.yaml`; if that removed the last
+provider of a contract, `composer reconcile --reason "<why>"` flips its capability to `absent` (V3
+refuses `provided`); then `composer sync` → **delete the leftover `modules/<id>/` directory** (`composer verify` fails on a package
 no app composes) → `flutter pub get` → `build_runner`. Or `remove_sample <bundle> --apply`, which
 deletes the directories itself (skill `remove_module`).
 

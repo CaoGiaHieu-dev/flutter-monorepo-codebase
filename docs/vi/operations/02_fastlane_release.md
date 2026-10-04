@@ -98,9 +98,7 @@ bundle install                         # từ thư mục gốc repo (hoặc từ
 bundle exec fastlane android build …   # như nhau từ cả hai thư mục
 ```
 
-**Các file `Gemfile.lock` đã được commit** — mỗi Gemfile một file bên cạnh, file ở gốc và `apps/mobile/Gemfile.lock` (`.gitignore` ở gốc bỏ qua `*.lock` nhưng có ngoại lệ cho chúng, giống `pubspec.lock`). Chúng ghim phiên bản fastlane, CocoaPods và plugin, nên mọi máy và mọi lần chạy CI đều cài cùng một bộ phiên bản thay vì bản mới nhất vào hôm đó. Hai Gemfile resolve cùng một danh sách gem nên hai lockfile **giống hệt nhau**; hãy giữ nguyên như vậy — sau khi chạy `bundle update` ở một thư mục, chạy đúng lệnh đó ở thư mục kia rồi kiểm tra bằng `cmp Gemfile.lock apps/mobile/Gemfile.lock`. Cả hai đều liệt kê các nền tảng có chạy lane (`bundle lock --add-platform x86_64-linux arm64-darwin x86_64-darwin`), nên `bundler-cache` trên runner GitHub chấp nhận chúng.
-
-Chúng được sinh bởi **Bundler 4** (`BUNDLED WITH 4.0.9` ở cuối mỗi file); `ruby/setup-ruby` cài đúng bản Bundler đó, bản này cần Ruby 3.2 trở lên (`fastlane.yml` dùng 3.3). Nếu Bundler trên máy bạn cũ hơn, chạy `gem install bundler` trước.
+**Các file `Gemfile.lock` được sinh ra và không commit.** `bundle install` ghi một file bên cạnh mỗi Gemfile, file ở gốc và `apps/mobile/Gemfile.lock`, và `.gitignore` ở gốc bỏ qua mọi `*.lock`. Các Gemfile liệt kê fastlane và CocoaPods (plugin đến từ `Pluginfile`) mà không ghi version, nên mỗi máy và mỗi lần chạy CI resolve các gem tương thích mới nhất; chạy `bundle update` khi muốn đi tiếp, và thêm ràng buộc version vào cả hai Gemfile nếu cần giữ một gem ở bản cũ. Hai Gemfile liệt kê cùng các gem, nên hãy chạy cùng một lệnh ở cả hai thư mục. `ruby/setup-ruby` với `bundler-cache: true` resolve và cache chúng trên runner GitHub; chúng cần Ruby 3.2 trở lên (`fastlane.yml` dùng 3.3).
 
 Nếu `bundle exec fastlane` báo `bundler: command not found: fastlane` ngay sau một lần `bundle install` thành công, thì thư mục chứa file thực thi của gem chưa nằm trong `PATH` (hay gặp với rbenv khi không dùng shim): hãy thêm nó vào — `gem env | grep "EXECUTABLE DIRECTORY"` cho biết đó là thư mục nào.
 
@@ -379,14 +377,14 @@ Sau đó nó chạy `install_dependencies`, thêm `fvm ` trước `dart` / `flut
 sh "#{dart_cmd} pub global activate flutterfire_cli"
 sh "#{dart_cmd} pub global activate flutter_gen"
 sh "#{flutter_cmd} clean"
-sh "#{flutter_cmd} pub get --enforce-lockfile"
+sh "#{flutter_cmd} pub get"
 # ...rồi flutter gen-l10n cho mọi l10n.yaml trong cây thư mục
 sh "#{dart_cmd} run build_runner build --workspace"
 # ...rồi, với mỗi package có lib/ (bỏ qua app), chạy từ gốc workspace:
 sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
 ```
 
-`--enforce-lockfile` build đúng theo `pubspec.lock` của workspace đã commit, và fail khi lockfile không còn khớp các pubspec thay vì resolve lại.
+File lock không được commit, nên đây chỉ là `pub get` thường: version đến từ catalog `pubspec_dependencies.yaml` (RULE-74) và version Flutter từ `.fvmrc`.
 
 Lượt sinh barrel chạy cuối cùng vì barrel còn export cả các file được sinh ra đang có trên đĩa — nó làm y như bước 6 của `tools/workspace_setup/configure.dart`.
 
@@ -436,7 +434,7 @@ Các lane iOS là thật và khá hoàn chỉnh, không phải stub:
 
 - `run_flutter_build` xoá `Podfile.lock` và chạy `pod deintegrate && pod install --repo-update` trước mỗi lần build iOS, ép giải lại dependency từ đầu.
 - Nó chọn `ios/flavors/<flavor>/ExportOptions.plist` khi có flavor, `ios/ExportOptions.plist` khi không, và chỉ cảnh báo chứ không fail nếu thiếu cả hai.
-- Nếu `flutter build ipa` archive thành công nhưng export lỗi, nó thử lại `xcrun xcodebuild -exportArchive -exportOptionsPlist <file đó>` tối đa ba lần — **chỉ khi file đó tồn tại**. Không có nó thì chẳng có gì để thử lại, nên lane dừng với lỗi nêu rõ đường dẫn còn thiếu. Hãy tạo nó cạnh flavor (`ios/flavors/<flavor>/ExportOptions.plist`, hoặc `ios/ExportOptions.plist` cho build không flavor) với tối thiểu `method` (ví dụ `app-store-connect`), `teamID` và, nếu ký thủ công, `provisioningProfiles`; file `ExportOptions.plist` nằm trong một lần export *Distribute App* thành công của Xcode là điểm xuất phát dùng được.
+- Nếu `flutter build ipa` archive thành công nhưng export lỗi, nó thử lại `xcrun xcodebuild -exportArchive -exportOptionsPlist <file đó>` tối đa ba lần — **chỉ khi file đó tồn tại**. Không có nó thì chẳng có gì để thử lại, nên lane dừng với lỗi nêu rõ đường dẫn còn thiếu. Hãy copy `apps/mobile/fastlane/ExportOptions.example.plist` sang `ios/flavors/<flavor>/ExportOptions.plist` (hoặc `ios/ExportOptions.plist` cho build không flavor), cả hai nằm dưới `apps/mobile/`, bỏ phần `.example`, thay mọi giá trị `YOUR_*` và giữ tối thiểu `method` (ví dụ `app-store-connect`), `teamID` và, nếu ký thủ công, `provisioningProfiles`; file `ExportOptions.plist` nằm trong một lần export *Distribute App* thành công của Xcode là điểm xuất phát dùng được.
 - `distribute_to_app_store` bỏ qua `upload_to_testflight` của Fastlane và gọi thẳng `xcrun altool --upload-app`, kèm comment giải thích wrapper altool của Fastlane không tương thích với Xcode 26. altool được chạy với `API_PRIVATE_KEYS_DIR` là thư mục chứa `paths.app_store_connect_key_filepath`, vì nó chỉ tìm key theo tên `AuthKey_<api_key_id>.p8` ([§2](#các-trường-cần-điền)).
 
 Những phần **chưa** được nối:

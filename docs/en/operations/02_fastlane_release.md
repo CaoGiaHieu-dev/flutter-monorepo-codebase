@@ -97,9 +97,7 @@ bundle install                         # from the repository root (or from apps/
 bundle exec fastlane android build …   # same from either directory
 ```
 
-**The `Gemfile.lock` files are committed** — one next to each Gemfile, the root one and `apps/mobile/Gemfile.lock` (the root `.gitignore` ignores `*.lock` but makes an exception for them, as for `pubspec.lock`). They pin fastlane, CocoaPods and the plugin, so every machine and every CI run installs the same versions instead of whatever is newest that day. The two Gemfiles resolve the same gem list, so the two lockfiles are **identical**; keep them that way — after `bundle update` in one directory, run the same command in the other and check with `cmp Gemfile.lock apps/mobile/Gemfile.lock`. Both list the platforms that run the lanes (`bundle lock --add-platform x86_64-linux arm64-darwin x86_64-darwin`), so `bundler-cache` on a GitHub runner accepts them.
-
-They were written by **Bundler 4** (`BUNDLED WITH 4.0.9` at the end of each file); `ruby/setup-ruby` installs exactly that Bundler, which needs Ruby 3.2 or newer (`fastlane.yml` uses 3.3). With an older local Bundler, `gem install bundler` first.
+**The `Gemfile.lock` files are generated and not committed.** `bundle install` writes one next to each Gemfile, the root one and `apps/mobile/Gemfile.lock`, and the root `.gitignore` ignores every `*.lock`. The Gemfiles list fastlane and CocoaPods (the plugin comes from the `Pluginfile`) without a version, so each machine and each CI run resolves the newest compatible gems; run `bundle update` when you want to move on, and add a version constraint to both Gemfiles if you need a gem held back. The two Gemfiles list the same gems, so run the same command in both directories. `ruby/setup-ruby` with `bundler-cache: true` resolves and caches them on a GitHub runner; they need Ruby 3.2 or newer (`fastlane.yml` uses 3.3).
 
 If `bundle exec fastlane` answers `bundler: command not found: fastlane` right after a successful `bundle install`, the directory gem executables are installed into is not on your `PATH` (common with rbenv without its shims): add it — `gem env | grep "EXECUTABLE DIRECTORY"` names it.
 
@@ -378,14 +376,14 @@ It then runs `install_dependencies`, with `fvm ` in front of `dart` / `flutter` 
 sh "#{dart_cmd} pub global activate flutterfire_cli"
 sh "#{dart_cmd} pub global activate flutter_gen"
 sh "#{flutter_cmd} clean"
-sh "#{flutter_cmd} pub get --enforce-lockfile"
+sh "#{flutter_cmd} pub get"
 # ...then flutter gen-l10n for every l10n.yaml in the tree
 sh "#{dart_cmd} run build_runner build --workspace"
 # ...then, per package with a lib/ (apps skipped), from the workspace root:
 sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
 ```
 
-`--enforce-lockfile` builds from exactly the committed workspace `pubspec.lock`, and fails when it no longer matches the pubspecs instead of re-resolving.
+Lock files are not committed, so this is a plain `pub get`: the versions come from the catalog `pubspec_dependencies.yaml` (RULE-74) and the Flutter version from `.fvmrc`.
 
 The barrel pass comes last because a barrel also exports the generated files on disk — it mirrors step 6 of `tools/workspace_setup/configure.dart`.
 
@@ -435,7 +433,7 @@ The iOS lanes are real and reasonably developed, not stubs:
 
 - `run_flutter_build` deletes `Podfile.lock` and runs `pod deintegrate && pod install --repo-update` before every iOS build, forcing fresh dependency resolution.
 - It picks `ios/flavors/<flavor>/ExportOptions.plist` when a flavor is set, `ios/ExportOptions.plist` otherwise, and warns rather than failing if neither exists.
-- If `flutter build ipa` archives successfully but export fails, it retries `xcrun xcodebuild -exportArchive -exportOptionsPlist <that file>` up to three times — **only when that file exists**. Without it there is nothing to retry with, so the lane stops with an error naming the missing path. Create it next to the flavor (`ios/flavors/<flavor>/ExportOptions.plist`, or `ios/ExportOptions.plist` for flavor-less builds) with at least `method` (e.g. `app-store-connect`), `teamID` and, for manual signing, `provisioningProfiles`; the `ExportOptions.plist` inside a successful Xcode *Distribute App* export is a working starting point.
+- If `flutter build ipa` archives successfully but export fails, it retries `xcrun xcodebuild -exportArchive -exportOptionsPlist <that file>` up to three times — **only when that file exists**. Without it there is nothing to retry with, so the lane stops with an error naming the missing path. Copy `apps/mobile/fastlane/ExportOptions.example.plist` to `ios/flavors/<flavor>/ExportOptions.plist` (or `ios/ExportOptions.plist` for flavor-less builds), both under `apps/mobile/`, drop the `.example`, replace every `YOUR_*` value and keep at least `method` (e.g. `app-store-connect`), `teamID` and, for manual signing, `provisioningProfiles`; the `ExportOptions.plist` inside a successful Xcode *Distribute App* export is a working starting point.
 - `distribute_to_app_store` bypasses Fastlane's `upload_to_testflight` and calls `xcrun altool --upload-app` directly, with a comment noting Fastlane's altool wrapper has compatibility problems with Xcode 26. altool is spawned with `API_PRIVATE_KEYS_DIR` set to the directory of `paths.app_store_connect_key_filepath`, since it finds the key only by the name `AuthKey_<api_key_id>.p8` ([§2](#fields-to-fill-in)).
 
 What is **not** wired up:

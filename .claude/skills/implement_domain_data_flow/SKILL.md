@@ -243,8 +243,8 @@ Errors are classified by `ErrorHandler.handleError(e)` (RULE-43), never an inven
 ### Step 8: Dependencies and codegen
 
 Write every third-party entry with an empty value (`dio:`); versions live only in the catalog
-(RULE-74), so `dart tools/dependency_sync.dart` fills them in and runs `pub get`. Commit the
-`pubspec.lock` change that results. Add a dependency **as your code starts importing it**: `arch_check`
+(RULE-74), so `dart tools/dependency_sync.dart` fills them in and runs `pub get`. `pubspec.lock` is generated and
+git-ignored: never commit it. Add a dependency **as your code starts importing it**: `arch_check`
 R5 fails an import that is not declared, `check_unused_packages` a declaration nothing imports.
 
 The data package's models and repository import `domain_<name>` types (the entity, `I<Name>Repository`) through

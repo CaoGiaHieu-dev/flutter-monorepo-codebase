@@ -86,7 +86,7 @@ Mọi cạnh platform khác đều theo chiều giữa các nhóm (R11) và nằ
 
 ## 3. Vì sao dùng Pub Workspace monorepo
 
-Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc, do `composer sync` sinh ra từ các app manifest — có 31 thành viên (16 package platform, 12 package module, hai app và `tools`). Một `pubspec.lock`, một lần resolve, một lệnh `dart run build_runner build --workspace` cho cả cây.
+Mọi package đều là thành viên trong danh sách `workspace:` của [`pubspec.yaml`](../../../pubspec.yaml) gốc, do `composer sync` sinh ra từ các app manifest — có 31 thành viên (16 package platform, 12 package module, hai app và `tools`). Một lần resolve (một `pubspec.lock`, được sinh ra và bị git bỏ qua), một lệnh `dart run build_runner build --workspace` cho cả cây.
 
 **Cái được:** biên dịch tăng dần nhanh, không lệch version giữa các package, refactor xuyên package gọn trong một commit, và phân tầng mà một cổng kiểm tra đọc được — `pubspec.yaml` và import của feature package đều bị quét, và `arch_check` R3 đánh hỏng build khi một feature khai hoặc import `data_auth`.
 

@@ -106,12 +106,12 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── .claude/                       # skills/ — agent task recipes (Claude Code discovers them here)
 ├── .github/                       # CODEOWNERS, SETUP_GUIDE.md, dependabot.yml, issue forms, PR template, CI workflows
 │   └── workflows/
-│       ├── pr_quality_check.yml   # PR gates 0–5 (composer, arch_check, analyze, tests, catalog, docs_check), barrel drift, unused audit, debug APK, generator smoke
+│       ├── pr_quality_check.yml   # PR gates 0–5 (composer, arch_check, analyze, tests, catalog, docs_check), barrel drift, unused audit, debug APK, two generator smoke tests
 │       ├── flutter_build.yml      # Manual build & distribute with the Flutter CLI
 │       ├── fastlane.yml           # Manual build & distribute through Fastlane
 │       ├── code_review.yml        # Gemini AI review on pull requests (advisory)
 │       └── README.md              # What each workflow does and the secrets it needs
-├── .vscode/                       # launch.json (App Dev/Staging/Prod), settings, tasks
+├── .vscode/                       # launch.json (App Dev/Staging/Prod, Admin Web/Desktop), settings, tasks
 ├── apps/                          # One directory per app — the composition roots
 │   ├── admin/                     # Second app: auth + settings only — see apps/admin/README.md
 │   └── mobile/                    # Every sample module — see apps/mobile/README.md
@@ -163,7 +163,7 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, app providers
 ├── tools/                         # Command-line toolset (a workspace member) — see tools/README.md
 │   ├── android_compliance/        # 16KB page size compatibility check (Android 15+)
-│   ├── arch_check/                # Layering and hygiene rules R1–R20 — PR Gate 1
+│   ├── arch_check/                # Layering and hygiene rules R1–R21 — PR Gate 1
 │   ├── barrel_generator/          # Regenerates a package's one barrel, lib/<package>.dart
 │   ├── code_review/               # Gemini AI source code review
 │   ├── composer/                  # sync/verify/describe/new/list apps from app_manifest.yaml — PR Gate 0
@@ -193,10 +193,9 @@ Below is every tracked top-level entry of the Workspace, one line each (gitignor
 ├── devtools_options.yaml          # Flutter DevTools settings
 ├── flutter_native_splash-{dev,staging,prod}.yaml  # Splash config per flavor (theme_generator)
 ├── icons_launcher-{dev,staging,prod}.yaml         # App icon config per flavor (theme_generator)
-├── Gemfile  Gemfile.lock          # Ruby gems for Fastlane (locked)
+├── Gemfile                        # Ruby gems for Fastlane (Gemfile.lock is generated, not committed)
 ├── LICENSE                        # BSD 3-Clause License
 ├── pubspec.yaml                   # Pub Workspace configuration (workspace: [...]) — the one workspace node
-├── pubspec.lock                   # The ONE lock file for the whole workspace — committed
 ├── pubspec_dependencies.yaml      # Single source of truth for library versions (Version Catalog)
 ├── README.md                      # This Master Technical Manual
 ├── README.vi.md                   # Vietnamese twin
@@ -269,7 +268,7 @@ All tools can be run from the root directory.
     ```
 11. **The gates (`tools/arch_check/`, `tools/docs_check/`, `tools/sample_cleanup/`)**:
     ```bash
-    dart tools/arch_check/check.dart                            # PR Gate 1 — rules R1–R20
+    dart tools/arch_check/check.dart                            # PR Gate 1 — rules R1–R21
     dart tools/docs_check/check.dart                            # PR Gate 5 — paths, en↔vi parity, RULE-IDs
     dart tools/sample_cleanup/remove_sample.dart --list         # the sample bundles you can remove
     ```
@@ -329,9 +328,10 @@ void initMicroPackage() {}
 ```
 
 ### Assembly at Host App (`apps/mobile/lib/di/injection.dart`):
-The whole file is **generated** from `apps/mobile/app_manifest.yaml` by
-`dart tools/composer/composer.dart sync --app mobile` — edit the manifest, never this file;
-`composer verify` (PR Gate 0) fails on any difference. Its `modules` region, verbatim:
+The `imports` and `modules` regions are **generated** from `apps/mobile/app_manifest.yaml` by
+`dart tools/composer/composer.dart sync --app mobile` — edit the manifest, never this file, and
+write nothing outside the regions but comments; `composer verify` (PR Gate 0) fails on any
+difference or any code outside them. Its `modules` region, verbatim:
 
 ```dart
 // composer:managed:modules — generated from app_manifest.yaml
@@ -472,8 +472,11 @@ holds no feature type at all, which is what makes `feature_auth` removable.
 ### Removing a feature
 
 1. Delete its line from `modules:` in every `apps/<id>/app_manifest.yaml` that composes it.
-2. `dart tools/composer/composer.dart sync` — regenerates `injection.dart`, the app's path
-   dependencies and the root `workspace:` list, all between `composer:managed` markers.
+2. If a capability lost its last provider (the only splash, the only tab), `dart tools/composer/composer.dart
+   reconcile --reason "<why>"` declares it `absent` in the manifests — `composer verify` refuses `provided`
+   for a contract nothing registers. Then `dart tools/composer/composer.dart sync` — regenerates
+   `injection.dart`, the app's path dependencies and the root `workspace:` list, all between
+   `composer:managed` markers.
 3. Delete the leftover `modules/<id>/` directory — `composer verify` fails on a package no app composes.
 4. `flutter pub get && dart run build_runner build --workspace`.
 
@@ -490,8 +493,8 @@ The CI/CD system utilizes **Fastlane** with the **Workspace-Root Delegation** ar
 
 Every pull request runs `.github/workflows/pr_quality_check.yml`: the quality job (`composer verify`,
 `arch_check`, the gate tools' tests, setup + codegen, the barrel-drift check, `flutter analyze`, per-package
-tests, the catalog check, `docs_check`, the unused-dependency audit), then a debug APK build and a
-generator smoke test. The commands, in order: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; the full
+tests, the catalog check, `docs_check`, the unused-dependency audit), then a debug APK build and two
+generator smoke tests. The commands, in order: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; the full
 description: [`operations/01_cicd.md`](docs/en/operations/01_cicd.md).
 
 ### Android APK Build Command from Root:
@@ -533,7 +536,7 @@ barrel (`lib/<package>.dart`) exports the gitignored generated files, which dang
 written them. The barrel pass is only needed after you add, rename or delete a `lib/` file. The full
 manual sequence is in [`getting-started/01_setup.md`](docs/en/getting-started/01_setup.md) § 2.
 
-*Thanks to Pub Workspaces there is a single `pubspec.lock`, at the root, and it is committed.*
+*Lock files (`pubspec.lock`, `Gemfile.lock`, `Podfile.lock`) are generated by `flutter pub get` and `bundle install`, git-ignored and never committed: versions are pinned only in `pubspec_dependencies.yaml` (RULE-74) and `.fvmrc`.*
 
 ### 3. Firebase Options (required — the repo will not compile without them)
 `apps/mobile/lib/firebase/firebase_module.dart` imports all three

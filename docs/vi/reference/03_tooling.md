@@ -5,7 +5,7 @@
 
 Mỗi tool một bảng. Mọi tool nằm trong `tools/`, đều là Dart thuần (trừ bản kiểm tra 16 KB), và chạy từ **thư mục gốc repo**. Tool nào gọi `dart` / `flutter` thì tự nhận diện FVM (`tools/shared/toolchain.dart`, RULE-73) và in bằng `stdout.writeln` / `stderr.writeln` (RULE-65). Bản đầy đủ — mọi tham số, trường hợp bị từ chối và chế độ lỗi — nằm ở [`tools/README.vi.md` § Tham chiếu đầy đủ](../../../tools/README.vi.md#-tham-chiếu-đầy-đủ-từng-tool).
 
-Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` kiểm tra thất bại hoặc không làm được việc, `64` tham số sai (không chạy hay ghi gì cả). Hai ngoại lệ: các script `unused_checker` riêng lẻ dùng `2` cho "có phát hiện", và `composer` không có tham số nào thì thoát `1` (cách dùng in ra stderr).
+Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` kiểm tra thất bại hoặc không làm được việc, `64` tham số sai (không chạy hay ghi gì cả). Một ngoại lệ: các script `unused_checker` riêng lẻ dùng `2` cho "có phát hiện". `composer` không có lệnh nào cũng là tham số sai: cách dùng in ra stderr, thoát `64`.
 
 ---
 
@@ -37,7 +37,7 @@ Mã thoát theo cùng một quy ước ở mọi tool: `0` thành công, `1` ki�
 
 ## Các CI gate trong một bảng
 
-`.github/workflows/pr_quality_check.yml` chạy những lệnh này, theo đúng thứ tự, sau `flutter pub get --enforce-lockfile`. Toàn bộ pipeline: [`../operations/01_cicd.md`](../operations/01_cicd.md).
+`.github/workflows/pr_quality_check.yml` chạy những lệnh này, theo đúng thứ tự, sau `flutter pub get`. Toàn bộ pipeline: [`../operations/01_cicd.md`](../operations/01_cicd.md).
 
 | Gate | Lệnh | Chặn merge? |
 |:--|:--|:--|
@@ -59,12 +59,12 @@ Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke`, `generator-sm
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/arch_check/check.dart` | Cưỡng chế các luật phân tầng và vệ sinh R1–R20 trên import, pubspec, tên file và mã nguồn | `0` sạch · `1` có vi phạm (mọi luật đều chặn) · `64` mọi tham số khác `--help` | 1 |
+| `dart tools/arch_check/check.dart` | Cưỡng chế các luật phân tầng và vệ sinh R1–R21 trên import, pubspec, tên file và mã nguồn | `0` sạch · `1` có vi phạm (mọi luật đều chặn) · `64` mọi tham số khác `--help` | 1 |
 | `dart tools/arch_check/check.dart --help` | Mô tả từng luật | `0` | — |
 
 - Đọc import (bằng lexer, không khớp theo dòng) và file `pubspec.yaml`, không cần codegen, và chạy xong trong vài giây.
 - Các cạnh ngược chiều đã duyệt được in ra ở mọi lần chạy. Thêm cạnh khác phải cập nhật cùng lúc allow-list trong `check.dart` và RULE-01.
-- Từng luật, kèm lý do nó tồn tại: [chi tiết](../../../tools/README.vi.md#arch_check). Dòng registry mà mỗi luật cưỡng chế: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (mọi lời tra cứu của shell đều có trong catalog contract) · R17 RULE-82 (một nhánh theo platform cần một mục allow-list kèm lý do, trong `tools/arch_check/platform_forks.dart`) · R18 RULE-52 (handler `on<Event>` phải async) · R19 RULE-65 (không `print` trong `lib/`) · R20 RULE-30 / RULE-33 (không số layout thô).
+- Từng luật, kèm lý do nó tồn tại: [chi tiết](../../../tools/README.vi.md#arch_check). Dòng registry mà mỗi luật cưỡng chế: R1 RULE-01 · R2 RULE-03 · R3 RULE-04 · R4 RULE-09 · R5 RULE-06 · R6 RULE-76 · R7 RULE-30 · R8 RULE-12 · R9 RULE-07 · R10 RULE-05 · R11 RULE-02 · R12 RULE-72 · R13 RULE-71 · R14 RULE-40 · R15 RULE-78 · R16 RULE-81 (mọi lời tra cứu của shell đều có trong catalog contract) · R17 RULE-82 (một nhánh theo platform cần một mục allow-list kèm lý do, trong `tools/arch_check/platform_forks.dart`) · R18 RULE-52 (handler `on<Event>` phải async) · R19 RULE-65 (không `print` trong `lib/`) · R20 RULE-30 / RULE-33 (không số layout thô) · R21 RULE-34 / RULE-35 (mọi locale có đủ khoá của `en.arb`, `lowerCamelCase`).
 
 ## `composer`
 
@@ -73,9 +73,9 @@ Gate 0 và 1 chạy trước mọi codegen. Job `generator-smoke`, `generator-sm
 | `dart tools/composer/composer.dart list [--app <id>] [--strict]` | In phần lắp ráp của từng app | `0` · `1` manifest không hợp lệ · `64` cờ sai | — |
 | `dart tools/composer/composer.dart describe [--app <id>] [--catalog]` | In báo cáo của một app — nó khai gì và shell resolve gì từ nó (đúng nội dung vùng `report` trong README của nó) — hoặc, với `--catalog`, mọi key manifest, catalog contract, các giá trị mặc định suy ra, các key trong pubspec, các check V1–V17 và các mã vấn đề | `0` · `1` app lạ hoặc catalog hỏng · `64` cờ sai | — |
 | `dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]` | Tạo `apps/<id>/` từ `tools/composer/app_template/`, suy ra `capabilities:` của nó từ những gì các module đăng ký, chạy `sync` và `verify`; **không bao giờ chạy `flutter create`** | `0` · `1` bị từ chối (id đã có, platform bị module chặn, module hoặc platform lạ) và không ghi gì, hoặc `verify` fail · `64` tham số sai | — |
-| `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Sinh lại danh sách `workspace:` ở root, path dependency của từng app, `injection.dart` (toàn bộ), vùng `facts` của `lib/app/app_profile.dart` và vùng `report` trong `README.md` của app từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
+| `dart tools/composer/composer.dart sync [--app <id>] [--strict]` | Sinh lại danh sách `workspace:` ở root, path dependency của từng app, vùng `imports` và `modules` của `injection.dart` (ngoài hai vùng đó chỉ có comment), vùng `facts` của `lib/app/app_profile.dart` và vùng `report` trong `README.md` của app từ `app_manifest.yaml` | `0` · `1` manifest hoặc YAML không hợp lệ, mất marker `composer:managed`, một package managed bị khai tay · `64` cờ sai | — |
 | `dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]` | Khai `absent` mọi capability tuỳ chọn mà manifest vẫn nói là `provided` dù không còn gì nó ghép đăng ký contract đó (lỗi V3 mà một module bị gỡ để lại), với lý do `<text>: <thứ shell làm khi thiếu nó>`; chạy `sync` sau đó | `0` · `1` một key không sửa được · `64` cờ sai | — |
-| `dart tools/composer/composer.dart verify [--app <id>]` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Cũng fail khi có module hoặc package platform không app nào lắp ráp, và đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào cùng smoke test dựng mọi factory (V12), các flavor native của runner Android hay iOS đã commit (V15 — [công thức](../guides/13_app_composition.md#flavor-native-cho-runner-mobile-mới)), root là workspace node duy nhất (V17) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
+| `dart tools/composer/composer.dart verify [--app <id>]` | Như trên, nhưng không ghi gì và fail khi lệch; ngầm bật `--strict`. Cũng fail khi có module hoặc package platform không app nào lắp ráp, và đối chiếu khai báo của từng app với mã nguồn: capability với những gì được đăng ký (V3), platform của package (V7), `FirebaseOptions` theo flavor (V10), file env (V11), điểm vào cùng smoke test dựng mọi factory (V12), code nằm ngoài hai vùng được sinh của `injection.dart` (V13), các flavor native của runner Android hay iOS đã commit (V15 — [công thức](../guides/13_app_composition.md#flavor-native-cho-runner-mobile-mới)), một `why` cho mỗi DI group và thứ tự nhóm (V16), root là workspace node duy nhất (V17) | `0` · `1` lệch, thiếu module trên đĩa, hoặc mọi trường hợp `sync` từ chối · `64` cờ sai | 0 |
 
 - Chỉ các vùng giữa `composer:managed:<region>` và `composer:end:<region>` là được sinh ra; không bao giờ sửa tay chúng (RULE-16).
 - Một lần `sync` không strict mà bỏ qua module thiếu sẽ in khối `PARTIAL COMPOSITION` kèm dòng `git checkout --` để khôi phục các file.
@@ -205,7 +205,7 @@ Chỉ chạy tương tác; cần Firebase CLI đã cài và đã đăng nhập. 
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `./tools/android_compliance/16kb_check.sh <apk\|apex\|dir>` | Kiểm tra tương thích 16 KB page-size của Android 15+ (căn lề zip và ELF) | `0` mọi thư viện native đều căn 16 KB (hoặc không có thư viện nào) · `1` có thư viện lệch căn, thiếu tham số, sai loại file, APK không đọc được, hoặc thiếu công cụ SDK | — |
+| `./tools/android_compliance/16kb_check.sh <apk\|apex\|dir>` | Kiểm tra tương thích 16 KB page-size của Android 15+ (căn lề zip và ELF) | `0` mọi thư viện native đều căn 16 KB (hoặc không có thư viện nào) · `1` có thư viện lệch căn, APK mà `zipalign -c -P 16` từ chối (thiếu hoặc `zipalign` quá cũ chỉ là cảnh báo), thiếu tham số, sai loại file, APK không đọc được, hoặc thiếu công cụ SDK | — |
 | `.\tools\android_compliance\16kb_check.bat <apk>` | Như trên trên Windows, qua Git Bash | như trên | — |
 
 Hãy build APK release của một flavor trước. Chi tiết: [`android_compliance`](../../../tools/README.vi.md#android_compliance).

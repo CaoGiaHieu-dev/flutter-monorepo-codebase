@@ -16,7 +16,7 @@
 | JDK | **17 trở lên** (build được trên 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` là mức bytecode đích, không phải giới hạn trên |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
-| Ruby ≥ 3.2 | chỉ cần cho Fastlane | `Gemfile.lock` đã commit do Bundler 4 ghi ra; xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
+| Ruby ≥ 3.2 | chỉ cần cho Fastlane | `bundle install` ghi `Gemfile.lock` (bị git bỏ qua); xem [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 | Node.js + npm, một tài khoản Google, một Firebase project | chỉ cần cho cấu hình Firebase **thật** (§3) | Firebase CLI là một package npm; nếu dùng stub ở §3 thì bỏ qua cả ba |
 
 ### FVM là tuỳ chọn
@@ -58,11 +58,12 @@ cd flutter-monorepo-codebase
 dart tools/workspace_setup/configure.dart
 ```
 
-**`configure.dart` chính là bước setup.** Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
+> [!TIP]
+> Lịch sử cũ của template mang theo khoảng 82 MB kết quả build Gradle từng bị commit một lần và từ lâu đã được ignore. Clone nông (`git clone --depth 1 <repo-url>`) bỏ qua phần đó; bắt đầu repository riêng của bạn với một lịch sử mới khi bạn dùng template (§8.4) cũng vậy. Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
 
 1. `dart pub global activate flutterfire_cli`. Chỉ nhánh Firebase thật ở [§3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được) dùng tới nó.
 2. `flutter clean` tại root.
-3. `flutter pub get` tại root. Bước này resolve cả workspace theo file `pubspec.lock` duy nhất ở root.
+3. `flutter pub get` tại root. Bước này resolve cả workspace và ghi file `pubspec.lock` duy nhất ở root.
 4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/ui/design_system` và các feature auth, home, onboarding, settings, splash.
 5. `dart run build_runner build --workspace`, chạy injectable, freezed, json_serializable, retrofit, go_router_builder, drift và flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì app không có barrel. Trên một bản clone mới bước này không đổi gì: các barrel đã được commit.
@@ -84,7 +85,7 @@ dart run build_runner build --workspace
 Những gì sẽ thấy ở một lần chạy sạch:
 
 - build_runner in ra vài cảnh báo `W injectable_config_builder … Missing dependencies`. Đó là chuyện bình thường. DI module của mỗi micro-package được sinh riêng và nhắc tới những type do package khác đăng ký. `injection.config.dart` của app mới là nơi ghép chúng lại.
-- **Chỉ một file lock, ở root, và được commit.** `pubspec.lock` được git theo dõi (`.gitignore` ở root bỏ ignore cho `/pubspec.lock`), nên mọi người resolve cùng một bộ version. Hãy commit nó khi thay đổi dependency làm nó đổi theo. Nếu thấy `pubspec.lock` xuất hiện trong package con, tức là có ai đó đã chạy `pub get` sai chỗ. Hãy xoá chúng đi, vì chỉ file ở root được dùng.
+- **Chỉ một file lock, ở root, được sinh ra và không commit.** `flutter pub get` ghi `pubspec.lock`, và `.gitignore` ở root bỏ qua mọi `*.lock` (nên cả `Gemfile.lock` và `Podfile.lock`). Version được ghim trong `pubspec_dependencies.yaml` (RULE-74) và version Flutter trong `.fvmrc`; CI resolve bằng `flutter pub get` thường. Nếu thấy `pubspec.lock` xuất hiện trong package con, tức là có ai đó đã chạy `pub get` sai chỗ. Hãy xoá chúng đi, vì chỉ file ở root được dùng.
 
 ---
 
@@ -266,7 +267,7 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `WEB_DOMAIN` và `APP_LINK_MODE` là `native_only: true` trong manifest: Gradle và Xcode đọc chúng, không có code Dart nào đọc. Cả hai đều không được khai trong `EnvConstants`; Gradle đọc `WEB_DOMAIN`, còn entitlements iOS đọc cả hai (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`). Giữ cả hai trong file env. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env, mục `env:` của manifest và, nếu Dart đọc nó, cả `EnvConstants`.
+> `WEB_DOMAIN` và `APP_LINK_MODE` là `native_only: true` trong manifest: Gradle và Xcode đọc chúng, không có code Dart nào đọc. Cả hai đều không được khai trong `EnvConstants`; Gradle đọc `WEB_DOMAIN`, còn entitlements iOS đọc cả hai (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` trong `apps/mobile/ios/Runner/Runner.entitlements`) khi bạn bật khối associated-domains đang bị comment ở đó ([`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link)); cho tới lúc đó không cấu hình iOS nào đọc hai key này. Giữ cả hai trong file env. `WEB_DOMAIN` còn là host của intent-filter App Links trên Android — giá trị rỗng sẽ thành `example.invalid` (tên miền dành riêng), không bao giờ thành "mọi link https" — xem [`04_routing.md` §9](../guides/04_routing.md#9-thiết-lập-deep-link). Key nào sản phẩm cần (API key bản đồ, URL socket) thì thêm đồng thời vào các file env, mục `env:` của manifest và, nếu Dart đọc nó, cả `EnvConstants`.
 
 > [!WARNING]
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
@@ -302,7 +303,7 @@ Với `env.dev` đã commit giữ nguyên, app sample chạy được nhưng **k
 
 | Bước | Màn hình | Vì sao |
 | :--- | :--- | :--- |
-| 1 | Một màn splash: trên Android là splash Dart (logo, "Template", "Clean Architecture for Flutter", một spinner); trên iOS splash native được giữ suốt quá trình khởi động | `platforms.<p>.splash` trong manifest. Trong lúc đó module auth thử khôi phục phiên; không có token đã lưu thì nó trả lời "đã đăng xuất" ngay tại chỗ, không gọi mạng |
+| 1 | Một màn splash: trên Android là splash Dart (logo, "Codebase", "Ứng dụng Flutter, sẵn sàng để phát triển", một spinner); trên iOS splash native được giữ suốt quá trình khởi động | `platforms.<p>.splash` trong manifest. Trong lúc đó module auth thử khôi phục phiên; không có token đã lưu thì nó trả lời "đã đăng xuất" ngay tại chỗ, không gọi mạng |
 | 2 | Onboarding: "Welcome to Codebase" và nút **Get Started** | `feature_onboarding` đóng góp entry location của lần chạy đầu. Nó chỉ hiện một lần: cờ được lưu lại, nên lần chạy sau bỏ qua |
 | 3 | Đăng nhập: "Welcome Back", một ô email và một ô mật khẩu | **Get Started** đi tới trang login của `feature_auth`. Form tự kiểm tra đầu vào — dạng email, mật khẩu ít nhất 6 ký tự — và không gửi gì cho tới khi cả hai đạt |
 | 4 | Nút quay spinner, rồi một toast "A network error occurred. Please try again.", và bạn ở lại màn hình đăng nhập | Request là `POST /user/login` tới một `BASE_URL` rỗng, tức một đường dẫn không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
@@ -377,7 +378,7 @@ Hãy xác nhận tên file trên thiết bị trước (`adb shell run-as <appli
 
 ### Từ VS Code
 
-`.vscode/launch.json` đã định nghĩa sẵn ba cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)**. Chọn một trong panel Run and Debug. Mỗi cấu hình tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `apps/mobile/`, vì đó là nơi Dart extension neo project).
+`.vscode/launch.json` đã định nghĩa sẵn năm cấu hình — **App (Dev)**, **App (Staging)**, **App (Prod)** cho `apps/mobile`, và **Admin (Web, Dev)**, **Admin (Desktop, Dev)** cho `apps/admin`. Chọn một trong panel Run and Debug. Các cấu hình App tự set `--flavor` và `--dart-define-from-file` (đường dẫn env tính tương đối với `apps/mobile/`, vì đó là nơi Dart extension neo project); các cấu hình Admin chạy `apps/admin/lib/main.dart` với `env.dev` của nó, trên Chrome hoặc trên desktop, và cần runner `web/` hay desktop tương ứng đã được scaffold trước: công thức nằm trong [`apps/admin/README.md`](../../../apps/admin/README.md).
 
 ---
 
@@ -407,7 +408,7 @@ Template được phát hành với các tên giữ chỗ, và vài định danh
 | Cái gì | Đổi ở đâu |
 | :--- | :--- |
 | Tên hiển thị, theo flavor | `APP_NAME` trong `apps/mobile/env.dev`, `env.stg` và `env.prod`. Dart đọc nó làm tiêu đề. Trên Android, `build.gradle.kts` biến nó thành nhãn launcher `app_name` (`"Codebase"` khi thiếu key). Trên iOS, nhãn là build setting `APP_DISPLAY_NAME` của từng cấu hình Runner trong `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*) |
-| Tên hiển thị dự phòng | `app.name` trong `apps/<id>/app_manifest.yaml`, rồi `dart tools/composer/composer.dart sync` |
+| Tên hiển thị dự phòng | `app.name` trong `apps/<id>/app_manifest.yaml`, rồi `dart tools/composer/composer.dart sync`. `test/app_profile_test.dart` của mỗi app đọc tên từ manifest, nên không test nào cần sửa |
 | Application ID của Android | `namespace` và `applicationId` trong `apps/mobile/android/app/build.gradle.kts` (`com.example.codebase`; flavor `dev` và `staging` nối thêm `.dev` và `.stg` qua `applicationIdSuffix`). Chuyển `src/main/kotlin/com/example/codebase/` sang đường dẫn package mới và sửa dòng `package` của `MainActivity.kt`: manifest gọi nó là `.MainActivity`, tên này được resolve theo `namespace` |
 | Bundle ID của iOS | mọi `PRODUCT_BUNDLE_IDENTIFIER` trong `project.pbxproj`: `com.example.codebase` (prod), `.dev`, `.staging`, và một dòng `.RunnerTests` cho mỗi cấu hình (`grep -n PRODUCT_BUNDLE_IDENTIFIER`) |
 | Team ký của iOS | mọi `DEVELOPMENT_TEAM` trong `project.pbxproj` là Apple team ID của tác giả template. Thay bằng của bạn, hoặc xoá đi và chọn team trong Xcode |
@@ -415,7 +416,7 @@ Template được phát hành với các tên giữ chỗ, và vài định danh
 | Firebase | các ID bạn đăng ký: chạy `dart tools/firebase/firebase_config.dart --app mobile` với base bundle ID mới (§3.1), hoặc đặt `package_name` mới vào các file `google-services.json` stub ở §3.2 |
 | Fastlane | `app_bundle_ids.ios` và `.android` trong `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-id)); hậu tố flavor ở đó phải khớp với Gradle và Xcode |
 | Icon và splash | các ảnh dưới `assets/branding/`, rồi `dart tools/theme_generator/theme_setting.dart --app mobile` (nó đọc `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở thư mục gốc repo) |
-| Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb` |
+| Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb`, và chữ trên splash `appName` ("Codebase") cùng `tagline` ("Ứng dụng Flutter, sẵn sàng để phát triển") trong `modules/splash/feature/assets/language/{en,vi}.arb` — giữ cùng các key ở cả hai file (`arch_check` R21) |
 
 `apps/admin` chưa có project native. Khi tạo runner cho nó ([`13_app_composition.md` § 7](../guides/13_app_composition.md#thêm-một-platform)), hãy truyền reverse domain của bạn cho `flutter create --org` thay vì `com.example`.
 
@@ -438,8 +439,11 @@ Tên package Dart (`codebase` ở gốc, hai app `mobile_app` và `admin_app`, m
 | `.github/ISSUE_TEMPLATE/config.yml` | ba link `github.com/CaoGiaHieu-dev/flutter-monorepo-codebase` |
 | `LICENSE`, tiêu đề và chân trang của `README.md` / `README.vi.md`, `CLAUDE.md` | tên tác giả và tên dự án |
 | `CHANGELOG.md` | link `[Unreleased]` ở cuối, và lịch sử riêng của template |
-| `tools/code_review/` | tên dự án trong `review_prompt.md` và chân trang báo cáo trong `lib/services/language_service.dart` (phần AI review tuỳ chọn) |
+| `tools/code_review/` | tên dự án trong `review_prompt.md` và chân trang báo cáo trong `lib/services/language_service.dart` (phần AI review tuỳ chọn). Ngôn ngữ báo cáo mặc định là `en` (`reportLanguage` trong `code_review_config.json`; `.github/workflows/code_review.yml` dùng nó cho pull request) |
+| `.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml` | các label `bug`, `enhancement` và `triage` phải tồn tại trong repository của bạn; hãy tạo chúng, hoặc sửa `labels:` — một label không tồn tại thì không được gắn |
 | `azure-ci-cd.yml` | tên pool `codebase`: một pool self-hosted do bạn tạo (chỉ khi dùng Azure) |
+
+Khi dùng template, bạn cũng có thể bắt đầu một lịch sử mới (`rm -rf .git && git init`, hoặc squash) thay vì thừa hưởng lịch sử của template: nó bỏ đi phần kết quả build Gradle cũ (§2) và các commit của tác giả.
 
 Khoá ký và secret CI không phải giá trị giữ chỗ trong repo; bạn tự tạo chúng: [`../operations/02_fastlane_release.md` § 4](../operations/02_fastlane_release.md#4-ký-ứng-dụng) và [`../operations/01_cicd.md` § 7](../operations/01_cicd.md#7-secrets).
 

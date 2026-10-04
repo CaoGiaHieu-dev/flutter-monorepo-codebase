@@ -296,6 +296,24 @@ cd apps/mobile
 flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
+### Những gì bạn sẽ thấy ở lần chạy đầu
+
+Với `env.dev` đã commit giữ nguyên, app sample chạy được nhưng **không đăng nhập được**: `BASE_URL` rỗng và repository không kèm backend nào. Đó là điều bình thường, không phải setup hỏng. Trình tự như sau:
+
+| Bước | Màn hình | Vì sao |
+| :--- | :--- | :--- |
+| 1 | Một màn splash: trên Android là splash Dart (logo, "Template", "Clean Architecture for Flutter", một spinner); trên iOS splash native được giữ suốt quá trình khởi động | `platforms.<p>.splash` trong manifest. Trong lúc đó module auth thử khôi phục phiên; không có token đã lưu thì nó trả lời "đã đăng xuất" ngay tại chỗ, không gọi mạng |
+| 2 | Onboarding: "Welcome to Codebase" và nút **Get Started** | `feature_onboarding` đóng góp entry location của lần chạy đầu. Nó chỉ hiện một lần: cờ được lưu lại, nên lần chạy sau bỏ qua |
+| 3 | Đăng nhập: "Welcome Back", một ô email và một ô mật khẩu | **Get Started** đi tới trang login của `feature_auth`. Form tự kiểm tra đầu vào — dạng email, mật khẩu ít nhất 6 ký tự — và không gửi gì cho tới khi cả hai đạt |
+| 4 | Nút quay spinner, rồi một toast "A network error occurred. Please try again.", và bạn ở lại màn hình đăng nhập | Request là `POST /user/login` tới một `BASE_URL` rỗng, tức một đường dẫn không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
+
+Để vượt qua bước 4, chọn một trong hai cách:
+
+- **Trỏ nó tới một backend.** Đặt `BASE_URL` trong `apps/mobile/env.dev` thành server của bạn (chỉ URL — file này được commit). Server phải trả lời lời gọi đăng nhập của sample; endpoint, body request và các trường response nằm ở [`../guides/08_networking.md` § 8](../guides/08_networking.md#hợp-đồng-đăng-nhập-của-sample), cùng với điều người dùng đọc cho từng lỗi.
+- **Tự viết data source.** Giữ hợp đồng domain (`IAuthRepository`, `LoginParams`, `UserEntity`) và thay những gì nằm sau nó bằng transport của bạn — Firebase, GraphQL, một dạng REST khác ([`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md)).
+
+Test của module (`cd modules/auth/data && flutter test`) chạy với một data source giả, nên chúng đạt mà không cần server nào.
+
 ### Build APK
 
 ```bash

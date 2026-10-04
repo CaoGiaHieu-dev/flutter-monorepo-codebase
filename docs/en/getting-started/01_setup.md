@@ -294,6 +294,24 @@ cd apps/mobile
 flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
+### What you will see on the first run
+
+With the committed `env.dev` as it is, the sample app runs but **cannot sign in**: `BASE_URL` is empty and the repository ships no backend. That is expected, not a failed setup. The sequence:
+
+| Step | Screen | Why |
+| :--- | :--- | :--- |
+| 1 | A splash: on Android the Dart splash (logo, "Template", "Clean Architecture for Flutter", a spinner); on iOS the native splash stays up for the whole boot | `platforms.<p>.splash` in the manifest. Meanwhile the auth module tries to restore a session; with no stored token it answers "signed out" locally, without a network call |
+| 2 | Onboarding: "Welcome to Codebase" and a **Get Started** button | `feature_onboarding` contributes the first-launch entry location. It is shown once: the flag is stored, so the next launch skips it |
+| 3 | Sign-in: "Welcome Back", an email field and a password field | **Get Started** goes to `feature_auth`'s login page. The form checks the input itself — an email shape, a password of at least 6 characters — and sends nothing until both pass |
+| 4 | A spinner on the button, then a toast, "A network error occurred. Please try again.", and you stay on the sign-in screen | The request is `POST /user/login` against an empty `BASE_URL`, a path with no host, which the HTTP client rejects before any connection is made |
+
+To get past step 4, do one of these two:
+
+- **Point it at a backend.** Set `BASE_URL` in `apps/mobile/env.dev` to your server (a URL only — the file is committed). The server must answer the sample's sign-in call; the endpoint, request body and response fields are in [`../guides/08_networking.md` § 8](../guides/08_networking.md#the-sample-sign-in-contract), together with what the user reads for each failure.
+- **Write your own data source.** Keep the domain contract (`IAuthRepository`, `LoginParams`, `UserEntity`) and replace what sits behind it with your transport — Firebase, GraphQL, a different REST shape ([`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md)).
+
+The module's tests (`cd modules/auth/data && flutter test`) run against a fake data source, so they pass with no server at all.
+
 ### Building an APK
 
 ```bash

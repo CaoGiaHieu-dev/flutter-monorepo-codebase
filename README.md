@@ -554,6 +554,15 @@ cd apps/mobile   # required — the workspace root has no android/ or ios/ proje
 flutter run --flavor dev --dart-define-from-file=env.dev
 ```
 
+> [!NOTE]
+> **Expect a sign-in screen that cannot sign in.** The sample app shows a splash, then onboarding,
+> then the sign-in form. The committed `env.dev` leaves `BASE_URL` empty and the repository ships no
+> backend, so submitting the form ends in the toast "A network error occurred". To go further, set
+> `BASE_URL` in `apps/mobile/env.dev` to a server that answers the sample's sign-in call, or replace
+> the sample data source with your own. What each screen shows, and the request and response the
+> sample expects: [`getting-started/01_setup.md`](docs/en/getting-started/01_setup.md) § 6 and
+> [`guides/08_networking.md`](docs/en/guides/08_networking.md#the-sample-sign-in-contract).
+
 ### 5. Build an APK
 ```bash
 cd apps/mobile   # required — building from the workspace root fails with a misleading Gradle error

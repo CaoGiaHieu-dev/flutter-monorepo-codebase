@@ -268,6 +268,59 @@ error: (failure) =>
 
 Mọi code từ 1000 tới dưới 2000 đều đọc ra là `networkError` trừ khi một dòng ở trên nêu tên nó. Một feature có thể nói điều cụ thể hơn — sai mật khẩu, không có người dùng — thì tự phân loại failure và dùng ARB của riêng nó (RULE-34); `failureMessage` là phương án dự phòng cho mọi thứ chung chung. Mã nằm trong `ErrorCodes` (`platform/foundation/kernel/lib/src/utils/error_codes.dart`): không bao giờ so với một literal.
 
+### Hợp đồng đăng nhập của sample
+
+`feature_auth` trong sample đăng nhập vào một backend REST mà repository này không kèm theo. `AuthRemoteDataSource` (`modules/auth/data/lib/src/data_sources/remote/auth_remote_data_source.dart`) gọi hai endpoint, khai trong `AuthApiConstants` (`modules/auth/data/lib/src/utils/auth_api_constants.dart`) và nối vào `BASE_URL`:
+
+| Lời gọi | Request | Response |
+|:--|:--|:--|
+| Đăng nhập: `POST /user/login` | body JSON `{"email": "<email>", "password": "<password>"}` | envelope bên dưới |
+| Gia hạn: `POST /user/refresh-token` | không có body; `Authorization: Bearer <token đã lưu>` | cùng envelope đó |
+
+Backend trả lời lời gọi đăng nhập như sau thì app sample đăng nhập được:
+
+```json
+{
+  "statusCode": 200,
+  "message": "ok",
+  "data": {
+    "id": "u_123",
+    "email": "ada@example.com",
+    "name": "Ada",
+    "role": "customer",
+    "token": "<access token>"
+  }
+}
+```
+
+Envelope là `BaseEntity<UserModel>` (ở trên) và `data` là `UserModel` (`modules/auth/data/lib/src/models/user_model.dart`):
+
+| Trường | Kiểu | Sample làm gì với nó |
+|:--|:--|:--|
+| `statusCode` | int, tùy chọn (mặc định `200`) | phải là `200`; giá trị khác là response bị từ chối, kể cả khi HTTP status là `200` |
+| `message` | string, tùy chọn | chỉ là chẩn đoán cho log; người dùng không bao giờ đọc nó (RULE-34) |
+| `data.id` | string, **bắt buộc** | id người dùng; body thiếu nó thì không parse được |
+| `data.email`, `data.name` | string, tùy chọn | được chép sang `UserEntity` |
+| `data.role` | string, tùy chọn | `customer`, `owner` hoặc `none`; cách viết khác thành `UserRole.unknown`; vắng thì giữ `null` |
+| `data.token` | string, tùy chọn | credential của phiên: `AuthRepositoryImpl` ghi nó vào secure storage và `AuthInterceptor` gửi nó dưới dạng `Authorization: Bearer <token>` ở các request sau. Nó không bao giờ tới `UserEntity`. Thiếu nó thì người dùng vẫn đăng nhập được, nhưng lần mở app kế tiếp không có phiên nào để khôi phục |
+
+Đăng nhập chỉ thành công khi lời gọi không lỗi, `statusCode` là `200` **và** có `data` (`AuthRepositoryImpl._authenticate`). Người dùng đọc gì, bằng chính câu chữ của sample (một toast do app shell hiện từ `ISessionState.sessionFailures`, không phải do page):
+
+| Backend trả lời | Failure | Người dùng đọc |
+|:--|:--|:--|
+| HTTP `401` | `AuthFailure(401)` | "Invalid credentials", và ô mật khẩu bị xóa |
+| HTTP `404` | `ServerFailure(404)` | "User not found" |
+| HTTP `5xx` | `ServerFailure(status)` | "The server is unavailable right now. Please try again later." |
+| HTTP `403`, mọi `4xx` khác | `AuthFailure(403)` / `ServerFailure(status)` | "Something went wrong" |
+| HTTP `200` với `statusCode` khác `200`, hoặc không có `data` | `ServerFailure(RESPONSE_REJECTED)` | "Something went wrong" |
+| body không parse được (thiếu `data.id`, `data` không phải object) | `ServerFailure(UNKNOWN)`, đồng thời báo cho `IErrorReporter` nếu app có đăng ký | "Something went wrong" |
+| không tới được host | `NetworkFailure(CONNECTION_ERROR)` | trước hết là hộp thoại thử lại; sau **Cancel**, "No internet connection. Check your connection and try again." |
+| `BASE_URL` rỗng (`env.dev` đã commit) | `NetworkFailure(NETWORK_UNKNOWN)` | "A network error occurred. Please try again." — đường dẫn `/user/login` không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
+
+Lời gọi đăng nhập được đánh dấu `EXTRA_CAN_REFRESH_TOKEN: false`, nên `401` ở đó là sai mật khẩu chứ không phải phiên hết hạn (bước 6). Việc gia hạn chạy khi app khởi động mà có token đã lưu, và khi một request khác nhận `401`. Không có token đã lưu thì repository trả lời "đã đăng xuất" mà không gọi server. `401`, `403` hoặc body bị từ chối từ `/user/refresh-token` kết thúc phiên và xóa credential đã lưu; một lỗi không tới được server thì giữ phiên, và app mở ra ở trạng thái đã đăng nhập bằng người dùng lưu ở lần đăng nhập cuối (bước 9).
+
+Để thử app mà không phải viết backend, chạy một HTTP server bất kỳ trả lời lời gọi đăng nhập như trên rồi đặt `BASE_URL` trỏ tới nó trong `apps/mobile/env.dev` (`curl -X POST "$BASE_URL/user/login" -H 'Content-Type: application/json' -d '{"email":"ada@example.com","password":"secret1"}'` cho thấy app sẽ nhận được gì). `env.dev` được commit, nên chỉ đặt URL vào đó, không bao giờ đặt credential. Android emulator tới máy chủ qua `10.0.2.2`, không phải `localhost`, và repository này không đặt cho phép cleartext traffic nào cho Android, nên URL `http://` thuần bị chặn ở đó cho tới khi bạn thêm — hãy dùng `https://` hoặc cho phép trong manifest của app bạn. Repository cố ý không có mock backend: template chỉ ra hình dạng và để transport cho bạn. Muốn đăng nhập vào một API khác, giữ `IAuthRepository`, `LoginParams` và `UserEntity` rồi đổi những gì nằm sau chúng: đường dẫn trong `AuthApiConstants`, tên `@JsonKey` trong `UserModel`, hoặc cả `AuthRemoteDataSource` ([`02_new_domain_data.md`](02_new_domain_data.md)). `modules/auth/data/test/` test repository với một data source giả, nên các test đó không cần server.
+
 ## 9. Cắm luồng refresh token
 
 Bạn không tự nối interceptor refresh. `NetworkConfigImpl` cài nó ngay khi có module đăng ký một `ISessionGateway` (ở sample là `AuthSessionGatewayImpl` của `data_auth`, `modules/auth/data/lib/src/session/auth_session_gateway_impl.dart`). Không có gateway nào thì `401` tới thẳng bên gọi, nguyên vẹn.

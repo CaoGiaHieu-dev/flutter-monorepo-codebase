@@ -180,9 +180,58 @@ Thứ app phải đăng ký cho một package nó ghép — `FirebaseOptions` ch
 
 1. Xem cái gì chặn nó: mục *Not targeted — and what blocks it* của báo cáo nêu tên mọi package đã ghép mà `platforms:` trong pubspec không liệt kê nó (`core_database` không có web, `core_notifications` không có Windows hay Linux).
 2. Khai nó, runner còn chờ được tạo: `platforms.<p>: { runner: scaffold }`, rồi `dart tools/composer/composer.dart sync --app <id>`.
-3. Tạo runner một lần, bằng dòng lệnh báo cáo in ra, ví dụ `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .` (hãy đặt reverse domain của riêng bạn vào `--org`: platform nào có application ID hoặc bundle ID thì dựng nó từ giá trị này), rồi đổi khai báo thành `runner: committed`. Runner khai `committed` cần có thư mục của nó, runner `scaffold` thì không được có (V6).
+3. Tạo runner một lần, bằng dòng lệnh báo cáo in ra, ví dụ `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .` (hãy đặt reverse domain của riêng bạn vào `--org`: platform nào có application ID hoặc bundle ID thì dựng nó từ giá trị này), rồi đổi khai báo thành `runner: committed`. Runner khai `committed` cần có thư mục của nó, runner `scaffold` thì không được có (V6). Với `android` hay `ios`, runner mà `flutter create` viết ra chưa có flavor nào: nối chúng trước lần build `--flavor` đầu tiên ([Flavor native cho runner mobile mới](#flavor-native-cho-runner-mobile-mới)); V15 từ chối một runner đã commit mà thiếu một flavor.
 4. Đặt thứ platform bật, nếu mặc định chưa đúng: `push`, `deep_links`, `orientation`, và với platform desktop là `window: { initial: [1440, 900], min: [1024, 700] }`, cần hook `configureWindow` (không có thì `P05`). Một platform tắt push hay deep link sẽ log một dòng nêu tên key và không khởi tạo gì.
 5. Chạy `composer verify` và smoke test. Trên web không có tuỳ chọn `--flavor`: truyền `--dart-define=APP_FLAVOR=<flavor>` — công cụ Flutter từ chối `FLUTTER_APP_FLAVOR`, tên riêng của framework, và shell chỉ đọc `APP_FLAVOR` trên web.
+
+### Flavor native cho runner mobile mới
+
+`flutter create` viết một runner không có flavor nào, nên `flutter run --flavor dev` fail trên nó, và `composer verify` (V15) từ chối một runner Android hay iOS đã commit mà thiếu một flavor mà `flavors:` khai — nó nêu tên flavor và mục này. `apps/mobile` là bản tham chiếu; mọi thứ dưới đây được chép từ file của nó. `flavors:` là một tập đóng (`dev`, `staging`, `prod`), và mỗi tên đồng thời là flavor Gradle, scheme Xcode và khoá của file env:
+
+| Flavor | `applicationIdSuffix` Android | `PRODUCT_BUNDLE_IDENTIFIER` iOS | File env | Scheme Xcode, configuration |
+|:--|:--|:--|:--|:--|
+| `dev` | `.dev` | `<id>.dev` | `env.dev` | `dev`, `Debug-dev` / `Profile-dev` / `Release-dev` |
+| `staging` | `.stg` | `<id>.staging` | `env.stg` | `staging`, `Debug-staging` / `Profile-staging` / `Release-staging` |
+| `prod` | không có | `<id>` | `env.prod` | `prod`, `Debug-prod` / `Profile-prod` / `Release-prod` |
+
+1. **File env.** Tạo `apps/<id>/env.dev`, `env.stg` và `env.prod` với các key mà `env:` khai (V11); `composer new` chỉ ghi `env.dev`, còn `env.prod` bị gitignore trong `apps/mobile`. Truyền một file bằng `--dart-define-from-file=env.<file>`.
+2. **Android, `android/app/build.gradle.kts`.** Chép từ `apps/mobile`: `buildFeatures { resValues = true }`; map `envs` ở đầu file, giải mã `-Pdart-defines`; trong `defaultConfig`, các dòng `resValue("string", "WEB_DOMAIN", …)` và `resValue("string", "app_name", …)` mà `AndroidManifest.xml` đọc dưới dạng `@string/WEB_DOMAIN` và `@string/app_name`; và các flavor, mỗi flavor một `DEEP_LINK_SCHEME` — scheme của intent filter deep link trong manifest (`@string/DEEP_LINK_SCHEME`), để ba bản cài không tranh nhau một liên kết:
+
+```kotlin
+flavorDimensions += "environment"
+
+productFlavors {
+    create("dev") {
+        dimension = "environment"
+        applicationIdSuffix = ".dev"
+        resValue("string", "DEEP_LINK_SCHEME", "myapp-dev")
+    }
+    create("staging") {
+        dimension = "environment"
+        applicationIdSuffix = ".stg"
+        resValue("string", "DEEP_LINK_SCHEME", "myapp-stg")
+    }
+    create("prod") {
+        dimension = "environment"
+        resValue("string", "DEEP_LINK_SCHEME", "myapp")
+    }
+}
+```
+
+   `apps/mobile` còn cho mỗi flavor một `signingConfig` (một file properties cho mỗi flavor, cùng một chốt chặn từ chối bản release staging hay prod bị ký bằng khoá dev công khai — [`02_fastlane_release.md` § 4](../operations/02_fastlane_release.md)) và một thư mục `android/app/src/<flavor>/` chứa `google-services.json` và icon launcher của flavor đó; hãy chép chúng khi app có ký hoặc dùng Firebase. Chuỗi `APP_ID` trong `defaultConfig` của nó không có gì đọc: bỏ nó đi.
+3. **iOS, Xcode** (mở `ios/Runner.xcworkspace`). *Project → Info → Configurations*: nhân đôi `Debug`, `Profile` và `Release` cho mỗi flavor rồi đặt tên bản sao là `Debug-dev`, `Profile-dev`, `Release-dev`, v.v. `Debug-<flavor>` lấy `Flutter/Debug.xcconfig` làm base configuration, `Profile-<flavor>` và `Release-<flavor>` lấy `Flutter/Release.xcconfig` (các file do Pods sinh ra đến sau `pod install`). Trên target *Runner*, đặt theo từng configuration `PRODUCT_BUNDLE_IDENTIFIER` (bảng trên), `APP_DISPLAY_NAME` và `DEEP_LINK_SCHEME`, mà `Info.plist` đọc dưới dạng `$(APP_DISPLAY_NAME)` và trong `CFBundleURLSchemes`; `apps/mobile` còn đặt `LAUNCH_SCREEN_STORYBOARD` theo flavor. *Product → Scheme → Manage Schemes*: nhân đôi `Runner` thành `dev`, `staging` và `prod`, tick **Shared** (chúng được lưu dưới `ios/Runner.xcodeproj/xcshareddata/xcschemes/`, nơi V15 đọc) và trong từng scheme trỏ Run và Test vào `Debug-<flavor>`, Profile vào `Profile-<flavor>`, Analyze vào `Debug-<flavor>` và Archive vào `Release-<flavor>`. Chép "Run Script" ở *Build → Pre-actions* của `dev.xcscheme` trong `apps/mobile` vào mỗi scheme: nó ghi `Flutter/Environment.xcconfig` từ `$DART_DEFINES` (`WEB_DOMAIN`, `APP_LINK_MODE`), mà `Flutter/Debug.xcconfig` và `Flutter/Release.xcconfig` include bằng `#include?`; thêm cùng dòng include đó vào cả hai file của bạn.
+4. **CocoaPods, `ios/Podfile`.** CocoaPods coi một configuration nó không được báo là release, nên hãy nêu tên từng cái, như `apps/mobile/ios/Podfile` làm, rồi chạy `pod install` trong `ios/`:
+
+```ruby
+project 'Runner', {
+  'Debug' => :debug, 'Debug-dev' => :debug, 'Debug-staging' => :debug, 'Debug-prod' => :debug,
+  'Profile' => :release, 'Profile-dev' => :release, 'Profile-staging' => :release, 'Profile-prod' => :release,
+  'Release' => :release, 'Release-dev' => :release, 'Release-staging' => :release, 'Release-prod' => :release,
+}
+```
+
+5. **fastlane, nếu bạn phát hành app bằng nó.** Các lane nằm trong `apps/mobile/fastlane` và đọc flavor từ `Config.yaml`; hãy chép thư mục cho app khác và giữ các quy ước của nó, mà các lane cố định trong `apps/mobile/fastlane/modules/helpers.rb`: `valid_flavors` liệt kê các flavor bạn đã nối, `app_bundle_ids` giữ ID gốc cho mỗi platform, và các lane nối thêm hậu tố của bảng trên (`.dev`, `.stg` trên Android, `.staging` trên iOS, prod không có gì) rồi truyền `env.dev`, `env.stg` hoặc `env.prod`. Một hậu tố khác với hậu tố trong Gradle hay Xcode sẽ upload nhầm application.
+6. **Kiểm tra.** `dart tools/composer/composer.dart verify` (V15 đối chiếu các flavor Gradle, các scheme shared và ba configuration mỗi flavor với `flavors:`), rồi `cd apps/<id> && flutter run --flavor dev --dart-define-from-file=env.dev`. V15 đọc file như văn bản — nó không thấy được base configuration sai hay thiếu mục Podfile, chỉ lần build mới thấy.
 
 ### Pin chứng chỉ
 
@@ -198,7 +247,7 @@ flavors:
 
 ### Thêm hoặc gỡ một module
 
-Thêm dòng vào `modules:` rồi chạy `sync`. Nếu module đăng ký một contract có trong catalog, `verify` giờ sẽ nói ra — *declared absent but ISessionState is registered at …* — và bạn khai nó là `provided`. Gỡ một module thì `verify` nêu tên key vừa mất nơi cung cấp và in dòng `absent` để dán. `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` làm cả hai lần đổi cho các nơi cung cấp duy nhất và tự chạy `sync`.
+Thêm dòng vào `modules:` rồi chạy `sync`. Nếu module đăng ký một contract có trong catalog, `verify` giờ sẽ nói ra — *declared absent but ISessionState is registered at …* — và bạn khai nó là `provided`. Gỡ một module thì `verify` nêu tên key vừa mất nơi cung cấp và in dòng `absent` để dán — hoặc chạy `dart tools/composer/composer.dart reconcile --reason "module x removed"`, lệnh khai `absent` mọi capability `provided`, trong mọi manifest app, mà không còn gì đăng ký nữa (lý do là chữ của bạn, rồi đến thứ shell làm khi thiếu nó), rồi `sync`. `dart tools/sample_cleanup/remove_sample.dart <bundle> --apply` chạy cả hai cho bạn. Chiều ngược lại vẫn là việc của bạn: một module bạn thêm vào mà đăng ký một contract app đã khai `absent` sẽ khiến `verify` đòi `provided`.
 
 ### Cung cấp ngôn ngữ khác, đổi palette hay giới hạn
 
@@ -224,7 +273,7 @@ Sau đó, từ gốc repo: `flutter pub get`, `dart run build_runner build --wor
 
 ## 9. Gate 0 kiểm tra những gì
 
-`composer verify` sinh lại mọi file được sinh và fail khi có sai lệch (V13), đồng thời đối chiếu khai báo với mã nguồn: từ vựng và khoảng giá trị (V1, V14), trạng thái capability so với thứ các package đã ghép và app đăng ký (V2–V4), các công tắc platform so với thứ app ghép và thứ mỗi package hỗ trợ (V5–V8), quyết định pin theo flavor (V9), thứ một package đã ghép cần app đăng ký (V10), các file env (V11), điểm vào và smoke test (V12), các runner native (V6, V15), thứ tự nhóm DI (V16) và nút workspace duy nhất (V17, RULE-16). `dart tools/composer/composer.dart describe --catalog` in danh sách kiểm tra thật; hướng dẫn này không sao chép nó.
+`composer verify` sinh lại mọi file được sinh và fail khi có sai lệch (V13), đồng thời đối chiếu khai báo với mã nguồn: từ vựng và khoảng giá trị (V1, V14), trạng thái capability so với thứ các package đã ghép và app đăng ký (V2–V4), các công tắc platform so với thứ app ghép và thứ mỗi package hỗ trợ (V5–V8), quyết định pin theo flavor (V9), thứ một package đã ghép cần app đăng ký (V10), các file env (V11), điểm vào và smoke test (V12), các runner native (V6, và V15: một runner Android hay iOS đã commit có một flavor cho mỗi flavor mà manifest khai), thứ tự nhóm DI (V16) và nút workspace duy nhất (V17, RULE-16). `dart tools/composer/composer.dart describe --catalog` in danh sách kiểm tra thật; hướng dẫn này không sao chép nó.
 
 Đọc một thông báo từ trái sang phải: `<file>: <key>: <vấn đề> — <cách sửa>`. Phép quét đằng sau V3 và V10 đọc mã nguồn, không đọc graph — một `getIt.register…` viết tay vô hình với nó — nên `checkAppContract` vẫn là thẩm quyền cuối. V3, V10, V11, V12 và V17 làm `verify` fail trong khi `sync` chỉ cảnh báo và vẫn ghi, để một chỉnh sửa dở dang vẫn sinh lại được; V7 và V8 từ chối ở cả hai, trước khi ghi bất cứ thứ gì.
 
@@ -253,6 +302,7 @@ cd apps/<id> && flutter test                             # smoke test (checkAppC
 | `verify`: `declared absent but … is registered at <file>:<line>` | Một package đã ghép đăng ký nó | Khai nó là `provided`, hoặc thôi ghép thứ đăng ký nó |
 | `verify`: `out of date: … (facts)` | Manifest đã đổi, hoặc vùng được sinh bị sửa tay | `dart tools/composer/composer.dart sync --app <id>`; không bao giờ sửa vùng `composer:managed` (RULE-16) |
 | `verify`: `flavors.prod.ssl_pinning: decide …` | Một flavor của app có platform Android hoặc iOS chưa có quyết định pin | `pins: [...]` hoặc `disabled: "lý do"` (ở trên) |
+| `verify`: `flavors.<f>: declared, but … has no productFlavor / scheme / build configuration named …` | Một runner mobile đã commit thiếu một flavor mà manifest khai | Nối nó (công thức ở trên), hoặc xoá flavor đó khỏi `flavors:` |
 | `verify`: `<package> does not support <platform>` | Một package đã ghép, hoặc package nó liên kết, thiếu platform đó | Chỉ khai các platform mà mọi package được liên kết hỗ trợ, hoặc thôi phụ thuộc vào nó |
 | Boot dừng: *`<id>` is running on `<platform>`, which its manifest does not declare* | Platform không nằm dưới `platforms:` | Khai nó (ở trên), chạy trên một platform đã khai, hoặc `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` để chạy thử nhanh |
 | Boot dừng: `P03` trên bản release | Một `--dart-define` bắt buộc đang rỗng | Truyền `--dart-define-from-file=env.<flavor>` |

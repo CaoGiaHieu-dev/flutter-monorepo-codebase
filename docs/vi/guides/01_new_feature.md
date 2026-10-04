@@ -406,7 +406,7 @@ App phải chạy được khi xoá bất kỳ feature nào (RULE-05). Gỡ theo
 3. Các thư mục package của module — `modules/<tên>/<layer>/` cho từng tầng nó có (`api`, `domain`, `data`, `feature`), rồi `modules/<tên>/`. `composer verify` báo lỗi với package còn trên đĩa mà không app nào ghép. Module chỉ là một feature thì chỉ có `modules/<tên>/feature/`
 4. `flutter pub get && dart run build_runner build --workspace`
 
-**Với module mẫu, hãy để tool làm.** `remove_sample.dart` thực hiện các bước trên. Quan trọng hơn, nó cho bạn biết điều mà danh sách thủ công ở trên không thể:
+**Với module mẫu, hãy để tool làm.** `remove_sample.dart` thực hiện các bước trên, rồi chạy `composer reconcile`, lệnh khai `absent` — với lý do `sample <bundle> removed: <thứ shell làm khi thiếu nó>` — mọi capability, trong manifest của mọi app, mà nơi cung cấp cuối cùng đã đi cùng bundle (phép quét của chính composer quyết định, không phải một danh sách), và `composer sync`; xong thì `composer verify` xanh. Quan trọng hơn, nó cho bạn biết điều mà danh sách thủ công ở trên không thể:
 
 ```bash
 dart tools/sample_cleanup/remove_sample.dart --list   # cái nào sample, cái nào framework
@@ -440,6 +440,27 @@ Phần *Dọn dẹp* của tutorial đi con đường thủ công một lần, c
 > file nào khác trong app import module (`arch_check` R10 giữ điều đó), và shell dùng chung ở `platform/shell/app_shell/` là
 > package `platform/`, nên R1 cấm nó import module ngay từ đầu. Shell có import `core_ui_kit` ở vài
 > nơi, và điều đó hoàn toàn ổn — đó là package platform, không phải feature có thể gỡ.
+
+
+### Một template đã gỡ sạch
+
+Gỡ cả bảy bundle (`settings`, `onboarding`, `home`, `dashboard`, `splash`, `cache`, rồi `auth`; chạy `auth` sau cùng, hoặc hai lần — `auth_api` được giữ khi còn một package khác đang import nó) để lại framework và không có sản phẩm nào. Tool đã làm: bỏ mọi module khỏi cả hai file `app_manifest.yaml`, xoá `modules/<id>/`, đổi mọi capability vừa mất nơi cung cấp cuối cùng thành `absent` kèm lý do, chạy `composer sync`, và để lại một `modules/.gitkeep` để thư mục rỗng sống sót qua một lần commit.
+
+Bạn đang có gì, và nên chờ đợi gì:
+
+- `platform/` còn nguyên; `apps/mobile` và `apps/admin` không ghép module nào, nên mỗi app khai `absent` mọi capability mà một sample từng cung cấp (`routes`, `tabs`, `session`, `localization`, …). `composer verify`, `arch_check`, `unused_checker` và `flutter analyze` (sau `flutter pub get` và `dart run build_runner build --workspace`) đều qua.
+- `docs_check` qua: một glob được ghi trong tài liệu như `modules/*/feature` không có gì để khớp trong `modules/` rỗng và được chấp nhận ở đó, còn một tham chiếu vào sample đã gỡ là một dòng INFO. Cập nhật hoặc xoá các tài liệu đó lúc rảnh.
+- Hai thứ trong test của mỗi app fail, và tool không sửa test nào. DI smoke test fail với `C05` — *the app has no route module and no navigation tab, so it has no screen to show* — cho tới khi feature đầu tiên của bạn có mặt; đó là shell đang đòi một feature. `test/app_profile_test.dart` ghim các capability mà sample đã cung cấp: hãy cập nhật hoặc xoá các kỳ vọng đó.
+
+Thêm feature đầu tiên bằng generator, nó đăng ký feature vào mọi manifest (`--apps <id>` giới hạn việc đó):
+
+```bash
+dart tools/module_generator/generate.dart 2 notes
+dart tools/module_generator/generate.dart 3 notes
+dart tools/module_generator/generate.dart 1 notes "" 1 2   # Provider, bottom-nav tab
+```
+
+Sau đó `composer verify` nêu tên các capability mà module mới đăng ký (`tabs`, `localization`): khai từng cái là `provided` trong mọi manifest có ghép nó, rồi chạy `dart tools/composer/composer.dart sync`, `flutter pub get`, `dart run build_runner build --workspace` và smoke test của từng app ([`../getting-started/04_first_feature_tutorial.md`](../getting-started/04_first_feature_tutorial.md) đi cùng con đường này với đủ mọi gate).
 
 ---
 

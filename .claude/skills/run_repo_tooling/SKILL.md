@@ -95,8 +95,8 @@ Workflow: [`update_docs`](../update_docs/SKILL.md).
 ## remove_sample
 
 `dart tools/sample_cleanup/remove_sample.dart --list` classifies every package (`framework`, `sample`, `shell`);
-`<bundle>` is a dry run that writes nothing; `<bundle> --apply` removes the bundle, flips the capabilities only it
-provided to `absent` and runs `composer sync`. Bundles: `auth`, `home`, `settings`, `onboarding`, `dashboard`,
+`<bundle>` is a dry run that writes nothing; `<bundle> --apply` removes the bundle, runs `composer reconcile` (declares `absent` every capability whose last provider is gone) and then
+`composer sync`; with every bundle gone `modules/` keeps only `.gitkeep`. Bundles: `auth`, `home`, `settings`, `onboarding`, `dashboard`,
 `splash`, `cache`. It keeps a bundle's `<id>_api` while another package imports it. Exit `1`: failed partway
 (shared files rolled back; deleted directories are not); `64`: unknown flag or bundle. A module you generated is not
 a sample: [`remove_module`](../remove_module/SKILL.md).

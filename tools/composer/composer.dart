@@ -36,6 +36,7 @@ import 'src/report.dart';
 /// dart tools/composer/composer.dart verify
 /// dart tools/composer/composer.dart list
 /// dart tools/composer/composer.dart describe [--app <id>] [--catalog]
+/// dart tools/composer/composer.dart reconcile [--app <id>] [--reason <text>]
 /// dart tools/composer/composer.dart new <id> --platforms <a,b> [--modules <x,y>] [--name <text>]
 /// ```
 ///
@@ -77,7 +78,14 @@ void main(List<String> args) {
   }
 
   final command = args.first;
-  if (!const {'list', 'sync', 'verify', 'describe', 'new'}.contains(command)) {
+  if (!const {
+    'list',
+    'sync',
+    'verify',
+    'describe',
+    'reconcile',
+    'new',
+  }.contains(command)) {
     OutputFormatter.printError('Unknown command `$command`.');
     _printHelp(stderr);
     exit(64);
@@ -105,6 +113,7 @@ void main(List<String> args) {
   var strict = false;
   var catalogOnly = false;
   String? appFilter;
+  String? reason;
   for (var i = 1; i < args.length; i++) {
     switch (args[i]) {
       case '--strict':
@@ -117,6 +126,12 @@ void main(List<String> args) {
           exit(64);
         }
         appFilter = args[++i];
+      case '--reason':
+        if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+          OutputFormatter.printError('`--reason` needs a text.');
+          exit(64);
+        }
+        reason = args[++i];
       default:
         OutputFormatter.printError('Unknown argument `${args[i]}`.');
         _printHelp(stderr);
@@ -126,7 +141,14 @@ void main(List<String> args) {
 
   _guardYaml(
     root,
-    () => _run(command, root, appFilter, strict, catalogOnly: catalogOnly),
+    () => _run(
+      command,
+      root,
+      appFilter,
+      strict,
+      catalogOnly: catalogOnly,
+      reason: reason,
+    ),
   );
 }
 
@@ -160,7 +182,12 @@ void _run(
   String? appFilter,
   bool strict, {
   required bool catalogOnly,
+  String? reason,
 }) {
+  if (reason != null && command != 'reconcile') {
+    OutputFormatter.printError('`--reason` belongs to `reconcile`.');
+    exit(64);
+  }
   final packages = _discoverPackages(root);
   final catalogProblems = <String>[];
   final catalog = readCatalog(packages, why: catalogProblems.add);
@@ -208,6 +235,16 @@ void _run(
       _list(apps, packages, appFilter);
     case 'describe':
       _describeApps(root, apps, packages, catalog!, provisions, appFilter);
+    case 'reconcile':
+      _reconcile(
+        root,
+        apps,
+        packages,
+        catalog!,
+        provisions,
+        appFilter,
+        reason,
+      );
     case 'sync':
       _sync(
         root,
@@ -1627,6 +1664,100 @@ void _sync(
   }
 }
 
+/// `reconcile`: declares `absent` every optional capability an app still says
+/// is `provided` although no composed package (or the app's own `lib/`)
+/// registers its contract any more — the V3 failure a removed module leaves
+/// behind (`tabs: provided` with the last `INavDestinationModule` gone).
+///
+/// The provider is the one V3 uses (`orphanedCapabilities`, the scan of
+/// `tools/shared/contract_scan.dart`), not a list. Each flipped line becomes
+/// `key: { state: absent, reason: "<prefix>: <what the shell does without
+/// it>" }`, [reasonPrefix] being `--reason`. Only the `key: provided` line is
+/// edited; a key it cannot find on one line is reported and left for V3 to
+/// name. Run `sync` afterwards (the facts and report regions follow the
+/// manifest).
+void _reconcile(
+  String root,
+  List<AppManifest> apps,
+  Map<String, String> packages,
+  ShellCatalog catalog,
+  ProvisionIndex provisions,
+  String? appFilter,
+  String? reasonPrefix,
+) {
+  final selected = appFilter == null
+      ? apps
+      : apps.where((a) => a.id == appFilter).toList();
+  if (selected.isEmpty) {
+    OutputFormatter.printError(
+      'No app matches `--app $appFilter`. Known: '
+      '${apps.map((a) => a.id).join(', ')}.',
+    );
+    exit(1);
+  }
+
+  var flipped = 0;
+  var unreadable = 0;
+  for (final app in selected) {
+    final r = _resolve(app, packages, <String>[]);
+    final view = _view(root, app, r, packages, catalog, provisions);
+    final orphans = orphanedCapabilities(view);
+    if (orphans.isEmpty) continue;
+
+    final manifest = File(p.posix.join(app.dir, 'app_manifest.yaml'));
+    final lines = manifest.readAsLinesSync();
+    var inCapabilities = false;
+    final done = <String>{};
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (RegExp(r'^\S').hasMatch(line)) {
+        inCapabilities = line.startsWith('capabilities:');
+        continue;
+      }
+      if (!inCapabilities) continue;
+      final provided = RegExp(
+        r'^(\s+)([a-z_]+):\s*provided\s*(?:#.*)?$',
+      ).firstMatch(line);
+      if (provided == null) continue;
+      final orphan = orphans
+          .where((o) => o.key == provided.group(2))
+          .firstOrNull;
+      if (orphan == null) continue;
+      final why = reasonPrefix == null || reasonPrefix.trim().isEmpty
+          ? orphan.whenAbsent
+          : '${reasonPrefix.trim()}: ${orphan.whenAbsent}';
+      final escaped = why.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+      lines[i] =
+          '${provided.group(1)}${orphan.key}: { state: absent, reason: '
+          '"$escaped" }';
+      done.add(orphan.key);
+    }
+    for (final orphan in orphans) {
+      if (done.contains(orphan.key)) continue;
+      unreadable++;
+      OutputFormatter.printWarning(
+        '${app.dir}/app_manifest.yaml: `${orphan.key}` is provided with no '
+        'provider left, but is not a one-line `${orphan.key}: provided` entry '
+        'under `capabilities:` — declare it `{ state: absent, reason: ... }` '
+        'by hand.',
+      );
+    }
+    if (done.isEmpty) continue;
+    manifest.writeAsStringSync('${lines.join('\n')}\n');
+    flipped += done.length;
+    OutputFormatter.printSuccess(
+      '${p.posix.relative(manifest.path, from: root)}: '
+      '${done.toList()..sort()} now absent (no provider left)',
+    );
+  }
+  if (flipped == 0 && unreadable == 0) {
+    OutputFormatter.printSuccess(
+      'Every `provided` capability still has a provider.',
+    );
+  }
+  if (unreadable > 0) exit(1);
+}
+
 /// Packages on disk under `modules/` or `platform/` that no app composes —
 /// one line each, `<dir> (<name>)`, sorted.
 ///
@@ -1844,6 +1975,13 @@ COMMANDS
                     region of its README.md. With --catalog: the manifest keys
                     (type, default, what refuses and what reads each), the
                     shell's contract catalog and the derived defaults.
+  reconcile         Declare `absent` every optional capability an app still
+                    says is `provided` although nothing it composes (or its
+                    own lib/) registers the contract any more — what removing
+                    a module leaves behind (V3). Edits only those lines of
+                    app_manifest.yaml, with the reason `<--reason text>: <what
+                    the shell does without it>`; run `sync` afterwards.
+                    remove_sample runs it for you.
   new               Create a whole app: `new <id> --platforms <a,b>
                     [--modules <x,y>] [--name "<Display Name>"]` renders
                     tools/composer/app_template/ into apps/<id>/, derives its
@@ -1868,9 +2006,10 @@ COMMANDS
                     only warns about one). Also implies --strict. Use in CI.
 
 OPTIONS
-  --app <id>        Only this app (list, describe, sync, verify). The root
+  --app <id>        Only this app (list, describe, reconcile, sync, verify). The root
                     `workspace:` list is still computed from every app.
   --catalog         With `describe`: the schema and catalog, not an app.
+  --reason <text>   With `reconcile`: the start of each `reason:` it writes.
   --platforms <a,b> With `new`: where the app runs (android, ios, web,
                     windows, macos, linux), each `runner: scaffold`.
   --modules <x,y>   With `new`: the modules it composes, every layer each has.

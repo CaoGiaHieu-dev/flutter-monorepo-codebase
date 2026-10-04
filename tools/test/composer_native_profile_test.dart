@@ -117,6 +117,23 @@ android {
     });
   });
 
+  group('parseBuildConfigurations', () {
+    test('lists every configuration name, quoted or not', () {
+      expect(parseBuildConfigurations(_pbxproj(['dev'])), {
+        'Debug',
+        'Release',
+        'Profile',
+        'Debug-dev',
+        'Release-dev',
+        'Profile-dev',
+      });
+    });
+
+    test('a project with no configurations lists none', () {
+      expect(parseBuildConfigurations(''), isEmpty);
+    });
+  });
+
   group('parseProfileOverrides', () {
     test('an app that passes only its facts sets nothing', () {
       final read = parseProfileOverrides(
@@ -206,10 +223,24 @@ android {
         expect(await syncAndVerify(ws), exitsWith(0));
       });
 
-      test('a runner that names none says nothing', () async {
+      test('an Android runner with no productFlavors fails, naming every '
+          'declared flavor and the recipe', () async {
         final ws = demo(
           extra: {'apps/demo/android/app/build.gradle': 'android { }'},
         );
+        expectRefused(await syncAndVerify(ws), [
+          '$manifestPath: flavors.dev: declared, but '
+              'apps/demo/android/app/build.gradle has no productFlavor named '
+              '`dev` (it has none)',
+          'flavors.staging: declared, but',
+          'flavors.prod: declared, but',
+          'docs/en/guides/13_app_composition.md § "Native flavors for a new '
+              'mobile runner"',
+        ]);
+      });
+
+      test('an app with no runner says nothing', () async {
+        final ws = demo();
         expect(await syncAndVerify(ws), exitsWith(0));
       });
 
@@ -259,6 +290,67 @@ android {
         expect(report, contains('`com.example.demo.dev`'));
         expect(report, contains('`com.example.demo.stg`'));
         expect(report, contains('check V15'));
+      });
+    });
+
+    group('V15 iOS flavors: a scheme and three configurations each', () {
+      const iosPlatforms =
+          'platforms:\n'
+          '  android: { runner: committed }\n'
+          '  ios: { runner: committed }\n';
+
+      Map<String, String> ios({
+        List<String> schemes = const ['dev', 'staging', 'prod'],
+        List<String> configurations = const ['dev', 'staging', 'prod'],
+      }) => {
+        'apps/demo/android/app/build.gradle': gradleAll,
+        'apps/demo/ios/Runner.xcodeproj/project.pbxproj': _pbxproj(
+          configurations,
+        ),
+        for (final scheme in ['Runner', ...schemes])
+          'apps/demo/ios/Runner.xcodeproj/xcshareddata/xcschemes/'
+                  '$scheme.xcscheme':
+              '<Scheme/>\n',
+      };
+
+      TempWorkspace withIos(Map<String, String> extra) => demo(
+        manifest: demoManifest(platforms: iosPlatforms),
+        extra: extra,
+      );
+
+      test('a runner with every flavor passes', () async {
+        expect(await syncAndVerify(withIos(ios())), exitsWith(0));
+      });
+
+      test('a missing scheme fails, naming the flavor', () async {
+        final ws = withIos(ios(schemes: ['dev', 'prod']));
+        expectRefused(await syncAndVerify(ws), [
+          '$manifestPath: flavors.staging: declared, but '
+              'apps/demo/ios/Runner.xcodeproj/xcshareddata/xcschemes has no '
+              'scheme named `staging` (it has dev, prod)',
+          'docs/en/guides/13_app_composition.md',
+        ]);
+      });
+
+      test('missing configurations fail, naming each', () async {
+        final ws = withIos(ios(configurations: ['dev', 'prod']));
+        expectRefused(await syncAndVerify(ws), [
+          '$manifestPath: flavors.staging: declared, but '
+              'apps/demo/ios/Runner.xcodeproj/project.pbxproj has no build '
+              'configuration named `Debug-staging`, `Release-staging`, '
+              '`Profile-staging`',
+        ]);
+      });
+
+      test('a runner with only the Runner scheme fails for every flavor', () async {
+        final ws = withIos(ios(schemes: const [], configurations: const []));
+        final run = await syncAndVerify(ws);
+        expectRefused(run, [
+          'flavors.dev: declared, but apps/demo/ios/Runner.xcodeproj/'
+              'xcshareddata/xcschemes has no scheme named `dev` (it has none)',
+          'flavors.prod: declared, but apps/demo/ios/Runner.xcodeproj/'
+              'project.pbxproj has no build configuration named `Debug-prod`',
+        ]);
       });
     });
 
@@ -400,4 +492,29 @@ android {
       },
     );
   });
+}
+
+/// A `project.pbxproj` holding the plain `Debug`/`Release`/`Profile`
+/// configurations and, for each of [flavors], the three `<Mode>-<flavor>` ones.
+String _pbxproj(List<String> flavors) {
+  final names = [
+    for (final mode in const ['Debug', 'Release', 'Profile']) mode,
+    for (final flavor in flavors)
+      for (final mode in const ['Debug', 'Release', 'Profile'])
+        '"$mode-$flavor"',
+  ];
+  final out = StringBuffer('/* Begin XCBuildConfiguration section */\n');
+  for (final name in names) {
+    out.write(
+      '\t\tID$name = {\n'
+      '\t\t\tisa = XCBuildConfiguration;\n'
+      '\t\t\tbuildSettings = {\n'
+      '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.example.demo;\n'
+      '\t\t\t};\n'
+      '\t\t\tname = $name;\n'
+      '\t\t};\n',
+    );
+  }
+  out.write('/* End XCBuildConfiguration section */\n');
+  return out.toString();
 }

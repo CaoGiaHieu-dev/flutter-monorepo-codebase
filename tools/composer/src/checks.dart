@@ -394,7 +394,7 @@ String _origin(AppView view, PackageFacts facts) {
 /// | V10 | what a composed package needs the app to register (`composition.app_provides`) is registered, per flavor |
 /// | V11 | the env files that exist hold exactly the keys `env:` declares, and none exists for a flavor the manifest does not declare |
 /// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`) |
-/// | V15 | the `productFlavors` of a committed Android runner and the flavor schemes of a committed iOS runner are the flavors the manifest declares |
+/// | V15 | a committed Android runner has a `productFlavor` per declared flavor, a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-` configurations per declared flavor, and neither names a flavor the manifest does not declare |
 /// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
 ///
 /// | V17 | no member pubspec other than the root's has a top-level `workspace:` key ([checkNestedWorkspaces]) |
@@ -470,15 +470,7 @@ void _contractsMatchCode(
     );
   }
 
-  // The declaring key of each optional row: its own id, else its bundle.
-  final byKey = <String, List<CatalogEntry>>{};
-  for (final row in catalog.optional) {
-    final key = view.declaration.capabilities.containsKey(row.id)
-        ? row.id
-        : row.bundle ?? row.id;
-    (byKey[key] ??= []).add(row);
-  }
-  for (final entry in byKey.entries) {
+  for (final entry in _rowsByDeclaringKey(view).entries) {
     final key = entry.key;
     final state = view.capability(entry.value.first.id);
     if (state == null) continue; // V2 reports an undeclared contract
@@ -517,6 +509,56 @@ void _contractsMatchCode(
       }
     }
   }
+}
+
+/// The declaring key of each optional catalog row — its own id, else its
+/// bundle (`session`) — mapped to the rows that key covers.
+Map<String, List<CatalogEntry>> _rowsByDeclaringKey(AppView view) {
+  final byKey = <String, List<CatalogEntry>>{};
+  for (final row in view.catalog.optional) {
+    final key = view.declaration.capabilities.containsKey(row.id)
+        ? row.id
+        : row.bundle ?? row.id;
+    (byKey[key] ??= []).add(row);
+  }
+  return byKey;
+}
+
+/// A `capabilities:` key the manifest declares `provided` although nothing in
+/// the app's composition registers it any more — what V3 reports as "declared
+/// provided but no composed package ... registers ...".
+class OrphanedCapability {
+  const OrphanedCapability({required this.key, required this.whenAbsent});
+
+  /// The manifest key (`tabs`, or a bundle such as `session`).
+  final String key;
+
+  /// What the shell does without it — the catalog's own words, the reason
+  /// the V3 message suggests for `{ state: absent, reason: ... }`.
+  final String whenAbsent;
+}
+
+/// Every optional capability [view] declares `provided` whose rows have no
+/// provider at all, by the same scan V3 uses (`ProvisionIndex`, from
+/// `tools/shared/contract_scan.dart`). `composer reconcile` flips these to
+/// `absent`; a key with only some of its rows unprovided is left alone — it is
+/// half-composed, and V3 names it.
+List<OrphanedCapability> orphanedCapabilities(AppView view) {
+  final out = <OrphanedCapability>[];
+  for (final entry in _rowsByDeclaringKey(view).entries) {
+    final state = view.capability(entry.value.first.id);
+    if (state == null || !state.provided) continue;
+    if (entry.value.any((row) => view.providersOf(row.type).isNotEmpty)) {
+      continue;
+    }
+    out.add(
+      OrphanedCapability(
+        key: entry.key,
+        whenAbsent: entry.value.first.whenAbsent,
+      ),
+    );
+  }
+  return out;
 }
 
 /// " (feature_splash registers it but is not composed)" — the packages outside
@@ -628,25 +670,33 @@ void _envFiles(
 }
 
 /// V15: a flavor is also a native fact — a Gradle `productFlavor`, an Xcode
-/// scheme — selected by name with `--flavor`. A committed runner that names
-/// flavors holds exactly the ones the manifest declares; a runner that names
-/// none (an app built without `--flavor`) says nothing.
+/// scheme with its `Debug-`/`Release-`/`Profile-` build configurations —
+/// selected by name with `--flavor`. A committed runner (the Gradle script of
+/// `android/app`, the `ios/Runner.xcodeproj`) holds exactly the flavors the
+/// manifest declares: a declared flavor the runner lacks is what makes
+/// `flutter run --flavor <f>` fail on a new app, and a native flavor the
+/// manifest does not declare is a leftover. An app with no runner committed
+/// says nothing here (V6 owns whether one is).
 void _nativeFlavors(
   AppView view,
   void Function(String file, String key, String problem) bad,
 ) {
   final declared = view.declaration.flavors.keys.toSet();
   final native = view.native;
+  const recipe =
+      'docs/en/guides/13_app_composition.md § "Native flavors for '
+      'a new mobile runner"';
 
   void compare(String where, Set<String> found, String how) {
     for (final flavor in declared.toList()..sort()) {
       if (found.contains(flavor)) continue;
+      final has = found.isEmpty ? 'none' : (found.toList()..sort()).join(', ');
       bad(
         view.manifestPath,
         'flavors.$flavor',
-        'declared, but $where has no $how named `$flavor` (it has '
-            '${(found.toList()..sort()).join(', ')}) — add it there, or '
-            'delete `$flavor:` from `flavors:`',
+        'declared, but $where has no $how named `$flavor` (it has $has) — '
+            'add it there (recipe: $recipe), or delete `$flavor:` from '
+            '`flavors:`',
       );
     }
     for (final flavor in found.toList()..sort()) {
@@ -661,21 +711,38 @@ void _nativeFlavors(
     }
   }
 
-  final android = native.android;
-  if (android != null) {
+  if (native.androidRunner) {
     compare(
       '${view.dir}/${native.androidFile}',
-      android.keys.toSet(),
+      native.android?.keys.toSet() ?? const {},
       'productFlavor',
     );
   }
-  final ios = native.ios;
-  if (ios != null) {
+  if (native.iosRunner) {
+    final where = '${view.dir}/ios';
     compare(
-      '${view.dir}/${native.iosSchemesDir}',
-      ios.keys.toSet(),
+      '$where/Runner.xcodeproj/xcshareddata/xcschemes',
+      native.ios?.keys.toSet() ?? const {},
       'scheme',
     );
+    // Flutter resolves `--flavor <f>` to the scheme `<f>` and the build
+    // configurations `Debug-<f>`, `Release-<f>` and `Profile-<f>`.
+    for (final flavor in declared.toList()..sort()) {
+      final missing = [
+        for (final mode in const ['Debug', 'Release', 'Profile'])
+          if (!native.iosConfigurations.contains('$mode-$flavor'))
+            '$mode-$flavor',
+      ];
+      if (missing.isEmpty) continue;
+      bad(
+        view.manifestPath,
+        'flavors.$flavor',
+        'declared, but $where/Runner.xcodeproj/project.pbxproj has no build '
+            'configuration named ${missing.map((m) => '`$m`').join(', ')} — '
+            'add the configurations of the `$flavor` scheme (recipe: $recipe), '
+            'or delete `$flavor:` from `flavors:`',
+      );
+    }
   }
 }
 

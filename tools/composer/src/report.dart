@@ -80,7 +80,7 @@ const List<CodedLine> kComposerChecks = [
   CodedLine('V14', 'no reason is empty, `TODO` or `TBD`'),
   CodedLine(
     'V15',
-    'the productFlavors of a committed Android runner and the flavor schemes of a committed iOS runner are the declared flavors; no env file exists for an undeclared one (V11)',
+    'a committed Android runner has a productFlavor, and a committed iOS runner a scheme with Debug-/Release-/Profile- configurations, for every declared flavor and none the manifest does not declare; no env file exists for an undeclared one (V11)',
   ),
   CodedLine(
     'V16',

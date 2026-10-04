@@ -150,6 +150,88 @@ void main() {
     expect(run.output, isNot(contains('removed sample bundle')));
   });
 
+  group('a fully stripped template (modules/ empty)', () {
+    // What `remove_sample` leaves after the last bundle: `modules/` holds a
+    // `.gitkeep`, and the docs still describe the shape of a module.
+    const stripped = {
+      'modules/.gitkeep': '',
+      'tools/sample_manifest.yaml':
+          'packages:\n'
+          '  feature_gone: { kind: sample, path: modules/gone/feature }\n'
+          '  feature_old: { kind: sample, path: modules/old/feature }\n'
+          'bundles:\n'
+          '  gone:\n'
+          '    packages: [feature_gone]\n'
+          '  old:\n'
+          '    packages: [feature_old]\n',
+    };
+
+    test('a glob over the empty modules/ passes', () async {
+      final run = await check({
+        ...stripped,
+        'README.md':
+            'Layers: `modules/*/feature`, `modules/*/domain/lib`, '
+            '`modules/**/*.dart`, `modules/*/<layer>/<x>`, '
+            '`modules/{gone,old}/feature` and `modules/<name>/feature`.\n',
+      });
+      expect(run, exitsWith(0));
+      expect(run.output, isNot(contains('dead reference')));
+    });
+
+    test('a typo outside the empty directory still fails', () async {
+      final run = await check({
+        ...stripped,
+        'README.md':
+            'Real: `modules/*/feature`.\n'
+            'Typo: `platform/*/lib/nope.dart` and `platform/commmon/lib`.\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('2 dead reference(s)'));
+      expect(run.output, contains('[pattern] platform/*/lib/nope.dart'));
+      expect(run.output, contains('[path] platform/commmon/lib'));
+      expect(run.output, isNot(contains('[pattern] modules/*/feature')));
+    });
+
+    test('a glob over a modules/ that holds a module must fit one', () async {
+      final run = await check({
+        ...stripped,
+        'modules/foo/domain/pubspec.yaml': 'name: domain_foo\n',
+        'README.md': 'Layers: `modules/*/feature` and `modules/*/domain`.\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('1 dead reference(s)'));
+      expect(run.output, contains('[pattern] modules/*/feature'));
+    });
+
+    test('a glob whose directory does not exist still fails', () async {
+      final run = await check({
+        'README.md': 'Layers: `modules/*/feature`.\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('[pattern] modules/*/feature'));
+    });
+
+    test('a non-empty directory is not a stripped one', () async {
+      // `platform/common` holds a file: a glob under it has to fit something.
+      final run = await check({
+        'README.md': 'Files: `platform/common/*/x.dart`.\n',
+      });
+      expect(run, exitsWith(1));
+      expect(run.output, contains('[pattern] platform/common/*/x.dart'));
+    });
+
+    test('a brace list across removed bundles is INFO while another module '
+        'stays', () async {
+      final run = await check({
+        ...stripped,
+        'modules/foo/feature/pubspec.yaml': 'name: feature_foo\n',
+        'README.md': 'Shipped: `modules/{gone,old}/feature`.\n',
+      });
+      expect(run, exitsWith(0));
+      expect(run.output, contains('removed sample bundle "gone"'));
+    });
+  });
+
   test('the root comes from the script location, not the cwd', () async {
     final ws = TempWorkspace.create({
       'pubspec.yaml': 'name: ws\n',

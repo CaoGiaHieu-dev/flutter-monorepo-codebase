@@ -33,6 +33,12 @@ import '../shared/workspace.dart';
 ///   dart tools/sample_cleanup/remove_sample.dart auth           # preview
 ///   dart tools/sample_cleanup/remove_sample.dart auth --apply   # do it
 ///
+/// After the packages are gone it runs `composer reconcile`, which declares
+/// `absent` every `provided` capability, in every app manifest, whose last
+/// provider went with them (composer's own scan of what is still registered,
+/// not a list), and then `composer sync`. Removing the last module leaves a
+/// `modules/.gitkeep`, so the directory survives a commit.
+///
 /// It never edits [_manifestPath]. After `--apply` the bundle's definition is
 /// still there while its packages are not, and that is how
 /// `tools/docs_check/check.dart` recognises a documentation reference into a
@@ -264,15 +270,11 @@ Future<void> _removeBundle({
   // --- 2. Shared file edits ------------------------------------------------
   stdout.writeln('');
   stdout.writeln('Shared files to edit:');
-  final capabilities = [
-    for (final id in (bundle['capabilities'] as YamlList?) ?? const []) '$id',
-  ];
   final edits = _planSharedEdits(
     pkgNames,
     packages,
     bundleName: bundleName,
     keepApiLayer: kept.isNotEmpty,
-    capabilities: capabilities,
   );
   if (edits.isEmpty) {
     stdout.writeln('  (no matching lines)');
@@ -287,6 +289,19 @@ Future<void> _removeBundle({
     }
   }
   _reportKept(kept, packages, bundleName, applied: false);
+
+  // The capabilities that lose their last provider are not listed here: which
+  // ones depends on what every other module registers, so composer works it
+  // out after the packages are gone (`composer reconcile`).
+  final sole = (bundle['capabilities'] as YamlList?) ?? const [];
+  stdout.writeln('');
+  stdout.writeln(
+    'Capabilities: after the removal, `composer reconcile` declares `absent` '
+    '(reason "sample $bundleName removed: ...") every `provided` capability '
+    'in every app manifest whose last provider is gone'
+    '${sole.isEmpty ? '' : ' — this bundle was the only provider of '
+              '${sole.join(', ')}'}.',
+  );
 
   // --- 3. Consequences the docs never covered ------------------------------
   final breaks = bundle['breaks'] as YamlList?;
@@ -374,6 +389,14 @@ Future<void> _removeBundle({
         stdout.writeln('  deleted ${parent.path}');
       }
     }
+    // The last module gone leaves `modules/` empty, which git does not keep:
+    // a fresh clone would lack the directory the docs and the generators
+    // name. A `.gitkeep` holds it.
+    final modulesDir = Directory('modules');
+    if (modulesDir.existsSync() && modulesDir.listSync().isEmpty) {
+      File('modules/.gitkeep').writeAsStringSync('');
+      stdout.writeln('  kept    modules/.gitkeep (modules/ is now empty)');
+    }
   } catch (e) {
     stderr.writeln('[ERROR] Failed partway through: $e');
     stderr.writeln('[INFO] Restoring the shared files...');
@@ -391,31 +414,28 @@ Future<void> _removeBundle({
   // are stale until `composer sync` runs. Leaving that to the reader left the
   // tree red under `composer verify`; a workspace without the composer (a
   // partial checkout) skips it and lists it as a next step instead.
-  final synced = _runComposerSync();
+  final synced = _runComposer(bundleName);
 
   stdout.writeln('');
   stdout.writeln('Done. Next steps:');
   if (synced == null) {
+    stdout.writeln(
+      '  dart tools/composer/composer.dart reconcile --reason '
+      '"sample $bundleName removed"',
+    );
     stdout.writeln('  dart tools/composer/composer.dart sync');
   } else if (!synced) {
     stdout.writeln(
-      '  # composer sync refused the manifests (see above). Fix them, then:',
+      '  # composer refused the manifests (see above). Fix them, then:',
+    );
+    stdout.writeln(
+      '  dart tools/composer/composer.dart reconcile --reason '
+      '"sample $bundleName removed"',
     );
     stdout.writeln('  dart tools/composer/composer.dart sync');
     exitCode = 1;
   }
   stdout.writeln('  dart tools/composer/composer.dart verify');
-  final shared = (bundle['shared_capabilities'] as YamlList?) ?? const [];
-  if (shared.isNotEmpty) {
-    stdout.writeln(
-      '  # `capabilities:` also names ${shared.join(', ')}, which other '
-      'modules may still provide;',
-    );
-    stdout.writeln(
-      '  # verify names any of them that lost its last provider (check V3) — '
-      'declare it `{ state: absent, reason: ... }`.',
-    );
-  }
   stdout.writeln('  flutter pub get');
   stdout.writeln('  dart run build_runner build --workspace');
   stdout.writeln('  flutter analyze');
@@ -432,13 +452,42 @@ Future<void> _removeBundle({
   stdout.writeln('');
 }
 
-/// Runs `composer sync` so the generated regions follow the edited manifests.
+/// Runs `composer reconcile` and then `composer sync`.
 ///
-/// `null` when the workspace has no composer, `true` when it regenerated,
-/// `false` when it refused (its output is printed so the reason is visible).
-bool? _runComposerSync() {
+/// `reconcile` flips to `absent` every `capabilities:` entry whose last
+/// provider the removal took with it (composer's own V3 scan decides, in every
+/// app manifest); `sync` then regenerates the regions generated from the
+/// manifests (workspace and deps lists, `injection.dart`, `app_profile.dart`
+/// facts, the README report). Leaving either to the reader left the tree red
+/// under `composer verify`. A workspace without the composer (a partial
+/// checkout) skips both and lists them as next steps.
+///
+/// `null` when the workspace has no composer, `true` when both ran, `false`
+/// when one refused (its output is printed so the reason is visible).
+bool? _runComposer(String bundleName) {
   const composer = 'tools/composer/composer.dart';
   if (!File(composer).existsSync()) return null;
+  stdout.writeln('');
+  stdout.writeln(
+    'Declaring the capabilities that lost their last provider absent '
+    '(composer reconcile)...',
+  );
+  final reconciled = Process.runSync(dartExecutable, [
+    ...dartArgs,
+    composer,
+    'reconcile',
+    '--reason',
+    'sample $bundleName removed',
+  ], runInShell: true);
+  stdout.write(reconciled.stdout);
+  if (reconciled.exitCode != 0) {
+    stderr.write(reconciled.stderr);
+    stderr.writeln(
+      '[ERROR] composer reconcile failed (exit ${reconciled.exitCode}).',
+    );
+    return false;
+  }
+
   stdout.writeln('');
   stdout.writeln('Regenerating from the manifests (composer sync)...');
   final result = Process.runSync(dartExecutable, [
@@ -762,18 +811,14 @@ class _FileEdit {
 /// comments and grouping that a re-serialise would flatten, and the module
 /// generator already edits them the same way.
 ///
-/// In an `app_manifest.yaml`, every id of [capabilities] the app declares
-/// `provided` flips to `{ state: absent, reason: "sample <bundle> removed" }`:
-/// the bundle was the only thing registering that contract, so leaving it
-/// `provided` would turn `composer verify` red. Contracts the removed bundle
-/// shares with another module are not flipped (the other module may still
-/// register them) — an app's DI smoke test names any that lost their last provider.
+/// `capabilities:` are not touched here: which of them lose their last
+/// provider is for composer to say once the packages are gone
+/// (`composer reconcile`, run by [_runComposer]).
 List<_FileEdit> _planSharedEdits(
   List<String> pkgNames,
   YamlMap packages, {
   required String bundleName,
   bool keepApiLayer = false,
-  List<String> capabilities = const [],
 }) {
   final edits = <_FileEdit>[];
 
@@ -791,32 +836,10 @@ List<_FileEdit> _planSharedEdits(
     final keep = <String>[];
     final removed = <String>[];
     final added = <String>[];
-    final isManifest = file.endsWith('app_manifest.yaml');
-    var inCapabilities = false;
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       var drop = false;
-
-      // app_manifest.yaml, `capabilities:` block: `  splash: provided`.
-      if (isManifest) {
-        if (RegExp(r'^\S').hasMatch(line)) {
-          inCapabilities = line.startsWith('capabilities:');
-        } else if (inCapabilities) {
-          final provided = RegExp(
-            r'^(\s+)(\w+):\s*provided\s*(#.*)?$',
-          ).firstMatch(line);
-          if (provided != null && capabilities.contains(provided.group(2))) {
-            final flipped =
-                '${provided.group(1)}${provided.group(2)}: { state: absent, '
-                'reason: "sample $bundleName removed" }';
-            removed.add(line);
-            added.add(flipped);
-            keep.add(flipped);
-            continue;
-          }
-        }
-      }
 
       for (final name in pkgNames) {
         // injection.dart: `import 'package:feature_auth/di/module.module.dart';`

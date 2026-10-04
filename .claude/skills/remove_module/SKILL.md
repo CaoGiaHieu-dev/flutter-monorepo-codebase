@@ -27,9 +27,11 @@ dart tools/sample_cleanup/remove_sample.dart auth --apply
 
 The dry run prints what would be removed, what breaks, which couplings degrade safely (`breaks` and
 `safe_couplings` in `tools/sample_manifest.yaml`), and which docs go dead — **read it before applying**. `--apply`
-removes the bundle (its feature, domain and data packages), drops it from every `app_manifest.yaml`, flips the
-capabilities **only it** provided to `absent`, and runs `composer sync` (shared files are rolled back on a failure;
-deleted directories are not — recover them with git). Then follow its printed next steps:
+removes the bundle (its feature, domain and data packages), drops it from every `app_manifest.yaml`, runs
+`composer reconcile --reason "sample <bundle> removed"` — which declares `absent`, with a reason, **every**
+capability in every app manifest whose last provider is gone, by composer's own scan of what is still registered (V3),
+not a list — and `composer sync` (shared files are rolled back on a failure; deleted directories are not — recover
+them with git). Then follow its printed next steps:
 
 ```bash
 dart tools/composer/composer.dart verify
@@ -44,8 +46,28 @@ dart run build_runner build --workspace
   never edits that file; `docs_check` therefore reports a documentation reference into a removed sample as INFO, not a failure.
 - `--apply` flips the manifests but edits no test: update each app's `test/app_profile_test.dart` (and any
   `_factoriesNeedingArguments` entry) as [The app tests](#the-app-tests) says, or Gate 3 fails.
-- `verify` names any capability that lost its last provider but the tool could not know (V3): declare it
-  `{ state: absent, reason: "…" }` (RULE-81).
+- A capability that is only *partly* unprovided (a bundle such as `session` with one member still registered) is left
+  for `verify` to name (V3): decide it by hand, `{ state: absent, reason: "…" }` or keep the module (RULE-81).
+- The tool never touches the other direction: a capability a manifest says `absent` that a module you add registers
+  makes `verify` ask for `provided`.
+
+## A fully stripped template
+
+All seven bundles removed (`settings`, `onboarding`, `home`, `dashboard`, `splash`, `cache`, `auth` last — or `auth`
+twice, since `auth_api` is kept while a remaining package imports it) leaves `platform/` and two apps that compose no
+module, every sample-provided capability `absent`, and a `modules/.gitkeep` (the tool writes it when the last module
+goes, so the empty directory survives a commit). Expect:
+
+- `composer verify`, `arch_check`, `unused_checker`, `docs_check` and `flutter analyze` (after `pub get` and
+  `build_runner`) pass. `docs_check` accepts a documented glob such as `modules/*/feature` while `modules/` is empty,
+  and reports references into removed samples as INFO.
+- Each app's tests fail until you act, and the tool edits no test: the smoke test with `C05` ("no route module and no
+  navigation tab") until a first feature exists; `test/app_profile_test.dart` until its expectations about the sample
+  capabilities are updated.
+- The first feature: `generate.dart 2 <name>`, `generate.dart 3 <name>`, `generate.dart 1 <name> "" <SM> <route>`
+  (`--apps <id>` limits which manifests get it). `verify` then names the capabilities it registers (`tabs`,
+  `localization`, …): declare each `provided` in every manifest that composes it, `composer sync`, `pub get`,
+  `build_runner`, the smoke tests.
 
 ## A module you generated
 
@@ -62,8 +84,10 @@ directory. Then remove in this order — the manifest first, so no step leaves a
 4. Delete the package directories: `modules/<name>/<layer>/` for each layer, then `modules/<name>/` when empty (or
    `platform/<group>/<name>`). Run `composer sync` again if `pub get` still names the package.
 5. `flutter pub get && dart run build_runner build --workspace` — regenerates every app's `injection.config.dart`.
-6. `dart tools/composer/composer.dart verify`. If a capability lost its last provider, declare it `absent` with a
-   reason in each app's `capabilities:`, then `composer sync` again.
+6. `dart tools/composer/composer.dart verify`. If a capability lost its last provider, run
+   `dart tools/composer/composer.dart reconcile --reason "<why>"` — it declares each such capability `absent` in every
+   app manifest (your text, then what the shell does without it) — then `composer sync` again; or write the
+   `{ state: absent, reason: "…" }` line `verify` prints yourself.
 7. Fix the app tests (below), then run the Verify block.
 
 Dropping a module from **one app** only is steps 2, 3 and 5 for that manifest (`--app <id>` limits `sync`); the root

@@ -163,17 +163,20 @@ packages:
 # A "feature" is never just its feature package. Each bundle lists everything
 # that travels with it. `capabilities` lists the optional shell contracts
 # (ids of `SHELL_CONTRACTS`, or a bundle id such as `session`) the bundle is
-# the only provider of; `shared_capabilities` the ones it shares with another
-# module, which an app's DI smoke test (`checkAppContract`) names after the
-# removal if the last provider went. `breaks` records samples that stop
-# working when this bundle is removed — the part no document covered before.
+# the only provider of — information for the dry run; `remove_sample --apply`
+# does not read it to edit anything. It runs `composer reconcile`, which
+# declares `absent` (with a reason) every `provided` capability in every app
+# manifest whose last provider is gone, by composer's own scan of what the
+# remaining packages register — so a contract the bundle shared with another
+# module is flipped exactly when that module is gone too. `breaks` records
+# samples that stop working when this bundle is removed — the part no
+# document covered before.
 
 bundles:
   auth:
-    # The contracts this bundle is the *only* provider of: `remove_sample --apply`
-    # flips each of them in every app's `capabilities:` to `absent`.
+    # The contracts this bundle is the *only* provider of (see the note above
+    # `bundles:`): the dry run names them.
     capabilities: [session, tree_wrappers]
-    shared_capabilities: [routes, localization]
     # auth_api is KEPT while feature_onboarding / feature_settings import it
     # (remove_sample says so, and the manifests keep `{ id: auth, layers:
     # [api] }`); its two contracts then have no implementation. The session
@@ -192,7 +195,6 @@ bundles:
 
   home:
     capabilities: [post_sign_in]
-    shared_capabilities: [tabs]
     # home_api is KEPT while feature_onboarding imports it.
     packages: [feature_home, home_api]
     breaks: []
@@ -204,13 +206,11 @@ bundles:
       AppRouter falls back to an empty branch rather than crashing.
 
   settings:
-    shared_capabilities: [tabs, localization]
     packages: [feature_settings]
     breaks: []
 
   onboarding:
     capabilities: [entry]
-    shared_capabilities: [routes]
     packages: [feature_onboarding]
     breaks: []
     note: >-
@@ -239,7 +239,6 @@ bundles:
 
   splash:
     capabilities: [splash]
-    shared_capabilities: [localization]
     packages: [feature_splash]
     orphaned_contracts:
       - platform/foundation/contracts/lib/src/app/i_app_splash_screen.dart

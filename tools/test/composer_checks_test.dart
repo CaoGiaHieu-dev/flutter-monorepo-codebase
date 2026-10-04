@@ -58,6 +58,95 @@ void main() {
     }
   }
 
+  group('reconcile declares absent what lost its last provider', () {
+    /// The feature no longer registers anything.
+    final nothingRegistered = {featureRegistrations: ''};
+
+    test('flips each provided key with no provider, so verify passes', () async {
+      final ws = demo(extra: nothingRegistered);
+      expect(await run(ws, ['sync']), exitsWith(0));
+      expectRefused(await run(ws, ['verify']), ['capabilities.routes']);
+
+      final reconciled = await run(ws, [
+        'reconcile',
+        '--reason',
+        'sample foo removed',
+      ]);
+      expect(reconciled, exitsWith(0));
+
+      final manifest = ws.read(manifestPath);
+      expect(
+        manifest,
+        contains(
+          '  routes: { state: absent, reason: "sample foo removed: the router '
+          'has no stack routes" }\n',
+        ),
+      );
+      // A bundle is flipped under its own key, with the first row's words.
+      expect(
+        manifest,
+        contains(
+          '  session: { state: absent, reason: "sample foo removed: the app '
+          'is treated as signed out" }\n',
+        ),
+      );
+      // What was already absent is left alone.
+      expect(
+        manifest,
+        contains(
+          '  splash: { state: absent, reason: "the native splash is kept '
+          'through boot" }\n',
+        ),
+      );
+      expect(await syncAndVerify(ws), exitsWith(0));
+    });
+
+    test('a bundle with one member still registered is left for V3', () async {
+      final ws = demo(
+        extra: {
+          featureRegistrations: kFixtureFeatureRegistrations.replaceFirst(
+            '  @lazySingleton\n  ISessionGateway bindGateway'
+                '(FooSession session) => session;\n',
+            '',
+          ),
+        },
+      );
+      expect(await run(ws, ['sync']), exitsWith(0));
+      final before = ws.read(manifestPath);
+      expect(await run(ws, ['reconcile']), exitsWith(0));
+      expect(ws.read(manifestPath), before);
+    });
+
+    test('with every provider in place it changes nothing', () async {
+      final ws = demo();
+      final before = ws.read(manifestPath);
+      final reconciled = await run(ws, ['reconcile']);
+      expect(reconciled, exitsWith(0));
+      expect(reconciled.output, contains('still has a provider'));
+      expect(ws.read(manifestPath), before);
+    });
+
+    test(
+      'without --reason the reason is what the shell does without it',
+      () async {
+        final ws = demo(extra: nothingRegistered);
+        expect(await run(ws, ['reconcile']), exitsWith(0));
+        expect(
+          ws.read(manifestPath),
+          contains(
+            '  routes: { state: absent, reason: "the router has no stack '
+            'routes" }\n',
+          ),
+        );
+      },
+    );
+
+    test('`--reason` belongs to reconcile', () async {
+      final result = await run(demo(), ['verify', '--reason', 'x']);
+      expect(result, exitsWith(64));
+    });
+  });
+
   group('V17 the root is the only workspace node', () {
     test('a member without a `workspace:` key passes', () async {
       expect(await syncAndVerify(demo()), exitsWith(0));

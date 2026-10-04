@@ -36,6 +36,13 @@ import 'translations.dart';
 ///   * **Placeholders.** A span with a `<…>` segment (`modules/<owner>/feature/…`)
 ///     is a template the reader fills in, not a reference to a file. Only its
 ///     literal part — the segments before the first placeholder — must exist.
+///   * **A wildcard over an empty directory.** A glob (`modules/*/feature`,
+///     `modules/**/*.dart`) that fits nothing passes when the directory
+///     holding its first wildcard segment exists and is empty (dotfiles such
+///     as `.gitkeep` aside): a fully stripped template has no module for it to
+///     fit, and the pattern is the shape the first one will take. A glob over a
+///     directory that holds anything still has to fit something, so a typo'd
+///     `platform/*/lib/x.dart` is still drift.
 ///   * **Removed samples.** `tools/sample_cleanup/remove_sample.dart` deletes
 ///     a sample bundle's packages but leaves `tools/sample_manifest.yaml`
 ///     untouched, on purpose: the manifest is how this check knows a path
@@ -213,6 +220,19 @@ void main(List<String> args) {
     for (final bundle in removedBundles) {
       if (bundle.covers(path) || (pattern != null && bundle.covers(pattern))) {
         sampleHits.putIfAbsent(bundle.name, () => <_Hit>[]).add(hit);
+        return;
+      }
+    }
+    // A brace list that names several samples (`modules/{auth,home}/feature`)
+    // is covered when each alternative lies in some removed bundle, not
+    // necessarily the same one.
+    if (pattern != null) {
+      final owners = [
+        for (final alternative in _expandBraces(pattern))
+          removedBundles.where((b) => b.covers(alternative)).firstOrNull,
+      ];
+      if (owners.isNotEmpty && !owners.contains(null)) {
+        sampleHits.putIfAbsent(owners.first!.name, () => <_Hit>[]).add(hit);
         return;
       }
     }
@@ -756,11 +776,39 @@ bool _matchesSomething(String repoRoot, String pattern) {
     return _exists(repoRoot, checked);
   }
   try {
-    return Glob(checked).listSync(root: repoRoot).isNotEmpty;
+    if (Glob(checked).listSync(root: repoRoot).isNotEmpty) return true;
   } on FileSystemException {
     // A fixed directory component that does not exist — nothing can match.
     return false;
   }
+  return _wildcardOverEmptyDirectory(repoRoot, checked);
+}
+
+/// Whether the directory holding [pattern]'s first wildcard segment (`*`,
+/// `**` or a `{a,b}` list) exists and is empty, dotfiles aside — a
+/// `modules/` a fully stripped template keeps with only a `.gitkeep`, so that
+/// `modules/*/feature` has nothing yet to fit.
+bool _wildcardOverEmptyDirectory(String repoRoot, String pattern) {
+  final segments = pattern.split('/');
+  final cut = segments.indexWhere((s) => s.contains('*') || s.contains('{'));
+  if (cut < 1) return false;
+  final parent = Directory(p.joinAll([repoRoot, ...segments.take(cut)]));
+  if (!parent.existsSync()) return false;
+  return parent
+      .listSync(followLinks: false)
+      .every((e) => p.basename(e.path).startsWith('.'));
+}
+
+/// `a/{b,c}/d` -> `a/b/d`, `a/c/d`; a pattern with no braces comes back as is.
+List<String> _expandBraces(String pattern) {
+  final brace = RegExp(r'\{([^{}]*)\}').firstMatch(pattern);
+  if (brace == null) return [pattern];
+  return [
+    for (final alternative in brace.group(1)!.split(','))
+      ..._expandBraces(
+        pattern.replaceRange(brace.start, brace.end, alternative),
+      ),
+  ];
 }
 
 /// [pattern] up to (not including) its first `<placeholder>` segment —

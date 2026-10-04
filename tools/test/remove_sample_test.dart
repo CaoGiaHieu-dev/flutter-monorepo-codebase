@@ -143,30 +143,70 @@ void main() {
     );
   });
 
-  group('composer sync after --apply', () {
-    // A stand-in composer: records that it ran, exits with the code a file asks.
-    String stub(int exitCode) =>
+  test('the last module gone leaves a modules/.gitkeep', () async {
+    final ws = workspace(bImportsApi: false);
+    expect(await run(ws, ['a', '--apply']), exitsWith(0));
+    expect(File(p.join(ws.root, 'modules/.gitkeep')).existsSync(), isFalse);
+
+    final last = await run(ws, ['b', '--apply']);
+    expect(last, exitsWith(0));
+    expect(last.output, contains('kept    modules/.gitkeep'));
+    expect(
+      Directory(p.join(ws.root, 'modules'))
+          .listSync()
+          .map((e) => p.basename(e.path)),
+      ['.gitkeep'],
+    );
+  });
+
+  group('composer reconcile and sync after --apply', () {
+    // A stand-in composer: records each call, one line per run, and exits with
+    // [exitCode] — or with [failOn]'s code when it is the command run.
+    String stub(int exitCode, {String? failOn}) =>
         "import 'dart:io';\n"
         'void main(List<String> args) {\n'
-        "  File('composer_ran.txt').writeAsStringSync(args.join(' '));\n"
-        '  exit($exitCode);\n'
+        "  File('composer_ran.txt').writeAsStringSync("
+        "'\${args.join(' ')}\\n', mode: FileMode.append);\n"
+        '  exit(args.first == ${failOn == null ? "''" : "'$failOn'"} '
+        '? $exitCode : 0);\n'
         '}\n';
 
-    test('runs it, so the generated regions follow the manifests', () async {
+    test('runs them, so the generated regions follow the manifests', () async {
       final ws = workspace(bImportsApi: false);
       ws.write({'tools/composer/composer.dart': stub(0)});
       final apply = await run(ws, ['a', '--apply']);
       expect(apply, exitsWith(0));
-      expect(ws.read('composer_ran.txt'), 'sync');
+      expect(
+        ws.read('composer_ran.txt'),
+        'reconcile --reason sample a removed\nsync\n',
+      );
       expect(apply.output, contains('composer sync: ok'));
       // Done: the next steps no longer ask for a sync the tool just did.
       expect(apply.output, isNot(contains('composer.dart sync')));
       expect(apply.output, contains('composer.dart verify'));
     });
 
+    test('a reconcile the composer refuses stops before sync', () async {
+      final ws = workspace(bImportsApi: false);
+      ws.write({'tools/composer/composer.dart': stub(2, failOn: 'reconcile')});
+      final apply = await run(ws, ['a', '--apply']);
+      expect(apply, exitsWith(1));
+      expect(apply.output, contains('composer reconcile failed'));
+      expect(
+        ws.read('composer_ran.txt'),
+        'reconcile --reason sample a removed\n',
+      );
+      expect(
+        apply.output,
+        contains(
+          'dart tools/composer/composer.dart reconcile --reason "sample a removed"',
+        ),
+      );
+    });
+
     test('exits 1 with the next step when the composer refuses', () async {
       final ws = workspace(bImportsApi: false);
-      ws.write({'tools/composer/composer.dart': stub(2)});
+      ws.write({'tools/composer/composer.dart': stub(2, failOn: 'sync')});
       final apply = await run(ws, ['a', '--apply']);
       expect(apply, exitsWith(1));
       expect(apply.output, contains('composer sync failed'));
@@ -180,10 +220,14 @@ void main() {
       ]);
       expect(apply, exitsWith(0));
       expect(apply.output, contains('dart tools/composer/composer.dart sync'));
+      expect(
+        apply.output,
+        contains('composer.dart reconcile --reason "sample a removed"'),
+      );
     });
   });
 
-  group('capabilities the bundle alone provided', () {
+  group('capabilities', () {
     TempWorkspace withCapabilities() {
       final ws = workspace(bImportsApi: false);
       ws.write({
@@ -197,7 +241,6 @@ void main() {
             '  a:\n'
             '    packages: [feature_a, domain_a, a_api]\n'
             '    capabilities: [splash, session]\n'
-            '    shared_capabilities: [routes]\n'
             '  b:\n'
             '    packages: [feature_b]\n',
         'apps/demo/app_manifest.yaml':
@@ -205,76 +248,31 @@ void main() {
             '  id: demo\n'
             'capabilities:\n'
             '  session: provided # the sign-in bundle\n'
-            '  splash: provided\n'
             '  routes: provided\n'
-            '  analytics: { state: absent, reason: "no backend" }\n'
             'modules:\n'
             '  - { id: a, layers: [api, domain, feature] }\n'
-            '  - { id: b, layers: [feature] }\n'
-            'splash: provided\n',
+            '  - { id: b, layers: [feature] }\n',
       });
       return ws;
     }
 
-    test('the dry run shows the flip', () async {
-      final dry = await run(withCapabilities(), ['a']);
-      expect(dry, exitsWith(0));
-      expect(
-        dry.output,
-        contains(
-          '+ session: { state: absent, reason: "sample a removed" }',
-        ),
-      );
-      expect(
-        dry.output,
-        contains('+ splash: { state: absent, reason: "sample a removed" }'),
-      );
-    });
-
     test(
-      '--apply flips them, and only them, to absent with a reason',
+      'the dry run says composer decides, and names the sole provider',
       () async {
-        final ws = withCapabilities();
-        final apply = await run(ws, ['a', '--apply']);
-        expect(apply, exitsWith(0));
-
-        final manifest = ws.read('apps/demo/app_manifest.yaml');
-        expect(
-          manifest,
-          contains(
-            '  session: { state: absent, reason: "sample a removed" }\n',
-          ),
-        );
-        expect(
-          manifest,
-          contains('  splash: { state: absent, reason: "sample a removed" }\n'),
-        );
-        // The old comment described the old state; a shared contract and an
-        // existing absence are left alone, and so is a `splash:` outside the
-        // `capabilities:` block.
-        expect(manifest, isNot(contains('the sign-in bundle')));
-        expect(manifest, contains('  routes: provided\n'));
-        expect(
-          manifest,
-          contains('  analytics: { state: absent, reason: "no backend" }\n'),
-        );
-        expect(manifest, contains('\nsplash: provided\n'));
+        final dry = await run(withCapabilities(), ['a']);
+        expect(dry, exitsWith(0));
+        expect(dry.output, contains('composer reconcile'));
+        expect(dry.output, contains('only provider of splash, session'));
       },
     );
 
-    test('says which contracts the bundle shares', () async {
-      final apply = await run(withCapabilities(), ['a', '--apply']);
-      expect(apply.output, contains('also names routes'));
-      expect(apply.output, contains('composer.dart verify'));
-    });
-
-    test('a bundle that lists none changes no capability', () async {
+    test('the tool itself leaves `capabilities:` to composer', () async {
       final ws = withCapabilities();
-      expect(await run(ws, ['b', '--apply']), exitsWith(0));
-      expect(
-        ws.read('apps/demo/app_manifest.yaml'),
-        contains('  splash: provided\n'),
-      );
+      final apply = await run(ws, ['a', '--apply']);
+      expect(apply, exitsWith(0));
+      final manifest = ws.read('apps/demo/app_manifest.yaml');
+      expect(manifest, contains('  session: provided # the sign-in bundle\n'));
+      expect(manifest, contains('  routes: provided\n'));
     });
   });
 }

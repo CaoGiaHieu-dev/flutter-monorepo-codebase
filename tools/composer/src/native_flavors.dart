@@ -20,6 +20,9 @@ class NativeFlavors {
     this.androidFile,
     this.ios,
     this.iosSchemesDir,
+    this.androidRunner = false,
+    this.iosRunner = false,
+    this.iosConfigurations = const {},
   });
 
   /// No committed runner says anything about flavors.
@@ -27,7 +30,10 @@ class NativeFlavors {
     : android = null,
       androidFile = null,
       ios = null,
-      iosSchemesDir = null;
+      iosSchemesDir = null,
+      androidRunner = false,
+      iosRunner = false,
+      iosConfigurations = const {};
 
   /// The Gradle `productFlavors`, name -> application ID (`null` when the ID
   /// cannot be worked out); `null` when the Android runner declares none.
@@ -43,6 +49,19 @@ class NativeFlavors {
   /// The directory the schemes were listed from.
   final String? iosSchemesDir;
 
+  /// An Android runner is committed: `android/app/build.gradle(.kts)` exists.
+  /// A bare `android/` folder is V6's business, not a runner V15 can read.
+  final bool androidRunner;
+
+  /// An iOS runner is committed: `ios/Runner.xcodeproj` exists.
+  final bool iosRunner;
+
+  /// The build configuration names of the Xcode project (`Debug-dev`,
+  /// `Release-dev`, `Profile-dev`, `Debug`, ...), empty when the project cannot
+  /// be read. Flutter's `--flavor <f>` needs `Debug-<f>`, `Release-<f>` and
+  /// `Profile-<f>` beside the scheme named `<f>`.
+  final Set<String> iosConfigurations;
+
   bool get isEmpty => android == null && ios == null;
 }
 
@@ -54,9 +73,11 @@ class NativeFlavors {
 NativeFlavors readNativeFlavors(String appDir) {
   Map<String, String?>? android;
   String? androidFile;
+  var androidRunner = false;
   for (final name in const ['build.gradle.kts', 'build.gradle']) {
     final file = File(p.join(appDir, 'android', 'app', name));
     if (!file.existsSync()) continue;
+    androidRunner = true;
     androidFile = p.posix.join('android', 'app', name);
     android = parseGradleFlavors(file.readAsStringSync());
     break;
@@ -64,6 +85,12 @@ NativeFlavors readNativeFlavors(String appDir) {
 
   Map<String, String?>? ios;
   String? schemesDir;
+  final xcodeproj = Directory(p.join(appDir, 'ios', 'Runner.xcodeproj'));
+  final iosRunner = xcodeproj.existsSync();
+  final pbxprojFile = File(p.join(xcodeproj.path, 'project.pbxproj'));
+  final pbxproj = pbxprojFile.existsSync()
+      ? pbxprojFile.readAsStringSync()
+      : '';
   final schemes = Directory(
     p.join(appDir, 'ios', 'Runner.xcodeproj', 'xcshareddata', 'xcschemes'),
   );
@@ -81,12 +108,7 @@ NativeFlavors readNativeFlavors(String appDir) {
     ]..sort();
     final flavors = names.where((n) => n != 'Runner').toList();
     if (flavors.isNotEmpty) {
-      final pbxproj = File(
-        p.join(appDir, 'ios', 'Runner.xcodeproj', 'project.pbxproj'),
-      );
-      final ids = pbxproj.existsSync()
-          ? parseBundleIds(pbxproj.readAsStringSync())
-          : const <String, String>{};
+      final ids = parseBundleIds(pbxproj);
       ios = {for (final name in flavors) name: ids[name]};
     }
   }
@@ -96,7 +118,20 @@ NativeFlavors readNativeFlavors(String appDir) {
     androidFile: androidFile,
     ios: ios,
     iosSchemesDir: schemesDir,
+    androidRunner: androidRunner,
+    iosRunner: iosRunner,
+    iosConfigurations: parseBuildConfigurations(pbxproj),
   );
+}
+
+/// The names of the build configurations of an Xcode `project.pbxproj`
+/// (`Debug`, `Debug-dev`, ...), from its `XCBuildConfiguration` objects.
+Set<String> parseBuildConfigurations(String pbxproj) {
+  final block = RegExp(
+    r'isa = XCBuildConfiguration;(.*?)name = "?([\w-]+)"?;\s*\};',
+    dotAll: true,
+  );
+  return {for (final m in block.allMatches(pbxproj)) m.group(2)!};
 }
 
 /// The `productFlavors` of a Gradle build script (Kotlin or Groovy DSL) and

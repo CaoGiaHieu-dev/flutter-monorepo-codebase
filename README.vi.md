@@ -453,7 +453,7 @@ Chúng ta sử dụng `go_router` kết hợp với `go_router_builder` để đ
 ### Quyền Sở Hữu Tuyến Đường (Route Ownership)
 Từng Feature Package tự sở hữu cấu trúc và tệp định tuyến của riêng mình:
 - `SplashPage` (`feature_splash`, cung cấp qua `IAppSplashScreen`) được `MainScope` hiển thị trong lúc app khởi tạo và **không** đăng ký trong GoRouter.
-- Gói `feature_auth` sở hữu `LoginRoute`, đóng góp qua `IFeatureRouteModule` của nó.
+- Package `feature_auth` sở hữu `LoginRoute`, đóng góp qua `IFeatureRouteModule` của nó.
 - Các Route tự kế thừa `GoRouteDataCustom` để có sẵn tính năng theo dõi màn hình tự động và chuyển trang mượt mà theo từng nền tảng.
 
 ### Lắp Ráp Tại Runtime (Assembly)
@@ -496,8 +496,12 @@ một generator smoke test. Các lệnh theo đúng thứ tự: [`CONTRIBUTING.m
 
 ### Lệnh Biên Dịch Android APK từ Root:
 ```bash
+bundle install                                                                  # một lần
+cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml    # một lần — thiếu nó các lane sẽ dừng
 bundle exec fastlane android build flavor:dev build_type:apk distribute_store:false distribute_firebase:false skip_setup:true change_log:test build_number:1 flutter_version:stable version:1.0.0
 ```
+
+`Config.yaml` bị gitignore. Khi cả hai cờ distribute đều `false`, bản mẫu giữ nguyên là đủ để build; hãy điền nó đầy đủ trước khi phát hành: [`operations/02_fastlane_release.md`](docs/vi/operations/02_fastlane_release.md) § 2. Bản build nằm trong `apps/mobile/build/app/outputs/flutter-apk/`.
 
 ---
 
@@ -567,6 +571,11 @@ dart tools/barrel_generator/generate.dart <package>/lib   # sau khi thêm, đổ
 > `**.config.dart`, `**.module.dart` — xem `analysis_options.yaml`). Analyze sạch **không** chứng
 > minh app biên dịch được. Luôn build thật trước khi tin vào một đợt refactor lớn.
 
+### 7. Biến Nó Thành Của Bạn
+Template được phát hành với các tên giữ chỗ — `com.example.codebase`, Apple team ID của tác giả,
+địa chỉ `your-domain.example`, handle `@your-org` trong CODEOWNERS, link tới repo gốc. Danh sách đầy
+đủ, từng file một, cùng những tên nên để nguyên: [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 8.
+
 ---
 
 ## 📚 Hệ Thống Tài Liệu (Documentation Hub)
@@ -578,7 +587,7 @@ Tài liệu được tổ chức theo **việc bạn đang muốn làm**, không
 ### 🚀 Bắt Đầu — *mới vào repo? đọc theo thứ tự này*
 | Tài liệu | Trả lời câu hỏi |
 | :--- | :--- |
-| [01. Cài đặt](docs/vi/getting-started/01_setup.md) | Cần cài gì, và làm sao chạy được app? |
+| [01. Cài đặt](docs/vi/getting-started/01_setup.md) | Cần cài gì, làm sao chạy được app, và phải đổi tên những gì để nó thành của tôi? |
 | [02. Dạo quanh dự án](docs/vi/getting-started/02_project_tour.md) | Mỗi package làm gì, muốn sửa X thì vào đâu? |
 | [03. Quy trình hàng ngày](docs/vi/getting-started/03_daily_workflow.md) | Gõ lệnh nào, khi nào? |
 | [04. Tutorial feature đầu tiên](docs/vi/getting-started/04_first_feature_tutorial.md) | Dựng, test và gỡ một module nhỏ từ đầu tới cuối, trong 30 phút |

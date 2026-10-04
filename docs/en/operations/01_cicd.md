@@ -94,7 +94,7 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 Dependency installation runs `dart tools/workspace_setup/configure.dart`. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input.
 
-### The "Fail on Critical Issues" step does not fail
+### The "Annotate critical issues (advisory)" step does not fail
 
 The final step counts the files the report marks HIGH priority — the one `**<Priority label>:** 🔴 HIGH` line each file section carries (written by `tools/code_review/lib/services/report_service.dart`; the label is translated, the value is not). Then it deliberately does nothing with the count:
 

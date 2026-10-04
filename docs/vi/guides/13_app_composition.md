@@ -84,7 +84,7 @@ modules:
 
 Một key chỉ tồn tại cùng với code đọc nó: một test của tools fail khi một key nêu tên một consumer mà consumer đó không nhắc tới. `composer` từ chối `app.kind`, thứ không có gì đọc, kèm chỉ dẫn xoá dòng ấy.
 
-Khi một platform bỏ `splash`, `push`, `deep_links` hay `orientation`, facts được sinh mang một mặc định suy ra, và báo cáo nói rõ nó từ đâu: `splash` là native trên iOS và, ở nơi khác, là Dart khi capability `splash` là `provided`; `push` bật khi `core_notifications` được ghép và hỗ trợ platform (không bao giờ trên web — không có service worker nào được chuyển kèm); `deep_links` bật; `orientation` là `phones_portrait` (màn hình dưới ngưỡng điện thoại bị khoá dọc). Facts luôn mang tường minh mọi trường, nên một app không bao giờ phụ thuộc vào một mặc định trong Dart.
+Khi một platform bỏ `splash`, `push`, `deep_links` hay `orientation`, facts được sinh mang một mặc định suy ra, và báo cáo nói rõ nó từ đâu: `splash` là native trên iOS và, ở nơi khác, là Dart khi capability `splash` là `provided`; `push` bật khi `core_notifications` được ghép và hỗ trợ platform (không bao giờ trên web — không có service worker nào đi kèm); `deep_links` bật; `orientation` là `phones_portrait` (màn hình dưới ngưỡng điện thoại bị khoá dọc). Facts luôn mang tường minh mọi trường, nên một app không bao giờ phụ thuộc vào một mặc định trong Dart.
 
 ## 4. Profile
 
@@ -94,7 +94,7 @@ Khi một platform bỏ `splash`, `push`, `deep_links` hay `orientation`, facts 
 |:--|:--|:--|:--|
 | `display` | `DisplayProfile` | khung thiết kế, chính sách scale theo từng lớp cửa sổ, chế độ chia đôi màn hình, trần cỡ chữ của hệ điều hành, ngưỡng điện thoại | 375×812, `expanded` vẽ 1:1, `textScaleMax: 2.0` (một `const` assert từ chối giá trị dưới 2.0 và trên 4.0), ngưỡng điện thoại 600 |
 | `router` | `RouterProfile` | khi nào dùng entry location (`firstLaunch`, `always`, `never`), vị trí fallback | chỉ lần chạy đầu, tab đầu tiên |
-| `locale` | `LocaleProfile` | các ngôn ngữ cung cấp (`supported`; null = mọi ARB template chuyển kèm), ngôn ngữ fallback và ngôn ngữ lần chạy đầu | mọi ngôn ngữ đã có, `en`, ngôn ngữ của thiết bị |
+| `locale` | `LocaleProfile` | các ngôn ngữ cung cấp (`supported`; null = mọi ARB mà template đi kèm), ngôn ngữ fallback và ngôn ngữ lần chạy đầu | mọi ngôn ngữ đã có, `en`, ngôn ngữ của thiết bị |
 | `theme` | `ThemeProfile` | chế độ theme lần chạy đầu mở ra, ghi đè palette theo `PaletteToken` (ARGB) | chế độ theo hệ thống, palette của template |
 | `network` | `NetworkProfile` | timeout connect, receive và send của HTTP client mặc định, header thêm, redirect | mỗi loại 20 giây, không header thêm, không redirect |
 
@@ -147,7 +147,7 @@ Future<void> _sizeTheWindow(AppRuntime runtime, WindowFacts window) async {
 }
 ```
 
-Hook nào nhắc tới `AppRuntime` hoặc `WindowFacts` cần import `core_common`, mà file được sinh không có sẵn. Gõ `const ShellHooks(` là IDE liệt kê bảy hook, mỗi hook được ghi rõ chạy khi nào và không được làm gì: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (bảng nằm trong [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#các-hook)). Một hook ném lỗi được báo cáo như mọi lỗi trong zone của app và dừng boot tại nơi nó chạy. Template không chuyển kèm plugin cửa sổ nào (RULE-74: catalog chỉ có thêm khi một app dùng tới), nên app nào muốn đặt kích thước cửa sổ desktop thì tự thêm plugin vào dependency của mình.
+Hook nào nhắc tới `AppRuntime` hoặc `WindowFacts` cần import `core_common`, mà file được sinh không có sẵn. Gõ `const ShellHooks(` là IDE liệt kê bảy hook, mỗi hook được ghi rõ chạy khi nào và không được làm gì: `onError`, `onNonFatalError`, `beforeDependencies`, `afterBoot`, `navigatorObservers`, `redirect`, `configureWindow` (bảng nằm trong [`../architecture/06_app_shell.md`](../architecture/06_app_shell.md#các-hook)). Một hook ném lỗi được báo cáo như mọi lỗi trong zone của app và dừng boot tại nơi nó chạy. Template không đi kèm plugin cửa sổ nào (RULE-74: catalog chỉ có thêm khi một app dùng tới), nên app nào muốn đặt kích thước cửa sổ desktop thì tự thêm plugin vào dependency của mình.
 
 ## 6. Contract: shell đòi gì ở một app
 
@@ -180,7 +180,7 @@ Thứ app phải đăng ký cho một package nó ghép — `FirebaseOptions` ch
 
 1. Xem cái gì chặn nó: mục *Not targeted — and what blocks it* của báo cáo nêu tên mọi package đã ghép mà `platforms:` trong pubspec không liệt kê nó (`core_database` không có web, `core_notifications` không có Windows hay Linux).
 2. Khai nó, runner còn chờ được tạo: `platforms.<p>: { runner: scaffold }`, rồi `dart tools/composer/composer.dart sync --app <id>`.
-3. Tạo runner một lần, bằng dòng lệnh báo cáo in ra, ví dụ `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .`, rồi đổi khai báo thành `runner: committed`. Runner khai `committed` cần có thư mục của nó, runner `scaffold` thì không được có (V6).
+3. Tạo runner một lần, bằng dòng lệnh báo cáo in ra, ví dụ `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .` (hãy đặt reverse domain của riêng bạn vào `--org`: platform nào có application ID hoặc bundle ID thì dựng nó từ giá trị này), rồi đổi khai báo thành `runner: committed`. Runner khai `committed` cần có thư mục của nó, runner `scaffold` thì không được có (V6).
 4. Đặt thứ platform bật, nếu mặc định chưa đúng: `push`, `deep_links`, `orientation`, và với platform desktop là `window: { initial: [1440, 900], min: [1024, 700] }`, cần hook `configureWindow` (không có thì `P05`). Một platform tắt push hay deep link sẽ log một dòng nêu tên key và không khởi tạo gì.
 5. Chạy `composer verify` và smoke test. Trên web không có tuỳ chọn `--flavor`: truyền `--dart-define=APP_FLAVOR=<flavor>` — công cụ Flutter từ chối `FLUTTER_APP_FLAVOR`, tên riêng của framework, và shell chỉ đọc `APP_FLAVOR` trên web.
 

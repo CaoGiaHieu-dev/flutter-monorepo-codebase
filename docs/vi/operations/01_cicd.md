@@ -95,7 +95,7 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 Bước cài dependency chạy `dart tools/workspace_setup/configure.dart`. Flutter lấy từ `.fvmrc` (`flutter-version-file`) ở mọi lần chạy — kể cả pull request — trừ khi lần chạy tay điền tham số tuỳ chọn `flutter_version`.
 
-### Bước "Fail on Critical Issues" không hề fail
+### Bước "Annotate critical issues (advisory)" không hề fail
 
 Bước cuối đếm số file mà báo cáo đánh dấu ưu tiên HIGH — dòng `**<Nhãn ưu tiên>:** 🔴 HIGH` duy nhất trong phần của mỗi file (do `tools/code_review/lib/services/report_service.dart` ghi; nhãn được dịch, giá trị thì không). Sau đó nó cố ý không làm gì với kết quả đếm:
 

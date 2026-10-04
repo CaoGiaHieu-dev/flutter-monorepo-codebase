@@ -149,6 +149,10 @@ FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 
 `platform/ui/design_system/l10n.yaml` and each feature's `l10n.yaml` say `preferred-supported-locales: [en, vi]`, as does the generator's `l10n.yaml.mustache`. `gen-l10n` still picks up `ja.arb` without an edit — the list only **orders** `AppLocalizations.supportedLocales`, and those it omits follow alphabetically. That order is what the Settings picker shows for an app that names no `supported` list, so append the new locale to keep it explicit: `[en, vi, ja]`. The fallback is not this order: it is `LocaleProfile.fallback`.
 
+### Declare the language to iOS
+
+`apps/mobile/ios/Runner/Info.plist` lists the app's languages under `CFBundleLocalizations` (`en`, `vi`), and iOS offers the app only those — in the per-app language setting and when it picks the preferred locale. Add `<string>ja</string>` to that array. Android needs nothing: `build.gradle.kts` sets no locale filter, so the new ARB is enough there.
+
 ### Regenerate
 
 ```bash
@@ -321,7 +325,7 @@ Review checklist:
 
 - [ ] No hard-coded user-facing string anywhere
 - [ ] New key added to **all** `.arb` locale files, `flutter gen-l10n` run
-- [ ] New locale: an ARB in `core_base_ui` **and every feature**, its name in `AppLanguages.nameOf` (step 2)
+- [ ] New locale: an ARB in `core_base_ui` **and every feature**, its name in `AppLanguages.nameOf`, and the code in the iOS `CFBundleLocalizations` (step 2)
 - [ ] Feature registers `IFeatureLocalization`; `root_app.dart` untouched
 - [ ] `core_ui_kit` uses `core_base_ui` strings, defines no `.arb`
 - [ ] Colours via `context.colors.*`, typography via `AppTextStyles.*(context)`

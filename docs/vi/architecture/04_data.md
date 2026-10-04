@@ -407,7 +407,7 @@ class PaymentRepositoryImpl extends BaseRepository
   @override
   Future<Result<PaymentEntity>> charge(ChargeParams params) {
     return execute<PaymentModel, PaymentEntity>(
-      () => _remote.charge(params.toJson()),
+      () => _remote.charge({'amount_cents': params.amountCents}),
       mapper: (model) => model.toEntity(),
     );
   }

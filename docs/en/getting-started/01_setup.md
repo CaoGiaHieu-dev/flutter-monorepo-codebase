@@ -379,6 +379,53 @@ If `flutter analyze` is not clean:
 
 ---
 
+## 8. Make it yours
+
+The template ships under placeholder names, and a few identifiers in it belong to its author. No gate checks any of them: a rename that misses one place still analyzes and builds, then fails later — at a store upload, a push, a deep link. Go through the lists once, then run `flutter analyze`, `cd apps/mobile && flutter test test/di_smoke_test.dart` and a debug APK build (RULE-77).
+
+### 8.1 The mobile app's name and identity
+
+| What | Where to change it |
+| :--- | :--- |
+| Display name, per flavor | `APP_NAME` in `apps/mobile/env.dev`, `env.stg` and `env.prod`. Dart reads it for the title. On Android, `build.gradle.kts` turns it into the launcher label `app_name` (`"Codebase"` when the key is absent). On iOS the label is the `APP_DISPLAY_NAME` build setting of each Runner configuration in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*) |
+| Display-name fallback | `app.name` in `apps/<id>/app_manifest.yaml`, then `dart tools/composer/composer.dart sync` |
+| Android application ID | `namespace` and `applicationId` in `apps/mobile/android/app/build.gradle.kts` (`com.example.codebase`; the `dev` and `staging` flavors append `.dev` and `.stg` through `applicationIdSuffix`). Move `src/main/kotlin/com/example/codebase/` to the new package path and edit the `package` line of `MainActivity.kt`: the manifest names it `.MainActivity`, which resolves against `namespace`. |
+| iOS bundle ID | every `PRODUCT_BUNDLE_IDENTIFIER` in `project.pbxproj`: `com.example.codebase` (prod), `.dev`, `.staging`, and a `.RunnerTests` one per configuration (`grep -n PRODUCT_BUNDLE_IDENTIFIER`) |
+| iOS signing team | every `DEVELOPMENT_TEAM` in `project.pbxproj` is the template author's Apple team ID. Replace it with yours, or clear it and pick the team in Xcode |
+| Deep-link scheme and domain | `DEEP_LINK_SCHEME` per flavor, in both `build.gradle.kts` and `project.pbxproj` (the two must agree); `WEB_DOMAIN` in the env files; the package name and bundle ID inside the files you serve under `/.well-known/` ([`04_routing.md` § 9](../guides/04_routing.md#9-set-up-deep-links)) |
+| Firebase | the IDs you register: run `dart tools/firebase/firebase_config.dart --app mobile` with the new base bundle ID (§3.1), or put the new `package_name` in the stub `google-services.json` files of §3.2 |
+| Fastlane | `app_bundle_ids.ios` and `.android` in `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-ids)); the flavor suffixes there must stay in step with Gradle and Xcode |
+| Icon and splash | the images under `assets/branding/`, then `dart tools/theme_generator/theme_setting.dart --app mobile` (it reads `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml` at the repository root) |
+| Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb` |
+
+`apps/admin` has no native project yet. When you create its runners ([`13_app_composition.md` § 7](../guides/13_app_composition.md#add-a-platform)), pass your own reverse domain to `flutter create --org` instead of `com.example`.
+
+### 8.2 Names to leave alone
+
+The Dart package names (the root `codebase`, the apps `mobile_app` and `admin_app`, every `feature_*`, `domain_*`, `data_*` and `core_*` package) and the app ids `mobile` and `admin` are internal: none reaches a store or a user. They are also load-bearing. `arch_check` classifies a package by its path and, in places, by its name prefix, and `composer` derives `<id>_app` and every `--app` value from the app id. There is no rename tool, so keep them.
+
+### 8.3 Flavors and languages
+
+- **A fourth flavor is not a manifest edit.** The flavors are a closed set: `composer` refuses any other name (`flavors.qa: expected one of dev, staging, prod`), the `Flavor` enum in `platform_kernel` has three values, and Gradle, Xcode and `Config.yaml` each declare the same three. Point `staging` at your QA backend through `env.stg`, or treat a new flavor as a change to all of those places together.
+- **A new language** touches every package that ships strings, and the iOS `Info.plist`: [`09_localization_theming.md` § 2](../guides/09_localization_theming.md#2-add-a-locale).
+
+### 8.4 Repository placeholders
+
+| File | Replace |
+| :--- | :--- |
+| `SECURITY.md` | `security@your-domain.example`, with a monitored address |
+| `CODE_OF_CONDUCT.md` | `conduct@your-domain.example`, likewise |
+| `.github/CODEOWNERS` | every `@your-org/<team>`: GitHub silently ignores a team that does not exist, so the rule looks enforced and is not |
+| `.github/ISSUE_TEMPLATE/config.yml` | the three `github.com/CaoGiaHieu-dev/flutter-monorepo-codebase` links |
+| `LICENSE`, the title and footer of `README.md` / `README.vi.md`, `CLAUDE.md` | the author's name and the project title |
+| `CHANGELOG.md` | the `[Unreleased]` link at the bottom, and the template's own history |
+| `tools/code_review/` | the project name in `review_prompt.md` and the report footer in `lib/services/language_service.dart` (the optional AI review) |
+| `azure-ci-cd.yml` | the pool name `codebase`: a self-hosted pool you create (only if you use Azure) |
+
+Signing keys and CI secrets are not placeholders in the repository; you create them: [`../operations/02_fastlane_release.md` § 4](../operations/02_fastlane_release.md#4-signing) and [`../operations/01_cicd.md` § 7](../operations/01_cicd.md#7-secrets).
+
+---
+
 ## Where to go next
 
 | You want to… | Read |

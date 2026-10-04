@@ -272,6 +272,7 @@ class EnvConstants {
 > `apps/mobile/env.dev` và `apps/mobile/env.stg` được **commit có chủ đích** — clone mới phải build được — nên đừng để bí mật trong đó. `apps/mobile/env.prod` được ignore theo tên trong `apps/mobile/.gitignore` (mẫu `*.env` ở root không khớp với nó); chạy `git check-ignore -v apps/mobile/env.prod` để xác nhận trước khi đặt giá trị production vào.
 
 Một app đọc những key nào, và flavor nào phải có chúng khác rỗng, được khai trong `app_manifest.yaml` của app, dưới `env:` (`BASE_URL: { required_in: [prod] }`; `native_only: true` cho key chỉ Gradle hay Xcode đọc). Một bản build non-debug của flavor yêu cầu một key mà key đó đang rỗng sẽ dừng ở màn hình boot-error (`P03`) thay vì chạy mà không có mạng. Vì vậy một key chỉ bắt buộc ở nơi bản build thiếu nó là vô dụng: `APP_NAME` thì không, tiêu đề rơi về `app.name` trong manifest. `composer verify` kiểm tra rằng các file env đang có chứa đúng các key đã khai (V11). Chính các flavor cũng được khai ở đó (`flavors:`), cùng quyết định pinning của từng app ([`../guides/13_app_composition.md`](../guides/13_app_composition.md)).
+
 ---
 
 ## 6. Chạy app
@@ -376,6 +377,53 @@ Nếu `flutter analyze` chưa sạch:
 | `Target of URI doesn't exist: 'firebase_options_dev.dart'` (và `_prod`, `_staging`) trong `firebase_module.dart` | Thiếu các file Firebase options bị gitignore | [Bước 3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được), dùng file thật hoặc stub |
 | `Target of URI doesn't exist` cho một file dưới `lib/src/gen/`, `Undefined name 'AppLocalizations'`, `Undefined name 'Assets'` | gen-l10n chưa chạy: các barrel export output bị gitignore của nó | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `flutter gen-l10n` trong package báo lỗi) |
 | `Undefined class '_$…'`, không tìm thấy `… .g.dart` / `.freezed.dart` / `.module.dart` | build_runner chưa chạy hoặc đã cũ | Chạy `dart tools/workspace_setup/configure.dart` (hoặc `dart run build_runner build --workspace` nếu đã setup một lần) |
+
+---
+
+## 8. Biến nó thành của bạn
+
+Template được phát hành với các tên giữ chỗ, và vài định danh trong đó thuộc về tác giả của nó. Không gate nào kiểm tra chúng: một lần đổi tên bỏ sót một chỗ vẫn analyze và build được, rồi hỏng muộn hơn — lúc upload lên store, lúc gửi push, lúc mở deep link. Hãy đi qua các danh sách dưới đây một lần, sau đó chạy `flutter analyze`, `cd apps/mobile && flutter test test/di_smoke_test.dart` và build một APK debug (RULE-77).
+
+### 8.1 Tên và danh tính của app mobile
+
+| Cái gì | Đổi ở đâu |
+| :--- | :--- |
+| Tên hiển thị, theo flavor | `APP_NAME` trong `apps/mobile/env.dev`, `env.stg` và `env.prod`. Dart đọc nó làm tiêu đề. Trên Android, `build.gradle.kts` biến nó thành nhãn launcher `app_name` (`"Codebase"` khi thiếu key). Trên iOS, nhãn là build setting `APP_DISPLAY_NAME` của từng cấu hình Runner trong `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*) |
+| Tên hiển thị dự phòng | `app.name` trong `apps/<id>/app_manifest.yaml`, rồi `dart tools/composer/composer.dart sync` |
+| Application ID của Android | `namespace` và `applicationId` trong `apps/mobile/android/app/build.gradle.kts` (`com.example.codebase`; flavor `dev` và `staging` nối thêm `.dev` và `.stg` qua `applicationIdSuffix`). Chuyển `src/main/kotlin/com/example/codebase/` sang đường dẫn package mới và sửa dòng `package` của `MainActivity.kt`: manifest gọi nó là `.MainActivity`, tên này được resolve theo `namespace` |
+| Bundle ID của iOS | mọi `PRODUCT_BUNDLE_IDENTIFIER` trong `project.pbxproj`: `com.example.codebase` (prod), `.dev`, `.staging`, và một dòng `.RunnerTests` cho mỗi cấu hình (`grep -n PRODUCT_BUNDLE_IDENTIFIER`) |
+| Team ký của iOS | mọi `DEVELOPMENT_TEAM` trong `project.pbxproj` là Apple team ID của tác giả template. Thay bằng của bạn, hoặc xoá đi và chọn team trong Xcode |
+| Scheme và domain của deep link | `DEEP_LINK_SCHEME` theo từng flavor, ở cả `build.gradle.kts` lẫn `project.pbxproj` (hai nơi phải khớp nhau); `WEB_DOMAIN` trong các file env; tên package và bundle ID bên trong các file bạn phục vụ dưới `/.well-known/` ([`04_routing.md` § 9](../guides/04_routing.md#9-thiết-lập-deep-link)) |
+| Firebase | các ID bạn đăng ký: chạy `dart tools/firebase/firebase_config.dart --app mobile` với base bundle ID mới (§3.1), hoặc đặt `package_name` mới vào các file `google-services.json` stub ở §3.2 |
+| Fastlane | `app_bundle_ids.ios` và `.android` trong `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-id)); hậu tố flavor ở đó phải khớp với Gradle và Xcode |
+| Icon và splash | các ảnh dưới `assets/branding/`, rồi `dart tools/theme_generator/theme_setting.dart --app mobile` (nó đọc `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở thư mục gốc repo) |
+| Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb` |
+
+`apps/admin` chưa có project native. Khi tạo runner cho nó ([`13_app_composition.md` § 7](../guides/13_app_composition.md#thêm-một-platform)), hãy truyền reverse domain của bạn cho `flutter create --org` thay vì `com.example`.
+
+### 8.2 Những tên nên để nguyên
+
+Tên package Dart (`codebase` ở gốc, hai app `mobile_app` và `admin_app`, mọi package `feature_*`, `domain_*`, `data_*` và `core_*`) cùng id app `mobile` và `admin` là tên nội bộ: không cái nào lên store hay tới tay người dùng. Chúng cũng đang gánh việc: `arch_check` phân loại package theo đường dẫn và, ở một số chỗ, theo tiền tố tên, còn `composer` suy ra `<id>_app` và mọi giá trị `--app` từ id của app. Không có tool đổi tên, nên hãy giữ nguyên.
+
+### 8.3 Flavor và ngôn ngữ
+
+- **Thêm flavor thứ tư không chỉ là sửa manifest.** Flavor là một tập đóng: `composer` từ chối mọi tên khác (`flavors.qa: expected one of dev, staging, prod`), enum `Flavor` trong `platform_kernel` có ba giá trị, và Gradle, Xcode lẫn `Config.yaml` đều khai cùng ba cái đó. Hãy trỏ `staging` sang backend QA của bạn qua `env.stg`, hoặc coi flavor mới là một thay đổi đồng thời ở tất cả những nơi đó.
+- **Thêm ngôn ngữ mới** đụng tới mọi package có chuỗi dịch, và cả `Info.plist` của iOS: [`09_localization_theming.md` § 2](../guides/09_localization_theming.md#2-thêm-một-ngôn-ngữ).
+
+### 8.4 Các giá trị giữ chỗ trong repo
+
+| File | Thay bằng |
+| :--- | :--- |
+| `SECURITY.md` | `security@your-domain.example`, bằng một địa chỉ có người theo dõi |
+| `CODE_OF_CONDUCT.md` | `conduct@your-domain.example`, tương tự |
+| `.github/CODEOWNERS` | mọi `@your-org/<team>`: GitHub âm thầm bỏ qua team không tồn tại, nên rule trông như có hiệu lực mà thật ra không |
+| `.github/ISSUE_TEMPLATE/config.yml` | ba link `github.com/CaoGiaHieu-dev/flutter-monorepo-codebase` |
+| `LICENSE`, tiêu đề và chân trang của `README.md` / `README.vi.md`, `CLAUDE.md` | tên tác giả và tên dự án |
+| `CHANGELOG.md` | link `[Unreleased]` ở cuối, và lịch sử riêng của template |
+| `tools/code_review/` | tên dự án trong `review_prompt.md` và chân trang báo cáo trong `lib/services/language_service.dart` (phần AI review tuỳ chọn) |
+| `azure-ci-cd.yml` | tên pool `codebase`: một pool self-hosted do bạn tạo (chỉ khi dùng Azure) |
+
+Khoá ký và secret CI không phải giá trị giữ chỗ trong repo; bạn tự tạo chúng: [`../operations/02_fastlane_release.md` § 4](../operations/02_fastlane_release.md#4-ký-ứng-dụng) và [`../operations/01_cicd.md` § 7](../operations/01_cicd.md#7-secrets).
 
 ---
 

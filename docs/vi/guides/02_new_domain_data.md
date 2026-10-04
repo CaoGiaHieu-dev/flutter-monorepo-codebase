@@ -34,11 +34,11 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 Nó tạo ra:
 
 ```
-modules/payment/domain/lib/src/     entities/  usecases/  repositories/
-modules/payment/data/lib/src/       models/    data_sources/  repositories_impl/
+modules/payment/domain/lib/src/     repositories/
+modules/payment/data/lib/src/       repositories_impl/
 ```
 
-Mỗi package cũng có sẵn một thư mục `utils/` rỗng: mọi package tự giữ hằng số của mình ở đó (RULE-09). Thư mục `params/` ở §4 và các thư mục `remote/` / `local/` ở §8 do bạn tạo cùng với file đầu tiên của chúng. Git không theo dõi thư mục rỗng, nên một thư mục bạn chưa đặt gì vào sẽ vắng mặt trong bản clone mới.
+Hai thư mục này mỗi bên chứa một stub. Mọi thư mục còn lại bạn tạo cùng với file đầu tiên của nó khi các bước dưới đây đi tới: `entities/`, `params/` và `usecases/` trong package domain; `models/` và `data_sources/{remote,local}/` trong package data; còn `utils/` ở cả hai, cho các hằng số mà package đó sở hữu (RULE-09). Git không theo dõi thư mục rỗng và bước barrel xoá thư mục rỗng, nên một thư mục bạn chưa đặt gì vào đơn giản là không có mặt — kể cả trong bản clone mới.
 
 ## 2. Lên thứ tự xây dựng
 

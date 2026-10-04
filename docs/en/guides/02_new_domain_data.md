@@ -34,11 +34,11 @@ dart tools/module_generator/generate.dart 3 payment   # data_payment
 It creates:
 
 ```
-modules/payment/domain/lib/src/     entities/  usecases/  repositories/
-modules/payment/data/lib/src/       models/    data_sources/  repositories_impl/
+modules/payment/domain/lib/src/     repositories/
+modules/payment/data/lib/src/       repositories_impl/
 ```
 
-Each also gets an empty `utils/`: every package owns its constants there (RULE-09). The `params/` folder of §4 and the `remote/` / `local/` folders of §8 you create with their first file. Git tracks no empty directory, so a folder you have not filled yet is absent from a fresh clone.
+Those two folders hold the one stub each. Every other folder you create with its first file, as the steps below reach it: `entities/`, `params/` and `usecases/` in the domain package; `models/` and `data_sources/{remote,local}/` in the data package; and `utils/` in either one, for the constants that package owns (RULE-09). Git tracks no empty directory and the barrel pass deletes an empty one, so a folder you have not filled is simply absent — also on a fresh clone.
 
 ## 2. Plan the build order
 

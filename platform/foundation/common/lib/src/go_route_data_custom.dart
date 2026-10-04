@@ -1,19 +1,31 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:core_di/core_di.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
 /// A custom GoRouteData implementation that adds support for route awareness,
 /// analytics screen tracking, and standard pop/transition behaviors.
+///
+/// Every page is wrapped in a [RouteAwareWidget] on every platform, so each
+/// screen is reported to the optional `IAnalytics` whether the app runs on a
+/// device or on the web.
 abstract class GoRouteDataCustom extends GoRouteData {
   const GoRouteDataCustom();
 
+  /// Overrides the key of the page; `null` uses `state.pageKey`.
+  ///
+  /// Return a stable key to make go_router treat two locations as the same
+  /// page (the page is updated in place instead of replaced).
   ValueKey<Object?>? get pageKey => null;
 
+  /// Whether the route may be popped by the system back gesture or button.
+  ///
+  /// Return `false` for a screen that must not be dismissed that way (a
+  /// blocking step); the default is `true`.
   bool get canPop => true;
 
   @override
@@ -23,38 +35,65 @@ abstract class GoRouteDataCustom extends GoRouteData {
 
   @override
   Page<void> buildPage(BuildContext context, GoRouterState state) {
-    if (kIsWeb) return super.buildPage(context, state);
-
-    final child = RouteAwareWidget(
-      state.name ?? state.path ?? 'RouteAwareWidget',
+    return routePageFor(
+      state: state,
       child: build(context, state),
-    );
-
-    if (Platform.isIOS) {
-      return CupertinoPage(
-        canPop: canPop,
-        allowSnapshotting: false,
-        key: pageKey ?? state.pageKey,
-        child: child,
-      );
-    }
-    return CustomTransitionPage(
-      key: pageKey ?? state.pageKey,
-      child: child,
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        return PopScope(
-          canPop: canPop,
-          child: CupertinoPageTransition(
-            key: pageKey ?? state.pageKey,
-            linearTransition: true,
-            primaryRouteAnimation: animation,
-            secondaryRouteAnimation: secondaryAnimation,
-            child: child,
-          ),
-        );
-      },
+      canPop: canPop,
+      pageKey: pageKey,
+      isWeb: kIsWeb,
     );
   }
+}
+
+/// Builds the page a [GoRouteDataCustom] route shows.
+///
+/// [child] is wrapped in a [RouteAwareWidget] named after the route. The page
+/// type follows the platform convention: a [CupertinoPage] on iOS, a plain
+/// [MaterialPage] on the web (the browser owns the transition), and a
+/// Cupertino-style slide everywhere else. [canPop] and [pageKey] apply on all
+/// of them. [isWeb] is a parameter so the web branch can be tested; callers
+/// pass [kIsWeb].
+@visibleForTesting
+Page<void> routePageFor({
+  required GoRouterState state,
+  required Widget child,
+  required bool canPop,
+  required bool isWeb,
+  ValueKey<Object?>? pageKey,
+}) {
+  final key = pageKey ?? state.pageKey;
+  final aware = RouteAwareWidget(
+    state.name ?? state.path ?? 'RouteAwareWidget',
+    child: child,
+  );
+
+  if (isWeb) {
+    return MaterialPage<void>(key: key, canPop: canPop, child: aware);
+  }
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return CupertinoPage<void>(
+      canPop: canPop,
+      allowSnapshotting: false,
+      key: key,
+      child: aware,
+    );
+  }
+  return CustomTransitionPage<void>(
+    key: key,
+    child: aware,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return PopScope(
+        canPop: canPop,
+        child: CupertinoPageTransition(
+          key: key,
+          linearTransition: true,
+          primaryRouteAnimation: animation,
+          secondaryRouteAnimation: secondaryAnimation,
+          child: child,
+        ),
+      );
+    },
+  );
 }
 
 /// A widget that is aware of route changes and logs screen views.

@@ -120,9 +120,9 @@ class AppRouter {
   ///
   /// "First launch" is the shell's own [AppBootStorage.viewedOnboard] flag,
   /// which `NavigatorWrapperWidget` sets the first time it keeps the user on
-  /// the entry location. This used to return the entry location on every
-  /// cold start, so a returning user saw onboarding until the session restore
-  /// finished and the boot redirect moved them on.
+  /// the entry location. Returning it on every cold start would show a
+  /// returning user onboarding until the session restore finished and the
+  /// boot redirect moved them on.
   String get entryLocation {
     final entry = usesEntryLocation ? getItOrNull<IAppEntryLocation>() : null;
     return resolveEntryLocation(
@@ -184,9 +184,9 @@ class AppRouter {
             branches: _dashboardBranches,
             // Without a dashboard module the destinations still render, just
             // without chrome: `navigationShell` is itself the widget showing
-            // the current branch. This used to fall back to an empty
-            // `SizedBox`, so an app composing tabs but no dashboard — an
-            // admin app with only `settings`, say — opened on a blank screen.
+            // the current branch. An empty `SizedBox` fallback would leave an
+            // app composing tabs but no dashboard — an admin app with only
+            // `settings`, say — on a blank screen.
             builder: (context, state, navigationShell) {
               return getItOrNull<IDashboardRouteModule>()?.builder(
                     context,

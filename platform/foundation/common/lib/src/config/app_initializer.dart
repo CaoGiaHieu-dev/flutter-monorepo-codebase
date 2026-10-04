@@ -128,9 +128,8 @@ class AppInitializer {
 
     // Fail closed. Validation is switched off only for a debug build that
     // explicitly declared the `dev` flavor; a missing or unknown flavor is
-    // treated as `prod` here. `appFlavor` used to fall back to `dev`, so a
-    // build without `--flavor` — release included — accepted any
-    // certificate.
+    // treated as `prod` here. A fallback to `dev` would let a build without
+    // `--flavor` — release included — accept any certificate.
     if (AppConfig.bypassesCertificateValidation) {
       DynamicLogger.log(
         'TLS certificate validation is DISABLED (debug build, dev flavor). '

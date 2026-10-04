@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:core_responsive/core_responsive.dart';
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -59,7 +59,7 @@ class LoadMoreListView<P extends LoadMoreMixin<Object?>> extends BoxScrollView {
         // last item's own slot, and with no items it is the only child.
         if (isLoadMore && index == actualChildCount) {
           return SafeArea(
-            minimum: context.edgeInsets(vertical: 10),
+            minimum: EdgeInsets.symmetric(vertical: AppSpacing.mdH(context)),
             child: const Center(child: CircularProgressIndicator.adaptive()),
           );
         }

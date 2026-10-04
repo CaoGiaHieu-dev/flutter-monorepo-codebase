@@ -2,13 +2,12 @@
 ///
 /// ## Why this exists
 ///
-/// `NetworkConfigImpl` in the app shell used to import `data_auth` and
-/// `domain_auth` directly, to read the token from `AuthLocalDataSource` and
-/// renew it through `RefreshTokenUseCase`. That made the auth module
-/// **not removable** — the shell failed to compile without it — while the
-/// template's own rules promised the opposite. A `getItOrNull` guard cannot
-/// help there: an unresolved import fails at compile time, long before any
-/// lookup runs.
+/// `NetworkConfigImpl` in the app shell needs the token and a way to renew
+/// it. Importing `data_auth` and `domain_auth` to read `AuthLocalDataSource`
+/// and call `RefreshTokenUseCase` would make the auth module **not
+/// removable** — the shell would fail to compile without it — against the
+/// template's own rules. A `getItOrNull` guard cannot help there: an
+/// unresolved import fails at compile time, long before any lookup runs.
 ///
 /// Three methods, because three are what `NetworkConfig` asks for. It is not a
 /// general-purpose auth API: a module needing to *log someone in* talks to the

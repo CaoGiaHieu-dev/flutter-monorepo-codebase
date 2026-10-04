@@ -208,7 +208,7 @@ Iterable<ProfileProblem> _bundleDisagreements(
   }
 }
 
-/// `C05`–`C08` and `C11`: what both smoke tests used to check by hand. A
+/// `C05`–`C08` and `C11`: the structural checks both smoke tests share. A
 /// contract in [failed] already threw while it was resolved (`C10`): what
 /// depends on it is skipped rather than reported twice.
 Iterable<ProfileProblem> _structure(

@@ -4,8 +4,7 @@
 /// `@DriftDatabase(tables: ...)` at compile time and requires a DAO to be a
 /// `part of` its database library, so a database declared here would have to
 /// name the tables of whichever package owns them — the same "one object
-/// knows everything" coupling that was removed from `core_storage` and
-/// `core_common`.
+/// knows everything" coupling `core_storage` and `core_common` avoid.
 ///
 /// Instead, **each package that owns persisted data declares its own
 /// database** next to its tables, DAO and data source, and opens it with the

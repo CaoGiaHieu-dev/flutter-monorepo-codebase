@@ -64,8 +64,8 @@ void main() {
     });
 
     test('clamp reads NaN as the design factor, then clamps it', () {
-      // NaN compares false with everything, so it used to come back out
-      // unchanged and turn every size built from it into NaN.
+      // NaN compares false with everything, so a plain clamp would hand it
+      // back unchanged and turn every size built from it into NaN.
       expect(const ScaleBounds.downOnly().clamp(double.nan), 1);
       expect(const ScaleBounds.unbounded().clamp(double.nan), 1);
       expect(const ScaleBounds.fixed().clamp(double.nan), 1);

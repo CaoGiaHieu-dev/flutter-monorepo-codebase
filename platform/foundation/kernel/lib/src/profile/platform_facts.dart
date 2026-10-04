@@ -64,9 +64,8 @@ final class WindowFacts {
 ///
 /// Generated from the manifest with every field explicit, so a generated app
 /// never depends on a Dart default. The defaults of a hand-built object —
-/// [PlatformFacts.today] — equal what the template did before apps could
-/// declare anything: push and deep links on, the Dart splash, phone-sized
-/// displays locked to portrait.
+/// [PlatformFacts.today] — are the template's own: push and deep links on,
+/// the Dart splash, phone-sized displays locked to portrait.
 final class PlatformFacts {
   const PlatformFacts({
     required this.runner,

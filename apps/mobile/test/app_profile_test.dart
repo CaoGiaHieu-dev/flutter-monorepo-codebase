@@ -1,24 +1,25 @@
+import 'dart:io';
+
 import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/app/app_profile.dart';
 
-/// Migration neutrality: what `apps/mobile` declares must reproduce what the
-/// app did before it could declare anything — the same platforms with the same
-/// switches, the same flavors, the same certificate pinning outcome (none) —
-/// and anything the profile itself sets must be the template default.
+/// What `apps/mobile` declares: android and ios with their switches, the three
+/// flavors, no certificate pinning (as a stated decision), and a profile that
+/// leaves every tuning section at the template default.
 ///
 /// A change to `app_manifest.yaml` that moves one of these is a behaviour
 /// change; this test says so, and the manifest edit and this test change
-/// together.
+/// together. The display name is the exception: it is read from the manifest.
 void main() {
   group('the facts', () {
     test('are for this app', () {
       expect(appFacts.id, 'mobile');
-      expect(appFacts.name, 'Codebase');
+      expect(appFacts.name, _manifestAppName());
       expect(appProfile.facts, same(appFacts));
     });
 
-    test('declare the three flavors the app was always built as', () {
+    test('declare the three flavors', () {
       expect(appFacts.flavors, {Flavor.dev, Flavor.staging, Flavor.prod});
     });
 
@@ -26,7 +27,7 @@ void main() {
       expect(appFacts.platforms.keys, {AppPlatform.android, AppPlatform.ios});
     });
 
-    test('keep every platform switch as it was', () {
+    test('declare every platform switch', () {
       for (final entry in appFacts.platforms.entries) {
         final platform = entry.value;
         expect(platform.runner, RunnerKind.committed, reason: entry.key.name);
@@ -42,7 +43,7 @@ void main() {
     });
 
     test(
-      'keep the splash fork of the old bootstrap: iOS native, Android Dart',
+      'split the splash by platform: iOS native, Android Dart',
       () {
         expect(
           appFacts.platformFor(AppPlatform.android)!.splash,
@@ -55,7 +56,7 @@ void main() {
       },
     );
 
-    test('still pin nothing, on every flavor — now as a stated decision', () {
+    test('pin nothing, on every flavor, as a stated decision', () {
       for (final flavor in Flavor.values) {
         expect(appFacts.sslPinning.hashesFor(flavor), isEmpty);
         expect(
@@ -66,7 +67,7 @@ void main() {
       }
     });
 
-    test('require what a working build always needed', () {
+    test('require what a working build needs', () {
       final required = {
         for (final rule in appFacts.env) rule.key: rule.requiredIn,
       };
@@ -111,8 +112,8 @@ void main() {
 
   group('the profile', () {
     test('tunes nothing: every section is the template default', () {
-      // What the shell did before an app could tune it. A section an app sets
-      // is a behaviour change, so the value here and the app move together.
+      // The shell's own defaults. A section an app sets is a behaviour
+      // change, so the value here and the app move together.
       const defaults = DisplayProfile();
       final display = appProfile.display;
       expect(display.designSize.width, defaults.designSize.width);
@@ -145,4 +146,19 @@ void main() {
       expect(appProfile.network.followRedirects, network.followRedirects);
     });
   });
+}
+
+/// The `name:` under `app:` in `app_manifest.yaml` — what `composer sync`
+/// turns into `appFacts.name`. Read from the file so renaming the app (the
+/// "Make it yours" step) does not break this test. A test runs from the
+/// package directory, where the manifest sits.
+String _manifestAppName() {
+  final manifest = File('app_manifest.yaml').readAsLinesSync();
+  final app = manifest.indexWhere((line) => line.trimRight() == 'app:');
+  for (final line in manifest.skip(app + 1)) {
+    if (line.isNotEmpty && !line.startsWith(' ')) break;
+    final match = RegExp(r'^\s+name:\s*(.+?)\s*$').firstMatch(line);
+    if (match != null) return match.group(1)!;
+  }
+  throw StateError('no `app.name` in app_manifest.yaml');
 }

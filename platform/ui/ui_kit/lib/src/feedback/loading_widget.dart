@@ -22,7 +22,7 @@ import '../utils/shared_ui_constants.dart';
 /// LoadingWidget()
 ///
 /// // Custom background color
-/// LoadingWidget(color: Colors.white.withAlpha(0.9))
+/// LoadingWidget(color: context.colors.surface.withValues(alpha: 0.9))
 ///
 /// // In a conditional widget
 /// isLoading ? LoadingWidget() : ContentWidget()

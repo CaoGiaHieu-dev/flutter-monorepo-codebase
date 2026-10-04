@@ -55,10 +55,10 @@ class PrefStorageImpl extends EncryptedStorage {
   ///
   /// **Never replaces a key that may still be good.** A new key orphans every
   /// value sealed with the old one, and [read] then deletes them — theme,
-  /// locale and the onboarding flag reset. This used to happen on *any*
-  /// secure-storage error: a locked Keychain before the first unlock after a
-  /// reboot, or a busy KeyStore, made init generate a fresh key in
-  /// SharedPreferences. The policy now matches `SecureStorageImpl`:
+  /// locale and the onboarding flag reset. A locked Keychain before the first
+  /// unlock after a reboot, or a busy KeyStore, is therefore never a reason
+  /// to generate a fresh key in SharedPreferences. The policy matches
+  /// `SecureStorageImpl`:
   ///
   /// * A failing read is retried. If it keeps failing, init uses the
   ///   SharedPreferences fallback key only when that key opens the stored

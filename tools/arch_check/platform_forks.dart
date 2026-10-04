@@ -24,8 +24,8 @@ const Map<String, String> kPlatformForkAllowList = {
       'throws there',
   'platform/foundation/common/lib/src/go_route_data_custom.dart':
       'the page type is an OS convention (CupertinoPage on iOS, MaterialPage '
-      'elsewhere) and dart:io Platform throws on the web. Known gap: on the web '
-      'it skips RouteAwareWidget, so screen analytics never fire there',
+      'on the web, a Cupertino-style slide elsewhere); every page is wrapped '
+      'in RouteAwareWidget on every platform',
   'platform/infra/notifications/lib/src/push_notification_service.dart':
       'each OS has its own notification-permission API (Android 13 runtime '
       'permission, iOS authorization request); whether push runs at all is '

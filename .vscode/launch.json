@@ -39,6 +39,31 @@
         "--dart-define-from-file",
         "env.prod"
       ]
+    },
+    {
+      "name": "Admin (Web, Dev)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "apps/admin",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "args": [
+        "--dart-define-from-file",
+        "env.dev",
+        "--dart-define",
+        "APP_FLAVOR=dev"
+      ]
+    },
+    {
+      "name": "Admin (Desktop, Dev)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "apps/admin",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define-from-file",
+        "env.dev"
+      ]
     }
   ]
 }

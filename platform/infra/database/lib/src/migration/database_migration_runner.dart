@@ -66,13 +66,13 @@ class DatabaseMigrationRunner {
   ///
   /// A downgrade ([from] > [to]) throws [UnsupportedError] unless this
   /// runner knows the schema it is leaving — a step registered for [from] or
-  /// above. With no such step the runner used to do nothing, and drift then
-  /// stamped the lower `user_version` over a schema that was still the newer
-  /// one: every table kept its newer shape, and reinstalling the newer build
-  /// later replayed its upgrades against tables that already had them, which
-  /// fails (a duplicate column) on every launch from then on. Failing here
-  /// leaves the file and its version untouched, and `DriftDatabaseOpener`
-  /// surfaces the error instead of quarantining the database.
+  /// above. Doing nothing instead would let drift stamp the lower
+  /// `user_version` over a schema that is still the newer one: every table
+  /// would keep its newer shape, and reinstalling the newer build later would
+  /// replay its upgrades against tables that already have them, which fails
+  /// (a duplicate column) on every launch from then on. Failing here leaves
+  /// the file and its version untouched, and `DriftDatabaseOpener` surfaces
+  /// the error instead of quarantining the database.
   ///
   /// In practice an older build only has such steps when they are shipped
   /// ahead of the change they reverse; otherwise installing an older build

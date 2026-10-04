@@ -189,7 +189,7 @@ linter:
     # Off: a single-statement if/for/while may omit braces.
     curly_braces_in_flow_control_structures: false
 
-    # Off: constants are UPPER_SNAKE_CASE in this repo (CLAUDE.md naming).
+    # Off: constants are UPPER_SNAKE_CASE in this repo (RULE-09, docs/en/reference/02_naming.md).
     constant_identifier_names: false
 
     # Off: arch_check R5 enforces declared dependencies instead.

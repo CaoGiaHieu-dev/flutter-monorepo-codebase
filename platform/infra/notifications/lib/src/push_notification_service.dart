@@ -43,7 +43,7 @@ const _channelGroup = AndroidNotificationChannelGroup(
 ///
 /// It runs in a **separate background isolate** that has never run
 /// `configureDependencies()`: GetIt is empty there, so the app's
-/// `FirebaseOptions` cannot be resolved (the old `getItOrNull` lookup was
+/// `FirebaseOptions` cannot be resolved (a `getItOrNull` lookup is
 /// always `null`). Firebase is initialized from the platform's native
 /// configuration instead — `google-services.json` on Android,
 /// `GoogleService-Info.plist` on iOS, which every flavor ships (the same

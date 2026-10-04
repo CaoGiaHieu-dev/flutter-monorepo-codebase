@@ -175,6 +175,22 @@ StringKeyResult findUsedAndUnusedStringKeys(
     try {
       final content = File(file).readAsStringSync();
 
+      // Inside `extension X on AppLocalizations { ... }` a key is a bare
+      // getter (`noInternetConnection`), with no receiver for the regex below
+      // to anchor on.
+      for (final body in localizationExtensionBodies(content)) {
+        for (final key in stringKeys) {
+          if (!unused.contains(key)) continue;
+          final bare = RegExp(
+            r'(?<![\w.$])' + RegExp.escape(key) + r'(?![\w$])',
+          );
+          if (bare.hasMatch(body)) {
+            used.add(key);
+            unused.remove(key);
+          }
+        }
+      }
+
       if (!content.contains('l10n') &&
           !content.contains('loc') &&
           !content.contains('S.of(') &&
@@ -196,4 +212,29 @@ StringKeyResult findUsedAndUnusedStringKeys(
   }
 
   return StringKeyResult(used, unused);
+}
+
+/// The bodies of every `extension <Name> on <X>Localizations { ... }` in
+/// [source] — where the generated getters are read without a receiver.
+///
+/// The body is cut at the matching brace; braces inside string literals
+/// (`'${...}'`, `'{count}'`) are balanced or rare enough in these extensions
+/// that counting them as code is harmless.
+List<String> localizationExtensionBodies(String source) {
+  final header = RegExp(
+    r'extension\s+\w*\s+on\s+\w*Localizations\s*\{',
+  );
+  final bodies = <String>[];
+  for (final match in header.allMatches(source)) {
+    var depth = 1;
+    var i = match.end;
+    while (i < source.length && depth > 0) {
+      final c = source[i];
+      if (c == '{') depth++;
+      if (c == '}') depth--;
+      i++;
+    }
+    bodies.add(source.substring(match.end, depth == 0 ? i - 1 : i));
+  }
+  return bodies;
 }

@@ -174,8 +174,8 @@ void main() {
       ),
     );
 
-    // Against the unbounded policy a 0-wide window used to scale every
-    // value to 0; it is now read as the artboard itself.
+    // Against the unbounded policy a 0-wide window is read as the artboard
+    // itself, not as a scale of 0 that would zero every value.
     expect(ctx.w(10), 10);
     expect(ctx.h(10), 10);
     expect(ctx.r(10), 10);

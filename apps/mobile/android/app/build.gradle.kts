@@ -144,7 +144,6 @@ android {
             envs["WEB_DOMAIN"]?.takeIf { it.isNotBlank() } ?: "example.invalid",
         )
         resValue("string", "app_name", envs["APP_NAME"] ?: "Codebase") 
-        resValue("string", "APP_ID", "${applicationId}${applicationIdSuffix ?: ""}") 
     }
 
     buildTypes {

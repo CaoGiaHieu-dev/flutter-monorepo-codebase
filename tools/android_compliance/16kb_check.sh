@@ -398,7 +398,12 @@ if [[ "${dir}" == *.apk ]]; then
 
   print_section "$PACKAGE" "APK Analysis" "Processing Android Package file"
 
-  # Enhanced zipalign check
+  # Enhanced zipalign check. A failed verification is a failed check: the APK
+  # holds libraries that are not 16KB page-aligned inside the zip even when
+  # their ELF segments are, and Play rejects that APK just the same. A missing
+  # or too-old zipalign stays a warning: the tool could not run, nothing was
+  # found wrong.
+  zip_failed=false
   if command -v zipalign >/dev/null 2>&1; then
     if { zipalign --help 2>&1 | grep -q "\-P <pagesize_kb>"; }; then
       print_status "processing" "Checking APK zip-alignment for 16KB boundaries..."
@@ -410,6 +415,7 @@ if [[ "${dir}" == *.apk ]]; then
         print_status "success" "APK zip-alignment verification passed"
       else
         print_status "error" "APK zip-alignment verification failed"
+        zip_failed=true
         echo "    ${DIM}Details:${ENDCOLOR}"
         echo "$zip_result" | grep -E 'lib/arm64-v8a|lib/x86_64|Verification|would be' | sed 's/^/      /' || echo "      $zip_result"
       fi
@@ -709,6 +715,20 @@ if [ ${#unaligned_libs[@]} -gt 0 ]; then
     "3. Clean and rebuild your project" \
     "4. Run this script again to verify fixes" \
     "5. Test thoroughly on 16KB devices/emulator"
+
+  cleanup_trap 1
+elif [ "${zip_failed:-false}" = "true" ]; then
+  # The ELF segments are aligned, but zipalign says the APK is not.
+  print_summary_box "ZIP ALIGNMENT CHECK FAILED" "error" \
+    "${ALERT} The native libraries are 16KB aligned, but the APK itself is not." \
+    "" \
+    "Analysis Results:" \
+    "  • Total libraries scanned: $total_libs" \
+    "  • All libraries: ${#aligned_libs[@]}/${total_libs} ALIGNED" \
+    "  • zipalign -c -P 16 -v 4: FAILED (details above)" \
+    "" \
+    "Rebuild with AGP 8.5.1+ (uncompressed, page-aligned libraries) and run" \
+    "this script again."
 
   cleanup_trap 1
 else

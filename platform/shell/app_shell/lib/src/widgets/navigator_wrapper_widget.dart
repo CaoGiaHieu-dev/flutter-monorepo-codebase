@@ -164,10 +164,10 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
   /// Goes to the registered [IPostSignInLocation] (the home tab in the
   /// samples), otherwise to [AppRouter.fallbackLocation].
   ///
-  /// The fallback used to be implicit — "the router's initial location
-  /// decides" — which only holds at boot. After a sign-in nothing navigated
-  /// at all, so a build without a landing module left a signed-in user on the
-  /// sign-in screen.
+  /// The fallback is explicit: "the router's initial location decides" only
+  /// holds at boot, and after a sign-in nothing else navigates, so a build
+  /// without a landing module would leave a signed-in user on the sign-in
+  /// screen.
   ///
   /// Also starts deep-link routing — here rather than only at boot, so a user
   /// who started signed out gets it after signing in. `initAppLink` is

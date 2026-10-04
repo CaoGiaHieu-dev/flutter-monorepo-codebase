@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import 'support/fake_bin.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/android_compliance/16kb_check.sh` (and its `.bat` wrapper) — the
@@ -316,6 +317,85 @@ void main() {
       skip: skipReason,
     );
 
+    group('zipalign', () {
+      /// A fake `zipalign`: `--help` advertises 16 KB support (or not), and
+      /// the verification run exits with [verifyExit].
+      FakeBin zipalign({required int verifyExit, bool supports16kb = true}) =>
+          FakeBin.create({
+            'zipalign':
+                '''
+case "\$1" in
+  --help) echo "zipalign ${supports16kb ? '[-P <pagesize_kb>] ' : ''}[-c] [-v]"; exit 0 ;;
+esac
+[ $verifyExit -ne 0 ] && echo "Verification FAILED: lib/arm64-v8a/libapp.so (BAD)"
+exit $verifyExit
+''',
+          });
+
+      String alignedApk() => _apk(TempWorkspace.create({}), 'good.apk', {
+        'lib/arm64-v8a/libapp.so': _elf(1 << 14),
+        'classes.dex': Uint8List.fromList([1, 2, 3]),
+      });
+
+      test(
+        'a failed verification fails the check even when every ELF segment '
+        'is aligned, and the temp files are still removed',
+        () async {
+          final tmp = _tmpDir();
+
+          final run = await _check(
+            script,
+            [alignedApk()],
+            tmpDir: tmp,
+            bin: zipalign(verifyExit: 1),
+          );
+
+          expect(run, exitsWith(1));
+          expect(run.output, contains('APK zip-alignment verification failed'));
+          expect(run.output, contains('ZIP ALIGNMENT CHECK FAILED'));
+          expect(run.output, isNot(contains('COMPATIBILITY CHECK PASSED')));
+          expect(Directory(tmp).listSync(), isEmpty);
+        },
+        skip: skipReason == false ? skipWithoutPosixShell() : skipReason,
+      );
+
+      test(
+        'a passing verification changes nothing: exit 0',
+        () async {
+          final run = await _check(
+            script,
+            [alignedApk()],
+            tmpDir: _tmpDir(),
+            bin: zipalign(verifyExit: 0),
+          );
+
+          expect(run, exitsWith(0));
+          expect(run.output, contains('APK zip-alignment verification passed'));
+          expect(run.output, contains('COMPATIBILITY CHECK PASSED'));
+        },
+        skip: skipReason == false ? skipWithoutPosixShell() : skipReason,
+      );
+
+      test(
+        'a zipalign that cannot check 16 KB is a warning, not a failure',
+        () async {
+          final run = await _check(
+            script,
+            [alignedApk()],
+            tmpDir: _tmpDir(),
+            bin: zipalign(verifyExit: 1, supports16kb: false),
+          );
+
+          expect(run, exitsWith(0));
+          expect(
+            run.output,
+            contains("zipalign version doesn't support 16KB alignment checks"),
+          );
+        },
+        skip: skipReason == false ? skipWithoutPosixShell() : skipReason,
+      );
+    });
+
     test('without any lib/ entry is a pass: Java and Kotlin only', () async {
       final ws = TempWorkspace.create({});
       final apk = _apk(ws, 'java.apk', {
@@ -398,11 +478,12 @@ Future<ToolRun> _check(
   String script,
   List<String> args, {
   String? tmpDir,
+  FakeBin? bin,
 }) async {
   final result = await Process.run(
     'bash',
     [script, ...args],
-    environment: {'TMPDIR': ?tmpDir},
+    environment: {...?bin?.environment, 'TMPDIR': ?tmpDir},
     stdoutEncoding: utf8,
     stderrEncoding: utf8,
   );

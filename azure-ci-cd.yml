@@ -111,12 +111,10 @@ stages:
               arguments: clean
 
           - task: Hey24sheep.flutter.flutter-command.FlutterCommand@0
-            displayName: Flutter pub get (committed lockfile)
+            displayName: Flutter pub get
             inputs:
               flutterDirectory: $(flutterPath)
-              # The workspace pubspec.lock is committed; fail on a stale one
-              # instead of silently re-resolving it.
-              arguments: pub get --enforce-lockfile
+              arguments: pub get
 
           - task: Bash@3
             displayName: Flutter Config

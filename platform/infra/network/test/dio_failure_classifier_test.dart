@@ -5,8 +5,8 @@ import 'package:platform_kernel/platform_kernel.dart';
 
 /// Dio's exceptions reach `ErrorHandler.handleError` through
 /// [DioFailureClassifier] — the kernel names no transport type. These are
-/// the Dio cases that used to live in `core_common`'s error handler test,
-/// unchanged, plus the registration contract.
+/// the Dio cases of the kernel's error handler, plus the registration
+/// contract.
 void main() {
   setUpAll(DioFailureClassifier.ensureRegistered);
 

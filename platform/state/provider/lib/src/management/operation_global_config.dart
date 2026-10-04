@@ -7,8 +7,8 @@ part of '../base/base_provider.dart';
 ///
 /// The callbacks are exposed read-only on purpose: they may only be changed
 /// through [setup] (which merges) or cleared through [reset]. Assigning them
-/// directly used to be possible and made it impossible to reason about who
-/// installed a given hook.
+/// directly would make it impossible to reason about who installed a given
+/// hook.
 class OperationGlobalConfig {
   OperationGlobalConfig._();
 

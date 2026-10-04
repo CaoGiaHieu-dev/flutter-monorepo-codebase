@@ -39,14 +39,14 @@ import 'shell_hooks.dart';
 ///
 /// The [profile] is required: an app that does not say where it runs and what
 /// it provides is the problem the declaration exists to remove. The shell does
-/// three things with it:
+/// four things with it:
 ///
 /// 1. **Before DI**, [AppProfile.validate] runs for the platform
 ///    (`resolveAppPlatform`) and flavor this build is. A problem — an
 ///    undeclared platform or flavor, a required `--dart-define` that is
 ///    empty, a missing pin decision — stops the boot at [runBootError]'s
 ///    screen, and `configureDependencies` is never called. Starting on a
-///    platform the manifest does not declare used to be a blank window with
+///    platform the manifest does not declare would be a blank window with
 ///    no error. `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` turns the
 ///    undeclared-platform problem into a logged warning, for a developer's
 ///    quick look.

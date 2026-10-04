@@ -1657,6 +1657,125 @@ void main() {
     });
   });
 
+  group('R21 translations agree', () {
+    String arb(List<String> keys, {String locale = 'en'}) =>
+        '{\n  "@@locale": "$locale",\n'
+        '${[for (final k in keys) '  "$k": "text",\n  "@$k": {"description": "d"}'].join(',\n')}\n}\n';
+
+    Map<String, String> package({
+      required String en,
+      String? vi,
+      Map<String, String> more = const {},
+    }) => {
+      'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+      'platform/ui/foo/assets/language/en.arb': en,
+      'platform/ui/foo/assets/language/vi.arb': ?vi,
+      for (final entry in more.entries)
+        'platform/ui/foo/assets/language/${entry.key}.arb': entry.value,
+    };
+
+    test('the same lowerCamelCase keys in en and vi pass', () async {
+      final run = await check(
+        package(
+          en: arb(['title', 'signInButton', 'v2Label']),
+          vi: arb(['title', 'signInButton', 'v2Label'], locale: 'vi'),
+        ),
+      );
+      expectClean(run, 'R21');
+    });
+
+    test('key order and @metadata do not matter', () async {
+      final run = await check(
+        package(
+          en: arb(['b', 'a']),
+          vi: '{"a": "x", "b": "y", "@a": {}}',
+        ),
+      );
+      expectClean(run, 'R21');
+    });
+
+    test('a package without an assets/language folder is not asked', () async {
+      final run = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+      });
+      expectClean(run, 'R21');
+    });
+
+    test(
+      'a key missing from vi.arb fails, naming the key and the file',
+      () async {
+        final run = await check(
+          package(
+            en: arb(['title', 'subtitle']),
+            vi: arb(['title'], locale: 'vi'),
+          ),
+        );
+        expectViolation(run, 'R21', 'platform/ui/foo/assets/language/vi.arb');
+        expect(
+          run.output,
+          contains('missing 1 key(s) that en.arb has: subtitle'),
+        );
+      },
+    );
+
+    test('a key only vi.arb has fails too', () async {
+      final run = await check(
+        package(
+          en: arb(['title']),
+          vi: arb(['title', 'orphan'], locale: 'vi'),
+        ),
+      );
+      expectViolation(run, 'R21', 'platform/ui/foo/assets/language/vi.arb');
+      expect(run.output, contains('1 key(s) en.arb does not have: orphan'));
+    });
+
+    test('a third locale is compared with en.arb as well', () async {
+      final run = await check(
+        package(
+          en: arb(['title']),
+          vi: arb(['title'], locale: 'vi'),
+          more: {'ja': arb([], locale: 'ja')},
+        ),
+      );
+      expectViolation(run, 'R21', 'platform/ui/foo/assets/language/ja.arb');
+    });
+
+    for (final (label, key) in [
+      ('snake_case', 'sign_in'),
+      ('UpperCamelCase', 'SignIn'),
+      ('a leading digit', '1st'),
+      ('kebab-case', 'sign-in'),
+    ]) {
+      test('$label key `$key` fails (RULE-35)', () async {
+        final run = await check(
+          package(
+            en: arb([key]),
+            vi: arb([key], locale: 'vi'),
+          ),
+        );
+        expectViolation(run, 'R21', 'platform/ui/foo/assets/language/en.arb');
+        expect(run.output, contains('key `$key` is not lowerCamelCase'));
+      });
+    }
+
+    test('vi.arb without en.arb fails: the template is missing', () async {
+      final run = await check({
+        'platform/ui/foo/pubspec.yaml': pubspec('core_foo'),
+        'platform/ui/foo/assets/language/vi.arb': arb(['title'], locale: 'vi'),
+      });
+      expectViolation(run, 'R21', 'platform/ui/foo/assets/language/en.arb');
+      expect(run.output, contains('but no en.arb'));
+    });
+
+    test('a file that is not a JSON object fails', () async {
+      final run = await check(
+        package(en: arb(['title']), vi: '{"title": '),
+      );
+      expectViolation(run, 'R21', 'platform/ui/foo/assets/language/vi.arb');
+      expect(run.output, contains('not a valid ARB file'));
+    });
+  });
+
   group('R15 the I prefix is reserved for interfaces', () {
     test('abstract, interface and sealed I-types pass', () async {
       final run = await check({

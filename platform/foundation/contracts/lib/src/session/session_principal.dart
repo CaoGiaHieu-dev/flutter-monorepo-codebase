@@ -3,11 +3,11 @@
 ///
 /// ## Why this exists instead of re-exporting a user entity
 ///
-/// [ISessionStatusStream] used to carry `UserEntity` from `domain_auth`. That
-/// made the DI Hub — and therefore every consumer of it — depend on one
-/// module's domain package for a *type*. `getItOrNull` cannot soften that: an
+/// If [ISessionStatusStream] carried `UserEntity` from `domain_auth`, the DI
+/// Hub — and therefore every consumer of it — would depend on one module's
+/// domain package for a *type*. `getItOrNull` cannot soften that: an
 /// unresolved import fails at compile time, not at lookup time, so the
-/// dependency was real and the auth module was not actually removable.
+/// dependency would be real and the auth module not actually removable.
 ///
 /// It also over-shares by construction. An entity grows whatever fields its
 /// owning module needs — a payout account, a device token, an internal flag —

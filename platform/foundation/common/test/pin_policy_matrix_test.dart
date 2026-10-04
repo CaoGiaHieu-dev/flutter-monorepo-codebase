@@ -18,7 +18,7 @@ const _reason = 'TEMPLATE PLACEHOLDER: no SPKI pins provisioned';
 ///
 /// - web: the browser owns TLS — INFO, nothing installed;
 /// - desktop: the pinning plugin has no implementation — INFO "not applicable",
-///   nothing installed (it used to log an ERROR "NOT pinned" on every start);
+///   nothing installed (no ERROR "NOT pinned" on every start);
 /// - android / ios: `pinned` installs the pinning client, `disabled` logs its
 ///   declared reason as a WARNING, and no decision at all is an ERROR.
 void main() {

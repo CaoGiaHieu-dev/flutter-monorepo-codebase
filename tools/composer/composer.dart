@@ -50,7 +50,8 @@ import 'src/report.dart';
 /// `verify` also holds the declaration to the source (`checkComposition`,
 /// `checkPackagePlatforms`): `capabilities:` against what the composed packages
 /// register (V3), package platforms (V7), per-flavor `FirebaseOptions` (V10),
-/// env files (V11) and the entry point and smoke test (V12). The registration
+/// env files (V11), the entry point and smoke test (V12), the native flavors
+/// of a committed runner (V15) and the DI group order (V16). The registration
 /// scan is `tools/shared/contract_scan.dart`, the one `arch_check` shares.
 ///
 /// `new` creates a whole app from `app_template/`: the manifest (with
@@ -74,7 +75,9 @@ String _endMarker(String region) => 'composer:end:$region';
 void main(List<String> args) {
   if (args.isEmpty || args.contains('--help') || args.contains('-h')) {
     _printHelp(args.isEmpty ? stderr : stdout);
-    exit(args.isEmpty ? 1 : 0);
+    // No command is a usage error, like an unknown one (64) — never 1, which
+    // `verify` uses for drift.
+    exit(args.isEmpty ? 64 : 0);
   }
 
   final command = args.first;
@@ -1489,8 +1492,8 @@ void _sync(
   // leaving the other regions rewritten around it.
   final regions = <_Region>[];
   final switchProblems = <String>[];
-  // What only the source can say (V3, V10, V11, V12, V17): `verify` fails on
-  // them, `sync` says so and still writes — the generated files do not depend on
+  // What only the source can say (V3, V10, V11, V12, V13, V15, V16, V17): `verify`
+  // fails on them, `sync` says so and still writes — the generated files do not depend on
   // them, and a half-finished edit must stay possible to regenerate.
   final sourceProblems = <String>[];
   for (final app in selected) {
@@ -1593,6 +1596,18 @@ void _sync(
     exit(1);
   }
 
+  // The two regions of `injection.dart` are all composer renders of it. The
+  // rest of the file is the header comment; code there is a hand edit that the
+  // region comparison cannot see, so it is held to the source too.
+  for (final path in {
+    for (final r in regions)
+      if (r.region == 'imports' || r.region == 'modules') r.path,
+  }) {
+    sourceProblems.addAll(
+      checkInjectionOutsideRegions(path, root: root),
+    );
+  }
+
   // Grouped by file: `injection.dart` holds two regions, and writing them one
   // at a time reported the file — "wrote" or "out of date" — once for each.
   final byFile = <String, List<_Region>>{};
@@ -1619,8 +1634,8 @@ void _sync(
     if (sourceProblems.isNotEmpty) {
       OutputFormatter.printError(
         '${sourceProblems.length} problem(s) between app_manifest.yaml and '
-        'the source (V3, V10, V11, V12, V17). Fix the line each one names; '
-        '`sync` does not change them.',
+        'the source (V3, V10, V11, V12, V13, V15, V16, V17). Fix the line each one '
+        'names; `sync` does not change them.',
       );
     }
     if (drift.isEmpty && stranded.isEmpty && sourceProblems.isEmpty) {
@@ -2036,11 +2051,19 @@ WHAT VERIFY HOLDS THE DECLARATION TO
   V11  the env files that exist hold exactly the keys `env:` declares
   V12  the entry point passes `profile:`; test/di_smoke_test.dart exists,
        calls checkAppContract and builds every factory (`FactoryRecorder` + `buildEvery`)
+  V13  the generated regions equal regeneration, and lib/di/injection.dart
+       holds nothing but comments and blank lines outside its two regions
+  V15  a committed Android runner has a `productFlavor` per declared flavor,
+       a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-`
+       configurations per declared flavor, and neither names a flavor the
+       manifest does not declare
+  V16  every DI group says `why` it sits where it does, and the groups the
+       template names follow the canonical order
   V17  no member pubspec but the root's has a top-level `workspace:` key
        (a nested workspace node, RULE-16)
-  V7 refuses before anything is written, in `sync` too. V3, V10, V11, V12 and
-  V17 fail `verify`; `sync` prints them as warnings and still writes. The scan
-  reads source, not the graph: `checkAppContract` stays the authority.
+  V7 refuses before anything is written, in `sync` too. V3, V10, V11, V12, V13,
+  V15, V16 and V17 fail `verify`; `sync` prints them as warnings and still writes.
+  The scan reads source, not the graph: `checkAppContract` stays the authority.
 
 MODULE LAYERS
   `modules: - { id: <m>, layers: [api, domain, data, feature] }`. `domain`,

@@ -333,10 +333,8 @@ def install_dependencies
     sh "#{dart_cmd} pub global activate flutterfire_cli"
     sh "#{dart_cmd} pub global activate flutter_gen"
     sh "#{flutter_cmd} clean"
-    # The workspace pubspec.lock is committed: a release is built from exactly
-    # the versions in it, and a lockfile that no longer matches the pubspecs
-    # fails here instead of being silently re-resolved.
-    sh "#{flutter_cmd} pub get --enforce-lockfile"
+    # Lock files are not committed; versions come from pubspec_dependencies.yaml.
+    sh "#{flutter_cmd} pub get"
   end
 
   # Conditionally run 'flutter gen-l10n' for all features.

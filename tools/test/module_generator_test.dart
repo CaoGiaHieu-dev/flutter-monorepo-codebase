@@ -1,7 +1,12 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../module_generator/src/common_helpers.dart';
 import '../module_generator/src/module_type.dart';
+import '../module_generator/src/pubspec_generator.dart';
+import 'support/fake_bin.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/module_generator/generate.dart` — argument handling that must
@@ -346,5 +351,292 @@ modules: []
       );
       expect(ws.read('apps/mobile/app_manifest.yaml'), mobile);
     });
+  });
+
+  group('package descriptions say what the package is', () {
+    ModuleConfig config(ModuleType type, {String name = 'notes'}) =>
+        ModuleConfig(
+          type: type,
+          typeDir: '',
+          typeName: '',
+          nameInput: name,
+          smType: StateManagementType.none,
+          moduleName: 'x_$name',
+          modulePath: 'modules/$name/x',
+        );
+
+    test('one sentence per type, naming the module, never a placeholder', () {
+      final all = {
+        for (final type in ModuleType.values)
+          type: PubspecGenerator.describe(config(type)),
+      };
+
+      expect(
+        all[ModuleType.feature],
+        startsWith('Presentation layer of the notes'),
+      );
+      expect(all[ModuleType.domain], startsWith('Domain layer of the notes'));
+      expect(all[ModuleType.data], startsWith('Data layer of the notes'));
+      expect(all[ModuleType.api], startsWith('Public API of the notes'));
+      for (final description in all.values) {
+        expect(description, isNot(startsWith('Module ')));
+        expect(description, isNot(contains('"')));
+      }
+    });
+  });
+
+  // The rendered output of the paths the CI smoke jobs do not reach (the
+  // others are `1 smoke "" 2 2`, `1 smoke_p "" 1 1`, 6, 2 and 3 with a
+  // domain). Every external command goes to a fake `dart` / `flutter`, so what
+  // is asserted here is what the generator itself writes: the files, their
+  // content and the pubspec. Whether the result compiles is the smoke job's.
+  group('generation renders every template path', () {
+    final skip = skipWithoutPosixShell();
+
+    /// The real templates, copied beside the snapshot: the generator reads
+    /// them relative to its own location.
+    Map<String, String> templates() {
+      final root = p.join(repoRoot, 'tools', 'module_generator', 'templates');
+      return {
+        for (final file in Directory(root).listSync(recursive: true))
+          if (file is File)
+            'tools/module_generator/templates/${p.relative(file.path, from: root).replaceAll(r'\', '/')}':
+                file.readAsStringSync(),
+      };
+    }
+
+    String stub(String name) => 'name: $name\n';
+
+    TempWorkspace generationWorkspace({Map<String, String> extra = const {}}) =>
+        TempWorkspace.create({
+          'pubspec.yaml': 'name: ws\nenvironment:\n  sdk: ">=3.13.3 <4.0.0"\n  flutter: ">=3.47.4"\nworkspace:\n  - apps/mobile\n',
+          'apps/mobile/app_manifest.yaml': '''
+app:
+  id: mobile
+  name: Mobile
+
+di_groups:
+  - name: core
+    phase: before
+    packages:
+      - core_common
+
+modules: []
+''',
+          'apps/mobile/pubspec.yaml': stub('mobile'),
+          for (final (dir, name) in [
+            ('platform/foundation/contracts', 'core_di'),
+            ('platform/foundation/common', 'core_common'),
+            ('platform/ui/design_system', 'core_base_ui'),
+            ('platform/ui/responsive', 'core_responsive'),
+            ('platform/ui/ui_kit', 'core_ui_kit'),
+            ('platform/state/provider', 'provider_state_management'),
+            ('platform/state/bloc', 'bloc_state_management'),
+            ('platform/layers/domain', 'domain_core'),
+            ('platform/layers/data', 'data_core'),
+          ])
+            '$dir/pubspec.yaml': stub(name),
+          ...templates(),
+          ...extra,
+        });
+
+    FakeBin toolchain() =>
+        FakeBin.create({'dart': 'exit 0', 'flutter': 'exit 0'});
+
+    Future<ToolRun> generate(
+      TempWorkspace ws,
+      List<String> args, {
+      FakeBin? bin,
+    }) => tool.run(
+      args,
+      workingDirectory: ws.root,
+      scriptPath: 'tools/module_generator/generate.dill',
+      environment: (bin ?? toolchain()).environment,
+    );
+
+    bool exists(TempWorkspace ws, String path) =>
+        File(p.join(ws.root, path)).existsSync() ||
+        Directory(p.join(ws.root, path)).existsSync();
+
+    test('a feature with no state management and no route (1 x "" 3 3)', () async {
+      final ws = generationWorkspace();
+
+      final run = await generate(ws, ['1', 'plain', '', '3', '3']);
+
+      expect(run, exitsWith(0));
+      const feature = 'modules/plain/feature';
+      expect(exists(ws, '$feature/lib/src/pages/plain_page.dart'), isTrue);
+      expect(exists(ws, '$feature/lib/di/module.dart'), isTrue);
+      expect(exists(ws, '$feature/assets/language/en.arb'), isTrue);
+      expect(exists(ws, '$feature/assets/language/vi.arb'), isTrue);
+      // No controller and no route-contribution stub of either kind (the
+      // typed route itself belongs to the page, so `routing/` is not empty).
+      expect(
+        exists(ws, '$feature/lib/src/routing/plain_route_module.dart'),
+        isTrue,
+      );
+      expect(
+        exists(ws, '$feature/lib/src/routing/plain_feature_route_module.dart'),
+        isFalse,
+      );
+      expect(
+        exists(ws, '$feature/lib/src/routing/plain_nav_destination.dart'),
+        isFalse,
+      );
+      // The page test is still there and builds the page without a controller.
+      final pageTest = ws.read('$feature/test/plain_page_test.dart');
+      expect(pageTest, isNot(contains('ChangeNotifierProvider')));
+      expect(pageTest, isNot(contains('BlocProvider')));
+      expect(exists(ws, '$feature/test/plain_provider_test.dart'), isFalse);
+      expect(exists(ws, '$feature/test/plain_bloc_test.dart'), isFalse);
+
+      final pubspec = ws.read('$feature/pubspec.yaml');
+      expect(pubspec, contains('name: feature_plain'));
+      expect(
+        pubspec,
+        contains('description: "Presentation layer of the plain module'),
+      );
+      expect(pubspec, isNot(contains('provider_state_management')));
+      expect(pubspec, isNot(contains('bloc_state_management')));
+      expect(pubspec, isNot(contains('freezed')));
+      expect(pubspec, contains('core_responsive:'));
+      // Mustache section tags leave nothing behind.
+      expect(pubspec, isNot(contains('{{')));
+      // The module is composed into the app, and the toolchain was driven.
+      expect(
+        ws.read('apps/mobile/app_manifest.yaml'),
+        contains('id: plain'),
+      );
+    }, skip: skip);
+
+    test('a BLoC feature with a stack route (1 x "" 2 1)', () async {
+      final ws = generationWorkspace();
+
+      final run = await generate(ws, ['1', 'chat', '', '2', '1']);
+
+      expect(run, exitsWith(0));
+      const feature = 'modules/chat/feature';
+      for (final file in ['bloc', 'event', 'state']) {
+        expect(exists(ws, '$feature/lib/src/bloc/chat_$file.dart'), isTrue);
+      }
+      expect(
+        exists(ws, '$feature/lib/src/routing/chat_feature_route_module.dart'),
+        isTrue,
+      );
+      expect(
+        exists(ws, '$feature/lib/src/routing/chat_nav_destination.dart'),
+        isFalse,
+      );
+      expect(exists(ws, '$feature/test/chat_bloc_test.dart'), isTrue);
+      final pubspec = ws.read('$feature/pubspec.yaml');
+      expect(pubspec, contains('bloc_state_management:'));
+      expect(pubspec, contains('freezed'));
+    }, skip: skip);
+
+    test(
+      'data without a domain: the repository implements no interface',
+      () async {
+        final ws = generationWorkspace();
+
+        final run = await generate(ws, ['3', 'orders']);
+
+        expect(run, exitsWith(0));
+        expect(run.output, contains('No domain_orders yet'));
+        const data = 'modules/orders/data';
+        final impl = ws.read(
+          '$data/lib/src/repositories_impl/orders_repository_impl.dart',
+        );
+        expect(
+          impl,
+          contains('class OrdersRepositoryImpl extends BaseRepository {}'),
+        );
+        expect(impl, isNot(contains("import 'package:domain_orders")));
+        final pubspec = ws.read('$data/pubspec.yaml');
+        expect(pubspec, contains('data_core:'));
+        expect(pubspec, isNot(contains('domain_orders')));
+        expect(
+          pubspec,
+          contains('description: "Data layer of the orders module'),
+        );
+      },
+      skip: skip,
+    );
+
+    test('data with its domain implements the domain repository', () async {
+      final ws = generationWorkspace(
+        extra: {'modules/orders/domain/pubspec.yaml': stub('domain_orders')},
+      );
+
+      final run = await generate(ws, ['3', 'orders']);
+
+      expect(run, exitsWith(0));
+      expect(run.output, isNot(contains('No domain_orders yet')));
+      const data = 'modules/orders/data';
+      final impl = ws.read(
+        '$data/lib/src/repositories_impl/orders_repository_impl.dart',
+      );
+      expect(impl, contains('domain_orders'));
+      expect(impl, contains('implements'));
+      expect(ws.read('$data/pubspec.yaml'), contains('domain_orders:'));
+    }, skip: skip);
+
+    test('a core package (4) lands in platform/infra with no workspace '
+        'dependency, and joins the core group', () async {
+      final ws = generationWorkspace();
+
+      final run = await generate(ws, ['4', 'metrics']);
+
+      expect(run, exitsWith(0));
+      final pubspec = ws.read('platform/infra/metrics/pubspec.yaml');
+      expect(pubspec, contains('name: core_metrics'));
+      expect(pubspec, contains('description: "Platform package metrics'));
+      expect(pubspec, isNot(contains('path:')));
+      expect(exists(ws, 'platform/infra/metrics/lib/di/module.dart'), isTrue);
+      expect(exists(ws, 'platform/infra/metrics/lib/src/pages'), isFalse);
+      expect(
+        ws.read('apps/mobile/app_manifest.yaml'),
+        contains('core_metrics'),
+      );
+    }, skip: skip);
+
+    test(
+      'a custom package (5) is <prefix>_<name> in the chosen group',
+      () async {
+        final ws = generationWorkspace();
+
+        final run = await generate(ws, [
+          '5',
+          'ledger',
+          'acme',
+          '--group',
+          'ui',
+        ]);
+
+        expect(run, exitsWith(0));
+        final pubspec = ws.read('platform/ui/ledger/pubspec.yaml');
+        expect(pubspec, contains('name: acme_ledger'));
+        expect(pubspec, isNot(contains('path:')));
+        expect(exists(ws, 'platform/ui/ledger/lib/di/module.dart'), isTrue);
+        expect(
+          ws.read('apps/mobile/app_manifest.yaml'),
+          contains('acme_ledger'),
+        );
+      },
+      skip: skip,
+    );
+
+    test('a failing toolchain step rolls the shared files back', () async {
+      final ws = generationWorkspace();
+      final before = ws.read('apps/mobile/app_manifest.yaml');
+      final bin = FakeBin.create({
+        'dart': 'exit 0',
+        'flutter': 'case "\$*" in "pub get") exit 1 ;; esac\nexit 0',
+      });
+
+      final run = await generate(ws, ['4', 'metrics'], bin: bin);
+
+      expect(run, exitsWith(1));
+      expect(ws.read('apps/mobile/app_manifest.yaml'), before);
+    }, skip: skip);
   });
 }

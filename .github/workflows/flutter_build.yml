@@ -26,6 +26,11 @@ on:
         required: false
         type: string
         default: "test"
+# Nothing here writes to the repository; the build uploads to Firebase App
+# Distribution with its own credentials.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build & Release
@@ -156,12 +161,11 @@ jobs:
 
           [ "$missing" -eq 0 ] || exit 1
 
-        #5 Resolve exactly the committed pubspec.lock
-      # The workspace lockfile is committed. --enforce-lockfile fails when it
-      # no longer matches the pubspecs instead of silently re-resolving, so
-      # the configure step below cannot drift away from it.
-      - name: Get dependencies from the committed lockfile
-        run: flutter pub get --enforce-lockfile
+        #5 Resolve the dependencies
+      # Lock files are generated and not committed; versions come from
+      # pubspec_dependencies.yaml.
+      - name: Get dependencies
+        run: flutter pub get
 
         #6 Install Dependencies and Generate
       - name: Install Dependencies

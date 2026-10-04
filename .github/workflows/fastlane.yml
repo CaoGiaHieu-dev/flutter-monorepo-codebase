@@ -1,5 +1,9 @@
 name: Fastlane build and distribute
 
+# The signing secrets are restored below; nothing here writes to the repository.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -21,9 +25,9 @@ on:
           - android
           - ios
       flutter_version:
-        description: "Flutter version (installed on the runner; the lane checks it)"
-        required: true
-        default: "3.47.4"
+        description: "Flutter version (installed on the runner; the lane checks it). Empty = the version pinned in .fvmrc"
+        required: false
+        type: string
       version:
         description: "App version"
         required: true
@@ -113,10 +117,23 @@ jobs:
         if: ${{ inputs.build-on == 'self-hosted' }}
         run: bundle install
 
+      # The default is not a literal here: it is whatever .fvmrc pins, so a
+      # Flutter bump cannot leave this workflow behind. An explicit input still
+      # wins (the lane then checks it against .fvmrc and stops on a mismatch).
+      - name: Resolve the Flutter version
+        id: flutter
+        shell: bash
+        env:
+          REQUESTED: ${{ inputs.flutter_version }}
+        run: |
+          set -euo pipefail
+          version="${REQUESTED:-$(python3 -c 'import json; print(json.load(open(".fvmrc"))["flutter"])')}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ inputs.flutter_version }}
+          flutter-version: ${{ steps.flutter.outputs.version }}
           channel: "stable"
           cache: true
 
@@ -296,7 +313,7 @@ jobs:
       - name: Build and distribute
         shell: bash
         env:
-          FLUTTER_VERSION: ${{ inputs.flutter_version }}
+          FLUTTER_VERSION: ${{ steps.flutter.outputs.version }}
           VERSION: ${{ inputs.version }}
           # Empty input = `auto` (see the input's description). Passing it
           # through empty used to reach flutter as --build-number=0.

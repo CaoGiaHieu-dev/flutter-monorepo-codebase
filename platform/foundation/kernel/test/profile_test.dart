@@ -24,7 +24,7 @@ void main() {
   });
 
   group('PlatformFacts.today', () {
-    test('is the behaviour the template had before apps declared anything', () {
+    test('is the template default: Dart splash, portrait phones, push and links on', () {
       const today = PlatformFacts.today();
       expect(today.splash, SplashMode.dart);
       expect(today.orientation, OrientationPolicy.phonesPortrait);

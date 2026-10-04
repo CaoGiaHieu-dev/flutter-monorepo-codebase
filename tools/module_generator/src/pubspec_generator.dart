@@ -42,6 +42,7 @@ class PubspecGenerator {
 
     final values = {
       'moduleName': config.moduleName,
+      'description': describe(config),
       'sdkConstraint': environment.sdk,
       'flutterConstraint': environment.flutter,
       'isFeature': config.type == ModuleType.feature,
@@ -63,6 +64,30 @@ class PubspecGenerator {
     };
 
     return template.renderString(values);
+  }
+
+  /// The one-line `description:` of a new package: what its layer is and which
+  /// module it belongs to, so a generated package never ships a placeholder.
+  /// The text is a starting point — it names the layer, the author says what
+  /// the module does.
+  static String describe(ModuleConfig config) {
+    final name = config.nameInput;
+    return switch (config.type) {
+      ModuleType.feature =>
+        'Presentation layer of the $name module: pages, state and routes',
+      ModuleType.domain =>
+        'Domain layer of the $name module (pure Dart): entities, use cases and '
+            'repository interfaces',
+      ModuleType.data =>
+        'Data layer of the $name module: models, data sources and repository '
+            'implementations',
+      ModuleType.core => 'Platform package $name: infrastructure for the app',
+      ModuleType.custom =>
+        'Platform package ${config.moduleName}: infrastructure for the app',
+      ModuleType.api =>
+        'Public API of the $name module: the contracts other features may '
+            'depend on',
+    };
   }
 
   /// The root `pubspec.yaml`'s `environment:` — every workspace member

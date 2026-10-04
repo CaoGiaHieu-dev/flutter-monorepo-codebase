@@ -15,7 +15,7 @@
 | JDK | **17 or newer** (builds on 21) | `apps/mobile/android/app/build.gradle.kts` → `JavaVersion.VERSION_17` is the bytecode target, not a ceiling |
 | Android SDK | compileSdk **37**, NDK `28.2.13676358` | `apps/mobile/android/app/build.gradle.kts` |
 | Xcode + CocoaPods | iOS deployment target **15.0** | `apps/mobile/ios/Podfile` |
-| Ruby ≥ 3.2 | only for Fastlane | the committed `Gemfile.lock` was written by Bundler 4; see [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
+| Ruby ≥ 3.2 | only for Fastlane | `bundle install` writes `Gemfile.lock` (git-ignored); see [operations/02_fastlane_release.md](../operations/02_fastlane_release.md) |
 | Node.js + npm, a Google account, a Firebase project | only for **real** Firebase config (§3) | the Firebase CLI is an npm package; skip all three if you use the §3 stubs |
 
 ### FVM is optional
@@ -57,11 +57,14 @@ cd flutter-monorepo-codebase
 dart tools/workspace_setup/configure.dart
 ```
 
+> [!TIP]
+> The old history of the template carries about 82 MB of Gradle build output that was committed once and has long been ignored. A shallow clone (`git clone --depth 1 <repo-url>`) skips it; so does starting your own repository from a fresh history when you adopt the template (§8.4).
+
 **`configure.dart` is the setup step.** It runs, in order, stopping at the first failure:
 
 1. `dart pub global activate flutterfire_cli` — only the real-Firebase path in [§3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it) uses it.
 2. `flutter clean` at the root.
-3. `flutter pub get` at the root — resolves the whole workspace against the one root `pubspec.lock`.
+3. `flutter pub get` at the root — resolves the whole workspace and writes the one root `pubspec.lock`.
 4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/ui/design_system` and the auth, home, onboarding, settings and splash features).
 5. `dart run build_runner build --workspace` — injectable, freezed, json_serializable, retrofit, go_router_builder, drift, flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` for every package with a `lib/` — the apps are skipped, because they have no barrel. On a fresh clone it changes nothing: the barrels are committed.
@@ -83,7 +86,7 @@ dart run build_runner build --workspace
 What to expect on a clean run:
 
 - build_runner prints several `W injectable_config_builder … Missing dependencies` warnings. They are expected: each micro-package's DI module is generated on its own and names types another package registers. The app's `injection.config.dart` puts them together.
-- **One lock file, at the root, committed.** `pubspec.lock` is tracked (the root `.gitignore` unignores `/pubspec.lock`), so everyone resolves the same versions. Commit it when a dependency change moves it. If per-package `pubspec.lock` files appear, something ran `pub get` from the wrong directory. Delete them, because only the root one is used.
+- **One lock file, at the root, generated and not committed.** `flutter pub get` writes `pubspec.lock`, and the root `.gitignore` ignores every `*.lock` (so also `Gemfile.lock` and `Podfile.lock`). The versions are pinned in `pubspec_dependencies.yaml` (RULE-74) and the Flutter version in `.fvmrc`; CI resolves with a plain `flutter pub get`. If per-package `pubspec.lock` files appear, something ran `pub get` from the wrong directory. Delete them, because only the root one is used.
 
 ---
 
@@ -265,7 +268,7 @@ class EnvConstants {
 ```
 
 > [!NOTE]
-> `WEB_DOMAIN` and `APP_LINK_MODE` are `native_only: true` in the manifest: Gradle and Xcode read them, no Dart code does. Neither is declared in `EnvConstants`; Gradle reads `WEB_DOMAIN` and the iOS entitlements read both (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`). Keep both in the env file. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files, to the manifest's `env:` and, if Dart reads it, to `EnvConstants` together.
+> `WEB_DOMAIN` and `APP_LINK_MODE` are `native_only: true` in the manifest: Gradle and Xcode read them, no Dart code does. Neither is declared in `EnvConstants`; Gradle reads `WEB_DOMAIN`, and the iOS entitlements read both (`applinks:$(WEB_DOMAIN)$(APP_LINK_MODE)` in `apps/mobile/ios/Runner/Runner.entitlements`) once you enable the commented-out associated-domains block there ([`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links)); until then no iOS configuration reads either key. Keep both in the env file. `WEB_DOMAIN` is also the host of the Android App Links intent-filter — an empty value becomes the reserved `example.invalid`, never "every https link" — see [`04_routing.md` §9](../guides/04_routing.md#9-set-up-deep-links). Add a key your product needs (a maps API key, a socket URL) to the env files, to the manifest's `env:` and, if Dart reads it, to `EnvConstants` together.
 
 > [!WARNING]
 > `apps/mobile/env.dev` and `apps/mobile/env.stg` are **committed on purpose** — a fresh clone must build — so keep them free of secrets. `apps/mobile/env.prod` is ignored by name in `apps/mobile/.gitignore` (the root `*.env` pattern would not match it); `git check-ignore -v apps/mobile/env.prod` confirms it before you put production values in.
@@ -300,7 +303,7 @@ With the committed `env.dev` as it is, the sample app runs but **cannot sign in*
 
 | Step | Screen | Why |
 | :--- | :--- | :--- |
-| 1 | A splash: on Android the Dart splash (logo, "Template", "Clean Architecture for Flutter", a spinner); on iOS the native splash stays up for the whole boot | `platforms.<p>.splash` in the manifest. Meanwhile the auth module tries to restore a session; with no stored token it answers "signed out" locally, without a network call |
+| 1 | A splash: on Android the Dart splash (logo, "Codebase", "A Flutter app, ready to build on", a spinner); on iOS the native splash stays up for the whole boot | `platforms.<p>.splash` in the manifest. Meanwhile the auth module tries to restore a session; with no stored token it answers "signed out" locally, without a network call |
 | 2 | Onboarding: "Welcome to Codebase" and a **Get Started** button | `feature_onboarding` contributes the first-launch entry location. It is shown once: the flag is stored, so the next launch skips it |
 | 3 | Sign-in: "Welcome Back", an email field and a password field | **Get Started** goes to `feature_auth`'s login page. The form checks the input itself — an email shape, a password of at least 6 characters — and sends nothing until both pass |
 | 4 | A spinner on the button, then a toast, "A network error occurred. Please try again.", and you stay on the sign-in screen | The request is `POST /user/login` against an empty `BASE_URL`, a path with no host, which the HTTP client rejects before any connection is made |
@@ -376,7 +379,7 @@ Confirm the file name on a device first (`adb shell run-as <applicationId> ls sh
 
 ### From VS Code
 
-`.vscode/launch.json` already defines three configurations — **App (Dev)**, **App (Staging)**, **App (Prod)**. Pick one from the Run and Debug panel. Each sets `--flavor` and `--dart-define-from-file` for you (the env path is relative to `apps/mobile/`, which is where the Dart extension anchors the project).
+`.vscode/launch.json` already defines five configurations — **App (Dev)**, **App (Staging)**, **App (Prod)** for `apps/mobile`, and **Admin (Web, Dev)** and **Admin (Desktop, Dev)** for `apps/admin`. Pick one from the Run and Debug panel. The App ones set `--flavor` and `--dart-define-from-file` for you (the env path is relative to `apps/mobile/`, which is where the Dart extension anchors the project); the Admin ones run `apps/admin/lib/main.dart` with its `env.dev`, in Chrome or on the desktop, and need the matching `web/` or desktop runner to be scaffolded first: the recipe is in [`apps/admin/README.md`](../../../apps/admin/README.md).
 
 ---
 
@@ -406,7 +409,7 @@ The template ships under placeholder names, and a few identifiers in it belong t
 | What | Where to change it |
 | :--- | :--- |
 | Display name, per flavor | `APP_NAME` in `apps/mobile/env.dev`, `env.stg` and `env.prod`. Dart reads it for the title. On Android, `build.gradle.kts` turns it into the launcher label `app_name` (`"Codebase"` when the key is absent). On iOS the label is the `APP_DISPLAY_NAME` build setting of each Runner configuration in `apps/mobile/ios/Runner.xcodeproj/project.pbxproj` (Xcode: *Runner → Build Settings → User-Defined*) |
-| Display-name fallback | `app.name` in `apps/<id>/app_manifest.yaml`, then `dart tools/composer/composer.dart sync` |
+| Display-name fallback | `app.name` in `apps/<id>/app_manifest.yaml`, then `dart tools/composer/composer.dart sync`. Each app's `test/app_profile_test.dart` reads the name from the manifest, so no test needs editing |
 | Android application ID | `namespace` and `applicationId` in `apps/mobile/android/app/build.gradle.kts` (`com.example.codebase`; the `dev` and `staging` flavors append `.dev` and `.stg` through `applicationIdSuffix`). Move `src/main/kotlin/com/example/codebase/` to the new package path and edit the `package` line of `MainActivity.kt`: the manifest names it `.MainActivity`, which resolves against `namespace`. |
 | iOS bundle ID | every `PRODUCT_BUNDLE_IDENTIFIER` in `project.pbxproj`: `com.example.codebase` (prod), `.dev`, `.staging`, and a `.RunnerTests` one per configuration (`grep -n PRODUCT_BUNDLE_IDENTIFIER`) |
 | iOS signing team | every `DEVELOPMENT_TEAM` in `project.pbxproj` is the template author's Apple team ID. Replace it with yours, or clear it and pick the team in Xcode |
@@ -414,7 +417,7 @@ The template ships under placeholder names, and a few identifiers in it belong t
 | Firebase | the IDs you register: run `dart tools/firebase/firebase_config.dart --app mobile` with the new base bundle ID (§3.1), or put the new `package_name` in the stub `google-services.json` files of §3.2 |
 | Fastlane | `app_bundle_ids.ios` and `.android` in `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-ids)); the flavor suffixes there must stay in step with Gradle and Xcode |
 | Icon and splash | the images under `assets/branding/`, then `dart tools/theme_generator/theme_setting.dart --app mobile` (it reads `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml` at the repository root) |
-| Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb` |
+| Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb`, and the splash text `appName` ("Codebase") and `tagline` ("A Flutter app, ready to build on") in `modules/splash/feature/assets/language/{en,vi}.arb` — keep the same keys in both files (`arch_check` R21) |
 
 `apps/admin` has no native project yet. When you create its runners ([`13_app_composition.md` § 7](../guides/13_app_composition.md#add-a-platform)), pass your own reverse domain to `flutter create --org` instead of `com.example`.
 
@@ -437,8 +440,11 @@ The Dart package names (the root `codebase`, the apps `mobile_app` and `admin_ap
 | `.github/ISSUE_TEMPLATE/config.yml` | the three `github.com/CaoGiaHieu-dev/flutter-monorepo-codebase` links |
 | `LICENSE`, the title and footer of `README.md` / `README.vi.md`, `CLAUDE.md` | the author's name and the project title |
 | `CHANGELOG.md` | the `[Unreleased]` link at the bottom, and the template's own history |
-| `tools/code_review/` | the project name in `review_prompt.md` and the report footer in `lib/services/language_service.dart` (the optional AI review) |
+| `tools/code_review/` | the project name in `review_prompt.md` and the report footer in `lib/services/language_service.dart` (the optional AI review). The report language defaults to `en` (`reportLanguage` in `code_review_config.json`; `.github/workflows/code_review.yml` uses it for pull requests) |
+| `.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml` | the labels `bug`, `enhancement` and `triage` must exist in your repository; create them, or edit `labels:` — a label that does not exist is not applied |
 | `azure-ci-cd.yml` | the pool name `codebase`: a self-hosted pool you create (only if you use Azure) |
+
+Adopting the template, you may also start a fresh history (`rm -rf .git && git init`, or squash) instead of inheriting the template's: it drops the old Gradle build output (§2) and the author's commits.
 
 Signing keys and CI secrets are not placeholders in the repository; you create them: [`../operations/02_fastlane_release.md` § 4](../operations/02_fastlane_release.md#4-signing) and [`../operations/01_cicd.md` § 7](../operations/01_cicd.md#7-secrets).
 

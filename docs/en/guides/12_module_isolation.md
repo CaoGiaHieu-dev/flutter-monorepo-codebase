@@ -114,7 +114,7 @@ git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
   apps/mobile/lib/app/app_profile.dart apps/admin/lib/app/app_profile.dart
 ```
 
-`pubspec.lock` is not among them: workspace members are not recorded in it, and pruning one changes it only when that member was the last user of some external package — check `git status` for it too.
+`pubspec.lock` is not among them: it is generated and git-ignored, so pruning a member leaves nothing of it to commit.
 
 And if it is committed anyway, **CI Gate 0 fails**. `composer verify` regenerates from the manifest on a runner where every submodule *is* checked out, and diffs against the committed files. A composition missing modules cannot match, so the mistake stops at the pull request rather than in a release.
 

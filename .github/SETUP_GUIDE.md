@@ -23,7 +23,8 @@ the module and app templates).
 
 Without the key the review step fails and the rest of the PR is unaffected — the workflow never
 blocks a merge. To change the report language for manual runs, pick it in the `workflow_dispatch`
-form; PR runs use Vietnamese (`--language vi` in the workflow).
+form (default `en`); PR runs use `reportLanguage` from
+`tools/code_review/code_review_config.json` (`en`).
 
 ## 3. Release builds — only if you use them
 
@@ -45,7 +46,7 @@ from a branch that has passed `pr_quality_check.yml`.
 ## 4. Check it works
 
 Open a pull request that touches any Dart file under `apps/`, `modules/` or `platform/`. The
-**Checks** tab should show both *PR Quality Check* jobs and, if the key is set, *AI Code Review*.
+**Checks** tab should show all four *PR Quality Check* jobs and, if the key is set, *AI Code Review*.
 
 ## Further reading
 

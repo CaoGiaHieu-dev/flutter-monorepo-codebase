@@ -314,7 +314,7 @@ Inline builders cannot be reused, previewed, or tested in isolation — and they
 ```bash
 cd modules/<name>/feature && flutter gen-l10n && cd -   # then check untranslated-messages.txt is empty
 dart tools/unused_checker/check_unused_translate.dart   # no key left unused
-dart tools/arch_check/check.dart                        # R7 / R20: no bare sizing extension (24.h), no raw layout number
+dart tools/arch_check/check.dart                        # R7 / R20: no bare sizing extension (24.h), no raw layout number; R21: every locale has en.arb's keys
 flutter analyze                                         # No issues found!
 cd modules/<name>/feature && flutter test               # page tests run under ResponsiveInit (RULE-62)
 ```

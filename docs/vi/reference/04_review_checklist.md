@@ -15,7 +15,7 @@ Mỗi ô ghi tên dòng trong bảng đăng ký mà nó kiểm. Bản thân lu�
 
 ```bash
 dart tools/composer/composer.dart verify             # Gate 0 — phần lắp ráp khớp app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R20
+dart tools/arch_check/check.dart                     # Gate 1 — luật R1–R21
 (cd tools && dart test)                              # Gate 1 — test của chính các gate tool
 dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrel
 git status --short -- '*.dart'                       # barrel lệch — CI fail nếu có thay đổi hoặc file .dart chưa theo dõi ở đây

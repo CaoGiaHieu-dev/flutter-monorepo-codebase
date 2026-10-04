@@ -130,7 +130,7 @@ variants plus a fallback, and never as a required constructor parameter of an in
    ```
 
 2. Annotate the classes (step 1) and declare every import under `dependencies:` (RULE-06).
-3. Compose it through the **manifest**, never `injection.dart` (generated in full, RULE-16). A module package
+3. Compose it through the **manifest**, never `injection.dart` (its imports and modules regions are generated, outside them only comments; RULE-16). A module package
    (`domain_*`, `data_*`, `feature_*`) is a line under `modules:` with the layers the app takes
    (`- { id: payment, layers: [domain, data, feature] }`; the generator adds it); its group comes from
    `from_modules:`. A **platform** package goes into the right `di_groups` entry by name:

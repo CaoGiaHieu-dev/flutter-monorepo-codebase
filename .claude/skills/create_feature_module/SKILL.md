@@ -80,7 +80,7 @@ whichever exists ([`create_api_package`](../create_api_package/SKILL.md)). Flows
 
 | Behaviour | Detail |
 | :--- | :--- |
-| `lib/src/utils/` | Created for every package type but API, because a package's constants belong there (RULE-09). Every feature gets `utils/<name>_path.dart` and `routing/<name>_route_module.dart`, whatever the route choice; delete them if the feature contributes no routes. |
+| Folders | The tool creates the tree, but the barrel pass deletes a directory that is still empty, so only folders holding a generated file remain: a domain package has `repositories/`, a data package `repositories_impl/`, and a package's constants go in a `utils/` you create with its first file (RULE-09). Every feature gets `utils/<name>_path.dart` and `routing/<name>_route_module.dart`, whatever the route choice; delete them if the feature contributes no routes. |
 | State-management folder | `lib/src/provider/` or `lib/src/bloc/` — **singular**, like `feature_auth` / `feature_home`. |
 | Toolchain | FVM is used only when a config (`.fvmrc` or `.fvm/fvm_config.json`) exists **and** `fvm --version` succeeds; otherwise the global `dart` / `flutter` (RULE-73). |
 | Fail-safe | The toolchain is checked **before any write**; an existing module directory aborts instead of overwriting. |

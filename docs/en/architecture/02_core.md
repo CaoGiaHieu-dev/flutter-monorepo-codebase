@@ -199,7 +199,7 @@ Everything is under `lib/src/`, behind the one package barrel (`lib/core_ui_kit.
 It depends on `core_base_ui` and `core_responsive` — never on a state-management package, on infra, on a feature or on `data_*`.
 
 > [!NOTE]
-> The dependency runs **one way**: `state -> ui`. `provider_state_management` may depend on the ui group (its `LoadMoreListView` scales through `core_responsive`); `core_ui_kit` depends on no state-management package. A widget bound to `LoadMoreMixin` or `ViewState` therefore lives in `provider_state_management`, not here. `provider_state_management` also keeps its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
+> The dependency runs **one way**: `state -> ui`. `provider_state_management` may depend on the ui group (its `LoadMoreListView` takes its spinner padding from the `AppSpacing` token in `core_base_ui`); `core_ui_kit` depends on no state-management package. A widget bound to `LoadMoreMixin` or `ViewState` therefore lives in `provider_state_management`, not here. `provider_state_management` also keeps its own `DefaultLoadingWidget` / `DefaultEmptyWidget` rather than borrowing branded ones from here.
 
 ### The UI-agnostic rule
 
@@ -1066,7 +1066,7 @@ Neither app commits a `web/` folder. `apps/admin` declares the web platform with
 
 What makes the shared boot path web-safe:
 
-- `dart:io` **compiles** on the web; only *calling* most of it fails. The platform is read in one place, `resolveAppPlatform()`, and boot decisions come from the app's declared `PlatformFacts` (the Dart splash is the platform's `splash` mode, not a fork on `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` returns a plain page before its `Platform.isIOS` branch (so on the web it also skips `RouteAwareWidget`: no screen analytics), `MainScope` skips `FlutterNativeSplash.remove()`, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
+- `dart:io` **compiles** on the web; only *calling* most of it fails. The platform is read in one place, `resolveAppPlatform()`, and boot decisions come from the app's declared `PlatformFacts` (the Dart splash is the platform's `splash` mode, not a fork on `Platform.isIOS` — RULE-82). `GoRouteDataCustom.buildPage` wraps every page in `RouteAwareWidget` on every platform, so screen analytics fire on the web too, and only its page type differs there (a plain `MaterialPage`, because the browser owns the transition), `MainScope` skips `FlutterNativeSplash.remove()`, and `core_network` uses `dart:io` only for header-name constants and `is SocketException` checks — Dio itself switches to the browser adapter.
 - `AppInitializer` installs **no** `HttpOverrides` on the web and logs once, at `INFO`, that the browser validates certificates: the browser owns TLS, so neither pinning nor the dev-flavor bypass can apply. Tests pass `platform: AppPlatform.web` to `initBeforeRunApp`.
 
 Known gaps:
@@ -1094,7 +1094,7 @@ Local (workspace) dependencies only — pub.dev packages omitted. Which group ea
 | `data_core` | `platform_kernel`, `domain_core` |
 | `core_base_ui` | `core_common`, `core_di`, `core_responsive`, `platform_kernel` |
 | `bloc_state_management` | `platform_kernel`, `domain_core` *(approved exception — `AppFailure` for `BlocViewState.error`)* |
-| `provider_state_management` | `core_common`, `core_responsive`, `domain_core` *(approved exception)* |
+| `provider_state_management` | `core_base_ui`, `core_common`, `domain_core` *(approved exception)* — `core_responsive` is a dev dependency, for its tests |
 | `core_ui_kit` | `core_base_ui`, `core_responsive` |
 | `platform_shell_adapters` | `core_base_ui` (`LanguageSet`), `core_common`, `core_di`, `core_network`, `core_storage`, `core_ui_kit` (`RetryDialog`, `AppOverlay`) |
 | `platform_app_shell` | `core_base_ui`, `core_common`, `core_di`, `core_network`, `core_responsive`, `core_ui_kit`, `provider_state_management`, `platform_shell_adapters` |

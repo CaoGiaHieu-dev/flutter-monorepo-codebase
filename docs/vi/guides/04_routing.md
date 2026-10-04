@@ -101,6 +101,27 @@ class ProfileDetailRoute extends GoRouteDataCustom with $ProfileDetailRoute {
 
 Điều hướng bằng chính class có kiểu — `const ProfileDetailRoute(id: '42', tab: 2).go(context)` — không bao giờ tự ghép chuỗi. Controller nhận id làm factory parameter, `ProfileDetailProvider(@factoryParam this._id)`, được route truyền vào như trên (RULE-11, RULE-21). Factory có `@factoryParam` **không nullable** là loại duy nhất mà smoke test DI không build được nếu thiếu màn hình của nó: hãy liệt kê type của nó trong `_factoriesNeedingArguments` ở `apps/<id>/test/di_smoke_test.dart`, kèm lý do (`F01`, [`05_di.md`](05_di.md)). Feature khác tới màn hình này qua một method của navigator nhận tham số đó — `void toProfileDetail(BuildContext context, {required String id})` trong `profile_api` (bước 6).
 
+### Hành vi của page: analytics màn hình, cử chỉ back, page key
+
+`GoRouteDataCustom` dựng page giúp bạn, trên mọi platform kể cả web: nó bọc kết quả của `build()` trong một `RouteAwareWidget`, nên mỗi màn hình được báo cho `IAnalytics` (tuỳ chọn) như một lượt xem màn hình, và chọn kiểu chuyển cảnh platform mong đợi (`CupertinoPage` trên iOS, `MaterialPage` thường trên web, kiểu trượt Cupertino ở nơi khác). Hai getter thay đổi page đó, và cả hai áp dụng trên mọi platform:
+
+```dart
+class CheckoutRoute extends GoRouteDataCustom with $CheckoutRoute {
+  const CheckoutRoute();
+
+  @override
+  bool get canPop => false; // the system back gesture or button does not dismiss it
+
+  @override
+  ValueKey<Object?>? get pageKey => const ValueKey('checkout'); // two locations share one page
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) => const CheckoutPage();
+}
+```
+
+`canPop` mặc định là `true`. `pageKey` mặc định là `null`, tức dùng `state.pageKey`; chỉ trả về một key ổn định khi go_router nên cập nhật một page tại chỗ thay vì thay thế nó. Đừng override `buildPage`, và đừng gọi `routePageFor`, hàm đứng sau nó: nó là public chỉ để dùng trong test.
+
 ## 4. Tạo controller trong route
 
 `build()` của route là nơi controller màn hình được tạo và gắn vào cây widget (RULE-21).

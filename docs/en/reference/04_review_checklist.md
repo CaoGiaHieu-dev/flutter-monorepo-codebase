@@ -14,7 +14,7 @@ The same gates `.github/workflows/pr_quality_check.yml` runs, in its order. Gate
 
 ```bash
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R20
+dart tools/arch_check/check.dart                     # Gate 1 — rules R1–R21
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
 dart tools/workspace_setup/configure.dart            # setup — pub get, gen-l10n, build_runner, barrels
 git status --short -- '*.dart'                       # barrel drift — CI fails on any change or untracked .dart file here

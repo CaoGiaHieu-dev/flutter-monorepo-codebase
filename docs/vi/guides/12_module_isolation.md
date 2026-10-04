@@ -115,7 +115,7 @@ git checkout -- pubspec.yaml apps/mobile/pubspec.yaml apps/admin/pubspec.yaml \
   apps/mobile/lib/app/app_profile.dart apps/admin/lib/app/app_profile.dart
 ```
 
-`pubspec.lock` không nằm trong số đó: các member của workspace không được ghi vào nó, và bỏ một member chỉ làm nó đổi khi member đó là nơi cuối cùng dùng một package bên ngoài nào đó — hãy xem cả nó trong `git status`.
+`pubspec.lock` không nằm trong số đó: nó được sinh ra và bị git bỏ qua, nên bỏ một member không để lại gì của nó để commit.
 
 Và nếu vẫn lỡ commit, **CI Gate 0 sẽ fail**. `composer verify` sinh lại từ manifest trên một runner có đầy đủ submodule, rồi so với các file đã commit. Một phép lắp ráp thiếu module thì không thể khớp, nên sai lầm dừng lại ở pull request thay vì đi vào bản phát hành.
 

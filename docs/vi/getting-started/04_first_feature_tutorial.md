@@ -80,7 +80,7 @@ dependencies:
   freezed_annotation: "^3.1.0"
 
 dev_dependencies:
-  freezed: "^4.0.0-dev.3"
+  freezed: "^4.0.1"
 ```
 
 Tạo entity:
@@ -151,7 +151,7 @@ dependencies:
   json_annotation: "^4.12.0"
 
 dev_dependencies:
-  freezed: "^4.0.0-dev.3"
+  freezed: "^4.0.1"
   json_serializable: "^6.14.1"
 ```
 

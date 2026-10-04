@@ -40,9 +40,9 @@ These mirror [`.github/workflows/pr_quality_check.yml`](.github/workflows/pr_qua
 in its order. Run them from the repository root:
 
 ```bash
-flutter pub get --enforce-lockfile                   # CI fails if pubspec.lock is stale
+flutter pub get                                     # lock files are generated, never committed
 dart tools/composer/composer.dart verify             # Gate 0 — composition matches app_manifest.yaml
-dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R20
+dart tools/arch_check/check.dart                     # Gate 1 — layering and hygiene rules R1–R21
 (cd tools && dart test)                              # Gate 1 — the gate tools' own tests
 dart tools/workspace_setup/configure.dart --stub-firebase   # codegen (skip if you just ran it)
 # CI then fails on barrel drift (RULE-75): on a clean checkout, the line above must leave no tracked
@@ -79,8 +79,8 @@ Each is a registry row — read it there; this list only says where people trip.
 - **Per-app values are declared in the app** (RULE-80, RULE-81, RULE-82): the manifest, the profile,
   the hooks — never a constant in `platform/` or a new platform fork. Guide:
   [`13_app_composition.md`](docs/en/guides/13_app_composition.md).
-- **Versions live in the catalog** (RULE-74). The workspace `pubspec.lock` is committed — commit its
-  changes with the PR that caused them.
+- **Versions live in the catalog** (RULE-74). Lock files (`pubspec.lock`,
+  `Gemfile.lock`, `Podfile.lock`) are generated and git-ignored: never commit one.
 - **Generated files** (RULE-76). Not committed: `*.g.dart`, `*.freezed.dart`, `*.config.dart`,
   `*.module.dart`, `lib/src/gen/**`. Committed: barrel files, regenerated after codegen (RULE-75).
 - **The analyzer is strict** (RULE-70) and `// ignore:` is not a fix (RULE-71).

@@ -85,7 +85,7 @@ Every other platform edge follows the group direction (R11) and stays inside `pl
 
 ## 3. Why a Pub Workspace monorepo
 
-Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list, which `composer sync` generates from the app manifests — 31 members (16 platform packages, 12 module packages, two apps and `tools`). One `pubspec.lock`, one resolution, one `dart run build_runner build --workspace` for the whole tree.
+Every package is a member of the root [`pubspec.yaml`](../../../pubspec.yaml) `workspace:` list, which `composer sync` generates from the app manifests — 31 members (16 platform packages, 12 module packages, two apps and `tools`). One resolution (one `pubspec.lock`, generated and git-ignored), one `dart run build_runner build --workspace` for the whole tree.
 
 **What you gain:** fast incremental compilation, no version drift between packages, refactors that cross package boundaries in a single commit, and layering that a gate can read — a feature package's `pubspec.yaml` and imports are scanned, and `arch_check` R3 fails the build when a feature declares or imports `data_auth`.
 

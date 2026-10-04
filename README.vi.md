@@ -106,12 +106,12 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── .claude/                       # skills/ — công thức tác vụ cho agent (Claude Code tự tìm ở đây)
 ├── .github/                       # CODEOWNERS, SETUP_GUIDE.md, dependabot.yml, issue form, mẫu PR, các workflow CI
 │   └── workflows/
-│       ├── pr_quality_check.yml   # Cổng PR 0–5 (composer, arch_check, analyze, test, catalog, docs_check), barrel drift, kiểm tra package thừa, debug APK, generator smoke
+│       ├── pr_quality_check.yml   # Cổng PR 0–5 (composer, arch_check, analyze, test, catalog, docs_check), barrel drift, kiểm tra package thừa, debug APK, hai generator smoke test
 │       ├── flutter_build.yml      # Build & phân phối thủ công bằng Flutter CLI
 │       ├── fastlane.yml           # Build & phân phối thủ công qua Fastlane
 │       ├── code_review.yml        # Review bằng Gemini AI trên pull request (chỉ tham khảo)
 │       └── README.md              # Mỗi workflow làm gì và cần secret nào
-├── .vscode/                       # launch.json (App Dev/Staging/Prod), settings, tasks
+├── .vscode/                       # launch.json (App Dev/Staging/Prod, Admin Web/Desktop), settings, tasks
 ├── apps/                          # Mỗi app một thư mục — các điểm lắp ráp
 │   ├── admin/                     # App thứ hai: chỉ auth + settings — xem apps/admin/README.md
 │   └── mobile/                    # Mọi module mẫu — xem apps/mobile/README.md
@@ -163,7 +163,7 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 │       └── app_shell/             # platform_app_shell: boot scope, router, material wrapper, provider cấp app
 ├── tools/                         # Bộ công cụ dòng lệnh (một thành viên workspace) — xem tools/README.vi.md
 │   ├── android_compliance/        # Kiểm tra tương thích 16KB page size (Android 15+)
-│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R20 — Cổng PR 1
+│   ├── arch_check/                # Luật phân tầng và vệ sinh R1–R21 — Cổng PR 1
 │   ├── barrel_generator/          # Sinh lại barrel duy nhất của package, lib/<package>.dart
 │   ├── code_review/               # Review mã nguồn bằng Gemini AI
 │   ├── composer/                  # sync/verify/describe/new/list app từ app_manifest.yaml — Cổng PR 0
@@ -193,10 +193,9 @@ bị gitignore, `.dart_tool/` và trạng thái IDE được lược bỏ):
 ├── devtools_options.yaml          # Cấu hình Flutter DevTools
 ├── flutter_native_splash-{dev,staging,prod}.yaml  # Cấu hình splash theo flavor (theme_generator)
 ├── icons_launcher-{dev,staging,prod}.yaml         # Cấu hình icon app theo flavor (theme_generator)
-├── Gemfile  Gemfile.lock          # Ruby gem cho Fastlane (đã khóa)
+├── Gemfile                        # Ruby gem cho Fastlane (Gemfile.lock được sinh ra, không commit)
 ├── LICENSE                        # Giấy phép BSD 3-Clause
 ├── pubspec.yaml                   # File cấu hình Pub Workspace (workspace: [...]) — node workspace duy nhất
-├── pubspec.lock                   # File lock DUY NHẤT cho cả workspace — được commit
 ├── pubspec_dependencies.yaml      # Nguồn chân lý phiên bản thư viện (Version Catalog)
 ├── README.md                      # Bản tiếng Anh
 ├── README.vi.md                   # Cẩm nang kỹ thuật Master này
@@ -269,7 +268,7 @@ Tất cả công cụ đều có thể chạy từ thư mục gốc.
     ```
 11. **Các cổng (`tools/arch_check/`, `tools/docs_check/`, `tools/sample_cleanup/`)**:
     ```bash
-    dart tools/arch_check/check.dart                            # Cổng PR 1 — luật R1–R20
+    dart tools/arch_check/check.dart                            # Cổng PR 1 — luật R1–R21
     dart tools/docs_check/check.dart                            # Cổng PR 5 — đường dẫn, cân bằng en↔vi, RULE-ID
     dart tools/sample_cleanup/remove_sample.dart --list         # các bundle mẫu có thể gỡ
     ```
@@ -329,9 +328,10 @@ void initMicroPackage() {}
 ```
 
 ### Tổng hợp tại Host App (`apps/mobile/lib/di/injection.dart`):
-Toàn bộ file được **sinh tự động** từ `apps/mobile/app_manifest.yaml` bởi
-`dart tools/composer/composer.dart sync --app mobile` — sửa manifest, đừng sửa file này;
-`composer verify` (Cổng PR 0) fail nếu có bất kỳ khác biệt nào. Vùng `modules` của nó, nguyên văn:
+Các vùng `imports` và `modules` được **sinh tự động** từ `apps/mobile/app_manifest.yaml` bởi
+`dart tools/composer/composer.dart sync --app mobile` — sửa manifest, đừng sửa file này, và
+ngoài các vùng đó chỉ được viết comment; `composer verify` (Cổng PR 0) fail nếu có bất kỳ khác biệt
+nào hoặc có code nằm ngoài chúng. Vùng `modules` của nó, nguyên văn:
 
 ```dart
 // composer:managed:modules — generated from app_manifest.yaml
@@ -472,8 +472,11 @@ không giữ kiểu dữ liệu nào của feature — đó chính là điều k
 ### Gỡ một feature
 
 1. Xóa dòng của nó trong mục `modules:` ở mọi `apps/<id>/app_manifest.yaml` có ghép nó.
-2. `dart tools/composer/composer.dart sync` — sinh lại `injection.dart`, path dependency của app
-   và danh sách `workspace:` ở root, tất cả nằm giữa marker `composer:managed`.
+2. Nếu một capability mất nơi cung cấp cuối cùng (splash duy nhất, tab duy nhất), `dart tools/composer/composer.dart
+   reconcile --reason "<why>"` khai nó `absent` trong các manifest — `composer verify` từ chối `provided`
+   cho contract không còn gì đăng ký. Sau đó `dart tools/composer/composer.dart sync` — sinh lại
+   `injection.dart`, path dependency của app và danh sách `workspace:` ở root, tất cả nằm giữa
+   marker `composer:managed`.
 3. Xóa thư mục `modules/<id>/` còn sót lại — `composer verify` fail khi có package mà không app nào ghép.
 4. `flutter pub get && dart run build_runner build --workspace`.
 
@@ -491,7 +494,7 @@ Hệ thống CI/CD sử dụng **Fastlane** với kiến trúc **Workspace-Root 
 Mỗi pull request chạy `.github/workflows/pr_quality_check.yml`: job quality (`composer verify`,
 `arch_check`, test của chính các tool cổng, setup + codegen, kiểm tra barrel drift, `flutter analyze`,
 test từng package, kiểm tra catalog, `docs_check`, kiểm tra dependency thừa), rồi build debug APK và
-một generator smoke test. Các lệnh theo đúng thứ tự: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; mô tả
+hai generator smoke test. Các lệnh theo đúng thứ tự: [`CONTRIBUTING.md`](CONTRIBUTING.md) § 3; mô tả
 đầy đủ: [`operations/01_cicd.md`](docs/vi/operations/01_cicd.md).
 
 ### Lệnh Biên Dịch Android APK từ Root:
@@ -533,7 +536,7 @@ dart tools/workspace_setup/configure.dart
 codegen ghi xong file. Lượt barrel chỉ cần khi bạn thêm, đổi tên hoặc xóa một file trong `lib/`.
 Trình tự làm tay đầy đủ nằm ở [`getting-started/01_setup.md`](docs/vi/getting-started/01_setup.md) § 2.
 
-*Nhờ Pub Workspaces, chỉ có một `pubspec.lock` duy nhất, nằm ở root, và nó được commit.*
+*File lock (`pubspec.lock`, `Gemfile.lock`, `Podfile.lock`) do `flutter pub get` và `bundle install` sinh ra, bị git bỏ qua và không bao giờ commit: version chỉ được ghim trong `pubspec_dependencies.yaml` (RULE-74) và `.fvmrc`.*
 
 ### 3. Firebase Options (bắt buộc — thiếu là repo không biên dịch được)
 `apps/mobile/lib/firebase/firebase_module.dart` import cả ba file

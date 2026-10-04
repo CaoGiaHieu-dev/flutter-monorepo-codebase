@@ -317,7 +317,7 @@ Builder inline không thể tái sử dụng, không preview được, không te
 ```bash
 cd modules/<name>/feature && flutter gen-l10n && cd -   # rồi kiểm tra untranslated-messages.txt trống
 dart tools/unused_checker/check_unused_translate.dart   # không còn key nào bị bỏ không dùng
-dart tools/arch_check/check.dart                        # R7 / R20: không có extension kích thước trần (24.h), không có số thô trong layout
+dart tools/arch_check/check.dart                        # R7 / R20: không có extension kích thước trần (24.h), không có số thô trong layout; R21: mọi locale có đủ khoá của en.arb
 flutter analyze                                         # No issues found!
 cd modules/<name>/feature && flutter test               # test page chạy dưới ResponsiveInit (RULE-62)
 ```

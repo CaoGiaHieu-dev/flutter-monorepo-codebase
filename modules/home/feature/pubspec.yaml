@@ -38,6 +38,8 @@ dev_dependencies:
   freezed: "^4.0.0-dev.3"
   flutter_test:
     sdk: flutter
+  core_responsive:
+    path: ../../../platform/ui/responsive
 
 flutter:
   generate: true

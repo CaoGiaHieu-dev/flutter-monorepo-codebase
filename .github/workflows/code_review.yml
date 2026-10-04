@@ -311,7 +311,7 @@ jobs:
       # the label is translated, the value is not). A bare `grep 🔴` also hit
       # the report's legend row `| 🔴 **High** | …`, so it was never zero.
       # Advisory: it annotates, it does not fail the job.
-      - name: ❌ Fail on Critical Issues
+      - name: Annotate critical issues (advisory)
         if: always()
         run: |
           shopt -s nullglob

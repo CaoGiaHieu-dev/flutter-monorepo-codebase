@@ -1,5 +1,5 @@
 name: core_network
-description: "Network service wrapper using Dio for codebase_template"
+description: "Network service wrapper using Dio"
 version: 1.0.0
 publish_to: none
 

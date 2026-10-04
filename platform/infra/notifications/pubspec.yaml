@@ -1,5 +1,5 @@
 name: core_notifications
-description: "Push notification management system using Firebase Messaging for codebase_template"
+description: "Push notification management system using Firebase Messaging"
 version: 1.0.0
 publish_to: none
 

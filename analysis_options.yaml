@@ -79,7 +79,6 @@ analyzer:
     - "**.mocks.dart"
     - "**.config.dart"
     - "**.module.dart"
-    - "**/core/localization/generated/**"
     - "**/gen/**"
     - build/**
     - android/**

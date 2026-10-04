@@ -1,5 +1,5 @@
 name: core_storage
-description: "Secure storage and caching helpers for codebase_template"
+description: "Secure storage and caching helpers"
 version: 1.0.0
 publish_to: none
 

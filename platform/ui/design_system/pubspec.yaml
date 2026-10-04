@@ -1,5 +1,5 @@
 name: core_base_ui
-description: "Central UI Kit, Theme System, Assets, and Translations for codebase_template"
+description: "Central UI Kit, Theme System, Assets, and Translations"
 version: 1.0.0
 publish_to: none
 

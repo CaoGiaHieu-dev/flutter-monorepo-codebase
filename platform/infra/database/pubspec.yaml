@@ -1,5 +1,5 @@
 name: core_database
-description: "Local relational database using Drift with background isolate for codebase_template"
+description: "Local relational database using Drift with background isolate"
 version: 1.0.0
 publish_to: none
 

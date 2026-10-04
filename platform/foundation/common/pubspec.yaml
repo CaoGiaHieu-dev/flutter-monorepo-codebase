@@ -1,5 +1,5 @@
 name: core_common
-description: "Common foundational utilities and interfaces for codebase_template"
+description: "Common foundational utilities and interfaces"
 version: 1.0.0
 publish_to: none
 

@@ -1,5 +1,5 @@
 name: provider_state_management
-description: "State management base structures and controllers for codebase_template"
+description: "State management base structures and controllers"
 version: 1.0.0
 publish_to: none
 

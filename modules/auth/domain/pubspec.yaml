@@ -1,5 +1,5 @@
 name: domain_auth
-description: "Module domain_auth for codebase_template"
+description: "Module domain_auth"
 version: 1.0.0
 publish_to: none
 

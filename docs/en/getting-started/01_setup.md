@@ -58,7 +58,7 @@ dart tools/workspace_setup/configure.dart
 ```
 
 > [!TIP]
-> The old history of the template carries about 82 MB of Gradle build output that was committed once and has long been ignored. A shallow clone (`git clone --depth 1 <repo-url>`) skips it; so does starting your own repository from a fresh history when you adopt the template (§8.4).
+> The old history of the template carries tens of megabytes of Gradle, iOS and tools build output that was committed once and has long been ignored. A shallow clone (`git clone --depth 1 <repo-url>`) skips it; so does starting your own repository from a fresh history when you adopt the template (§8.4).
 
 **`configure.dart` is the setup step.** It runs, in order, stopping at the first failure:
 
@@ -129,7 +129,7 @@ Then run from the repository root:
 dart tools/firebase/firebase_config.dart --app mobile
 ```
 
-The script requires the Firebase CLI to be installed and logged in. If it is missing, the script prints install instructions and exits 1; it tries `firebase login` at most twice, refuses to run without a terminal, and `--help` prints its usage. `configure.dart` has already activated `flutterfire_cli`. It asks for three things: a **Firebase project ID**, a **base bundle ID / package name** (`com.example.codebase`), and the flavors (default `dev staging prod`). Then it runs `flutterfire configure` inside `apps/mobile/` for every flavor and build mode. It writes `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` and `android/app/src/<flavor>/google-services.json`, all relative to `apps/mobile/`. The Android package gets `.dev` / `.stg` / no suffix, and the iOS bundle ID gets `.dev` / `.staging` / no suffix. `--app` is required because the workspace holds more than one app.
+The script requires the Firebase CLI to be installed and logged in. If it is missing, the script prints install instructions and exits 1; it tries `firebase login` at most twice, refuses to run unless both stdin and stdout are terminals (a run with either one redirected, piped or `</dev/null` — an agent or CI harness — exits 1 before any prompt), and `--help` prints its usage. `configure.dart` has already activated `flutterfire_cli`. It asks for three things: a **Firebase project ID**, a **base bundle ID / package name** (`com.example.codebase`), and the flavors (default `dev staging prod`). Then it runs `flutterfire configure` inside `apps/mobile/` for every flavor and build mode. It writes `lib/firebase/firebase_options_<flavor>.dart`, `ios/flavors/<flavor>/GoogleService-Info.plist` and `android/app/src/<flavor>/google-services.json`, all relative to `apps/mobile/`. The Android package gets `.dev` / `.stg` / no suffix, and the iOS bundle ID gets `.dev` / `.staging` / no suffix. `--app` is required because the workspace holds more than one app.
 
 > [!NOTE]
 > The helper puts **all flavors in the one project ID** you type. To keep dev, staging and prod in separate Firebase projects, run FlutterFire by hand instead, once per environment, **from `apps/mobile/`**:
@@ -377,6 +377,10 @@ The trade-off: a reinstall or a new phone starts from a clean app — no prefere
 
 Confirm the file name on a device first (`adb shell run-as <applicationId> ls shared_prefs`) — it depends on the `flutter_secure_storage` version and options.
 
+### iOS: the UIScene lifecycle
+
+`apps/mobile/ios` uses the UIScene lifecycle that Flutter's own app template ships: `Runner/AppDelegate.swift` conforms to `FlutterImplicitEngineDelegate` and registers the plugins in `didInitializeImplicitFlutterEngine`, `Runner/SceneDelegate.swift` is a `FlutterSceneDelegate` compiled into the Runner target, and `Runner/Info.plist` declares it under `UIApplicationSceneManifest`. Keep the three together. A Runner on the older `AppDelegate`-only lifecycle is rewritten by Flutter's tool on the first iOS build, which leaves tracked files modified, and iOS warns that scene support will soon be required. The iOS deep-link setup: [`04_routing.md` § 9](../guides/04_routing.md#configure-ios).
+
 ### From VS Code
 
 `.vscode/launch.json` already defines five configurations — **App (Dev)**, **App (Staging)**, **App (Prod)** for `apps/mobile`, and **Admin (Web, Dev)** and **Admin (Desktop, Dev)** for `apps/admin`. Pick one from the Run and Debug panel. The App ones set `--flavor` and `--dart-define-from-file` for you (the env path is relative to `apps/mobile/`, which is where the Dart extension anchors the project); the Admin ones run `apps/admin/lib/main.dart` with its `env.dev`, in Chrome or on the desktop, and need the matching `web/` or desktop runner to be scaffolded first: the recipe is in [`apps/admin/README.md`](../../../apps/admin/README.md).
@@ -416,7 +420,7 @@ The template ships under placeholder names, and a few identifiers in it belong t
 | Deep-link scheme and domain | `DEEP_LINK_SCHEME` per flavor, in both `build.gradle.kts` and `project.pbxproj` (the two must agree); `WEB_DOMAIN` in the env files; the package name and bundle ID inside the files you serve under `/.well-known/` ([`04_routing.md` § 9](../guides/04_routing.md#9-set-up-deep-links)) |
 | Firebase | the IDs you register: run `dart tools/firebase/firebase_config.dart --app mobile` with the new base bundle ID (§3.1), or put the new `package_name` in the stub `google-services.json` files of §3.2 |
 | Fastlane | `app_bundle_ids.ios` and `.android` in `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-ids)); the flavor suffixes there must stay in step with Gradle and Xcode |
-| Icon and splash | the images under `assets/branding/`, then `dart tools/theme_generator/theme_setting.dart --app mobile` (it reads `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml` at the repository root) |
+| Icon and splash | the images under `assets/branding/`, then `dart tools/theme_generator/theme_setting.dart --app mobile` (it reads `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml` at the repository root). On iOS the flavored build configurations use their own icon sets — `devAppIcon`, `stagingAppIcon`, `prodAppIcon` in `Runner/Assets.xcassets`, written by `icons_launcher` from each flavor's yaml — through `ASSETCATALOG_COMPILER_APPICON_NAME` in `project.pbxproj`; the unflavored configurations keep the stock `AppIcon`. So a changed image reaches an iOS build only through a flavor |
 | Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb`, and the splash text `appName` ("Codebase") and `tagline` ("A Flutter app, ready to build on") in `modules/splash/feature/assets/language/{en,vi}.arb` — keep the same keys in both files (`arch_check` R21) |
 
 `apps/admin` has no native project yet. When you create its runners ([`13_app_composition.md` § 7](../guides/13_app_composition.md#add-a-platform)), pass your own reverse domain to `flutter create --org` instead of `com.example`.

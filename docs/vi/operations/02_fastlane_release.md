@@ -82,9 +82,7 @@ cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml
 | `firebase.app_ids.<platform>.<flavor>` | Firebase App ID theo nền tảng và flavor, kèm khoá `default` cho build không flavor. Flavor không có mục riêng sẽ lùi về `default` kèm cảnh báo — tức là upload vào app mặc định, nên hãy cho mọi flavor bạn phân phối một mục riêng |
 | `firebase.credentials_map.<flavor>` | Đường dẫn file JSON service-account của Firebase theo flavor; flavor không có mục riêng sẽ lùi về `default` (đúng cách lùi mà `fastlane.yml` dùng khi ghi file này) |
 | `app_store_connect.api_key_id` / `.issuer_id` | Định danh API key của App Store Connect |
-| `app_store_connect.username` / `.team_id` | Apple ID và team, dùng dự phòng cho các action không nhận API key |
 | `app_store_connect.apple_ids.<flavor>` | Apple ID dạng số theo flavor — **bắt buộc**, bước upload TestFlight sẽ lỗi *"Unknown flavor for apple-id mapping"* nếu thiếu flavor tương ứng |
-| `google_play.account_id` | Chỉ dùng để dựng link tới console |
 | `paths.firebase_testers_file` | File text chứa email tester cho Firebase App Distribution |
 | `paths.google_play_key_prod` / `_dev` | File JSON service-account của Google Play |
 | `paths.app_store_connect_key_filepath` | File API key `.p8`. Tên file **bắt buộc là `AuthKey_<app_store_connect.api_key_id>.p8`** — đúng tên App Store Connect đặt cho file tải về. Bước upload TestFlight chạy `xcrun altool --apiKey <id>`, lệnh này không nhận đường dẫn key: nó chỉ tìm file có đúng tên đó, trong `$API_PRIVATE_KEYS_DIR` (lane đặt biến này thành thư mục chứa file) hoặc trong `./private_keys`, `~/private_keys`, `~/.private_keys`, `~/.appstoreconnect/private_keys`. Ở local, file đặt tên khác vẫn upload được, qua một bản sao tạm đã đổi tên kèm cảnh báo; `fastlane.yml` thì từ chối |

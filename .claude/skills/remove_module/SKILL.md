@@ -1,6 +1,6 @@
 ---
 name: remove_module
-description: Use when a module or package must go — "remove the auth sample", "delete this feature", "drop a module from the admin app", "clean up the sample code", "remove_sample". Takes a module out of an app (manifest line, composer sync) or out of the repo (delete the directory, pub get, build_runner), flips the capabilities that lost their last provider, or runs remove_sample for a shipped sample.
+description: Use when a module or package must go — "remove the auth sample", "delete this feature", "drop a module from the admin app", "clean up the sample code", "remove_sample". Takes a module out of an app (manifest line, composer sync) or out of the repo (delete the directory, pub get, build_runner), flips the capabilities that lost their last provider, or runs remove_sample for a shipped sample. Not for the other maintenance tools (use run_repo_tooling).
 ---
 
 # Skill: Remove a module
@@ -8,6 +8,11 @@ description: Use when a module or package must go — "remove the auth sample", 
 Use this skill to take a module out of one app, or out of the repository. The shipped modules (`auth`, `home`,
 `settings`, `onboarding`, `dashboard`, `splash`, `cache`) are **sample** reference code — patterns to copy or delete,
 not product logic — and have a tool; a module you generated has the manual path.
+
+> **Use [`run_repo_tooling`](../run_repo_tooling/SKILL.md) instead when** the task is another maintenance tool (barrels, version
+> sync, unused checks, docs_check); its `remove_sample` section is only a command reference, and this skill is where a removal
+> is decided and finished. A capability that lost its last provider is reconciled here (`composer reconcile`); declaring one by
+> choice is [`configure_app`](../configure_app/SKILL.md).
 
 **Guide:** [`docs/en/guides/01_new_feature.md` § 9](../../../docs/en/guides/01_new_feature.md#9-remove-a-feature) · the
 tutorial's [clean-up](../../../docs/en/getting-started/04_first_feature_tutorial.md#clean-up-remove-the-module).

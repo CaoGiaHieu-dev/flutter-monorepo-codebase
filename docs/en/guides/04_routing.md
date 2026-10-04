@@ -366,6 +366,8 @@ Two link shapes reach the app, and both land on the same router location:
 
 The platform delivers the URI to `app_links`. `DeeplinkProvider` (`platform/shell/app_shell/lib/src/provider/deeplink_provider.dart`) turns it into a location with `locationOf` and routes it. It does so only after `canRoute` has checked the session, and only once `NavigatorWrapperWidget` has started it — never over onboarding or login. A path no module registered lands on `UndefinedRouteWidget`, like any unknown location.
 
+`locationOf` keeps everything the link carries: the path, **every** query parameter (a key given twice keeps both values: `?tag=a&tag=b`) and the fragment (`#section`). A custom-scheme link with an empty host (`<scheme>:///settings`) is read as the path `/settings`, the same as `<scheme>://settings`.
+
 ### Keep Flutter's own deep linking off
 
 Since Flutter 3.27 the engine also handles deep links by default. It pushes the URI straight into `GoRouter`, skipping `DeeplinkProvider` and its session check: a signed-out user could open a signed-in screen, and each link would be routed twice. Both platforms therefore switch it off:
@@ -444,6 +446,8 @@ adb shell am start -a android.intent.action.VIEW -d "https://<WEB_DOMAIN>/settin
 ```
 
 ### Configure iOS
+
+**Scene lifecycle.** The Runner uses UIScene, the lifecycle Flutter's own template ships: `AppDelegate.swift` conforms to `FlutterImplicitEngineDelegate` and registers the plugins in `didInitializeImplicitFlutterEngine`, `SceneDelegate.swift` (a `FlutterSceneDelegate`, part of the Runner target in `project.pbxproj`) is the window scene's delegate, and `Info.plist` declares it under `UIApplicationSceneManifest`. Keep the three together. With the older `AppDelegate`-only lifecycle, Flutter's tool migrates these files itself on the first iOS build, which dirties tracked files in an unreviewed diff.
 
 **Custom scheme.** `Info.plist` registers it under `CFBundleURLTypes`, with `CFBundleURLSchemes` = `$(DEEP_LINK_SCHEME)` and `CFBundleURLName` = `$(PRODUCT_BUNDLE_IDENTIFIER)`. Nothing else is needed: `xcrun simctl openurl booted "codebase-dev://settings?tab=2"` opens the dev build.
 

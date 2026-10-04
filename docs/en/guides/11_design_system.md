@@ -641,6 +641,6 @@ Review checklist — what each rule's registry row says a machine holds is in [`
 
 ## Related
 
-- Rules: RULE-30, RULE-31, RULE-32, RULE-33, RULE-38 (text follows the OS font size) — [`../reference/01_rules.md`](../reference/01_rules.md)
+- Rules: RULE-30, RULE-31, RULE-32, RULE-33, RULE-38 (text follows the OS font size), RULE-39 (48 dp tap targets; `CustomButton` keeps 48 dp at every window width, under test) — [`../reference/01_rules.md`](../reference/01_rules.md)
 - [`09_localization_theming.md`](09_localization_theming.md) — using tokens in widget code, and per-feature translations
 - [`../architecture/02_core.md`](../architecture/02_core.md) — where `core_base_ui` sits, and why it ships zero widgets; the `core_responsive` public API

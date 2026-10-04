@@ -189,7 +189,7 @@ Bản clone mới cần `pub get`, `gen-l10n` và `build_runner`; lượt chạy
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/firebase/firebase_config.dart [--app <id>]` | Chạy `flutterfire configure` cho từng flavor và build mode của một app | `0` · `1` không có terminal, thiếu Firebase CLI hoặc chưa đăng nhập, không chạy từ root · `64` tham số sai | — |
+| `dart tools/firebase/firebase_config.dart [--app <id>]` | Chạy `flutterfire configure` cho từng flavor và build mode của một app | `0` · `1` stdin hoặc stdout không phải terminal, thiếu Firebase CLI hoặc chưa đăng nhập, không chạy từ root · `64` tham số sai | — |
 
 Chỉ chạy tương tác; cần Firebase CLI đã cài và đã đăng nhập. `--app` là bắt buộc khi workspace có hai app. Chi tiết: [`firebase`](../../../tools/README.vi.md#firebase).
 

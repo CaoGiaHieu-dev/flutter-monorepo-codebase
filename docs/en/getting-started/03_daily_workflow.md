@@ -104,7 +104,7 @@ The tool also repairs broken local `path:` entries for workspace packages.
 | :--- | :--- | :--- |
 | **Module generator** | `dart tools/module_generator/generate.dart <type> <name> [<prefix>] [<SM>] [<route>] [--apps <id,id>]` | Scaffolding a new Feature / Domain / Data / Core / Custom / API package (`<type>` 1–6). It adds a module to **every** `app_manifest.yaml` (or only `--apps`) and runs `composer sync`, which registers it in the workspace and in each app. `apps/admin` composes only auth + settings, so pass `--apps mobile` for a module that does not belong there. Always pass every argument: a feature missing `<SM>` or `<route>` exits `64` without a terminal. `--help` prints the usage; every argument is in [`../reference/03_tooling.md`](../reference/03_tooling.md#module_generator). |
 | **Composer** | `dart tools/composer/composer.dart sync` / `verify` / `describe --app <id>` | `sync` after editing an `app_manifest.yaml`; `verify` is CI Gate 0; `describe` prints what an app declares and what the shell resolves. [`../guides/13_app_composition.md`](../guides/13_app_composition.md). |
-| **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. Sub-commands exist for assets, files, packages, translations. The packages check is a CI step. |
+| **Unused checker** | `dart tools/unused_checker/check_script.dart` | Periodic cleanup. It runs all four checks and takes no sub-command; to run one, call its own script (`check_unused_assets.dart`, `check_unused_file.dart`, `check_unused_packages.dart`, `check_unused_translate.dart`: assets, files, packages, translations). The packages check is a CI step. |
 | **Outdated checker** | `dart tools/check_outdated.dart` | Before a dependency-bump session. It lists what pub.dev has newer. In a terminal it then shows an interactive checklist: `a` applies the selected versions to the catalog and runs `dependency_sync` + `pub get`, and `q` quits. Without a terminal (CI, a pipe) it only reports. |
 | **AI code review** | `dart tools/code_review/code_review.dart --changed` | Optional pre-PR pass, never a merge gate. Needs a Gemini API key (`GEMINI_API_KEY`, `--api-key`, or saved when prompted). Also supports `--all`, `--file <path>`, `--focus architecture,security`, and `--language <code>` for that run only. |
 | **Workspace setup** | `dart tools/workspace_setup/configure.dart` | First setup of a clone, after a big rebase, or when things are inexplicably broken. It runs, in order: activate `flutterfire_cli` → `flutter clean` → `flutter pub get` → `flutter gen-l10n` in every package with an `l10n.yaml` → `dart run build_runner build --workspace` → the barrel generator for every package with a `lib/` (apps skipped). Stops at the first failing step. `--stub-firebase` also writes compile-only Firebase files ([`01_setup.md`](01_setup.md#32-no-firebase-project-yet-use-stubs)). |
@@ -144,7 +144,7 @@ dart tools/arch_check/check.dart
 flutter analyze
 
 # Gate 3 — tests live per package, so run every package that has a test/ directory
-#         (the same discovery CI uses; bash — Git Bash on Windows)
+#         (the same rule CI uses to find packages; bash — Git Bash on Windows)
 for pubspec in $(find apps modules platform -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*' | sort); do
   dir=$(dirname "$pubspec")
   [ -d "$dir/test" ] || continue
@@ -161,7 +161,7 @@ dart tools/docs_check/check.dart
 dart tools/unused_checker/check_unused_packages.dart
 ```
 
-Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some. CI discovers them the same way. The loop stops at the first failing package and names it. Add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail). Use `flutter_test` in a Flutter package and `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` has its own suite, shown under Gate 1. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
+Tests live at `<package>/test/`, wherever the package lives. The loop finds them rather than listing them, so it keeps working when you add a package with tests or remove a sample that had some. CI applies the same rule (any directory with a `pubspec.yaml` and a `test/`) but differs in three ways: it searches from the repository root, it runs every package and fails at the end instead of stopping, and it fails when it finds none. The loop stops at the first failing package and names it. Add your tests next to the code you write, with hand-written fakes (the repo uses no mockito/mocktail). Use `flutter_test` in a Flutter package and `package:test` in a pure-Dart one. The loop covers `apps/`, `modules/` and `platform/`; `tools/` has its own suite, shown under Gate 1. On Windows, run it in Git Bash (it ships with Git for Windows) — PowerShell and `cmd` have no `find`/`dirname` of this kind.
 
 An undeclared import is caught by `arch_check` (R5); the unused checker covers the reverse.
 

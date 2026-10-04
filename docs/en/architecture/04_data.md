@@ -365,15 +365,21 @@ Both endpoints funnel through one helper, because they do the same four things:
 
 ```dart
 Future<Result<UserEntity>> _authenticate(
-  Future<BaseEntity<UserModel>> Function() request,
-) {
+  Future<BaseEntity<UserModel>> Function() request, {
+  bool requiresToken = false,
+}) {
+  bool hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
+
   return execute<BaseEntity<UserModel>, UserEntity>(
     request,
-    successCondition: (response) =>
-        response.isSuccess && response.data != null,
+    successCondition: (response) {
+      final user = response.data;
+      if (!response.isSuccess || user == null) return false;
+      return !requiresToken || hasToken(user);
+    },
     onSuccess: (response) async {
       final user = response.data!;
-      await _local.saveUserToken(user.token);
+      if (hasToken(user)) await _local.saveUserToken(user.token);
       await _local.saveUserData(user);
     },
     mapper: (response) => response.data!.toEntity(),
@@ -386,7 +392,7 @@ Three details carry the weight:
 | Detail | Why it matters |
 |:---|:---|
 | `successCondition` | Without it, `execute` treats **any** response that did not throw as a success. An API that reports failure inside a 200 body would log the user in. A rejected response fails with `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)` — not `500` — so the session gateway treats it as the server's refusal, not an outage |
-| `onSuccess` saves the token | `NetworkConfig.getToken()` reads it back through `ISessionGateway`, which `data_auth` implements over `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger |
+| `onSuccess` saves the token | `NetworkConfig.getToken()` reads it back through `ISessionGateway`, which `data_auth` implements over `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger. A sign-in answer without a token is a failure (`requiresToken`) and stores nothing; a renewal without one keeps the stored token, because saving `null` would delete it |
 | `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward — there is a test asserting exactly that |
 
 `logout` is `execute<void, void>(_local.clearAllAuthData)`: clearing storage is asynchronous, so the failure of a write reaches the caller as a `Result` instead of being lost.

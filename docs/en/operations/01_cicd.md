@@ -94,7 +94,7 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 ### Flutter version pinning
 
-Dependency installation runs `dart tools/workspace_setup/configure.dart`. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input.
+Dependency installation runs `dart tools/workspace_setup/configure.dart --stub-firebase`: the git-ignored `firebase_options_*.dart` files are absent on a clean checkout and `build_runner` must resolve `firebase_module.dart`'s imports, as in `pr_quality_check.yml`; the review only reads Dart, so the compile-only stubs are enough. Flutter comes from `.fvmrc` (`flutter-version-file`) on every run — pull requests included — unless a manual run fills in the optional `flutter_version` input.
 
 ### The "Annotate critical issues (advisory)" step does not fail
 

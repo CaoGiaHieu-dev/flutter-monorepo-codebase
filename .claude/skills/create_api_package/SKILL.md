@@ -1,6 +1,6 @@
 ---
 name: create_api_package
-description: Use when another feature must reach a module without importing it — "add an API package", "let feature A navigate to feature B", "expose a contract from my module", "create <id>_api". Generates modules/<id>/api (package <id>_api) with generator type 6, adds the api layer to the manifests, wires an existing feature, and covers what belongs in an API package (navigators, action handlers, widget builders, module-owned storage interfaces) and what arch_check holds it to.
+description: Use when another feature must reach a module without importing it — "add an API package", "let feature A navigate to feature B", "expose a contract from my module", "create <id>_api". Generates modules/<id>/api (package <id>_api) with generator type 6, adds the api layer to the manifests, wires an existing feature, and covers what belongs in an API package (navigators, action handlers, widget builders, module-owned storage interfaces) and what arch_check holds it to. Not for a screen's own route inside a feature (use implement_navigation_route).
 ---
 
 # Skill: Create a module API package
@@ -9,6 +9,11 @@ Use this skill when a feature needs a contract to **another module**: a navigato
 widget-builder interface or a module-owned storage interface. Such a contract belongs to the module that
 implements it — its API package `modules/<id>/api`, named `<id>_api` — never to `core_di` (RULE-04, RULE-08,
 RULE-22, RULE-25).
+
+> **Use [`implement_navigation_route`](../implement_navigation_route/SKILL.md) instead when** the task is a screen or a route
+> inside one feature; it comes back here only for the cross-module navigator. **Use
+> [`create_feature_module`](../create_feature_module/SKILL.md) instead when** the package is a feature, domain, data, core or
+> custom one (generator types 1-5).
 
 **Guide:** [`docs/en/guides/12_module_isolation.md` § 4](../../../docs/en/guides/12_module_isolation.md#4-create-a-module-api-package).
 **Rules** ([registry](../../../docs/en/reference/01_rules.md)): RULE-04, RULE-05, RULE-08, RULE-12, RULE-22,

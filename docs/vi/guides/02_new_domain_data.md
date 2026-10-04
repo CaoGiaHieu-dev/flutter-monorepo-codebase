@@ -361,11 +361,14 @@ biên này. Không tầng nào phía trên nhìn thấy `CacheEntryModel`.
 // modules/auth/data/lib/src/repositories_impl/auth_repository_impl.dart — _authenticate
 return execute<BaseEntity<UserModel>, UserEntity>(
   request,
-  successCondition: (response) =>
-      response.isSuccess && response.data != null,
+  successCondition: (response) {
+    final user = response.data;
+    if (!response.isSuccess || user == null) return false;
+    return !requiresToken || hasToken(user);
+  },
   onSuccess: (response) async {
     final user = response.data!;
-    await _local.saveUserToken(user.token);
+    if (hasToken(user)) await _local.saveUserToken(user.token);
     await _local.saveUserData(user);
   },
   mapper: (response) => response.data!.toEntity(),
@@ -560,7 +563,7 @@ void main() {
 ```
 
 Trong `payment_page_test.dart`, tạo provider bằng `PaymentProvider(ChargeUseCase(FakePaymentRepository()))`,
-`await provider.charge(...)` trước khi pump, rồi truyền instance đó cho `ChangeNotifierProvider`.
+`await provider.charge(...)` trước khi pump, rồi truyền instance đó cho `ChangeNotifierProvider`. Test page được sinh còn khai báo `_FailingProvider extends PaymentProvider` cho ca load thất bại; giờ nó cũng cần tham số constructor đó, nên cho nó một constructor truyền `ChargeUseCase(FakePaymentRepository())` cho `super` (`initialize()` của chính nó vẫn ép ra lỗi). Hãy giữ ca đó: nó chứng minh một lần load thất bại hiện `somethingWentWrong` chứ không phải diagnostic.
 
 **5. Sinh lại** — constructor của controller đổi thì phần đăng ký DI của nó cũng đổi:
 

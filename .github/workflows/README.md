@@ -24,8 +24,10 @@ what each gate protects and what is still missing, is in
 | `GITHUB_TOKEN` | `code_review.yml` (provided by GitHub; posts the PR review) |
 | Release secrets | `flutter_build.yml`, `fastlane.yml` — signing, App Distribution, the per-flavor Firebase options / `google-services.json`, `ENV_PROD_B64`, and for fastlane `FASTLANE_CONFIG_YAML_B64` plus the credential files it names. Full list: [`docs/en/operations/01_cicd.md` § 7](../../docs/en/operations/01_cicd.md#7-secrets) |
 
+Dependabot (`.github/dependabot.yml`) covers `pub`, `gradle` and `github-actions` only; there is no `bundler` entry, because the Gemfiles pin no versions and no `Gemfile.lock` is committed.
+
 `pr_quality_check.yml` needs no secrets. It stubs the git-ignored `firebase_options_*.dart` files
-for every `apps/*/lib/firebase/` so the workspace compiles, and its `build` job also stubs
+for every `apps/*/lib/firebase/` so the workspace compiles (`code_review.yml` runs `configure.dart --stub-firebase` for the same reason), and its `build` job also stubs
 the `dev` flavor's `apps/mobile/android/app/src/<flavor>/google-services.json` so Gradle can
 build the debug APK.
 

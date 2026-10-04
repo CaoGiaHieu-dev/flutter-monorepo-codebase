@@ -160,9 +160,13 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
+  bool get isSuccess =>
+      statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
+      statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
   bool get hasError => !isSuccess;
 ```
+
+`isSuccess` là mọi mã 2xx (`200` ≤ `statusCode` < `300`), nên một envelope `201` hay `204` là thành công.
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 

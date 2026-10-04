@@ -96,7 +96,7 @@ Khi một platform bỏ `splash`, `push`, `deep_links` hay `orientation`, facts 
 | `router` | `RouterProfile` | khi nào dùng entry location (`firstLaunch`, `always`, `never`), vị trí fallback | chỉ lần chạy đầu, tab đầu tiên |
 | `locale` | `LocaleProfile` | các ngôn ngữ cung cấp (`supported`; null = mọi ARB mà template đi kèm), ngôn ngữ fallback và ngôn ngữ lần chạy đầu | mọi ngôn ngữ đã có, `en`, ngôn ngữ của thiết bị |
 | `theme` | `ThemeProfile` | chế độ theme lần chạy đầu mở ra, ghi đè palette theo `PaletteToken` (ARGB) | chế độ theo hệ thống, palette của template |
-| `network` | `NetworkProfile` | timeout connect, receive và send của HTTP client mặc định, header thêm, redirect | mỗi loại 20 giây, không header thêm, không redirect |
+| `network` | `NetworkProfile` | timeout connect, receive và send của HTTP client mặc định, header thêm, redirect, và `authorizedHosts` (các host ngoài base URL của API được nhận bearer token) | mỗi loại 20 giây, không header thêm, không redirect, không host được uỷ quyền thêm |
 
 ```dart
 const AppProfile appProfile = AppProfile(
@@ -118,11 +118,14 @@ const AppProfile appProfile = AppProfile(
     connectTimeout: Duration(seconds: 5),
     receiveTimeout: Duration(seconds: 60),
     headers: {'x-client': 'reports'},
+    authorizedHosts: {'files.example.com'},
   ),
 );
 ```
 
 Điều một phần không được phép nói thì bị từ chối ở nơi có thể: `DisplayProfile(textScaleMax: 1.5)` không biên dịch được (`const_eval_throws_exception` — RULE-38), một header của `NetworkProfile` tên `authorization`, `cookie`, `set-cookie`, `proxy-authorization` hoặc `content-type` làm client mặc định ném lỗi lúc boot (RULE-66), và một `LocaleProfile` không cung cấp ngôn ngữ nào đã có hoặc có fallback mà nó không cung cấp thì ném lỗi lúc boot, nêu tên trường. `shadow` và `scrim` của palette, cùng hai gradient, không ghi đè được: gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`.
+
+`authorizedHosts` là một tập tên host trần (`files.example.com`: không scheme, port hay path). Bearer token chỉ đi tới host của `BASE_URL` và các host này; một request tới host khác (CDN, URL storage đã ký sẵn) ra đi mà không có thông tin đăng nhập ([`08_networking.md`](08_networking.md) § 6).
 
 Sau khi sửa profile, chạy `composer sync`: § 5 của báo cáo trong README in ra các section app đã đặt, và `verify` (V13) đọc lại file để giữ nó cập nhật. `test/app_profile_test.dart` của mỗi app là nơi bạn khẳng định điều mình đã đổi, để một lần sửa sau làm nó dịch chuyển sẽ thấy rõ. Mỗi section có nghĩa gì với một màn hình: [`09_localization_theming.md`](09_localization_theming.md) (`locale`, `theme`) và [`11_design_system.md`](11_design_system.md) (`display`, `theme`).
 
@@ -306,6 +309,7 @@ cd apps/<id> && flutter test                             # smoke test (checkAppC
 | `verify`: `<package> does not support <platform>` | Một package đã ghép, hoặc package nó liên kết, thiếu platform đó | Chỉ khai các platform mà mọi package được liên kết hỗ trợ, hoặc thôi phụ thuộc vào nó |
 | Boot dừng: *`<id>` is running on `<platform>`, which its manifest does not declare* | Platform không nằm dưới `platforms:` | Khai nó (ở trên), chạy trên một platform đã khai, hoặc `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` để chạy thử nhanh |
 | Boot dừng: `P03` trên bản release | Một `--dart-define` bắt buộc đang rỗng | Truyền `--dart-define-from-file=env.<flavor>` |
+| Boot kết thúc ở một màn hình có nút **Retry** và mã vấn đề `B01` | Chính lần boot đã ném lỗi — `configureDependencies`, một initializer hay một hook — không phải khai báo sai | Đọc lỗi (hiện ở flavor dev hoặc staging và ở bản debug, profile), sửa nguyên nhân, bấm Retry; cùng lỗi đó đã được báo cáo tới `onError` và `IErrorReporter` |
 | Boot dừng trên platform desktop: `P05` | `window` được khai báo mà không đặt hook `configureWindow` | Thêm hook (mục 5), hoặc bỏ `window` |
 | Smoke test: `C02` / `C03` | Graph không khớp với khai báo | Test nêu tên contract — sửa manifest hoặc composition |
 | `new` từ chối | Id đã tồn tại, hoặc một platform bị module chặn | Thông báo nêu rõ cái nào; không có gì được ghi |

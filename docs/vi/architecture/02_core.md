@@ -322,7 +322,7 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 | Interceptor | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handler | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler`, và `RequestOptions.forReplay()` (`request_replay.dart`) |
 | Constants | `src/utils/network_constants.dart` | Tên header, tiền tố `Bearer`, cờ request `EXTRA_*`, log tag — timeout, header thêm và chính sách redirect là `NetworkProfile` của app |
-| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status — `ErrorCodes.HTTP_ERROR` khi không có, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
+| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status — `ErrorCodes.HTTP_ERROR` khi không có, cancel → `ErrorCodes.REQUEST_CANCELLED`, lỗi unknown do JSON hỏng → `ParseFailure`, do lỗi TLS hay pin không khớp → một `ServerFailure` `BAD_CERTIFICATE` không tạm thời, …) |
 
 `DioFailureClassifier` là cách `ErrorHandler` của kernel biết về Dio mà không import nó: một `@singleton` eager có `@PostConstruct` gọi `ErrorHandler.registerClassifier`. Module của package này chạy trong nhóm DI `core`, nên classifier được đăng ký trước khi có bất kỳ Dio client nào (tất cả đều lazy) và trước khi repository nào chạy; constructor của `ApiClient` đăng ký lại lần nữa, idempotent, cho client dựng ngoài DI. Unit test nào đẩy một repository tới `DioException` mà không qua DI thì gọi `DioFailureClassifier.ensureRegistered()` trước. DI smoke test của các app khẳng định việc đăng ký này (`checkAppContract` C08).
 
@@ -335,7 +335,7 @@ Cách khai một service, cho request bỏ qua một bước, thêm client thứ
 
 ### Cấu hình mặc định của `ApiClient`
 
-`core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (xem bên dưới), do app shell implement, và những gì một app tinh chỉnh — timeout, header thêm, redirect — qua `NetworkProfile` của nó, được đăng ký trước khi graph dựng, nên `Dio` mặc định mà nhóm `core` tạo ra đã mang sẵn.
+`core_network` không bao giờ hard-code thông tin đăng nhập hay UI. Nó nhận mọi thứ qua `NetworkConfig` (xem bên dưới), do app shell implement, và những gì một app tinh chỉnh — timeout, header thêm, redirect, các host thêm được nhận bearer token (`authorizedHosts`) — qua `NetworkProfile` của nó, được đăng ký trước khi graph dựng, nên `Dio` mặc định mà nhóm `core` tạo ra đã mang sẵn.
 
 ```dart
 // platform/infra/network/lib/src/api_client.dart
@@ -427,15 +427,21 @@ Gắn header `language` viết hoa — mã mà `NetworkConfig.getLocale` đã re
 ```dart
 // platform/infra/network/lib/src/interceptors/auth_interceptor.dart
 if (needAuthentication) {
-  final token = getToken() ?? '';
-  if (token.isNotEmpty) {
-    options.headers.addAll({
-      HttpHeaders.authorizationHeader:
-          '${NetworkConstants.BEARER_PREFIX} $token',
-    });
+  if (_isTrustedHost(options)) {
+    final token = getToken() ?? '';
+    if (token.isNotEmpty) {
+      options.headers.addAll({
+        HttpHeaders.authorizationHeader:
+            '${NetworkConstants.BEARER_PREFIX} $token',
+      });
+    }
+  } else {
+    options.extra[NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] = false;
   }
 }
 ```
+
+Token chỉ đi tới **host của API**: host trong base URL của client (`BASE_URL`, so sánh không phân biệt hoa thường) hoặc một trong `NetworkProfile.authorizedHosts` của app. Một URL tuyệt đối tới bất kỳ nơi nào khác — CDN, link storage đã ký sẵn, link "trang kế" mà server trả về — không mang thông tin đăng nhập, và base URL `https` không bao giờ gửi token qua một request `http` thường tới cùng host. Request như vậy cũng bị đánh dấu `EXTRA_CAN_REFRESH_TOKEN: false`: một `401` từ host chưa từng thấy token không nói gì về phiên đăng nhập và không được khởi động một lần refresh có thể làm người dùng bị đăng xuất.
 
 > [!NOTE]
 > Tên header ngôn ngữ là `'language'` (không chuẩn), **không phải** `Accept-Language`. Phía server phải khớp đúng tên này.
@@ -454,7 +460,9 @@ bool retryWhen(DioExceptionType type) {
 }
 ```
 
-Nhiều request lỗi đồng thời được gom vào một hàng đợi và chỉ hiện **một** dialog retry duy nhất qua `NetworkConfig.onRetryCallback`. Nếu không truyền callback, mọi request trong hàng đợi sẽ bị huỷ thay vì treo. "Retry" lấy mọi request ra khỏi hàng đợi (mỗi bên gọi một mục) và gửi lại qua chính `Dio` đó với `canRetry: false`: interceptor auth và refresh chạy lại (token mới, 401 được refresh), timeout thì đưa bên gọi trở lại hàng đợi cho dialog kế tiếp, còn lỗi khác tới tay bên gọi đúng là lỗi *đó* chứ không phải timeout ban đầu.
+Nhiều request lỗi đồng thời được gom vào một hàng đợi và chỉ hiện **một** dialog retry duy nhất qua `NetworkConfig.onRetryCallback`. Nếu không truyền callback, mọi request trong hàng đợi sẽ bị huỷ thay vì treo, và hàng đợi cũng bị huỷ khi chính callback ném lỗi (không hiện được dialog): các bên gọi nhận lỗi của chính mình và một lỗi sau đó vẫn có thể hiện dialog trở lại. "Retry" lấy mọi request ra khỏi hàng đợi (mỗi bên gọi một mục) và gửi lại qua chính `Dio` đó với `canRetry: false`: interceptor auth và refresh chạy lại (token mới, 401 được refresh), timeout thì đưa bên gọi trở lại hàng đợi cho dialog kế tiếp, còn lỗi khác tới tay bên gọi đúng là lỗi *đó* chứ không phải timeout ban đầu.
+
+Một request đã timeout *sau khi* được gửi (`sendTimeout`, `receiveTimeout`) có thể đã được xử lý rồi, nên `POST` hay `PATCH` **không** được gửi lại khi đó — nó fail với timeout — trừ khi bên gọi đặt `NetworkConstants.EXTRA_IDEMPOTENT: true` vì server khử trùng lặp nó (ví dụ bằng idempotency key). `GET`, `HEAD`, `PUT`, `DELETE` và `OPTIONS` vẫn được retry, và mọi method cũng vậy sau lỗi *connect*, vốn chưa từng tới server.
 
 #### `LoggingInterceptor`
 
@@ -479,7 +487,7 @@ static Map<String, dynamic> redactHeaders(Map<String, dynamic> headers) {
 }
 ```
 
-Body cũng được che, ở mọi độ sâu: giá trị dưới `password`, `token`, `access_token` / `accessToken`, `refresh_token`, `id_token`, `secret` hoặc `client_secret` được in thành `***REDACTED***` — request login mang password trong body, còn response trả token trong body.
+Body cũng được che, ở mọi độ sâu — request login mang password trong body, còn response trả token trong body. Một key là thông tin đăng nhập khi, so sánh dạng chữ thường đã bỏ `_`, `-` và dấu cách, nó **kết thúc** bằng `password`, `passwd`, `passcode`, `pwd`, `token`, `secret`, `apikey`, `authorization`, `privatekey` hoặc `cardnumber` (`newPassword`, `access_token`, `clientSecret` và `X-Api-Key` khớp; `tokenType` thì không), hoặc **chính là** `otp`, `pin`, `cvv`, `cvc`, `ssn` hoặc `cardno`, đứng một mình hoặc sau `new`, `old`, `confirm`, `current`, `user` hay `card` (`newPin` khớp, `shipping` thì không). Giá trị của nó được in thành `***REDACTED***`. URL cũng được che: mọi *giá trị* query được in thành `***` (`?token=…` không bao giờ tới console), còn user-info và fragment bị bỏ.
 
 ### App cung cấp `NetworkConfig` thế nào
 
@@ -672,6 +680,8 @@ Nơi pinning áp dụng được hay không là một sự thật của platform
 
 `_setupHttpOverrides` chạy từ `AppInitializer.initBeforeRunApp()`, được `runShellApp` gọi sau các bước kiểm tra profile và hook `beforeDependencies`, và **trước** `configureDependencies()` — nó chỉ đọc profile nên không cần đăng ký gì. Thời điểm là mấu chốt: `IOHttpClientAdapter` của Dio giữ `HttpClient` nó tạo đầu tiên suốt vòng đời của `Dio`, và mọi thứ đồ thị dựng ra đều có thể mở kết nối — một singleton eager khi DI khởi tạo, một implementation contract mà `checkAppContract` resolve ngay sau đó, một controller tạo trên splash (auth khôi phục phiên bằng một lần refresh token). Override cài muộn hơn, sau DI hay trong `initService`, sẽ không bao giờ tới được client đó. `AppInitializer.init` gọi lại `initBeforeRunApp()` cho host nào bỏ qua bước này; lần gọi thứ hai không cài gì. `platform/shell/app_shell/test/boot_order_test.dart` sẽ fail nếu thứ tự bị đảo lại.
 
+Vì client pinning được cài làm `HttpOverrides.global` của cả process, **các pin áp dụng cho mọi host mà process kết nối tới**, không chỉ API: một CDN ảnh, một host font hay endpoint của SDK bên thứ ba mà certificate không khớp pin nào sẽ fail ở bước bắt tay TLS. Hãy pin các key bao phủ mọi host mà app gọi, hoặc phục vụ lưu lượng đó từ một host bạn pin; một flavor không làm được cả hai thì khai báo `disabled` kèm lý do. (Client được cài tạo các client bọc bên trong dưới override thường, nên một request không đệ quy vào override; `platform/foundation/common/test/ssl_pinning_enforcement_test.dart` kiểm tra client đã cài.)
+
 Kiểm tra certificate chỉ bị bỏ qua (phục vụ server tự ký cục bộ) **trong bản debug đã khai báo tường minh flavor `dev`** — `AppConfig.bypassesCertificateValidation`. Mọi trường hợp khác đi qua đường pinning: `staging`, `prod`, bản profile hay release của `dev`, và bản build **thiếu hoặc sai** flavor — được coi như `prod` và ghi log mức ERROR. Đây là cố ý fail closed. `AppConfig.appFlavor` (môi trường DI) lùi về `dev` ở bản debug và về `prod` ở các bản còn lại, nhưng việc xử lý certificate đọc `AppConfig.declaredFlavor`, vốn là `null` trừ khi bản build nêu một flavor đã biết.
 
 ---
@@ -706,12 +716,15 @@ Chỉ cấp **cơ chế**. Không định nghĩa key, không định nghĩa pres
 String encryptData(String data) {
   return _withKey((enc) {
     final iv = encrypter.IV.fromSecureRandom(StorageConstants.IV_BYTES);
+    if (data.isEmpty) return '${iv.base64}:';
     return '${iv.base64}:${enc.encrypt(data, iv: iv).base64}';
   });
 }
 ```
 
-IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần cho ra hai bản mã khác nhau — người quan sát không thể biết giá trị có đổi hay không. `_withKey` chỉ lộ master key trong khoảnh khắc gọi rồi xoá về 0 các buffer.
+IV ngẫu nhiên mỗi lần ghi nghĩa là ghi cùng một giá trị hai lần cho ra hai bản mã khác nhau — người quan sát không thể biết giá trị có đổi hay không. `_withKey` chỉ lộ master key trong khoảnh khắc gọi rồi xoá về 0 các buffer. Một chuỗi rỗng được niêm phong thành IV cộng bản mã rỗng (`"iv_base64:"`) và `decryptData` đọc lại nó thành `''`, vì cipher không thể padding không byte nào.
+
+**Đây chỉ là bảo mật nội dung (confidentiality).** AES-CBC không có thẻ xác thực, nên một bản mã hay IV bị sửa không bị phát hiện là bị giả mạo: nó giải mã ra byte khác, hoặc fail ở bước padding khoảng 255 trên 256 lần. Một giá trị đã niêm phong không chứng minh gì về người ghi nó, và lớp này không được dùng để xác thực dữ liệu. Lớp khoá bên dưới bảo vệ tính bí mật khi lưu, không bảo vệ tính toàn vẹn.
 
 **Lớp 2 — phần cứng.** Master key 256-bit nằm trong Keychain/KeyStore dưới tên `_internal_master_key`, sinh ra ở lần chạy đầu tiên:
 
@@ -733,7 +746,7 @@ if (masterKey == null) {
 }
 ```
 
-**Che RAM.** Cả master key lẫn giá trị trong cache đều không nằm trong bộ nhớ dưới dạng byte đọc được. Cả hai bị XOR với một mask ngẫu nhiên và chỉ lộ ra đúng khoảnh khắc được dùng — `StorageValue` giữ giá trị trong RAM dưới dạng `ObfuscatedBytes`, và master key cũng được xử lý y hệt:
+**Che RAM.** Cả master key lẫn giá trị trong cache đều không nằm trong heap dưới dạng một mảng thô, dễ grep. Cả hai bị XOR với một mask ngẫu nhiên và chỉ lộ ra đúng khoảnh khắc được dùng — `StorageValue` giữ giá trị trong RAM dưới dạng `ObfuscatedBytes`, và master key cũng được xử lý y hệt:
 
 ```dart
 // platform/infra/storage/lib/src/obfuscated_bytes.dart
@@ -747,7 +760,7 @@ class ObfuscatedBytes {
   }
 ```
 
-Điều này nâng rào chắn trước tấn công đọc memory dump; nó không thay thế các lớp ở trên.
+Đây là vệ sinh dữ liệu, không phải bảo vệ: mask được lưu ngay cạnh các byte đã che trong cùng heap, nên ai đọc được bộ nhớ của process đều gỡ được nó, và `StorageValue.value` dựng lại một `String` thường ở mỗi lần đọc. Thứ nó mang lại là một lần dump tuỳ tiện hay một buffer bị log không phơi giá trị ra nguyên dạng. Nó không thay thế các lớp ở trên.
 
 #### Khi Keychain trục trặc — thử lại, không bao giờ xoá sạch
 

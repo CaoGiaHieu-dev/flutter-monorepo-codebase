@@ -157,9 +157,13 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
-  bool get isSuccess => statusCode == DomainConstants.SUCCESS_STATUS_CODE;
+  bool get isSuccess =>
+      statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
+      statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
   bool get hasError => !isSuccess;
 ```
+
+`isSuccess` is any 2xx (`200` ≤ `statusCode` < `300`), so a `201` or a `204` envelope is a success.
 
 ### `PaginatedEntity<T>` + `MetaPaginate`
 

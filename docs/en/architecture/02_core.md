@@ -321,7 +321,7 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 | Interceptors | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handlers | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler`, and `RequestOptions.forReplay()` (`request_replay.dart`) |
 | Constants | `src/utils/network_constants.dart` | Header names, `Bearer` prefix, `EXTRA_*` request flags, log tags — the timeouts, extra headers and redirect policy are the app's `NetworkProfile` |
-| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status — `ErrorCodes.HTTP_ERROR` when there is none, cancel → `ErrorCodes.REQUEST_CANCELLED`, …) |
+| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status — `ErrorCodes.HTTP_ERROR` when there is none, cancel → `ErrorCodes.REQUEST_CANCELLED`, an unknown error caused by bad JSON → `ParseFailure`, one caused by a TLS error or a pin mismatch → a non-transient `ServerFailure` `BAD_CERTIFICATE`, …) |
 
 `DioFailureClassifier` is how the kernel's `ErrorHandler` learns about Dio without importing it: an eager `@singleton` whose `@PostConstruct` calls `ErrorHandler.registerClassifier`. This package's module runs in the `core` DI group, so the classifier is registered before any Dio client exists (all are lazy) and before any repository runs; `ApiClient`'s constructor registers it again, idempotently, for a client built outside DI. A unit test that drives a repository into a `DioException` without DI calls `DioFailureClassifier.ensureRegistered()` first. The apps' DI smoke tests assert the registration (`checkAppContract` C08).
 
@@ -334,7 +334,7 @@ How to declare a service, opt a request out, add a second client or turn pinning
 
 ### `ApiClient` defaults
 
-`core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (below), which the app shell implements, and what an app tunes — timeouts, extra headers, redirects — through its `NetworkProfile`, registered before the graph is built, so the default `Dio` the `core` group creates already carries it.
+`core_network` never hard-codes credentials or UI. It takes everything through `NetworkConfig` (below), which the app shell implements, and what an app tunes — timeouts, extra headers, redirects, the extra hosts that may receive the bearer token (`authorizedHosts`) — through its `NetworkProfile`, registered before the graph is built, so the default `Dio` the `core` group creates already carries it.
 
 ```dart
 // platform/infra/network/lib/src/api_client.dart
@@ -426,15 +426,21 @@ Adds an upper-cased `language` header — the code `NetworkConfig.getLocale` res
 ```dart
 // platform/infra/network/lib/src/interceptors/auth_interceptor.dart
 if (needAuthentication) {
-  final token = getToken() ?? '';
-  if (token.isNotEmpty) {
-    options.headers.addAll({
-      HttpHeaders.authorizationHeader:
-          '${NetworkConstants.BEARER_PREFIX} $token',
-    });
+  if (_isTrustedHost(options)) {
+    final token = getToken() ?? '';
+    if (token.isNotEmpty) {
+      options.headers.addAll({
+        HttpHeaders.authorizationHeader:
+            '${NetworkConstants.BEARER_PREFIX} $token',
+      });
+    }
+  } else {
+    options.extra[NetworkConstants.EXTRA_CAN_REFRESH_TOKEN] = false;
   }
 }
 ```
+
+The token goes **only to the API host**: the host of the client's base URL (`BASE_URL`, compared case-insensitively) or one of the app's `NetworkProfile.authorizedHosts`. An absolute URL to anywhere else — a CDN, a presigned storage link, a "next page" link a server handed back — carries no credential, and an `https` base URL never sends it over a plain `http` request to the same host. Such a request is also marked `EXTRA_CAN_REFRESH_TOKEN: false`: a `401` from a host that never saw the token says nothing about the session, and must not start a refresh that could sign the user out.
 
 > [!NOTE]
 > The language header key is the non-standard `'language'`, not `Accept-Language`. Match it on the server side.
@@ -453,7 +459,9 @@ bool retryWhen(DioExceptionType type) {
 }
 ```
 
-Concurrent failures are collected into one queue — one entry per caller — and a **single** retry dialog is raised through `NetworkConfig.onRetryCallback`. If no callback is supplied, every queued request is cancelled instead of hanging. "Retry" takes every queued request out of the queue and replays it through the same `Dio`, marked `canRetry: false`: the auth and refresh interceptors run again (fresh token, a 401 is refreshed), a timeout re-queues the caller for the next dialog, and any other failure reaches the caller as *that* error, not the original timeout.
+Concurrent failures are collected into one queue — one entry per caller — and a **single** retry dialog is raised through `NetworkConfig.onRetryCallback`. If no callback is supplied, every queued request is cancelled instead of hanging, and so is the queue when the callback itself throws (the prompt could not be shown): the callers fail with their own errors and a later failure can raise a prompt again. "Retry" takes every queued request out of the queue and replays it through the same `Dio`, marked `canRetry: false`: the auth and refresh interceptors run again (fresh token, a 401 is refreshed), a timeout re-queues the caller for the next dialog, and any other failure reaches the caller as *that* error, not the original timeout.
+
+A request that timed out *after* it was sent (`sendTimeout`, `receiveTimeout`) may already have been processed, so a `POST` or `PATCH` is **not** replayed then — it fails with the timeout — unless the caller sets `NetworkConstants.EXTRA_IDEMPOTENT: true` because the server deduplicates it (an idempotency key, say). `GET`, `HEAD`, `PUT`, `DELETE` and `OPTIONS` keep retrying, and so does any method after a *connect* failure, which never reached the server.
 
 #### `LoggingInterceptor`
 
@@ -478,7 +486,7 @@ static Map<String, dynamic> redactHeaders(Map<String, dynamic> headers) {
 }
 ```
 
-Bodies are masked too, at any depth: a value under `password`, `token`, `access_token` / `accessToken`, `refresh_token`, `id_token`, `secret` or `client_secret` prints as `***REDACTED***` — a login request carries the password in its body and the response returns the token in its body.
+Bodies are masked too, at any depth — a login request carries the password in its body and the response returns the token in its body. A key is a credential when, compared lower-case with `_`, `-` and spaces removed, it **ends** in `password`, `passwd`, `passcode`, `pwd`, `token`, `secret`, `apikey`, `authorization`, `privatekey` or `cardnumber` (`newPassword`, `access_token`, `clientSecret` and `X-Api-Key` match; `tokenType` does not), or **is** `otp`, `pin`, `cvv`, `cvc`, `ssn` or `cardno`, alone or after `new`, `old`, `confirm`, `current`, `user` or `card` (`newPin` matches, `shipping` does not). Its value prints as `***REDACTED***`. The URL is masked too: every query *value* prints as `***` (`?token=…` never reaches the console) and the user-info and fragment are dropped.
 
 ### How the app supplies `NetworkConfig`
 
@@ -671,6 +679,8 @@ Where pinning can apply at all is a fact of the platform (`AppPlatform.canPinTls
 
 `_setupHttpOverrides` runs from `AppInitializer.initBeforeRunApp()`, which `runShellApp` calls after the profile checks and the `beforeDependencies` hook and **before** `configureDependencies()` — it reads only the profile, so it needs no registration. Timing is the whole point: Dio's `IOHttpClientAdapter` keeps the `HttpClient` it created first for the life of the `Dio`, and anything the graph builds can open a connection — an eager singleton while DI initialises, a contract implementation `checkAppContract` resolves right after, a controller created on the splash (auth restoring its session with a token refresh). An override installed later, after DI or in `initService`, would never reach that client. `AppInitializer.init` calls `initBeforeRunApp()` again for a host that skipped it; the second call installs nothing. `platform/shell/app_shell/test/boot_order_test.dart` fails if the order regresses.
 
+Because the pinning client is installed as the process-wide `HttpOverrides.global`, **the pins apply to every host the process connects to**, not only the API: an image CDN, a font host or any third-party SDK's endpoint that is not served by a certificate matching one of the pins fails its TLS handshake. Pin keys that cover every host the app talks to, or serve that traffic from a host you pin; a flavor that cannot do either declares `disabled` with its reason. (The installed client makes the wrapped clients under plain overrides, so a request does not recurse into the override; `platform/foundation/common/test/ssl_pinning_enforcement_test.dart` inspects the installed client.)
+
 Certificate validation is bypassed (for local self-signed servers) **only in a debug build that explicitly declared the `dev` flavor** — `AppConfig.bypassesCertificateValidation`. Everything else goes through the pinning path: `staging`, `prod`, a `dev` profile or release build, and a build with a **missing or unknown** flavor, which is treated as `prod` and logged as an ERROR. This fails closed on purpose. `AppConfig.appFlavor` (the DI environment) falls back to `dev` in a debug build and to `prod` otherwise, but certificate handling reads `AppConfig.declaredFlavor`, which is `null` unless the build named a known flavor.
 
 ---
@@ -705,12 +715,15 @@ Provides the **mechanism only**. It defines no keys and no presets. Its only wor
 String encryptData(String data) {
   return _withKey((enc) {
     final iv = encrypter.IV.fromSecureRandom(StorageConstants.IV_BYTES);
+    if (data.isEmpty) return '${iv.base64}:';
     return '${iv.base64}:${enc.encrypt(data, iv: iv).base64}';
   });
 }
 ```
 
-A random IV per write means writing the same value twice produces different ciphertext — an observer cannot tell that a value was unchanged. `_withKey` reveals the master key for the instant of the call and zeroes the buffers afterwards.
+A random IV per write means writing the same value twice produces different ciphertext — an observer cannot tell that a value was unchanged. `_withKey` reveals the master key for the instant of the call and zeroes the buffers afterwards. An empty string seals to the IV and an empty ciphertext (`"iv_base64:"`) and `decryptData` reads it back as `''`, because the cipher cannot pad zero bytes.
+
+**This is confidentiality only.** AES-CBC carries no authentication tag, so a changed ciphertext or IV is not detected as tampering: it decrypts to other bytes, or fails on padding about 255 times in 256. A sealed value proves nothing about who wrote it, and the layer must not be used to authenticate data. The key layer below protects secrecy at rest, not integrity.
 
 **Layer 2 — hardware.** The 256-bit master key lives in Keychain/KeyStore under `_internal_master_key`, generated on first launch:
 
@@ -732,7 +745,7 @@ if (masterKey == null) {
 }
 ```
 
-**RAM masking.** Neither the master key nor a cached value sits in memory as readable bytes. Both are XOR-masked with a random mask and revealed only for the instant they are used — `StorageValue` keeps its in-memory value as `ObfuscatedBytes`, and the master key receives the same treatment:
+**RAM masking.** Neither the master key nor a cached value sits in the heap as a plain, greppable array. Both are XOR-masked with a random mask and revealed only for the instant they are used — `StorageValue` keeps its in-memory value as `ObfuscatedBytes`, and the master key receives the same treatment:
 
 ```dart
 // platform/infra/storage/lib/src/obfuscated_bytes.dart
@@ -746,7 +759,7 @@ class ObfuscatedBytes {
   }
 ```
 
-This raises the bar against a memory-dump attack; it is not a substitute for the layers above.
+This is hygiene, not protection: the mask is stored beside the masked bytes in the same heap, so anyone who can read the process's memory can undo it, and `StorageValue.value` rebuilds a plain `String` on every read. What it buys is that a casual dump or a logged buffer does not show the value as-is. It is not a substitute for the layers above.
 
 #### When the Keychain misbehaves — retry, never wipe
 

@@ -10,8 +10,9 @@ required status checks: **Settings → Branches → Branch protection rules → 
 to pass**, and select **PR Quality Check / Analyze, test and audit** (the gates),
 **PR Quality Check / Build the dev APK (debug)** (the only check that proves the app builds),
 **PR Quality Check / Module generator smoke test** and
-**PR Quality Check / Generator smoke test (Provider, API, domain/data, new app)** (the only checks that run
-the module and app templates).
+**PR Quality Check / Generator smoke test (Provider, API, domain/data, core/custom, new app)** (the only checks that run
+the module and app templates). Branch protection matches a check by its exact name, so copy it from the Checks tab of a run
+rather than retyping it: a name that no job reports blocks every merge, or is silently not required.
 
 ## 2. AI code review — optional
 
@@ -43,7 +44,15 @@ secret is reported by name and fails the run before any build starts.
 Both are manual (`workflow_dispatch`) and run none of the quality gates, so dispatch them only
 from a branch that has passed `pr_quality_check.yml`.
 
-## 4. Check it works
+## 4. Dependency updates — nothing to configure
+
+`.github/dependabot.yml` opens weekly update pull requests for three ecosystems only: `pub` (a notification — the
+versions live in `pubspec_dependencies.yaml`, so such a PR fails Gate 4 until the catalog is edited and
+`dart tools/dependency_sync.dart` applied), `gradle` (`apps/mobile/android`) and `github-actions`. There is no `bundler`
+entry: the Gemfiles pin no versions and no `Gemfile.lock` is committed, so there is nothing for Dependabot to update.
+Security alerts are separate (**Settings → Code security**).
+
+## 5. Check it works
 
 Open a pull request that touches any Dart file under `apps/`, `modules/` or `platform/`. The
 **Checks** tab should show all four *PR Quality Check* jobs and, if the key is set, *AI Code Review*.

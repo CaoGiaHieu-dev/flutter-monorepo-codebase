@@ -1,12 +1,17 @@
 ---
 name: configure_app
-description: Use when changing what an app is or how the shell behaves for it — "add a platform", "turn push or deep links off on web", "pin certificates", "offer other languages", "change the palette, text-scale cap, design size or HTTP timeouts for one app", "add a hook", "declare a capability absent", "what does this app register?", or "create a third app". Picks the right channel (manifest, profile, hook, contract), edits it, runs composer sync and verify, and proves it with the smoke test.
+description: Use when changing what an app is or how the shell behaves for it — "add a platform", "turn push or deep links off on web", "pin certificates", "offer other languages", "change the palette, text-scale cap, design size or HTTP timeouts for one app", "add a hook", "declare a capability absent", "what does this app register?", or "create a third app". Picks the right channel (manifest, profile, hook, contract), edits it, runs composer sync and verify, and proves it with the smoke test. Declares capabilities by decision; remove_module reconciles them after a removal and implement_dependency_injection registers the contract.
 ---
 
 # Skill: Configure an app
 
 Use this skill when a per-app decision must change, or when asked to read an app, or to create one.
 Nothing per-app is ever a constant in `platform/` (RULE-80).
+
+> **Capabilities have three owners.** Declaring one `provided` or `absent` by decision is this skill. Flipping the ones that lost
+> their last provider after a removal is [`remove_module`](../remove_module/SKILL.md) (`composer reconcile`). Registering the
+> contract itself is [`implement_dependency_injection`](../implement_dependency_injection/SKILL.md). `composer verify` (V3) names
+> both sides when a registration and a declaration disagree.
 
 **Guide:** [`docs/en/guides/13_app_composition.md`](../../../docs/en/guides/13_app_composition.md) ·
 architecture: [`06_app_shell.md` § 2](../../../docs/en/architecture/06_app_shell.md#2-boot-lifecycle).

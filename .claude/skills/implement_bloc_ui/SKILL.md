@@ -1,12 +1,15 @@
 ---
 name: implement_bloc_ui
-description: Use when a screen's logic is written with BLoC — "create a bloc", "implement UI logic using BLoC", "listen to bloc state to show a toast or dialog". Covers BaseBloc with private Freezed events (part / part of), BlocViewState<T> settled by emitResult or a custom Freezed state, BlocBuilder / BlocListener with translated errors, the route-level BlocProvider and the bloc's tests. Cubit only when events are unnecessary.
+description: Use when a screen's logic is written with BLoC — "create a bloc", "implement UI logic using BLoC", "listen to bloc state to show a toast or dialog". Covers BaseBloc with private Freezed events (part / part of), BlocViewState<T> settled by emitResult or a custom Freezed state, BlocBuilder / BlocListener with translated errors, the route-level BlocProvider and the bloc's tests. Cubit only when events are unnecessary. For the translated text itself (ARB key, getter) use localize_feature.
 ---
 
 # Skill: Screen logic with BLoC
 
 Use this skill to give a screen a `BaseBloc` controller: load data through a use case, render
 loading / success / error, react to failures.
+
+> **Use [`localize_feature`](../localize_feature/SKILL.md) for** the text a toast, dialog or error state shows (ARB key, getter,
+> `failureMessage`); this skill decides when it appears.
 
 **Guide:** [`docs/en/guides/03_state_management.md`](../../../docs/en/guides/03_state_management.md) § 6–9
 (the long form); the package README is `platform/state/bloc/README.md`.

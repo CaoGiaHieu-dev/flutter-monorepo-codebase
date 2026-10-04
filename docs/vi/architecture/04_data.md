@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/04_data.md@0930d8e -->
+<!-- translated-from: docs/en/architecture/04_data.md@6bf1353 -->
 # Tầng Data
 
 **File này trả lời:** `modules/*/data` thoả mãn các hợp đồng repository do Domain khai báo bằng cách nào — model, data source và xử lý lỗi nằm ở đâu, và tầng này tuyệt đối không được để lộ những gì ra ngoài.

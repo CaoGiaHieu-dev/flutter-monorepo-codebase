@@ -1,22 +1,16 @@
 import 'package:flutter/foundation.dart';
 
-/// A mixin that provides load more functionality to a [ChangeNotifier].
+/// A mixin that tracks pagination state for a [ChangeNotifier].
 ///
-/// This mixin uses a [ScrollController] to listen for scroll events and trigger
-/// the `onLoadMore` method when the user scrolls to the bottom of the list.
-///
-/// The `onLoadMore` method should be overridden to handle the loading of more
-/// data. This mixin provides the following properties and methods to help with
-/// load more functionality:
+/// The mixin holds no scroll logic: the list widget (see `LoadMoreListView`)
+/// decides when the user reached the end and asks for the next page, while
+/// this mixin only answers whether one is available. It provides:
 ///
 /// - `totalPage`: The total number of pages in the data set.
 /// - `currentPage`: The current page being displayed.
 /// - `nextPage`: The next page to load.
 /// - `isLoadingMore`: Whether the mixin is currently loading more data.
-/// - `canLoadMore`: Whether the mixin can load more data.
-/// - `listenLoadMore()`: Adds a listener to the [ScrollController] to trigger
-///   `onLoadMore` when the user scrolls to the bottom of the list.
-/// - `removeListenLoadMore()`: Removes the listener from the [ScrollController].
+/// - `canLoadMore`: Whether another page can be requested right now.
 /// - `setTotalPage(int value)`: Sets the total number of pages.
 /// - `setCurrentPage(int value)`: Sets the current page.
 mixin LoadMoreMixin<T> on ChangeNotifier {

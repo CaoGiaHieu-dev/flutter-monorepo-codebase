@@ -26,7 +26,7 @@ Zero to a running app, and the daily rhythm afterwards.
 
 | Page | Answers |
 |---|---|
-| [`01_setup.md`](getting-started/01_setup.md) | What do I need installed, and what exact commands take me from `git clone` to a running app? |
+| [`01_setup.md`](getting-started/01_setup.md) | What do I need installed, what exact commands take me from `git clone` to a running app, and what do I rename to make it mine? |
 | [`02_project_tour.md`](getting-started/02_project_tour.md) | What is every folder for, which package owns what, and where do I go to change a given thing? |
 | [`03_daily_workflow.md`](getting-started/03_daily_workflow.md) | Which command do I run, and when? What breaks if I skip it? |
 | [`04_first_feature_tutorial.md`](getting-started/04_first_feature_tutorial.md) | How do I build, test and remove a small module end to end — in 30 minutes, every command verified? |

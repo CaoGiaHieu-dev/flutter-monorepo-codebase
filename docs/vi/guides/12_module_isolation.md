@@ -59,7 +59,7 @@ cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 
 - danh sách `workspace:` ở root và path dependency của từng app (đều đã commit) vẫn nêu mọi module;
 - một submodule chưa init là thư mục rỗng không có `pubspec.yaml`;
-- nên `flutter pub get` từ chối cả workspace (*"No workspace packages matching `modules/home/feature`"*).
+- nên `flutter pub get` từ chối cả workspace (*"No workspace packages matching `modules/home/api`"*).
 
 `tools/composer/bootstrap.dart` phá vòng lặp đó. Nó không import package nào, nên chạy được khi chưa hề có `.dart_tool/`. Nó chỉ **xoá bớt** mục, và chỉ trong các vùng `composer:managed` của `pubspec.yaml` ở root và của từng `apps/<id>/pubspec.yaml`: mọi mục mà thư mục không có `pubspec.yaml`. Sau đó `sync` viết lại đúng các vùng đó, cùng `injection.dart` của từng app, từ manifest. Trên bản checkout đầy đủ, `bootstrap` không có gì để bỏ và không ghi gì, nên chạy lúc nào cũng an toàn. `--dry-run` cho xem nó sẽ bỏ những gì.
 
@@ -167,7 +167,7 @@ dart tools/arch_check/check.dart            # R1, R3, R8, R10 đều đạt
 
 | Triệu chứng | Nguyên nhân | Cách sửa |
 |:--|:--|:--|
-| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | Phần lắp ráp đã commit nêu một module không có trên đĩa | `dart tools/composer/bootstrap.dart`, rồi `pub get` và `composer sync` (§2) |
+| `flutter pub get`: *No workspace packages matching `modules/home/api`* | Phần lắp ráp đã commit nêu một module không có trên đĩa | `dart tools/composer/bootstrap.dart`, rồi `pub get` và `composer sync` (§2) |
 | `bootstrap` thoát với mã 1 và không ghi gì | Một module đang có khai path dependency viết tay tới một module vắng mặt | Init thêm submodule đó (§2) |
 | `pub get` vẫn lỗi sau `sync` | `sync` chạy với `--app mobile`, để `apps/admin/pubspec.yaml` vẫn trỏ tới các module thiếu | Chạy `sync` cho mọi app (§2) |
 | CI Gate 0 fail trên PR của bạn | Một phần lắp ráp từng phần đã bị commit | Khôi phục các file composition rồi push lại (§3) |

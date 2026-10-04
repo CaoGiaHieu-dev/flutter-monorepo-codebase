@@ -125,7 +125,7 @@ return switch (locale.languageCode) {
 
 ### Nói app nào cung cấp ngôn ngữ đó
 
-Thứ app cung cấp là `LanguageSet` của nó: `LocaleProfile.supported` của app (`locale:` trong `apps/<id>/lib/app/app_profile.dart`; `null` nghĩa là mọi ngôn ngữ `core_base_ui` chuyển kèm) giao với `AppLocalizations.supportedLocales`, thứ `gen-l10n` dựng từ các file ARB đang có. `MaterialApp.supportedLocales` cùng `localeResolutionCallback` của nó (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider`, header `language` của mọi request và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`, theo thứ tự của profile) đều đọc nó. Nên file ARB mới thêm locale cho mọi app không nêu danh sách `supported`; app nào liệt kê ngôn ngữ của mình thì giữ danh sách đó.
+Thứ app cung cấp là `LanguageSet` của nó: `LocaleProfile.supported` của app (`locale:` trong `apps/<id>/lib/app/app_profile.dart`; `null` nghĩa là mọi ngôn ngữ `core_base_ui` đi kèm) giao với `AppLocalizations.supportedLocales`, thứ `gen-l10n` dựng từ các file ARB đang có. `MaterialApp.supportedLocales` cùng `localeResolutionCallback` của nó (`platform/shell/app_shell/lib/src/app_material_wrapper.dart`), phần kiểm tra locale đã lưu của `LanguageProvider`, header `language` của mọi request và bộ chọn ngôn ngữ ở Settings (`modules/settings/feature/lib/src/pages/settings_page.dart`, theo thứ tự của profile) đều đọc nó. Nên file ARB mới thêm locale cho mọi app không nêu danh sách `supported`; app nào liệt kê ngôn ngữ của mình thì giữ danh sách đó.
 
 ```dart
 // apps/<id>/lib/app/app_profile.dart — một app chỉ có tiếng Việt
@@ -150,6 +150,10 @@ FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
 ### Sắp thứ tự ngôn ngữ trong `preferred-supported-locales`
 
 `platform/ui/design_system/l10n.yaml` và `l10n.yaml` của từng feature ghi `preferred-supported-locales: [en, vi]`, `l10n.yaml.mustache` của generator cũng vậy. `gen-l10n` vẫn nhận `ja.arb` mà không cần sửa — danh sách này chỉ **sắp thứ tự** `AppLocalizations.supportedLocales`, locale nào không có trong đó thì xếp sau theo bảng chữ cái. Thứ tự đó là thứ bộ chọn ở Settings hiển thị cho app không nêu danh sách `supported`, nên hãy thêm locale mới vào cuối để thứ tự rõ ràng: `[en, vi, ja]`. Locale dự phòng không phải thứ tự này: nó là `LocaleProfile.fallback`.
+
+### Khai báo ngôn ngữ cho iOS
+
+`apps/mobile/ios/Runner/Info.plist` liệt kê các ngôn ngữ của app dưới `CFBundleLocalizations` (`en`, `vi`), và iOS chỉ cung cấp cho app đúng những ngôn ngữ đó — trong phần cài đặt ngôn ngữ theo từng app và khi chọn locale ưu tiên. Hãy thêm `<string>ja</string>` vào mảng đó. Android không cần gì thêm: `build.gradle.kts` không đặt bộ lọc locale nào, nên ARB mới là đủ.
 
 ### Sinh lại
 
@@ -324,7 +328,7 @@ Checklist review:
 
 - [ ] Không còn chuỗi hiển thị nào bị hard-code
 - [ ] Key mới đã thêm vào **tất cả** file `.arb`, đã chạy `flutter gen-l10n`
-- [ ] Ngôn ngữ mới: có ARB trong `core_base_ui` **và mọi feature**, có tên trong `AppLanguages.nameOf` (bước 2)
+- [ ] Ngôn ngữ mới: có ARB trong `core_base_ui` **và mọi feature**, có tên trong `AppLanguages.nameOf`, và có mã trong `CFBundleLocalizations` của iOS (bước 2)
 - [ ] Feature đăng ký `IFeatureLocalization`; `root_app.dart` không bị đụng tới
 - [ ] `core_ui_kit` dùng chuỗi của `core_base_ui`, không định nghĩa `.arb`
 - [ ] Màu qua `context.colors.*`, typography qua `AppTextStyles.*(context)`

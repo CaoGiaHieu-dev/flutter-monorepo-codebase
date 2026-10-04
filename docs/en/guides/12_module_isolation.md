@@ -58,7 +58,7 @@ cd apps/mobile && flutter run --flavor dev --dart-define-from-file=env.dev
 
 - the committed root `workspace:` list and each app's path dependencies still name every module;
 - an uninitialised submodule is an empty directory with no `pubspec.yaml`;
-- so `flutter pub get` refuses the whole workspace (*"No workspace packages matching `modules/home/feature`"*).
+- so `flutter pub get` refuses the whole workspace (*"No workspace packages matching `modules/home/api`"*).
 
 `tools/composer/bootstrap.dart` breaks that cycle. It imports no package, so it runs with no `.dart_tool/` at all. It only **removes** entries, and only from the `composer:managed` regions of the root `pubspec.yaml` and of each `apps/<id>/pubspec.yaml`: every entry whose directory has no `pubspec.yaml`. `sync` then rewrites those regions, and each app's `injection.dart`, properly from the manifests. On a full checkout `bootstrap` finds nothing to prune and writes nothing, so it is safe to run every time. `--dry-run` shows what it would prune.
 
@@ -166,7 +166,7 @@ dart tools/arch_check/check.dart            # R1, R3, R8, R10 hold
 
 | Symptom | Cause | Fix |
 |:--|:--|:--|
-| `flutter pub get`: *No workspace packages matching `modules/home/feature`* | The committed composition names a module that is not on disk | `dart tools/composer/bootstrap.dart`, then `pub get` and `composer sync` (§2) |
+| `flutter pub get`: *No workspace packages matching `modules/home/api`* | The committed composition names a module that is not on disk | `dart tools/composer/bootstrap.dart`, then `pub get` and `composer sync` (§2) |
 | `bootstrap` exits 1 and writes nothing | A present module has a hand-written path dependency on an absent one | Initialise that submodule too (§2) |
 | `pub get` still fails after `sync` | `sync` ran with `--app mobile`, leaving `apps/admin/pubspec.yaml` pointing at missing modules | Run `sync` for every app (§2) |
 | CI Gate 0 fails on your PR | A partial composition was committed | Restore the composition files and push again (§3) |

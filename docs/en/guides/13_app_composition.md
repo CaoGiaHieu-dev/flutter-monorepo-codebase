@@ -179,7 +179,7 @@ What an app must register for a package it composes — `FirebaseOptions` for `c
 
 1. See what blocks it: the report's *Not targeted — and what blocks it* names every composed package whose pubspec `platforms:` does not list it (`core_database` has no web, `core_notifications` no Windows or Linux).
 2. Declare it, runner still to be created: `platforms.<p>: { runner: scaffold }`, then `dart tools/composer/composer.dart sync --app <id>`.
-3. Create the runner once, with the line the report prints, e.g. `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .`, and change the declaration to `runner: committed`. A declared `committed` runner needs its folder, a `scaffold` one must not have it (V6).
+3. Create the runner once, with the line the report prints, e.g. `cd apps/<id> && flutter create --platforms=windows --org com.example --project-name <id>_app .` (put your own reverse domain in `--org`: a platform that has an application or bundle ID builds it from this value), and change the declaration to `runner: committed`. A declared `committed` runner needs its folder, a `scaffold` one must not have it (V6).
 4. Set what the platform enables, if the default is not right: `push`, `deep_links`, `orientation`, and for a desktop platform `window: { initial: [1440, 900], min: [1024, 700] }`, which needs the `configureWindow` hook (`P05` otherwise). A platform that switches push or deep links off logs one line naming the key and initialises nothing.
 5. Run `composer verify` and the smoke test. On the web there is no `--flavor` option: pass `--dart-define=APP_FLAVOR=<flavor>` — the Flutter tool refuses the framework's own `FLUTTER_APP_FLAVOR`, and the shell reads `APP_FLAVOR` on the web only.
 

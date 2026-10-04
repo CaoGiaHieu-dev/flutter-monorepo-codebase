@@ -27,7 +27,7 @@ Từ số 0 đến app chạy được, và nhịp làm việc hàng ngày sau �
 
 | Trang | Trả lời |
 |---|---|
-| [`01_setup.md`](getting-started/01_setup.md) | Cần cài gì, và chính xác những lệnh nào đưa tôi từ `git clone` đến app chạy được? |
+| [`01_setup.md`](getting-started/01_setup.md) | Cần cài gì, chính xác những lệnh nào đưa tôi từ `git clone` đến app chạy được, và phải đổi tên những gì để nó thành của tôi? |
 | [`02_project_tour.md`](getting-started/02_project_tour.md) | Mỗi thư mục để làm gì, package nào sở hữu cái gì, muốn sửa X thì vào đâu? |
 | [`03_daily_workflow.md`](getting-started/03_daily_workflow.md) | Chạy lệnh nào, khi nào? Bỏ qua thì hỏng gì? |
 | [`04_first_feature_tutorial.md`](getting-started/04_first_feature_tutorial.md) | Làm sao dựng, test rồi gỡ một module nhỏ từ đầu tới cuối — trong 30 phút, mọi lệnh đều đã kiểm chứng? |

@@ -496,8 +496,12 @@ description: [`operations/01_cicd.md`](docs/en/operations/01_cicd.md).
 
 ### Android APK Build Command from Root:
 ```bash
+bundle install                                                                  # once
+cp apps/mobile/fastlane/Config.example.yaml apps/mobile/fastlane/Config.yaml    # once — the lanes stop without it
 bundle exec fastlane android build flavor:dev build_type:apk distribute_store:false distribute_firebase:false skip_setup:true change_log:test build_number:1 flutter_version:stable version:1.0.0
 ```
+
+`Config.yaml` is gitignored. With both distribution flags `false`, the unmodified example is enough to build; fill it in before you distribute: [`operations/02_fastlane_release.md`](docs/en/operations/02_fastlane_release.md) § 2. The build lands in `apps/mobile/build/app/outputs/flutter-apk/`.
 
 ---
 
@@ -567,6 +571,11 @@ dart tools/barrel_generator/generate.dart <package>/lib   # after adding, renami
 > `**.module.dart` — see `analysis_options.yaml`). A clean analyze does **not** prove the app
 > compiles. Always run a real build before trusting a large refactor.
 
+### 7. Make It Yours
+The template ships under placeholder names — `com.example.codebase`, the author's Apple team ID,
+`your-domain.example` addresses, `@your-org` CODEOWNERS handles, links to the original repository. The
+complete list, file by file, and the names to leave alone: [`getting-started/01_setup.md`](docs/en/getting-started/01_setup.md) § 8.
+
 ---
 
 ## 📚 Documentation Hub
@@ -578,7 +587,7 @@ The documentation is organised by **what you are trying to do**, not by layer.
 ### 🚀 Getting Started — *new to the repo? read these in order*
 | Doc | Answers |
 | :--- | :--- |
-| [01. Setup](docs/en/getting-started/01_setup.md) | What do I install, and how do I get the app running? |
+| [01. Setup](docs/en/getting-started/01_setup.md) | What do I install, how do I get the app running, and what do I rename to make it mine? |
 | [02. Project Tour](docs/en/getting-started/02_project_tour.md) | What is every package for, and where do I change X? |
 | [03. Daily Workflow](docs/en/getting-started/03_daily_workflow.md) | Which commands do I run, and when? |
 | [04. First Feature Tutorial](docs/en/getting-started/04_first_feature_tutorial.md) | Build, test and remove a small module end to end, in 30 minutes |

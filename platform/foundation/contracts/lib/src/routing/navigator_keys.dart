@@ -16,12 +16,12 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// ## Nested keys are requested by id, not declared here
 ///
-/// This class used to expose `authKey`, naming one specific feature from an
-/// infra package. Every feature that wanted its own back stack had to open a PR
-/// against the DI Hub, and the DI Hub's public surface grew a product vocabulary
-/// it has no business knowing.
+/// A fixed getter per feature (an `authKey`) would name one specific feature
+/// from an infra package: every feature that wanted its own back stack would
+/// need a change to the DI Hub, and the Hub's public surface would grow a
+/// product vocabulary it has no business knowing.
 ///
-/// [nested] replaces that: a module asks for a key by id and gets the same
+/// [nested] avoids that: a module asks for a key by id and gets the same
 /// instance every time, so the shell and its children agree without anyone
 /// declaring anything centrally.
 ///

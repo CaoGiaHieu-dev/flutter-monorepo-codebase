@@ -21,13 +21,12 @@ import 'package:material_ui/material_ui.dart';
 /// to the actual owners of each value ([ISessionGateway] for the session,
 /// [ILanguageStorage] for the locale) so no cross-domain storage key leaks.
 ///
-/// **This file imports no module.** It used to pull `AuthLocalDataSource` and
-/// `RefreshTokenUseCase` straight out of `data_auth` / `domain_auth`, which
-/// meant a build without the auth module did not compile — the composition
-/// root was the one place breaking the removability the rest of the shell is
-/// careful to preserve. A `getItOrNull` guard cannot fix that on its own: an
-/// unresolved import fails at compile time, before any lookup happens.
-/// Enforced now by `arch_check` rule **R10**.
+/// **This file imports no module.** Importing `AuthLocalDataSource` or
+/// `RefreshTokenUseCase` from `data_auth` / `domain_auth` would make a build
+/// without the auth module fail to compile — the composition root would
+/// break the removability the rest of the shell preserves. A `getItOrNull`
+/// guard cannot fix that on its own: an unresolved import fails at compile
+/// time, before any lookup happens. Enforced by `arch_check` rule **R10**.
 ///
 /// The gateway is resolved at call time rather than injected, so this class
 /// constructs fine whether or not a session owner is in the build, and no

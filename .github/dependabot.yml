@@ -13,8 +13,7 @@ updates:
   # Dependabot PR that edits a member's pubspec.yaml therefore fails Gate 4
   # (`dependency_sync --check`) until someone checks out the branch, applies
   # the same version in pubspec_dependencies.yaml, runs
-  # `dart tools/dependency_sync.dart` (which also refreshes the committed
-  # pubspec.lock) and pushes. Treat these PRs as notifications that an update
+  # `dart tools/dependency_sync.dart` and pushes. Treat these PRs as notifications that an update
   # exists; `dart tools/check_outdated.dart` gives the same list on demand.
   # Scanned from the workspace root only, so one PR covers the workspace
   # instead of one per member package; the limit keeps the queue small.

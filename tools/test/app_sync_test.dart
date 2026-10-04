@@ -505,4 +505,102 @@ void main() {
       },
     );
   });
+
+  group('the composer help lists every check it holds the source to', () {
+    test('V3, V7, V10-V13 and V15-V17 each have a line in `--help`', () {
+      final source = read('tools/composer/composer.dart');
+      final start = source.indexOf('WHAT VERIFY HOLDS THE DECLARATION TO');
+      final end = source.indexOf('MODULE LAYERS', start);
+      expect(start, greaterThan(-1));
+      final section = source.substring(start, end);
+      for (final id in [
+        'V3',
+        'V7',
+        'V10',
+        'V11',
+        'V12',
+        'V13',
+        'V15',
+        'V16',
+        'V17',
+      ]) {
+        expect(
+          RegExp('^  $id ', multiLine: true).hasMatch(section),
+          isTrue,
+          reason: '$id has no line in the help list',
+        );
+      }
+    });
+  });
+
+  group('the Flutter version has one home: .fvmrc', () {
+    final pinned = RegExp(
+      r'"flutter"\s*:\s*"(\d+\.\d+\.\d+)"',
+    ).firstMatch(read('.fvmrc'))!.group(1)!;
+
+    List<int> parts(String version) => [
+      for (final part in version.split('.')) int.parse(part),
+    ];
+
+    test('no workflow spells the version, or a literal `flutter-version:`', () {
+      final workflows = Directory(p.join(repoRoot, '.github', 'workflows'))
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.yml'));
+      for (final file in workflows) {
+        final text = file.readAsStringSync();
+        final name = p.basename(file.path);
+        expect(text, isNot(contains(pinned)), reason: '$name repeats $pinned');
+        expect(
+          RegExp(
+            r'^\s*flutter-version:\s*["\x27]?\d',
+            multiLine: true,
+          ).hasMatch(text),
+          isFalse,
+          reason: '$name pins a literal flutter-version: read .fvmrc',
+        );
+      }
+    });
+
+    test('the catalog header does not repeat the toolchain version', () {
+      final header = read('pubspec_dependencies.yaml')
+          .split('\n')
+          .takeWhile((line) => line.startsWith('#') || line.trim().isEmpty)
+          .join('\n');
+      expect(header, isNot(contains(pinned)));
+      expect(header, isNot(matches(RegExp(r'Flutter \d+\.\d+'))));
+    });
+
+    test('the root pubspec floor is not above what .fvmrc pins', () {
+      final floor = RegExp(
+        r'flutter:\s*"?>=\s*(\d+\.\d+\.\d+)',
+      ).firstMatch(read('pubspec.yaml'))!.group(1)!;
+      final a = parts(floor);
+      final b = parts(pinned);
+      var above = false;
+      for (var i = 0; i < 3; i++) {
+        if (a[i] != b[i]) {
+          above = a[i] > b[i];
+          break;
+        }
+      }
+      expect(above, isFalse, reason: 'pubspec floor $floor > pinned $pinned');
+    });
+  });
+
+  group('the PR workflow names the packages it expects to be clean', () {
+    test('the new app is checked under its package name, `<id>_app`', () {
+      final text = read('.github/workflows/pr_quality_check.yml');
+      final id = RegExp(
+        r'composer\.dart new (\w+)',
+      ).firstMatch(text)!.group(1)!;
+      // `composer new` names every app package `<id>_app`; the unused-package
+      // audit prints that name, so the step's pattern has to as well.
+      final pattern = RegExp(
+        r'grep -Eq "Package: \(([^)]*)\)\$"',
+      ).firstMatch(text)!.group(1)!.split('|');
+      expect(pattern, contains('${id}_app'));
+      expect(pattern, isNot(contains(id)));
+    });
+  });
 }

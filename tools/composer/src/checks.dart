@@ -26,8 +26,8 @@ import 'package_facts.dart';
 ///
 /// Two more run where the app's view is built (`sync` / `verify`), because they
 /// need the composed packages: [checkPlatformSwitches] (V8) and
-/// [checkPackagePlatforms] (V7). [checkComposition] holds V3, V10, V11 and V12
-/// to the source — the static scan of `tools/shared/contract_scan.dart` and the
+/// [checkPackagePlatforms] (V7). [checkComposition] holds V3, V10, V11, V12,
+/// V15 and V16 to the source — the static scan of `tools/shared/contract_scan.dart` and the
 /// files an app owns.
 ///
 /// V1 (closed vocabularies, types, ranges, `app.kind`) lives in the parser and
@@ -386,7 +386,7 @@ String _origin(AppView view, PackageFacts facts) {
   return 'as an extra dependency';
 }
 
-/// V3, V10, V11 and V12: the declaration held to the source.
+/// V3, V10, V11, V12, V15 and V16: the declaration held to the source.
 ///
 /// | Check | Holds |
 /// |:-:|:--|
@@ -396,7 +396,6 @@ String _origin(AppView view, PackageFacts facts) {
 /// | V12 | the entry point passes the profile; the DI smoke test exists, calls `checkAppContract` and builds every factory (`FactoryRecorder` + `buildEvery`) |
 /// | V15 | a committed Android runner has a `productFlavor` per declared flavor, a committed iOS runner a scheme and `Debug-`/`Release-`/`Profile-` configurations per declared flavor, and neither names a flavor the manifest does not declare |
 /// | V16 | every DI group says `why` it sits where it does, and the groups the template names follow the canonical order |
-///
 /// | V17 | no member pubspec other than the root's has a top-level `workspace:` key ([checkNestedWorkspaces]) |
 ///
 /// [root] is the repository root the app's files are read from.
@@ -450,6 +449,44 @@ List<String> checkNestedWorkspaces(
     );
   }
   return problems..sort();
+}
+
+/// V13, the part the region comparison cannot see: outside its two
+/// `composer:managed` regions `lib/di/injection.dart` holds the header comment
+/// and nothing else.
+///
+/// `sync` rewrites the regions only, so a statement added before, between or
+/// after them would survive every regeneration and `verify` would never notice
+/// it. Comments and blank lines are fine — the header explains the file. One
+/// `<file>: injection: <problem>` line per offending line; none when the file
+/// does not exist (the missing file is reported where the regions are vetted).
+List<String> checkInjectionOutsideRegions(String path, {required String root}) {
+  final file = File(path);
+  if (!file.existsSync()) return const [];
+  final rel = p.posix.relative(
+    p.posix.normalize(path.replaceAll(r'\', '/')),
+    from: p.posix.normalize(root.replaceAll(r'\', '/')),
+  );
+  final problems = <String>[];
+  var inside = false;
+  final lines = file.readAsLinesSync();
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (line.contains('composer:managed:')) {
+      inside = true;
+    } else if (line.contains('composer:end:')) {
+      inside = false;
+    } else if (!inside) {
+      final text = line.trim();
+      if (text.isEmpty || text.startsWith('//')) continue;
+      problems.add(
+        '$rel: injection: line ${i + 1} is code outside the `composer:managed` '
+        'regions (`$text`) — `sync` never rewrites it; move the change into '
+        'the manifest (RULE-16)',
+      );
+    }
+  }
+  return problems;
 }
 
 /// V3.

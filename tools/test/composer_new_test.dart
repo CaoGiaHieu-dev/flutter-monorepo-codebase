@@ -225,6 +225,33 @@ void main() {
       );
     });
 
+    test('ignores the Firebase project files an app may generate', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, [
+          'new',
+          'reports',
+          '--platforms',
+          'windows',
+          '--modules',
+          'foo',
+        ]),
+        exitsWith(0),
+      );
+
+      final ignore = ws.read('apps/reports/.gitignore').split('\n');
+      // `tools/firebase/firebase_config.dart` writes
+      // lib/firebase/firebase_options_<flavor>.dart into any app that adopts
+      // push; it carries project identifiers and must not be committable.
+      for (final entry in [
+        'firebase_options_*.dart',
+        'google-services.json',
+        'env.prod',
+      ]) {
+        expect(ignore, contains(entry), reason: entry);
+      }
+    });
+
     test('derives its capabilities from what the modules register', () async {
       final ws = await workspace();
       expect(

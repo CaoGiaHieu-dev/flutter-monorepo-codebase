@@ -30,9 +30,9 @@ class AuthSessionGatewayImpl implements ISessionGateway {
   /// Only a failure that never got the server's verdict throws, which keeps
   /// the session ([isTransientFailure]); every refusal returns null.
   ///
-  /// The envelope case used to arrive as `ServerFailure(code: 500)`, which
-  /// this read as "server down": the dead session was kept, and every later
-  /// 401 retried the same refused renewal forever.
+  /// A refusal inside a successful envelope is not a transient fault: read as
+  /// "server down" the dead session would be kept, and every later 401 would
+  /// retry the same refused renewal forever.
   @override
   Future<String?> refreshToken() async {
     final result = await _repository.refreshToken();

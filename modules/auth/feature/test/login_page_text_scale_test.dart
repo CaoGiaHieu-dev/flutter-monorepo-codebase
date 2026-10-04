@@ -82,6 +82,9 @@ Future<void> _pumpLogin(WidgetTester tester, Size window) async {
   await tester.pumpAndSettle();
 }
 
+FeatureAuthLocalizations _l10n(WidgetTester tester) =>
+    FeatureAuthLocalizations.of(tester.element(find.byType(LoginPage)))!;
+
 void main() {
   for (final window in const [Size(320, 568), Size(360, 640), Size(375, 812)]) {
     testWidgets('lays out at ${_maxTextScale}x text on a $window phone', (
@@ -102,12 +105,13 @@ void main() {
       (tester) async {
         await _pumpLogin(tester, window);
 
-        final submit = find.text('Sign In').last;
+        final l10n = _l10n(tester);
+        final submit = find.text(l10n.signIn).last;
         await tester.ensureVisible(submit);
         await tester.tap(submit);
         await tester.pumpAndSettle();
 
-        expect(find.text('Email is required'), findsOneWidget);
+        expect(find.text(l10n.emailIsRequired), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -121,7 +125,7 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.first, 'ada@example.com');
     await tester.enterText(fields.last, 'wrong-password');
-    final submit = find.text('Sign In').last;
+    final submit = find.text(_l10n(tester).signIn).last;
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();

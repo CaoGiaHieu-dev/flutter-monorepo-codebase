@@ -1259,6 +1259,9 @@ void main(List<String> args) {
   // over the working tree instead of once per package.
   blocking.addAll(_hygieneViolations(root));
 
+  // --- R21: ARB files agree (RULE-34, RULE-35) ----------------------------
+  blocking.addAll(_arbViolations(root, packages));
+
   stopwatch.stop();
   _report(packages.length, blocking, warnings, stopwatch.elapsed);
   exit(blocking.isEmpty ? 0 : 1);
@@ -1372,6 +1375,119 @@ final _interfaceNamedClass = RegExp(
 );
 
 /// R12-R15, over every non-ignored file in the working tree.
+/// R21: the translations of a package agree.
+///
+/// A package with `assets/language/*.arb` has `en.arb` as its template; every
+/// other `*.arb` beside it must carry exactly its key set, and every key is
+/// `lowerCamelCase` (RULE-34, RULE-35). `flutter gen-l10n` never fails on a
+/// key missing from `vi.arb` — it writes `untranslated-messages.txt` and the
+/// screen silently shows English — so without this the registry's "every
+/// string is translated" holds only until the next ARB edit.
+///
+/// Keys are the top-level entries that do not start with `@` (`@key`
+/// metadata and `@@locale`). Placeholders are not compared.
+List<Violation> _arbViolations(
+  String root,
+  Map<String, MonorepoPackage> packages,
+) {
+  final out = <Violation>[];
+  final lowerCamel = RegExp(r'^[a-z][a-zA-Z0-9]*$');
+
+  Set<String>? keysOf(File file, String rel) {
+    try {
+      final decoded = jsonDecode(file.readAsStringSync());
+      if (decoded is! Map) throw const FormatException('not a JSON object');
+      return {
+        for (final key in decoded.keys)
+          if (!(key as String).startsWith('@')) key,
+      };
+    } on FormatException catch (e) {
+      out.add(
+        Violation('R21', rel, 'not a valid ARB file (${e.message}).'),
+      );
+      return null;
+    }
+  }
+
+  for (final pkg in packages.values) {
+    final dir = Directory(p.posix.join(pkg.rootPath, 'assets', 'language'));
+    if (!dir.existsSync()) continue;
+    final arbs = <String, File>{
+      for (final f in dir.listSync(followLinks: false).whereType<File>())
+        if (f.path.endsWith('.arb')) p.basename(f.path): f,
+    };
+    if (arbs.isEmpty) continue;
+    String rel(String name) => p.posix.relative(
+      p.posix.join(dir.path.replaceAll(r'\', '/'), name),
+      from: root,
+    );
+
+    final template = arbs['en.arb'];
+    if (template == null) {
+      out.add(
+        Violation(
+          'R21',
+          rel('en.arb'),
+          '${pkg.name} has ${(arbs.keys.toList()..sort()).join(', ')} but no '
+              'en.arb — the English file is the template every other locale '
+              'is compared with.',
+        ),
+      );
+      continue;
+    }
+    final names = arbs.keys.toList()..sort();
+    final keysByFile = <String, Set<String>>{};
+    for (final name in names) {
+      final keys = keysOf(arbs[name]!, rel(name));
+      if (keys != null) keysByFile[name] = keys;
+    }
+
+    for (final entry in keysByFile.entries) {
+      for (final key in (entry.value.toList()..sort())) {
+        if (lowerCamel.hasMatch(key)) continue;
+        out.add(
+          Violation(
+            'R21',
+            rel(entry.key),
+            'key `$key` is not lowerCamelCase (RULE-35) — gen-l10n turns it '
+                'into a getter of that name.',
+          ),
+        );
+      }
+    }
+
+    final base = keysByFile['en.arb'];
+    if (base == null) continue;
+    for (final entry in keysByFile.entries) {
+      if (entry.key == 'en.arb') continue;
+      final missing = (base.difference(entry.value).toList()..sort());
+      final extra = (entry.value.difference(base).toList()..sort());
+      if (missing.isNotEmpty) {
+        out.add(
+          Violation(
+            'R21',
+            rel(entry.key),
+            'missing ${missing.length} key(s) that en.arb has: '
+                '${missing.join(', ')} (RULE-34) — the screen would show '
+                'English.',
+          ),
+        );
+      }
+      if (extra.isNotEmpty) {
+        out.add(
+          Violation(
+            'R21',
+            rel(entry.key),
+            '${extra.length} key(s) en.arb does not have: ${extra.join(', ')} '
+                '— add them to en.arb (the template) or remove them here.',
+          ),
+        );
+      }
+    }
+  }
+  return out;
+}
+
 List<Violation> _hygieneViolations(String root) {
   final out = <Violation>[];
   final files = _workingTreeFiles(root);
@@ -1643,6 +1759,7 @@ void _report(
     'R18': 'Bloc event handlers are async',
     'R19': 'Runtime diagnostics go through DynamicLogger',
     'R20': 'No raw numeric literals for layout and paint',
+    'R21': 'Translations agree: same keys in every ARB, lowerCamelCase',
   };
 
   if (warnings.isNotEmpty) {
@@ -1971,6 +2088,15 @@ RULES CHECKED
       a type check. A raw double reached through a variable
       (`final w = 100.0; Container(width: w)`) or a widget not listed (a data
       class with a `width` field is deliberately not one) is a review matter.
+
+  R21 Translations agree  (RULE-34, RULE-35)
+      In every package with assets/language/*.arb, en.arb is the template:
+      every other .arb beside it carries exactly its key set (a key missing
+      from vi.arb makes the screen show English, and gen-l10n only writes
+      untranslated-messages.txt), an .arb without en.arb is reported, and every
+      key is lowerCamelCase. Keys are the top-level entries not starting with
+      `@` (metadata, `@@locale`). Placeholders are not compared. An ARB file
+      that is not a JSON object is a violation.
 
   R12, R13, R15 and R17-R20 read every file in the working tree that git does not
   ignore (tracked files and new ones about to be added; modules checked out

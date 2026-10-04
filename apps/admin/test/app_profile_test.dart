@@ -1,15 +1,16 @@
+import 'dart:io';
+
 import 'package:admin_app/app/app_profile.dart';
 import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Migration neutrality: what `apps/admin` declares must reproduce what the
-/// app did before it could declare anything — the same switches on every
-/// platform it can run on, the same flavors, no pinning — and every optional
-/// contract it does not compose stays declared absent, with a reason.
+/// What `apps/admin` declares: the same switches on every platform it can run
+/// on, the three flavors, no pinning — and every optional contract it does
+/// not compose declared absent, with a reason.
 ///
 /// A change to `app_manifest.yaml` that moves one of these is a behaviour
 /// change; this test says so, and the manifest edit and this test change
-/// together.
+/// together. The display name is the exception: it is read from the manifest.
 void main() {
   const declared = {
     AppPlatform.web,
@@ -21,11 +22,11 @@ void main() {
   group('the facts', () {
     test('are for this app', () {
       expect(appFacts.id, 'admin');
-      expect(appFacts.name, 'Codebase Admin');
+      expect(appFacts.name, _manifestAppName());
       expect(appProfile.facts, same(appFacts));
     });
 
-    test('declare the three flavors the app was always built as', () {
+    test('declare the three flavors', () {
       expect(appFacts.flavors, {Flavor.dev, Flavor.staging, Flavor.prod});
     });
 
@@ -36,7 +37,7 @@ void main() {
       }
     });
 
-    test('keep the switches as they were: native splash, deep links on', () {
+    test('declare native splash and deep links on every platform', () {
       for (final entry in appFacts.platforms.entries) {
         final platform = entry.value;
         expect(platform.splash, SplashMode.native, reason: entry.key.name);
@@ -64,7 +65,7 @@ void main() {
       }
     });
 
-    test('require what a working build always needed', () {
+    test('require what a working build needs', () {
       final required = {
         for (final rule in appFacts.env) rule.key: rule.requiredIn,
       };
@@ -115,8 +116,8 @@ void main() {
 
   group('the profile', () {
     test('tunes nothing: every section is the template default', () {
-      // What the shell did before an app could tune it. A section an app sets
-      // is a behaviour change, so the value here and the app move together.
+      // The shell's own defaults. A section an app sets is a behaviour
+      // change, so the value here and the app move together.
       const defaults = DisplayProfile();
       final display = appProfile.display;
       expect(display.designSize.width, defaults.designSize.width);
@@ -149,4 +150,19 @@ void main() {
       expect(appProfile.network.followRedirects, network.followRedirects);
     });
   });
+}
+
+/// The `name:` under `app:` in `app_manifest.yaml` — what `composer sync`
+/// turns into `appFacts.name`. Read from the file so renaming the app (the
+/// "Make it yours" step) does not break this test. A test runs from the
+/// package directory, where the manifest sits.
+String _manifestAppName() {
+  final manifest = File('app_manifest.yaml').readAsLinesSync();
+  final app = manifest.indexWhere((line) => line.trimRight() == 'app:');
+  for (final line in manifest.skip(app + 1)) {
+    if (line.isNotEmpty && !line.startsWith(' ')) break;
+    final match = RegExp(r'^\s+name:\s*(.+?)\s*$').firstMatch(line);
+    if (match != null) return match.group(1)!;
+  }
+  throw StateError('no `app.name` in app_manifest.yaml');
 }

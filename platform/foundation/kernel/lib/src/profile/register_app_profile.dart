@@ -46,7 +46,7 @@ import 'theme_profile.dart';
 /// [allowUndeclaredPlatform] is true — it defaults to the
 /// `ALLOW_UNDECLARED_PLATFORM` define (`ProfileConstants`). The undeclared
 /// platform then gets `PlatformFacts.today()`, so a quick look on an unlisted
-/// platform behaves as the app did before it could declare one.
+/// platform behaves as the template defaults, not as a declared platform.
 /// `runShellApp` has already stopped the boot with `P01` by the time it gets
 /// here; a test passes a declared platform.
 ///

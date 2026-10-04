@@ -31,9 +31,10 @@ subprojects {
 // Guava / Firebase expose Checker Framework annotations (e.g.
 // @UnknownInitialization) on inferred types, but declare checker-qual as
 // `compileOnly` so it never reaches a consumer's compile classpath. Kotlin 2.x
-// rejects an inferred type carrying an inaccessible annotation class, which
-// breaks :firebase_auth:compileDebugKotlin. Putting checker-qual on every
-// Android subproject's compile classpath makes those annotations resolvable.
+// rejects an inferred type carrying an inaccessible annotation class, so a
+// plugin that builds on those libraries can fail its own compile<Variant>Kotlin
+// task. Putting checker-qual on every Android subproject's compile classpath
+// makes those annotations resolvable.
 // Compile-time only — nothing is added to the shipped APK.
 subprojects {
     plugins.withId("com.android.library") {

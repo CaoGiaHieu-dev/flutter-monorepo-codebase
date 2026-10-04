@@ -17,6 +17,14 @@ mixin NetworkMixin {
   /// A subscription to listen for network connectivity changes.
   StreamSubscription<InternetStatus>? _internetConnectionSubscription;
 
+  /// The connectivity stream this mixin listens to.
+  ///
+  /// Defaults to the app-wide `InternetConnection` in [AppUtils]; override it
+  /// to feed another source, such as a stream controller in a test.
+  @protected
+  Stream<InternetStatus> get internetStatusStream =>
+      AppUtils.internetConnection.onStatusChange;
+
   /// Starts listening for network connection changes.
   ///
   /// This method subscribes to the `onStatusChange` stream of the
@@ -31,17 +39,16 @@ mixin NetworkMixin {
     // two overlapping calls both see an empty slot and both subscribe,
     // leaking one — or re-subscribe after a stop had already run.
     final previous = _internetConnectionSubscription;
-    _internetConnectionSubscription = AppUtils.internetConnection.onStatusChange
-        .listen((event) {
-          switch (event) {
-            case InternetStatus.connected:
-              onNetworkConnected();
-              break;
-            case InternetStatus.disconnected:
-              onNetworkDisconnected();
-              break;
-          }
-        });
+    _internetConnectionSubscription = internetStatusStream.listen((event) {
+      switch (event) {
+        case InternetStatus.connected:
+          onNetworkConnected();
+          break;
+        case InternetStatus.disconnected:
+          onNetworkDisconnected();
+          break;
+      }
+    });
     await previous?.cancel();
   }
 

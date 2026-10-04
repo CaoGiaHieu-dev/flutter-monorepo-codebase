@@ -54,8 +54,8 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 - **RULE-31** — a reusable `core_ui_kit` widget uses its parameters as received and scales only its own constants; `context.w(widget.width)` and `context.w(AppSpacing.lg(context))` scale twice.
 - **RULE-32** *[gate for `Platform.is*` / `kIsWeb` forks]* — layout is chosen by window size class (`context.windowSizeClass`, `context.adaptive`, `AdaptiveLayout`), never `Platform.is*`, a device model or an ad-hoc `shortestSide` check.
 - **RULE-33** *[gate for raw numbers]* — colours, typography, spacing and radii come from the design tokens (`context.colors`, `AppTextStyles.*(context)`, `AppSpacing`, `AppRadius`), never literals; numbers change in their `raw*` constants.
-- **RULE-34** — no hardcoded user-facing string; feature ARBs in `assets/language/` registered through `IFeatureLocalization`; never an edit to the shell's `app_material_wrapper.dart`; `core_ui_kit` defines no ARB; `AppFailure.message` never reaches the screen (map the failure `code` to a translated string).
-- **RULE-35** — ARB keys are `lowerCamelCase` (`welcomeBack`, not `welcome_back`).
+- **RULE-34** *[gate for a locale whose ARB keys differ from `en.arb`'s (`arch_check` R21)]* — no hardcoded user-facing string; feature ARBs in `assets/language/` registered through `IFeatureLocalization`; never an edit to the shell's `app_material_wrapper.dart`; `core_ui_kit` defines no ARB; `AppFailure.message` never reaches the screen (map the failure `code` to a translated string).
+- **RULE-35** *[gate]* — ARB keys are `lowerCamelCase` (`welcomeBack`, not `welcome_back`).
 - **RULE-36** — every dialog and bottom sheet is its own widget class (`*_dialog.dart`, `*_bottom_sheet.dart`); no inline tree inside a `showDialog` / `showModalBottomSheet` builder.
 - **RULE-37** — feature-specific assets live in the feature's `assets/`, not `core_base_ui`.
 - **RULE-38** *[gate for the shell, `feature_auth` and `feature_dashboard`]* — text follows the OS font size: no `MediaQuery.withNoTextScaling`, no `TooltipVisibility(visible: false)`, no fixed-height container around text; icon-only buttons carry a `tooltip`, meaningful images a `semanticLabel`.
@@ -170,5 +170,3 @@ Generate your review strictly using the markdown template below.
 | **Overall**       | **X/10** |                                                 |
 ```
 
----
-*Copyright (c) 2026 CaoGiaHieu-dev. All rights reserved.*

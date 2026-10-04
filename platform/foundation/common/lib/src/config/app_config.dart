@@ -102,11 +102,11 @@ class AppConfig {
   /// The flavor for [raw], falling back to `dev` in a debug build and to
   /// `prod` in a profile or release build.
   ///
-  /// Falling back to `dev` unconditionally meant a release built without a
-  /// flavor — or with a misspelt one — ran as `dev`, and `dev` is the flavor
-  /// that used to disable certificate validation. The fallback now fails
-  /// closed outside debug; certificate handling additionally ignores the
-  /// fallback altogether (see [allowsCertificateBypass]).
+  /// Falling back to `dev` unconditionally would run a release built without
+  /// a flavor — or with a misspelt one — as `dev`, the flavor that disables
+  /// certificate validation. The fallback therefore fails closed outside
+  /// debug; certificate handling additionally ignores the fallback
+  /// altogether (see [allowsCertificateBypass]).
   static Flavor resolveFlavor(String? raw, {required bool isDebug}) =>
       parseFlavor(raw) ?? (isDebug ? Flavor.dev : Flavor.prod);
 

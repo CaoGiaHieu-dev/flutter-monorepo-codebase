@@ -8,6 +8,10 @@ on:
     branches: [main, develop, master]
   workflow_dispatch:
 
+# Read-only token: the gates only check out and read the repository.
+permissions:
+  contents: read
+
 concurrency:
   group: quality-${{ github.ref }}
   cancel-in-progress: true
@@ -31,14 +35,12 @@ jobs:
           channel: "stable"
           cache: true
 
-      # The workspace pubspec.lock is committed, and this is the step that
-      # holds a PR to it: --enforce-lockfile fails when the lockfile no longer
-      # matches the pubspecs instead of silently re-resolving it (which the
-      # plain `flutter pub get` inside configure.dart would do). It is also
-      # all Gates 0 and 1 need — `tools/` is a workspace member — so they run
-      # straight after it, before any codegen.
-      - name: Get dependencies from the committed lockfile
-        run: flutter pub get --enforce-lockfile
+      # Lock files are generated and not committed: versions come from
+      # pubspec_dependencies.yaml (Gate 4 holds every pubspec to it). This
+      # plain pub get is all Gates 0 and 1 need — `tools/` is a workspace
+      # member — so they run straight after it, before any codegen.
+      - name: Get dependencies
+        run: flutter pub get
 
       # Gate 0 — the composition matches its manifest.
       # Runs before anything else and needs no codegen: if injection.dart, an
@@ -216,8 +218,8 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Get dependencies from the committed lockfile
-        run: flutter pub get --enforce-lockfile
+      - name: Get dependencies
+        run: flutter pub get
 
       # The generator runs pub get, gen-l10n, build_runner and the barrels
       # for its own module, but `flutter analyze` needs every other
@@ -228,7 +230,7 @@ jobs:
 
       # Feature `smoke`, BLoC, bottom-nav tab: registers it in every
       # app_manifest.yaml, runs composer sync and dependency_sync, then
-      # codegen. The lockfile changes here, which is expected.
+      # codegen.
       - name: Generate a feature module
         run: dart tools/module_generator/generate.dart 1 smoke "" 2 2
 
@@ -277,7 +279,7 @@ jobs:
   # `smoke_p` / `smoke_d` / `smoke_app` so they never collide with the other
   # job. Nothing here is committed; the checkout is thrown away.
   generator-smoke-compose:
-    name: Generator smoke test (Provider, API, domain/data, new app)
+    name: Generator smoke test (Provider, API, domain/data, core/custom, new app)
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -293,8 +295,8 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Get dependencies from the committed lockfile
-        run: flutter pub get --enforce-lockfile
+      - name: Get dependencies
+        run: flutter pub get
 
       - name: Workspace setup
         run: dart tools/workspace_setup/configure.dart --stub-firebase
@@ -310,6 +312,13 @@ jobs:
           dart tools/module_generator/generate.dart 6 smoke_p
           dart tools/module_generator/generate.dart 2 smoke_d
           dart tools/module_generator/generate.dart 3 smoke_d
+          # The paths no other step renders: a feature with no state
+          # management and no route (`1 x "" 3 3`), a data package whose
+          # domain does not exist, a core package and a custom one.
+          dart tools/module_generator/generate.dart 1 smoke_n "" 3 3
+          dart tools/module_generator/generate.dart 3 smoke_nd
+          dart tools/module_generator/generate.dart 4 smoke_core
+          dart tools/module_generator/generate.dart 5 smoke_custom acme
 
       # A whole app composing the new modules. Without --modules it composes
       # nothing with a screen, and its own smoke test fails with C05 by design.
@@ -326,7 +335,7 @@ jobs:
           set -e
           flutter pub get
           dart run build_runner build --workspace
-          for lib in modules/smoke_p/feature/lib modules/smoke_p/api/lib modules/smoke_d/domain/lib modules/smoke_d/data/lib; do
+          for lib in modules/smoke_p/feature/lib modules/smoke_p/api/lib modules/smoke_d/domain/lib modules/smoke_d/data/lib modules/smoke_n/feature/lib modules/smoke_nd/data/lib platform/infra/smoke_core/lib platform/infra/smoke_custom/lib; do
             dart tools/barrel_generator/generate.dart "$lib"
           done
 
@@ -350,6 +359,10 @@ jobs:
         working-directory: modules/smoke_p/feature
         run: flutter test
 
+      - name: The no-state-management feature's own tests
+        working-directory: modules/smoke_n/feature
+        run: flutter test
+
       - name: The new app's own tests
         working-directory: apps/smoke_app
         run: flutter test
@@ -370,7 +383,7 @@ jobs:
           code=$?
           set -e
           echo "$out"
-          if [ "$code" -eq 2 ] && ! grep -Eq "Package: (feature_smoke_p|smoke_p_api|domain_smoke_d|data_smoke_d|smoke_app)$" <<<"$out"; then
+          if [ "$code" -eq 2 ] && ! grep -Eq "Package: (feature_smoke_p|smoke_p_api|domain_smoke_d|data_smoke_d|feature_smoke_n|data_smoke_nd|core_smoke_core|acme_smoke_custom|smoke_app_app)$" <<<"$out"; then
             echo "::warning::Unused dependencies outside the generated packages (advisory — see the quality job)."
             exit 0
           fi
@@ -410,8 +423,8 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Get dependencies from the committed lockfile
-        run: flutter pub get --enforce-lockfile
+      - name: Get dependencies
+        run: flutter pub get
 
       # --stub-firebase writes the same compile-only Firebase options as the
       # quality job, plus what an Android build also needs: a

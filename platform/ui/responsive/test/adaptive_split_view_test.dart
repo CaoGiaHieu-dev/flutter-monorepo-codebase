@@ -152,8 +152,8 @@ void main() {
 
     // A primaryWidth that leaves the secondary pane nothing — as wide as the
     // view, or wide enough that the divider eats the rest — is one pane.
-    // It used to overflow the row by the divider's width while `isSplit`
-    // said true over a zero-width secondary pane.
+    // `isSplit` stays false and the row never overflows by the divider's
+    // width over a zero-width secondary pane.
     for (final (label, primaryWidth, withDivider) in [
       ('wider than the view', 5000.0, false),
       ('as wide as the view', 1000.0, false),

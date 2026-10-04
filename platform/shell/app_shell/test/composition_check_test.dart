@@ -40,7 +40,7 @@ class _ExplodingTab extends FakeDestination {
 
 /// `checkAppContract` is what the DI smoke tests and the debug boot share:
 /// the app's `capabilities:` declaration held against the graph it built,
-/// plus the structural checks both smoke tests used to copy by hand.
+/// plus the structural checks every app's smoke test needs.
 void main() {
   setUpAll(TestWidgetsFlutterBinding.ensureInitialized);
   setUp(getIt.enableRegisteringMultipleInstancesOfOneType);

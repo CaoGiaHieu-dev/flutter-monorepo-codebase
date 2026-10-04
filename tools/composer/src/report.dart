@@ -75,7 +75,7 @@ const List<CodedLine> kComposerChecks = [
   ),
   CodedLine(
     'V13',
-    'the generated regions (facts, report, imports, modules) equal regeneration',
+    'the generated regions (facts, report, imports, modules) equal regeneration; injection.dart holds only comments and blank lines outside its two regions',
   ),
   CodedLine('V14', 'no reason is empty, `TODO` or `TBD`'),
   CodedLine(

@@ -1,5 +1,5 @@
 name: core_base_ui
-description: "Central UI Kit, Theme System, Assets, and Translations"
+description: "Design tokens, the Material theme, the global translations (ARB) and the failure-message mapping"
 version: 1.0.0
 publish_to: none
 

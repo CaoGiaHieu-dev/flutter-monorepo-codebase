@@ -252,4 +252,59 @@ void main() {
     final ws = workspace();
     expect(await run(ws, ['sync', '--stritc']), exitsWith(64));
   });
+
+  test(
+    'no command is a usage error: usage, exit 64 (never 1, the drift code)',
+    () async {
+      final ws = workspace();
+
+      final none = await run(ws, const []);
+
+      expect(none, exitsWith(64));
+      expect(none.output, contains('USAGE'));
+      expect(await run(ws, ['--help']), exitsWith(0));
+      expect(await run(ws, ['nosuchcommand']), exitsWith(64));
+    },
+  );
+
+  group('code outside the generated regions of injection.dart', () {
+    const injection = 'apps/demo/lib/di/injection.dart';
+
+    test(
+      'a statement after the last region fails verify and survives sync',
+      () async {
+        final ws = workspace();
+        expect(await run(ws, ['sync']), exitsWith(0));
+        expect(await run(ws, ['verify']), exitsWith(0));
+
+        ws.write({
+          injection: '${ws.read(injection)}\nvoid handEdited() {}\n',
+        });
+
+        final verify = await run(ws, ['verify']);
+        expect(verify, exitsWith(1));
+        expect(verify.output, contains('$injection: injection: line '));
+        expect(verify.output, contains('void handEdited() {}'));
+        expect(verify.output, contains('V13'));
+
+        // `sync` warns, still writes, and does not remove the line.
+        final sync = await run(ws, ['sync']);
+        expect(sync, exitsWith(0));
+        expect(ws.read(injection), contains('void handEdited() {}'));
+      },
+    );
+
+    test('a comment or blank line outside the regions is fine', () async {
+      final ws = workspace();
+      expect(await run(ws, ['sync']), exitsWith(0));
+
+      ws.write({
+        injection:
+            '// A note for the reader.\n\n${ws.read(injection)}\n'
+            '// Another one.\n',
+      });
+
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+  });
 }

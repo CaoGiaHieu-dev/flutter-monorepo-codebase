@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for the ExportOptions.plist the iOS lanes pass to
+  `xcodebuild -exportArchive` when `flutter build ipa` archives but cannot
+  export (see docs/en/operations/02_fastlane_release.md, iOS section).
+
+  Copy it, drop `.example`, and fill it in:
+    ios/flavors/<flavor>/ExportOptions.plist   for a build with a flavor
+    ios/ExportOptions.plist                    for a build without one
+
+  Replace every YOUR_* value. The ExportOptions.plist inside a successful
+  Xcode "Distribute App" export is another working starting point.
+-->
+<plist version="1.0">
+<dict>
+    <!-- app-store-connect (store / TestFlight), ad-hoc, development or enterprise -->
+    <key>method</key>
+    <string>app-store-connect</string>
+
+    <!-- Apple Developer Team ID (10 characters) -->
+    <key>teamID</key>
+    <string>YOUR_TEAM_ID</string>
+
+    <!-- automatic, or manual together with provisioningProfiles below -->
+    <key>signingStyle</key>
+    <string>automatic</string>
+
+    <!--
+      Manual signing only: set signingStyle to manual and uncomment. Maps each
+      bundle id (with the flavor's suffix) to its provisioning profile name.
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>YOUR_BUNDLE_ID</key>
+        <string>YOUR_PROVISIONING_PROFILE_NAME</string>
+    </dict>
+    -->
+
+    <key>destination</key>
+    <string>export</string>
+
+    <!-- Upload dSYMs so crash reports can be symbolicated -->
+    <key>uploadSymbols</key>
+    <true/>
+</dict>
+</plist>

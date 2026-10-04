@@ -16,8 +16,8 @@ part 'dao/cache_entries_dao.dart';
 /// Drift resolves `@DriftDatabase(tables: ...)` at compile time and requires a
 /// DAO to be a `part of` its database library. A single shared database would
 /// therefore force the package declaring it to name every other package's
-/// tables — the same "one object knows everything" coupling that was removed
-/// from `core_storage` and `platform_kernel`.
+/// tables — the same "one object knows everything" coupling `core_storage`
+/// and `platform_kernel` avoid.
 ///
 /// So each package that owns persisted data declares its own database and
 /// keeps its tables, DAO and data source together. `core_database` supplies

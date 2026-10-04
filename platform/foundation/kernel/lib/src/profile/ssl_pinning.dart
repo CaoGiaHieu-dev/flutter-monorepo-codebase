@@ -58,8 +58,7 @@ final class SslPinningPolicy {
   const SslPinningPolicy(this.byFlavor);
 
   /// A policy that decides nothing: no flavor pins and none is flagged. What a
-  /// hand-built object gets in a test — the template's behaviour before apps
-  /// declared a decision (an empty hash list).
+  /// hand-built object gets in a test: an empty hash list per flavor.
   const SslPinningPolicy.none() : byFlavor = const {};
 
   final Map<Flavor, SslPinning> byFlavor;

@@ -1,5 +1,5 @@
 name: core_di
-description: "Module core_di"
+description: "Product-neutral contracts the app shell resolves from modules: routing, session, localization and observability interfaces"
 version: 1.0.0
 publish_to: none
 

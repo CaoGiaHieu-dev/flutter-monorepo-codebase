@@ -35,8 +35,8 @@ abstract class BaseRepository {
       await onFailure?.call(response);
       // The server answered; the success condition rejected what it said.
       // Coded apart from HTTP 5xx so a caller can tell this verdict from a
-      // transient fault — it used to be `serverFailure(…, null)`, i.e. code
-      // 500, which the auth gateway read as "server down, keep the session".
+      // transient fault: a code-500 server failure would be read by the auth
+      // gateway as "server down, keep the session".
       return Failure(
         ErrorHandler.responseRejectedFailure(
           response is BaseEntity && response.hasError ? response.message : null,

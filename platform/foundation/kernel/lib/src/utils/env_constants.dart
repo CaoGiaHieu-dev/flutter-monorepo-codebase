@@ -1,8 +1,9 @@
 /// Values passed in with `--dart-define-from-file=apps/<id>/env.<flavor>`.
 ///
 /// Only keys Dart actually reads are declared here. A key the native side
-/// consumes alone (`WEB_DOMAIN` and `APP_LINK_MODE`, read by Gradle and the iOS
-/// entitlements) stays in the env file without an entry.
+/// consumes alone (`WEB_DOMAIN` and `APP_LINK_MODE`, read by Gradle, and by the
+/// iOS entitlements once their commented-out block is enabled — see
+/// `docs/en/guides/04_routing.md` § 9) stays in the env file without an entry.
 class EnvConstants {
   EnvConstants._();
 

@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 
+import 'support/fake_bin.dart';
 import 'support/tool_harness.dart';
 
 /// `tools/unused_checker` — the declared-but-unused dependency audit (CI's
@@ -224,5 +225,302 @@ void main() => $appUses();
       expect(run.output, isNot(contains('wired.dart')));
       expect(run.output, isNot(contains('home_route.dart')));
     });
+  });
+
+  group('check_unused_assets', () {
+    late CompiledTool tool;
+    setUpAll(() async {
+      tool = await CompiledTool.compile(
+        'tools/unused_checker/check_unused_assets.dart',
+      );
+    });
+    tearDownAll(() => tool.dispose());
+
+    Future<ToolRun> check(
+      TempWorkspace ws, [
+      List<String> args = const [],
+    ]) => tool.run(
+      args,
+      workingDirectory: ws.root,
+      scriptPath: 'tools/unused_checker/check_unused_assets.dill',
+    );
+
+    TempWorkspace workspace({
+      String assets = '    - assets/logo.png\n',
+      String lib = "const logo = 'assets/logo.png';\n",
+      bool withFile = true,
+    }) => TempWorkspace.create({
+      'pubspec.yaml': 'name: ws\n',
+      'tools/.keep': '',
+      'pkg/pubspec.yaml': 'name: pkg\nflutter:\n  assets:\n$assets',
+      'pkg/lib/pkg.dart': lib,
+      if (withFile) 'pkg/assets/logo.png': 'png',
+    });
+
+    test('an asset named by its path is used: exit 0', () async {
+      final run = await check(workspace());
+
+      expect(run, exitsWith(0));
+      expect(run.output, contains('No unused assets or missing files found'));
+    });
+
+    test('an asset reached by its flutter_gen accessor is used', () async {
+      final run = await check(
+        workspace(lib: 'final logo = Assets.logo;\n'),
+      );
+
+      expect(run, exitsWith(0));
+    });
+
+    test('an asset nothing references exits 2 and is named', () async {
+      final run = await check(workspace(lib: 'const nothing = 1;\n'));
+
+      expect(run, exitsWith(2));
+      expect(run.output, contains('Unused Assets in pkg'));
+      expect(run.output, contains('pkg/assets/logo.png'));
+    });
+
+    test('a declared asset whose file is missing exits 1', () async {
+      final run = await check(workspace(withFile: false));
+
+      expect(run, exitsWith(1));
+      expect(run.output, contains('Missing Files in pkg'));
+      expect(run.output, contains('pkg/assets/logo.png'));
+    });
+
+    test('--help exits 0; an unknown argument exits 64', () async {
+      final ws = workspace();
+
+      final help = await check(ws, ['--help']);
+      expect(help, exitsWith(0));
+      expect(help.stdout, contains('check_unused_assets.dart'));
+
+      final bad = await check(ws, ['--fix']);
+      expect(bad, exitsWith(64));
+      expect(bad.output, contains('Unknown argument(s): --fix'));
+    });
+
+    test('a root holding no package is a failure, not a pass', () async {
+      final ws = TempWorkspace.create({
+        'pubspec.yaml': 'name: ws\n',
+        'tools/.keep': '',
+      });
+
+      expect(await check(ws), exitsWith(1));
+    });
+  });
+
+  group('check_unused_translate', () {
+    late CompiledTool tool;
+    setUpAll(() async {
+      tool = await CompiledTool.compile(
+        'tools/unused_checker/check_unused_translate.dart',
+      );
+    });
+    tearDownAll(() => tool.dispose());
+
+    Future<ToolRun> check(
+      TempWorkspace ws, [
+      List<String> args = const [],
+    ]) => tool.run(
+      args,
+      workingDirectory: ws.root,
+      scriptPath: 'tools/unused_checker/check_unused_translate.dill',
+    );
+
+    TempWorkspace workspace({
+      String arb = '{"hello": "Hello", "@hello": {}, "bye": "Bye"}',
+      Map<String, String> lib = const {},
+    }) => TempWorkspace.create({
+      'pubspec.yaml': 'name: ws\n',
+      'tools/.keep': '',
+      'pkg/pubspec.yaml': 'name: pkg\n',
+      'pkg/assets/language/en.arb': arb,
+      'pkg/assets/language/vi.arb': arb,
+      for (final entry in lib.entries) 'pkg/lib/${entry.key}': entry.value,
+    });
+
+    test('every key read through context.l10n is clean: exit 0', () async {
+      final run = await check(
+        workspace(
+          lib: {
+            'page.dart': 'void f(context) { context.l10nPkg.hello; context.l10nPkg.bye; }\n',
+          },
+        ),
+      );
+
+      expect(run, exitsWith(0));
+      expect(run.output, contains('No unused translation keys found'));
+    });
+
+    test(
+      'a key no code reads exits 2 and is named; @metadata is not a key',
+      () async {
+        final run = await check(
+          workspace(
+            lib: {'page.dart': 'void f(context) => context.l10nPkg.hello;\n'},
+          ),
+        );
+
+        expect(run, exitsWith(2));
+        expect(run.output, contains('Package: pkg'));
+        expect(run.output, contains('- bye'));
+        expect(run.output, isNot(contains('- hello')));
+        expect(run.output, isNot(contains('@hello')));
+      },
+    );
+
+    test(
+      'a key read as a bare getter inside `extension on AppLocalizations` '
+      'is used; the same word elsewhere is not',
+      () async {
+        final run = await check(
+          workspace(
+            lib: {
+              'failure.dart': '''
+extension FailureMessageExtension on AppLocalizations {
+  String message(int code) {
+    return switch (code) {
+      1 => hello,
+      _ => 'x',
+    };
+  }
+}
+''',
+              // `bye` is only a word in a plain class: not a read.
+              'other.dart': 'class Other { final bye = 1; }\n',
+            },
+          ),
+        );
+
+        expect(run, exitsWith(2));
+        expect(run.output, contains('- bye'));
+        expect(run.output, isNot(contains('- hello')));
+      },
+    );
+
+    test('--help exits 0; an unknown argument exits 64', () async {
+      final ws = workspace();
+
+      expect(await check(ws, ['--help']), exitsWith(0));
+      expect(await check(ws, ['--nope']), exitsWith(64));
+    });
+
+    test('a workspace without any ARB file passes with a notice', () async {
+      final ws = TempWorkspace.create({
+        'pubspec.yaml': 'name: ws\n',
+        'tools/.keep': '',
+        'pkg/pubspec.yaml': 'name: pkg\n',
+        'pkg/lib/pkg.dart': '',
+      });
+
+      final run = await check(ws);
+
+      expect(run, exitsWith(0));
+      expect(run.output, contains('No translation keys found'));
+    });
+  });
+
+  group('check_script', () {
+    late CompiledTool tool;
+    setUpAll(() async {
+      tool = await CompiledTool.compile(
+        'tools/unused_checker/check_script.dart',
+      );
+    });
+    tearDownAll(() => tool.dispose());
+
+    /// A fake `dart` standing in for the four checkers: the exit code of
+    /// each is scripted by the name of the script it was asked to run.
+    FakeBin fakeDart({
+      int assets = 0,
+      int translate = 0,
+      int file = 0,
+      int packages = 0,
+    }) => FakeBin.create({
+      'dart':
+          '''
+case "\$*" in
+  *check_unused_assets*) exit $assets ;;
+  *check_unused_translate*) exit $translate ;;
+  *check_unused_file*) exit $file ;;
+  *check_unused_packages*) exit $packages ;;
+esac
+exit 99
+''',
+    });
+
+    Future<ToolRun> check(FakeBin bin, [List<String> args = const []]) {
+      final ws = TempWorkspace.create({
+        'pubspec.yaml': 'name: ws\n',
+        'tools/.keep': '',
+      });
+      return tool.run(
+        args,
+        workingDirectory: ws.root,
+        scriptPath: 'tools/unused_checker/check_script.dill',
+        environment: bin.environment,
+      );
+    }
+
+    final skip = skipWithoutPosixShell();
+
+    test('runs the four checks in order; all clean exits 0', () async {
+      final bin = fakeDart();
+
+      final run = await check(bin);
+
+      expect(run, exitsWith(0));
+      expect(run.output, contains('All checks passed! Your project is clean.'));
+      expect(bin.argsOf('dart'), [
+        'run tools/unused_checker/check_unused_assets.dart',
+        'run tools/unused_checker/check_unused_translate.dart',
+        'run tools/unused_checker/check_unused_file.dart',
+        'run tools/unused_checker/check_unused_packages.dart',
+      ]);
+    }, skip: skip);
+
+    test('findings (exit 2) are warnings: the run still exits 0', () async {
+      final run = await check(fakeDart(translate: 2, file: 2));
+
+      expect(run, exitsWith(0));
+      expect(run.output, contains('Warnings Found'));
+      expect(run.output, contains('some have warnings'));
+    }, skip: skip);
+
+    test(
+      'a check that fails (any other non-zero exit) exits 1, after the rest ran',
+      () async {
+        final bin = fakeDart(assets: 1, packages: 2);
+
+        final run = await check(bin);
+
+        expect(run, exitsWith(1));
+        expect(run.output, contains('Failed Checks'));
+        expect(run.output, contains('Some checks failed'));
+        // It keeps going: all four were run.
+        expect(bin.argsOf('dart'), hasLength(4));
+      },
+      skip: skip,
+    );
+
+    test('a check that cannot run (crash code) is a failure too', () async {
+      final run = await check(fakeDart(file: 254));
+
+      expect(run, exitsWith(1));
+    }, skip: skip);
+
+    test('--help exits 0; an unknown argument exits 64', () async {
+      final bin = fakeDart();
+
+      final help = await check(bin, ['--help']);
+      expect(help, exitsWith(0));
+      expect(help.stdout, contains('check_script.dart'));
+
+      final bad = await check(bin, ['--all']);
+      expect(bad, exitsWith(64));
+      expect(bad.output, contains('Unknown argument(s): --all'));
+      expect(bin.calls, isEmpty);
+    }, skip: skip);
   });
 }

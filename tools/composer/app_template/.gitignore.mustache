@@ -15,6 +15,14 @@ build/
 **/gen/**
 **/generated/**
 
+# Firebase configuration: `lib/firebase/firebase_options_*.dart` is generated
+# per project by `tools/firebase/firebase_config.dart` and carries this app's
+# project identifiers, so it is never committed.
+firebase_options_*.dart
+firebase.json
+google-services.json
+**/google-services.json
+
 # Lock files — the workspace keeps one, at the root.
 pubspec.lock
 

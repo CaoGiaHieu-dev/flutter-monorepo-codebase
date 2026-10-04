@@ -5,9 +5,9 @@ import 'package:mobile_app/app/app_hooks.dart';
 import 'package:mobile_app/app/app_profile.dart';
 import 'package:platform_app_shell/platform_app_shell.dart';
 
-/// Booting this app on a platform its manifest does not declare used to be a
+/// Booting this app on a platform its manifest does not declare would be a
 /// permanently blank window with no error (Linux: `Firebase.initializeApp`
-/// never returns). Now the boot stops before dependency injection and says
+/// never returns). The boot stops before dependency injection instead and says
 /// what to do — and `ALLOW_UNDECLARED_PLATFORM` is the one way past it.
 void main() {
   tearDown(() async {
@@ -63,8 +63,8 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  test('ALLOW_UNDECLARED_PLATFORM lets the profile register, as the template '
-      'behaved before apps declared platforms', () {
+  test('ALLOW_UNDECLARED_PLATFORM lets the profile register, with the '
+      'template defaults for that platform', () {
     expect(
       () => registerAppProfile(appProfile, platform: AppPlatform.linux),
       throwsStateError,

@@ -3,15 +3,15 @@
 
 // Dependency injection for the `{{id}}` app.
 //
-// **This whole file is generated** — the imports, the module lists and the
-// `configureDependencies` entry point below — from
+// **The two marked regions are generated** — the imports and the module lists
+// with the `configureDependencies` entry point — from
 // `apps/{{id}}/app_manifest.yaml` by:
 //
 //   dart tools/composer/composer.dart sync --app {{id}}
 //
-// There is no hand-written code in it, so there is nothing to keep in step
-// by hand: edit the manifest instead, and `composer verify` fails CI if this
-// file has drifted from it. Getting a module list wrong fails at boot with
+// Outside them there is only this comment, so there is nothing to keep in step
+// by hand: edit the manifest instead, and `composer verify` fails CI if a region
+// has drifted from it or code appears outside them. Getting a module list wrong fails at boot with
 // `"<Type> is not registered"`, which `flutter analyze` cannot see.
 //
 // Group order is load-bearing and is declared in the manifest's `di_groups`:

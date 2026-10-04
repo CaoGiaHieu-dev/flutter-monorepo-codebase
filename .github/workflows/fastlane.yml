@@ -193,7 +193,7 @@ jobs:
             echo "restored $target from $name"
           }
 
-          # fastlane configuration (apps/mobile/fastlane/helpers.rb aborts without it)
+          # fastlane configuration (apps/mobile/fastlane/modules/helpers.rb aborts without it)
           restore FASTLANE_CONFIG_YAML_B64 "$APP/fastlane/Config.yaml"
 
           # Dart-define file. env.dev / env.stg are committed; env.prod is not.

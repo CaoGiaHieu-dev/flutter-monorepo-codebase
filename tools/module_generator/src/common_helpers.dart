@@ -85,9 +85,14 @@ class CommonHelpers {
 
   /// Files outside the new module that generation rewrites in place: every
   /// app's `app_manifest.yaml` ([registerInAppManifests]), what
-  /// `composer sync` regenerates from them — the root `pubspec.yaml`, each
-  /// app's `pubspec.yaml` and `lib/di/injection.dart` — and the committed
-  /// `pubspec.lock` that `pub get` rewrites.
+  /// `composer sync` regenerates from them — the root `pubspec.yaml` and, per
+  /// app, `pubspec.yaml`, `lib/di/injection.dart`, the `facts` region of
+  /// `lib/app/app_profile.dart` and the `report` region of `README.md`. The
+  /// last two are in the list so a rolled-back run leaves `composer verify`
+  /// green, not just a manifest that matches the old files.
+  ///
+  /// `pubspec.lock` is not here: lock files are generated, git-ignored and
+  /// rebuilt by `pub get`, so there is nothing to restore.
   ///
   /// Not here: what `pub get` and `build_runner` write that git does not
   /// track — `.dart_tool/package_config.json`, each app's
@@ -101,11 +106,12 @@ class CommonHelpers {
   /// around them.
   static List<String> get sharedMutatedFiles => [
     'pubspec.yaml',
-    'pubspec.lock',
     for (final app in discoverApps()) ...[
       '${app.dir}/app_manifest.yaml',
       '${app.dir}/pubspec.yaml',
       '${app.dir}/lib/di/injection.dart',
+      '${app.dir}/lib/app/app_profile.dart',
+      '${app.dir}/README.md',
     ],
   ];
 

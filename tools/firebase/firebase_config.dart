@@ -79,10 +79,19 @@ void main(List<String> args) async {
 
   // The project ID, bundle ID and flavors are prompted for — there is no
   // flag form — so a run without a terminal could only fail later.
-  if (!stdin.hasTerminal) {
+  //
+  // `stdin.hasTerminal` alone is not the check: Dart reports true for
+  // `</dev/null` (a character device), the usual way an agent or harness
+  // starts a process, and such a run used to go on to `firebase login`.
+  // `stdioType` tells a real terminal from any other device or a pipe, and
+  // both ends are needed — the prompts are written to stdout and read from
+  // stdin.
+  if (stdioType(stdin) != StdioType.terminal ||
+      stdioType(stdout) != StdioType.terminal) {
     stderr.writeln(
-      '[X] This script is interactive and stdin is not a terminal. Run it '
-      'from a terminal, after `firebase login`.',
+      '[X] This script is interactive and needs a terminal on both stdin and '
+      'stdout; at least one is redirected, piped or /dev/null. Run it from '
+      'a terminal, after `firebase login`.',
     );
     exit(1);
   }

@@ -253,12 +253,15 @@ Mặc định không gì được scale vượt cỡ thiết kế: cửa sổ ta
 > [!CAUTION]
 > Widget dùng lại trong `core_ui_kit` **không được scale tham số nó nhận vào** (RULE-31). Bên gọi scale trước khi truyền, nên giá trị đến nơi đã ở đơn vị pixel thiết bị và phải được dùng nguyên vẹn; scale thêm lần nữa là scale hai lần, và người truyền token thì **không thể** ghi đè được nữa. Hằng số **của chính** widget thì ngược lại: nó phải scale, nếu không widget không responsive.
 
-`CustomButton.rectangle` cho thấy cả hai nửa. `height` hay `radius` mà bên gọi truyền thì được dùng nguyên; khi bên gọi không truyền gì, widget scale giá trị mặc định của chính nó:
+`CustomButton.rectangle` cho thấy cả hai nửa. `radius` mà bên gọi truyền thì được dùng nguyên, `height` cũng vậy — trừ việc widget nâng nó lên mức tối thiểu 48 dp của vùng chạm (RULE-39); khi bên gọi không truyền gì, widget scale giá trị mặc định của chính nó:
 
 ```dart
 // platform/ui/ui_kit/lib/src/buttons/custom_button.dart
 final radius = this.radius ?? AppRadius.md(context);
-final height = this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT);
+final height = math.max(
+  kMinInteractiveDimension,
+  this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT),
+);
 ```
 
 Bản sai thì scale chính tham số — `context.h(widget.height)` — làm scale đôi mọi nơi gọi đã truyền `context.h(56)` và bỏ qua token.

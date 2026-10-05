@@ -126,7 +126,7 @@ dart tools/code_review/code_review.dart --changed
 
 ## 🔗 Tích Hợp CI/CD
 
-Workflow thật là [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): trên mỗi Pull Request (vào `main`, `develop`, `master`) chạm tới file Dart trong `apps/*/lib`, `modules/` hoặc `platform/` (trừ `*.g.dart`, `*.freezed.dart`, `*.module.dart`), nó chạy tool với `--file` cho từng file thay đổi (ngôn ngữ báo cáo là `reportLanguage`, `en` như đã commit), tải report lên thành artifact và đăng review kèm gợi ý inline lên PR. Có thể chạy tay (`workflow_dispatch`) với phạm vi `changed` / `all` / `domain` / `data` / `platform` / `presentation`. Secret cần có: `GEMINI_API_KEY`. Workflow này không chặn merge.
+Workflow thật là [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): trên mỗi Pull Request (vào `main`, `develop`, `master`) chạm tới file Dart trong `apps/*/lib`, `modules/` hoặc `platform/` (trừ `*.g.dart`, `*.freezed.dart`, `*.module.dart`), nó chạy tool với `--file` cho từng file thay đổi (ngôn ngữ báo cáo là `reportLanguage`, `en` như đã commit), tải report lên thành artifact và đăng review kèm gợi ý inline lên PR. Có thể chạy tay (`workflow_dispatch`) với phạm vi `changed` / `all` / `domain` / `data` / `platform` / `presentation`. Secret: `GEMINI_API_KEY` — không có nó (người mới dùng template, PR từ fork) thì các bước review và comment bị bỏ qua kèm một notice thay vì fail. Workflow này không chặn merge.
 
 ## 🐛 Xử Lý Sự Cố
 

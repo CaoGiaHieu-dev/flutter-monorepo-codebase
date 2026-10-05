@@ -108,7 +108,7 @@ Cả hai bảng màu là field `static final` trong [`theme/theme_system_extensi
 /// Light theme palette.
 static final ThemeSystemExtension light = const ThemeSystemExtension(
   primary: Color(0xff0A7E8C),
-  primaryContainer: Color(0xff8B5CF6),
+  primaryContainer: Color(0xff7C3AED),
   background: Color(0xffF8FAFC),
   surface: Color(0xffFFFFFF),
   textPrimary: Color(0xff0F172A),
@@ -137,7 +137,7 @@ theme: ThemeProfile(
 ),
 ```
 
-Mọi token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) đều ghi đè được; `ThemeProvider` dựng cả hai palette một lần (`withOverrides`) và suy ra `ColorScheme` cùng extension từ kết quả, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn hai gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`. Chạy `composer sync` sau khi sửa để báo cáo trong README của app liệt kê section đó là đã đặt ([`13_app_composition.md`](13_app_composition.md)).
+Mọi token màu của `PaletteToken` (`primary`, `background`, các màu chữ, `success`, `error` …) đều ghi đè được; `ThemeProvider` dựng cả hai palette một lần (`withOverrides`) và suy ra `ColorScheme` cùng extension từ kết quả, nên `context.colors.primary`, `Theme.of(context).colorScheme.primary` và các gradient khớp nhau. `textPrimary` đi tới cả 15 style của text theme (theme được tô màu trước, rồi mới scale cỡ chữ), nên một override hiện ra ở mọi `Text` lấy style từ theme. `shadow` và `scrim` không ghi đè được — `AppShadows` không phụ thuộc context và scrim là màu đen có alpha một cách có chủ đích — còn hai gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`. Chạy `composer sync` sau khi sửa để báo cáo trong README của app liệt kê section đó là đã đặt ([`13_app_composition.md`](13_app_composition.md)).
 
 Chỉ có một token tồn tại vì màn hình mẫu: `liquidOnboardingColors`, gradient của splash (`AppGradients.liquidOnboarding`). Khi xoá sample splash, hãy xoá luôn token đó khỏi extension (field, `copyWith`, `lerp`, cả hai bảng màu, `withOverrides`) và khỏi `AppGradients` thay vì để lại màu chết.
 
@@ -488,7 +488,7 @@ Nó chặn widget con ở `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 
 
 ### Mẫu tham chiếu: chrome điều hướng theo lớp cửa sổ
 
-`feature_dashboard` đổi chrome theo lớp cửa sổ: bottom bar ở `compact`, `NavigationRail` từ `medium` trở lên, dạng mở rộng (nhãn nằm cạnh icon) từ `large` trở lên. Cả hai dựng từ cùng những `NavDestination` mà mỗi tab đóng góp qua `INavDestinationModule`, nên không tab nào biết cái nào đang hiển thị.
+`feature_dashboard` đổi chrome theo lớp cửa sổ: bottom bar ở `compact` (kiểu `fixed`, nên nhãn vẫn hiện từ tab thứ tư trở đi), `NavigationRail` từ `medium` trở lên, dạng mở rộng (nhãn nằm cạnh icon) từ `large` trở lên. Cả hai dựng từ cùng những `NavDestination` mà mỗi tab đóng góp qua `INavDestinationModule`, nên không tab nào biết cái nào đang hiển thị.
 
 ```dart
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart

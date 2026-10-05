@@ -59,7 +59,7 @@ The rules below are the one-line form of the registry in `docs/en/reference/01_r
 - **RULE-36** — every dialog and bottom sheet is its own widget class (`*_dialog.dart`, `*_bottom_sheet.dart`); no inline tree inside a `showDialog` / `showModalBottomSheet` builder.
 - **RULE-37** — feature-specific assets live in the feature's `assets/`, not `core_base_ui`.
 - **RULE-38** *[gate for the shell, `feature_auth` and `feature_dashboard`]* — text follows the OS font size: no `MediaQuery.withNoTextScaling`, no `TooltipVisibility(visible: false)`, no fixed-height container around text; icon-only buttons carry a `tooltip`, meaningful images a `semanticLabel`.
-- **RULE-39** — tap targets at least 48 × 48 dp; start/end padding uses `edgeInsetsDirectional`, not physical `left` / `right`.
+- **RULE-39** *[gate for the `core_ui_kit` widgets that have a test — `CustomButton`, `CustomInputField`, `showDropDown` rows; review for every other widget]* — tap targets at least 48 × 48 dp; start/end padding uses `edgeInsetsDirectional`, not physical `left` / `right`.
 
 ### 40–49 · Domain, data, storage, database and network
 - **RULE-40** *[gate]* — data sources live in `data_sources/remote/` and `data_sources/local/`, never `datasources/`.

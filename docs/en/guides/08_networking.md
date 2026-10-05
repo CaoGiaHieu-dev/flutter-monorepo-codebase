@@ -274,14 +274,14 @@ error: (failure) =>
 | response transform timeout | `NetworkFailure`, `TRANSFORM_TIMEOUT` (1008) | `connectionTimedOut` |
 | no connection (`connectionError`, a `SocketException`) | `NetworkFailure`, `CONNECTION_ERROR` (1005) / `NO_INTERNET` (1001) | `noInternetConnection` |
 | certificate rejected (`badCertificate`) | `NetworkFailure`, `BAD_CERTIFICATE` (1006) | `networkError` |
-| an unknown Dio error caused by a TLS error or a pin mismatch | `ServerFailure`, `BAD_CERTIFICATE` (1006) — not a `NetworkFailure`, so it is not transient | `networkError` |
+| an unknown Dio error caused by a TLS error or a pin mismatch | `ServerFailure`, `BAD_CERTIFICATE` (1006) — not a `NetworkFailure`, so the retry policy does not retry it | `networkError` |
 | an unknown Dio error caused by a body that is not valid JSON (a `FormatException`: a maintenance page, a captive portal) | `ParseFailure`, `INVALID_FORMAT` (4001) | `somethingWentWrong` |
 | other transport failure, a cancelled request, an `HttpException`, no status | `NETWORK_UNKNOWN` (1007), `REQUEST_CANCELLED` (1004), `HTTP_ERROR` (1002) | `networkError` |
 | error response `5xx` | `ServerFailure`, the status | `serverUnavailable` |
 | error response `401` / `403` | `AuthFailure`, the status | `somethingWentWrong` |
 | any other error response, a rejected `200`, an empty body, an unclassified error, no code | the status, `RESPONSE_REJECTED` (7001), `EMPTY_RESPONSE` (7002), `UNKNOWN` (9999) | `somethingWentWrong` |
 
-The two certificate paths are honest about what Dio reports: a certificate the platform rejects arrives as `DioExceptionType.badCertificate` and stays a `NetworkFailure`; a pin mismatch and a TLS handshake error arrive as `unknown` with the cause attached, and are classified from that cause as a `ServerFailure` — it is non-transient for retries (the same certificate will be rejected again), but the handshake failed before any request left the device, so the server gave no verdict: the sample's session gateway treats `NetworkFailure`, a certificate rejection (1006), a real 5xx and a cancelled request as transient and keeps the session. Any code from 1000 up to (not including) 2000 reads as `networkError` unless a row above names it. A feature that can say something more specific — wrong password, unknown user — classifies the failure itself and uses its own ARB (RULE-34); `failureMessage` is the fallback for everything generic. The code lives in `ErrorCodes` (`platform/foundation/kernel/lib/src/utils/error_codes.dart`): never compare against a literal.
+The two certificate paths are honest about what Dio reports: a certificate the platform rejects arrives as `DioExceptionType.badCertificate` and stays a `NetworkFailure`; a pin mismatch and a TLS handshake error arrive as `unknown` with the cause attached, and are classified from that cause as a `ServerFailure` — it is not retried (the same certificate will be rejected again), but the handshake failed before any request left the device, so the server gave no verdict: the sample's session gateway treats `NetworkFailure`, a certificate rejection (1006), a real 5xx and a cancelled request as transient and keeps the session. Any code from 1000 up to (not including) 2000 reads as `networkError` unless a row above names it. A feature that can say something more specific — wrong password, unknown user — classifies the failure itself and uses its own ARB (RULE-34); `failureMessage` is the fallback for everything generic. The code lives in `ErrorCodes` (`platform/foundation/kernel/lib/src/utils/error_codes.dart`): never compare against a literal.
 
 ### The sample sign-in contract
 
@@ -346,7 +346,7 @@ To use your own backend, implement `ISessionGateway` (`platform/foundation/contr
 | :-- | :-- | :-- |
 | a token | renewed | replays the request and every one waiting on it |
 | `null` | the server **refused** (401/403, any 4xx, or a 200 whose envelope reports an error — `ErrorCodes.RESPONSE_REJECTED`) | calls `onRefreshFailed` once, rejects them all |
-| throws | never got an answer (no network, a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
+| throws | never got an answer (no network, a certificate or pin rejection (1006), a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
 
 Then mark the login and refresh calls `EXTRA_CAN_REFRESH_TOKEN: false` (step 6). What happens after your answer — one refresh for N concurrent `401`s, and the three recursion guards — is in [`../architecture/02_core.md` § 6](../architecture/02_core.md#the-refresh-token-flow).
 

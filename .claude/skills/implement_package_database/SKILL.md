@@ -136,8 +136,15 @@ part 'dao/cache_entries_dao.dart';
 
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
-    : _migrations = migrations;
+  CacheDatabase._(
+    super.e,
+    Iterable<IDatabaseMigration> migrations, [
+    this.schemaVersion = _currentSchemaVersion,
+  ]) : _migrations = migrations;
+
+  /// The schema version this build ships. Bump it together with a new
+  /// [IDatabaseMigration]; see [migration].
+  static const int _currentSchemaVersion = 1;
 
   final Iterable<IDatabaseMigration> _migrations;
 
@@ -153,16 +160,23 @@ class CacheDatabase extends _$CacheDatabase {
     );
   }
 
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file as a
+  /// newer build would, so the contributed [migrations] actually run.
   @visibleForTesting
   factory CacheDatabase.forTesting([
     QueryExecutor? executor,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
+    int schemaVersion = _currentSchemaVersion,
   ]) {
-    return CacheDatabase._(executor ?? NativeDatabase.memory(), migrations);
+    return CacheDatabase._(
+      executor ?? NativeDatabase.memory(),
+      migrations,
+      schemaVersion,
+    );
   }
 
   @override
-  int get schemaVersion => 1;
+  final int schemaVersion;
 
   @override
   MigrationStrategy get migration =>
@@ -267,7 +281,7 @@ A schema change is **three edits made together**; miss one and the upgrade silen
 install and an upgraded one differ:
 
 1. Edit the table. A column added to an existing table must be `nullable()` or have `withDefault(...)`.
-2. Bump `schemaVersion` to the new number (Drift runs `onUpgrade` only when the stored `user_version` is below it).
+2. Bump the schema version (`_currentSchemaVersion`, the value `schemaVersion` returns) to the new number (Drift runs `onUpgrade` only when the stored `user_version` is below it).
 3. Contribute one `IDatabaseMigration<YourDatabase>` whose `version` is that number, registered **typed** to
    your database, then run `build_runner`:
 
@@ -303,6 +317,9 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration<CacheDatabase> {
   exact type): the version moves and the schema does not.
 - `version` is the version the step *produces* and must be `>= 2`; duplicates are rejected at startup.
   Upgrades replay ascending, downgrades descending; gaps are legal.
+- The whole upgrade runs in **one transaction** (`driftMigrationStrategy`): a step that throws rolls the earlier
+  ones back, the file keeps its old version and schema, and the next launch retries. Keep every step safe to
+  run again from the old schema.
 - Drift has no `onDowngrade`: a downgrade with no registered step for the version being left **throws**
   `UnsupportedError` rather than stamping a lower `user_version` over a newer schema. Implement `downgrade` when
   the change is reversible; throw a descriptive error when it is not.
@@ -311,10 +328,12 @@ class AddExpiresAtToCacheEntries implements IDatabaseMigration<CacheDatabase> {
 
 `CacheDatabase.forTesting()` is an in-memory database on the current isolate (no file, no isolate). Put the
 tests in the owning package's `test/`, following `modules/cache/data/test/` (`cache_database_test.dart`: DAO
-round-trips, migration wiring, real-file WAL / foreign keys; `database_handle_test.dart`). Test pragmas on a real
+round-trips, migration wiring, real-file WAL / foreign keys, an old file upgrading and a failing step leaving it
+as it was; `database_handle_test.dart`). Test pragmas on a real
 file: an in-memory database reports `journal_mode = memory`.
 
-**Test an upgrade.** Write the **old** schema by hand — never derive it from the current table class, which
+**Test an upgrade.** `CacheDatabase.forTesting(executor, steps, schemaVersion)` takes the schema version the build
+under test ships. Write the **old** schema by hand — never derive it from the current table class, which
 already has the new column — stamp `PRAGMA user_version = 1`, and reopen with the step. `NativeDatabase`'s `setup`
 runs on the raw SQLite connection before Drift reads `user_version`, so Drift sees a version-1 file and runs the step:
 
@@ -342,6 +361,7 @@ test('v1 -> v2 adds expires_at and keeps the rows', () async {
       },
     ),
     [AddExpiresAtToCacheEntries()],
+    2, // schemaVersion: without it the database stays at 1 and the step never runs
   );
   addTearDown(database.close);
 

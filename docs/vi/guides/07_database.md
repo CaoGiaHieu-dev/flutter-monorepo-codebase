@@ -160,8 +160,15 @@ part 'dao/cache_entries_dao.dart';
 
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
-    : _migrations = migrations;
+  CacheDatabase._(
+    super.e,
+    Iterable<IDatabaseMigration> migrations, [
+    this.schemaVersion = _currentSchemaVersion,
+  ]) : _migrations = migrations;
+
+  /// The schema version this build ships. Bump it together with a new
+  /// [IDatabaseMigration]; see [migration].
+  static const int _currentSchemaVersion = 1;
 
   /// Schema steps contributed for this database.
   ///
@@ -187,16 +194,24 @@ class CacheDatabase extends _$CacheDatabase {
   }
 
   /// In-memory database for unit tests (runs on the current isolate).
+  ///
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file as a
+  /// newer build would, so the contributed [migrations] actually run.
   @visibleForTesting
   factory CacheDatabase.forTesting([
     QueryExecutor? executor,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
+    int schemaVersion = _currentSchemaVersion,
   ]) {
-    return CacheDatabase._(executor ?? NativeDatabase.memory(), migrations);
+    return CacheDatabase._(
+      executor ?? NativeDatabase.memory(),
+      migrations,
+      schemaVersion,
+    );
   }
 
   @override
-  int get schemaVersion => 1;
+  final int schemaVersion;
 
   @override
   MigrationStrategy get migration =>
@@ -362,11 +377,10 @@ Một thay đổi schema là **ba chỗ sửa đi cùng nhau** — thiếu một
    DateTimeColumn get expiresAt => dateTime().nullable()();
    ```
 
-2. **Tăng `schemaVersion`** trong class database (`1` → `2`). Nó phải bằng `version` cao nhất trong các bước của bạn: Drift chỉ gọi `onUpgrade` khi `user_version` đang lưu nhỏ hơn `schemaVersion`, nên không tăng thì không bước nào chạy trên máy đã cài, và các query hỏng với *"no such column"*.
+2. **Tăng số phiên bản schema** trong class database (`_currentSchemaVersion` trong sample, `1` → `2`; đó là giá trị `schemaVersion` trả về). Nó phải bằng `version` cao nhất trong các bước của bạn: Drift chỉ gọi `onUpgrade` khi `user_version` đang lưu nhỏ hơn `schemaVersion`, nên không tăng thì không bước nào chạy trên máy đã cài, và các query hỏng với *"no such column"*.
 
    ```dart
-   @override
-   int get schemaVersion => 2;
+   static const int _currentSchemaVersion = 2;
    ```
 
 3. **Đăng ký bước migration** — bên dưới. Rồi chạy `dart run build_runner build --workspace` (class bảng được sinh có thêm cột).
@@ -400,7 +414,7 @@ class AddExpiresAtToCacheEntries
 
 - **`version` là version mà bước này *tạo ra*.** `version == 2` nghĩa là "lấy database ở version 1 và đưa nó lên version 2". Do đó `upgrade` phải chạy được trên `version - 1`, và `downgrade` phải đưa nó về đúng hình dạng đó.
 - **Version 1 không migrate được** — đó là thứ `Migrator.createAll()` tạo ra. Runner từ chối `version < 2` ngay lúc khởi tạo.
-- **Trùng version bị từ chối**, không âm thầm chọn đại một cái.
+- **Cả lần upgrade là một transaction.** `driftMigrationStrategy` chạy mọi bước bên trong `database.transaction`, nên một bước ném lỗi sẽ rollback cả các bước trước đó: file giữ nguyên version và schema cũ, và lần khởi động sau thử lại upgrade từ đầu. Hãy viết bước nào cũng chạy lại an toàn từ schema cũ, và đừng bao giờ dựa vào trạng thái áp dụng dở dang.
 
 ## 12. Test database
 
@@ -414,10 +428,10 @@ Bộ test hiện có được chia theo đúng vị trí code:
 
 | Package | File | Bao phủ |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng |
+| `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng, và upgrade trên file thật: mọi bước được replay và giữ nguyên các row, một bước lỗi làm các bước trước đó bị rollback |
 | `core_database` | `drift_database_opener_test.dart` | Trực tiếp predicate phát hiện hỏng — gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
 | `core_database` | `database_connection_factory_test.dart` | Các kết nối trong read pool mang busy timeout, thứ mà `beforeOpen` chỉ đặt cho writer |
-| `data_cache` | `cache_database_test.dart` | Round-trip DAO, wiring migration, và hành vi trên **file thật** (WAL, khoá ngoại, dữ liệu sống sót qua close/reopen) |
+| `data_cache` | `cache_database_test.dart` | Round-trip DAO, wiring migration, và hành vi trên **file thật** (WAL, khoá ngoại, dữ liệu sống sót qua close/reopen, file version cũ nâng cấp qua bước của nó và giữ nguyên row, một bước lỗi để file cũ nguyên trạng) |
 | `data_cache` | `database_handle_test.dart` | Accessor đọc/ghi, các row hiện ra trên chính database, transaction commit / rollback / giá trị trả về |
 
 Hai thói quen đáng học:

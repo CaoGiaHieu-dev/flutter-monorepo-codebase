@@ -321,7 +321,7 @@ Built on Dio, configured through the `NetworkConfig` contract so the package nev
 | Interceptors | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handlers | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler`, and `RequestOptions.forReplay()` (`request_replay.dart`) |
 | Constants | `src/utils/network_constants.dart` | Header names, `Bearer` prefix, `EXTRA_*` request flags, log tags — the timeouts, extra headers and redirect policy are the app's `NetworkProfile` |
-| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status — `ErrorCodes.HTTP_ERROR` when there is none, cancel → `ErrorCodes.REQUEST_CANCELLED`, an unknown error caused by bad JSON → `ParseFailure`, one caused by a TLS error or a pin mismatch → a non-transient `ServerFailure` `BAD_CERTIFICATE`, …) |
+| Error mapping | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeouts → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 or `ServerFailure` with the status — `ErrorCodes.HTTP_ERROR` when there is none, cancel → `ErrorCodes.REQUEST_CANCELLED`, an unknown error caused by bad JSON → `ParseFailure`, one caused by a TLS error or a pin mismatch → a `ServerFailure` `BAD_CERTIFICATE` that is not retried, …) |
 
 `DioFailureClassifier` is how the kernel's `ErrorHandler` learns about Dio without importing it: an eager `@singleton` whose `@PostConstruct` calls `ErrorHandler.registerClassifier`. This package's module runs in the `core` DI group, so the classifier is registered before any Dio client exists (all are lazy) and before any repository runs; `ApiClient`'s constructor registers it again, idempotently, for a client built outside DI. A unit test that drives a repository into a `DioException` without DI calls `DioFailureClassifier.ensureRegistered()` first. The apps' DI smoke tests assert the registration (`checkAppContract` C08).
 
@@ -577,13 +577,26 @@ Future<String?> refreshToken() async {
 
 // modules/auth/data/lib/src/session/transient_failure.dart
 /// Whether [failure] says nothing about the session's validity — the
-/// renewal never got an answer — so the session must be kept.
+/// request never got the server's verdict — so the session must be kept.
+///
+/// Only a failure that never reached a decision counts: no network
+/// ([NetworkFailure]), a certificate or pin rejection
+/// ([ErrorCodes.BAD_CERTIFICATE], raised by the handshake before any request
+/// is sent), a real HTTP 5xx, or a cancelled request. Every other
+/// failure means the server answered and refused — a 401/403, another 4xx,
+/// or a 200 whose envelope reports an error (`ErrorCodes.RESPONSE_REJECTED`).
+///
+/// Shared by the two places that decide whether a user stays signed in:
+/// [AuthSessionGatewayImpl.refreshToken] (a `401` mid-session) and
+/// `AuthRepositoryImpl.restoreSession` (app start).
 bool isTransientFailure(AppFailure<dynamic>? failure) {
   if (failure is NetworkFailure) return true;
   if (failure is! ServerFailure) return false;
   final code = failure.code;
   if (code == null) return false;
-  return (code >= 500 && code < 600) || code == ErrorCodes.REQUEST_CANCELLED;
+  return (code >= 500 && code < 600) ||
+      code == ErrorCodes.REQUEST_CANCELLED ||
+      code == ErrorCodes.BAD_CERTIFICATE;
 }
 ```
 
@@ -595,9 +608,9 @@ The gateway's answer decides what happens to the session:
 | :-- | :-- | :-- |
 | a token | renewed | replays the request and every one waiting on it |
 | `null` | the server **refused** (401/403, any 4xx, or a 200 whose envelope reports an error — `ErrorCodes.RESPONSE_REJECTED`) | calls `onRefreshFailed` once, rejects them all |
-| throws | never got an answer (no network, a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
+| throws | never got an answer (no network, a certificate or pin rejection (1006), a real HTTP 5xx, cancelled) — only these | rejects them all, **keeps the session** |
 
-`onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `ISessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token.
+`onRefreshFailed` is `NetworkConfigImpl._clearSession`: the gateway drops the stored credentials, then `ISessionState.onSessionLost()` drops the owner to signed-out — the change `NavigatorWrapperWidget` routes to login on. Clearing storage alone would leave the user on screen, "signed in", with no token. An owner that had a signed-in user also publishes `SessionExpiredFailure` on `sessionFailures` (the sample's `AuthProvider` does, and nothing when nobody was signed in), so the shell can say why the user was sent to sign-in.
 
 A `401` that arrives *after* a refresh finished — a request sent with the old token — does not start another one: `RefreshTokenHandler` compares the request's `Authorization` header with `NetworkConfig.getToken` and, when they differ, just replays it. With rotating refresh tokens a redundant refresh could otherwise invalidate the session it just renewed.
 
@@ -902,12 +915,13 @@ Future<void> run(Migrator m, int from, int to) async {
 }
 ```
 
-Four properties worth naming:
+Five properties worth naming:
 
 1. **A plain `if`, not `else if`.** A device that skipped several releases replays *every* intermediate step instead of jumping straight to the newest shape.
 2. **Upgrades ascend, downgrades descend.** Order matters in both directions.
 3. **Gaps are legal.** A release may ship no schema change, leaving that version number unused.
 4. **A downgrade needs explicit steps.** Going from `from` down to `to` throws `UnsupportedError` unless a step is registered for `from` or above — the runner must know the schema it is leaving. Without that check it did nothing, and drift stamped the lower `user_version` over tables that still had the newer shape; reinstalling the newer build then replayed its upgrades against them (a duplicate column) and failed on every launch. The throw leaves the file and its version untouched, and `DriftDatabaseOpener` surfaces it as a startup error rather than quarantining the file. In practice an older build only has such steps if they shipped ahead of the change they reverse — otherwise installing an older build over a newer schema is unsupported.
+5. **One transaction.** `driftMigrationStrategy` runs the whole replay inside `database.transaction`. SQLite DDL is transactional and drift stamps the new `user_version` only after `onUpgrade` returns, so a step that throws rolls every earlier step back: the file keeps its old version and schema and the next launch retries. Without it a failure on step 3 left step 2's `ADD COLUMN` applied under the old version, and every later launch failed with a duplicate column (`platform/infra/database/test/migration_test.dart`, *upgrade against a real file*; `modules/cache/data/test/cache_database_test.dart`).
 
 Validation happens once, at construction — not mid-migration. Discovering a wiring mistake halfway through would leave the schema partially migrated.
 
@@ -1019,7 +1033,7 @@ Losing user data is worse than surfacing a startup error.
 
 `PushNotificationService` wraps Firebase Messaging and `flutter_local_notifications`. Channel IDs and payload types live in `src/utils/notification_constants.dart`, with the package that consumes them — a notification channel ID has no business being readable by every package in the app.
 
-Boot never waits on the user or the network: `init()` (awaited inside `configureDependencies()`) sets up Firebase, the channels, the listeners and the local-notifications plugin only. The FCM token registration runs afterwards, un-awaited, and logs a failure instead of throwing — read the token from `tokenStream`, since `fcmToken` can still be `null` right after boot. Asking for permission is **opt-in**: nothing prompts at boot, and an app calls `PushNotificationService.requestPermission()` where it wants to ask (which registers the token again). A platform that declares `push: false` (`platforms.<p>.push`, read through `PlatformFacts`) makes `init()` return before it touches Firebase and the rest no-ops. Blocked payload types (`addBlockedTypes` / `removeBlockedTypes`) match case-insensitively. The grouped-inbox summary and title are app-supplied (`inboxSummaryBuilder` / `inboxTitleBuilder`, both `null` by default) so the text comes from the app's own localizations.
+Boot never waits on the user or the network: `init()` (awaited inside `configureDependencies()`) sets up Firebase, the channels, the listeners and the local-notifications plugin only. The FCM token registration runs afterwards, un-awaited, and logs a failure instead of throwing — read the token from `tokenStream`, since `fcmToken` can still be `null` right after boot. Asking for permission is **opt-in**: nothing prompts at boot, and an app calls `PushNotificationService.requestPermission()` where it wants to ask (which registers the token again). It returns a `Future<bool>`: `true` when the user allows notifications now (an authorized or provisional status), `false` when they refused, have not decided, push is off for the platform or the request failed — a settings toggle can show where the user stands. It never throws, and asks the OS through Firebase Messaging and the local-notifications plugin, so there is no `Platform.is*` fork in it. A platform that declares `push: false` (`platforms.<p>.push`, read through `PlatformFacts`) makes `init()` return before it touches Firebase and the rest no-ops. Blocked payload types (`addBlockedTypes` / `removeBlockedTypes`) match case-insensitively. The grouped-inbox summary and title are app-supplied (`inboxSummaryBuilder` / `inboxTitleBuilder`, both `null` by default) so the text comes from the app's own localizations.
 
 The service is an eager `@singleton` that injects `FirebaseOptions`, which each app registers from its own `lib/firebase/firebase_module.dart`. That is why an app's manifest lists `core_notifications` in a `notifications` group with `phase: after` rather than in `core`: `before` runs ahead of the app's own registrations. An app without push notifications leaves the group out.
 

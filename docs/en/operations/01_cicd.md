@@ -88,6 +88,8 @@ Runs the repo's own Gemini-powered reviewer (`tools/code_review/code_review.dart
 
 **What it does**: resolves changed files with `tj-actions/changed-files` (pinned to a commit SHA — its tags were rewritten in the March 2025 supply-chain compromise), runs the reviewer, uploads the Markdown report as an artifact (30-day retention), then parses that report and posts **inline review comments** on the exact lines when they fall inside the PR diff. Findings outside the diff are grouped into a separate per-file comment.
 
+**Without a key**: the first step checks whether the `GEMINI_API_KEY` secret is set. A fresh adopter of the template, and every pull request from a fork (secrets are empty there), has none; the reviewer and comment steps are then skipped with a `::notice::` and the job stays green, instead of failing every PR that touches Dart.
+
 **Permissions**: the workflow declares `contents: read`, `pull-requests: write` (the review with inline comments) and `issues: write` (the per-file and "no issues" comments), so it works under a repository whose default `GITHUB_TOKEN` is read-only. The changed-file list reaches the review script through `env:` — one file per line, never interpolated into the script — and the PR's file list is read with `github.paginate`, so a PR touching more than 30 files still gets inline comments on all of them.
 
 **Manual `changed` scope**: diffs the checked-out branch against its merge-base with the repository's default branch (fetched explicitly; the checkout has full history), keeps the Dart files under an app's `lib/` or `test/`, `modules/` and `platform/`, minus generated ones, and reviews them with `--file`. It does **not** use the tool's own `--changed`, which means `git diff HEAD` — uncommitted changes — and is always empty on a fresh checkout. Dispatched on the default branch itself, it finds nothing and says so.
@@ -109,7 +111,7 @@ if [ "$CRITICAL_COUNT" -gt 0 ]; then
 fi
 ```
 
-`exit 1` is commented out, so **the AI review is advisory only and never blocks a merge**. If you want it to gate, uncomment that line — but do so only after you trust the reviewer's false-positive rate on your codebase, otherwise every PR stalls.
+`exit 1` is commented out, so **the AI review is advisory only and never blocks a merge** — and without `GEMINI_API_KEY` it is skipped, not failed. If you want it to gate, uncomment that line — but do so only after you trust the reviewer's false-positive rate on your codebase, otherwise every PR stalls.
 
 ---
 
@@ -323,11 +325,19 @@ dart tools/unused_checker/check_unused_packages.dart
 #    dart tools/module_generator/generate.dart 6 smoke_p
 #    dart tools/module_generator/generate.dart 2 smoke_d
 #    dart tools/module_generator/generate.dart 3 smoke_d
+#    dart tools/module_generator/generate.dart 1 smoke_n "" 3 3
+#    dart tools/module_generator/generate.dart 3 smoke_nd
+#    dart tools/module_generator/generate.dart 4 smoke_core
+#    dart tools/module_generator/generate.dart 5 smoke_custom acme
 #    dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
 #    flutter pub get && dart run build_runner build --workspace
-#    (for each of modules/smoke_p/{feature,api} modules/smoke_d/{domain,data}: barrel_generator <dir>/lib)
+#    (for each of modules/smoke_p/{feature,api} modules/smoke_d/{domain,data} modules/smoke_n/feature
+#     modules/smoke_nd/data platform/infra/smoke_core platform/infra/smoke_custom: barrel_generator <dir>/lib)
 #    dart tools/composer/composer.dart verify && flutter analyze && dart tools/arch_check/check.dart
-#    (cd modules/smoke_p/feature && flutter test) && (cd apps/smoke_app && flutter test)
+#    dart tools/dependency_sync.dart --check
+#    (cd modules/smoke_p/feature && flutter test) && (cd modules/smoke_n/feature && flutter test)
+#    (cd apps/smoke_app && flutter test)
+#    (cd apps/mobile && flutter test) && (cd apps/admin && flutter test)   # the existing apps still boot
 
 # 5. The build job of pr_quality_check.yml (needs the Firebase stubs or real
 #    files — see below) — note the cd

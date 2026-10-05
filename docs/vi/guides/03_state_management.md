@@ -119,6 +119,8 @@ Giá trị thành công trở thành `data` của provider thế nào (`Operatio
 | Không `convert`, kết quả là `null` | `null` |
 | Không `convert`, kết quả không phải `T` | **debug:** một `assert` fail, nêu tên cả hai kiểu. **release:** assert bị loại bỏ, nên state thành `success` với `data: null` — màn hình lặng lẽ render trống |
 
+Một `convert` **ném lỗi** (parse một giá trị mà repository để lọt qua) không để màn hình kẹt ở `loading`: giống một thao tác ném lỗi, nó chuyển sang `error` với `ErrorHandler.handleError(e)`, `onFailure` chạy, và lỗi được báo qua `FlutterError.reportError`.
+
 `onSuccess` nhận giá trị **đã convert** (`T?`), không phải `R` gốc. Test `platform/state/provider/test/base_provider_test.dart` (`runConvertedOperation`) phủ nhánh này.
 
 > [!CAUTION]
@@ -312,7 +314,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 
 Đây là listener minh hoạ, đúng như một màn hình trong `feature_auth` sẽ viết. Nó điều hướng qua **navigator interface resolve bằng `getItOrNull`**, không bao giờ qua path hardcode ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` đến từ package `auth_api` / `home_api`. `context.l10n.failureMessage(code)` là phép ánh xạ của `core_base_ui` từ mã của một failure (một giá trị `ErrorCodes` hoặc một HTTP status) sang câu đã dịch, nên mọi màn hình diễn đạt cùng một lỗi theo cùng một cách. Nó là một extension trên `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` và `CONNECTION_ERROR` được đọc là mất kết nối, hai mã timeout là hết thời gian chờ, phần còn lại của dải mã mạng là lỗi mạng, một HTTP 5xx là máy chủ không khả dụng, và mọi thứ khác — kể cả mã `null` — là "đã xảy ra lỗi".
 
-App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`. Thay vào đó nó lắng nghe `ISessionState.sessionChanges` / `sessionFailures` của `core_di`, và điều hướng tới path của `ISignInLocation` / `IPostSignInLocation`. Nó không dùng navigator của module nào. `AuthProvider` phát mỗi lần đăng nhập thất bại thành một `SessionFailure` — `SessionServerFailure(code:)` cho mọi thứ nó không gọi tên được — và shell diễn đạt nó từ cùng `failureMessage(code)`.
+App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`. Thay vào đó nó lắng nghe `ISessionState.sessionChanges` / `sessionFailures` của `core_di`, và điều hướng tới path của `ISignInLocation` / `IPostSignInLocation`. Nó không dùng navigator của module nào. `AuthProvider` phát mỗi lần đăng nhập thất bại thành một `SessionFailure` — `SessionServerFailure(code:)` cho mọi thứ nó không gọi tên được — và shell diễn đạt nó từ cùng `failureMessage(code)`. Khi một phiên đang đăng nhập bị mất (`onSessionLost()`), nó phát `SessionExpiredFailure`, và shell diễn đạt bằng key toàn cục `sessionExpired`.
 
 `MultiProviderStateListener` cho phép lồng nhiều listener mà không tạo kim tự tháp widget.
 
@@ -459,7 +461,7 @@ Cubit thì trộn `CubitResultMixin<T>` và gọi `emitResult(() => ...)`. Nó k
 | `Result.success(null)` | `success(null)` nếu `T` nullable, ngược lại `initial` |
 | `Result.failure(f)` | `error(f)` |
 | `Result.none` / `Result.cancel` | state trước lời gọi, nếu đã emit `loading` — không bao giờ kẹt ở `loading`; ngược lại không emit gì |
-| Thao tác ném exception | `error(ErrorHandler.handleError(e))`, kèm `addError(e)` để `BlocObserver.onError` thấy lỗi |
+| Thao tác, hoặc `convert` của nó, ném exception | `error(ErrorHandler.handleError(e))`, kèm `addError(e)` để `BlocObserver.onError` thấy lỗi |
 
 `onSuccess:` / `onFailure:` chạy sau khi state đã được emit. Dùng chúng cho việc tiếp theo (bắn event khác, analytics), không dùng để đổi state. Khi handler đã xong, sẽ không emit gì thêm và các callback bị bỏ qua. "Đã xong" nghĩa là bloc đã đóng, hoặc transformer `restartable()` đã thay handler này trong lúc lời gọi còn chờ.
 

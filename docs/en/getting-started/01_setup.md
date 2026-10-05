@@ -58,7 +58,7 @@ dart tools/workspace_setup/configure.dart
 ```
 
 > [!TIP]
-> The old history of the template carries tens of megabytes of Gradle, iOS and tools build output that was committed once and has long been ignored. A shallow clone (`git clone --depth 1 <repo-url>`) skips it; so does starting your own repository from a fresh history when you adopt the template (§8.4).
+> The old history of the template carries about 160 MB (uncompressed) of Gradle, iOS and tools build output that was committed once and has long been ignored. A shallow clone (`git clone --depth 1 <repo-url>`) skips it; so does starting your own repository from a fresh history when you adopt the template (§8.4).
 
 **`configure.dart` is the setup step.** It runs, in order, stopping at the first failure:
 
@@ -305,7 +305,7 @@ With the committed `env.dev` as it is, the sample app runs but **cannot sign in*
 | :--- | :--- | :--- |
 | 1 | A splash: on Android the Dart splash (logo, "Codebase", "A Flutter app, ready to build on", a spinner); on iOS the native splash stays up for the whole boot | `platforms.<p>.splash` in the manifest. Meanwhile the auth module tries to restore a session; with no stored token it answers "signed out" locally, without a network call |
 | 2 | Onboarding: "Welcome to Codebase" and a **Get Started** button | `feature_onboarding` contributes the first-launch entry location. It is shown once: the flag is stored, so the next launch skips it |
-| 3 | Sign-in: "Welcome Back", an email field and a password field | **Get Started** goes to `feature_auth`'s login page. The form checks the input itself — an email shape, a password of at least 6 characters — and sends nothing until both pass |
+| 3 | Sign-in: "Welcome Back", an email field and a password field | **Get Started** goes to `feature_auth`'s login page. The form checks the input itself — an email shape, a password of at least 6 characters (`AuthValidationConstants.MIN_PASSWORD_LENGTH`) — and sends nothing until both pass |
 | 4 | A spinner on the button, then a toast, "A network error occurred. Please try again.", and you stay on the sign-in screen | The request is `POST /user/login` against an empty `BASE_URL`, a path with no host, which the HTTP client rejects before any connection is made |
 
 To get past step 4, do one of these two:

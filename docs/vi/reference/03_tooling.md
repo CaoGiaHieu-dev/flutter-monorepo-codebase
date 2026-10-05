@@ -179,7 +179,7 @@ Chi tiết: [`check_outdated`](../../../tools/README.vi.md#check_outdated).
 
 | Lệnh | Mục đích | Mã thoát | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/workspace_setup/configure.dart` | Setup đầy đủ: kích hoạt `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, barrel | `0` · mã thoát của lệnh thất bại · `64` tham số sai | CI chạy nó trước Gate 2 |
+| `dart tools/workspace_setup/configure.dart` | Setup đầy đủ: kích hoạt `flutterfire_cli` (không với `--stub-firebase`), `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, barrel | `0` · mã thoát của lệnh thất bại · `64` tham số sai | CI chạy nó trước Gate 2 |
 | `dart tools/workspace_setup/configure.dart --stub-firebase` | Như trên, kèm stub Firebase chỉ để compile ở nơi chưa có file thật | như trên | CI dùng |
 | `dart tools/workspace_setup/configure.dart --help` | In các bước, không chạy gì | `0` | — |
 

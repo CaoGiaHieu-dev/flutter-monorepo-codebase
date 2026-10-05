@@ -19,7 +19,7 @@ Tick what applies; delete lines that do not.
 **Gates** — the commands are in [CONTRIBUTING.md § 3](../CONTRIBUTING.md#3-checks-to-run-before-opening-a-pr).
 
 - [ ] The `pr_quality_check.yml` gates pass locally: composer verify, `arch_check`, `flutter analyze`, tests in every package with a `test/`, `dependency_sync --check`, `docs_check`
-- [ ] `flutter build apk --flavor dev --debug` passes (analyze does not cover generated code)
+- [ ] `cd apps/mobile && flutter build apk --flavor dev --debug --dart-define-from-file=env.dev` passes (analyze does not cover generated code)
 
 **Architecture**
 

@@ -84,15 +84,18 @@ void main(List<String> args) async {
     stubs = writeFirebaseStubs('.');
   }
 
-  // 1. Activating global CLIs
-  stdout.writeln('[!] Activating global CLIs...');
-  await _runCommand(flutterCmd, [
-    ...dartArgs,
-    'pub',
-    'global',
-    'activate',
-    'flutterfire_cli',
-  ]);
+  // 1. Activating global CLIs. The stubs replace what flutterfire_cli would
+  // generate, so a stubbed run (CI) needs neither the CLI nor pub.dev for it.
+  if (!stubFirebase) {
+    stdout.writeln('[!] Activating global CLIs...');
+    await _runCommand(flutterCmd, [
+      ...dartArgs,
+      'pub',
+      'global',
+      'activate',
+      'flutterfire_cli',
+    ]);
+  }
 
   // 2. Running Flutter clean
   stdout.writeln('[!] Running Flutter clean...');

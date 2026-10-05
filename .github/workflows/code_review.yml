@@ -81,6 +81,19 @@ jobs:
 
       # Pinned to a commit, not a tag: tags of this action were rewritten in
       # the March 2025 supply-chain compromise (CVE-2025-30066).
+      # The review needs a Gemini key. Without one (a fresh adopter, a fork PR)
+      # the review steps are skipped instead of failing every pull request.
+      - name: 🔑 Check for the Gemini API key
+        id: key
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GEMINI_API_KEY is not set: the AI code review is skipped."
+          fi
+
       # One file per line and no shell escaping — the list reaches the script
       # through env, never interpolated into it.
       - name: 📜 Get changed .dart files
@@ -102,7 +115,7 @@ jobs:
             !**/*.module.dart
 
       - name: 🔍 Run Code Review (PR)
-        if: github.event_name == 'pull_request' && steps.changed_files.outputs.any_changed == 'true'
+        if: github.event_name == 'pull_request' && steps.key.outputs.present == 'true' && steps.changed_files.outputs.any_changed == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CHANGED_FILES: ${{ steps.changed_files.outputs.all_changed_files }}
@@ -120,7 +133,7 @@ jobs:
 
       # Inputs travel through env, never interpolated into the script.
       - name: 🔍 Run Code Review (Manual)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && steps.key.outputs.present == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SCOPE: ${{ inputs.review_scope }}
@@ -173,7 +186,7 @@ jobs:
           retention-days: 30
 
       - name: 📝 Comment PR with Inline Suggestions
-        if: github.event_name == 'pull_request' && always()
+        if: github.event_name == 'pull_request' && steps.key.outputs.present == 'true' && always()
         uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

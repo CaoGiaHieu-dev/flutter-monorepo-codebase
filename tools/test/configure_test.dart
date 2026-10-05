@@ -274,6 +274,20 @@ import 'firebase_options_prod.dart' as prod;
       'apps/mobile/lib/firebase/firebase_module.dart': module,
     });
 
+    test('a stubbed run does not activate flutterfire_cli', () async {
+      final ws = withFirebase();
+      final bin = FakeBin.create({'flutter': logOnly, 'dart': logOnly});
+
+      final run0 = await run(ws, bin, args: ['--stub-firebase']);
+
+      expect(run0, exitsWith(0));
+      expect(
+        bin.calls.where((c) => c.contains('flutterfire_cli')),
+        isEmpty,
+      );
+      expect(bin.calls.any((c) => c.endsWith(' clean')), isTrue);
+    }, skip: skipWithoutPosixShell());
+
     test(
       'writes the stubs before the first command and lists them at the end',
       () async {

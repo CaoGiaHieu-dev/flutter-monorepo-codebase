@@ -6,16 +6,9 @@ import '../database/cache_database.dart';
 
 part 'cache_entry_model.freezed.dart';
 
-/// Data-layer representation of a row in the `cache_entries` table.
-///
-/// Exists so Drift stays an implementation detail of this package: the
-/// generated [CacheEntry] row class is converted here, at the boundary, and
-/// never appears in `ICacheEntryLocalDataSource`'s signatures. Without this
-/// model the repository — and anything importing `data_cache` — would be
-/// coupled to Drift's generated code.
-///
-/// Deliberately not `json_serializable`: rows come from SQLite, not from an
-/// API payload, so there is no JSON contract to honour.
+/// Data-layer form of a `cache_entries` row. The generated Drift [CacheEntry]
+/// is converted here, at the boundary, so Drift never leaks past `data_cache`.
+/// Not `json_serializable`: rows come from SQLite, not an API payload.
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -28,7 +21,6 @@ abstract class CacheEntryModel
     required DateTime updatedAt,
   }) = _CacheEntryModel;
 
-  /// Maps a Drift row into the data-layer model.
   factory CacheEntryModel.fromRow(CacheEntry row) {
     return CacheEntryModel(
       key: row.key,

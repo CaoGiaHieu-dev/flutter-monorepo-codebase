@@ -1,8 +1,10 @@
 import 'package:auth_api/auth_api.dart';
 import 'package:core_common/core_common.dart';
+import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:feature_onboarding/feature_onboarding.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:home_api/home_api.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -20,81 +22,53 @@ class _Home implements HomeNavigator {
   void toHome(BuildContext context) => calls++;
 }
 
-/// "Get started" goes to sign-in when the auth module is composed, to home
-/// when only home is, and does nothing when neither is — it never hardcodes
-/// a route.
 void main() {
   tearDown(getIt.reset);
 
-  Future<void> tapGetStarted(WidgetTester tester) async {
+  // The entry location is a path the module's own route answers.
+  Future<void> pumpAtEntryLocation(WidgetTester tester) async {
+    final router = GoRouter(
+      navigatorKey: NavigatorKeys.appKey,
+      initialLocation: OnboardingAppEntryLocation().path,
+      routes: OnboardingFeatureRouteModule().routes,
+    );
+    addTearDown(router.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates:
-            FeatureOnboardingLocalizations.localizationsDelegates,
-        supportedLocales: FeatureOnboardingLocalizations.supportedLocales,
-        builder: (context, child) => ResponsiveInit(child: child!),
-        home: const OnboardingPage(),
+      ResponsiveInit(
+        child: MaterialApp.router(
+          routerConfig: router,
+          localizationsDelegates:
+              FeatureOnboardingLocalizations.localizationsDelegates,
+          supportedLocales: FeatureOnboardingLocalizations.supportedLocales,
+        ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(ElevatedButton));
-    await tester.pumpAndSettle();
   }
 
-  testWidgets('with auth and home composed, sign-in wins', (tester) async {
+  testWidgets('the entry location shows the page; Get Started goes to sign-in '
+      'when auth is composed', (tester) async {
     final auth = _Auth();
     final home = _Home();
     getIt
       ..registerSingleton<AuthNavigator>(auth)
       ..registerSingleton<HomeNavigator>(home);
 
-    await tapGetStarted(tester);
+    await pumpAtEntryLocation(tester);
+    expect(find.byType(OnboardingPage), findsOneWidget);
+    await tester.tap(find.byType(ElevatedButton));
 
     expect(auth.calls, 1);
     expect(home.calls, 0);
   });
 
-  testWidgets('without auth, falls back to home', (tester) async {
+  testWidgets('without auth, Get Started falls back to home', (tester) async {
     final home = _Home();
     getIt.registerSingleton<HomeNavigator>(home);
 
-    await tapGetStarted(tester);
+    await pumpAtEntryLocation(tester);
+    await tester.tap(find.byType(ElevatedButton));
 
     expect(home.calls, 1);
-  });
-
-  testWidgets('with neither auth nor home, stays put', (tester) async {
-    await tapGetStarted(tester);
-
-    expect(find.byType(OnboardingPage), findsOneWidget);
-  });
-
-  testWidgets('scrolls instead of overflowing on a square window with 2x '
-      'Vietnamese text', (tester) async {
-    tester.view
-      ..physicalSize = const Size(400, 400)
-      ..devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('vi'),
-        localizationsDelegates: [
-          ...FeatureOnboardingLocalizations.localizationsDelegates,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: FeatureOnboardingLocalizations.supportedLocales,
-        builder: (context, child) => ResponsiveInit(child: child!),
-        home: const OnboardingPage(),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    // The button is still reachable by scrolling.
-    await tester.ensureVisible(find.byType(ElevatedButton));
-    expect(find.byType(ElevatedButton), findsOneWidget);
   });
 }

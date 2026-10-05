@@ -1,6 +1,5 @@
 {
   "@@locale": "en",
-  "home": "Home",
   "tabLabel": "Home",
   "userLoggedIn": "User is Logged In",
   "userLoggedOut": "User is Logged Out",

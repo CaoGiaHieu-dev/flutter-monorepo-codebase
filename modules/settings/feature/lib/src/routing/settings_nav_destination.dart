@@ -7,8 +7,8 @@ import '../extensions/l10n_settings_extension.dart';
 import '../utils/settings_path.dart';
 import 'settings_route_module.dart';
 
-/// SAMPLE — a second destination, showing that `order` is what fixes the
-/// sequence rather than registration order or DI declaration order.
+/// SAMPLE: a second destination; `order` fixes the sequence, not registration
+/// order.
 @LazySingleton(as: INavDestinationModule)
 class SettingsNavDestination extends INavDestinationModule {
   @override

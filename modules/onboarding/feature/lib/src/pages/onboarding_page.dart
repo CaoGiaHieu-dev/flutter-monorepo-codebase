@@ -8,53 +8,39 @@ import '../extensions/l10n_onboarding_extension.dart';
 
 /// SAMPLE — the app's cold-start location, contributed via `IAppEntryLocation`.
 ///
-/// The button reaches auth through `getItOrNull<AuthNavigator>()` and, in a
-/// build without `feature_auth`, falls back to `HomeNavigator` — so first
-/// launch never strands the user here. Only with neither module composed does
-/// it do nothing. That null-tolerance is what makes a feature removable.
-///
-/// Both navigators come from the owning modules' API packages (`auth_api`,
-/// `home_api`), never from `feature_auth` / `feature_home`: a feature may
-/// depend on another module's `*_api` only (arch_check R3). Removing the auth
-/// module keeps `auth_api` while this package still imports it
-/// (`remove_sample` reports it), so the lookup above still compiles.
+/// The button reaches auth through `getItOrNull<AuthNavigator>()` and falls
+/// back to `HomeNavigator` when `feature_auth` is not composed; with neither
+/// it does nothing. Both navigators come from `*_api` packages, never from
+/// another feature (arch_check R3), which is what keeps a module removable.
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Scrolls when the content outgrows the window (landscape, a
-      // split-screen window, large text) instead of overflowing, and stays
-      // centred when it fits.
-      body: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    context.l10nOnboarding.welcomeToOnboarding,
-                    style: AppTextStyles.headlineMediumStyle(context),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: AppSpacing.xlH(context)),
-                  ElevatedButton(
-                    onPressed: () {
-                      final auth = getItOrNull<AuthNavigator>();
-                      if (auth != null) {
-                        auth.toLogin(context);
-                      } else {
-                        getItOrNull<HomeNavigator>()?.toHome(context);
-                      }
-                    },
-                    child: Text(context.l10nOnboarding.getStarted),
-                  ),
-                ],
+      // Centred when it fits, scrolls instead of overflowing when it does not.
+      body: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              Text(
+                context.l10nOnboarding.welcomeToOnboarding,
+                style: AppTextStyles.headlineMediumStyle(context),
+                textAlign: TextAlign.center,
               ),
-            ),
+              SizedBox(height: AppSpacing.xlH(context)),
+              ElevatedButton(
+                onPressed: () {
+                  final auth = getItOrNull<AuthNavigator>();
+                  if (auth != null) {
+                    auth.toLogin(context);
+                  } else {
+                    getItOrNull<HomeNavigator>()?.toHome(context);
+                  }
+                },
+                child: Text(context.l10nOnboarding.getStarted),
+              ),
+            ],
           ),
         ),
       ),

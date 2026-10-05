@@ -8,15 +8,9 @@ void initMicroPackage() {}
 
 @module
 abstract class AuthDataDiModule {
-  /// Builds this module's Retrofit client from the shared [Dio].
-  ///
-  /// `Dio` comes from `core_network`'s own module, already carrying the auth,
-  /// refresh, retry and logging interceptors — so the data source inherits
-  /// the whole chain without knowing it exists.
-  ///
-  /// Constructing it here rather than inside the repository keeps the
-  /// dependency visible to the container, which is what lets a test pass a
-  /// fake in.
+  /// Builds the Retrofit client from the shared [Dio] that `core_network`
+  /// registers, so the data source inherits its interceptor chain. Built here,
+  /// not inside the repository, so a test can pass a fake in.
   @lazySingleton
   AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
       AuthRemoteDataSource(dio);

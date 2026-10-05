@@ -2,11 +2,7 @@
 class CacheConstants {
   CacheConstants._();
 
-  /// On-disk SQLite file for this package's [CacheDatabase], resolved inside
-  /// the app documents directory.
-  ///
-  /// Named after its owner rather than the app, because each package that
-  /// persists data opens its own file. Changing this value points the package
-  /// at a different database and makes existing on-device rows unreachable.
+  /// SQLite file of this package's [CacheDatabase], named after its owner:
+  /// each package that persists data opens its own file.
   static const String DATABASE_FILE_NAME = 'cache.sqlite';
 }

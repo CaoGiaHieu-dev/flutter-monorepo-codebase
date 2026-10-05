@@ -1,5 +1,6 @@
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider_state_management/provider_state_management.dart';
@@ -7,32 +8,17 @@ import 'package:provider_state_management/provider_state_management.dart';
 import '../extensions/l10n_auth_extension.dart';
 import '../provider/auth_error_state.dart';
 import '../provider/auth_provider.dart';
-import '../widgets/auth_form_widget.dart';
-import '../widgets/auth_header_widget.dart';
 
-/// SAMPLE — the one screen of the auth reference module.
+/// SAMPLE — the one screen of the auth module: a translated login form on a
+/// global Provider controller.
 ///
-/// What it demonstrates, and why each line is here:
-///
-/// - **No `ChangeNotifierProvider` in this file.** `AuthProvider` is mounted
-///   once by `AuthTreeWrapper` (an `IAppTreeWrapper` contributed through DI).
-///   Wrapping again here would build a second instance and desynchronise state
-///   — see RULE-21.
-/// - **`ProviderStateListener`** for a side effect of a failed sign-in: a
-///   rejected password is cleared, so the next attempt starts from an empty
-///   field. It fires once per failed attempt, even two identical ones in a
-///   row. The failure's *message* is not shown here: the app shell already
-///   announces every session failure as a translated toast (it listens to
-///   `ISessionState.sessionFailures`), and a second toast would repeat it.
-/// - **`Consumer<AuthProvider>`** rebuilds only the form on `isLoading`.
-/// - **No navigation on success.** `AuthProvider` publishes the session change,
-///   the app shell listens and routes. A page that navigates itself would
-///   double-navigate the moment the shell does its job.
-/// - **`AdaptiveContent`** caps the form's width on a tablet or desktop
-///   window; on a phone it changes nothing.
-///
-/// Replace it with a real screen, or delete the package — nothing in the
-/// framework references it.
+/// - **No `ChangeNotifierProvider` here**: `AuthProvider` is mounted once by
+///   `AuthTreeWrapper`; wrapping again would build a second instance (RULE-21).
+/// - **`ProviderStateListener`** runs a side effect of a failed sign-in: a
+///   rejected password is cleared. The failure's message is not shown here: the
+///   shell announces every session failure as a translated toast.
+/// - **`Selector`** rebuilds only the button when `isLoading` changes.
+/// - **No navigation on success**: the shell listens to the session and routes.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -41,6 +27,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -51,52 +38,76 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// The email is sent trimmed: a trailing space from a keyboard's
-  /// autocomplete would reach the server as another identity. The password is
-  /// sent exactly as typed — a space in it is part of it.
-  Future<void> _onLoginPressed() => context.read<AuthProvider>().login(
-    _emailController.text.trim(),
-    _passwordController.text,
-  );
+  String? _required(String? value) => value == null || value.trim().isEmpty
+      ? context.l10nAuth.fieldRequired
+      : null;
 
-  void _onLoginFailed(BuildContext context, ErrorState? error, String? _) {
-    if (error == const AuthErrorState.invalidCredentials()) {
-      _passwordController.clear();
-    }
+  /// The email is sent trimmed (a keyboard's autocomplete leaves a trailing
+  /// space); the password exactly as typed.
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    context.read<AuthProvider>().login(
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return ProviderStateListener<AuthProvider, UserEntity>(
-      onError: _onLoginFailed,
+      onError: (context, error, _) {
+        if (error == const AuthErrorState.invalidCredentials()) {
+          _passwordController.clear();
+        }
+      },
       child: Scaffold(
         backgroundColor: context.colors.surface,
         body: SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.all(AppSpacing.xl(context)),
-            // On a tablet or desktop window the form keeps a readable width
-            // instead of stretching across the screen.
             child: AdaptiveContent(
-              child: Consumer<AuthProvider>(
-                builder: (context, authProvider, _) {
-                  return Column(
-                    children: [
-                      SizedBox(height: AppSpacing.xxlH(context)),
-                      AuthHeaderWidget(
-                        title: context.l10nAuth.welcomeBack,
-                        subtitle: context.l10nAuth.signInSubtitle,
-                      ),
-                      SizedBox(height: AppSpacing.xxlH(context)),
-                      AuthFormWidget(
-                        emailController: _emailController,
-                        passwordController: _passwordController,
-                        submitButtonText: context.l10nAuth.signIn,
-                        isLoading: authProvider.isLoading,
-                        onSubmit: _onLoginPressed,
-                      ),
-                    ],
-                  );
-                },
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    Text(
+                      context.l10nAuth.welcomeBack,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.headlineLargeStyle(context),
+                    ),
+                    SizedBox(height: AppSpacing.xxlH(context)),
+                    CustomInputField(
+                      controller: _emailController,
+                      hintText: context.l10nAuth.enterYourEmail,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      validator: _required,
+                    ),
+                    SizedBox(height: AppSpacing.lgH(context)),
+                    CustomInputField(
+                      controller: _passwordController,
+                      hintText: context.l10nAuth.enterYourPassword,
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      validator: _required,
+                      onFieldSubmitted: (_) => _submit(),
+                    ),
+                    SizedBox(height: AppSpacing.xlH(context)),
+                    Selector<AuthProvider, bool>(
+                      selector: (_, auth) => auth.isLoading,
+                      builder: (context, isLoading, _) =>
+                          CustomButton.rectangle(
+                            disable: isLoading,
+                            onPressed: _submit,
+                            child: isLoading
+                                ? CircularProgressIndicator(
+                                    semanticsLabel: context.l10n.loading,
+                                  )
+                                : Text(context.l10nAuth.signIn),
+                          ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

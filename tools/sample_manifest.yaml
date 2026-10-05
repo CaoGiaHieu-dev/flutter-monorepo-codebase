@@ -222,10 +222,9 @@ bundles:
     packages: [domain_cache, data_cache]
     breaks: []
     note: >-
-      Nothing consumes it. Removing it also removes the only tests of
-      core_database's DatabaseHandle and of WAL / foreign keys under
-      driftMigrationStrategy (modules/cache/data/test/) — give them another
-      fixture first if you want to keep that coverage.
+      Nothing consumes it. It is the only sample of a Drift database: its
+      upgrade test (modules/cache/data/test/) is the one that exercises
+      driftMigrationStrategy against a real file.
 
   dashboard:
     capabilities: [dashboard]

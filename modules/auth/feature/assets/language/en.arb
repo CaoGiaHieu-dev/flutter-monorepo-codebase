@@ -1,23 +1,8 @@
 {
   "@@locale": "en",
   "welcomeBack": "Welcome Back",
-  "signInSubtitle": "Sign in to your account to continue",
   "signIn": "Sign In",
-  "email": "Email",
-  "emailIsRequired": "Email is required",
-  "invalidEmail": "Please enter a valid email",
-  "passwordIsRequired": "Password is required",
-  "passwordTooShort": "Password must be at least {min} characters",
-  "@passwordTooShort": {
-    "placeholders": {
-      "min": {
-        "type": "int"
-      }
-    }
-  },
   "enterYourEmail": "Enter your email",
-  "password": "Password",
   "enterYourPassword": "Enter your password",
-  "showPassword": "Show password",
-  "hidePassword": "Hide password"
+  "fieldRequired": "This field is required"
 }

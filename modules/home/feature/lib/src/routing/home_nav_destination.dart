@@ -7,11 +7,9 @@ import '../extensions/l10n_home_extension.dart';
 import '../utils/home_path.dart';
 import 'home_route_module.dart';
 
-/// SAMPLE — a module contributing one primary navigation destination.
-///
-/// It describes the destination ([NavDestination]) rather than building a
-/// widget, so the same module works in an app that renders a bottom bar, a
-/// rail or a sidebar.
+/// SAMPLE: a module contributing one primary navigation destination. It
+/// describes the destination ([NavDestination]) instead of building a widget,
+/// so the dashboard can render it as a bottom bar or a rail.
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override

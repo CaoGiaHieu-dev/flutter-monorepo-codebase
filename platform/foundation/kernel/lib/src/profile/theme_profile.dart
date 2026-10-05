@@ -16,10 +16,9 @@ enum ThemeModeSetting {
 /// Not listed, so not overridable: `shadow` and `scrim`. `AppShadows` is
 /// context-free and reads one shadow colour for both palettes, and a scrim is
 /// black with an alpha on purpose (a theme-inverting scrim would lighten the
-/// screen behind a dialog in dark mode). The two gradients are derived, never
-/// set: `primaryGradientColors` is `[primary, primaryContainer]` and
-/// `liquidOnboardingColors` is `[info, primaryContainer, error]` — which is
-/// what both template palettes already are.
+/// screen behind a dialog in dark mode). The gradient is derived, never set:
+/// `primaryGradientColors` is `[primary, primaryContainer]` — which is what
+/// both template palettes already are.
 enum PaletteToken {
   primary,
   primaryContainer,

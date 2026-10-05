@@ -1,23 +1,8 @@
 {
   "@@locale": "vi",
   "welcomeBack": "Chào mừng trở lại",
-  "signInSubtitle": "Đăng nhập vào tài khoản của bạn để tiếp tục",
   "signIn": "Đăng nhập",
-  "email": "Email",
-  "emailIsRequired": "Email là bắt buộc",
-  "invalidEmail": "Vui lòng nhập email hợp lệ",
-  "passwordIsRequired": "Mật khẩu là bắt buộc",
-  "passwordTooShort": "Mật khẩu phải có ít nhất {min} ký tự",
-  "@passwordTooShort": {
-    "placeholders": {
-      "min": {
-        "type": "int"
-      }
-    }
-  },
   "enterYourEmail": "Nhập email của bạn",
-  "password": "Mật khẩu",
   "enterYourPassword": "Nhập mật khẩu",
-  "showPassword": "Hiện mật khẩu",
-  "hidePassword": "Ẩn mật khẩu"
+  "fieldRequired": "Trường này là bắt buộc"
 }

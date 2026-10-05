@@ -8,24 +8,17 @@ import 'package:injectable/injectable.dart';
 part 'home_profile_event.dart';
 part 'home_profile_bloc.freezed.dart';
 
-/// SAMPLE — the **stream-mapping** Bloc: it turns a stream another module
-/// publishes into screen state. There is no use case and no `Result` here,
-/// so it emits `BlocViewState.success` by hand; a Bloc that loads through a
-/// use case mixes in `BlocResultMixin` and settles with `emitResult` instead
-/// (what the module generator's BLoC template does — RULE-53).
+/// SAMPLE: the **stream-mapping** Bloc. It turns the session stream another
+/// module publishes into screen state, so it emits `BlocViewState.success` by
+/// hand; a Bloc that loads through a use case settles with `emitResult`
+/// instead (RULE-53).
 ///
-/// Demonstrates template wiring:
-/// - `@injectable` factory (not a singleton)
-/// - Instantiated at the route via [BlocProvider]
-/// - Private Freezed event subclasses + `part` / `part of` (RULE-51)
-/// - Listens to [ISessionStatusStream] **when one is registered**. The contract
-///   is `core_di`'s, but its only implementer is `feature_auth`, which any app
-///   may leave out, so the route passes
-///   `getItOrNull<ISessionStatusStream>()` as a factory param and this bloc
-///   reads `null` as "signed out". A required constructor dependency would
-///   make DI unable to build this bloc at all once auth is removed.
-///
-/// This is **sample / reference** code — replace with real home business logic.
+/// - `@injectable` factory, created at the route (RULE-10, RULE-21).
+/// - Private Freezed events, `part` / `part of` (RULE-51).
+/// - [ISessionStatusStream] is optional (its only implementer, `feature_auth`,
+///   may be left out of an app), so the route passes
+///   `getItOrNull<ISessionStatusStream>()` as a factory param and `null`
+///   reads as "signed out".
 @injectable
 class HomeProfileBloc
     extends BaseBloc<HomeProfileEvent, BlocViewState<SessionPrincipal?>> {
@@ -42,11 +35,8 @@ class HomeProfileBloc
   final ISessionStatusStream? _sessionStatusStream;
   StreamSubscription<SessionPrincipal?>? _subscription;
 
-  /// Subscribes to session changes once, then shows the current user.
-  ///
-  /// A broadcast stream does not replay, so a change made while nobody was
-  /// listening is only picked up by re-reading `currentUser` — which is what
-  /// `refreshed` is for.
+  /// Subscribes once, then shows the current user. A broadcast stream does not
+  /// replay, so `refreshed` re-reads `currentUser`.
   Future<void> _onLoad(
     HomeProfileEvent event,
     Emitter<BlocViewState<SessionPrincipal?>> emit,

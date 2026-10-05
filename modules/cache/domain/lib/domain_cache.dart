@@ -2,8 +2,8 @@
 ///
 /// This package is a reference implementation shipped with the template,
 /// not product code. It demonstrates:
-/// the domain half of a locally persisted slice — entity, params, repository
-/// contract and two use cases. Its `data_cache` sibling shows the Drift side.
+/// the domain half of a locally persisted slice — an entity and a repository
+/// contract. Its `data_cache` sibling shows the Drift side.
 ///
 /// To remove it and everything that travels with it:
 ///
@@ -20,7 +20,4 @@ library;
 export 'di/module.dart';
 export 'di/module.module.dart';
 export 'src/entities/cache_entry_entity.dart';
-export 'src/params/cache_entry_params.dart';
 export 'src/repositories/i_cache_entry_repository.dart';
-export 'src/usecases/get_cache_entry_usecase.dart';
-export 'src/usecases/save_cache_entry_usecase.dart';

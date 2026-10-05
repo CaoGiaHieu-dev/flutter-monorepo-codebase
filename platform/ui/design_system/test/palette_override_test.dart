@@ -92,11 +92,6 @@ void main() {
         const Color(brand),
         colors.primaryContainer,
       ]);
-      expect(colors.liquidOnboardingColors, [
-        colors.info,
-        colors.primaryContainer,
-        colors.error,
-      ]);
       expect(theme.scaffoldBackgroundColor, const Color(0xFFFAFAFA));
       expect(theme.colorScheme.surface, colors.surface);
     });

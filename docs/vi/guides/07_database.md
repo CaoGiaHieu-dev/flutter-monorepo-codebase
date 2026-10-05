@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/07_database.md@9a3fb93 -->
+<!-- translated-from: docs/en/guides/07_database.md@25468b2 -->
 # Hướng dẫn: Cơ sở dữ liệu quan hệ (Drift + SQLite)
 
 ## Mục tiêu

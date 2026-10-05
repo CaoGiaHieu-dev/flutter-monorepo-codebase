@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/getting-started/03_daily_workflow.md@d6a34fc -->
+<!-- translated-from: docs/en/getting-started/03_daily_workflow.md@25468b2 -->
 # 03 · Vòng lặp làm việc hàng ngày
 
 **Trang này trả lời:** khi nào thì gõ lệnh nào? Bỏ qua thì hỏng chuyện gì?

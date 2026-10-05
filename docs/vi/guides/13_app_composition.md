@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/13_app_composition.md@d6a34fc -->
+<!-- translated-from: docs/en/guides/13_app_composition.md@25468b2 -->
 # Ghép và cấu hình một app
 
 ## Mục tiêu

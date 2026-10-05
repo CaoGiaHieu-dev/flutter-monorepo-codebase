@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/03_state_management.md@d6a34fc -->
+<!-- translated-from: docs/en/guides/03_state_management.md@25468b2 -->
 # Quản lý State
 
 ## Mục tiêu

@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/06_app_shell.md@d6a34fc -->
+<!-- translated-from: docs/en/architecture/06_app_shell.md@25468b2 -->
 # App Shell (`platform/shell/` + `apps/<id>/`)
 
 Tài liệu này trả lời câu hỏi **"từ lúc chạm icon đến khi thấy màn hình đầu tiên, chuyện gì xảy ra, và ai lắp ráp mọi thứ lại?"**. Đọc xong bạn sẽ gỡ được lỗi khởi động, thêm được adapter cho shell, và hiểu vì sao thứ tự các nhóm DI trong `app_manifest.yaml` không hề tuỳ tiện.

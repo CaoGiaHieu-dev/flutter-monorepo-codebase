@@ -83,6 +83,13 @@ class TestProvider extends BaseProvider<String> {
     );
   }
 
+  Future<void> runThrowingConvert(String raw) async {
+    await executeOperation<String>(
+      OperationConfig(operation: () async => Result.success(raw)),
+      convert: (data) => int.parse(data!).toString(),
+    );
+  }
+
   Future<void> runOperation(Future<Result<String>> Function() operation) async {
     await executeOperation(OperationConfig(operation: operation));
   }
@@ -548,6 +555,22 @@ void main() {
 
       expect(seen, isNotNull);
       expect(provider.isError, isTrue);
+      provider.dispose();
+    });
+
+    test('a convert that throws settles on an error state too', () async {
+      final provider = TestProvider();
+
+      await provider.runThrowingConvert('not a number');
+
+      expect(provider.isLoading, isFalse);
+      expect(provider.isError, isTrue);
+      expect(reported.single.exception, isA<FormatException>());
+
+      // A valid payload still converts afterwards.
+      await provider.runThrowingConvert('7');
+      expect(provider.isSuccess, isTrue);
+      expect(provider.data, '7');
       provider.dispose();
     });
 

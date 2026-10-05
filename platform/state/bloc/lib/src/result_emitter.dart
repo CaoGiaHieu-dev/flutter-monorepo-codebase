@@ -40,6 +40,7 @@ mixin BlocResultMixin<T> on BlocBase<BlocViewState<T>> {
   /// | `Result.failure(f)`        | `error(f)`                                     |
   /// | `Result.none` / `.cancel`  | the state before the call, if `loading` was emitted; otherwise nothing |
   /// | throws                     | `error(ErrorHandler.handleError(e))`, and the error is passed to `addError` (→ `BlocObserver.onError`) |
+  /// | [convert] throws           | the same: `error(...)` and `addError`, never a stuck `loading` |
   ///
   /// [convert] maps a non-null payload `R` to `T`. Without it the payload
   /// must already be a `T`; anything else is a programming error and throws
@@ -150,7 +151,23 @@ Future<void> _settleResult<T, R>({
 
   switch (result) {
     case Success<R>(:final data):
-      final value = _toState<T, R>(data, convert);
+      // A payload of the wrong type with no `convert` is a programming error
+      // and stays loud: it throws before anything is settled.
+      _checkConvertible<T, R>(data, convert);
+      final T? value;
+      try {
+        value = _toState<T, R>(data, convert);
+      } catch (error, stackTrace) {
+        // A `convert` that throws is a bug like a throwing `run`: settle on
+        // the failure state — never leave the screen on `loading` — and
+        // surface the error to `onError` / `BlocObserver`.
+        reportError(error, stackTrace);
+        final failure = ErrorHandler.handleError(error, stackTrace);
+        emit(BlocViewState<T>.error(failure));
+        if (isDone()) return;
+        await onFailure?.call(failure);
+        return;
+      }
       emit(
         value is T
             ? BlocViewState<T>.success(value)
@@ -168,14 +185,21 @@ Future<void> _settleResult<T, R>({
   }
 }
 
-/// The success payload as a `T?`: `null` for no payload, [convert]ed when a
-/// converter was given, otherwise the payload itself, which must be a `T`.
-T? _toState<T, R>(R? data, T Function(R data)? convert) {
-  if (data == null) return null;
-  if (convert != null) return convert(data);
-  if (data is T) return data as T;
+/// Throws a [StateError] for a payload that is not a `T` when there is no
+/// [convert] to map it.
+void _checkConvertible<T, R>(R? data, T Function(R data)? convert) {
+  if (data == null || convert != null || data is T) return;
   throw StateError(
     'emitResult: the operation returned ${data.runtimeType}, which is not the '
     'state type $T. Pass `convert` to map it.',
   );
+}
+
+/// The success payload as a `T?`: `null` for no payload, [convert]ed when a
+/// converter was given, otherwise the payload itself, which
+/// [_checkConvertible] has shown to be a `T`.
+T? _toState<T, R>(R? data, T Function(R data)? convert) {
+  if (data == null) return null;
+  if (convert != null) return convert(data);
+  return data as T;
 }

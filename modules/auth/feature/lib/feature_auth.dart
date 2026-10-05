@@ -39,5 +39,6 @@ export 'src/routing/auth_sign_in_location.dart';
 export 'src/session/auth_status_stream_impl.dart';
 export 'src/utils/auth_path.dart';
 export 'src/utils/auth_ui_constants.dart';
+export 'src/utils/auth_validation_constants.dart';
 export 'src/widgets/auth_form_widget.dart';
 export 'src/widgets/auth_header_widget.dart';

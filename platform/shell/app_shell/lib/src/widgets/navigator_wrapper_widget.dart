@@ -211,6 +211,7 @@ class NavigatorWrapperWidgetState extends State<NavigatorWrapperWidget> {
       SessionInvalidCredentialsFailure() => l10n.invalidCredentials,
       SessionUserNotFoundFailure() => l10n.userNotFound,
       SessionServerFailure(:final code) => l10n.failureMessage(code),
+      SessionExpiredFailure() => l10n.sessionExpired,
       SessionUnknownFailure() => l10n.somethingWentWrong,
     };
 

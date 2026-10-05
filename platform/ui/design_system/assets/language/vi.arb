@@ -10,6 +10,7 @@
   "invalidCredentials": "Thông tin xác thực không hợp lệ",
   "userNotFound": "Không tìm thấy người dùng",
   "somethingWentWrong": "Đã có lỗi xảy ra",
+  "sessionExpired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
   "pageNotFound": "Không tìm thấy trang",
   "goBack": "Quay lại",
   "goToHome": "Về trang chủ",

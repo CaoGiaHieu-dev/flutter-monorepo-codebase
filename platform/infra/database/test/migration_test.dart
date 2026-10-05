@@ -28,6 +28,22 @@ class _RecordingMigration implements IDatabaseMigration {
   Future<void> downgrade(drift.Migrator m) async => log.add('down:$version');
 }
 
+/// Runs raw SQL, so a real file's schema actually changes.
+class _SqlMigration implements IDatabaseMigration {
+  const _SqlMigration(this.version, this.sql);
+
+  @override
+  final int version;
+
+  final String sql;
+
+  @override
+  Future<void> upgrade(drift.Migrator m) => m.database.customStatement(sql);
+
+  @override
+  Future<void> downgrade(drift.Migrator m) async {}
+}
+
 class _ThrowingDowngrade implements IDatabaseMigration {
   const _ThrowingDowngrade(this.version);
 
@@ -261,6 +277,100 @@ void main() {
       await open(3, [_RecordingMigration(2, log), _RecordingMigration(3, log)]);
       expect(log, isEmpty);
     });
+  });
+
+  group('upgrade against a real file', () {
+    late Directory tempDir;
+    late File file;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('core_database_up');
+      file = File(p.join(tempDir.path, 'up.sqlite'));
+      // A file as an older build left it: one table, `user_version = 1`.
+      final old = TestDatabase(
+        drift.NativeDatabase(
+          file,
+          setup: (raw) {
+            raw.execute('CREATE TABLE t (k TEXT PRIMARY KEY)');
+            raw.execute("INSERT INTO t VALUES ('row')");
+            raw.execute('PRAGMA user_version = 1');
+          },
+        ),
+      );
+      await old.customSelect('SELECT 1').get();
+      await old.close();
+    });
+
+    tearDown(() async {
+      if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+    });
+
+    Future<({Object? error, List<String> columns, int version})> open(
+      int schemaVersion,
+      List<IDatabaseMigration> migrations,
+    ) async {
+      final database = _VersionedDatabase(
+        drift.NativeDatabase(file),
+        schemaVersion,
+        migrations,
+      );
+      Object? error;
+      var columns = <String>[];
+      var version = -1;
+      try {
+        columns = (await database.customSelect('PRAGMA table_info(t)').get())
+            .map((r) => r.data['name']! as String)
+            .toList();
+        version =
+            (await database.customSelect('PRAGMA user_version').getSingle())
+                    .data
+                    .values
+                    .first!
+                as int;
+      } catch (e) {
+        error = e;
+      }
+      try {
+        await database.close();
+      } catch (_) {}
+      return (error: error, columns: columns, version: version);
+    }
+
+    test('replays every step and keeps the rows', () async {
+      final result = await open(3, const [
+        _SqlMigration(2, 'ALTER TABLE t ADD COLUMN a INTEGER'),
+        _SqlMigration(3, 'ALTER TABLE t ADD COLUMN b INTEGER'),
+      ]);
+
+      expect(result.error, isNull);
+      expect(result.version, 3);
+      expect(result.columns, ['k', 'a', 'b']);
+    });
+
+    test(
+      'a failing step rolls back the earlier ones, so a retry works',
+      () async {
+        final failed = await open(3, const [
+          _SqlMigration(2, 'ALTER TABLE t ADD COLUMN a INTEGER'),
+          _SqlMigration(3, 'ALTER TABLE missing ADD COLUMN b INTEGER'),
+        ]);
+        expect(failed.error, isNotNull);
+
+        // Reading the file with the old build's version shows what stayed.
+        final after = await open(1, const []);
+        expect(after.version, 1);
+        expect(after.columns, ['k'], reason: 'step 2 must not stay applied');
+
+        // The fixed build upgrades cleanly: no duplicate column on step 2.
+        final retried = await open(3, const [
+          _SqlMigration(2, 'ALTER TABLE t ADD COLUMN a INTEGER'),
+          _SqlMigration(3, 'ALTER TABLE t ADD COLUMN b INTEGER'),
+        ]);
+        expect(retried.error, isNull);
+        expect(retried.version, 3);
+        expect(retried.columns, ['k', 'a', 'b']);
+      },
+    );
   });
 }
 

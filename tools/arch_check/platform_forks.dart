@@ -26,10 +26,6 @@ const Map<String, String> kPlatformForkAllowList = {
       'the page type is an OS convention (CupertinoPage on iOS, MaterialPage '
       'on the web, a Cupertino-style slide elsewhere); every page is wrapped '
       'in RouteAwareWidget on every platform',
-  'platform/infra/notifications/lib/src/push_notification_service.dart':
-      'each OS has its own notification-permission API (Android 13 runtime '
-      'permission, iOS authorization request); whether push runs at all is '
-      'PlatformFacts.push, not this fork',
   'platform/shell/app_shell/lib/src/main_scope.dart':
       'flutter_native_splash has no web side: FlutterNativeSplash.remove() '
       'throws PlatformException(removeSplashFromWeb) there',

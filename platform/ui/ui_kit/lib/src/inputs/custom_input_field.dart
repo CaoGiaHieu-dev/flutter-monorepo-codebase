@@ -82,14 +82,55 @@ class _CustomInputFieldState extends State<CustomInputField> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final border =
-        widget.border ??
+  /// The border for one state.
+  ///
+  /// A border the caller passes is used for every state, as before. Otherwise
+  /// the resting border is `textSecondary` (3:1 or better against the field's
+  /// `surface` fill, WCAG 1.4.11), a focused field gets a thicker `primary`
+  /// one and an invalid field an `error` one, so the three states differ
+  /// without relying on a hairline.
+  InputBorder _border(
+    BuildContext context, {
+    required Color color,
+    required double width,
+  }) {
+    return widget.border ??
         OutlineInputBorder(
           borderRadius: AppRadius.mdRadius(context),
-          borderSide: BorderSide(color: context.colors.surfaceVariant),
+          borderSide: BorderSide(color: color, width: context.r(width)),
         );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final border = _border(
+      context,
+      color: colors.textSecondary,
+      width: SharedUiConstants.INPUT_BORDER_WIDTH,
+    );
+    final focusedBorder = _border(
+      context,
+      color: colors.primary,
+      width: SharedUiConstants.INPUT_ACTIVE_BORDER_WIDTH,
+    );
+    final errorBorder = _border(
+      context,
+      color: colors.error,
+      width: SharedUiConstants.INPUT_BORDER_WIDTH,
+    );
+    final focusedErrorBorder = _border(
+      context,
+      color: colors.error,
+      width: SharedUiConstants.INPUT_ACTIVE_BORDER_WIDTH,
+    );
+    // A disabled field is exempt from the contrast rule; the quieter token
+    // tells it apart from one that takes input.
+    final disabledBorder = _border(
+      context,
+      color: colors.border,
+      width: SharedUiConstants.INPUT_BORDER_WIDTH,
+    );
     return TextFormField(
       enabled: widget.enable,
       focusNode: focusNode,
@@ -154,21 +195,24 @@ class _CustomInputFieldState extends State<CustomInputField> {
             widget.hintStyle ??
             AppTextStyles.bodyMediumStyle(
               context,
-            ).copyWith(color: context.colors.textDisabled),
+            ).copyWith(color: context.colors.textSecondary),
         errorStyle: AppTextStyles.labelMediumStyle(
           context,
         ).copyWith(color: context.colors.error),
         border: border,
         enabledBorder: border,
-        errorBorder: border,
+        errorBorder: errorBorder,
+        // RULE-39: `context.h` only scales down, so on a small window the
+        // dense padding alone leaves a field shorter than 48 dp.
+        constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
         isDense: true,
-        focusedBorder: border,
-        disabledBorder: border,
+        focusedBorder: focusedBorder,
+        disabledBorder: disabledBorder,
         suffixIcon: widget.suffixIcon,
         prefixIcon: widget.prefixIcon,
         suffixIconConstraints: const BoxConstraints(),
         prefixIconConstraints: const BoxConstraints(),
-        focusedErrorBorder: border,
+        focusedErrorBorder: focusedErrorBorder,
         fillColor: context.colors.surface,
         filled: true,
         prefix: widget.prefixIcon == null

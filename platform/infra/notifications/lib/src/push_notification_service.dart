@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:injectable/injectable.dart';
 import 'package:platform_kernel/platform_kernel.dart';
@@ -213,31 +213,29 @@ class PushNotificationService {
   /// registers the FCM token again — on iOS a token is only issued once the
   /// app may notify.
   ///
+  /// Returns whether the user allows notifications now: `true` for an
+  /// authorized or provisional status, `false` when they refused, have not
+  /// decided, push is off for this platform, or the request failed. A settings
+  /// toggle reads it to show where the user stands.
+  ///
   /// Call it from the app at a moment the user understands; nothing in the
   /// platform calls it. Never throws: a failure is logged.
-  Future<void> requestPermission() async {
-    if (_off) return;
+  Future<bool> requestPermission() async {
+    if (_off) return false;
+    var granted = false;
     try {
-      final settings = await _firebaseMessaging.requestPermission(
-        alert: true,
-        announcement: true,
-        badge: true,
-        carPlay: false,
-        criticalAlert: false,
-        provisional: false,
-        sound: true,
-      );
+      final status = await requestSystemPermission();
+      granted =
+          status == AuthorizationStatus.authorized ||
+          status == AuthorizationStatus.provisional;
       DynamicLogger.log(
-        'User granted permission: ${settings.authorizationStatus}',
+        'Notification permission: $status',
         tag: 'PushNotificationService.requestPermission',
       );
 
-      if (Platform.isAndroid) {
-        await _requestNotificationPermissionAndroid();
-      } else if (Platform.isIOS) {
-        await _requestNotificationPermissionIOS();
-      }
+      if (!await requestLocalPermission()) granted = false;
     } catch (e, s) {
+      granted = false;
       DynamicLogger.log(
         'Requesting notification permission failed: $e',
         tag: 'PushNotificationService.requestPermission',
@@ -246,6 +244,47 @@ class PushNotificationService {
       );
     }
     await _registerTokenSafely();
+    return granted;
+  }
+
+  /// Asks through the local notifications plugin as well — Android 13+ and
+  /// iOS show their prompt that way — and reports whether it was not refused.
+  ///
+  /// `resolvePlatformSpecificImplementation` yields the implementation of the
+  /// platform it runs on and `null` on every other one, the web included, so
+  /// no platform check is needed here; a platform with nothing to ask is
+  /// not a refusal. Its own method so a test can answer it.
+  @visibleForTesting
+  Future<bool> requestLocalPermission() async {
+    final android = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+    final ios = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
+    return android != false && ios != false;
+  }
+
+  /// Shows the system permission prompt through Firebase Messaging and
+  /// reports the status the user left it in.
+  ///
+  /// Its own method so a test can answer it without a Firebase app.
+  @visibleForTesting
+  Future<AuthorizationStatus> requestSystemPermission() async {
+    final settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: true,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
+    );
+    return settings.authorizationStatus;
   }
 
   /// [registerToken], logging instead of throwing.
@@ -342,24 +381,6 @@ class PushNotificationService {
       badge: false,
       sound: false,
     );
-  }
-
-  /// Requests notification permission for Android devices.
-  Future<void> _requestNotificationPermissionAndroid() async {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.requestNotificationsPermission();
-  }
-
-  /// Requests notification permission for iOS devices.
-  Future<void> _requestNotificationPermissionIOS() async {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 
   /// Sets notification listeners.

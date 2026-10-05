@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_di/core_di.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:domain_core/domain_core.dart';
@@ -13,13 +15,16 @@ class _FakeAuthRepository implements IAuthRepository {
   );
   Result<UserEntity> loginResult = const Result.success(_ada);
 
+  /// When set, `login` waits for it instead of answering at once.
+  Future<Result<UserEntity>>? pendingLogin;
+
   final logins = <LoginParams>[];
   int logouts = 0;
 
   @override
   Future<Result<UserEntity>> login(LoginParams params) async {
     logins.add(params);
-    return loginResult;
+    return pendingLogin ?? loginResult;
   }
 
   @override
@@ -158,6 +163,26 @@ void main() {
     });
   });
 
+  test('a second login while the first is pending sends nothing', () async {
+    final provider = await buildProvider();
+    final pending = Completer<Result<UserEntity>>();
+    repository.pendingLogin = pending.future;
+
+    final first = provider.login('ada@example.com', 'hunter2');
+    await pumpEventQueue();
+    await provider.login('ada@example.com', 'hunter2');
+
+    expect(repository.logins, hasLength(1));
+
+    pending.complete(const Result.success(_ada));
+    await first;
+
+    // The guard is released once the first one settles.
+    repository.pendingLogin = null;
+    await provider.login('ada@example.com', 'hunter2');
+    expect(repository.logins, hasLength(2));
+  });
+
   test('logout clears the local session and signs the user out', () async {
     repository.restoreResult = const Result.success(_ada);
     final provider = await buildProvider();
@@ -181,6 +206,31 @@ void main() {
 
     expect(provider.signedInUser, isNull);
     expect(repository.logouts, 0, reason: 'storage is already cleared');
+  });
+
+  test('a signed-in user who loses the session is told it expired', () async {
+    repository.restoreResult = const Result.success(_ada);
+    final provider = await buildProvider();
+    final failures = <SessionFailure>[];
+    final sub = provider.sessionFailures.listen(failures.add);
+    addTearDown(sub.cancel);
+
+    provider.onSessionLost();
+    await pumpEventQueue();
+
+    expect(failures.single, isA<SessionExpiredFailure>());
+  });
+
+  test('losing a session nobody was signed in to says nothing', () async {
+    final provider = await buildProvider();
+    final failures = <SessionFailure>[];
+    final sub = provider.sessionFailures.listen(failures.add);
+    addTearDown(sub.cancel);
+
+    provider.onSessionLost();
+    await pumpEventQueue();
+
+    expect(failures, isEmpty);
   });
 
   test('disposing the status stream closes it for its listeners', () async {

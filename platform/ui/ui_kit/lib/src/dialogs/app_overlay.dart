@@ -93,8 +93,9 @@ class AppOverlay {
     final overlay = _current;
     removeLoadingOverlay();
     final entry = overlay._loadingEntry = OverlayEntry(
-      builder: (_) =>
-          overlay._capturedThemes.wrap(const LoadingOverlayWidget()),
+      builder: (_) => overlay._capturedThemes.wrap(
+        const _ModalLayer(child: LoadingOverlayWidget()),
+      ),
     );
     overlay._overlayState.insert(
       entry,
@@ -271,6 +272,55 @@ class AppOverlay {
       session.request.complete(null);
     }
     if (_instance == this) _instance = null;
+  }
+}
+
+/// What makes an overlay entry modal for assistive technology and the
+/// keyboard — the dim layer alone only looks modal.
+///
+/// - [BlockSemantics] drops every earlier sibling of the entry (the page, a
+///   loading layer under a dialog) from the semantics tree, so a screen
+///   reader cannot swipe past the modal into the page behind it, and
+///   `scopesRoute` makes the entry announce as its own screen.
+/// - A [FocusScope] takes the keyboard focus when the layer appears and keeps
+///   Tab inside it, so a focused field behind the dim layer stops receiving
+///   keystrokes. The focus that was there is restored when the layer goes.
+class _ModalLayer extends StatefulWidget {
+  const _ModalLayer({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ModalLayer> createState() => _ModalLayerState();
+}
+
+class _ModalLayerState extends State<_ModalLayer> {
+  final FocusScopeNode _scope = FocusScopeNode(debugLabel: 'AppOverlay modal');
+
+  @override
+  void initState() {
+    super.initState();
+    // Moves the primary focus into the layer, off whatever it was on.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scope.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scope.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlockSemantics(
+      child: Semantics(
+        scopesRoute: true,
+        explicitChildNodes: true,
+        child: FocusScope(node: _scope, child: widget.child),
+      ),
+    );
   }
 }
 

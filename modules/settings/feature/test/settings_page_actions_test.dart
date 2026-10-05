@@ -109,6 +109,28 @@ void main() {
     ]);
   });
 
+  testWidgets('the theme row shows the mode it is in', (tester) async {
+    await pumpSettings(tester);
+    final l10n = l10nOf(tester);
+    final row = find.text(l10n.changeTheme);
+
+    ListTile themeTile() => tester.widget<ListTile>(
+      find.ancestor(of: row, matching: find.byType(ListTile)),
+    );
+    String subtitle() => (themeTile().subtitle! as Text).data!;
+
+    expect(subtitle(), l10n.themeSystem);
+    await tester.tap(row);
+    await tester.pump();
+    expect(subtitle(), l10n.themeLight);
+    await tester.tap(row);
+    await tester.pump();
+    expect(subtitle(), l10n.themeDark);
+    await tester.tap(row);
+    await tester.pump();
+    expect(subtitle(), l10n.themeSystem);
+  });
+
   testWidgets('picking a language changes the locale and saves it', (
     tester,
   ) async {

@@ -14,7 +14,7 @@
 ///
 /// `core_di` is a contract-only package with no code generation of its own;
 /// pulling in a Freezed `part` here would mean every consumer waits on
-/// `build_runner` for what is a four-variant tag. Dart 3 `sealed` gives the
+/// `build_runner` for what is a five-variant tag. Dart 3 `sealed` gives the
 /// exhaustive `switch` that matters, with zero generated files.
 ///
 /// None of them carries text: `AppFailure.message` is an English
@@ -26,6 +26,7 @@
 ///   SessionInvalidCredentialsFailure() => l10n.invalidCredentials,
 ///   SessionUserNotFoundFailure()       => l10n.userNotFound,
 ///   SessionServerFailure(:final code)  => l10n.failureMessage(code),
+///   SessionExpiredFailure()            => l10n.sessionExpired,
 ///   SessionUnknownFailure()            => l10n.somethingWentWrong,
 /// };
 /// ```
@@ -51,6 +52,13 @@ final class SessionServerFailure extends SessionFailure {
   /// The failure's code — an `ErrorCodes` value or an HTTP status — when the
   /// owner knows one. The shell maps it to a translated sentence.
   final int? code;
+}
+
+/// A signed-in session ended without the user asking: the server refused to
+/// renew it ([ISessionState.onSessionLost]). The shell sends the user to the
+/// sign-in location, and this is the explanation they read there.
+final class SessionExpiredFailure extends SessionFailure {
+  const SessionExpiredFailure();
 }
 
 /// Anything the owning module could not classify further.

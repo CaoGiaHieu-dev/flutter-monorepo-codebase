@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../extensions/l10n_auth_extension.dart';
 import '../utils/auth_ui_constants.dart';
+import '../utils/auth_validation_constants.dart';
 
 /// SAMPLE — demonstrates a feature-owned form widget:
 /// feature-scoped translations (`context.l10nAuth`), `core_responsive` scaling
@@ -55,11 +56,18 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
     if (value == null || value.isEmpty) {
       return context.l10nAuth.passwordIsRequired;
     }
-    if (value.length < 6) return context.l10nAuth.passwordTooShort;
+    if (value.length < AuthValidationConstants.MIN_PASSWORD_LENGTH) {
+      return context.l10nAuth.passwordTooShort(
+        AuthValidationConstants.MIN_PASSWORD_LENGTH,
+      );
+    }
     return null;
   }
 
   void _onSubmit() {
+    // The keyboard's Done key reaches this too, not only the button, which
+    // swallows its own taps while loading: a second request must not leave.
+    if (widget.isLoading) return;
     if (_formKey.currentState?.validate() ?? false) widget.onSubmit?.call();
   }
 
@@ -79,7 +87,9 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
       border: OutlineInputBorder(borderRadius: radius),
       enabledBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: context.colors.border),
+        // `textSecondary`, not `border`: a field's boundary needs 3:1 against
+        // the page (WCAG 1.4.11) and the hairline token has 1.2:1.
+        borderSide: BorderSide(color: context.colors.textSecondary),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: radius,
@@ -135,14 +145,14 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
           ),
           SizedBox(height: AppSpacing.xlH(context)),
           CustomButton.rectangle(
-            onPressed: () {
-              if (widget.isLoading) return;
-              _onSubmit();
-            },
+            onPressed: _onSubmit,
             child: widget.isLoading
                 ? SizedBox.square(
                     dimension: context.r(AuthUiConstants.SUBMIT_SPINNER_SIZE),
                     child: CircularProgressIndicator(
+                      // The label's colour: the default (`primary`) is the
+                      // button's own fill, which left an empty button.
+                      color: context.colors.textInverse,
                       // Announced by a screen reader in place of the label
                       // the spinner replaced.
                       semanticsLabel: context.l10n.loading,
@@ -153,9 +163,12 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
                   )
                 : Text(
                     widget.submitButtonText,
-                    style: AppTextStyles.bodyLargeStyle(
-                      context,
-                    ).copyWith(fontWeight: FontWeight.w600),
+                    // `textInverse` is the palette's on-colour for the `primary`
+                    // fill; the default text colour is for the page.
+                    style: AppTextStyles.bodyLargeStyle(context).copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textInverse,
+                    ),
                   ),
           ),
         ],

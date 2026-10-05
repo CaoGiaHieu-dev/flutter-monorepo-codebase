@@ -7,7 +7,14 @@
   "emailIsRequired": "Email is required",
   "invalidEmail": "Please enter a valid email",
   "passwordIsRequired": "Password is required",
-  "passwordTooShort": "Password must be at least 6 characters",
+  "passwordTooShort": "Password must be at least {min} characters",
+  "@passwordTooShort": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
   "enterYourEmail": "Enter your email",
   "password": "Password",
   "enterYourPassword": "Enter your password",

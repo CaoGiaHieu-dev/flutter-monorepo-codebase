@@ -47,6 +47,30 @@ class _CountBloc extends BaseBloc<Object, BlocViewState<int>>
   }
 }
 
+/// Parses its payload; a payload that is not a number makes `convert` throw.
+class _ConvertBloc extends BaseBloc<String, BlocViewState<int>>
+    with BlocResultMixin<int> {
+  _ConvertBloc() : super(const BlocViewState.initial()) {
+    on<String>(
+      (event, emit) async => emitResult<String>(
+        emit,
+        () async => Result.success(event),
+        convert: int.parse,
+        onFailure: failures.add,
+      ),
+    );
+  }
+
+  final failures = <AppFailure<dynamic>>[];
+  final reported = <Object>[];
+
+  @override
+  void onError(Object error, StackTrace stackTrace) {
+    reported.add(error);
+    super.onError(error, stackTrace);
+  }
+}
+
 class _NullableBloc extends BaseBloc<Object, BlocViewState<int?>>
     with BlocResultMixin<int?> {
   _NullableBloc() : super(const BlocViewState.initial()) {
@@ -61,6 +85,17 @@ class _LengthCubit extends BaseCubit<BlocViewState<int>>
 
   Future<void> load(Future<Result<String>> Function() run) =>
       emitResult(run, convert: (text) => text.length);
+
+  Future<void> loadParsed(Future<Result<String>> Function() run) =>
+      emitResult(run, convert: int.parse);
+
+  final reported = <Object>[];
+
+  @override
+  void onError(Object error, StackTrace stackTrace) {
+    reported.add(error);
+    super.onError(error, stackTrace);
+  }
 
   Future<void> loadUnconverted(Future<Result<String>> Function() run) =>
       emitResult(run);
@@ -214,6 +249,26 @@ void main() {
       expect(bloc.reported, [boom]);
     });
 
+    test(
+      'a convert that throws settles on error, onFailure included',
+      () async {
+        final bloc = _ConvertBloc();
+        final states = _record(bloc);
+
+        bloc.add('x');
+        await pumpEventQueue();
+
+        expect(states, hasLength(2));
+        expect(states.first, const BlocViewState<int>.loading());
+        expect(
+          states.last.maybeWhen(error: (f) => f, orElse: () => null),
+          isNotNull,
+        );
+        expect(bloc.failures, hasLength(1));
+        expect(bloc.reported.single, isA<FormatException>());
+      },
+    );
+
     test('emits nothing once the bloc closed while running', () async {
       final bloc = _CountBloc();
       final states = _record(bloc);
@@ -261,6 +316,24 @@ void main() {
         BlocViewState<int>.success(4),
       ]);
     });
+
+    test(
+      'a convert that throws settles on error and reaches onError',
+      () async {
+        final cubit = _LengthCubit();
+        final states = _record(cubit);
+
+        await cubit.loadParsed(() async => const Result.success('x'));
+
+        expect(states, hasLength(2));
+        expect(states.first, const BlocViewState<int>.loading());
+        expect(
+          states.last.maybeWhen(error: (f) => f, orElse: () => null),
+          isA<AppFailure<dynamic>>(),
+        );
+        expect(cubit.reported.single, isA<FormatException>());
+      },
+    );
 
     test('a payload of another type without convert is a StateError', () {
       final cubit = _LengthCubit();

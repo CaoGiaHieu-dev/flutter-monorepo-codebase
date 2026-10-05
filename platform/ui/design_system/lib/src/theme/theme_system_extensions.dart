@@ -90,7 +90,7 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
   /// Light theme palette.
   static final ThemeSystemExtension light = const ThemeSystemExtension(
     primary: Color(0xff0A7E8C),
-    primaryContainer: Color(0xff8B5CF6),
+    primaryContainer: Color(0xff7C3AED),
     secondary: Color(0xff1E293B), // iOS slate secondary
     secondaryContainer: Color(0xffF1F5F9), // iOS slate container
     background: Color(0xffF8FAFC), // Light iOS layout background
@@ -103,19 +103,19 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
     border: Color(0xffE2E8F0),
     divider: Color(0xffF1F5F9),
     success: Color(0xff10B981),
-    error: Color(0xffEF4444),
+    error: Color(0xffDC2626),
     warning: Color(0xffF59E0B),
-    info: Color(0xff3B82F6),
+    info: Color(0xff2563EB),
     shadow: Color(0xff000000),
     scrim: Color(0x8A000000), // black, 54%
     primaryGradientColors: [
       Color(0xff0A7E8C), // primary
-      Color(0xff8B5CF6), // primaryContainer
+      Color(0xff7C3AED), // primaryContainer
     ],
     liquidOnboardingColors: [
-      Color(0xff3B82F6), // blue
-      Color(0xff8B5CF6), // violet/pink
-      Color(0xffEF4444), // red
+      Color(0xff2563EB), // blue
+      Color(0xff7C3AED), // violet
+      Color(0xffDC2626), // red
     ],
   );
 

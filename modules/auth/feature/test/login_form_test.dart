@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_di/core_di.dart';
@@ -51,7 +52,7 @@ void main() {
 
   setUp(() => repository = _FakeAuthRepository());
 
-  Future<void> pumpLogin(WidgetTester tester) async {
+  Future<void> pumpLogin(WidgetTester tester, {bool dark = false}) async {
     tester.view
       ..physicalSize = const Size(375, 812)
       ..devicePixelRatio = 1.0;
@@ -71,6 +72,8 @@ void main() {
         child: Builder(
           builder: (context) => MaterialApp(
             theme: theme.lightTheme(context),
+            darkTheme: theme.darkTheme(context),
+            themeMode: dark ? ThemeMode.dark : ThemeMode.light,
             localizationsDelegates: [
               ...FeatureAuthLocalizations.localizationsDelegates,
               ...AppLocalizations.localizationsDelegates,
@@ -132,11 +135,23 @@ void main() {
     await pumpLogin(tester);
 
     await submit(tester, email: 'ada@example.com', password: '12345');
-    expect(find.text(l10nOf(tester).passwordTooShort), findsOneWidget);
+    expect(
+      find.text(
+        l10nOf(tester)
+            .passwordTooShort(AuthValidationConstants.MIN_PASSWORD_LENGTH),
+      ),
+      findsOneWidget,
+    );
     expect(repository.logins, isEmpty);
 
     await submit(tester, email: 'ada@example.com', password: '123456');
-    expect(find.text(l10nOf(tester).passwordTooShort), findsNothing);
+    expect(
+      find.text(
+        l10nOf(tester)
+            .passwordTooShort(AuthValidationConstants.MIN_PASSWORD_LENGTH),
+      ),
+      findsNothing,
+    );
     expect(repository.logins, hasLength(1));
   });
 
@@ -224,5 +239,66 @@ void main() {
     await tester.pump();
 
     expect(tester.widget<EditableText>(password).obscureText, isFalse);
+  });
+
+  double contrast(Color a, Color b) {
+    final la = a.computeLuminance();
+    final lb = b.computeLuminance();
+    return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+  }
+
+  for (final dark in [false, true]) {
+    testWidgets('the sign-in label and spinner read on the button fill '
+        '(${dark ? 'dark' : 'light'})', (tester) async {
+      final slow = Completer<Result<UserEntity>>();
+      repository.pendingLogin = slow.future;
+      await pumpLogin(tester, dark: dark);
+
+      final fill = tester
+          .widget<MaterialButton>(find.byType(MaterialButton))
+          .color!;
+      final label = tester.widget<Text>(find.text(l10nOf(tester).signIn).last);
+      expect(contrast(label.style!.color!, fill), greaterThanOrEqualTo(4.5));
+
+      await tester.enterText(find.byType(TextFormField).first, 'a@b.co');
+      await tester.enterText(find.byType(TextFormField).last, 'secret1');
+      final signIn = find.text(l10nOf(tester).signIn).last;
+      await tester.ensureVisible(signIn);
+      await tester.tap(signIn);
+      await tester.pump();
+      await tester.pump();
+
+      // While loading the spinner is what the button shows: it must not be
+      // the colour of the fill it sits on.
+      final spinner = tester.widget<CircularProgressIndicator>(
+        find.byType(CircularProgressIndicator),
+      );
+      expect(spinner.color, isNotNull);
+      expect(contrast(spinner.color!, fill), greaterThanOrEqualTo(3.0));
+
+      slow.complete(const Result.success(UserEntity(id: '1', name: 'Ada')));
+      await tester.pumpAndSettle();
+    });
+  }
+
+  testWidgets('Done on the keyboard while signing in sends no second '
+      'request', (tester) async {
+    final slow = Completer<Result<UserEntity>>();
+    repository.pendingLogin = slow.future;
+    await pumpLogin(tester);
+
+    await tester.enterText(find.byType(TextFormField).first, 'a@b.co');
+    await tester.enterText(find.byType(TextFormField).last, 'secret1');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.pump();
+    expect(repository.logins, hasLength(1));
+
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(repository.logins, hasLength(1));
+
+    slow.complete(const Result.success(UserEntity(id: '1', name: 'Ada')));
+    await tester.pumpAndSettle();
   });
 }

@@ -120,12 +120,14 @@ void main() {
       SessionInvalidCredentialsFailure() => 'credentials',
       SessionUserNotFoundFailure() => 'not-found',
       SessionServerFailure(:final code) => 'server:$code',
+      SessionExpiredFailure() => 'expired',
       SessionUnknownFailure() => 'unknown',
     };
 
     test('each variant is told apart by the exhaustive switch', () {
       expect(describe(const SessionInvalidCredentialsFailure()), 'credentials');
       expect(describe(const SessionUserNotFoundFailure()), 'not-found');
+      expect(describe(const SessionExpiredFailure()), 'expired');
       expect(describe(const SessionUnknownFailure()), 'unknown');
     });
 

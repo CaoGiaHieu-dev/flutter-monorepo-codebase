@@ -2,7 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'cache_entry_entity.freezed.dart';
 
-/// Domain entity for a locally cached key-value row stored in Drift.
+/// A locally cached key-value row.
 @freezed
 abstract class CacheEntryEntity with _$CacheEntryEntity {
   const CacheEntryEntity._();

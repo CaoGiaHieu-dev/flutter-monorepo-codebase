@@ -34,8 +34,6 @@ dependencies:
   freezed_annotation: "^3.1.0"
   core_responsive:
     path: ../../../platform/ui/responsive
-  provider: "^6.1.5+1"
-  dynamic_logger: "^0.5.0"
 
   flutter_localizations:
     sdk: flutter

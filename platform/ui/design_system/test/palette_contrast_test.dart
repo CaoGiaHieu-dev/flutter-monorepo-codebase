@@ -42,7 +42,6 @@ void main() {
           p.info,
           p.error,
           ...p.primaryGradientColors,
-          ...p.liquidOnboardingColors,
         ]) {
           expect(
             _contrast(p.textInverse, fill),

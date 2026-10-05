@@ -6,8 +6,8 @@ import 'package:injectable/injectable.dart';
 import '../data_sources/local/cache_entry_local_data_source.dart';
 import '../models/cache_entry_model.dart';
 
-/// SAMPLE — wraps the local data source in `execute()` so nothing throws past
-/// the data layer, and maps [CacheEntryModel] to the domain entity.
+/// SAMPLE — wraps the data source in `execute()` so nothing throws past the
+/// data layer, and maps [CacheEntryModel] to the domain entity.
 @LazySingleton(as: ICacheEntryRepository)
 class CacheEntryRepositoryImpl extends BaseRepository
     implements ICacheEntryRepository {
@@ -24,7 +24,7 @@ class CacheEntryRepositoryImpl extends BaseRepository
   }
 
   @override
-  Future<Result<void>> save(CacheEntryParams params) {
-    return execute<void, void>(() => _local.save(params.key, params.value));
+  Future<Result<void>> save(String key, String value) {
+    return execute<void, void>(() => _local.save(key, value));
   }
 }

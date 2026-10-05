@@ -6,75 +6,46 @@ import 'package:material_ui/material_ui.dart';
 import '../bloc/home_profile_bloc.dart';
 import '../extensions/l10n_home_extension.dart';
 
-/// Home tab — sample screen using a route-scoped [HomeProfileBloc].
+/// Home tab: renders the route-scoped [HomeProfileBloc]'s state.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Centred, and scrolls instead of overflowing at large text sizes.
     return Scaffold(
-      // Scrolls when the content outgrows the window (landscape, a
-      // split-screen window, large text) instead of overflowing, and stays
-      // centred when it fits.
-      body: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: _profile(),
+      body: Center(
+        child: SingleChildScrollView(
+          child: BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
+            builder: (context, state) => state.when(
+              initial: () => const SizedBox.shrink(),
+              loading: () => const CircularProgressIndicator(),
+              success: (user) => Column(
+                children: [
+                  Text(
+                    user == null
+                        ? context.l10nHome.userLoggedOut
+                        : context.l10nHome.userLoggedIn,
+                    style: AppTextStyles.bodyMediumStyle(context),
+                  ),
+                  if (user?.displayName case final name?) Text(name),
+                  SizedBox(height: AppSpacing.mdH(context)),
+                  TextButton(
+                    onPressed: () => context.read<HomeProfileBloc>().add(
+                      const HomeProfileEvent.refreshed(),
+                    ),
+                    child: Text(context.l10nHome.refreshProfile),
+                  ),
+                ],
+              ),
+              // `failure.message` is developer text (RULE-34): show the
+              // translated sentence for its code.
+              error: (failure) =>
+                  Text(context.l10n.failureMessage(failure.code)),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _profile() {
-    return BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
-      builder: (context, state) {
-        return state.when(
-          initial: () => const SizedBox.shrink(),
-          loading: () => const CircularProgressIndicator(),
-          success: (user) {
-            final isLoggedIn = user != null;
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(context.l10nHome.home),
-                SizedBox(height: AppSpacing.mdH(context)),
-                Text(
-                  isLoggedIn
-                      ? context.l10nHome.userLoggedIn
-                      : context.l10nHome.userLoggedOut,
-                  style: AppTextStyles.bodyMediumStyle(context).copyWith(
-                    color: isLoggedIn
-                        ? context.colors.primary
-                        : context.colors.error,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (user?.displayName != null) ...[
-                  SizedBox(height: AppSpacing.smH(context)),
-                  Text(
-                    user!.displayName!,
-                    style: AppTextStyles.bodySmallStyle(context),
-                  ),
-                ],
-                SizedBox(height: AppSpacing.mdH(context)),
-                TextButton(
-                  onPressed: () => context.read<HomeProfileBloc>().add(
-                    const HomeProfileEvent.refreshed(),
-                  ),
-                  child: Text(context.l10nHome.refreshProfile),
-                ),
-              ],
-            );
-          },
-          // `failure.message` is an English diagnostic (RULE-34): the
-          // user reads the translated sentence for its code.
-          error: (failure) => Text(context.l10n.failureMessage(failure.code)),
-        );
-      },
     );
   }
 }

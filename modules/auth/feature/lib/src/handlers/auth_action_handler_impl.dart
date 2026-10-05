@@ -1,7 +1,7 @@
 import 'package:auth_api/auth_api.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
-import 'package:provider/provider.dart';
+import 'package:provider_state_management/provider_state_management.dart';
 
 import '../provider/auth_provider.dart';
 

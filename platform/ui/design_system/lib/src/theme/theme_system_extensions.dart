@@ -38,7 +38,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
     required this.shadow,
     required this.scrim,
     required this.primaryGradientColors,
-    required this.liquidOnboardingColors,
   });
 
   // Core colors
@@ -85,7 +84,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
 
   // Theme Gradients
   final List<Color> primaryGradientColors;
-  final List<Color> liquidOnboardingColors;
 
   /// Light theme palette.
   static final ThemeSystemExtension light = const ThemeSystemExtension(
@@ -111,11 +109,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
     primaryGradientColors: [
       Color(0xff0A7E8C), // primary
       Color(0xff7C3AED), // primaryContainer
-    ],
-    liquidOnboardingColors: [
-      Color(0xff2563EB), // blue
-      Color(0xff7C3AED), // violet
-      Color(0xffDC2626), // red
     ],
   );
 
@@ -144,23 +137,16 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
       Color(0xff22D3EE), // primary
       Color(0xffA78BFA), // primaryContainer
     ],
-    liquidOnboardingColors: [
-      Color(0xff60A5FA), // info/blue
-      Color(0xffA78BFA), // primaryContainer/violet
-      Color(0xffF87171), // error/red
-    ],
   );
 
   /// This palette with [overrides] applied — an app's `ThemeProfile.light` or
   /// `.dark`. [PaletteToken]s not listed keep their value; no overrides
   /// returns this palette itself.
   ///
-  /// The two gradients are never set directly, they follow the tokens they are
-  /// made of, as both template palettes already do:
-  /// `primaryGradientColors` is `[primary, primaryContainer]` and
-  /// `liquidOnboardingColors` is `[info, primaryContainer, error]` — so a new
-  /// `primary` reaches `context.colors.primary`, the [ColorScheme] and the
-  /// gradient alike. `shadow` and `scrim` are not tokens an app can override.
+  /// The gradient is never set directly, it follows the tokens it is made of,
+  /// as both template palettes already do: `primaryGradientColors` is
+  /// `[primary, primaryContainer]` — so a new `primary` reaches
+  /// `context.colors.primary`, the [ColorScheme] and the gradient alike. `shadow` and `scrim` are not tokens an app can override.
   ThemeSystemExtension withOverrides(Map<PaletteToken, int> overrides) {
     if (overrides.isEmpty) return this;
     Color? override(PaletteToken token) {
@@ -189,11 +175,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
     );
     return recolored.copyWith(
       primaryGradientColors: [recolored.primary, recolored.primaryContainer],
-      liquidOnboardingColors: [
-        recolored.info,
-        recolored.primaryContainer,
-        recolored.error,
-      ],
     );
   }
 
@@ -255,7 +236,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
     Color? shadow,
     Color? scrim,
     List<Color>? primaryGradientColors,
-    List<Color>? liquidOnboardingColors,
   }) {
     return ThemeSystemExtension(
       primary: primary ?? this.primary,
@@ -279,8 +259,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
       scrim: scrim ?? this.scrim,
       primaryGradientColors:
           primaryGradientColors ?? this.primaryGradientColors,
-      liquidOnboardingColors:
-          liquidOnboardingColors ?? this.liquidOnboardingColors,
     );
   }
 
@@ -321,11 +299,6 @@ class ThemeSystemExtension extends ThemeExtension<ThemeSystemExtension> {
       primaryGradientColors: _lerpColorList(
         primaryGradientColors,
         other.primaryGradientColors,
-        t,
-      ),
-      liquidOnboardingColors: _lerpColorList(
-        liquidOnboardingColors,
-        other.liquidOnboardingColors,
         t,
       ),
     );

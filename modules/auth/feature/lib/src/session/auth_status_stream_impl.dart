@@ -4,12 +4,12 @@ import 'package:core_di/core_di.dart';
 import 'package:domain_auth/domain_auth.dart';
 import 'package:injectable/injectable.dart';
 
-/// Implementation of [ISessionStatusStream] provided by `feature_auth`.
+/// [ISessionStatusStream] provided by `feature_auth`: the neutral stream other
+/// features listen to (home's BLoC), whatever state library the owner uses.
 ///
-/// This is the boundary where the auth feature's own [UserEntity] becomes the
-/// shared [SessionPrincipal]. Nothing outside this module sees the entity, so it
-/// can grow whatever fields this module needs without a cross-module release,
-/// and none of them leak to consumers that only asked who is signed in.
+/// Registered as the concrete `@singleton`; `AuthDiModule` binds the interface
+/// to this same instance, so the owner writes through [updateAuthStatus] and
+/// everyone else reads the read-only interface.
 @singleton
 class AuthStatusStreamImpl implements ISessionStatusStream {
   final _controller = StreamController<SessionPrincipal?>.broadcast();
@@ -21,26 +21,20 @@ class AuthStatusStreamImpl implements ISessionStatusStream {
   @override
   SessionPrincipal? get currentUser => _currentUser;
 
-  /// Called by `feature_auth` when the session settles.
+  /// The one place [UserEntity] is narrowed to the shared [SessionPrincipal],
+  /// so the entity can grow without leaking to consumers.
   void updateAuthStatus(UserEntity? user) {
-    final principal = toPrincipal(user);
-    _currentUser = principal;
-    if (!_controller.isClosed) _controller.add(principal);
+    _currentUser = user == null
+        ? null
+        : SessionPrincipal(
+            id: user.id,
+            displayName: user.name,
+            email: user.email,
+          );
+    _controller.add(_currentUser);
   }
 
-  /// Closes the stream; listeners receive `done`. GetIt calls it when the
-  /// singleton is disposed (`getIt.reset()`, a test's tear-down).
+  /// GetIt calls it when the singleton is disposed.
   @disposeMethod
   Future<void> dispose() => _controller.close();
-
-  /// The one place `UserEntity` is narrowed for the outside world.
-  static SessionPrincipal? toPrincipal(UserEntity? user) {
-    if (user == null) return null;
-    return SessionPrincipal(
-      id: user.id,
-      displayName: user.name,
-      email: user.email,
-      roles: {if (user.role != null) user.role!.name},
-    );
-  }
 }

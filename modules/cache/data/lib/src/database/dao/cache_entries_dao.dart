@@ -17,13 +17,7 @@ class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
     );
   }
 
-  /// Reads the payload for [key], or `null` when missing.
-  Future<String?> getValue(String key) async {
-    final row = await getEntry(key);
-    return row?.value;
-  }
-
-  /// Reads the full row for [key], or `null` when missing.
+  /// Reads the row for [key], or `null` when missing.
   Future<CacheEntry?> getEntry(String key) {
     return (select(
       cacheEntries,

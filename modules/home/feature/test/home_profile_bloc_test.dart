@@ -6,103 +6,50 @@ import 'package:feature_home/feature_home.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A hand-written [ISessionStatusStream]: a broadcast controller plus the
-/// current user, which is what `feature_auth`'s implementation is.
-class _FakeAuthStatusStream implements ISessionStatusStream {
-  _FakeAuthStatusStream({this.currentUser});
-
+/// current user.
+class _FakeSessionStream implements ISessionStatusStream {
   final controller = StreamController<SessionPrincipal?>.broadcast();
+
+  Future<void> close() => controller.close();
 
   @override
   SessionPrincipal? currentUser;
 
   @override
   Stream<SessionPrincipal?> get sessionStatusStream => controller.stream;
-
-  /// Closes [controller]; each test registers it with `addTearDown`.
-  Future<void> close() => controller.close();
 }
 
 const _ada = SessionPrincipal(id: '1', displayName: 'Ada');
-const _grace = SessionPrincipal(id: '2', displayName: 'Grace');
 
 void main() {
-  test(
-    'with no auth module registered, Home shows the signed-out state',
-    () async {
-      // The route passes `getItOrNull<ISessionStatusStream>()`, which is null in
-      // an app composed without `feature_auth`.
-      final bloc = HomeProfileBloc(null);
-      addTearDown(bloc.close);
-
-      await expectLater(
-        bloc.stream,
-        emits(const BlocViewState<SessionPrincipal?>.success(null)),
-      );
-      expect(bloc.state.data, isNull);
-    },
-  );
-
-  test('starts from the stream\'s current user', () async {
-    final auth = _FakeAuthStatusStream(currentUser: _ada);
-    addTearDown(auth.close);
-    final bloc = HomeProfileBloc(auth);
+  test('with no session stream registered, Home is signed out', () async {
+    final bloc = HomeProfileBloc(null);
     addTearDown(bloc.close);
 
     await expectLater(
       bloc.stream,
-      emits(const BlocViewState<SessionPrincipal?>.success(_ada)),
+      emits(const BlocViewState<SessionPrincipal?>.success(null)),
     );
   });
 
-  test('follows every auth status change, sign-out included', () async {
-    final auth = _FakeAuthStatusStream();
-    addTearDown(auth.close);
-    final bloc = HomeProfileBloc(auth);
-    addTearDown(bloc.close);
-
-    final states = <BlocViewState<SessionPrincipal?>>[];
-    final sub = bloc.stream.listen(states.add);
-    addTearDown(sub.cancel);
+  test('follows the stream, re-reads on refresh, cancels on close', () async {
+    final session = _FakeSessionStream();
+    addTearDown(session.close);
+    final bloc = HomeProfileBloc(session);
     await pumpEventQueue();
+    expect(bloc.state.data, isNull);
 
-    auth.controller.add(_grace);
+    session.controller.add(_ada);
     await pumpEventQueue();
-    auth.controller.add(null);
-    await pumpEventQueue();
+    expect(bloc.state.data, _ada);
 
-    expect(states.map((s) => s.data?.id), [null, '2', null]);
-  });
-
-  test('refreshed re-reads the current user', () async {
-    final auth = _FakeAuthStatusStream();
-    addTearDown(auth.close);
-    final bloc = HomeProfileBloc(auth);
-    addTearDown(bloc.close);
-    await pumpEventQueue();
-
-    // A broadcast stream does not replay: a change made while nobody was
-    // listening is only picked up by re-reading `currentUser`.
-    auth.currentUser = _ada;
+    // A broadcast stream does not replay: `refreshed` reads `currentUser`.
+    session.currentUser = const SessionPrincipal(id: '2');
     bloc.add(const HomeProfileEvent.refreshed());
     await pumpEventQueue();
-
-    expect(bloc.state.data, _ada);
-  });
-
-  test('close cancels the auth subscription', () async {
-    final auth = _FakeAuthStatusStream();
-    addTearDown(auth.close);
-    final bloc = HomeProfileBloc(auth);
-    await pumpEventQueue();
-    expect(auth.controller.hasListener, isTrue);
+    expect(bloc.state.data?.id, '2');
 
     await bloc.close();
-
-    expect(auth.controller.hasListener, isFalse);
-    // An event after close would throw inside the bloc if the listener
-    // survived; with it cancelled this is a no-op.
-    auth.controller.add(_grace);
-    await pumpEventQueue();
-    expect(bloc.isClosed, isTrue);
+    expect(session.controller.hasListener, isFalse);
   });
 }

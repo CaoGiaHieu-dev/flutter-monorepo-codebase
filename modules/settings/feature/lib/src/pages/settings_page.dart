@@ -6,8 +6,9 @@ import 'package:provider/provider.dart';
 
 import '../extensions/l10n_settings_extension.dart';
 
-/// SAMPLE — a second nav destination, and the one screen that *consumes*
-/// another module's contract without depending on that module.
+/// SAMPLE: a nav destination that switches theme and language through the
+/// shell's global providers, and reaches another module's action
+/// (`IAuthActionHandler`) without importing that module.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -16,71 +17,52 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final languageButtonKey = GlobalKey(
-    debugLabel: 'languageButtonKey',
-  );
+  final _languageKey = GlobalKey();
 
-  /// The app shell mounts `LanguageProvider` and `ThemeProvider` above the
-  /// router, so this page reads them from the tree (RULE-11) — before the
-  /// `await`, while `context` is certainly mounted.
-  Future<void> _onLanguageChanged() async {
+  Future<void> _pickLanguage() async {
+    // The shell mounts `LanguageProvider` and `ThemeProvider` above the router
+    // (RULE-11). Read before the `await`, while `context` is mounted.
     final languages = context.read<LanguageProvider>();
-    final picked = await languageButtonKey.showDropDown<Locale>(
+    final picked = await _languageKey.showDropDown<Locale>(
       context,
       options: languages.languageSet.supported,
-      builder: (context, item) => Text(item.languageName(context)),
+      builder: (context, locale) => Text(locale.languageName(context)),
     );
     if (picked != null) languages.setLocale(picked);
   }
 
-  String _themeModeName(BuildContext context, ThemeMode mode) {
-    final l10n = context.l10nSettings;
-    return switch (mode) {
-      ThemeMode.system => l10n.themeSystem,
-      ThemeMode.light => l10n.themeLight,
-      ThemeMode.dark => l10n.themeDark,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
-    // `getItOrNull`, not `getIt`: [IAuthActionHandler] is declared in
-    // `auth_api` but implemented by `feature_auth`, which is removable. A
-    // throwing lookup here compiles fine — this package depends on the auth
-    // module's API package, not on its feature — and then crashes at runtime
-    // in a build without it. With no auth
-    // feature there is no session to end, so the row is simply not offered.
-    //
-    // Enforced by `dart tools/arch_check/check.dart` rule R8.
-    final authActions = getItOrNull<IAuthActionHandler>();
-    // Rebuilds this row when the mode changes (a tap here, or a restore).
+    final l10n = context.l10nSettings;
     final themeMode = context.select<ThemeProvider, ThemeMode>(
       (theme) => theme.themeMode,
     );
+    // `getItOrNull`, not `getIt`: the handler is declared in `auth_api` but
+    // implemented by the removable `feature_auth`. With no auth module there is
+    // no session to end, so the row is not offered (arch_check R8).
+    final authActions = getItOrNull<IAuthActionHandler>();
 
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10nSettings.settings)),
+      appBar: AppBar(title: Text(l10n.settings)),
       body: ListView(
-        padding: EdgeInsets.all(AppSpacing.lg(context)),
         children: [
           ListTile(
-            key: languageButtonKey,
-            title: Text(context.l10nSettings.changeLanguage),
-            trailing: const Icon(Icons.language),
-            onTap: _onLanguageChanged,
+            key: _languageKey,
+            title: Text(l10n.changeLanguage),
+            onTap: _pickLanguage,
           ),
           ListTile(
-            title: Text(context.l10nSettings.changeTheme),
-            // The row cycles through three modes; saying which one is
-            // active also tells a screen reader what a tap changes.
-            subtitle: Text(_themeModeName(context, themeMode)),
-            trailing: const Icon(Icons.color_lens),
+            title: Text(l10n.changeTheme),
+            subtitle: Text(switch (themeMode) {
+              ThemeMode.system => l10n.themeSystem,
+              ThemeMode.light => l10n.themeLight,
+              ThemeMode.dark => l10n.themeDark,
+            }),
             onTap: () => context.read<ThemeProvider>().toggleTheme(),
           ),
           if (authActions != null)
             ListTile(
-              title: Text(context.l10nSettings.logout),
-              trailing: const Icon(Icons.logout),
+              title: Text(l10n.logout),
               onTap: () => authActions.logout(context),
             ),
         ],

@@ -8,12 +8,11 @@ import '../repositories/i_auth_repository.dart';
 /// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
-  LoginUseCase(this._authRepository);
+  LoginUseCase(this._repository);
 
-  final IAuthRepository _authRepository;
+  final IAuthRepository _repository;
 
   @override
-  Future<Result<UserEntity>> call(LoginParams params) {
-    return _authRepository.login(params);
-  }
+  Future<Result<UserEntity>> call(LoginParams params) =>
+      _repository.login(params);
 }

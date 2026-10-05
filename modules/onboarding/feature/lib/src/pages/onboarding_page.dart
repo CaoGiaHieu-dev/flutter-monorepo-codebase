@@ -24,27 +24,38 @@ class OnboardingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              context.l10nOnboarding.welcomeToOnboarding,
-              style: AppTextStyles.headlineMediumStyle(context),
+      // Scrolls when the content outgrows the window (landscape, a
+      // split-screen window, large text) instead of overflowing, and stays
+      // centred when it fits.
+      body: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    context.l10nOnboarding.welcomeToOnboarding,
+                    style: AppTextStyles.headlineMediumStyle(context),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: AppSpacing.xlH(context)),
+                  ElevatedButton(
+                    onPressed: () {
+                      final auth = getItOrNull<AuthNavigator>();
+                      if (auth != null) {
+                        auth.toLogin(context);
+                      } else {
+                        getItOrNull<HomeNavigator>()?.toHome(context);
+                      }
+                    },
+                    child: Text(context.l10nOnboarding.getStarted),
+                  ),
+                ],
+              ),
             ),
-            SizedBox(height: AppSpacing.xlH(context)),
-            ElevatedButton(
-              onPressed: () {
-                final auth = getItOrNull<AuthNavigator>();
-                if (auth != null) {
-                  auth.toLogin(context);
-                } else {
-                  getItOrNull<HomeNavigator>()?.toHome(context);
-                }
-              },
-              child: Text(context.l10nOnboarding.getStarted),
-            ),
-          ],
+          ),
         ),
       ),
     );

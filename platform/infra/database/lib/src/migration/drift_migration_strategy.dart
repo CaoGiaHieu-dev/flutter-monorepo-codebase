@@ -41,8 +41,16 @@ MigrationStrategy driftMigrationStrategy({
     /// so there is no separate `onDowngrade` to override. The runner compares
     /// [from] and [to] and dispatches to [IDatabaseMigration.upgrade] or
     /// [IDatabaseMigration.downgrade] accordingly.
+    ///
+    /// All steps run inside **one transaction**. SQLite DDL is transactional
+    /// and drift stamps the new `user_version` only after this callback
+    /// returns, so a step that throws rolls every earlier step back too: the
+    /// file keeps both its old version and its old schema. Without it a
+    /// failure on step 3 would leave step 2's `ADD COLUMN` applied under the
+    /// old version, and the next launch would replay step 2 and fail with a
+    /// duplicate column on every start.
     onUpgrade: (Migrator m, int from, int to) async {
-      await runner.run(m, from, to);
+      await database.transaction(() => runner.run(m, from, to));
     },
 
     /// Runs after migrations, before drift reports the database as open.

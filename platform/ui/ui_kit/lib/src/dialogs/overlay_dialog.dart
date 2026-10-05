@@ -129,39 +129,41 @@ class _DialogOverlayEntry extends StatelessWidget {
     );
     if (request.useSafeArea) dialog = SafeArea(child: dialog);
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: request.barrierDismissible ? onBarrierTap : null,
-            child: Semantics(
-              label:
-                  request.barrierLabel ??
-                  MaterialLocalizations.of(context).modalBarrierDismissLabel,
-              child: FadeTransition(
-                opacity: CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeIn,
-                ),
-                child: ColoredBox(
-                  color:
-                      request.barrierColor ??
-                      Theme.of(context).colorScheme.scrim,
+    return _ModalLayer(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: request.barrierDismissible ? onBarrierTap : null,
+              child: Semantics(
+                label:
+                    request.barrierLabel ??
+                    MaterialLocalizations.of(context).modalBarrierDismissLabel,
+                child: FadeTransition(
+                  opacity: CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeIn,
+                  ),
+                  child: ColoredBox(
+                    color:
+                        request.barrierColor ??
+                        Theme.of(context).colorScheme.scrim,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Center(
-          child: ScaleTransition(
-            scale: CurvedAnimation(
-              parent: animation,
-              curve: request.transitionCurve,
+          Center(
+            child: ScaleTransition(
+              scale: CurvedAnimation(
+                parent: animation,
+                curve: request.transitionCurve,
+              ),
+              child: Material(type: MaterialType.transparency, child: dialog),
             ),
-            child: Material(type: MaterialType.transparency, child: dialog),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -87,6 +87,23 @@ void main() {
     expect(find.text(l10n.userLoggedIn), findsNothing);
   });
 
+  testWidgets('scrolls instead of overflowing on a short window with 2x '
+      'text', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 200)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await pumpHome(tester, HomeProfileBloc(newAuth(currentUser: _ada)));
+
+    expect(tester.takeException(), isNull);
+    final l10n = l10nOf(tester);
+    await tester.ensureVisible(find.text(l10n.refreshProfile));
+    expect(find.text(l10n.refreshProfile), findsOneWidget);
+  });
+
   testWidgets('a signed-in user is greeted by display name', (tester) async {
     await pumpHome(
       tester,

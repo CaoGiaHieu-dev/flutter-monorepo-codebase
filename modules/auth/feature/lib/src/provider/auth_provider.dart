@@ -135,6 +135,21 @@ class AuthProvider extends BaseProvider<UserEntity>
   /// reacts through `ProviderStateListener`, the shell through the session
   /// channels.
   Future<void> login(String email, String password) async {
+    // One sign-in at a time: a second call while the first is pending (the
+    // keyboard's Done key pressed twice) would send a second request and race
+    // two outcomes.
+    if (_isSigningIn) return;
+    _isSigningIn = true;
+    try {
+      await _signIn(email, password);
+    } finally {
+      _isSigningIn = false;
+    }
+  }
+
+  bool _isSigningIn = false;
+
+  Future<void> _signIn(String email, String password) async {
     await executeOperation(
       OperationConfig(
         operation: () =>
@@ -149,8 +164,16 @@ class AuthProvider extends BaseProvider<UserEntity>
 
   /// The transport cleared a session the server refused to renew; the stored
   /// credentials are already gone, so only the state changes.
+  ///
+  /// A signed-in user is told why they are leaving: the shell sends them to
+  /// the sign-in screen and shows [SessionExpiredFailure] as a translated
+  /// toast. Nothing is published when nobody was signed in.
   @override
-  void onSessionLost() => _setLoggedOut();
+  void onSessionLost() {
+    final wasSignedIn = signedInUser != null;
+    _setLoggedOut();
+    if (wasSignedIn) _failureController.add(const SessionExpiredFailure());
+  }
 
   /// Clears the session. Navigation is handled by the app shell, which listens
   /// to [sessionChanges] — do not navigate from here.

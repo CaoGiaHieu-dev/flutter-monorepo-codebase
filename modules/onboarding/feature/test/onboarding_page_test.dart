@@ -68,4 +68,33 @@ void main() {
 
     expect(find.byType(OnboardingPage), findsOneWidget);
   });
+
+  testWidgets('scrolls instead of overflowing on a square window with 2x '
+      'Vietnamese text', (tester) async {
+    tester.view
+      ..physicalSize = const Size(400, 400)
+      ..devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('vi'),
+        localizationsDelegates: [
+          ...FeatureOnboardingLocalizations.localizationsDelegates,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        supportedLocales: FeatureOnboardingLocalizations.supportedLocales,
+        builder: (context, child) => ResponsiveInit(child: child!),
+        home: const OnboardingPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // The button is still reachable by scrolling.
+    await tester.ensureVisible(find.byType(ElevatedButton));
+    expect(find.byType(ElevatedButton), findsOneWidget);
+  });
 }

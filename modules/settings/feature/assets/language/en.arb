@@ -4,5 +4,8 @@
   "tabLabel": "Settings",
   "changeLanguage": "Change Language",
   "changeTheme": "Change Theme",
+  "themeSystem": "System default",
+  "themeLight": "Light",
+  "themeDark": "Dark",
   "logout": "Logout"
 }

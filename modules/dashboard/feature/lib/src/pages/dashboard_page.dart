@@ -64,6 +64,12 @@ class DashboardPage extends StatelessWidget {
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: selected,
           onTap: _onSelect,
+          // Left to Flutter the bar turns `shifting` from the fourth tab on
+          // and hides the labels of the unselected ones, so a template that
+          // gains a tab silently loses its text. The rail below always
+          // shows labels; the bar does too.
+          type: BottomNavigationBarType.fixed,
+          showUnselectedLabels: true,
           items: [for (final d in items) _itemOf(d)],
         ),
       );

@@ -37,7 +37,19 @@ class SharedUiConstants {
   static const double LOADING_WIDGET_DIMENSION = 100;
 
   /// Opacity of the `textPrimary` pill behind a toast.
-  static const double TOAST_BACKGROUND_ALPHA = 0.4;
+  ///
+  /// Near-opaque on purpose: the label (`surface`) must keep 4.5:1 against
+  /// whatever the pill floats over, and a translucent pill over a busy page
+  /// cannot promise that (WCAG 1.4.3).
+  static const double TOAST_BACKGROUND_ALPHA = 0.92;
+
+  /// Stroke width of a `CustomInputField`'s focused and error border — thicker
+  /// than the resting 1 dp so the state does not rest on colour alone
+  /// (scaled with `r`).
+  static const double INPUT_ACTIVE_BORDER_WIDTH = 2;
+
+  /// Stroke width of a `CustomInputField`'s resting border (scaled with `r`).
+  static const double INPUT_BORDER_WIDTH = 1;
 
   /// How far `CustomInputField`'s counter is nudged towards the start, and
   /// its default bottom padding (scaled with `w` / `h`).

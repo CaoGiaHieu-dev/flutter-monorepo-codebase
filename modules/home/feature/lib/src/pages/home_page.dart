@@ -13,55 +13,68 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
-          builder: (context, state) {
-            return state.when(
-              initial: () => const SizedBox.shrink(),
-              loading: () => const CircularProgressIndicator(),
-              success: (user) {
-                final isLoggedIn = user != null;
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(context.l10nHome.home),
-                    SizedBox(height: AppSpacing.mdH(context)),
-                    Text(
-                      isLoggedIn
-                          ? context.l10nHome.userLoggedIn
-                          : context.l10nHome.userLoggedOut,
-                      style: AppTextStyles.bodyMediumStyle(context).copyWith(
-                        color: isLoggedIn
-                            ? context.colors.primary
-                            : context.colors.error,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (user?.displayName != null) ...[
-                      SizedBox(height: AppSpacing.smH(context)),
-                      Text(
-                        user!.displayName!,
-                        style: AppTextStyles.bodySmallStyle(context),
-                      ),
-                    ],
-                    SizedBox(height: AppSpacing.mdH(context)),
-                    TextButton(
-                      onPressed: () => context.read<HomeProfileBloc>().add(
-                        const HomeProfileEvent.refreshed(),
-                      ),
-                      child: Text(context.l10nHome.refreshProfile),
-                    ),
-                  ],
-                );
-              },
-              // `failure.message` is an English diagnostic (RULE-34): the
-              // user reads the translated sentence for its code.
-              error: (failure) =>
-                  Text(context.l10n.failureMessage(failure.code)),
-            );
-          },
+      // Scrolls when the content outgrows the window (landscape, a
+      // split-screen window, large text) instead of overflowing, and stays
+      // centred when it fits.
+      body: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: _profile(),
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _profile() {
+    return BlocBuilder<HomeProfileBloc, BlocViewState<SessionPrincipal?>>(
+      builder: (context, state) {
+        return state.when(
+          initial: () => const SizedBox.shrink(),
+          loading: () => const CircularProgressIndicator(),
+          success: (user) {
+            final isLoggedIn = user != null;
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(context.l10nHome.home),
+                SizedBox(height: AppSpacing.mdH(context)),
+                Text(
+                  isLoggedIn
+                      ? context.l10nHome.userLoggedIn
+                      : context.l10nHome.userLoggedOut,
+                  style: AppTextStyles.bodyMediumStyle(context).copyWith(
+                    color: isLoggedIn
+                        ? context.colors.primary
+                        : context.colors.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (user?.displayName != null) ...[
+                  SizedBox(height: AppSpacing.smH(context)),
+                  Text(
+                    user!.displayName!,
+                    style: AppTextStyles.bodySmallStyle(context),
+                  ),
+                ],
+                SizedBox(height: AppSpacing.mdH(context)),
+                TextButton(
+                  onPressed: () => context.read<HomeProfileBloc>().add(
+                    const HomeProfileEvent.refreshed(),
+                  ),
+                  child: Text(context.l10nHome.refreshProfile),
+                ),
+              ],
+            );
+          },
+          // `failure.message` is an English diagnostic (RULE-34): the
+          // user reads the translated sentence for its code.
+          error: (failure) => Text(context.l10n.failureMessage(failure.code)),
+        );
+      },
     );
   }
 }

@@ -8,6 +8,22 @@ import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart' as drift_native;
 import 'package:flutter_test/flutter_test.dart';
 
+/// Adds a column with raw SQL, so a real file's schema actually changes.
+class _AddColumn implements IDatabaseMigration {
+  _AddColumn(this.version, this.sql);
+
+  @override
+  final int version;
+
+  final String sql;
+
+  @override
+  Future<void> upgrade(drift.Migrator m) => m.database.customStatement(sql);
+
+  @override
+  Future<void> downgrade(drift.Migrator m) async {}
+}
+
 /// Inert migration used to prove dispatch without a real schema history.
 class _RecordingMigration implements IDatabaseMigration {
   _RecordingMigration(this.version, this.log);
@@ -131,6 +147,88 @@ void main() {
           .getSingle();
 
       expect(row.data.values.first.toString(), '1');
+    });
+
+    // The old schema is written by hand and stamped `user_version = 1`;
+    // `setup` runs on the raw connection before Drift reads the version, so a
+    // build with schema version 2 sees an old file and replays the step.
+    CacheDatabase openOldFile(
+      String path,
+      List<IDatabaseMigration> steps,
+      int schemaVersion,
+    ) {
+      return CacheDatabase.forTesting(
+        drift_native.NativeDatabase(
+          File(path),
+          setup: (raw) {
+            if (raw.select('PRAGMA user_version').first.values.first == 0) {
+              raw.execute(
+                'CREATE TABLE cache_entries (key TEXT NOT NULL PRIMARY KEY, '
+                'value TEXT NOT NULL, updated_at INTEGER NOT NULL)',
+              );
+              raw.execute("INSERT INTO cache_entries VALUES ('k', 'v', 0)");
+              raw.execute('PRAGMA user_version = 1');
+            }
+          },
+        ),
+        steps,
+        schemaVersion,
+      );
+    }
+
+    Future<List<Object?>> columnsOf(CacheDatabase db) async {
+      final rows = await db
+          .customSelect('PRAGMA table_info(cache_entries)')
+          .get();
+      return rows.map((row) => row.data['name']).toList();
+    }
+
+    test(
+      'an old-version file upgrades through its step and keeps rows',
+      () async {
+        final path = '${tempDir.path}${Platform.pathSeparator}old.sqlite';
+        final upgraded = openOldFile(path, [
+          _AddColumn(
+            2,
+            'ALTER TABLE cache_entries ADD COLUMN expires_at INTEGER',
+          ),
+        ], 2);
+        addTearDown(upgraded.close);
+
+        expect(await columnsOf(upgraded), contains('expires_at'));
+        expect(await upgraded.cacheEntriesDao.getValue('k'), 'v');
+      },
+    );
+
+    test('a failing step leaves the old file as it was', () async {
+      final path = '${tempDir.path}${Platform.pathSeparator}atomic.sqlite';
+      final failing = openOldFile(path, [
+        _AddColumn(
+          2,
+          'ALTER TABLE cache_entries ADD COLUMN expires_at INTEGER',
+        ),
+        _AddColumn(3, 'ALTER TABLE missing_table ADD COLUMN x INTEGER'),
+      ], 3);
+      await expectLater(
+        failing.cacheEntriesDao.getValue('k'),
+        throwsA(anything),
+      );
+      try {
+        await failing.close();
+      } catch (_) {}
+
+      // Step 2 was rolled back with step 3, so the fixed build can replay it.
+      final retried = openOldFile(path, [
+        _AddColumn(
+          2,
+          'ALTER TABLE cache_entries ADD COLUMN expires_at INTEGER',
+        ),
+        _AddColumn(3, 'ALTER TABLE cache_entries ADD COLUMN note TEXT'),
+      ], 3);
+      addTearDown(retried.close);
+
+      expect(await columnsOf(retried), containsAll(['expires_at', 'note']));
+      expect(await retried.cacheEntriesDao.getValue('k'), 'v');
     });
 
     test('data survives a close and reopen of the same file', () async {

@@ -96,17 +96,34 @@ class OperationExecutor<T> {
 
     T? finalData;
 
-    if (convert != null) {
-      finalData = convert(data);
-    } else if (data is T) {
-      finalData = data;
-    } else if (data == null) {
-      finalData = null;
-    } else {
-      assert(
-        false,
-        'A `convert` function must be provided to `executeOperation` when the operation result type ($R) is not assignable to the provider\'s state type ($T).',
+    try {
+      if (convert != null) {
+        finalData = convert(data);
+      } else if (data is T) {
+        finalData = data;
+      } else if (data == null) {
+        finalData = null;
+      } else {
+        assert(
+          false,
+          'A `convert` function must be provided to `executeOperation` when the operation result type ($R) is not assignable to the provider\'s state type ($T).',
+        );
+      }
+    } catch (error, stackTrace) {
+      // A `convert` that throws (a parse of a value the repository let
+      // through) is a bug like a throwing operation: settle the screen on the
+      // failure state instead of leaving it on `loading`, and surface the
+      // error where a bug is looked for.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'provider_state_management',
+          context: ErrorDescription('while converting an operation result'),
+        ),
       );
+      await _handleFailure(ErrorHandler.handleError(error, stackTrace), config);
+      return;
     }
 
     _stateManager.setState(state: const ViewState.success(), data: finalData);

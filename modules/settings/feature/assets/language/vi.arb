@@ -4,5 +4,8 @@
   "tabLabel": "Cài đặt",
   "changeLanguage": "Đổi Ngôn Ngữ",
   "changeTheme": "Đổi Chủ Đề",
+  "themeSystem": "Theo hệ thống",
+  "themeLight": "Sáng",
+  "themeDark": "Tối",
   "logout": "Đăng xuất"
 }

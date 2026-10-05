@@ -153,60 +153,35 @@ class ThemeProvider extends ChangeNotifier
     /// Null-tolerant so the `TextStyle.fontSize` chain stays readable.
     double? scaleFont(double? size) => size == null ? null : context.sp(size);
 
-    /// Scales the font sizes of the text theme to the device's screen size.
-    final textTheme = defaultTheme
-        .apply(
-          bodyColor: themeSystem.textPrimary,
-          displayColor: themeSystem.textPrimary,
-          decorationColor: themeSystem.textPrimary,
-        )
-        .copyWith(
-          labelSmall: defaultTheme.labelSmall?.copyWith(
-            fontSize: scaleFont(defaultTheme.labelSmall?.fontSize),
-          ),
-          labelMedium: defaultTheme.labelMedium?.copyWith(
-            fontSize: scaleFont(defaultTheme.labelMedium?.fontSize),
-          ),
-          labelLarge: defaultTheme.labelLarge?.copyWith(
-            fontSize: scaleFont(defaultTheme.labelLarge?.fontSize),
-          ),
-          bodySmall: defaultTheme.bodySmall?.copyWith(
-            fontSize: scaleFont(defaultTheme.bodySmall?.fontSize),
-          ),
-          bodyMedium: defaultTheme.bodyMedium?.copyWith(
-            fontSize: scaleFont(defaultTheme.bodyMedium?.fontSize),
-          ),
-          bodyLarge: defaultTheme.bodyLarge?.copyWith(
-            fontSize: scaleFont(defaultTheme.bodyLarge?.fontSize),
-          ),
-          titleSmall: defaultTheme.titleSmall?.copyWith(
-            fontSize: scaleFont(defaultTheme.titleSmall?.fontSize),
-          ),
-          titleMedium: defaultTheme.titleMedium?.copyWith(
-            fontSize: scaleFont(defaultTheme.titleMedium?.fontSize),
-          ),
-          titleLarge: defaultTheme.titleLarge?.copyWith(
-            fontSize: scaleFont(defaultTheme.titleLarge?.fontSize),
-          ),
-          displaySmall: defaultTheme.displaySmall?.copyWith(
-            fontSize: scaleFont(defaultTheme.displaySmall?.fontSize),
-          ),
-          displayMedium: defaultTheme.displayMedium?.copyWith(
-            fontSize: scaleFont(defaultTheme.displayMedium?.fontSize),
-          ),
-          displayLarge: defaultTheme.displayLarge?.copyWith(
-            fontSize: scaleFont(defaultTheme.displayLarge?.fontSize),
-          ),
-          headlineSmall: defaultTheme.headlineSmall?.copyWith(
-            fontSize: scaleFont(defaultTheme.headlineSmall?.fontSize),
-          ),
-          headlineMedium: defaultTheme.headlineMedium?.copyWith(
-            fontSize: scaleFont(defaultTheme.headlineMedium?.fontSize),
-          ),
-          headlineLarge: defaultTheme.headlineLarge?.copyWith(
-            fontSize: scaleFont(defaultTheme.headlineLarge?.fontSize),
-          ),
-        );
+    /// Scales one style's font size to the device's screen size.
+    TextStyle? scaled(TextStyle? style) =>
+        style?.copyWith(fontSize: scaleFont(style.fontSize));
+
+    // The palette's text colour goes on first and the sizes are scaled from
+    // the coloured theme: copying from the uncoloured one would throw the
+    // colours away and leave Material's own defaults on every style.
+    final coloured = defaultTheme.apply(
+      bodyColor: themeSystem.textPrimary,
+      displayColor: themeSystem.textPrimary,
+      decorationColor: themeSystem.textPrimary,
+    );
+    final textTheme = coloured.copyWith(
+      labelSmall: scaled(coloured.labelSmall),
+      labelMedium: scaled(coloured.labelMedium),
+      labelLarge: scaled(coloured.labelLarge),
+      bodySmall: scaled(coloured.bodySmall),
+      bodyMedium: scaled(coloured.bodyMedium),
+      bodyLarge: scaled(coloured.bodyLarge),
+      titleSmall: scaled(coloured.titleSmall),
+      titleMedium: scaled(coloured.titleMedium),
+      titleLarge: scaled(coloured.titleLarge),
+      displaySmall: scaled(coloured.displaySmall),
+      displayMedium: scaled(coloured.displayMedium),
+      displayLarge: scaled(coloured.displayLarge),
+      headlineSmall: scaled(coloured.headlineSmall),
+      headlineMedium: scaled(coloured.headlineMedium),
+      headlineLarge: scaled(coloured.headlineLarge),
+    );
 
     return ThemeData(
       splashColor: Colors.transparent,

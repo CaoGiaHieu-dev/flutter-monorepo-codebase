@@ -58,7 +58,9 @@ class CustomButton extends StatelessWidget {
   /// The fill colour; the palette's `primary` by default.
   final Color? color;
 
-  /// The fill colour while disabled; [color] by default.
+  /// The fill colour while disabled; the palette's `surfaceVariant` by
+  /// default (nothing for a transparent button), so a disabled button never
+  /// looks like an enabled one.
   final Color? disableColor;
 
   /// The button's content.
@@ -73,7 +75,8 @@ class CustomButton extends StatelessWidget {
   /// Whether the button is disabled.
   final bool disable;
 
-  /// A gradient fill, drawn instead of [color].
+  /// A gradient fill, drawn instead of [color]. A disabled button drops it for
+  /// the plain disabled fill.
   final List<Color>? gradientFillColors;
 
   @override
@@ -83,16 +86,22 @@ class CustomButton extends StatelessWidget {
       kMinInteractiveDimension,
       this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT),
     );
-    final gradient = gradientFillColors;
-    final backgroundColor = gradient == null
-        ? color ?? context.colors.primary
-        : null;
+    final colors = context.colors;
+    final gradient = disable ? null : gradientFillColors;
+    final backgroundColor = gradient == null ? color ?? colors.primary : null;
     final isTransparent = color == Colors.transparent;
+    // The label colour a plain `Text` child gets: the palette's on-colour for
+    // the brand fill (the Material default is white, 1.8:1 on the dark
+    // theme's cyan), the page's text colour on a transparent button, and
+    // Material's own pick for any other fill the caller chose.
+    final labelColor = isTransparent
+        ? colors.textPrimary
+        : (color == null ? colors.textInverse : null);
     // A transparent button has no background of its own, so its ripple has to
     // read against whatever is behind it. `textPrimary` inverts with the
     // theme, so the feedback shows in both.
     final feedback = isTransparent
-        ? context.colors.textPrimary.withValues(
+        ? colors.textPrimary.withValues(
             alpha: SharedUiConstants.TRANSPARENT_BUTTON_FEEDBACK_ALPHA,
           )
         : null;
@@ -111,8 +120,11 @@ class CustomButton extends StatelessWidget {
       highlightElevation: isTransparent ? 0 : null,
       highlightColor: feedback,
       splashColor: feedback,
-      disabledColor: disableColor ?? backgroundColor,
-      disabledTextColor: context.colors.primary,
+      textColor: labelColor,
+      disabledColor:
+          disableColor ??
+          (isTransparent ? Colors.transparent : colors.surfaceVariant),
+      disabledTextColor: colors.textSecondary,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: EdgeInsets.zero,
       child: Padding(padding: padding, child: child),

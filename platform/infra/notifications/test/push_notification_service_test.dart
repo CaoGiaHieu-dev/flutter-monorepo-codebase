@@ -1,6 +1,9 @@
 import 'package:core_notifications/core_notifications.dart';
 import 'package:dynamic_logger/dynamic_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_kernel/platform_kernel.dart';
 
@@ -12,6 +15,40 @@ const _options = FirebaseOptions(
   messagingSenderId: 'test',
   projectId: 'test',
 );
+
+/// A platform with no Android / iOS implementation to ask: what the plugin
+/// resolves to on the web or a desktop.
+class _NoNotificationsPlatform extends FlutterLocalNotificationsPlatform {}
+
+/// A service whose system prompt answers with [status] (or throws), and whose
+/// token registration only counts — no Firebase app is needed.
+class _PromptingService extends PushNotificationService {
+  _PromptingService(
+    this.status, {
+    this.throws = false,
+    this.localAllows = true,
+    PlatformFacts? platform,
+  }) : super(_options, platform ?? const PlatformFacts.today());
+
+  final AuthorizationStatus status;
+  final bool throws;
+  final bool localAllows;
+  int prompts = 0;
+  int tokenRegistrations = 0;
+
+  @override
+  Future<AuthorizationStatus> requestSystemPermission() async {
+    prompts++;
+    if (throws) throw StateError('the prompt failed');
+    return status;
+  }
+
+  @override
+  Future<bool> requestLocalPermission() async => localAllows;
+
+  @override
+  Future<void> registerToken() async => tokenRegistrations++;
+}
 
 /// `DynamicLogger`'s level number for `LogLevel.INFO`.
 const _info = 700;
@@ -38,6 +75,106 @@ void main() {
       service.removeBlockedTypes(['PROMO']);
 
       expect(service.isTypeBlocked('promo'), isFalse);
+    });
+  });
+
+  group('requestPermission', () {
+    test('reports true when the user allows notifications', () async {
+      for (final status in [
+        AuthorizationStatus.authorized,
+        AuthorizationStatus.provisional,
+      ]) {
+        final service = _PromptingService(status);
+
+        expect(await service.requestPermission(), isTrue, reason: '$status');
+        expect(service.prompts, 1);
+        await service.dispose();
+      }
+    });
+
+    test('reports false when they refuse or have not decided', () async {
+      for (final status in [
+        AuthorizationStatus.denied,
+        AuthorizationStatus.notDetermined,
+      ]) {
+        final service = _PromptingService(status);
+
+        expect(await service.requestPermission(), isFalse, reason: '$status');
+        await service.dispose();
+      }
+    });
+
+    test('registers the token afterwards, granted or not', () async {
+      final granted = _PromptingService(AuthorizationStatus.authorized);
+      final denied = _PromptingService(AuthorizationStatus.denied);
+
+      await granted.requestPermission();
+      await denied.requestPermission();
+
+      expect(granted.tokenRegistrations, 1);
+      expect(denied.tokenRegistrations, 1);
+      await granted.dispose();
+      await denied.dispose();
+    });
+
+    test('a failing prompt is false, not an exception, and still registers '
+        'the token', () async {
+      final service = _PromptingService(
+        AuthorizationStatus.authorized,
+        throws: true,
+      );
+
+      expect(await service.requestPermission(), isFalse);
+      expect(service.tokenRegistrations, 1);
+      await service.dispose();
+    });
+
+    test('a refusal at the local plugin (Android 13, iOS) is false even if '
+        'Firebase reports authorized', () async {
+      final service = _PromptingService(
+        AuthorizationStatus.authorized,
+        localAllows: false,
+      );
+
+      expect(await service.requestPermission(), isFalse);
+      await service.dispose();
+    });
+
+    test('the local plugin answers null off Android and iOS, which is not a '
+        'refusal', () async {
+      // Without a platform implementation (the web, a desktop) there is
+      // nothing to ask: the base implementation must not throw
+      // `UnsupportedError` as `Platform.isAndroid` does in a browser.
+      FlutterLocalNotificationsPlatform.instance = _NoNotificationsPlatform();
+      final service = PushNotificationService(_options);
+
+      for (final platform in [TargetPlatform.linux, TargetPlatform.windows]) {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          expect(await service.requestLocalPermission(), isTrue);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      }
+      await service.dispose();
+    });
+
+    test('with push off it asks nothing and reports false', () async {
+      const off = PlatformFacts(
+        runner: RunnerKind.scaffold,
+        splash: SplashMode.native,
+        orientation: OrientationPolicy.free,
+        deepLinks: true,
+        push: false,
+      );
+      final service = _PromptingService(
+        AuthorizationStatus.authorized,
+        platform: off,
+      );
+
+      expect(await service.requestPermission(), isFalse);
+      expect(service.prompts, 0);
+      await service.dispose();
     });
   });
 
@@ -125,7 +262,7 @@ void main() {
       final service = PushNotificationService(_options, off);
 
       await service.registerToken();
-      await service.requestPermission();
+      expect(await service.requestPermission(), isFalse);
       await service.subscribeToTopic('news');
       await service.unsubscribeFromTopic('news');
       await service.revokeToken();

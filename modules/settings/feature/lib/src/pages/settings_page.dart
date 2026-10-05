@@ -33,6 +33,15 @@ class _SettingsPageState extends State<SettingsPage> {
     if (picked != null) languages.setLocale(picked);
   }
 
+  String _themeModeName(BuildContext context, ThemeMode mode) {
+    final l10n = context.l10nSettings;
+    return switch (mode) {
+      ThemeMode.system => l10n.themeSystem,
+      ThemeMode.light => l10n.themeLight,
+      ThemeMode.dark => l10n.themeDark,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     // `getItOrNull`, not `getIt`: [IAuthActionHandler] is declared in
@@ -44,6 +53,10 @@ class _SettingsPageState extends State<SettingsPage> {
     //
     // Enforced by `dart tools/arch_check/check.dart` rule R8.
     final authActions = getItOrNull<IAuthActionHandler>();
+    // Rebuilds this row when the mode changes (a tap here, or a restore).
+    final themeMode = context.select<ThemeProvider, ThemeMode>(
+      (theme) => theme.themeMode,
+    );
 
     return Scaffold(
       appBar: AppBar(title: Text(context.l10nSettings.settings)),
@@ -58,6 +71,9 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           ListTile(
             title: Text(context.l10nSettings.changeTheme),
+            // The row cycles through three modes; saying which one is
+            // active also tells a screen reader what a tap changes.
+            subtitle: Text(_themeModeName(context, themeMode)),
             trailing: const Icon(Icons.color_lens),
             onTap: () => context.read<ThemeProvider>().toggleTheme(),
           ),

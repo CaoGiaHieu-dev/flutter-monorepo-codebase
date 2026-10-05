@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_common/core_common.dart';
 import 'package:core_di/core_di.dart';
+import 'package:core_responsive/core_responsive.dart';
+import 'package:core_ui_kit/core_ui_kit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -35,6 +38,7 @@ class _Session implements ISessionState {
   _Session(this.signedInUser);
 
   final _changes = StreamController<SessionPrincipal?>.broadcast();
+  final _failures = StreamController<SessionFailure>.broadcast();
 
   @override
   SessionPrincipal? signedInUser;
@@ -44,7 +48,12 @@ class _Session implements ISessionState {
     _changes.add(user);
   }
 
-  Future<void> dispose() => _changes.close();
+  void fail(SessionFailure failure) => _failures.add(failure);
+
+  Future<void> dispose() async {
+    await _changes.close();
+    await _failures.close();
+  }
 
   @override
   bool get hasRestoredSession => true;
@@ -56,7 +65,7 @@ class _Session implements ISessionState {
   Stream<SessionPrincipal?> get sessionChanges => _changes.stream;
 
   @override
-  Stream<SessionFailure> get sessionFailures => const Stream.empty();
+  Stream<SessionFailure> get sessionFailures => _failures.stream;
 
   @override
   void onSessionLost() {}
@@ -106,7 +115,18 @@ Future<(AppRouter, FakeDeeplinkProvider)> _boot(
     getIt.registerSingleton<IPostSignInLocation>(postSignIn);
   }
 
-  await tester.pumpWidget(MaterialApp.router(routerConfig: router.router));
+  await tester.pumpWidget(
+    ResponsiveInit(
+      child: MaterialApp.router(
+        routerConfig: router.router,
+        theme: ThemeData(extensions: [ThemeSystemExtension.light]),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            Overlay.wrap(child: AppOverlayInitializer(child: child!)),
+      ),
+    ),
+  );
   await tester.pumpAndSettle();
   return (router, deeplinks);
 }
@@ -182,6 +202,34 @@ void main() {
       },
     );
   });
+  group('session failures', () {
+    testWidgets('an expired session is explained in a translated toast', (
+      tester,
+    ) async {
+      final session = _Session(_ada);
+      addTearDown(session.dispose);
+      await _boot(
+        tester,
+        viewedOnboard: true,
+        session: session,
+        signIn: FakeSignInLocation('/login'),
+        postSignIn: FakePostSignInLocation('/landing'),
+      );
+
+      session.fail(const SessionExpiredFailure());
+      await tester.pump();
+      await tester.pump();
+
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(NavigatorWrapperWidget)),
+      )!;
+      expect(find.text(l10n.sessionExpired), findsOneWidget);
+
+      AppOverlay.removeToastOverlay();
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('session locations', () {
     testWidgets('a signed-in returning user lands on IPostSignInLocation', (
       tester,

@@ -34,8 +34,15 @@ part 'dao/cache_entries_dao.dart';
 /// not inside a query.
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
-    : _migrations = migrations;
+  CacheDatabase._(
+    super.e,
+    Iterable<IDatabaseMigration> migrations, [
+    this.schemaVersion = _currentSchemaVersion,
+  ]) : _migrations = migrations;
+
+  /// The schema version this build ships. Bump it together with a new
+  /// [IDatabaseMigration]; see [migration].
+  static const int _currentSchemaVersion = 1;
 
   /// Schema steps contributed for this database.
   ///
@@ -61,16 +68,24 @@ class CacheDatabase extends _$CacheDatabase {
   }
 
   /// In-memory database for unit tests (runs on the current isolate).
+  ///
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file as a
+  /// newer build would, so the contributed [migrations] actually run.
   @visibleForTesting
   factory CacheDatabase.forTesting([
     QueryExecutor? executor,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
+    int schemaVersion = _currentSchemaVersion,
   ]) {
-    return CacheDatabase._(executor ?? NativeDatabase.memory(), migrations);
+    return CacheDatabase._(
+      executor ?? NativeDatabase.memory(),
+      migrations,
+      schemaVersion,
+    );
   }
 
   @override
-  int get schemaVersion => 1;
+  final int schemaVersion;
 
   /// Migration behaviour is shared with every other database in the project.
   ///

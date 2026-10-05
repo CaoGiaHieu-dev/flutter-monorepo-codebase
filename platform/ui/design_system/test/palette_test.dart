@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
@@ -159,6 +161,48 @@ void main() {
       expect(await future, 'two');
       expect(reported, 'two');
     });
+
+    for (final size in const [
+      Size(375, 812),
+      Size(360, 640),
+      Size(320, 568),
+      Size(800, 360),
+    ]) {
+      testWidgets('every row is at least 48 dp tall at '
+          '${size.width}x${size.height} (RULE-39)', (tester) async {
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final (key, context) = await pumpAnchor(tester);
+
+        unawaited(
+          key.showDropDown<String>(context, options: const ['one', 'two']),
+        );
+        await tester.pumpAndSettle();
+
+        for (final row in tester.widgetList<PopupMenuItem<Object?>>(
+          find.byType(PopupMenuItem<Object?>),
+        )) {
+          expect(row.height, greaterThanOrEqualTo(kMinInteractiveDimension));
+        }
+        for (final label in ['one', 'two']) {
+          final rowBox = tester.getRect(
+            find
+                .ancestor(
+                  of: find.text(label),
+                  matching: find.byType(InkWell),
+                )
+                .first,
+          );
+          // A hair of tolerance: the menu lays rows out in fractional pixels.
+          expect(
+            rowBox.height,
+            greaterThanOrEqualTo(kMinInteractiveDimension - 0.01),
+          );
+        }
+      });
+    }
 
     testWidgets('a dismissed menu returns null and reports nothing', (
       tester,

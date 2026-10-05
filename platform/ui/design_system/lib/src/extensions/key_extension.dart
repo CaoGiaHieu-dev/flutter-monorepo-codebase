@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:core_responsive/core_responsive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -102,7 +104,12 @@ extension GlobalKeyExtension on GlobalKey {
           if (index > 0) const PopupMenuDivider(),
           PopupMenuItem<_Choice<T>>(
             value: choice,
-            height: context.h(BaseUiConstants.DROPDOWN_ITEM_HEIGHT),
+            // RULE-39: `context.h` only scales down, so a short window would
+            // shrink the row below the 48 dp tap target.
+            height: math.max(
+              kMinInteractiveDimension,
+              context.h(BaseUiConstants.DROPDOWN_ITEM_HEIGHT),
+            ),
             padding: padding,
             child: switch (choice.value) {
               null => const SizedBox.shrink(),

@@ -18,7 +18,6 @@ class BottomTransitionPage<T> extends Page<T> {
     this.constraints,
     this.transitionAnimationController,
     this.isScrollControlled = false,
-    this.useRootNavigator = false,
     this.isDismissible = true,
     this.enableDrag = true,
     this.showDragHandle,
@@ -53,9 +52,6 @@ class BottomTransitionPage<T> extends Page<T> {
 
   /// Whether the bottom sheet can be scrolled to full screen
   final bool isScrollControlled;
-
-  /// Whether to use the root navigator for the bottom sheet
-  final bool useRootNavigator;
 
   /// Whether the bottom sheet can be dismissed by tapping outside
   final bool isDismissible;

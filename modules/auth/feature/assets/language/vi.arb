@@ -7,7 +7,14 @@
   "emailIsRequired": "Email là bắt buộc",
   "invalidEmail": "Vui lòng nhập email hợp lệ",
   "passwordIsRequired": "Mật khẩu là bắt buộc",
-  "passwordTooShort": "Mật khẩu phải có ít nhất 6 ký tự",
+  "passwordTooShort": "Mật khẩu phải có ít nhất {min} ký tự",
+  "@passwordTooShort": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
   "enterYourEmail": "Nhập email của bạn",
   "password": "Mật khẩu",
   "enterYourPassword": "Nhập mật khẩu",

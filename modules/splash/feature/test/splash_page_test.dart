@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_di/core_di.dart';
 import 'package:core_responsive/core_responsive.dart';
@@ -5,9 +7,13 @@ import 'package:feature_splash/feature_splash.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-class _LightThemeStorage implements IThemeStorage {
+class _ThemeStorage implements IThemeStorage {
+  _ThemeStorage(this.mode);
+
+  final ThemeMode mode;
+
   @override
-  ThemeMode getThemeMode() => ThemeMode.light;
+  ThemeMode getThemeMode() => mode;
 
   @override
   void saveThemeMode(ThemeMode mode) {}
@@ -22,6 +28,7 @@ void main() {
     Locale locale = const Locale('en'),
     double textScale = 1.0,
     Size window = const Size(375, 812),
+    bool dark = false,
   }) async {
     tester.view
       ..physicalSize = window
@@ -30,13 +37,17 @@ void main() {
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-    final theme = ThemeProvider(_LightThemeStorage());
+    final theme = ThemeProvider(
+      _ThemeStorage(dark ? ThemeMode.dark : ThemeMode.light),
+    );
     addTearDown(theme.dispose);
     await tester.pumpWidget(
       ResponsiveInit(
         child: Builder(
           builder: (context) => MaterialApp(
             theme: theme.lightTheme(context),
+            darkTheme: theme.darkTheme(context),
+            themeMode: dark ? ThemeMode.dark : ThemeMode.light,
             localizationsDelegates: [
               ...FeatureSplashLocalizations.localizationsDelegates,
               ...AppLocalizations.localizationsDelegates,
@@ -107,6 +118,56 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
+
+  testWidgets('lays out on a square window with 2x Vietnamese text', (
+    tester,
+  ) async {
+    await pumpSplash(
+      tester,
+      locale: const Locale('vi'),
+      textScale: 2.0,
+      window: const Size(400, 400),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  for (final dark in [false, true]) {
+    testWidgets('the text and spinner read on the gradient '
+        '(${dark ? 'dark' : 'light'})', (tester) async {
+      await pumpSplash(tester, dark: dark);
+      final l10n = l10nOf(tester);
+      final palette = dark
+          ? ThemeSystemExtension.dark
+          : ThemeSystemExtension.light;
+
+      double contrast(Color a, Color b) {
+        final la = a.computeLuminance();
+        final lb = b.computeLuminance();
+        return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+      }
+
+      final texts = [
+        tester.widget<Text>(find.text(l10n.appName)),
+        tester.widget<Text>(find.text(l10n.tagline)),
+      ];
+      final spinner = tester.widget<CircularProgressIndicator>(
+        find.byType(CircularProgressIndicator),
+      );
+      final colours = [
+        for (final text in texts) text.style!.color!,
+        spinner.color!,
+      ];
+      // Every stop of the gradient the screen paints, for each colour drawn
+      // on it.
+      for (final colour in colours) {
+        for (final stop in palette.liquidOnboardingColors) {
+          expect(contrast(colour, stop), greaterThanOrEqualTo(4.5));
+        }
+      }
+    });
+  }
 
   test('SplashLocalizationImpl publishes the feature delegate', () {
     expect(

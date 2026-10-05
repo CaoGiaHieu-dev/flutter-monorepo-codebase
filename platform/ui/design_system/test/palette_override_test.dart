@@ -101,6 +101,41 @@ void main() {
       expect(theme.colorScheme.surface, colors.surface);
     });
 
+    testWidgets('textPrimary reaches every text style, not only the palette', (
+      tester,
+    ) async {
+      const red = 0xFFFF0000;
+      final provider = ThemeProvider(
+        _MemoryThemeStorage(),
+        const ThemeProfile(
+          light: {PaletteToken.textPrimary: red},
+          dark: {PaletteToken.textPrimary: red},
+        ),
+      );
+      addTearDown(provider.dispose);
+
+      for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+        final (colors, theme) = await pump(tester, provider, mode);
+        final text = theme.textTheme;
+
+        expect(colors.textPrimary, const Color(red));
+        for (final style in [
+          text.displayLarge,
+          text.headlineMedium,
+          text.titleLarge,
+          text.titleMedium,
+          text.bodyLarge,
+          text.bodyMedium,
+          text.bodySmall,
+          text.labelLarge,
+          text.labelSmall,
+          theme.appBarTheme.titleTextStyle,
+        ]) {
+          expect(style?.color, const Color(red), reason: '$mode');
+        }
+      }
+    });
+
     testWidgets('a token not listed keeps the template value', (tester) async {
       final provider = ThemeProvider(_MemoryThemeStorage(), rebrand);
       addTearDown(provider.dispose);

@@ -10,6 +10,7 @@
   "invalidCredentials": "Invalid credentials",
   "userNotFound": "User not found",
   "somethingWentWrong": "Something went wrong",
+  "sessionExpired": "Your session expired. Please sign in again.",
   "pageNotFound": "Page not found",
   "goBack": "Go back",
   "goToHome": "Go to home",

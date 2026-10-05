@@ -322,7 +322,7 @@ Dựng trên Dio, cấu hình qua hợp đồng `NetworkConfig` nên package kh�
 | Interceptor | `src/interceptors/` | `AuthInterceptor`, `RefreshTokenInterceptor`, `RetryInterceptor`, `LoggingInterceptor` |
 | Handler | `src/handlers/` | `RefreshTokenHandler`, `RetryHandler`, và `RequestOptions.forReplay()` (`request_replay.dart`) |
 | Constants | `src/utils/network_constants.dart` | Tên header, tiền tố `Bearer`, cờ request `EXTRA_*`, log tag — timeout, header thêm và chính sách redirect là `NetworkProfile` của app |
-| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status — `ErrorCodes.HTTP_ERROR` khi không có, cancel → `ErrorCodes.REQUEST_CANCELLED`, lỗi unknown do JSON hỏng → `ParseFailure`, do lỗi TLS hay pin không khớp → một `ServerFailure` `BAD_CERTIFICATE` không tạm thời, …) |
+| Ánh xạ lỗi | `src/error/dio_failure_classifier.dart` | `DioFailureClassifier` — `DioException` → `AppFailure` (timeout → `NetworkFailure` `CONNECTION_TIMEOUT`, `badResponse` → `AuthFailure` 401/403 hoặc `ServerFailure` mang status — `ErrorCodes.HTTP_ERROR` khi không có, cancel → `ErrorCodes.REQUEST_CANCELLED`, lỗi unknown do JSON hỏng → `ParseFailure`, do lỗi TLS hay pin không khớp → một `ServerFailure` `BAD_CERTIFICATE` không được retry, …) |
 
 `DioFailureClassifier` là cách `ErrorHandler` của kernel biết về Dio mà không import nó: một `@singleton` eager có `@PostConstruct` gọi `ErrorHandler.registerClassifier`. Module của package này chạy trong nhóm DI `core`, nên classifier được đăng ký trước khi có bất kỳ Dio client nào (tất cả đều lazy) và trước khi repository nào chạy; constructor của `ApiClient` đăng ký lại lần nữa, idempotent, cho client dựng ngoài DI. Unit test nào đẩy một repository tới `DioException` mà không qua DI thì gọi `DioFailureClassifier.ensureRegistered()` trước. DI smoke test của các app khẳng định việc đăng ký này (`checkAppContract` C08).
 
@@ -578,13 +578,26 @@ Future<String?> refreshToken() async {
 
 // modules/auth/data/lib/src/session/transient_failure.dart
 /// Whether [failure] says nothing about the session's validity — the
-/// renewal never got an answer — so the session must be kept.
+/// request never got the server's verdict — so the session must be kept.
+///
+/// Only a failure that never reached a decision counts: no network
+/// ([NetworkFailure]), a certificate or pin rejection
+/// ([ErrorCodes.BAD_CERTIFICATE], raised by the handshake before any request
+/// is sent), a real HTTP 5xx, or a cancelled request. Every other
+/// failure means the server answered and refused — a 401/403, another 4xx,
+/// or a 200 whose envelope reports an error (`ErrorCodes.RESPONSE_REJECTED`).
+///
+/// Shared by the two places that decide whether a user stays signed in:
+/// [AuthSessionGatewayImpl.refreshToken] (a `401` mid-session) and
+/// `AuthRepositoryImpl.restoreSession` (app start).
 bool isTransientFailure(AppFailure<dynamic>? failure) {
   if (failure is NetworkFailure) return true;
   if (failure is! ServerFailure) return false;
   final code = failure.code;
   if (code == null) return false;
-  return (code >= 500 && code < 600) || code == ErrorCodes.REQUEST_CANCELLED;
+  return (code >= 500 && code < 600) ||
+      code == ErrorCodes.REQUEST_CANCELLED ||
+      code == ErrorCodes.BAD_CERTIFICATE;
 }
 ```
 
@@ -596,9 +609,9 @@ Câu trả lời của gateway quyết định số phận của phiên đăng n
 | :-- | :-- | :-- |
 | một token | đã gia hạn | gửi lại request và mọi request đang chờ nó |
 | `null` | server **từ chối** (401/403, mọi 4xx, hoặc một 200 mà envelope báo lỗi — `ErrorCodes.RESPONSE_REJECTED`) | gọi `onRefreshFailed` một lần, reject tất cả |
-| ném lỗi | không nhận được câu trả lời (mất mạng, HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
+| ném lỗi | không nhận được câu trả lời (mất mạng, certificate hoặc pin bị từ chối (1006), HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
 
-`onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `ISessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token.
+`onRefreshFailed` chính là `NetworkConfigImpl._clearSession`: gateway xoá thông tin đăng nhập đã lưu, rồi `ISessionState.onSessionLost()` đưa bên sở hữu về trạng thái đăng xuất — đúng thay đổi mà `NavigatorWrapperWidget` lắng nghe để chuyển tới màn đăng nhập. Chỉ xoá storage thì người dùng vẫn ở lại màn hình, "đang đăng nhập", mà không có token. Bên sở hữu đã có người dùng đăng nhập còn phát `SessionExpiredFailure` trên `sessionFailures` (`AuthProvider` của sample làm vậy, và không phát gì khi chưa ai đăng nhập), để shell nói được vì sao người dùng bị đưa về màn đăng nhập.
 
 Một `401` tới *sau* khi refresh đã xong — request được gửi bằng token cũ — không khởi động refresh mới: `RefreshTokenHandler` so header `Authorization` của request với `NetworkConfig.getToken` và, nếu khác nhau, chỉ gửi lại request. Với refresh token xoay vòng, một lần refresh thừa có thể làm mất hiệu lực chính phiên vừa được gia hạn.
 
@@ -903,12 +916,13 @@ Future<void> run(Migrator m, int from, int to) async {
 }
 ```
 
-Bốn tính chất đáng gọi tên:
+Năm tính chất đáng gọi tên:
 
 1. **Dùng `if` thuần, không phải `else if`.** Thiết bị bỏ lỡ vài bản phát hành sẽ replay *mọi* bước trung gian thay vì nhảy thẳng tới hình dạng mới nhất.
 2. **Upgrade chạy tăng dần, downgrade chạy giảm dần.** Thứ tự quan trọng ở cả hai chiều.
 3. **Khoảng trống version là hợp lệ.** Một bản phát hành có thể không đổi schema, để trống số version đó.
 4. **Downgrade cần bước tường minh.** Đi từ `from` xuống `to` sẽ ném `UnsupportedError` trừ khi có một bước đăng ký cho version `from` trở lên — runner phải biết schema mà nó đang rời bỏ. Thiếu kiểm tra này, runner không làm gì cả và drift đóng dấu `user_version` thấp hơn lên các bảng vẫn mang hình dạng mới; cài lại bản mới hơn sau đó sẽ replay các bước upgrade trên chúng (trùng cột) và lỗi ở mọi lần khởi động. Lỗi ném ra giữ nguyên file và version của nó, và `DriftDatabaseOpener` báo nó như lỗi khởi động thay vì cách ly file. Trên thực tế một bản cũ chỉ có các bước đó nếu chúng được phát hành trước thay đổi mà chúng đảo ngược — ngoài ra, cài bản cũ đè lên schema mới hơn là không được hỗ trợ.
+5. **Một transaction.** `driftMigrationStrategy` chạy toàn bộ phần replay trong `database.transaction`. DDL của SQLite có tính transaction và drift chỉ ghi `user_version` mới sau khi `onUpgrade` trả về, nên một bước ném lỗi sẽ rollback mọi bước trước đó: file giữ nguyên version và schema cũ, lần khởi động sau thử lại. Không có nó, lỗi ở bước 3 để `ADD COLUMN` của bước 2 đã áp dụng dưới version cũ, và mọi lần khởi động sau đều lỗi trùng cột (`platform/infra/database/test/migration_test.dart`, *upgrade against a real file*; `modules/cache/data/test/cache_database_test.dart`).
 
 Việc kiểm tra diễn ra một lần, lúc khởi tạo — không phải giữa chừng migration. Phát hiện lỗi wiring khi đã chạy được nửa đường sẽ để lại schema migrate dở.
 
@@ -1020,7 +1034,7 @@ Mất dữ liệu người dùng tệ hơn là báo lỗi lúc khởi động.
 
 `PushNotificationService` bọc Firebase Messaging và `flutter_local_notifications`. Channel ID và loại payload nằm ở `src/utils/notification_constants.dart`, tức ngay trong package tiêu thụ chúng — một channel ID thông báo không có lý do gì để mọi package trong app đọc được.
 
-Khởi động không bao giờ chờ người dùng hay mạng: `init()` (được await bên trong `configureDependencies()`) chỉ thiết lập Firebase, các channel, listener và plugin local-notifications. Việc đăng ký FCM token chạy sau đó, không await, và ghi log lỗi thay vì throw — hãy đọc token từ `tokenStream`, vì `fcmToken` có thể vẫn là `null` ngay sau khi khởi động. Xin quyền là **opt-in**: không có gì hiện hộp xin quyền lúc khởi động, app tự gọi `PushNotificationService.requestPermission()` ở chỗ nó muốn hỏi (hàm này đăng ký lại token). Một platform khai `push: false` (`platforms.<p>.push`, đọc qua `PlatformFacts`) khiến `init()` trả về trước khi đụng tới Firebase và các hàm còn lại thành no-op. Loại payload bị chặn (`addBlockedTypes` / `removeBlockedTypes`) so khớp không phân biệt hoa thường. Dòng tóm tắt và tiêu đề của inbox gộp do app cung cấp (`inboxSummaryBuilder` / `inboxTitleBuilder`, mặc định đều `null`) để chữ đến từ localization của chính app.
+Khởi động không bao giờ chờ người dùng hay mạng: `init()` (được await bên trong `configureDependencies()`) chỉ thiết lập Firebase, các channel, listener và plugin local-notifications. Việc đăng ký FCM token chạy sau đó, không await, và ghi log lỗi thay vì throw — hãy đọc token từ `tokenStream`, vì `fcmToken` có thể vẫn là `null` ngay sau khi khởi động. Xin quyền là **opt-in**: không có gì hiện hộp xin quyền lúc khởi động, app tự gọi `PushNotificationService.requestPermission()` ở chỗ nó muốn hỏi (hàm này đăng ký lại token). Hàm trả về `Future<bool>`: `true` khi người dùng hiện cho phép thông báo (trạng thái authorized hoặc provisional), `false` khi họ từ chối, chưa quyết định, push tắt trên platform đó hoặc yêu cầu thất bại — một công tắc trong Settings có thể dùng nó để hiện người dùng đang ở đâu. Hàm không bao giờ ném lỗi, và hỏi hệ điều hành qua Firebase Messaging cùng plugin local-notifications, nên bên trong không có nhánh `Platform.is*` nào. Một platform khai `push: false` (`platforms.<p>.push`, đọc qua `PlatformFacts`) khiến `init()` trả về trước khi đụng tới Firebase và các hàm còn lại thành no-op. Loại payload bị chặn (`addBlockedTypes` / `removeBlockedTypes`) so khớp không phân biệt hoa thường. Dòng tóm tắt và tiêu đề của inbox gộp do app cung cấp (`inboxSummaryBuilder` / `inboxTitleBuilder`, mặc định đều `null`) để chữ đến từ localization của chính app.
 
 Service này là `@singleton` eager inject `FirebaseOptions`, mà mỗi app tự đăng ký từ `lib/firebase/firebase_module.dart` của mình. Vì thế manifest của app đặt `core_notifications` trong nhóm `notifications` với `phase: after` thay vì trong `core`: `before` chạy trước phần đăng ký của chính app. App không dùng push notification thì bỏ nhóm này đi.
 

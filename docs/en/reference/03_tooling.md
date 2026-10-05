@@ -178,7 +178,7 @@ Details: [`check_outdated`](../../../tools/README.md#check_outdated).
 
 | Command | Purpose | Exit codes | CI gate |
 |:--|:--|:--|:--|
-| `dart tools/workspace_setup/configure.dart` | Full setup: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, barrels | `0` · the failing command's exit code · `64` bad argument | CI runs it before Gate 2 |
+| `dart tools/workspace_setup/configure.dart` | Full setup: activate `flutterfire_cli` (not with `--stub-firebase`), `flutter clean`, `pub get`, `gen-l10n`, `build_runner`, barrels | `0` · the failing command's exit code · `64` bad argument | CI runs it before Gate 2 |
 | `dart tools/workspace_setup/configure.dart --stub-firebase` | The same, plus compile-only Firebase stubs where no real file exists | as above | Used by CI |
 | `dart tools/workspace_setup/configure.dart --help` | Print the steps, run nothing | `0` | — |
 

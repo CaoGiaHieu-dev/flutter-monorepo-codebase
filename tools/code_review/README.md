@@ -126,7 +126,7 @@ dart tools/code_review/code_review.dart --changed
 
 ## 🔗 CI/CD Integration
 
-The real workflow is [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): on every pull request (into `main`, `develop`, `master`) touching Dart files in `apps/*/lib`, `modules/` or `platform/` (except `*.g.dart`, `*.freezed.dart`, `*.module.dart`), it runs the tool with one `--file` per changed file (the report language is `reportLanguage`, `en` as committed), uploads the report as an artifact and posts a review with inline suggestions on the PR. It can also be run by hand (`workflow_dispatch`) with a `changed` / `all` / `domain` / `data` / `platform` / `presentation` scope. Required secret: `GEMINI_API_KEY`. This workflow does not block a merge.
+The real workflow is [`.github/workflows/code_review.yml`](../../.github/workflows/code_review.yml): on every pull request (into `main`, `develop`, `master`) touching Dart files in `apps/*/lib`, `modules/` or `platform/` (except `*.g.dart`, `*.freezed.dart`, `*.module.dart`), it runs the tool with one `--file` per changed file (the report language is `reportLanguage`, `en` as committed), uploads the report as an artifact and posts a review with inline suggestions on the PR. It can also be run by hand (`workflow_dispatch`) with a `changed` / `all` / `domain` / `data` / `platform` / `presentation` scope. Secret: `GEMINI_API_KEY` — without it (a fresh adopter, a fork PR) the review and comment steps are skipped with a notice instead of failing. This workflow does not block a merge.
 
 ## 🐛 Troubleshooting
 

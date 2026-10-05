@@ -59,7 +59,7 @@ dart tools/workspace_setup/configure.dart
 ```
 
 > [!TIP]
-> Lịch sử cũ của template mang theo vài chục MB kết quả build (Gradle, iOS và tools) từng bị commit một lần và từ lâu đã được ignore. Clone nông (`git clone --depth 1 <repo-url>`) bỏ qua phần đó; bắt đầu repository riêng của bạn với một lịch sử mới khi bạn dùng template (§8.4) cũng vậy.
+> Lịch sử cũ của template mang theo khoảng 160 MB (chưa nén) kết quả build (Gradle, iOS và tools) từng bị commit một lần và từ lâu đã được ignore. Clone nông (`git clone --depth 1 <repo-url>`) bỏ qua phần đó; bắt đầu repository riêng của bạn với một lịch sử mới khi bạn dùng template (§8.4) cũng vậy.
 
 **`configure.dart` là bước setup.** Script chạy lần lượt các bước sau và dừng ngay ở lỗi đầu tiên:
 
@@ -307,7 +307,7 @@ Với `env.dev` đã commit giữ nguyên, app sample chạy được nhưng **k
 | :--- | :--- | :--- |
 | 1 | Một màn splash: trên Android là splash Dart (logo, "Codebase", "Ứng dụng Flutter, sẵn sàng để phát triển", một spinner); trên iOS splash native được giữ suốt quá trình khởi động | `platforms.<p>.splash` trong manifest. Trong lúc đó module auth thử khôi phục phiên; không có token đã lưu thì nó trả lời "đã đăng xuất" ngay tại chỗ, không gọi mạng |
 | 2 | Onboarding: "Welcome to Codebase" và nút **Get Started** | `feature_onboarding` đóng góp entry location của lần chạy đầu. Nó chỉ hiện một lần: cờ được lưu lại, nên lần chạy sau bỏ qua |
-| 3 | Đăng nhập: "Welcome Back", một ô email và một ô mật khẩu | **Get Started** đi tới trang login của `feature_auth`. Form tự kiểm tra đầu vào — dạng email, mật khẩu ít nhất 6 ký tự — và không gửi gì cho tới khi cả hai đạt |
+| 3 | Đăng nhập: "Welcome Back", một ô email và một ô mật khẩu | **Get Started** đi tới trang login của `feature_auth`. Form tự kiểm tra đầu vào — dạng email, mật khẩu ít nhất 6 ký tự (`AuthValidationConstants.MIN_PASSWORD_LENGTH`) — và không gửi gì cho tới khi cả hai đạt |
 | 4 | Nút quay spinner, rồi một toast "A network error occurred. Please try again.", và bạn ở lại màn hình đăng nhập | Request là `POST /user/login` tới một `BASE_URL` rỗng, tức một đường dẫn không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
 
 Để vượt qua bước 4, chọn một trong hai cách:

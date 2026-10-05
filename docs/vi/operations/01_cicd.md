@@ -89,6 +89,8 @@ Chạy chính công cụ review dùng Gemini của repo (`tools/code_review/code
 
 **Nó làm gì**: lấy danh sách file thay đổi bằng `tj-actions/changed-files` (ghim theo SHA commit — các tag của nó từng bị ghi đè trong vụ tấn công chuỗi cung ứng tháng 3/2025), chạy reviewer, upload báo cáo Markdown làm artifact (giữ 30 ngày), rồi phân tích báo cáo đó và đăng **comment inline đúng dòng** khi dòng đó nằm trong diff của PR. Phát hiện nằm ngoài diff được gom thành comment riêng theo từng file.
 
+**Khi không có key**: bước đầu tiên kiểm tra secret `GEMINI_API_KEY` có được đặt không. Người mới dùng template, và mọi pull request từ fork (secret rỗng ở đó), không có nó; khi đó các bước reviewer và comment bị bỏ qua kèm một `::notice::` và job vẫn xanh, thay vì làm fail mọi PR chạm vào Dart.
+
 **Quyền (permissions)**: workflow khai báo `contents: read`, `pull-requests: write` (review kèm comment inline) và `issues: write` (comment theo từng file và comment "không có vấn đề"), nên vẫn chạy được ở repo mà `GITHUB_TOKEN` mặc định chỉ có quyền đọc. Danh sách file thay đổi đi vào script review qua `env:` — mỗi dòng một file, không bao giờ nội suy thẳng vào script — và danh sách file của PR được đọc bằng `github.paginate`, nên PR đụng hơn 30 file vẫn nhận comment inline trên tất cả.
 
 **Phạm vi `changed` khi chạy tay**: diff nhánh đang checkout với merge-base của nó và nhánh mặc định của repo (được fetch tường minh; checkout có đủ lịch sử), giữ các file Dart dưới `lib/` hoặc `test/` của một app, `modules/` và `platform/`, trừ file generated, rồi review bằng `--file`. Nó **không** dùng `--changed` của chính công cụ, vốn là `git diff HEAD` — thay đổi chưa commit — và luôn rỗng trên một checkout mới. Dispatch ngay trên nhánh mặc định thì nó không thấy gì và báo như vậy.
@@ -110,7 +112,7 @@ if [ "$CRITICAL_COUNT" -gt 0 ]; then
 fi
 ```
 
-`exit 1` bị comment, nên **AI review chỉ mang tính khuyến nghị và không bao giờ chặn merge**. Muốn nó chặn thật thì bỏ comment dòng đó — nhưng chỉ nên làm sau khi bạn tin tưởng tỉ lệ báo nhầm của nó trên codebase của mình, không thì mọi PR sẽ tắc.
+`exit 1` bị comment, nên **AI review chỉ mang tính khuyến nghị và không bao giờ chặn merge** — và khi không có `GEMINI_API_KEY` nó bị bỏ qua, không bị fail. Muốn nó chặn thật thì bỏ comment dòng đó — nhưng chỉ nên làm sau khi bạn tin tưởng tỉ lệ báo nhầm của nó trên codebase của mình, không thì mọi PR sẽ tắc.
 
 ---
 
@@ -323,11 +325,19 @@ dart tools/unused_checker/check_unused_packages.dart
 #    dart tools/module_generator/generate.dart 6 smoke_p
 #    dart tools/module_generator/generate.dart 2 smoke_d
 #    dart tools/module_generator/generate.dart 3 smoke_d
+#    dart tools/module_generator/generate.dart 1 smoke_n "" 3 3
+#    dart tools/module_generator/generate.dart 3 smoke_nd
+#    dart tools/module_generator/generate.dart 4 smoke_core
+#    dart tools/module_generator/generate.dart 5 smoke_custom acme
 #    dart tools/composer/composer.dart new smoke_app --platforms android,ios --modules smoke_p,smoke_d
 #    flutter pub get && dart run build_runner build --workspace
-#    (với từng modules/smoke_p/{feature,api} modules/smoke_d/{domain,data}: barrel_generator <dir>/lib)
+#    (với từng modules/smoke_p/{feature,api} modules/smoke_d/{domain,data} modules/smoke_n/feature
+#     modules/smoke_nd/data platform/infra/smoke_core platform/infra/smoke_custom: barrel_generator <dir>/lib)
 #    dart tools/composer/composer.dart verify && flutter analyze && dart tools/arch_check/check.dart
-#    (cd modules/smoke_p/feature && flutter test) && (cd apps/smoke_app && flutter test)
+#    dart tools/dependency_sync.dart --check
+#    (cd modules/smoke_p/feature && flutter test) && (cd modules/smoke_n/feature && flutter test)
+#    (cd apps/smoke_app && flutter test)
+#    (cd apps/mobile && flutter test) && (cd apps/admin && flutter test)   # các app có sẵn vẫn khởi động được
 
 # 5. Job build của pr_quality_check.yml (cần stub Firebase hoặc file thật —
 #    xem bên dưới) — chú ý cd

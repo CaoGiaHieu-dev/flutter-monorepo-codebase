@@ -275,14 +275,14 @@ error: (failure) =>
 | timeout khi transform response | `NetworkFailure`, `TRANSFORM_TIMEOUT` (1008) | `connectionTimedOut` |
 | không có kết nối (`connectionError`, một `SocketException`) | `NetworkFailure`, `CONNECTION_ERROR` (1005) / `NO_INTERNET` (1001) | `noInternetConnection` |
 | certificate bị từ chối (`badCertificate`) | `NetworkFailure`, `BAD_CERTIFICATE` (1006) | `networkError` |
-| một lỗi Dio unknown do lỗi TLS hoặc pin không khớp | `ServerFailure`, `BAD_CERTIFICATE` (1006) — không phải `NetworkFailure`, nên không phải lỗi tạm thời | `networkError` |
+| một lỗi Dio unknown do lỗi TLS hoặc pin không khớp | `ServerFailure`, `BAD_CERTIFICATE` (1006) — không phải `NetworkFailure`, nên retry policy không retry nó | `networkError` |
 | một lỗi Dio unknown do body không phải JSON hợp lệ (một `FormatException`: trang bảo trì, captive portal) | `ParseFailure`, `INVALID_FORMAT` (4001) | `somethingWentWrong` |
 | lỗi transport khác, request bị huỷ, một `HttpException`, không có status | `NETWORK_UNKNOWN` (1007), `REQUEST_CANCELLED` (1004), `HTTP_ERROR` (1002) | `networkError` |
 | response lỗi `5xx` | `ServerFailure`, chính status đó | `serverUnavailable` |
 | response lỗi `401` / `403` | `AuthFailure`, chính status đó | `somethingWentWrong` |
 | mọi response lỗi khác, một `200` bị từ chối, body rỗng, lỗi không phân loại được, không có code | chính status đó, `RESPONSE_REJECTED` (7001), `EMPTY_RESPONSE` (7002), `UNKNOWN` (9999) | `somethingWentWrong` |
 
-Hai đường certificate phản ánh đúng những gì Dio báo: certificate mà platform từ chối đến dưới dạng `DioExceptionType.badCertificate` và vẫn là một `NetworkFailure`; pin không khớp và lỗi bắt tay TLS đến dưới dạng `unknown` kèm nguyên nhân, và được phân loại từ nguyên nhân đó thành một `ServerFailure` — nó không phải lỗi tạm thời đối với retry (cùng certificate đó sẽ lại bị từ chối), nhưng bắt tay thất bại trước khi bất kỳ request nào rời máy, nên server chưa đưa ra phán quyết: session gateway của sample coi `NetworkFailure`, một lần certificate bị từ chối (1006), một 5xx thật và một request bị huỷ là lỗi tạm thời và giữ phiên. Mọi code từ 1000 tới dưới 2000 đều đọc ra là `networkError` trừ khi một dòng ở trên nêu tên nó. Một feature có thể nói điều cụ thể hơn — sai mật khẩu, không có người dùng — thì tự phân loại failure và dùng ARB của riêng nó (RULE-34); `failureMessage` là phương án dự phòng cho mọi thứ chung chung. Mã nằm trong `ErrorCodes` (`platform/foundation/kernel/lib/src/utils/error_codes.dart`): không bao giờ so với một literal.
+Hai đường certificate phản ánh đúng những gì Dio báo: certificate mà platform từ chối đến dưới dạng `DioExceptionType.badCertificate` và vẫn là một `NetworkFailure`; pin không khớp và lỗi bắt tay TLS đến dưới dạng `unknown` kèm nguyên nhân, và được phân loại từ nguyên nhân đó thành một `ServerFailure` — nó không được retry (cùng certificate đó sẽ lại bị từ chối), nhưng bắt tay thất bại trước khi bất kỳ request nào rời máy, nên server chưa đưa ra phán quyết: session gateway của sample coi `NetworkFailure`, một lần certificate bị từ chối (1006), một 5xx thật và một request bị huỷ là lỗi tạm thời và giữ phiên. Mọi code từ 1000 tới dưới 2000 đều đọc ra là `networkError` trừ khi một dòng ở trên nêu tên nó. Một feature có thể nói điều cụ thể hơn — sai mật khẩu, không có người dùng — thì tự phân loại failure và dùng ARB của riêng nó (RULE-34); `failureMessage` là phương án dự phòng cho mọi thứ chung chung. Mã nằm trong `ErrorCodes` (`platform/foundation/kernel/lib/src/utils/error_codes.dart`): không bao giờ so với một literal.
 
 ### Hợp đồng đăng nhập của sample
 
@@ -347,7 +347,7 @@ Bạn không tự nối interceptor refresh. `NetworkConfigImpl` cài nó ngay k
 | :-- | :-- | :-- |
 | một token | đã gia hạn | gửi lại request và mọi request đang chờ nó |
 | `null` | server **từ chối** (401/403, mọi 4xx, hoặc một 200 mà envelope báo lỗi — `ErrorCodes.RESPONSE_REJECTED`) | gọi `onRefreshFailed` một lần, reject tất cả |
-| ném lỗi | không nhận được câu trả lời (mất mạng, HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
+| ném lỗi | không nhận được câu trả lời (mất mạng, certificate hoặc pin bị từ chối (1006), HTTP 5xx thật, bị huỷ) — chỉ những trường hợp này | reject tất cả, **giữ nguyên phiên** |
 
 Sau đó đánh dấu lời gọi login và refresh bằng `EXTRA_CAN_REFRESH_TOKEN: false` (bước 6). Chuyện gì xảy ra sau câu trả lời của bạn — một lần refresh cho N request `401` đồng thời, và ba lớp chống đệ quy — nằm ở [`../architecture/02_core.md` § 6](../architecture/02_core.md#luồng-refresh-token).
 

@@ -38,7 +38,7 @@ These are deliberate and documented, so they are **not** vulnerabilities in them
 - **SSL pinning is off until you configure it.** The template apps declare
   `ssl_pinning: { disabled: … }` for staging and prod in `apps/mobile/app_manifest.yaml`, so they use
   normal certificate validation only (and each app's report lists it under *decisions to revisit*).
-  Declare at least two SPKI hashes (leaf + backup) per flavor before relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning).
+  Declare at least two SPKI hashes (leaf + backup) per flavor before relying on pinning — see [`docs/en/guides/08_networking.md` § 10](docs/en/guides/08_networking.md#10-turn-on-ssl-pinning). Pins apply to every host the process connects to, not only your API: an image CDN, a font host or a third-party SDK endpoint with no matching pin fails its handshake too.
 - **Certificate validation is bypassed only in a debug build that explicitly declared
   `--flavor dev`.** A missing or unknown flavor is treated as prod. A bypass reachable any other
   way *is* a vulnerability — please report it.
@@ -55,6 +55,9 @@ Secrets are never committed. If you find any of the following in the history, re
 
 - Decide `flavors.<f>.ssl_pinning` in your app manifest (at least two pins, or `disabled` with a
   reason). The decision is the app's `SslPinningPolicy`, which `AppInitializer` installs before DI
-  starts; there is no pin to register or bind and no constant in `platform/` to edit.
+  starts; there is no pin to register or bind and no constant in `platform/` to edit. The pins cover
+  every host the app connects to (check CDNs and SDK endpoints first), and the bearer token goes only
+  to the API host and `NetworkProfile.authorizedHosts` — declare both together when the API spans
+  several domains.
 - Generate your own release keystores and keep them out of git.
 - Replace the placeholder contact above and enable private vulnerability reporting in your fork.

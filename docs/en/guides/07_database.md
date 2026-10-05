@@ -159,8 +159,15 @@ part 'dao/cache_entries_dao.dart';
 
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(super.e, Iterable<IDatabaseMigration> migrations)
-    : _migrations = migrations;
+  CacheDatabase._(
+    super.e,
+    Iterable<IDatabaseMigration> migrations, [
+    this.schemaVersion = _currentSchemaVersion,
+  ]) : _migrations = migrations;
+
+  /// The schema version this build ships. Bump it together with a new
+  /// [IDatabaseMigration]; see [migration].
+  static const int _currentSchemaVersion = 1;
 
   /// Schema steps contributed for this database.
   ///
@@ -186,16 +193,24 @@ class CacheDatabase extends _$CacheDatabase {
   }
 
   /// In-memory database for unit tests (runs on the current isolate).
+  ///
+  /// [schemaVersion] lets an upgrade test reopen a hand-written old file as a
+  /// newer build would, so the contributed [migrations] actually run.
   @visibleForTesting
   factory CacheDatabase.forTesting([
     QueryExecutor? executor,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
+    int schemaVersion = _currentSchemaVersion,
   ]) {
-    return CacheDatabase._(executor ?? NativeDatabase.memory(), migrations);
+    return CacheDatabase._(
+      executor ?? NativeDatabase.memory(),
+      migrations,
+      schemaVersion,
+    );
   }
 
   @override
-  int get schemaVersion => 1;
+  final int schemaVersion;
 
   @override
   MigrationStrategy get migration =>
@@ -361,11 +376,10 @@ A schema change is **three edits made together** — miss one and the upgrade si
    DateTimeColumn get expiresAt => dateTime().nullable()();
    ```
 
-2. **Bump `schemaVersion`** in your database class (`1` → `2`). It must equal the highest `version` among your steps: Drift calls `onUpgrade` only when the stored `user_version` is below `schemaVersion`, so without the bump no step ever runs on an existing install, and its queries fail with *"no such column"*.
+2. **Bump the schema version** in your database class (`_currentSchemaVersion` in the sample, `1` → `2`; it is what `schemaVersion` returns). It must equal the highest `version` among your steps: Drift calls `onUpgrade` only when the stored `user_version` is below `schemaVersion`, so without the bump no step ever runs on an existing install, and its queries fail with *"no such column"*.
 
    ```dart
-   @override
-   int get schemaVersion => 2;
+   static const int _currentSchemaVersion = 2;
    ```
 
 3. **Register the step** — below. Then `dart run build_runner build --workspace` (the generated table class gains the column).
@@ -400,6 +414,7 @@ class AddExpiresAtToCacheEntries
 - **`version` is the version this step *produces*.** `version == 2` means "take a database at version 1 and make it version 2". So `upgrade` must run against `version - 1`, and `downgrade` must return it to that same shape.
 - **Version 1 is not migratable** — it is what `Migrator.createAll()` creates. The runner rejects `version < 2` at construction.
 - **Duplicate versions are rejected**, not silently resolved to one of them.
+- **The whole upgrade is one transaction.** `driftMigrationStrategy` runs every step inside `database.transaction`, so a step that throws rolls back the earlier steps too: the file keeps its old version and schema, and the next launch retries the upgrade from the start. Write a step that is safe to run again from the old schema, and never one that depends on a half-applied state.
 
 ## 12. Test the database
 
@@ -413,10 +428,10 @@ The existing tests are split to follow the code:
 
 | Package | File | Covers |
 |---|---|---|
-| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry |
+| `core_database` | `migration_test.dart` | Runner validation (version < 2, duplicates, sorting), replay of skipped versions, descending downgrade, gaps, irreversible downgrade, downgrade with no covering step refused (and the stored version left untouched, against a real file), empty registry, and the upgrade against a real file: every step replays and keeps the rows, a failing step rolls the earlier ones back |
 | `core_database` | `drift_database_opener_test.dart` | The corruption predicate directly — including the case where an environment marker vetoes a corruption match |
 | `core_database` | `database_connection_factory_test.dart` | Read-pool connections carry the busy timeout, which `beforeOpen` sets on the writer only |
-| `data_cache` | `cache_database_test.dart` | DAO round-trips, migration wiring, and **real-file** behaviour (WAL, foreign keys, survival across close/reopen) |
+| `data_cache` | `cache_database_test.dart` | DAO round-trips, migration wiring, and **real-file** behaviour (WAL, foreign keys, survival across close/reopen, an old-version file upgrading through its step and keeping its rows, a failing step leaving the old file as it was) |
 | `data_cache` | `database_handle_test.dart` | Accessor reads/writes, rows visible on the database itself, transaction commit / rollback / return value |
 
 Two habits worth copying:

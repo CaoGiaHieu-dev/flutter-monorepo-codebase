@@ -81,7 +81,8 @@ class ProductListProvider extends BaseProvider<List<ProductEntity>> {
 ```
 
 - A use case returning another type than `T` passes `convert:` to `executeOperation` (a named argument
-  of the method, not of `OperationConfig`); without it a release build ends in `success` with `null` data.
+  of the method, not of `OperationConfig`); without it a release build ends in `success` with `null` data. A `convert` that throws settles on `error`
+  like a failing operation (never a stuck `loading`).
 - `showLoading` is conditional: `OperationExecutor.execute` emits `loading` only while `data == null`
   (`platform/state/provider/lib/src/management/operation_executor.dart`). A **refresh** on a populated
   screen shows no spinner and there is no flag; call `updateState(state: const ViewState.loading())` first

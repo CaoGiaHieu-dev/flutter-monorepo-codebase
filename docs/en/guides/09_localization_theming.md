@@ -250,12 +250,15 @@ By default nothing scales past the design size: a tablet or desktop window draws
 > [!CAUTION]
 > A reusable widget in `core_ui_kit` **must not scale the parameters it receives** (RULE-31). The caller scales before passing, so a value arrives already in device pixels and has to be used as-is; scaling it again double-scales, and a caller passing a token cannot override it at all. A widget's **own** constants are the opposite case: it must scale those, or it is not responsive.
 
-`CustomButton.rectangle` shows both halves. A `height` or `radius` the caller passes is used as given; when it passes nothing, the widget scales its own default:
+`CustomButton.rectangle` shows both halves. A `radius` the caller passes is used as given, and so is a `height` — except that the widget lifts it to the 48 dp minimum tap target (RULE-39); when the caller passes nothing, the widget scales its own default:
 
 ```dart
 // platform/ui/ui_kit/lib/src/buttons/custom_button.dart
 final radius = this.radius ?? AppRadius.md(context);
-final height = this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT);
+final height = math.max(
+  kMinInteractiveDimension,
+  this.height ?? context.h(SharedUiConstants.BUTTON_HEIGHT),
+);
 ```
 
 The wrong version scales the parameter itself — `context.h(widget.height)` — which double-scales every caller that already passed `context.h(56)` and ignores a token.

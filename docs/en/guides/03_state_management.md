@@ -118,6 +118,8 @@ How the success value becomes the provider's data (`OperationExecutor._handleSuc
 | no `convert`, result is `null` | `null` |
 | no `convert`, result is not a `T` | **debug:** an `assert` fails, naming both types. **release:** asserts are stripped, so the state becomes `success` with `data: null` — a screen that silently renders empty |
 
+A `convert` that **throws** (a parse of a value the repository let through) does not leave the screen on `loading`: like a throwing operation it settles on `error` with `ErrorHandler.handleError(e)`, `onFailure` runs, and the error is reported through `FlutterError.reportError`.
+
 `onSuccess` receives the **converted** value (`T?`), not the raw `R`. The test `platform/state/provider/test/base_provider_test.dart` (`runConvertedOperation`) covers the path.
 
 > [!CAUTION]
@@ -311,7 +313,7 @@ ProviderStateListener<AuthProvider, UserEntity>(
 
 This is an illustrative listener, as a screen inside `feature_auth` would write it. It navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages. `context.l10n.failureMessage(code)` is `core_base_ui`'s mapping from a failure's code (an `ErrorCodes` value or an HTTP status) to a translated sentence, so every screen words the same fault the same way. It is an extension on `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` and `CONNECTION_ERROR` read as no connection, the two timeout codes as a timeout, the rest of the network range as a network error, an HTTP 5xx as the server being unavailable, and anything else — a `null` code included — as "something went wrong".
 
-The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator. `AuthProvider` publishes each failed sign-in as a `SessionFailure` — a `SessionServerFailure(code:)` for everything it cannot name — and the shell words it from the same `failureMessage(code)`.
+The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator. `AuthProvider` publishes each failed sign-in as a `SessionFailure` — a `SessionServerFailure(code:)` for everything it cannot name — and the shell words it from the same `failureMessage(code)`. When a signed-in session is lost (`onSessionLost()`), it publishes `SessionExpiredFailure` instead, which the shell words with the global key `sessionExpired`.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 
@@ -458,7 +460,7 @@ What `emitResult` emits, row by row:
 | `Result.success(null)` | `success(null)` when `T` is nullable, otherwise `initial` |
 | `Result.failure(f)` | `error(f)` |
 | `Result.none` / `Result.cancel` | the state from before the call, if `loading` was emitted — never left stuck on `loading`; otherwise nothing |
-| The operation throws | `error(ErrorHandler.handleError(e))`, and `addError(e)` so `BlocObserver.onError` sees the bug |
+| The operation, or its `convert`, throws | `error(ErrorHandler.handleError(e))`, and `addError(e)` so `BlocObserver.onError` sees the bug |
 
 `onSuccess:` / `onFailure:` run after that state was emitted. Use them for follow-up work (another event, analytics), not for state. Once the handler is done, nothing more is emitted and the callbacks are skipped. "Done" means the bloc closed, or a `restartable()` transformer replaced the handler while the call was pending.
 

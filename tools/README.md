@@ -371,7 +371,7 @@ dart tools/theme_generator/theme_setting.dart --app mobile
 # The workspace holds two apps today (mobile, admin), so --app is required. Both tools have --help.
 ```
 
-- `configure.dart` runs, in order: `dart pub global activate flutterfire_cli` →
+- `configure.dart` runs, in order: `dart pub global activate flutterfire_cli` (not with `--stub-firebase`: the stubs replace what it would generate, so a stubbed CI run needs neither the CLI nor pub.dev for it) →
   `flutter clean` → `flutter pub get` → `flutter gen-l10n` in every package with an `l10n.yaml` →
   `dart run build_runner build --workspace` → the barrel generator for every package with a `lib/`
   (apps skipped). It stops at the first failing command with that command's exit code.
@@ -469,7 +469,7 @@ R12–R15 and R17–R20 read files, not the package graph: every file git does n
 
 R16 exists because an app declares, for each row of the shell's catalog, that it provides the contract or does without it and why (`capabilities:`, RULE-81) — and that only holds while the catalog is complete. R8 already derives which contracts vanish with a module; R16 reads the same set (through `tools/shared/contract_scan.dart`, which holds the scanner `arch_check` and `composer` share, so they cannot disagree) and asks the other question: does the shell look one up without a row? Adding such a lookup fails Gate 1 until the row — and so the `capabilities:` entry of each app — exists. The second half keeps a rename from leaving a row for a type that no longer exists.
 
-R17 keeps "where am I running" an app decision. What an app enables on a platform is declared in its manifest and read from `PlatformFacts`; `resolveAppPlatform()` is the one function that asks the Flutter runtime. The few other forks are OS-API availability (`dart:io`'s `Platform` throws on the web; each OS asks for notification permission its own way), listed with the reason in `kPlatformForkAllowList` so the exception is visible in review.
+R17 keeps "where am I running" an app decision. What an app enables on a platform is declared in its manifest and read from `PlatformFacts`; `resolveAppPlatform()` is the one function that asks the Flutter runtime. The few other forks are OS-API availability (`dart:io`'s `Platform` throws on the web; a page transition follows each OS's convention), listed with the reason in `kPlatformForkAllowList` so the exception is visible in review.
 
 R8's lookup scan reads the same comment-stripped source as R18–R20 (`tools/arch_check/source_rules.dart`), so a lookup split across lines or spelled `getIt.get<T>()` is seen. Its second half closes the other way a graph crashes without its module: injectable builds `@injectable` / `@lazySingleton` classes with a throwing get for every non-nullable constructor parameter, so a shell or platform class that takes a module-owned contract that way takes the whole container down once the module is removed. Nullable and `@factoryParam` parameters are optional and pass. A parameter the scan cannot type (a `this.x` with no matching field in the class, a default value) is left alone — the scan prefers a miss to a false alarm.
 
@@ -763,7 +763,7 @@ dart tools/workspace_setup/configure.dart --stub-firebase   # plus compile-only 
 dart tools/workspace_setup/configure.dart --help   # what it runs, in order — runs nothing
 ```
 
-Full setup for a fresh clone. It runs, in order: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` in every package with an `l10n.yaml`, `build_runner build --workspace`, then the barrel generator for every package with a `lib/` (apps skipped). It is **the** setup step. The barrels it writes export the gitignored generated files (gen-l10n output, flutter_gen's `Assets`, `module.module.dart`), so run `gen-l10n` and `build_runner` before the barrel pass — which is the order `configure.dart` uses. After adding, renaming or deleting a `lib/` file only the barrel pass is needed.
+Full setup for a fresh clone. It runs, in order: activate `flutterfire_cli` (skipped with `--stub-firebase`), `flutter clean`, `pub get`, `gen-l10n` in every package with an `l10n.yaml`, `build_runner build --workspace`, then the barrel generator for every package with a `lib/` (apps skipped). It is **the** setup step. The barrels it writes export the gitignored generated files (gen-l10n output, flutter_gen's `Assets`, `module.module.dart`), so run `gen-l10n` and `build_runner` before the barrel pass — which is the order `configure.dart` uses. After adding, renaming or deleting a `lib/` file only the barrel pass is needed.
 
 It works on the repository root whatever the working directory. `--help` / `-h` prints the steps and exits `0`; any argument other than `--stub-firebase` exits `64` **before anything runs**.
 
@@ -831,7 +831,7 @@ Gemini-backed review driven by `tools/code_review/review_prompt.md`. Needs a Gem
 - An unknown option or a stray positional argument exits `64`.
 
 > [!NOTE]
-> The GitHub workflow runs this in **advisory mode** — its "fail on critical issues" step has `exit 1` commented out, so it never blocks a PR. See [`../operations/01_cicd.md`](../docs/en/operations/01_cicd.md).
+> The GitHub workflow runs this in **advisory mode** — its "fail on critical issues" step has `exit 1` commented out, so it never blocks a PR, and without `GEMINI_API_KEY` it is skipped, not failed. See [`../operations/01_cicd.md`](../docs/en/operations/01_cicd.md).
 
 ### `coverage_report`
 

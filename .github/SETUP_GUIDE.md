@@ -22,8 +22,9 @@ rather than retyping it: a name that no job reports blocks every merge, or is si
 |:--|:--|
 | `GEMINI_API_KEY` | an API key from [Google AI Studio](https://aistudio.google.com/app/apikey) |
 
-Without the key the review step fails and the rest of the PR is unaffected — the workflow never
-blocks a merge. To change the report language for manual runs, pick it in the `workflow_dispatch`
+Without the key (a fresh adopter, or a pull request from a fork, where secrets are empty) the
+workflow checks for it first and skips the review and comment steps with a `::notice::` — the job
+stays green and the rest of the PR is unaffected. The workflow never blocks a merge. To change the report language for manual runs, pick it in the `workflow_dispatch`
 form (default `en`); PR runs use `reportLanguage` from
 `tools/code_review/code_review_config.json` (`en`).
 

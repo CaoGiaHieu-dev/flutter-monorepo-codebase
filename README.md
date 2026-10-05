@@ -528,7 +528,7 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 ```bash
 dart tools/workspace_setup/configure.dart
 ```
-This is **the** setup step: it activates `flutterfire_cli`, then runs `flutter clean` →
+This is **the** setup step: it activates `flutterfire_cli` (not with `--stub-firebase`), then runs `flutter clean` →
 `flutter pub get` → `gen-l10n` in every package with an `l10n.yaml` →
 `dart run build_runner build --workspace` → the barrel generator for every package. The manual
 sequence is `pub get`, `gen-l10n`, `build_runner` — in that order, because each package's committed

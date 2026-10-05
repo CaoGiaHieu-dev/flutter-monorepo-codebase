@@ -19,6 +19,8 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Added
 
+- A signed-in user whose session expires sees a translated "session expired" toast (`SessionExpiredFailure`, the global key `sessionExpired`, en and vi); the Settings theme row shows the current mode; the sample's minimum password length is one constant (`AuthValidationConstants.MIN_PASSWORD_LENGTH`, `passwordTooShort` takes `{min}`).
+- Tests: database upgrades in `modules/cache/data` and `core_database`, a palette contrast test, the modal overlay and the shared widgets' states, and the notification permission flow.
 - **`composer reconcile`** declares `absent` every optional capability whose last provider is gone (the V3 scan, not a list); `remove_sample --apply` runs it and then `sync`, so `composer verify` stays green for every bundle and for all bundles together. A fully stripped template keeps `modules/.gitkeep`.
 - **V15 checks native flavors.** On a committed Android or iOS runner it requires a `productFlavor` per declared flavor and an Xcode scheme plus `Debug-`/`Release-`/`Profile-<flavor>` configurations; the failure names the flavor and the recipe in guide 13.
 - **CI `generator-smoke-compose`** generates a Provider feature, its API package, a domain/data pair and a new app with `composer new`, then holds them to verify, analyze, arch_check, the new tests and the apps' DI smoke tests.
@@ -159,7 +161,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   `IDashboardRouteModule.builder` takes the destinations, `AppBootStorage.viewedOnboard`. Notifications:
   the permission prompt is opt-in (`PushNotificationService.requestPermission()`) and the background
   handler initialises Firebase without DI.
-- `DioFailureClassifier` maps an unknown error caused by bad JSON to `ParseFailure` and one caused by a TLS error or a pin mismatch to a non-transient certificate failure (`BAD_CERTIFICATE`); unread fastlane keys (`app_store_connect.username` / `team_id`, `google_play.account_id`) and the ineffective bundler Dependabot block are removed.
+- `DioFailureClassifier` maps an unknown error caused by bad JSON to `ParseFailure` and one caused by a TLS error or a pin mismatch to a certificate failure (`BAD_CERTIFICATE`) that the retry policy does not retry.
 - Samples follow the rules they teach: a simpler auth sample (an offline start keeps the stored session;
   `RestoreSessionUseCase`; `session/` folder), `lib/di/` holds the DI module only, settings reads
   `LanguageProvider` / `ThemeProvider` from the tree, the module generator's templates match.
@@ -192,6 +194,9 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   dependencies (`get_it` from 14 packages, `json_annotation`, `cupertino_icons`), the per-package
   `.gitignore` files, and the language domain/data sample packages.
 - The unused `dev/` and `staging/` `MainActivity.kt` files (the manifest resolves `.MainActivity` under the namespace).
+- Unread fastlane keys (`app_store_connect.username` / `team_id`, `google_play.account_id`) and the ineffective bundler Dependabot block.
+- The unused `package_rename` dev dependency and the unused `APP_ID` Android resource.
+- The unused `BottomTransitionPage.useRootNavigator`.
 
 ### Fixed
 
@@ -200,7 +205,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - The `code_review` workflow parses the report in any language, so the default English report is posted.
 - `GoRouteDataCustom` reports screen views on the web and honours `canPop` / `pageKey` on every platform.
 - The generator-smoke unused-dependency step matches the generated app's package; `check_unused_translate` no longer flags bare getters inside `extension on AppLocalizations`.
-- Removed the unused `package_rename` dev dependency and the unused `APP_ID` Android resource; Xcode scheme comments are in English; 14 files end with a newline; the `LoadingWidget` doc example compiles.
+- Xcode scheme comments are in English; 14 files end with a newline; the `LoadingWidget` doc example compiles.
 - `docs_check` accepts a glob over an empty directory (e.g. `modules/*/feature` in a fully stripped template); a glob over a non-empty directory must still match.
 - Networking: token-refresh deadlocks and recursion (a `401` from login or refresh no longer starts a
   refresh; a late `401` for an old token replays), retry decisions that could lose an error, and
@@ -215,16 +220,27 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - UI: dark-mode colours in `ui_kit`, theme text scaling, split-view overflow, responsive edge cases.
 - Tooling: dozens of silent failures, hangs and hazards across the module generator, composer,
   `dependency_sync`, `docs_check`, the unused checker and Fastlane lanes; tool output in English.
-- Stopped tracking the committed Gradle, iOS and tools build output (tens of MB, two copies of a large `kernel_blob.bin` among it).
+- Stopped tracking the committed Gradle, iOS and tools build output (about 160 MB uncompressed, two copies of a large `kernel_blob.bin` among it).
 - Boot no longer freezes on a splash or blank window when `configureDependencies`, an initializer or a hook throws: a boot error screen with Retry appears and the error is still reported.
 - Certificate pinning no longer overflows the stack on the first request when pins are declared; the pinning tests verify the installed client and real pin matching.
 - The splash waits (up to the connect timeout) for the stored-session restore, so a returning user does not see the signed-out home.
 - The retry handler recovers when its prompt callback throws and no longer replays timed-out POST and PATCH requests (opt in with `EXTRA_IDEMPOTENT`).
 - `CustomButton` keeps a 48 dp tap target, the toast is announced by screen readers and spinners are labelled (new global `loading` string, en and vi).
+- The sample auth keeps the signed-in session when a certificate or pin is rejected on renewal or at app start (`BAD_CERTIFICATE` counts as "no verdict from the server", like a lost network), instead of signing the user out.
 - A throwing `executeOperation` leaves loading for the error state; a sign-in or refresh answer without a token no longer wipes the stored credential; the login email is trimmed.
+- A database upgrade runs all its steps in one transaction: a failing step no longer leaves a half-migrated file that fails every launch; the file keeps its old version and the next launch retries.
+- `ThemeProvider` applies the palette's text colours to every text style (it used to leave Material's defaults on all of them).
+- The sample login button's label and spinner read on the brand fill in both themes, and Done on the keyboard no longer sends a second sign-in (`AuthProvider.login` ignores a call while one is pending).
+- `CustomButton` has a distinct disabled fill with a readable label, `CustomInputField` has contrast-safe resting, focused, error and disabled borders and is at least 48 dp tall, and `showDropDown` rows are at least 48 dp (RULE-39).
+- `AppOverlay` dialogs and the loading layer hide the page behind them from assistive technology and keyboard focus.
+- Onboarding, splash and home scroll instead of overflowing on short or square windows with large text; the dashboard bottom bar keeps its labels from the fourth tab.
+- A throwing `convert` settles on the error state in `BaseProvider` and `BaseBloc` instead of leaving `loading`.
 - Deep links keep repeated query keys, fragments and `myapp:///path`; `BaseEntity.isSuccess` accepts any 2xx; `ValidationHelper` dates and `isValidEmail` (any-length TLD, `+`); `EncryptedStorage.encryptData('')` no longer throws.
+- The toast pill is near-opaque (alpha 0.92); the light palette's `error`, `info` and `primaryContainer` are darker so their on-colours reach WCAG AA; the splash text uses `textInverse`; `PushNotificationService.requestPermission()` returns whether notifications are allowed and no longer uses `dart:io` `Platform`.
 - The iOS runner uses the UIScene lifecycle (the first iOS build no longer rewrites tracked files) and each flavored Xcode configuration uses its own icon set.
 - `code_review.yml` stubs Firebase like the other workflows; the generated Provider page renders a translated error and ships a failing-load test; a rolled-back generator or `remove_sample` run restores each app's README report and `app_profile.dart` facts; `firebase_config.dart` refuses to run without terminals.
+- The `code_review` workflow skips its review and comment steps, with a notice, when `GEMINI_API_KEY` is not set (a fresh adopter, a fork PR) instead of failing every pull request that touches Dart.
+- CI no longer installs `flutterfire_cli` on stubbed runs (`configure.dart --stub-firebase` skips it; a run without the flag still activates it); the quality job timeout is 45 minutes; the PR template's APK command is complete (from `apps/mobile`, with the env file).
 - The CI step that annotated critical review findings was named "Fail on Critical Issues" but never failed; it is now named as advisory.
 
 ### Security

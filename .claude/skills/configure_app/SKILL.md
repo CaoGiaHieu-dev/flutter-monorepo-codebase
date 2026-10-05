@@ -52,11 +52,14 @@ Never edit the `facts` region or the README `report` region (RULE-16: `composer:
   only; needs the `configureWindow` hook or boot stops with P05). Left out, the report shows the
   derived default and why.
 - **Pin certificates.** `flavors.prod.ssl_pinning: { pins: ["<leaf>", "<backup>"] }` (≥ 2, base64 of 32
-  bytes) or `{ disabled: "reason" }` (RULE-48, V9). Only Android and iOS can pin.
+  bytes) or `{ disabled: "reason" }` (RULE-48, V9). Only Android and iOS can pin. Pins apply to **every host the
+  process connects to** (an image CDN, a font host or an SDK endpoint with no matching pin fails its TLS
+  handshake too): check those hosts first — [`08_networking` § 10](../../../docs/en/guides/08_networking.md#10-turn-on-ssl-pinning).
 - **Another language / palette / limits.** `locale: LocaleProfile(supported: […], fallback:, initial:)`,
   `theme: ThemeProfile(mode:, light:, dark:)` (17 `PaletteToken`s; `shadow` and `scrim` are not
-  overridable), `network: NetworkProfile(connectTimeout: …)` (no auth / cookie / content-type headers,
-  RULE-66), `display: DisplayProfile(textScaleMax: 2.5)` (never below 2.0 — RULE-38, a compile error).
+  overridable), `network: NetworkProfile(connectTimeout: …, authorizedHosts: {…})` (no auth / cookie / content-type
+  headers, RULE-66; the bearer token goes only to the `BASE_URL` host and `authorizedHosts`, so a split-domain
+  API lists its other hosts there — and pins them), `display: DisplayProfile(textScaleMax: 2.5)` (never below 2.0 — RULE-38, a compile error).
 - **Declare a capability.** `capabilities.<id>: provided` or `{ state: absent, reason: "…" }`; the
   reason says why, never `TODO` (V14). `composer verify` (V3) says which direction is wrong.
 - **Add an env key.** Under `env:` (`required_in: [flavor…]`, or `native_only: true`) **and** in the

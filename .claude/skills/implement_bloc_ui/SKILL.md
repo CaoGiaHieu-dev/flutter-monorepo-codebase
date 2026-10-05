@@ -70,7 +70,7 @@ event handler completed normally".
 `success(T data)` and `error(AppFailure)`, plus `T? get data`; it is **not** the Provider branch's
 `ViewState`. `emitResult` emits `loading` (skipped once a `success` is on screen), settles the
 `Result` into `success` / `error`, restores the previous state on `none` / `cancel` and turns a thrown
-error into `error(ErrorHandler.handleError(e))` (RULE-53).
+error — from the use case or from `convert` — into `error(ErrorHandler.handleError(e))` (RULE-53).
 
 ```dart
 @injectable

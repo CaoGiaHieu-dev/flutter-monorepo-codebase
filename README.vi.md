@@ -528,7 +528,7 @@ bundle exec fastlane android build flavor:dev build_type:apk distribute_store:fa
 ```bash
 dart tools/workspace_setup/configure.dart
 ```
-Đây **chính là** bước setup: nó activate `flutterfire_cli`, rồi chạy `flutter clean` →
+Đây **chính là** bước setup: nó activate `flutterfire_cli` (không với `--stub-firebase`), rồi chạy `flutter clean` →
 `flutter pub get` → `gen-l10n` trong mọi package có `l10n.yaml` →
 `dart run build_runner build --workspace` → barrel generator cho từng package. Trình tự làm tay là
 `pub get`, `gen-l10n`, `build_runner` — đúng thứ tự đó, vì barrel được commit của mỗi package

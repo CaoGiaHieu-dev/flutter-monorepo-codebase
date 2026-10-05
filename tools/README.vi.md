@@ -366,7 +366,7 @@ dart tools/theme_generator/theme_setting.dart --app mobile
 # Workspace hiện có hai app (mobile, admin) nên --app là bắt buộc. Cả hai tool đều có --help.
 ```
 
-- `configure.dart` chạy theo thứ tự: `dart pub global activate flutterfire_cli` →
+- `configure.dart` chạy theo thứ tự: `dart pub global activate flutterfire_cli` (không với `--stub-firebase`: các stub thay thế thứ nó sẽ sinh ra, nên một lần chạy CI có stub không cần CLI hay pub.dev cho việc đó) →
   `flutter clean` → `flutter pub get` → `flutter gen-l10n` ở mọi package có `l10n.yaml` →
   `dart run build_runner build --workspace` → barrel generator cho mọi package có `lib/` (bỏ qua
   app). Dừng ở lệnh lỗi đầu tiên với đúng exit code của nó.
@@ -463,7 +463,7 @@ R12–R15 và R17–R20 đọc file, không đọc đồ thị package: mọi fi
 
 R16 tồn tại vì với mỗi dòng của catalog shell, app khai rằng nó cung cấp contract đó hoặc làm không có nó và vì sao (`capabilities:`, RULE-81) — và điều đó chỉ đúng khi catalog đầy đủ. R8 đã suy ra contract nào biến mất cùng một module; R16 đọc cùng tập đó (qua `tools/shared/contract_scan.dart`, bộ quét mà `arch_check` và `composer` dùng chung nên không thể bất đồng) và hỏi câu ngược lại: shell có tra cứu một contract mà không có dòng nào không? Thêm một lookup như vậy làm Gate 1 fail cho tới khi dòng đó — và nhờ vậy mục `capabilities:` của từng app — có mặt. Nửa thứ hai chặn việc đổi tên để lại một dòng cho type không còn tồn tại.
 
-R17 giữ "tôi đang chạy ở đâu" là quyết định của app. Việc app bật gì trên một platform được khai trong manifest và đọc từ `PlatformFacts`; `resolveAppPlatform()` là hàm duy nhất hỏi runtime của Flutter. Vài nhánh còn lại là về sự khả dụng của API hệ điều hành (`Platform` của `dart:io` ném lỗi trên web; mỗi hệ điều hành xin quyền thông báo theo cách riêng), được liệt kê kèm lý do trong `kPlatformForkAllowList` để ngoại lệ hiện ra khi review.
+R17 giữ "tôi đang chạy ở đâu" là quyết định của app. Việc app bật gì trên một platform được khai trong manifest và đọc từ `PlatformFacts`; `resolveAppPlatform()` là hàm duy nhất hỏi runtime của Flutter. Vài nhánh còn lại là về sự khả dụng của API hệ điều hành (`Platform` của `dart:io` ném lỗi trên web; page transition theo quy ước của từng hệ điều hành), được liệt kê kèm lý do trong `kPlatformForkAllowList` để ngoại lệ hiện ra khi review.
 
 Phép quét lookup của R8 đọc cùng mã đã bỏ comment như R18–R20 (`tools/arch_check/source_rules.dart`), nên lookup xuống dòng hay viết `getIt.get<T>()` đều bị thấy. Nửa thứ hai chặn cách khác mà đồ thị sập khi thiếu module: injectable dựng các class `@injectable` / `@lazySingleton` bằng get ném lỗi cho mỗi tham số constructor không nullable, nên một class của shell hay platform nhận contract thuộc module theo cách đó sẽ kéo sập cả container khi module bị tháo. Tham số nullable và `@factoryParam` là tuỳ chọn nên qua. Tham số mà phép quét không xác định được kiểu (một `this.x` không có field tương ứng trong class, một giá trị mặc định) được bỏ qua — phép quét thà bỏ sót còn hơn báo nhầm.
 
@@ -757,7 +757,7 @@ dart tools/workspace_setup/configure.dart --stub-firebase   # kèm stub Firebase
 dart tools/workspace_setup/configure.dart --help   # các bước sẽ chạy, theo thứ tự — không chạy gì
 ```
 
-Dựng đầy đủ cho một bản clone mới. Script chạy theo thứ tự: activate `flutterfire_cli`, `flutter clean`, `pub get`, `gen-l10n` trong mọi package có `l10n.yaml`, `build_runner build --workspace`, rồi barrel generator cho mọi package có `lib/` (bỏ qua các app). Đây **chính là** bước setup. Các barrel nó ghi export những file sinh ra đã bị gitignore (output của gen-l10n, `Assets` của flutter_gen, `module.module.dart`), nên chạy `gen-l10n` và `build_runner` trước lượt barrel — đúng thứ tự `configure.dart` dùng. Sau khi thêm, đổi tên hoặc xoá một file trong `lib/` thì chỉ cần lượt barrel.
+Dựng đầy đủ cho một bản clone mới. Script chạy theo thứ tự: activate `flutterfire_cli` (bỏ qua với `--stub-firebase`), `flutter clean`, `pub get`, `gen-l10n` trong mọi package có `l10n.yaml`, `build_runner build --workspace`, rồi barrel generator cho mọi package có `lib/` (bỏ qua các app). Đây **chính là** bước setup. Các barrel nó ghi export những file sinh ra đã bị gitignore (output của gen-l10n, `Assets` của flutter_gen, `module.module.dart`), nên chạy `gen-l10n` và `build_runner` trước lượt barrel — đúng thứ tự `configure.dart` dùng. Sau khi thêm, đổi tên hoặc xoá một file trong `lib/` thì chỉ cần lượt barrel.
 
 Script làm việc trên gốc repo bất kể thư mục làm việc. `--help` / `-h` in các bước và thoát `0`; mọi tham số khác ngoài `--stub-firebase` thoát `64` **trước khi chạy bất cứ gì**.
 
@@ -825,7 +825,7 @@ Review bằng Gemini, điều khiển bởi `tools/code_review/review_prompt.md`
 - Tuỳ chọn lạ hoặc tham số vị trí thừa thoát với mã `64`.
 
 > [!NOTE]
-> Workflow GitHub chạy nó ở **chế độ cảnh báo** — bước "fail on critical issues" có dòng `exit 1` bị comment lại, nên nó không bao giờ chặn PR. Xem [`../operations/01_cicd.md`](../docs/vi/operations/01_cicd.md).
+> Workflow GitHub chạy nó ở **chế độ cảnh báo** — bước "fail on critical issues" có dòng `exit 1` bị comment lại, nên nó không bao giờ chặn PR, và khi không có `GEMINI_API_KEY` nó bị bỏ qua, không bị fail. Xem [`../operations/01_cicd.md`](../docs/vi/operations/01_cicd.md).
 
 ### `coverage_report`
 

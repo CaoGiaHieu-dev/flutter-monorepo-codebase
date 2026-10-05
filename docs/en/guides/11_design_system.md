@@ -107,7 +107,7 @@ Both palettes are `static final` fields in [`theme/theme_system_extensions.dart`
 /// Light theme palette.
 static final ThemeSystemExtension light = const ThemeSystemExtension(
   primary: Color(0xff0A7E8C),
-  primaryContainer: Color(0xff8B5CF6),
+  primaryContainer: Color(0xff7C3AED),
   background: Color(0xffF8FAFC),
   surface: Color(0xffFFFFFF),
   textPrimary: Color(0xff0F172A),
@@ -136,7 +136,7 @@ theme: ThemeProfile(
 ),
 ```
 
-Every colour token of `PaletteToken` (`primary`, `background`, the text colours, `success`, `error` …) is overridable; `ThemeProvider` builds both palettes once (`withOverrides`) and derives the `ColorScheme` and the extension from the result, so `context.colors.primary`, `Theme.of(context).colorScheme.primary` and the gradients agree. `shadow` and `scrim` are not overridable — `AppShadows` is context-free and a scrim is black with alpha on purpose — and the two gradients derive from `primary`, `primaryContainer`, `info` and `error`. Run `composer sync` after the edit so the app README's report lists the section as set ([`13_app_composition.md`](13_app_composition.md)).
+Every colour token of `PaletteToken` (`primary`, `background`, the text colours, `success`, `error` …) is overridable; `ThemeProvider` builds both palettes once (`withOverrides`) and derives the `ColorScheme` and the extension from the result, so `context.colors.primary`, `Theme.of(context).colorScheme.primary` and the gradients agree. `textPrimary` reaches all 15 styles of the text theme (the theme is coloured first, then the sizes are scaled), so an override shows in every `Text` that takes its style from the theme. `shadow` and `scrim` are not overridable — `AppShadows` is context-free and a scrim is black with alpha on purpose — and the two gradients derive from `primary`, `primaryContainer`, `info` and `error`. Run `composer sync` after the edit so the app README's report lists the section as set ([`13_app_composition.md`](13_app_composition.md)).
 
 One token exists only for a sample screen: `liquidOnboardingColors`, the splash gradient (`AppGradients.liquidOnboarding`). Delete the splash sample and remove that token from the extension (field, `copyWith`, `lerp`, both palettes, `withOverrides`) and from `AppGradients` rather than leaving a dead colour behind.
 
@@ -487,7 +487,7 @@ It caps its child at `maxWidth` — `AdaptiveConstants.CONTENT_MAX_WIDTH`, 640 �
 
 ### The reference: navigation chrome per window class
 
-`feature_dashboard` switches its chrome on the window size class: a bottom bar on `compact`, a `NavigationRail` from `medium` up, extended (labels beside the icons) from `large` up. Both are built from the same `NavDestination`s each tab contributes through `INavDestinationModule`, so no tab knows which one is showing.
+`feature_dashboard` switches its chrome on the window size class: a bottom bar on `compact` (type `fixed`, so the labels stay visible from the fourth tab on), a `NavigationRail` from `medium` up, extended (labels beside the icons) from `large` up. Both are built from the same `NavDestination`s each tab contributes through `INavDestinationModule`, so no tab knows which one is showing.
 
 ```dart
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart

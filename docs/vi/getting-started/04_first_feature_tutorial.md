@@ -353,6 +353,11 @@ class NotesPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10nNotes.title)),
       body: BaseViewWidget<NotesProvider, List<NoteEntity>>(
+        // A failed first load has no data yet: without this it would fall back
+        // to `emptyWidget` and read "No notes yet". `message` is an English
+        // diagnostic and is never shown (RULE-34).
+        onErrorBuilder: (context, notes, message, child) =>
+            Center(child: Text(context.l10n.somethingWentWrong)),
         emptyWidget: (context, child) => _empty(context),
         builder: (context, notes, child) {
           if (notes.isEmpty) return _empty(context);
@@ -385,7 +390,7 @@ class NotesPage extends StatelessWidget {
 }
 ```
 
-Page không tự tạo provider. Route đã làm việc đó, nên bọc thêm lần nữa ở đây sẽ tạo instance thứ hai (RULE-21).
+`onErrorBuilder` là thứ hiện ra khi lần tải đầu thất bại: provider chưa có dữ liệu, nên thiếu nó thì page sẽ lùi về `emptyWidget` và nói với người dùng rằng chưa có ghi chú nào — page được generator sinh ra cũng làm như vậy, với chuỗi toàn cục `somethingWentWrong`. Page không tự tạo provider. Route đã làm việc đó, nên bọc thêm lần nữa ở đây sẽ tạo instance thứ hai (RULE-21).
 
 Constructor của provider đã đổi, nên phần đăng ký DI của nó phải được sinh lại:
 
@@ -452,6 +457,7 @@ Thay test của page. Page phải nằm dưới `ResponsiveInit`, vì mọi kíc
 
 ```dart
 // modules/notes/feature/test/notes_page_test.dart
+import 'package:core_base_ui/core_base_ui.dart';
 import 'package:core_responsive/core_responsive.dart';
 import 'package:domain_core/domain_core.dart';
 import 'package:domain_notes/domain_notes.dart';
@@ -467,16 +473,19 @@ import 'fake_notes_repository.dart';
 Future<void> _pumpPage(
   WidgetTester tester, {
   List<NoteEntity> notes = const [NoteEntity(id: '1', title: 'Hello')],
+  Result<List<NoteEntity>>? result,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      localizationsDelegates:
-          FeatureNotesLocalizations.localizationsDelegates,
+      localizationsDelegates: [
+        ...AppLocalizations.localizationsDelegates,
+        ...FeatureNotesLocalizations.localizationsDelegates,
+      ],
       supportedLocales: FeatureNotesLocalizations.supportedLocales,
       builder: (context, child) => ResponsiveInit(child: child!),
       home: ChangeNotifierProvider(
         create: (_) => NotesProvider(
-          GetNotesUseCase(FakeNotesRepository(Result.success(notes))),
+          GetNotesUseCase(FakeNotesRepository(result ?? Result.success(notes))),
         ),
         child: const NotesPage(),
       ),
@@ -508,6 +517,23 @@ void main() {
       tester.element(find.byType(NotesPage)),
     )!;
     expect(find.text(l10n.emptyNotes), findsOneWidget);
+  });
+
+  testWidgets('a failed load shows a translated sentence, not the '
+      'diagnostic', (tester) async {
+    await _pumpPage(
+      tester,
+      result: const Result.failure(
+        ServerFailure(message: 'HTTP 500: upstream stack trace', code: 500),
+      ),
+    );
+
+    final sentence = AppLocalizations.of(
+      tester.element(find.byType(NotesPage)),
+    )!.somethingWentWrong;
+    expect(find.text(sentence), findsOneWidget);
+    expect(find.text('HTTP 500: upstream stack trace'), findsNothing);
+    expect(find.text('No notes yet'), findsNothing);
   });
 
   testWidgets('lays out on a phone and on a tablet', (tester) async {

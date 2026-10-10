@@ -423,6 +423,7 @@ Vì bước này chạy `flutter clean` và `build_runner` cho cả workspace n�
 - [ ] `Config.yaml` đầy đủ; các file JSON/`.p8` credential có mặt đúng đường dẫn đã cấu hình
 - [ ] `flutter analyze` sạch và test các package pass — `pr_quality_check.yml` chặn ở PR, nhưng các pipeline phát hành thì không (xem [`01_cicd.md`](01_cicd.md#6-quality-gate))
 - [ ] `flavors.prod.ssl_pinning` trong manifest của app chứa pin thật nếu bản build này chạy với traffic production — các app mẫu khai `disabled` kèm lý do, tức traffic không được pin
+- [ ] Một bản build có pin thật đã đi qua một track kiểm thử nội bộ trước, và Play Console không hiện cảnh báo bảo mật nào về probe của plugin pinning
 - [ ] Đã viết changelog
 - [ ] Build number không trùng với bản release đã có
 

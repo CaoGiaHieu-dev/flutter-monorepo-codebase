@@ -52,7 +52,8 @@ Never edit the `facts` region or the README `report` region (RULE-16: `composer:
   only; needs the `configureWindow` hook or boot stops with P05). Left out, the report shows the
   derived default and why.
 - **Pin certificates.** `flavors.prod.ssl_pinning: { pins: ["<leaf>", "<backup>"] }` (≥ 2, base64 of 32
-  bytes) or `{ disabled: "reason" }` (RULE-48, V9). Only Android and iOS can pin. Pins apply to **every host the
+  bytes) or `{ disabled: "reason" }` (RULE-48, V9). Every platform but the web can pin; on desktop only the leaf
+  certificate is visible, so include the leaf's key. Pins apply to **every host the
   process connects to** (an image CDN, a font host or an SDK endpoint with no matching pin fails its TLS
   handshake too): check those hosts first — [`08_networking` § 10](../../../docs/en/guides/08_networking.md#10-turn-on-ssl-pinning).
 - **Another language / palette / limits.** `locale: LocaleProfile(supported: […], fallback:, initial:)`,

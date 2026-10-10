@@ -422,6 +422,7 @@ Because this runs `flutter clean` and a full workspace `build_runner`, it is slo
 - [ ] `Config.yaml` complete; credential JSON/`.p8` files present at the configured paths
 - [ ] `flutter analyze` clean and package tests pass — `pr_quality_check.yml` gates this on PRs, but the release pipelines do not (see [`01_cicd.md`](01_cicd.md#6-the-quality-gate))
 - [ ] `flavors.prod.ssl_pinning` in the app's manifest holds real pins if this build faces production traffic — the template apps declare `disabled` with a reason, which leaves traffic unpinned
+- [ ] A build with real pins went to an internal testing track first, and the Play Console shows no security alert about the pinning plugin's probe
 - [ ] Changelog written
 - [ ] Build number does not collide with an existing release
 

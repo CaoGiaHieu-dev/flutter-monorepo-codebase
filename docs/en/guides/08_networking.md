@@ -354,7 +354,7 @@ Then mark the login and refresh calls `EXTRA_CAN_REFRESH_TOKEN: false` (step 6).
 ## 10. Turn on SSL pinning
 
 > [!WARNING]
-> **Pinning is a per-flavor decision of the app, and the template ships it as "off".** `apps/mobile` declares `ssl_pinning: { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned …" }` for staging and prod — a stated decision, listed in the app's README under *Decisions to revisit before shipping* and logged as a `WARNING` on every Android or iOS start — so those builds accept any certificate the device trusts, including one injected by an intercepting proxy, until you replace it with pins (RULE-48). `apps/admin` declares none: none of its platforms can pin.
+> **Pinning is a per-flavor decision of the app, and the template ships it as "off".** `apps/mobile` declares `ssl_pinning: { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned …" }` for staging and prod — a stated decision, listed in the app's README under *Decisions to revisit before shipping* and logged as a `WARNING` on every start on a platform that can pin (everything but the web) — so those builds accept any certificate the device trusts, including one injected by an intercepting proxy, until you replace it with pins (RULE-48). `apps/admin` declares the same placeholder for staging and prod: Windows, macOS and Linux can pin, the web cannot.
 
 Get the SPKI SHA-256 hash of each key:
 
@@ -366,6 +366,8 @@ openssl s_client -servername <host> -connect <host>:443 </dev/null \
   | openssl enc -base64
 ```
 
+**No hash yet?** Declare two well-formed placeholders — the base64 of 32 bytes, for example `AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=` and `AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=` — on a non-production flavor and make one request. The refusal, `CertificatePinningException: No valid SPKI pins found for host: <host> (server presented: <pin>, <pin>)`, lists the SPKI hash of every certificate the server presented, leaf first, in debug and release builds (on Windows, macOS and Linux only the leaf). A hash that is not the base64 of 32 bytes is not a placeholder: the app stops at boot with `InvalidPinException`.
+
 Pin **at least two** distinct keys — the leaf plus a backup — so certificate rotation does not lock every installed client out of the API. The decision lives in the manifest, per flavor (RULE-48, RULE-80); nothing in `platform/` is edited:
 
 ```yaml
@@ -375,7 +377,7 @@ flavors:
     ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
 ```
 
-A flavor takes `pins: [...]` or `disabled: "<reason>"` (a reason that is not empty, `TODO` or `TBD`), never both. `dev` needs no entry: it defaults to `disabled` with the reason "development flavor: local servers use self-signed certificates". Then `dart tools/composer/composer.dart sync` generates the decision into the app's `facts` region (`AppFacts.sslPinning`, an `SslPinningPolicy`) and its README report, and `composer verify` holds it (V1 the shape — two or more distinct pins, each the base64 of 32 bytes — and V9 a decision for every flavor where a declared platform can pin, Android or iOS). There is no other pin source and nothing to register or bind: `AppInitializer.initBeforeRunApp` reads the profile, never the graph, **before** DI starts, so a pin decision cannot be lost to a missing registration and no connection the graph opens can precede it.
+A flavor takes `pins: [...]` or `disabled: "<reason>"` (a reason that is not empty, `TODO` or `TBD`), never both. `dev` needs no entry: it defaults to `disabled` with the reason "development flavor: local servers use self-signed certificates". Then `dart tools/composer/composer.dart sync` generates the decision into the app's `facts` region (`AppFacts.sslPinning`, an `SslPinningPolicy`) and its README report, and `composer verify` holds it (V1 the shape — two or more distinct pins, each the base64 of 32 bytes — and V9 a decision for every flavor where a declared platform can pin: Android, iOS, Windows, macOS or Linux). There is no other pin source and nothing to register or bind: `AppInitializer.initBeforeRunApp` reads the profile, never the graph, **before** DI starts, so a pin decision cannot be lost to a missing registration and no connection the graph opens can precede it.
 
 **The pins cover every host the process connects to, not only your API.** The pinning client is installed as the process-wide `HttpOverrides.global`, so an image CDN, a font host, a storage bucket or a third-party SDK endpoint whose certificate does not match one of the pinned keys fails its TLS handshake too. Before you declare `pins:` for a flavor, check every host the app reaches with `dart:io` (the Dio client, `Image.network`, SDKs that use `HttpClient`) and pin keys that cover them, or serve that traffic from a host you pin. A flavor that cannot do either declares `disabled` with its reason.
 
@@ -383,15 +385,22 @@ What the app does with the decision, in the order `initBeforeRunApp` asks:
 
 | Build | Result |
 |:--|:--|
-| Web | The browser owns TLS: nothing is installed, one `INFO` line says so |
+| Web | The browser owns TLS: nothing is installed, one `INFO` line says so (the package's web client verifies signed responses, which is not pinning, see below) |
 | Debug build whose declared flavor is `dev` | Certificate validation is bypassed for local servers (`WARNING`); pins never apply |
 | Missing or unknown flavor | Treated as `prod` for TLS: validation stays on (`ERROR` naming the fix) |
-| Desktop (Windows, macOS, Linux) | The pinning plugin has no implementation: one `INFO` line, validation by the platform |
-| Android / iOS, flavor `pins` | A pinning client with exactly those hashes becomes the global `HttpOverrides` |
-| Android / iOS, flavor `disabled` | `WARNING` with the declared reason, traffic is **not** pinned |
-| Android / iOS, no decision | `ERROR` tagged `Security`; boot check `P04` refuses to start before it comes to this |
+| Android, iOS, Windows, macOS or Linux, flavor `pins` | A pinning client with exactly those hashes becomes the global `HttpOverrides`; a hash that is not the base64 of 32 bytes stops the boot (`InvalidPinException`) |
+| Android, iOS, Windows, macOS or Linux, flavor `disabled` | `WARNING` with the declared reason, traffic is **not** pinned |
+| Android, iOS, Windows, macOS or Linux, no decision | `ERROR` tagged `Security`; boot check `P04` refuses to start before it comes to this |
 
-Where no declared platform can pin (`apps/admin`), `composer verify` refuses an `ssl_pinning` key as dead and names the ways out: declare android or ios; pin where the app connects to (a gateway or proxy that holds the pinned certificate); or add a desktop pinning implementation first. When pinning is installed, and which builds bypass it: [`../architecture/02_core.md` § 6](../architecture/02_core.md#when-pinning-is-installed-and-when-it-is-skipped).
+**How it enforces.** The client reads the chain a host presents over a separate direct connection (the probe), compares the SPKI SHA-256 of each certificate with your pins, and makes the real connection trust only the certificates that matched; a host that presents none of your keys is refused with no request sent. The chain is cached per host and port; when a handshake fails (the server rotated to a key you pinned) it is dropped, read again and the request retried once, with no restart. The probe and the pinned connection are direct, so neither follows a system or environment proxy: behind a proxy that must carry the traffic, a pinned flavor fails closed. A plain `http://` URL to a pinned host is refused, not sent (`InsecureConnectionException`), but only as the URL you request: a `3xx` from a pinned `https://` host to an `http://` URL is followed in cleartext by any client that follows redirects (`dart:io` drops the `Authorization` header on that hop; the request is still sent). `ApiClient` does not follow redirects (`NetworkProfile.followRedirects` is `false` unless the app sets it): keep it `false` on pinned flavors. A plain `HttpClient()`, which an image loader uses, follows them by default. The pinned client sends no `User-Agent` of its own (package 1.2.2; an unpinned `dart:io` client sends `Dart/<version> (dart:io)`): set one in `NetworkProfile.headers` if your gateway wants it (on the web the browser sends its own, and the pinned client is not used there).
+
+**Desktop sees the leaf certificate only.** Android and iOS read the whole chain, so a pin may name the leaf, an intermediate or the root. On Windows, macOS and Linux `dart:io` exposes the leaf alone: a pin set that does not contain the leaf's key never matches there, and the backup must be a second *leaf* key (a key pair you generate now and keep offline), not a CA key. This is read from the package source, not measured on every desktop OS.
+
+**Offline.** A pinned host that cannot be reached is probed again three times with a growing pause (0.2 s, 0.4 s, 0.6 s) before the request fails as `NETWORK_UNKNOWN`: about 1.2 s of pauses per failed request, and a failure is not cached.
+
+**The web cannot pin, and the package's web client is not pinning.** The browser owns TLS, so nothing is installed and one `INFO` line says so. Since 1.2.0 the package ships a web client that verifies an Ed25519 signature the *server* puts on every response (`X-Server-Signature`, `X-Signature-Timestamp`). It authenticates response bodies, not the connection, so a request, its bearer token included, reaches whoever intercepts it; the signature covers the timestamp (and an optional nonce) and the body, not the URL, method or status; with no public key it verifies nothing and SPKI pins are ignored; it is an `http.Client`, not a Dio adapter. Using it takes a backend that signs, CORS that exposes the two headers and an adapter in `ApiClient` that verifies the raw bytes. The template wires none of this and has no manifest key for it.
+
+Where no declared platform can pin (a web-only app), `composer verify` refuses an `ssl_pinning` key as dead and names the ways out: declare android, ios or a desktop platform; or pin where the app connects to (a gateway or proxy that holds the pinned certificate). When pinning is installed, and which builds bypass it: [`../architecture/02_core.md` § 6](../architecture/02_core.md#when-pinning-is-installed-and-when-it-is-skipped).
 
 ---
 
@@ -419,6 +428,8 @@ Review checklist:
 - [ ] `flavors.prod.ssl_pinning` (and staging) decided in the manifest — ≥2 pins, or `disabled` with a reason — before shipping
 - [ ] `composer verify` is clean (V9 holds the pin decision) and `cd platform/foundation/common && flutter test test/pin_policy_matrix_test.dart` passes
 - [ ] Every host the app reaches over `dart:io` (CDN, storage, SDKs) is covered by the pinned keys before a flavor declares `pins:`
+- [ ] On a desktop platform the pinned keys include the leaf's key and the backup is a second leaf key
+- [ ] The first store build with pins went to an internal testing track and the Play Console shows no security alert about the pinning plugin's probe (its Android side reads the chain with an observe-only trust manager)
 - [ ] No credential ever logged verbatim
 
 ## Troubleshooting
@@ -434,8 +445,13 @@ Review checklist:
 | The UI shows "Something went wrong" for an error you expected to be specific | `failureMessage` maps only the generic codes; the status or `ErrorCodes` value is not one it names | Classify the failure in the feature and use its own ARB (step 8) |
 | `ERROR` log: `SSL pinning has no decision for flavor …` (or boot stops with `P04`) | The flavor has no `ssl_pinning` entry in the manifest, and the platform can pin | Declare `pins:` or `disabled` with a reason under `flavors.<f>.ssl_pinning` and run `composer sync` (step 10); V9 refuses it at Gate 0 first |
 | `WARNING` log: `SSL pinning is disabled for flavor …` | The flavor's decision is `disabled` — the declared reason is in the log | Declare `pins:` (step 10) when the flavor should pin |
-| `composer verify`: `no declared platform can pin TLS … delete it` | The app declares only web and desktop platforms, which cannot pin | Delete the key, or take one of the three ways out it lists (step 10) |
-| `INFO` log: `Web build: the browser validates TLS certificates …` or `SSL pinning is not applicable on <platform> …` | Pinning cannot apply on that platform | Nothing to fix; the decision is only read on Android and iOS |
+| `composer verify`: `no declared platform can pin TLS … delete it` | The app declares only the web, which cannot pin | Delete the key, or take one of the two ways out it lists (step 10) |
+| `INFO` log: `Web build: the browser validates TLS certificates …` | Pinning cannot apply on the web | Nothing to fix; the decision is read on every other platform |
+| `CertificatePinningException: No valid SPKI pins found for host … (server presented: …)` | None of the pinned keys is on the server's chain | Pin one of the listed hashes (leaf first) and a backup (step 10) |
+| `No valid SPKI pins found for host …` on a Windows, macOS or Linux flavor while the same pins work on Android | Desktop sees the leaf only, and the pinned keys are CA keys | Pin the leaf's key and a backup leaf key (step 10) |
+| The app stops at boot with `InvalidPinException` | A declared hash is not the base64 of 32 bytes | Fix the manifest (`composer verify` V1 refuses it first) |
+| `NETWORK_UNKNOWN` and, in the debug log's `error_details`, `Refusing to open a non-HTTPS connection to <host> while certificate pinning is enabled` | An `http://` URL on a pinned flavor (a `BASE_URL` without TLS) | Use `https://`, or declare the flavor `disabled` |
+| Every request on a pinned flavor fails as `NETWORK_UNKNOWN` (`AppFailure.message` is the generic "Unknown network error"; `Failed to fetch certificate chain` is in the logging interceptor's `error_details`, which is debug-only, and in the package's own `HttpSecurityPinning:` retry lines, which use `debugPrint` and so also reach a release build's console) | The probe could not reach the host (offline, DNS, or a proxy that must carry the traffic) | Check connectivity; pinned flavors connect directly |
 | Every request fails on a pinned flavor after the server's certificate changed | Neither pinned hash is the new key's | Hash the live host again and ship a release pinning the new leaf and a backup (step 10) |
 | Images, fonts or an SDK fail with a TLS error on a flavor that declares `pins:` | The pins apply to every host the process connects to, and that host's certificate matches none of them | Pin keys that cover it, serve it from a pinned host, or declare the flavor `disabled` with a reason (step 10) |
 | A `POST` times out and no retry dialog appears | A timed-out `POST` / `PATCH` is not replayed — the server may have processed it | If the server deduplicates it, set `EXTRA_IDEMPOTENT: true` (step 6); otherwise let the user retry deliberately |

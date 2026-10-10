@@ -50,9 +50,11 @@ app:
   entrypoint: lib/main.dart
 
 flavors:                       # tập đóng: dev | staging | prod
-  dev:
+  dev:                         # ssl_pinning mặc định là disabled
   staging:
-  prod:                        # ssl_pinning chỉ ở nơi một platform đã khai báo có thể pin
+    ssl_pinning: { disabled: "no SPKI pins provisioned yet" }
+  prod:                        # ở đây bắt buộc có quyết định: windows pin được
+    ssl_pinning: { disabled: "no SPKI pins provisioned yet" }
 
 env:
   BASE_URL: { required_in: [prod] }
@@ -238,7 +240,7 @@ project 'Runner', {
 
 ### Pin chứng chỉ
 
-Pinning chỉ chạy trên Android và iOS — trên web trình duyệt sở hữu TLS, và plugin pinning không có implementation cho desktop — nên key chỉ bắt buộc ở nơi một platform đã khai báo pin được, và bị từ chối ở nơi không platform nào pin được. Thay quyết định của staging hoặc prod trong manifest:
+Pinning chạy trên Android, iOS và các platform desktop — trên web trình duyệt sở hữu TLS — nên key bắt buộc ở nơi một platform đã khai báo pin được, và bị từ chối ở nơi không platform nào pin được. Trên desktop plugin chỉ thấy certificate leaf, nên hãy pin key của leaf và một key leaf dự phòng. Thay quyết định của staging hoặc prod trong manifest:
 
 ```yaml
 flavors:
@@ -306,7 +308,7 @@ cd apps/<id> && flutter test                             # smoke test (checkAppC
 | `verify`: `declared provided but no composed package or apps/<id>/lib registers …` | Một module đã bị gỡ, hoặc chưa từng được ghép, trong khi manifest nói `provided` | Thêm module, hoặc khai contract là `absent` kèm lý do (thông báo in sẵn dòng cần dán) |
 | `verify`: `declared absent but … is registered at <file>:<line>` | Một package đã ghép đăng ký nó | Khai nó là `provided`, hoặc thôi ghép thứ đăng ký nó |
 | `verify`: `out of date: … (facts)` | Manifest đã đổi, hoặc vùng được sinh bị sửa tay | `dart tools/composer/composer.dart sync --app <id>`; không bao giờ sửa vùng `composer:managed` (RULE-16) |
-| `verify`: `flavors.prod.ssl_pinning: decide …` | Một flavor của app có platform Android hoặc iOS chưa có quyết định pin | `pins: [...]` hoặc `disabled: "lý do"` (ở trên) |
+| `verify`: `flavors.prod.ssl_pinning: decide …` | Một flavor của app có platform pin được (Android, iOS, Windows, macOS, Linux) chưa có quyết định pin | `pins: [...]` hoặc `disabled: "lý do"` (ở trên) |
 | `verify`: `flavors.<f>: declared, but … has no productFlavor / scheme / build configuration named …` | Một runner mobile đã commit thiếu một flavor mà manifest khai | Nối nó (công thức ở trên), hoặc xoá flavor đó khỏi `flavors:` |
 | `verify`: `<package> does not support <platform>` | Một package đã ghép, hoặc package nó liên kết, thiếu platform đó | Chỉ khai các platform mà mọi package được liên kết hỗ trợ, hoặc thôi phụ thuộc vào nó |
 | Boot dừng: *`<id>` is running on `<platform>`, which its manifest does not declare* | Platform không nằm dưới `platforms:` | Khai nó (ở trên), chạy trên một platform đã khai, hoặc `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` để chạy thử nhanh |

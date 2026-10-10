@@ -39,11 +39,13 @@ class AppInitializer {
   /// this run is built as (`AppConfig.appFlavor`): `flavors.<f>.
   /// ssl_pinning` in the manifest, carried by [AppFacts.sslPinning]
   /// ([SslPinningPolicy]). Pinned installs the pinning client with exactly
-  /// those hashes, disabled logs its reason, and a platform that cannot pin
-  /// TLS (`AppPlatform.canPinTls`: the web, where the browser owns TLS, and
-  /// the desktop, where the pinning plugin has no implementation) says so once
-  /// instead of installing or complaining. [platform] is the platform this run
-  /// is on (`resolveAppPlatform()`, the one place that reads the runtime): the
+  /// those hashes — a hash the client cannot parse throws an
+  /// [InvalidPinException] here, so the boot stops with the pin named
+  /// instead of the first request failing as a "network" error — disabled
+  /// logs its reason, and the web, the one platform that cannot pin TLS
+  /// (`AppPlatform.canPinTls`: the browser owns TLS), says so once instead
+  /// of installing or complaining. [platform] is the platform this run is on
+  /// (`resolveAppPlatform()`, the one place that reads the runtime): the
   /// caller says where it runs, this class never guesses.
   ///
   /// Idempotent: [init] calls it too, for a host that never called it, and a
@@ -54,19 +56,29 @@ class AppInitializer {
     required Flavor flavor,
   }) {
     if (_ranBeforeRunApp) return;
-    _ranBeforeRunApp = true;
 
     // Configure Dynamic Logger
     _setupDynamicLogger();
 
     // Certificate handling: pinning, or — debug + explicit dev flavor only —
-    // a bypass for local self-signed servers.
+    // a bypass for local self-signed servers. Recorded as done only after it
+    // returned: a pin the client cannot parse throws from here, and the
+    // boot-failure screen's retry must throw again, not find the flag set
+    // and start the app with no pinning.
     _setupHttpOverrides(profile, platform, flavor);
+    _ranBeforeRunApp = true;
   }
 
   /// Lets a test run [initBeforeRunApp] again.
   @visibleForTesting
   static void debugResetBeforeRunApp() => _ranBeforeRunApp = false;
+
+  /// The pinning `HttpOverrides` for [pins], built but not installed, so a
+  /// test can feed it a list no `SslPinning.pinned` decision can produce
+  /// (that type always carries a leaf and a backup).
+  @visibleForTesting
+  static HttpOverrides debugPinningOverrides(List<String> pins) =>
+      _MyHttpSecurityPinningHttpOverrides(pins);
 
   /// Performs all required startup initializations.
   static Future<void> init({
@@ -158,20 +170,6 @@ class AppInitializer {
         tag: 'Security',
         level: LogLevel.WARNING,
       );
-    }
-
-    // A platform whose pinning plugin has no implementation (desktop): there is
-    // nothing to pin with, so say so once rather than log an ERROR about a
-    // misconfiguration the app cannot fix — and never route every HTTPS call
-    // through a client that cannot serve it.
-    if (!platform.canPinTls) {
-      DynamicLogger.log(
-        'SSL pinning is not applicable on ${platform.name}: the pinning '
-        'plugin has no implementation here. TLS is validated by the platform.',
-        tag: 'Security',
-        level: LogLevel.INFO,
-      );
-      return;
     }
 
     // The app's declared decision for this flavor (`flavors.<f>.ssl_pinning`).
@@ -313,53 +311,42 @@ class _MyHttpOverrides extends HttpOverrides {
 
 class _MyHttpSecurityPinningHttpOverrides extends HttpOverrides {
   final List<String> pins;
-  _MyHttpSecurityPinningHttpOverrides(this.pins);
+  _MyHttpSecurityPinningHttpOverrides(this.pins) {
+    // The package reads an empty pin list as "this host is not pinned" (system
+    // trust, no probe), so an empty list would install a client that pins
+    // nothing. A pinned decision always carries a leaf and a backup; refuse
+    // anything else here, where a release build (asserts off) still checks.
+    if (pins.isEmpty) {
+      throw ArgumentError.value(
+        pins,
+        'pins',
+        'a pinned decision needs at least one pin',
+      );
+    }
+    // The client parses its pins when it is built, i.e. at the first
+    // `HttpClient()` of the process, where a bad pin would surface as a
+    // failed request. Parse them here, at boot, so the pin is named and the
+    // app never starts on a pin it cannot enforce.
+    for (final pin in pins) {
+      SpkiPin.parse(pin);
+    }
+  }
 
   @override
   HttpClient createHttpClient(SecurityContext? context) {
-    // Built under the plain overrides: the pinning client creates an
-    // `HttpClient()` of its own in a field initializer, and that call is
-    // answered by the *global* overrides — this class.
-    return HttpOverrides.runWithHttpOverrides(
-      () => _PinningClient(pins),
-      _plainOverrides,
-    );
+    // The package builds the clients it wraps under no-op overrides, so
+    // being the global `HttpOverrides` does not recurse.
+    //
+    // `Object` and a type test, not a typed local or a subclass: this file is
+    // compiled for the web, where the package's class is an `http.BaseClient`
+    // and not an `HttpClient`. A direct return or an override of `open`
+    // fails `flutter build web` while `flutter analyze` stays clean. The web
+    // never reaches this line (`AppPlatform.canPinTls` is false there); the
+    // test only turns a bare `TypeError` into a message that names the cause.
+    final Object client = HttpSecurityPinningClient(pins);
+    if (client is! HttpClient) {
+      throw UnsupportedError('SSL pinning is not available on the web');
+    }
+    return client;
   }
-}
-
-/// The default `HttpClient` factory, ignoring the global overrides.
-final HttpOverrides _plainOverrides = _PlainHttpOverrides();
-
-class _PlainHttpOverrides extends HttpOverrides {}
-
-/// [HttpSecurityPinningClient] made safe to install as `HttpOverrides.global`.
-///
-/// The plugin's client wraps real `HttpClient`s: `HttpClient()` when it is
-/// built and `HttpClient(context: pinnedContext)` each time it reads a new
-/// host's chain. Both calls ask [HttpOverrides.current] — which, once pinning
-/// is installed globally, makes another pinning client, which asks again:
-/// the first request of the process ended in a stack overflow. Every call
-/// that can create a wrapped client therefore runs under the plain overrides,
-/// so the wrapped clients are the real ones and the pins stay enforced for
-/// every host (`open` and `openUrl` are what the other request methods use).
-class _PinningClient extends HttpSecurityPinningClient {
-  _PinningClient(super.spkiHashes);
-
-  @override
-  Future<HttpClientRequest> open(
-    String method,
-    String host,
-    int port,
-    String path,
-  ) => HttpOverrides.runWithHttpOverrides(
-    () => super.open(method, host, port, path),
-    _plainOverrides,
-  );
-
-  @override
-  Future<HttpClientRequest> openUrl(String method, Uri url) =>
-      HttpOverrides.runWithHttpOverrides(
-        () => super.openUrl(method, url),
-        _plainOverrides,
-      );
 }

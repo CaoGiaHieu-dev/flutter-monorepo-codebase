@@ -36,7 +36,7 @@ flavors: # closed set: dev | staging | prod
 {{/pinning}}
 {{^pinning}}
   staging:
-  prod: # no ssl_pinning: no declared platform can pin (web: the browser owns TLS; desktop: the plugin has no implementation)
+  prod: # no ssl_pinning: the only platform is the web, where the browser owns TLS
 {{/pinning}}
 
 env: # the keys of the env.<flavor> files; checked here, validated again at boot

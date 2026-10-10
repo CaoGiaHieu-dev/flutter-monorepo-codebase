@@ -41,9 +41,16 @@ const List<String> kPlatformNames = [
   'linux',
 ];
 
-/// `AppPlatform.canPinTls` in `platform_kernel`: `http_security_pinning` has a
-/// native side on these only.
-const Set<String> kPinnablePlatforms = {'android', 'ios'};
+/// `AppPlatform.canPinTls` in `platform_kernel`: `http_security_pinning` can pin
+/// TLS on these — a native probe on android and ios, a leaf-only pure-Dart
+/// probe on the desktop platforms — and not on the web.
+const Set<String> kPinnablePlatforms = {
+  'android',
+  'ios',
+  'windows',
+  'macos',
+  'linux',
+};
 
 /// `RunnerKind` in `platform_kernel`.
 const List<String> kRunnerKinds = ['committed', 'scaffold'];

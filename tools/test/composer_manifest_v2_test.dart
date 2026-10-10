@@ -599,9 +599,12 @@ void main() {
         );
         await expectRefused(
           ws,
-          contains(
-            '$manifestPath: flavors.prod.ssl_pinning: no declared platform can '
-            'pin TLS (web: the browser owns TLS on web',
+          allOf(
+            contains(
+              '$manifestPath: flavors.prod.ssl_pinning: no declared platform '
+              'can pin TLS (web: the browser owns TLS on web',
+            ),
+            contains('declare android, ios or a desktop platform'),
           ),
         );
       },
@@ -622,6 +625,73 @@ void main() {
         ws.read(readmePath),
         contains('n/a — no declared platform can pin TLS'),
       );
+    });
+
+    test('a desktop platform can pin: an undecided prod is refused', () async {
+      final ws = workspace(
+        manifest: demoManifest(
+          flavors:
+              'flavors:\n'
+              '  dev:\n'
+              '  staging:\n'
+              '    ssl_pinning: { disabled: "no pins yet" }\n'
+              '  prod:\n',
+          platforms: 'platforms:\n  windows: { runner: scaffold }\n',
+        ),
+        without: {'apps/demo/android/README.txt'},
+      );
+      await expectRefused(
+        ws,
+        contains(
+          '$manifestPath: flavors.prod.ssl_pinning: decide — pins: '
+          '["<leaf>", "<backup>"] or disabled: "<reason>" (windows can pin)',
+        ),
+      );
+    });
+
+    test('the web beside a desktop platform still states the decisions, '
+        'and the web ignores them', () async {
+      final ws = workspace(
+        manifest: demoManifest(
+          platforms:
+              'platforms:\n'
+              '  web: { runner: scaffold }\n'
+              '  linux: { runner: scaffold }\n',
+        ),
+        without: {'apps/demo/android/README.txt'},
+      );
+      expect(await run(ws, ['sync']), exitsWith(0));
+      final facts = ws.read(profilePath);
+      expect(facts, contains('Flavor.staging: SslPinning.disabled('));
+      expect(facts, contains('Flavor.prod: SslPinning.disabled('));
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('a pin key is live when a desktop platform is declared beside the '
+        'web', () async {
+      final leaf = base64.encode(List<int>.generate(32, (i) => i));
+      final backup = base64.encode(List<int>.generate(32, (i) => i + 1));
+      final ws = workspace(
+        manifest: demoManifest(
+          flavors:
+              'flavors:\n'
+              '  dev:\n'
+              '  staging:\n'
+              '    ssl_pinning: { disabled: "no pins yet" }\n'
+              '  prod:\n'
+              '    ssl_pinning: { pins: ["$leaf", "$backup"] }\n',
+          platforms:
+              'platforms:\n'
+              '  web: { runner: scaffold }\n'
+              '  linux: { runner: scaffold }\n',
+        ),
+        without: {'apps/demo/android/README.txt'},
+      );
+      final sync = await run(ws, ['sync']);
+      expect(sync, exitsWith(0));
+      expect(sync.output, isNot(contains('can pin TLS')));
+      expect(ws.read(profilePath), contains('Flavor.prod: SslPinning.pinned('));
+      expect(await run(ws, ['verify']), exitsWith(0));
     });
 
     test('a pin list needs two hashes', () async {

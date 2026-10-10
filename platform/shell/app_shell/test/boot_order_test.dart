@@ -13,7 +13,7 @@ import 'support/profile_fakes.dart';
 /// The pins the test profile decides for every flavor.
 const _pinned = SslPinning.pinned(
   'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-  'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
+  'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
 );
 
 class _Splash implements IAppSplashScreen {

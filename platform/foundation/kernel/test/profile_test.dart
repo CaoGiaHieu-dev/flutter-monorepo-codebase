@@ -8,11 +8,18 @@ List<String> _codes(List<ProfileProblem> problems) =>
 
 void main() {
   group('AppPlatform', () {
-    test('only android and ios can pin TLS', () {
+    test('every platform but the web can pin TLS', () {
       expect(
         AppPlatform.values.where((p) => p.canPinTls),
-        [AppPlatform.android, AppPlatform.ios],
+        [
+          AppPlatform.android,
+          AppPlatform.ios,
+          AppPlatform.windows,
+          AppPlatform.macos,
+          AppPlatform.linux,
+        ],
       );
+      expect(AppPlatform.web.canPinTls, isFalse);
     });
 
     test('windows, macos and linux are the desktop platforms', () {
@@ -75,7 +82,8 @@ void main() {
       });
 
       test('does not add a second problem about the same platform', () {
-        // linux cannot pin and would otherwise be inspected for a window.
+        // macos is not declared, so its pin decision and window are never
+        // inspected: P01 stands alone.
         final profile = mobileProfile(
           sslPinning: const SslPinningPolicy.none(),
         );
@@ -187,14 +195,25 @@ void main() {
     });
 
     group('P04 no pin decision where the platform can pin', () {
+      final everywhere = {
+        for (final platform in AppPlatform.values)
+          platform: platform == AppPlatform.web
+              ? webFacts
+              : platform.isDesktop
+              ? linuxFacts
+              : androidFacts,
+      };
       final undecided = mobileProfile(
+        platforms: everywhere,
         sslPinning: const SslPinningPolicy({
           Flavor.dev: SslPinning.disabled('development flavor'),
         }),
       );
 
-      test('flavor without a decision on android and ios', () {
-        for (final platform in [AppPlatform.android, AppPlatform.ios]) {
+      test('flavor without a decision, on every platform that can pin', () {
+        final pinnable = AppPlatform.values.where((p) => p.canPinTls);
+        expect(pinnable, hasLength(5));
+        for (final platform in pinnable) {
           final problems = undecided.validate(
             platform: platform,
             flavor: Flavor.prod,
@@ -213,26 +232,26 @@ void main() {
       });
 
       test('a platform that cannot pin needs no decision', () {
-        final profile = mobileProfile(
-          platforms: const {AppPlatform.linux: linuxFacts},
-          sslPinning: const SslPinningPolicy.none(),
-        );
         expect(
-          profile.validate(platform: AppPlatform.linux, flavor: Flavor.prod),
+          undecided.validate(platform: AppPlatform.web, flavor: Flavor.prod),
           isEmpty,
         );
       });
 
-      test('pinned counts as a decision', () {
+      test('pinned counts as a decision [one desktop platform]', () {
         final pinned = mobileProfile(
+          platforms: everywhere,
           sslPinning: const SslPinningPolicy({
             Flavor.prod: SslPinning.pinned('leaf', 'backup'),
           }),
         );
-        expect(
-          pinned.validate(platform: AppPlatform.ios, flavor: Flavor.prod),
-          isEmpty,
-        );
+        for (final platform in [AppPlatform.ios, AppPlatform.linux]) {
+          expect(
+            pinned.validate(platform: platform, flavor: Flavor.prod),
+            isEmpty,
+            reason: platform.name,
+          );
+        }
       });
     });
 

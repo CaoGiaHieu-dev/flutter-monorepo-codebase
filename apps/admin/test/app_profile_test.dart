@@ -5,8 +5,9 @@ import 'package:core_common/core_common.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What `apps/admin` declares: the same switches on every platform it can run
-/// on, the three flavors, no pinning — and every optional contract it does
-/// not compose declared absent, with a reason.
+/// on, the three flavors, stated placeholder pin decisions on the platforms
+/// that can pin — and every optional contract it does not compose declared
+/// absent, with a reason.
 ///
 /// A change to `app_manifest.yaml` that moves one of these is a behaviour
 /// change; this test says so, and the manifest edit and this test change
@@ -57,11 +58,20 @@ void main() {
       }
     });
 
-    test('pin nothing: no declared platform can pin TLS', () {
-      expect(declared.any((p) => p.canPinTls), isFalse);
+    test('state a placeholder pin decision on every flavor; the desktop '
+        'platforms can pin, the web cannot', () {
+      expect(declared.where((p) => p.canPinTls), {
+        AppPlatform.windows,
+        AppPlatform.macos,
+        AppPlatform.linux,
+      });
       for (final flavor in Flavor.values) {
-        expect(appFacts.sslPinning.decisionFor(flavor), isNull);
         expect(appFacts.sslPinning.hashesFor(flavor), isEmpty);
+        expect(
+          appFacts.sslPinning.decisionFor(flavor),
+          isA<DisabledSsl>(),
+          reason: flavor.name,
+        );
       }
     });
 

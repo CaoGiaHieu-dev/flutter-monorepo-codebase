@@ -137,6 +137,33 @@ void main() {
         expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
       });
 
+      test('a pin mismatch carries what the server presented into the '
+          'diagnostic', () {
+        final failure = classify(
+          _PinException(
+            'No valid SPKI pins found for host: api.example.com '
+            '(server presented: AAAA=, BBBB=)',
+          ),
+        );
+
+        expect(failure.code, ErrorCodes.BAD_CERTIFICATE);
+        expect(failure, isNot(isA<NetworkFailure<dynamic>>()));
+        expect(failure.message, contains('server presented: AAAA=, BBBB='));
+      });
+
+      test('a refusal to use a non-HTTPS URL on a pinned host is not a pin '
+          'mismatch', () {
+        final failure = classify(
+          _PinException(
+            'Refusing to open a non-HTTPS connection to api.example.com '
+            'while certificate pinning is enabled: http://api.example.com/',
+          ),
+        );
+
+        expect(failure, isA<NetworkFailure<dynamic>>());
+        expect(failure.code, ErrorCodes.NETWORK_UNKNOWN);
+      });
+
       test('failing to read the certificate chain at all is not a pin '
           'mismatch', () {
         final failure = classify(

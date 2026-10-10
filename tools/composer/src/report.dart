@@ -537,11 +537,14 @@ String _window(Sourced<WindowDecl>? window) {
 }
 
 String _tls(String platform) {
+  // The desktop platforms are a subset of the pinnable ones: test them first.
+  if (kDesktopPlatforms.contains(platform)) {
+    return 'can pin, the leaf certificate only (decision per flavor, §1)';
+  }
   if (kPinnablePlatforms.contains(platform)) {
     return 'can pin (decision per flavor, §1)';
   }
-  if (platform == 'web') return 'n/a (the browser owns TLS)';
-  return 'n/a (the pinning plugin has no implementation here)';
+  return 'n/a (the browser owns TLS)';
 }
 
 /// [text] safe inside a Markdown table cell.
@@ -611,8 +614,7 @@ String renderCatalog(ShellCatalog catalog) {
   line('DERIVED DEFAULTS (what the generated facts fill in)');
   line(
     '  TLS pinning can apply on   ${kPinnablePlatforms.join(', ')} '
-    '(web: the browser owns TLS; desktop: the pinning plugin has no '
-    'implementation)',
+    '(web: the browser owns TLS; desktop sees only the leaf certificate)',
   );
   line(
     '  splash                     ios: native; elsewhere dart when '

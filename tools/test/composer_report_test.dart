@@ -88,12 +88,12 @@ void main() {
     ),
   );
 
-  /// An app like `apps/admin`: web and desktop, runners still to create, no
-  /// push, nothing that can pin.
+  /// An app like `apps/admin`: web and a desktop platform, runners still to
+  /// create, no push. Windows can pin, so the default `flavors:` block decides
+  /// staging and prod.
   TempWorkspace adminLike() {
     final files = demoWorkspaceFiles(
       manifest: demoManifest(
-        flavors: 'flavors:\n  dev:\n  staging:\n  prod:\n',
         platforms:
             'platforms:\n'
             '  windows: { runner: scaffold }\n'
@@ -139,6 +139,25 @@ void main() {
       final result = await run(ws, ['describe', '--app', 'demo']);
       expect(result, exitsWith(0));
       expectGolden('describe_admin_like.txt', result.stdout);
+    });
+
+    test('says what a TLS pin can do on each platform', () async {
+      final report = (await run(adminLike(), [
+        'describe',
+        '--app',
+        'demo',
+      ])).stdout;
+
+      // windows: a desktop platform sees the leaf certificate only.
+      expect(
+        report,
+        contains(
+          'can pin, the leaf certificate only (decision per flavor, §1)',
+        ),
+      );
+      // web: the browser owns TLS.
+      expect(report, contains('n/a (the browser owns TLS)'));
+      expect(report, isNot(contains('has no implementation')));
     });
 
     test('is the text of the README report region', () async {
@@ -235,7 +254,12 @@ void main() {
       expect(out, contains('session_state'));
       expect(out, contains('ISessionState'));
       expect(out, contains('DERIVED DEFAULTS'));
-      expect(out, contains('TLS pinning can apply on   android, ios'));
+      expect(
+        out,
+        contains(
+          'TLS pinning can apply on   android, ios, windows, macos, linux',
+        ),
+      );
     });
 
     test('works on a workspace whose manifests are broken', () async {

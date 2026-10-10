@@ -8,7 +8,7 @@ import 'package:http_security_pinning/http_security_pinning.dart';
 class _Sentinel extends HttpOverrides {}
 
 const _leaf = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-const _backup = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=';
+const _backup = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=';
 const _reason = 'TEMPLATE PLACEHOLDER: no SPKI pins provisioned';
 
 /// What an app's pinning decision for one flavor does at boot, on every
@@ -18,10 +18,9 @@ const _reason = 'TEMPLATE PLACEHOLDER: no SPKI pins provisioned';
 /// platform decides whether it can apply at all (`AppPlatform.canPinTls`):
 ///
 /// - web: the browser owns TLS — INFO, nothing installed;
-/// - desktop: the pinning plugin has no implementation — INFO "not applicable",
-///   nothing installed (no ERROR "NOT pinned" on every start);
-/// - android / ios: `pinned` installs the pinning client, `disabled` logs its
-///   declared reason as a WARNING, and no decision at all is an ERROR.
+/// - every other platform (android, ios, windows, macos, linux): `pinned`
+///   installs the pinning client, `disabled` logs its declared reason as a
+///   WARNING, and no decision at all is an ERROR.
 void main() {
   late List<({int level, String message})> logged;
   late HttpOverrides sentinel;
@@ -110,18 +109,12 @@ void main() {
               boot(entry.value, platform, flavor);
 
               expect(installedPinning(), isFalse);
-              expect(logsAt(info, 'browser validates TLS'), isTrue);
-              expect(logsAt(error, 'NOT pinned'), isFalse);
-            });
-          } else if (!platform.canPinTls) {
-            test('$label: not applicable, said once, nothing installed', () {
-              boot(entry.value, platform, flavor);
-
-              expect(installedPinning(), isFalse);
               expect(
-                logsAt(info, 'not applicable on ${platform.name}'),
-                isTrue,
+                HttpOverrides.current,
+                same(sentinel),
+                reason: 'nothing installed: neither pinning nor a bypass',
               );
+              expect(logsAt(info, 'browser validates TLS'), isTrue);
               expect(logsAt(error, 'NOT pinned'), isFalse);
             });
           } else if (entry.key == 'pinned') {
@@ -137,6 +130,11 @@ void main() {
               boot(entry.value, platform, flavor);
 
               expect(installedPinning(), isFalse);
+              expect(
+                HttpOverrides.current,
+                same(sentinel),
+                reason: 'a disabled decision installs nothing: TLS stays on',
+              );
               expect(logsAt(warning, _reason), isTrue);
               expect(logsAt(warning, 'flavor ${flavor.name}'), isTrue);
             });
@@ -145,6 +143,11 @@ void main() {
               boot(entry.value, platform, flavor);
 
               expect(installedPinning(), isFalse);
+              expect(
+                HttpOverrides.current,
+                same(sentinel),
+                reason: 'no decision installs nothing: TLS stays on',
+              );
               expect(
                 logsAt(error, 'flavors.${flavor.name}.ssl_pinning'),
                 isTrue,
@@ -155,6 +158,13 @@ void main() {
       }
     });
   }
+
+  test('the web is the only platform where pinning cannot apply', () {
+    expect(
+      AppPlatform.values.where((p) => !p.canPinTls),
+      [AppPlatform.web],
+    );
+  });
 
   test('only the current flavor decides: another flavor pinned changes '
       'nothing', () {

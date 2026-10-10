@@ -96,7 +96,10 @@ final class DioFailureClassifier implements ErrorClassifier {
   ///   certificate: a [ServerFailure] coded [ErrorCodes.BAD_CERTIFICATE]. Not
   ///   a [NetworkFailure] — callers treat those as "offline, keep the
   ///   session", and an intercepted connection is the opposite of offline;
-  /// - anything else stays [ErrorCodes.NETWORK_UNKNOWN].
+  /// - anything else stays [ErrorCodes.NETWORK_UNKNOWN] — the pinning
+  ///   client's other refusals included (a chain that could not be read, a
+  ///   non-HTTPS URL on a pinned host): they say nothing about the
+  ///   certificate the server presented.
   static AppFailure<dynamic> _failureFromCause(DioException error) {
     final cause = error.error;
     if (cause is FormatException) {
@@ -105,9 +108,19 @@ final class DioFailureClassifier implements ErrorClassifier {
         code: ErrorCodes.INVALID_FORMAT,
       );
     }
-    if (cause is TlsException || _isPinMismatch(cause)) {
+    if (cause is TlsException) {
       return const ServerFailure(
         message: 'Certificate rejected',
+        code: ErrorCodes.BAD_CERTIFICATE,
+      );
+    }
+    if (_isPinMismatch(cause)) {
+      // The message carries the hashes the server presented ("(server
+      // presented: …)", public values): the only way a release build's crash
+      // report can say what a rotated certificate now is. The UI maps `code`,
+      // never this text.
+      return ServerFailure(
+        message: 'Certificate rejected: $cause',
         code: ErrorCodes.BAD_CERTIFICATE,
       );
     }

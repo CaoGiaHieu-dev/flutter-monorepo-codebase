@@ -8,7 +8,7 @@ class _Sentinel extends HttpOverrides {}
 
 const _pinned = SslPinning.pinned(
   'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-  'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
+  'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
 );
 
 AppProfile _profile({required SslPinning? decision}) => AppProfile(
@@ -57,6 +57,56 @@ void main() {
       HttpOverrides.current?.createHttpClient(null),
       isA<HttpSecurityPinningClient>(),
       reason: 'a new override is not enough: the accept-all bypass is one too',
+    );
+  });
+
+  test('installs the pinning HttpOverrides on every platform that can pin', () {
+    for (final platform in AppPlatform.values.where((p) => p.canPinTls)) {
+      AppInitializer.debugResetBeforeRunApp();
+      HttpOverrides.global = _Sentinel();
+
+      AppInitializer.initBeforeRunApp(
+        profile: _profile(decision: _pinned),
+        platform: platform,
+        flavor: Flavor.prod,
+      );
+
+      expect(
+        HttpOverrides.current?.createHttpClient(null),
+        isA<HttpSecurityPinningClient>(),
+        reason: platform.name,
+      );
+    }
+  });
+
+  test('a pin the client cannot parse stops the boot, and a retry stops it '
+      'again', () {
+    const unparsable = SslPinning.pinned('not-a-pin', 'also not a pin');
+    final sentinel = _Sentinel();
+    HttpOverrides.global = sentinel;
+    void boot() => AppInitializer.initBeforeRunApp(
+      profile: _profile(decision: unparsable),
+      platform: AppPlatform.android,
+      flavor: Flavor.prod,
+    );
+
+    expect(boot, throwsA(isA<InvalidPinException>()));
+    expect(
+      HttpOverrides.current,
+      same(sentinel),
+      reason: 'nothing half-installed',
+    );
+    // `runShellApp`'s boot-failure screen retries the boot: it must find the
+    // work undone and fail again, not "already ran" and start unpinned.
+    expect(boot, throwsA(isA<InvalidPinException>()));
+    expect(HttpOverrides.current, same(sentinel));
+  });
+
+  test('an empty pin list is refused: the package would read it as '
+      '"not pinned"', () {
+    expect(
+      () => AppInitializer.debugPinningOverrides(const <String>[]),
+      throwsArgumentError,
     );
   });
 

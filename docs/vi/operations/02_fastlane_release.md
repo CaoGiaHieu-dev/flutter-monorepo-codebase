@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/operations/02_fastlane_release.md@4b2b033 -->
+<!-- translated-from: docs/en/operations/02_fastlane_release.md@5251b83 -->
 # Fastlane & Phát hành
 
 Tài liệu này trả lời: **Fastlane trong repo được lắp ráp thế nào, có những lane nào và nhận tham số gì, app được ký ra sao, và quy trình phát hành đầy đủ gồm những bước nào.** Đọc xong bạn cấu hình được `Config.yaml`, chạy được mọi lane từ thư mục gốc, và đưa được bản build lên Firebase App Distribution, Google Play hoặc TestFlight.

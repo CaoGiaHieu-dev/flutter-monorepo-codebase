@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/06_storage.md@d6a34fc -->
+<!-- translated-from: docs/en/guides/06_storage.md@4b2b033 -->
 # Hướng dẫn: Lưu trữ Key-Value
 
 ## Mục tiêu

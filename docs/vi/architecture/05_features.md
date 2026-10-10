@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/architecture/05_features.md@0930d8e -->
+<!-- translated-from: docs/en/architecture/05_features.md@4b2b033 -->
 # Tầng Feature
 
 **File này trả lời:** một package sở hữu màn hình được tổ chức thế nào, nó được phép phụ thuộc vào đâu, và các feature giữ độc lập với nhau ra sao mà vẫn ghép lại thành một app.

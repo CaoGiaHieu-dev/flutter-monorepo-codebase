@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/11_design_system.md@25468b2 -->
+<!-- translated-from: docs/en/guides/11_design_system.md@4b2b033 -->
 # Hướng dẫn: Cấu hình design system
 
 ## Mục tiêu

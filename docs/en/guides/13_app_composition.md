@@ -49,9 +49,11 @@ app:
   entrypoint: lib/main.dart
 
 flavors:                       # closed set: dev | staging | prod
-  dev:
+  dev:                         # ssl_pinning defaults to disabled
   staging:
-  prod:                        # ssl_pinning only where a declared platform can pin
+    ssl_pinning: { disabled: "no SPKI pins provisioned yet" }
+  prod:                        # a decision is required here: windows can pin
+    ssl_pinning: { disabled: "no SPKI pins provisioned yet" }
 
 env:
   BASE_URL: { required_in: [prod] }
@@ -237,7 +239,7 @@ project 'Runner', {
 
 ### Pin certificates
 
-Pinning works on Android and iOS only — the browser owns TLS on the web, and the pinning plugin has no desktop implementation — so the key is required only where a declared platform can pin, and refused where none can. Replace the staging or prod decision in the manifest:
+Pinning works on Android, iOS and the desktop platforms — the browser owns TLS on the web — so the key is required where a declared platform can pin, and refused where none can. On desktop the plugin sees only the leaf certificate, so pin the leaf's key and a backup leaf key. Replace the staging or prod decision in the manifest:
 
 ```yaml
 flavors:
@@ -305,7 +307,7 @@ cd apps/<id> && flutter test                             # the smoke test (check
 | `verify`: `declared provided but no composed package or apps/<id>/lib registers …` | A module was removed, or never composed, while the manifest says `provided` | Add the module, or declare the contract `absent` with a reason (the message prints the line) |
 | `verify`: `declared absent but … is registered at <file>:<line>` | A composed package registers it | Declare it `provided`, or stop composing what registers it |
 | `verify`: `out of date: … (facts)` | The manifest changed, or the generated region was edited by hand | `dart tools/composer/composer.dart sync --app <id>`; never edit a `composer:managed` region (RULE-16) |
-| `verify`: `flavors.prod.ssl_pinning: decide …` | A flavor of an app with an Android or iOS platform has no pin decision | `pins: [...]` or `disabled: "reason"` (above) |
+| `verify`: `flavors.prod.ssl_pinning: decide …` | A flavor of an app with a platform that can pin (Android, iOS, Windows, macOS, Linux) has no pin decision | `pins: [...]` or `disabled: "reason"` (above) |
 | `verify`: `flavors.<f>: declared, but … has no productFlavor / scheme / build configuration named …` | A committed mobile runner lacks a flavor the manifest declares | Wire it (the recipe above), or delete the flavor from `flavors:` |
 | `verify`: `<package> does not support <platform>` | A composed package, or one it links, lacks the platform | Declare only platforms every linked package supports, or stop depending on it |
 | Boot stops: *`<id>` is running on `<platform>`, which its manifest does not declare* | The platform is not under `platforms:` | Declare it (above), run on a declared one, or `--dart-define=ALLOW_UNDECLARED_PLATFORM=true` for a quick look |

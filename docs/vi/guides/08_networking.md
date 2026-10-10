@@ -355,7 +355,7 @@ Sau đó đánh dấu lời gọi login và refresh bằng `EXTRA_CAN_REFRESH_TO
 ## 10. Bật SSL pinning
 
 > [!WARNING]
-> **Pinning là quyết định theo từng flavor của app, và template giao nó ở trạng thái "tắt".** `apps/mobile` khai `ssl_pinning: { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned …" }` cho staging và prod — một quyết định được nêu rõ, được liệt kê trong README của app ở mục *Decisions to revisit before shipping* và được log `WARNING` ở mỗi lần khởi động trên Android hay iOS — nên các bản build đó chấp nhận mọi certificate mà thiết bị tin tưởng, kể cả cert do proxy chèn vào, cho tới khi bạn thay nó bằng pin thật (RULE-48). `apps/admin` không khai gì: không platform nào của nó pin được.
+> **Pinning là quyết định theo từng flavor của app, và template giao nó ở trạng thái "tắt".** `apps/mobile` khai `ssl_pinning: { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned …" }` cho staging và prod — một quyết định được nêu rõ, được liệt kê trong README của app ở mục *Decisions to revisit before shipping* và được log `WARNING` ở mỗi lần khởi động trên một platform pin được (mọi platform trừ web) — nên các bản build đó chấp nhận mọi certificate mà thiết bị tin tưởng, kể cả cert do proxy chèn vào, cho tới khi bạn thay nó bằng pin thật (RULE-48). `apps/admin` khai cùng placeholder đó cho staging và prod: Windows, macOS và Linux pin được, web thì không.
 
 Lấy hash SPKI SHA-256 của từng key:
 
@@ -367,6 +367,8 @@ openssl s_client -servername <host> -connect <host>:443 </dev/null \
   | openssl enc -base64
 ```
 
+**Chưa có hash?** Khai hai placeholder đúng định dạng — base64 của 32 byte, ví dụ `AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=` và `AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=` — trên một flavor không phải production rồi gửi một request. Lời từ chối, `CertificatePinningException: No valid SPKI pins found for host: <host> (server presented: <pin>, <pin>)`, liệt kê hash SPKI của mọi certificate mà server đã trình ra, leaf đứng đầu, trong cả bản debug lẫn release (trên Windows, macOS và Linux chỉ có leaf). Một hash không phải base64 của 32 byte thì không phải placeholder: app dừng ở lúc boot với `InvalidPinException`.
+
 Pin **ít nhất hai** key khác nhau — leaf cộng một key dự phòng — để khi xoay vòng certificate không khoá chết toàn bộ client đã cài. Quyết định nằm trong manifest, theo từng flavor (RULE-48, RULE-80); không sửa gì dưới `platform/`:
 
 ```yaml
@@ -376,7 +378,7 @@ flavors:
     ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
 ```
 
-Một flavor nhận `pins: [...]` hoặc `disabled: "<reason>"` (lý do không rỗng, không phải `TODO` hay `TBD`), không bao giờ cả hai. `dev` không cần mục nào: nó mặc định là `disabled` với lý do "development flavor: local servers use self-signed certificates". Sau đó `dart tools/composer/composer.dart sync` sinh quyết định vào vùng `facts` của app (`AppFacts.sslPinning`, một `SslPinningPolicy`) và báo cáo trong README, và `composer verify` giữ nó (V1 hình dạng — từ hai pin khác nhau trở lên, mỗi pin là base64 của 32 byte — và V9 một quyết định cho mọi flavor ở nơi một platform đã khai báo pin được, Android hoặc iOS). Không có nguồn pin nào khác và không có gì để đăng ký hay bind: `AppInitializer.initBeforeRunApp` đọc profile, không bao giờ đọc đồ thị, **trước** khi DI bắt đầu, nên một quyết định pin không thể mất vì thiếu đăng ký và không kết nối nào do đồ thị mở ra có thể đi trước nó.
+Một flavor nhận `pins: [...]` hoặc `disabled: "<reason>"` (lý do không rỗng, không phải `TODO` hay `TBD`), không bao giờ cả hai. `dev` không cần mục nào: nó mặc định là `disabled` với lý do "development flavor: local servers use self-signed certificates". Sau đó `dart tools/composer/composer.dart sync` sinh quyết định vào vùng `facts` của app (`AppFacts.sslPinning`, một `SslPinningPolicy`) và báo cáo trong README, và `composer verify` giữ nó (V1 hình dạng — từ hai pin khác nhau trở lên, mỗi pin là base64 của 32 byte — và V9 một quyết định cho mọi flavor ở nơi một platform đã khai báo pin được: Android, iOS, Windows, macOS hoặc Linux). Không có nguồn pin nào khác và không có gì để đăng ký hay bind: `AppInitializer.initBeforeRunApp` đọc profile, không bao giờ đọc đồ thị, **trước** khi DI bắt đầu, nên một quyết định pin không thể mất vì thiếu đăng ký và không kết nối nào do đồ thị mở ra có thể đi trước nó.
 
 **Các pin áp dụng cho mọi host mà process kết nối tới, không chỉ API của bạn.** Client pinning được cài làm `HttpOverrides.global` của cả process, nên một CDN ảnh, một host font, một storage bucket hay endpoint của SDK bên thứ ba mà certificate không khớp key nào đã pin cũng fail ở bước bắt tay TLS. Trước khi khai báo `pins:` cho một flavor, hãy kiểm tra mọi host mà app chạm tới bằng `dart:io` (client Dio, `Image.network`, các SDK dùng `HttpClient`) và pin các key bao phủ chúng, hoặc phục vụ lưu lượng đó từ một host bạn pin. Một flavor không làm được cả hai thì khai báo `disabled` kèm lý do.
 
@@ -384,15 +386,22 @@ App làm gì với quyết định đó, theo đúng thứ tự `initBeforeRunAp
 
 | Bản build | Kết quả |
 |:--|:--|
-| Web | Trình duyệt sở hữu TLS: không cài gì, một dòng `INFO` nói rõ điều đó |
+| Web | Trình duyệt sở hữu TLS: không cài gì, một dòng `INFO` nói rõ điều đó (client web của package xác minh các response có chữ ký, đó không phải pinning, xem bên dưới) |
 | Bản debug có flavor khai báo là `dev` | Việc kiểm tra certificate bị bỏ qua cho server local (`WARNING`); pin không bao giờ áp dụng |
 | Flavor thiếu hoặc không biết | Coi là `prod` cho TLS: việc kiểm tra vẫn bật (`ERROR` nêu cách sửa) |
-| Desktop (Windows, macOS, Linux) | Plugin pinning không có implementation: một dòng `INFO`, nền tảng tự kiểm tra |
-| Android / iOS, flavor `pins` | Một client pinning với đúng các hash đó trở thành `HttpOverrides` toàn cục |
-| Android / iOS, flavor `disabled` | `WARNING` kèm lý do đã khai, traffic **không** được pin |
-| Android / iOS, không có quyết định | `ERROR` gắn tag `Security`; kiểm tra boot `P04` từ chối khởi động trước khi tới bước này |
+| Android, iOS, Windows, macOS hoặc Linux, flavor `pins` | Một client pinning với đúng các hash đó trở thành `HttpOverrides` toàn cục; một hash không phải base64 của 32 byte sẽ dừng boot (`InvalidPinException`) |
+| Android, iOS, Windows, macOS hoặc Linux, flavor `disabled` | `WARNING` kèm lý do đã khai, traffic **không** được pin |
+| Android, iOS, Windows, macOS hoặc Linux, không có quyết định | `ERROR` gắn tag `Security`; kiểm tra boot `P04` từ chối khởi động trước khi tới bước này |
 
-Ở nơi không platform nào đã khai báo pin được (`apps/admin`), `composer verify` từ chối key `ssl_pinning` vì vô dụng và nêu các lối thoát: khai báo android hoặc ios; pin ở nơi app kết nối tới (một gateway hay proxy giữ certificate được pin); hoặc thêm implementation pinning cho desktop trước. Pinning được cài lúc nào, và bản build nào bỏ qua nó: [`../architecture/02_core.md` § 6](../architecture/02_core.md#pinning-được-cài-lúc-nào-và-khi-nào-bị-bỏ-qua).
+**Cách nó thực thi.** Client đọc chuỗi certificate mà một host trình ra qua một kết nối trực tiếp riêng (probe), so SPKI SHA-256 của từng certificate với các pin của bạn, và làm cho kết nối thật chỉ tin những certificate đã khớp; một host không trình ra key nào của bạn bị từ chối mà không có request nào được gửi. Chuỗi được cache theo host và port; khi bắt tay thất bại (server đã xoay sang một key bạn đã pin), nó bị bỏ, được đọc lại và request được thử lại một lần, không cần khởi động lại. Probe và kết nối đã pin đều là kết nối trực tiếp, nên không cái nào đi theo proxy của hệ thống hay của biến môi trường: sau một proxy bắt buộc phải chở traffic, flavor đã pin sẽ fail closed. Một URL `http://` thường tới một host đã pin bị từ chối chứ không được gửi (`InsecureConnectionException`), nhưng chỉ với URL bạn yêu cầu: mã `3xx` từ một host `https://` đã pin sang một URL `http://` được mọi client chịu theo redirect đi theo dưới dạng cleartext (`dart:io` bỏ header `Authorization` ở bước nhảy đó; request vẫn được gửi). `ApiClient` không theo redirect (`NetworkProfile.followRedirects` là `false` trừ khi app đặt khác): hãy giữ `false` trên các flavor đã pin. Một `HttpClient()` thường, thứ mà bộ nạp ảnh dùng, theo redirect theo mặc định. Client đã pin không tự gửi `User-Agent` (package 1.2.2; client `dart:io` không pin gửi `Dart/<version> (dart:io)`): đặt một cái trong `NetworkProfile.headers` nếu gateway của bạn cần (trên web trình duyệt tự gửi User-Agent của nó, và client đã pin không được dùng ở đó).
+
+**Desktop chỉ thấy certificate leaf.** Android và iOS đọc cả chuỗi, nên một pin có thể trỏ tới leaf, intermediate hoặc root. Trên Windows, macOS và Linux, `dart:io` chỉ lộ ra mình leaf: một bộ pin không chứa key của leaf sẽ không bao giờ khớp ở đó, và key dự phòng phải là một key *leaf* thứ hai (một cặp key bạn sinh ngay bây giờ và cất offline), không phải key CA. Điều này được đọc từ mã nguồn package, chưa được đo trên từng hệ điều hành desktop.
+
+**Offline.** Một host đã pin không kết nối được sẽ bị probe lại ba lần với quãng nghỉ tăng dần (0.2 s, 0.4 s, 0.6 s) trước khi request fail với `NETWORK_UNKNOWN`: khoảng 1.2 s quãng nghỉ cho mỗi request fail, và một lần fail không được cache.
+
+**Web không pin được, và client web của package không phải pinning.** Trình duyệt sở hữu TLS, nên không cài gì và một dòng `INFO` nói rõ điều đó. Từ 1.2.0 package có kèm một client web xác minh chữ ký Ed25519 mà *server* đặt trên mỗi response (`X-Server-Signature`, `X-Signature-Timestamp`). Nó xác thực phần thân response, không xác thực kết nối, nên một request, kể cả bearer token của nó, tới được bất kỳ ai chặn giữa đường; chữ ký bao phủ timestamp (và một nonce tuỳ chọn) cùng phần thân, không bao phủ URL, method hay status; khi không có public key thì nó không xác minh gì và các pin SPKI bị bỏ qua; nó là một `http.Client`, không phải adapter của Dio. Dùng nó cần một backend có ký, CORS lộ hai header đó và một adapter trong `ApiClient` xác minh các byte thô. Template không nối cái nào trong số này và không có key manifest cho nó.
+
+Ở nơi không platform nào đã khai báo pin được (một app chỉ có web), `composer verify` từ chối key `ssl_pinning` vì vô dụng và nêu các lối thoát: khai báo android, ios hoặc một platform desktop; hoặc pin ở nơi app kết nối tới (một gateway hay proxy giữ certificate được pin). Pinning được cài lúc nào, và bản build nào bỏ qua nó: [`../architecture/02_core.md` § 6](../architecture/02_core.md#pinning-được-cài-lúc-nào-và-khi-nào-bị-bỏ-qua).
 
 ---
 
@@ -420,6 +429,8 @@ Checklist review:
 - [ ] `flavors.prod.ssl_pinning` (và staging) đã được quyết định trong manifest — ≥2 pin, hoặc `disabled` kèm lý do — trước khi phát hành
 - [ ] `composer verify` sạch (V9 giữ quyết định pin) và `cd platform/foundation/common && flutter test test/pin_policy_matrix_test.dart` pass
 - [ ] Mọi host mà app chạm tới qua `dart:io` (CDN, storage, SDK) được các key đã pin bao phủ trước khi một flavor khai báo `pins:`
+- [ ] Trên một platform desktop, các key đã pin gồm key của leaf và key dự phòng là một key leaf thứ hai
+- [ ] Bản build store đầu tiên có pin đã đi qua một track kiểm thử nội bộ và Play Console không hiện cảnh báo bảo mật nào về probe của plugin pinning (phía Android của nó đọc chuỗi bằng một trust manager chỉ quan sát)
 - [ ] Không log nguyên văn bất kỳ thông tin đăng nhập nào
 
 ## Xử lý sự cố
@@ -435,8 +446,13 @@ Checklist review:
 | UI hiện "Something went wrong" cho một lỗi bạn mong là cụ thể | `failureMessage` chỉ ánh xạ các code chung; status hay giá trị `ErrorCodes` đó không nằm trong số nó nêu tên | Phân loại failure trong feature và dùng ARB của riêng nó (bước 8) |
 | Log `ERROR`: `SSL pinning has no decision for flavor …` (hoặc boot dừng với `P04`) | Flavor chưa có mục `ssl_pinning` trong manifest, và platform pin được | Khai `pins:` hoặc `disabled` kèm lý do dưới `flavors.<f>.ssl_pinning` rồi chạy `composer sync` (bước 10); V9 từ chối nó ở Gate 0 trước |
 | Log `WARNING`: `SSL pinning is disabled for flavor …` | Quyết định của flavor là `disabled` — lý do đã khai nằm trong log | Khai `pins:` (bước 10) khi flavor cần pin |
-| `composer verify`: `no declared platform can pin TLS … delete it` | App chỉ khai báo platform web và desktop, những nơi không pin được | Xoá key, hoặc đi theo một trong ba lối thoát mà thông báo liệt kê (bước 10) |
-| Log `INFO`: `Web build: the browser validates TLS certificates …` hoặc `SSL pinning is not applicable on <platform> …` | Pinning không thể áp dụng trên platform đó | Không có gì phải sửa; quyết định chỉ được đọc trên Android và iOS |
+| `composer verify`: `no declared platform can pin TLS … delete it` | App chỉ khai báo web, nơi không pin được | Xoá key, hoặc đi theo một trong hai lối thoát mà thông báo liệt kê (bước 10) |
+| Log `INFO`: `Web build: the browser validates TLS certificates …` | Pinning không thể áp dụng trên web | Không có gì phải sửa; quyết định được đọc trên mọi platform khác |
+| `CertificatePinningException: No valid SPKI pins found for host … (server presented: …)` | Không key nào đã pin nằm trong chuỗi của server | Pin một trong các hash được liệt kê (leaf đứng đầu) và một key dự phòng (bước 10) |
+| `No valid SPKI pins found for host …` trên một flavor Windows, macOS hoặc Linux trong khi cùng các pin đó chạy được trên Android | Desktop chỉ thấy leaf, và các key đã pin là key CA | Pin key của leaf và một key leaf dự phòng (bước 10) |
+| App dừng ở lúc boot với `InvalidPinException` | Một hash đã khai không phải base64 của 32 byte | Sửa manifest (`composer verify` V1 từ chối nó trước) |
+| `NETWORK_UNKNOWN` và, trong `error_details` của log debug, `Refusing to open a non-HTTPS connection to <host> while certificate pinning is enabled` | Một URL `http://` trên flavor đã pin (một `BASE_URL` không có TLS) | Dùng `https://`, hoặc khai flavor là `disabled` |
+| Mọi request trên một flavor đã pin fail với `NETWORK_UNKNOWN` (`AppFailure.message` là "Unknown network error" chung chung; `Failed to fetch certificate chain` nằm trong `error_details` của logging interceptor, chỉ có ở bản debug, và trong các dòng retry `HttpSecurityPinning:` của chính package, vốn dùng `debugPrint` nên cũng tới console của bản release) | Probe không tới được host (offline, DNS, hoặc một proxy bắt buộc phải chở traffic) | Kiểm tra kết nối; các flavor đã pin kết nối trực tiếp |
 | Mọi request fail trên một flavor đã pin sau khi certificate của server đổi | Không hash nào được pin là hash của key mới | Hash lại host đang chạy và phát hành một bản pin leaf mới cùng một key dự phòng (bước 10) |
 | Ảnh, font hay một SDK fail với lỗi TLS trên flavor khai báo `pins:` | Các pin áp dụng cho mọi host process kết nối tới, và certificate của host đó không khớp pin nào | Pin các key bao phủ nó, phục vụ nó từ host đã pin, hoặc khai flavor là `disabled` kèm lý do (bước 10) |
 | Một `POST` bị timeout và không hiện dialog retry | `POST` / `PATCH` đã timeout không được gửi lại — server có thể đã xử lý nó | Nếu server khử trùng lặp, đặt `EXTRA_IDEMPOTENT: true` (bước 6); nếu không, để người dùng tự thử lại có chủ ý |

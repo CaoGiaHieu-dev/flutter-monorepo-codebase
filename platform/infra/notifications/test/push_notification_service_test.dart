@@ -234,7 +234,9 @@ void main() {
               name: 'Admin',
               flavors: {Flavor.dev},
               platforms: {AppPlatform.windows: off},
-              sslPinning: SslPinningPolicy.none(),
+              sslPinning: SslPinningPolicy({
+                Flavor.dev: SslPinning.disabled('test: no pins'),
+              }),
             ),
           ),
           platform: AppPlatform.windows,

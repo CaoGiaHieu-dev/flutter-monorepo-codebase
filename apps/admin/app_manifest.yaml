@@ -12,9 +12,15 @@ app:
   entrypoint: lib/main.dart
 
 flavors:
-  dev:
+  dev: # ssl_pinning default: disabled — local servers use self-signed certificates
   staging:
-  prod: # no ssl_pinning: no declared platform can pin (web: the browser owns TLS; desktop: the plugin has no implementation)
+    ssl_pinning:
+      { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned — docs/en/guides/08_networking.md § 10" }
+  prod:
+    # A real decision:  ssl_pinning: { pins: ["<leaf spki sha256 base64>", "<backup spki sha256 base64>"] }
+    # Windows, macOS and Linux see the leaf certificate only: pin the leaf's key and a backup LEAF key. The web cannot pin.
+    ssl_pinning:
+      { disabled: "TEMPLATE PLACEHOLDER: no SPKI pins provisioned — docs/en/guides/08_networking.md § 10" }
 
 env:
   BASE_URL: { required_in: [prod] }

@@ -116,8 +116,23 @@ const AppFacts appFacts = AppFacts(
       'no analytics backend chosen: no screen events',
     ),
   },
-  // n/a: no declared platform can pin TLS
-  sslPinning: SslPinningPolicy.none(),
+  sslPinning: SslPinningPolicy({
+    // default
+    Flavor.dev: SslPinning.disabled(
+      'development flavor: local servers use self-signed '
+      'certificates',
+    ),
+    // manifest
+    Flavor.staging: SslPinning.disabled(
+      'TEMPLATE PLACEHOLDER: no SPKI pins provisioned — '
+      'docs/en/guides/08_networking.md § 10',
+    ),
+    // manifest
+    Flavor.prod: SslPinning.disabled(
+      'TEMPLATE PLACEHOLDER: no SPKI pins provisioned — '
+      'docs/en/guides/08_networking.md § 10',
+    ),
+  }),
 );
 // composer:end:facts
 

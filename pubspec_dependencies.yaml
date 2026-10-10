@@ -18,7 +18,9 @@ dependencies:
 
   # Networking & HTTP client
   dio: "^5.11.0"
-  http_security_pinning: "^1.0.1"
+  # >= 1.2.2: below 1.1.0 the pinning client recurses when it is the global HttpOverrides, and core_common no
+  # longer guards against that. Desktop pinning arrived in 1.1.0, the web-safe conditional exports in 1.2.1.
+  http_security_pinning: "^1.2.2"
   retrofit: "^4.10.0"
 
   # Navigation & Routing

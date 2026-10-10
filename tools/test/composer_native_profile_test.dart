@@ -486,7 +486,10 @@ android {
         );
         final result = await run(ws, ['sync']);
         expect(result, exitsWith(1));
-        expect(result.output, contains('declare android or ios'));
+        expect(
+          result.output,
+          contains('declare android, ios or a desktop platform'),
+        );
         expect(result.output, contains('gateway or proxy'));
         expect(result.output, contains('08_networking.md'));
       },

@@ -232,11 +232,10 @@ void _pinning(
         bad(
           key,
           'no declared platform can pin TLS (${decl.platforms.map((p) => p.name).join(', ')}: '
-          'the browser owns TLS on web, the pinning plugin has no desktop '
-          'implementation), so the key does nothing — delete it. To pin, '
-          'declare android or ios; or pin where the app connects to (a '
-          'gateway or proxy that holds the pinned certificate); or add a '
-          'desktop pinning implementation first '
+          'the browser owns TLS on web), so the key does nothing — delete it. '
+          'To pin, declare android, ios or a desktop platform (windows, macos, '
+          'linux); or pin where the app connects to (a gateway or proxy that '
+          'holds the pinned certificate) '
           '(docs/en/guides/08_networking.md § 10)',
         );
       }

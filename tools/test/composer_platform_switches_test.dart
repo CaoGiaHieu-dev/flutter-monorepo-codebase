@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../composer/src/manifest_v2.dart' show kPinnablePlatforms;
 import 'support/composer_fixture.dart';
 import 'support/tool_harness.dart';
 
@@ -47,7 +48,7 @@ void main() {
   }) {
     // A platform that can pin needs a decision per flavor; one that cannot
     // refuses it.
-    final canPin = platforms.contains('android') || platforms.contains('ios');
+    final canPin = kPinnablePlatforms.any(platforms.contains);
     var manifest = demoManifest(
       platforms: platforms,
       flavors: canPin ? kFlavors : 'flavors:\n  dev:\n  staging:\n  prod:\n',

@@ -5,6 +5,10 @@ import '../flavor.dart';
 /// There is no "unset": an app either pins ([SslPinning.pinned]) or says why
 /// it does not ([SslPinning.disabled]). A flavor with no decision on a
 /// platform that can pin is a boot problem (`P04`) and a composer error.
+///
+/// Android and iOS read the whole chain, so a pin may name the leaf, an
+/// intermediate or the root; Windows, macOS and Linux see only the leaf, so
+/// their pin set must contain the leaf's key (RULE-48).
 sealed class SslPinning {
   /// Pin the certificates whose SPKI SHA-256 hashes (base64) are [leaf] and
   /// [backup], and any [more].

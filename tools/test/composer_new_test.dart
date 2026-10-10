@@ -479,6 +479,35 @@ void main() {
       },
     );
 
+    test('decides the pin on a desktop-only app too', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'kiosk', '--platforms', 'windows']),
+        exitsWith(0),
+      );
+      expect(
+        ws.read('apps/kiosk/app_manifest.yaml'),
+        contains('ssl_pinning: { disabled: "no SPKI pins provisioned yet'),
+      );
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
+    test('states no pin where the only platform is the web', () async {
+      final ws = await workspace();
+      expect(
+        await run(ws, ['new', 'web1', '--platforms', 'web']),
+        exitsWith(0),
+      );
+      final manifest = ws.read('apps/web1/app_manifest.yaml');
+      // No `ssl_pinning:` key line (the comment beside `prod:` names the key).
+      expect(
+        manifest,
+        isNot(matches(RegExp(r'^\s+ssl_pinning:', multiLine: true))),
+      );
+      expect(manifest, contains('the only platform is the web'));
+      expect(await run(ws, ['verify']), exitsWith(0));
+    });
+
     test('sorts the smoke test imports for its own id', () async {
       final ws = await workspace();
       expect(

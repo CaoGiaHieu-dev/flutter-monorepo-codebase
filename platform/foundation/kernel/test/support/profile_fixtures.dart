@@ -24,6 +24,14 @@ const PlatformFacts linuxFacts = PlatformFacts(
   push: false,
 );
 
+const PlatformFacts webFacts = PlatformFacts(
+  runner: RunnerKind.scaffold,
+  splash: SplashMode.native,
+  orientation: OrientationPolicy.phonesPortrait,
+  deepLinks: true,
+  push: false,
+);
+
 /// A phone app, like `apps/mobile`: android + ios, three flavors, an explicit
 /// pin decision on each flavor.
 AppFacts mobileFacts({

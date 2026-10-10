@@ -84,9 +84,11 @@ Future<Result<T>> execute<R, T>(
       return _toResult<R, T>(response, mapper);
     }
     await onFailure?.call(response);
+    // The server answered; the success condition rejected what it said.
+    // Coded apart from HTTP 5xx so a caller can tell this verdict from a
+    // transient fault: a code-500 server failure would be read by the auth
+    // gateway as "server down, keep the session".
     return Failure(
-      // Coded ErrorCodes.RESPONSE_REJECTED — never a 5xx — with the envelope's
-      // message when a BaseEntity reports an error.
       ErrorHandler.responseRejectedFailure(
         response is BaseEntity && response.hasError ? response.message : null,
       ),
@@ -130,7 +132,7 @@ Cả hai hàm bọc đều dồn mọi throw vào `ErrorHandler.handleError(e)` 
 > );
 > ```
 >
-> Mọi lỗi đó thành cùng một failure, nên mọi UI phân loại lỗi theo code — chẳng hạn `AuthProvider.mapAuthFailure` đang khớp `AuthFailure` mang `401` và `ServerFailure` mang `404` — sẽ **không bao giờ khớp**. Nhánh mặc định còn gọi `ErrorHandler.onUnclassifiedError`, mà app shell nối vào `IErrorReporter` tuỳ chọn như một lỗi non-fatal (RULE-67), nên ít nhất khoảng trống này được báo cáo.
+> Mọi lỗi đó thành cùng một failure, nên mọi UI phân loại lỗi theo code — chẳng hạn `AuthProvider.mapAuthFailure` đang khớp `AuthFailure` mang `401` — sẽ **không bao giờ khớp**. Nhánh mặc định còn gọi `ErrorHandler.onUnclassifiedError`, mà app shell nối vào `IErrorReporter` tuỳ chọn như một lỗi non-fatal (RULE-67), nên ít nhất khoảng trống này được báo cáo.
 >
 > Nếu bạn thêm repository chạy trên Firebase, hãy hiện thực `ErrorClassifier` cho các kiểu exception của nó rồi đưa cho `ErrorHandler.registerClassifier` trước (RULE-43). `DioFailureClassifier` trong `platform/infra/network/lib/src/error/dio_failure_classifier.dart` là mẫu.
 
@@ -145,6 +147,7 @@ Model là biểu diễn của riêng tầng Data. Nó không bao giờ lọt và
 ```dart
 // platform/layers/data/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
+  /// The domain entity this model represents.
   E toEntity();
 }
 ```
@@ -159,33 +162,21 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
   const UserModel._();
 
   const factory UserModel({
-    @JsonKey(name: 'id') required String id,
-    @JsonKey(name: 'email') String? email,
-    @JsonKey(name: 'name') String? name,
-    @JsonKey(name: 'role') String? role, // cách viết của backend
-    @JsonKey(name: 'token') String? token, // credential: không bao giờ vào entity
+    required String id,
+    String? email,
+    String? name,
+    String? token,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
 
   @override
-  UserEntity toEntity() {
-    return UserEntity(
-      id: id,
-      email: email,
-      name: name,
-      role: role == null ? null : _roleFromName(role!),
-    );
-  }
-
-  factory UserModel.fromEntity(UserEntity entity) { /* … */ }
+  UserEntity toEntity() => UserEntity(id: id, email: email, name: name);
 }
 ```
 
-Role vẫn là `String` trên đường truyền và được ánh xạ trong `toEntity()`: cách viết là chuyện của transport, nên `UserRole` của `domain_auth` không mang annotation JSON nào, và một role backend thêm sau này sẽ ánh xạ thành `UserRole.unknown` thay vì ném lỗi.
-
-`fromEntity` là chiều ngược lại, dùng khi ghi một entity ngược lên API hay cache. Sample chưa có luồng ghi ngược nào, nên hiện chỉ `modules/auth/data/test/user_model_test.dart` dùng tới nó.
+`token` là credential của phiên: model mang nó từ đường truyền tới `AuthRepositoryImpl`, nơi chuyển nó cho local data source, còn `toEntity()` bỏ nó ra, nên nó không bao giờ đi lên trên. Tên field trùng với key JSON nên sample không cần `@JsonKey`; hãy thêm `@JsonKey(name: '…')` cho field mà backend viết khác tên Dart. Sample không có luồng ghi entity ngược lên API, nên model không có phép ánh xạ ngược — hãy viết khi một luồng cần tới.
 
 ### Model cho database
 
@@ -204,9 +195,12 @@ abstract class CacheEntryModel
     required DateTime updatedAt,
   }) = _CacheEntryModel;
 
-  /// Maps a Drift row into the data-layer model.
   factory CacheEntryModel.fromRow(CacheEntry row) {
-    return CacheEntryModel(key: row.key, value: row.value, updatedAt: row.updatedAt);
+    return CacheEntryModel(
+      key: row.key,
+      value: row.value,
+      updatedAt: row.updatedAt,
+    );
   }
 
   @override
@@ -235,11 +229,8 @@ Bảng đăng ký: RULE-41.
 Đây chính là lý do `CacheEntryModel` tồn tại. `modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
 ```dart
-/// Contract for reading/writing cache rows.
-///
 /// Signatures speak in [CacheEntryModel], never in Drift's generated row
-/// class — that keeps Drift an implementation detail of `data_cache` instead
-/// of leaking it to every consumer of this package.
+/// class, so Drift stays an implementation detail of `data_cache`.
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
 
@@ -268,7 +259,7 @@ class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
 }
 ```
 
-Inject nguyên object database sẽ trao cho lớp này **mọi DAO** có trên đó; `IDatabaseHandle.accessor(...)` chỉ trao đúng một cái. Xem [hướng dẫn database](../guides/07_database.md).
+Inject nguyên `CacheDatabase` sẽ trao cho lớp này **mọi DAO** có trên đó; `IDatabaseHandle.accessor(...)` chỉ trao đúng một cái. Xem [hướng dẫn database](../guides/07_database.md).
 
 ### Quy tắc 3 — để exception nổi lên
 
@@ -282,14 +273,14 @@ Bảng đăng ký: RULE-44.
 
 `core_storage` chỉ cung cấp cơ chế. Mỗi bên tiêu thụ tự khai `StorageValue` của mình và giữ key trong `utils/` của chính nó.
 
-`modules/auth/data/lib/src/utils/auth_storage_keys.dart`:
+`modules/auth/data/lib/src/utils/auth_constants.dart`:
 
 ```dart
+/// Physical storage keys owned by `data_auth` — no other package reads them.
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
@@ -307,17 +298,10 @@ class AuthLocalDataSource {
     AuthStorageKeys.TOKEN,
   );
 
-  late final _authUser = StorageValue<Map<String, dynamic>>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.AUTH_USER,
-  );
-
-  /// Hydrates the in-memory cache from disk at startup so synchronous
-  /// getters below return correct values immediately.
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
-  }
+  Future<void> initialize() => _token.readFromStorage();
   // …
 }
 ```
@@ -327,13 +311,13 @@ class AuthLocalDataSource {
 >
 > `StorageValue` giữ một cache trong RAM, được `initialize()` nạp từ đĩa đúng một lần lúc khởi động. Đăng ký dạng factory sẽ tạo instance **mới, rỗng** ở mỗi lần inject, nên `getUserToken()` trả `null` dù token vẫn nằm trên đĩa. Cặp bắt buộc là: đăng ký singleton **+** `@PostConstruct(preResolve: true)`.
 
-Endpoint REST cũng theo đúng quy tắc sở hữu này — `modules/auth/data/lib/src/utils/auth_api_constants.dart` chứa `AuthApiConstants`, vì những endpoint đó thuộc về auth và không thuộc về bất cứ thứ gì khác.
+Endpoint REST cũng theo đúng quy tắc sở hữu này — chính file `auth_constants.dart` đó chứa `AuthApiConstants` bên cạnh `AuthStorageKeys` (package nhỏ thế này giữ cả hai trong một `<owner>_constants.dart`, RULE-09), vì những endpoint đó thuộc về auth và không thuộc về bất cứ thứ gì khác.
 
 ---
 
 ## 6. `data_auth` — đọc phần này trước khi copy
 
-`AuthRepositoryImpl` là file bị copy nhiều nhất trong template, nên nó được viết theo cách tài liệu này mô tả về tầng data: một Retrofit data source cho mạng, một `StorageValue` data source cho phiên đăng nhập, `execute()` bọc cả hai, và ánh xạ model → entity ngay tại ranh giới. Ngoài `login` và `logout`, nó còn hiện thực `refreshToken` và `restoreSession`; khi lần gia hạn không tới được server, `restoreSession` lùi về user đã lưu ở lần đăng nhập gần nhất, nhờ đó khởi động lúc offline vẫn giữ trạng thái đã đăng nhập.
+`AuthRepositoryImpl` là file bị copy nhiều nhất trong template, nên nó được viết theo cách tài liệu này mô tả về tầng data: một Retrofit data source cho mạng, một `StorageValue` data source cho phiên đăng nhập, `execute()` bọc cả hai, và ánh xạ model → entity ngay tại ranh giới. Ngoài `login` và `logout`, nó còn hiện thực `refreshToken`, mà app gọi lúc khởi động để khôi phục phiên đã lưu. Không có phương án lùi lúc offline: app khởi động khi không có mạng sẽ hiện màn hình đăng nhập, còn token vẫn được giữ cho lần khởi động sau tới được server.
 
 ```dart
 @LazySingleton(as: IAuthRepository)
@@ -349,6 +333,9 @@ Retrofit client được dựng một lần trong [`modules/auth/data/lib/di/mod
 ```dart
 @module
 abstract class AuthDataDiModule {
+  /// Builds the Retrofit client from the shared [Dio] that `core_network`
+  /// registers, so the data source inherits its interceptor chain. Built here,
+  /// not inside the repository, so a test can pass a fake in.
   @lazySingleton
   AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
       AuthRemoteDataSource(dio);
@@ -369,23 +356,23 @@ Future<Result<UserEntity>> _authenticate(
   Future<BaseEntity<UserModel>> Function() request, {
   bool requiresToken = false,
 }) {
-  bool hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
-
   return execute<BaseEntity<UserModel>, UserEntity>(
     request,
     successCondition: (response) {
       final user = response.data;
-      if (!response.isSuccess || user == null) return false;
-      return !requiresToken || hasToken(user);
+      return response.isSuccess &&
+          user != null &&
+          (!requiresToken || _hasToken(user));
     },
     onSuccess: (response) async {
       final user = response.data!;
-      if (hasToken(user)) await _local.saveUserToken(user.token);
-      await _local.saveUserData(user);
+      if (_hasToken(user)) await _local.saveUserToken(user.token!);
     },
     mapper: (response) => response.data!.toEntity(),
   );
 }
+
+static bool _hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
 ```
 
 Ba chi tiết gánh toàn bộ sức nặng:
@@ -394,9 +381,9 @@ Ba chi tiết gánh toàn bộ sức nặng:
 |:---|:---|
 | `successCondition` | Thiếu nó, `execute` coi **mọi** response không ném exception là thành công. Một API báo lỗi trong body 200 sẽ cho người dùng đăng nhập được. Response bị từ chối trả về `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)` — không phải `500` — nên session gateway coi đó là server từ chối, không phải sự cố |
 | `onSuccess` lưu token | `NetworkConfig.getToken()` đọc lại token qua `ISessionGateway`, do `data_auth` hiện thực trên nền `AuthLocalDataSource`. Bỏ bước này thì không header `Authorization` nào được gửi, và luồng refresh 401 trong `core_network` không bao giờ kích hoạt. Một câu trả lời đăng nhập không có token là một lỗi (`requiresToken`) và không lưu gì; một lần gia hạn không có token giữ token đã lưu, vì lưu `null` sẽ xoá nó |
-| `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên — có hẳn một test khẳng định điều đó |
+| `token` nằm ở `UserModel`, không nằm ở `UserEntity` | Credential là thứ transport trả về, không phải một phần danh tính người dùng. Nó được đọc đúng một lần ở đây và không bao giờ đi lên trên: `UserEntity` không có field token, và `auth_data_test.dart` kiểm tra rằng đăng nhập lưu token còn entity trả về không mang nó |
 
-`logout` là `execute<void, void>(_local.clearAllAuthData)`: xoá storage là bất đồng bộ, nên một lần ghi thất bại đến tay bên gọi dưới dạng `Result` thay vì bị mất.
+`logout` là `execute<void, void>(_local.clearUserToken)`: xoá storage là bất đồng bộ, nên một lần ghi thất bại đến tay bên gọi dưới dạng `Result` thay vì bị mất.
 
 Đây chính là mắt xích khép vòng với interceptor refresh 401 của `core_network`. Xem [hướng dẫn networking](../guides/08_networking.md).
 

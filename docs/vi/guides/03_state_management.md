@@ -31,31 +31,38 @@ Kế thừa `BaseProvider<T>` và chạy mỗi use case qua `executeOperation`. 
 @lazySingleton
 class AuthProvider extends BaseProvider<UserEntity>
     implements ISessionState, ISessionRefreshListenable {
-  AuthProvider(
-    this._loginUseCase,
-    this._logoutUseCase,
-    this._restoreSessionUseCase,
-    this._authStream,
-  ) : super();
+  AuthProvider(this._loginUseCase, this._repository, this._authStream);
 
   // …
 
+  /// Signs in. `executeOperation` shows loading, runs the use case and settles
+  /// success or the classified error; the page reacts through
+  /// `ProviderStateListener`, the shell through the session channels. No
+  /// navigation here: the shell routes on [sessionChanges].
   Future<void> login(String email, String password) async {
+    // One sign-in at a time: a second submit (the keyboard's Done pressed
+    // twice) would race two outcomes.
+    if (isLoading) return;
     await executeOperation(
       OperationConfig(
         operation: () =>
             _loginUseCase(LoginParams(email: email, password: password)),
-        onSuccess: (user) async {
-          DynamicLogger.log('Login successful for user: ${user?.name}');
-        },
+        onSuccess: _authStream.updateAuthStatus,
+        onFailure: (failure) => _failures.add(
+          mapAuthFailure(failure) == const AuthErrorState.invalidCredentials()
+              ? const SessionInvalidCredentialsFailure()
+              : SessionServerFailure(code: failure.code),
+        ),
         errorStateBuilder: mapAuthFailure,
       ),
     );
   }
+
+  // …
 }
 ```
 
-`AuthProvider` là `@lazySingleton` vì nó là controller **toàn cục**: phiên đăng nhập sống lâu hơn bất kỳ màn hình nào. Controller gắn với một màn hình là `@injectable` (bước 9).
+`AuthProvider` là `@lazySingleton` vì nó là controller **toàn cục**: phiên đăng nhập sống lâu hơn bất kỳ màn hình nào. Controller gắn với một màn hình là `@injectable` (bước 9). Ba callback chia nhau kết quả: `onSuccess` đưa user vừa đăng nhập cho session stream, `onFailure` phát failure lên kênh phiên của shell, còn `errorStateBuilder` phân loại error state mà trang đọc. Câu chặn `if (isLoading) return;` giữ cho lần submit thứ hai không chạy đua với lần đầu.
 
 ### Cấu hình thao tác
 
@@ -71,10 +78,20 @@ class OperationConfig<R, T> {
     this.errorStateBuilder,
   });
 
+  /// The operation function to execute (API call, database operation, etc.)
+  /// Now returns Result<R> directly instead of BaseResult<R>
   final FutureOr<Result<R>> Function() operation;
+
+  /// Optional callback when operation succeeds with data
   final FutureOr<void> Function(T? data)? onSuccess;
+
+  /// Optional callback when operation fails with system failure
   final FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure;
+
+  /// Whether to show loading state (default: true)
   final bool showLoading;
+
+  /// Optional builder to map failure to ErrorState
   final ErrorState? Function(AppFailure<dynamic> failure)? errorStateBuilder;
 }
 ```
@@ -96,7 +113,7 @@ class OperationConfig<R, T> {
 Future<void> executeOperation<R>(
   OperationConfig<R, T> config, {
   T? Function(R? data)? convert,
-})
+}) async { … }
 ```
 
 ```dart
@@ -149,18 +166,22 @@ abstract class ViewState with _$ViewState {
   const factory ViewState.success() = _Success;
   const factory ViewState.error({ErrorState? error}) = _Error;
   const factory ViewState.loadingMore() = _LoadingMore;
+  // …
 }
 ```
 
 `ViewState` chỉ là **máy trạng thái — nó không mang data**. Data nằm ở lớp bọc:
 
 ```dart
-@Freezed(genericArgumentFactories: true)
+@freezed
 abstract class ViewStateModel<T> with _$ViewStateModel<T> {
   const ViewStateModel._();
   const factory ViewStateModel({
+    /// The current state of the view model.
     @Default(ViewState.initial()) ViewState state,
+    /// The data associated with the current state.
     T? data,
+    /// The optional message associated with the state.
     String? message,
   }) = _ViewStateModel<T>;
 }
@@ -179,27 +200,21 @@ import 'package:provider_state_management/provider_state_management.dart';
 
 part 'auth_error_state.freezed.dart';
 
-/// Why a sign-in failed, as far as this feature can tell.
-///
-/// Carries no text: `AppFailure.message` is an English diagnostic, and what
-/// the user reads comes from the ARBs — see `SessionFailure`, which the app
-/// shell turns into a translated toast.
+/// Why a sign-in failed, as far as the screen words it differently. Carries no
+/// text (RULE-34): the shell shows a translated toast for the session failure.
 @freezed
 abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
 
-  const factory AuthErrorState.userNotFound() = _UserNotFound;
-
-  /// Anything else — offline, a timeout, a 5xx, a locked account (403).
-  /// [code] is the failure's `ErrorCodes` / HTTP status, which picks the
-  /// translated sentence.
+  /// Anything else — offline, a timeout, a 5xx, a locked account. [code] is the
+  /// failure's `ErrorCodes` / HTTP status.
   const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```
 
-`AuthProvider.mapAuthFailure` (`auth_provider.dart`) là `errorStateBuilder` tương ứng: nó đổi một `AppFailure` thành một trong các biến thể này, và nhánh dự phòng `AuthErrorState.failed(code: failure.code)` chuyển tiếp mã lỗi. Một `errorStateBuilder` trả `null` nghĩa là "không có lỗi riêng của feature"; khi đó state là một `ViewState.error()` trơn.
+`AuthProvider.mapAuthFailure` (`auth_provider.dart`) là `errorStateBuilder` tương ứng: nó đổi một `AppFailure` thành một trong các biến thể này — 401 là `invalidCredentials`, còn nhánh dự phòng `AuthErrorState.failed(code: failure.code)` chuyển tiếp mã lỗi. 403 là tài khoản bị khoá chứ không phải sai mật khẩu, nên rơi vào `failed`. Một `errorStateBuilder` trả `null` nghĩa là "không có lỗi riêng của feature"; khi đó state là một `ViewState.error()` trơn.
 
 Error state không mang chữ nào: `AppFailure.message` là chẩn đoán tiếng Anh và không bao giờ tới màn hình (RULE-34). Màn hình diễn đạt failure từ mã của nó — xem § 4 cho nhánh Provider, § 8 cho BLoC.
 
@@ -292,11 +307,9 @@ ProviderStateListener<AuthProvider, UserEntity>(
     // error state mang, qua ARB toàn cục.
     if (error is AuthErrorState) {
       AppOverlay.showToast(
-        content: error.maybeWhen(
+        content: error.when(
           invalidCredentials: () => context.l10n.invalidCredentials,
-          userNotFound: () => context.l10n.userNotFound,
           failed: (code) => context.l10n.failureMessage(code),
-          orElse: () => context.l10n.somethingWentWrong,
         ),
       );
     }
@@ -312,9 +325,9 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-Đây là listener minh hoạ, đúng như một màn hình trong `feature_auth` sẽ viết. Nó điều hướng qua **navigator interface resolve bằng `getItOrNull`**, không bao giờ qua path hardcode ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` đến từ package `auth_api` / `home_api`. `context.l10n.failureMessage(code)` là phép ánh xạ của `core_base_ui` từ mã của một failure (một giá trị `ErrorCodes` hoặc một HTTP status) sang câu đã dịch, nên mọi màn hình diễn đạt cùng một lỗi theo cùng một cách. Nó là một extension trên `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` và `CONNECTION_ERROR` được đọc là mất kết nối, hai mã timeout là hết thời gian chờ, phần còn lại của dải mã mạng là lỗi mạng, một HTTP 5xx là máy chủ không khả dụng, và mọi thứ khác — kể cả mã `null` — là "đã xảy ra lỗi".
+Đây là listener minh hoạ, đúng như một màn hình trong `feature_auth` sẽ viết; trang đăng nhập thật (`login_page.dart`) dùng dạng nhỏ hơn, vì shell đã hiện lỗi rồi: `onError` của nó chỉ xoá mật khẩu bị từ chối và không truyền `listenWhen` (mặc định đã cho mọi thao tác thất bại đi qua). Ví dụ này điều hướng qua **navigator interface resolve bằng `getItOrNull`**, không bao giờ qua path hardcode ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` đến từ package `auth_api` / `home_api`. `context.l10n.failureMessage(code)` là phép ánh xạ của `core_base_ui` từ mã của một failure (một giá trị `ErrorCodes` hoặc một HTTP status) sang câu đã dịch, nên mọi màn hình diễn đạt cùng một lỗi theo cùng một cách. Nó là một extension trên `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` và `CONNECTION_ERROR` được đọc là mất kết nối, hai mã timeout là hết thời gian chờ, phần còn lại của dải mã mạng là lỗi mạng, một HTTP 5xx là máy chủ không khả dụng, và mọi thứ khác — kể cả mã `null` — là "đã xảy ra lỗi".
 
-App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`. Thay vào đó nó lắng nghe `ISessionState.sessionChanges` / `sessionFailures` của `core_di`, và điều hướng tới path của `ISignInLocation` / `IPostSignInLocation`. Nó không dùng navigator của module nào. `AuthProvider` phát mỗi lần đăng nhập thất bại thành một `SessionFailure` — `SessionServerFailure(code:)` cho mọi thứ nó không gọi tên được — và shell diễn đạt nó từ cùng `failureMessage(code)`. Khi một phiên đang đăng nhập bị mất (`onSessionLost()`), nó phát `SessionExpiredFailure`, và shell diễn đạt bằng key toàn cục `sessionExpired`.
+App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) không được import `AuthProvider`. Thay vào đó nó lắng nghe `ISessionState.sessionChanges` / `sessionFailures` của `core_di`, và điều hướng tới path của `ISignInLocation` / `IPostSignInLocation`. Nó không dùng navigator của module nào. `AuthProvider` phát mỗi lần đăng nhập thất bại thành một `SessionFailure` — `SessionInvalidCredentialsFailure` cho 401, `SessionServerFailure(code:)` cho mọi thứ còn lại — và shell diễn đạt nó từ key toàn cục `invalidCredentials` hoặc từ cùng `failureMessage(code)`. Khi một phiên đang đăng nhập bị mất (`onSessionLost()`), nó phát `SessionExpiredFailure`, và shell diễn đạt bằng key toàn cục `sessionExpired`.
 
 `MultiProviderStateListener` cho phép lồng nhiều listener mà không tạo kim tự tháp widget.
 
@@ -323,11 +336,13 @@ App shell làm cùng việc đó mà không dùng widget này. [`navigator_wrapp
 Override `initialize()` cho phần setup phải xong trước, rồi `await provider.ensureInitialized()`:
 
 ```dart
+/// Restores the stored session: no token, or a refused one, means signed out.
 @override
 Future<void> initialize() async {
   updateState(state: const ViewState.loading());
-  _authSubscription ??= listen(_syncAuthStream);
-  await _restoreSession();
+  final result = await _repository.refreshToken();
+  _setUser(result.dataOrNull);
+  _hasRestoredSession = true;
   await super.initialize();
 }
 ```
@@ -357,11 +372,8 @@ class HomeProfileBloc
   final ISessionStatusStream? _sessionStatusStream;
   StreamSubscription<SessionPrincipal?>? _subscription;
 
-  /// Subscribes to session changes once, then shows the current user.
-  ///
-  /// A broadcast stream does not replay, so a change made while nobody was
-  /// listening is only picked up by re-reading `currentUser` — which is what
-  /// `refreshed` is for.
+  /// Subscribes once, then shows the current user. A broadcast stream does not
+  /// replay, so `refreshed` re-reads `currentUser`.
   Future<void> _onLoad(
     HomeProfileEvent event,
     Emitter<BlocViewState<SessionPrincipal?>> emit,
@@ -563,7 +575,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 > [!CAUTION]
 > **Không được bọc hai lần.** Route đã cung cấp controller, nên page **không được** tự bọc thêm `BlocProvider` / `ChangeNotifierProvider`. Làm vậy tạo ra instance thứ hai: page đọc cái này còn event bạn bắn đi cái kia. State âm thầm không bao giờ cập nhật, và instance đầu bị rò rỉ.
 
-Controller toàn cục như `AuthProvider` là ngoại lệ. Route **không** bọc chúng: chúng được cung cấp một lần gần gốc app (`AuthTreeWrapper`, một `IAppTreeWrapper`, gắn `AuthProvider`) và đọc bằng `Consumer<AuthProvider>` / `context.watch`.
+Controller toàn cục như `AuthProvider` là ngoại lệ. Route **không** bọc chúng: chúng được cung cấp một lần gần gốc app (`AuthTreeWrapper`, một `IAppTreeWrapper`, gắn `AuthProvider`) và đọc bằng `context.read`, `Selector<AuthProvider, …>`, `Consumer<AuthProvider>` hoặc `context.watch`.
 
 ---
 

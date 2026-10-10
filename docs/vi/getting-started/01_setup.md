@@ -66,7 +66,7 @@ dart tools/workspace_setup/configure.dart
 1. `dart pub global activate flutterfire_cli`. Chỉ nhánh Firebase thật ở [§3](#3-sinh-file-firebase-options-bắt-buộc--không-có-thì-repo-không-biên-dịch-được) dùng tới nó.
 2. `flutter clean` tại root.
 3. `flutter pub get` tại root. Bước này resolve cả workspace và ghi file `pubspec.lock` duy nhất ở root.
-4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/ui/design_system` và các feature auth, home, onboarding, settings, splash.
+4. `flutter gen-l10n` trong mọi package có `l10n.yaml`. Hiện đó là `platform/ui/design_system` và các feature auth, home, onboarding, settings.
 5. `dart run build_runner build --workspace`, chạy injectable, freezed, json_serializable, retrofit, go_router_builder, drift và flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` cho mọi package có `lib/`. Các app được bỏ qua, vì app không có barrel. Trên một bản clone mới bước này không đổi gì: các barrel đã được commit.
 
@@ -80,7 +80,7 @@ Nếu muốn làm tay thì chạy đủ ba bước sau, theo đúng thứ tự (
 flutter pub get
 # gen-l10n trong từng package có l10n.yaml
 (cd platform/ui/design_system && flutter gen-l10n)
-for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
+for f in auth home onboarding settings; do (cd modules/$f/feature && flutter gen-l10n); done
 dart run build_runner build --workspace
 ```
 
@@ -305,9 +305,9 @@ Với `env.dev` đã commit giữ nguyên, app sample chạy được nhưng **k
 
 | Bước | Màn hình | Vì sao |
 | :--- | :--- | :--- |
-| 1 | Một màn splash: trên Android là splash Dart (logo, "Codebase", "Ứng dụng Flutter, sẵn sàng để phát triển", một spinner); trên iOS splash native được giữ suốt quá trình khởi động | `platforms.<p>.splash` trong manifest. Trong lúc đó module auth thử khôi phục phiên; không có token đã lưu thì nó trả lời "đã đăng xuất" ngay tại chỗ, không gọi mạng |
+| 1 | Một màn splash: trên Android là splash Dart (logo Flutter và một spinner, không có chữ); trên iOS splash native được giữ suốt quá trình khởi động | `platforms.<p>.splash` trong manifest. Trong lúc đó module auth thử khôi phục phiên; không có token đã lưu thì nó trả lời "đã đăng xuất" ngay tại chỗ, không gọi mạng |
 | 2 | Onboarding: "Welcome to Codebase" và nút **Get Started** | `feature_onboarding` đóng góp entry location của lần chạy đầu. Nó chỉ hiện một lần: cờ được lưu lại, nên lần chạy sau bỏ qua |
-| 3 | Đăng nhập: "Welcome Back", một ô email và một ô mật khẩu | **Get Started** đi tới trang login của `feature_auth`. Form tự kiểm tra đầu vào — dạng email, mật khẩu ít nhất 6 ký tự (`AuthValidationConstants.MIN_PASSWORD_LENGTH`) — và không gửi gì cho tới khi cả hai đạt |
+| 3 | Đăng nhập: "Welcome Back", một ô email và một ô mật khẩu | **Get Started** đi tới trang login của `feature_auth`. Form chỉ kiểm tra cả hai ô đã được điền ("This field is required" dưới ô còn trống) và không gửi gì cho tới khi đủ |
 | 4 | Nút quay spinner, rồi một toast "A network error occurred. Please try again.", và bạn ở lại màn hình đăng nhập | Request là `POST /user/login` tới một `BASE_URL` rỗng, tức một đường dẫn không có host, nên HTTP client từ chối nó trước khi mở bất kỳ kết nối nào |
 
 Để vượt qua bước 4, chọn một trong hai cách:
@@ -315,7 +315,7 @@ Với `env.dev` đã commit giữ nguyên, app sample chạy được nhưng **k
 - **Trỏ nó tới một backend.** Đặt `BASE_URL` trong `apps/mobile/env.dev` thành server của bạn (chỉ URL — file này được commit). Server phải trả lời lời gọi đăng nhập của sample; endpoint, body request và các trường response nằm ở [`../guides/08_networking.md` § 8](../guides/08_networking.md#hợp-đồng-đăng-nhập-của-sample), cùng với điều người dùng đọc cho từng lỗi.
 - **Tự viết data source.** Giữ hợp đồng domain (`IAuthRepository`, `LoginParams`, `UserEntity`) và thay những gì nằm sau nó bằng transport của bạn — Firebase, GraphQL, một dạng REST khác ([`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md)).
 
-Test của module (`cd modules/auth/data && flutter test`) chạy với một data source giả, nên chúng đạt mà không cần server nào.
+Test của module (`cd modules/auth/data && flutter test`) chạy repository và local data source với một remote data source giả cùng một storage trong bộ nhớ, nên chúng đạt mà không cần server nào.
 
 ### Build APK
 
@@ -422,7 +422,7 @@ Template được phát hành với các tên giữ chỗ, và vài định danh
 | Firebase | các ID bạn đăng ký: chạy `dart tools/firebase/firebase_config.dart --app mobile` với base bundle ID mới (§3.1), hoặc đặt `package_name` mới vào các file `google-services.json` stub ở §3.2 |
 | Fastlane | `app_bundle_ids.ios` và `.android` trong `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-id)); hậu tố flavor ở đó phải khớp với Gradle và Xcode |
 | Icon và splash | các ảnh dưới `assets/branding/`, rồi `dart tools/theme_generator/theme_setting.dart --app mobile` (nó đọc `icons_launcher-<flavor>.yaml` và `flutter_native_splash-<flavor>.yaml` ở thư mục gốc repo). Trên iOS, các build configuration có flavor dùng bộ icon riêng — `devAppIcon`, `stagingAppIcon`, `prodAppIcon` trong `Runner/Assets.xcassets`, do `icons_launcher` ghi từ yaml của từng flavor — qua `ASSETCATALOG_COMPILER_APPICON_NAME` trong `project.pbxproj`; các configuration không có flavor giữ `AppIcon` mặc định. Vì vậy một ảnh đã đổi chỉ tới được build iOS qua một flavor |
-| Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb`, và chữ trên splash `appName` ("Codebase") cùng `tagline` ("Ứng dụng Flutter, sẵn sàng để phát triển") trong `modules/splash/feature/assets/language/{en,vi}.arb` — giữ cùng các key ở cả hai file (`arch_check` R21) |
+| Chữ trong sample | các chuỗi như `welcomeToOnboarding` ("Welcome to Codebase") trong `modules/onboarding/feature/assets/language/*.arb` — giữ cùng các key ở cả hai file (`arch_check` R21). Splash không có chữ |
 
 `apps/admin` chưa có project native. Khi tạo runner cho nó ([`13_app_composition.md` § 7](../guides/13_app_composition.md#thêm-một-platform)), hãy truyền reverse domain của bạn cho `flutter create --org` thay vì `com.example`.
 

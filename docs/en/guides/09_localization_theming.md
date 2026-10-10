@@ -20,7 +20,7 @@ Where a string goes (RULE-34, RULE-37):
 - A feature's strings go in that feature's `.arb` files.
 - Genuinely global strings go in `core_base_ui`.
 - `core_ui_kit` defines **no** `.arb` of its own: it is a widget library every feature uses, and its strings come from `core_base_ui`.
-- A failure's text is never `AppFailure.message` (developer text for logs). A generic fault is worded by `context.l10n.failureMessage(failure.code)`, which `core_base_ui` maps from the failure's `code`; a feature that can say more (wrong password, unknown user) classifies the failure itself and uses its own ARB key. `modules/home/feature/lib/src/pages/home_page.dart` shows the generic form.
+- A failure's text is never `AppFailure.message` (developer text for logs). A generic fault is worded by `context.l10n.failureMessage(failure.code)`, which `core_base_ui` maps from the failure's `code`; a feature that can say more (a wrong password, say) classifies the failure itself and words it with its own ARB key — `AuthProvider.mapAuthFailure` classifies a `401`, and the shell words that session failure as a translated toast. `modules/home/feature/lib/src/pages/home_page.dart` shows the generic form.
 
 ### Edit the ARB files
 
@@ -29,7 +29,6 @@ In `modules/home/feature/assets/language/en.arb` — ARB is plain JSON, so a pas
 ```json
 {
   "@@locale": "en",
-  "home": "Home",
   "tabLabel": "Home",
   "userLoggedIn": "User is Logged In",
   "userLoggedOut": "User is Logged Out",
@@ -137,7 +136,7 @@ const AppProfile appProfile = AppProfile(
 
 ### Add an ARB to every feature
 
-Add `assets/language/ja.arb`, every key translated, to **each** feature with an `l10n.yaml` — today `modules/{auth,home,onboarding,settings,splash}/feature`. This is not optional: each feature's extension force-unwraps its delegate —
+Add `assets/language/ja.arb`, every key translated, to **each** feature with an `l10n.yaml` — today `modules/{auth,home,onboarding,settings}/feature` (the splash ships no strings). This is not optional: each feature's extension force-unwraps its delegate —
 
 ```dart
 FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
@@ -182,7 +181,7 @@ Container(
   color: context.colors.surface,
   padding: EdgeInsets.all(AppSpacing.lg(context)),
   child: Text(
-    context.l10nHome.home,
+    context.l10nHome.userLoggedIn,
     style: AppTextStyles.bodyMediumStyle(context),
   ),
 )
@@ -280,12 +279,22 @@ Non-token defaults for shared widgets live in the package's own `utils/` — `pl
 ```dart
 /// Timing, overlay and default-size constants owned by `core_ui_kit`.
 ///
+/// Package-internal by convention: these are defaults for the reusable
+/// widgets in this package. Features that need a different value pass it
+/// explicitly through the widget's constructor instead of reading these.
+///
 /// Sizes are **design pixels**: a widget scales its own default through
 /// `core_responsive` (`context.w/h/r`) when the caller passes nothing. A value
 /// the caller passes is already scaled and used as-is.
 class SharedUiConstants {
   SharedUiConstants._();
 
+  /// Default show/hide duration of a dialog raised through `AppOverlay`.
+  static const Duration DIALOG_TRANSITION_DURATION = Duration(
+    milliseconds: 200,
+  );
+
+  /// Default visible duration for a toast raised by `AppOverlay.showToast`.
   static const Duration TOAST_DURATION = Duration(seconds: 3);
 
   /// Default height of `CustomButton.rectangle`.

@@ -109,8 +109,8 @@ Hạ tầng dùng chung cho mọi tầng. **Core tuyệt đối không được 
 | Package | Đường dẫn | Sở hữu |
 | :--- | :--- | :--- |
 | `domain_core` | `platform/layers/domain` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
-| `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
-| `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RestoreSessionUseCase` |
+| `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `ICacheEntryRepository` |
+| `domain_auth` | `modules/auth/domain` | `UserEntity`, `LoginParams`, `IAuthRepository`, `LoginUseCase` |
 
 ### Data — `modules/*/data`
 
@@ -120,7 +120,7 @@ Hiện thực hợp đồng của domain. Data source trả về **Model**, khô
 | :--- | :--- | :--- |
 | `data_core` | `platform/layers/data` | `BaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + bảng `CacheEntries` + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
-| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token` / `auth_user`), `AuthRepositoryImpl`, `AuthSessionGatewayImpl`, `AuthStorageKeys`, `AuthApiConstants` |
+| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (sở hữu key `token`), `AuthRepositoryImpl`, `AuthSessionGatewayImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
 ### Features — `modules/*/feature`
 
@@ -132,7 +132,7 @@ Mỗi package đúng một mối quan tâm UI. Feature được phép phụ thu�
 | `feature_home` | `modules/home/feature` | Tab Home, `HomeProfileBloc` (nhánh BLoC), `HomeNavDestination`, `HomeNavigatorImpl` (implement `home_api`), `HomePostSignInLocation` |
 | `feature_settings` | `modules/settings/feature` | Tab Settings, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Luồng onboarding, hiện thực `IAppEntryLocation` |
-| `feature_dashboard` | `modules/dashboard/feature` | **Chỉ là khung vỏ** — `Scaffold` + điều hướng chính: bottom bar khi cửa sổ `compact`, `NavigationRail` từ `medium` trở lên (dạng mở rộng từ `large`). Dựng các destination từ `getAllOrEmpty<INavDestinationModule>()`; không sở hữu trang tab nào. |
+| `feature_dashboard` | `modules/dashboard/feature` | **Chỉ là khung vỏ** — `Scaffold` + điều hướng chính: bottom bar khi cửa sổ `compact`, `NavigationRail` từ `medium` trở lên (dạng mở rộng từ `large`). Hiển thị các destination mà router của shell đưa cho `IDashboardRouteModule.builder` (router thu thập chúng bằng `getAllOrEmpty<INavDestinationModule>()`); không sở hữu trang tab nào. |
 | `feature_splash` | `modules/splash/feature` | `SplashPage` và `SplashScreenImpl` (`IAppSplashScreen`), do `MainScope` hiển thị trước khi router tồn tại |
 
 > [!NOTE]

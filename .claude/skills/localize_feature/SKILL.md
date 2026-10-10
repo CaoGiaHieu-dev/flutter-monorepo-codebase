@@ -26,8 +26,8 @@ Cite them; do not restate them.
 | Inside a `core_ui_kit` widget | `core_base_ui`'s ARB — `core_ui_kit` has **no** ARB | `context.l10n.<key>` |
 | A failure's text | never `AppFailure.message` (developer text) | `context.l10n.failureMessage(failure.code)` |
 
-A feature that can say more than the generic fault (wrong password, unknown user) classifies the failure itself and
-uses its own key; the generic form is shown in `modules/home/feature/lib/src/pages/home_page.dart`. A feature's
+A feature that can say more than the generic fault (a wrong password, say) classifies the failure itself and
+words it with its own key (`AuthProvider.mapAuthFailure` classifies a `401`; the shell words that session failure as a toast); the generic form is shown in `modules/home/feature/lib/src/pages/home_page.dart`. A feature's
 assets live in the feature's `assets/` (RULE-37).
 
 ## Steps

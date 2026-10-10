@@ -296,6 +296,7 @@ create("staging") {
     dimension = "environment"
     applicationIdSuffix = ".stg"
     signingConfig = signingConfigs.getByName("staging")
+    // …
 }
 ```
 
@@ -374,11 +375,12 @@ It then runs `install_dependencies`, with `fvm ` in front of `dart` / `flutter` 
 sh "#{dart_cmd} pub global activate flutterfire_cli"
 sh "#{dart_cmd} pub global activate flutter_gen"
 sh "#{flutter_cmd} clean"
+# Lock files are not committed; versions come from pubspec_dependencies.yaml.
 sh "#{flutter_cmd} pub get"
 # ...then flutter gen-l10n for every l10n.yaml in the tree
 sh "#{dart_cmd} run build_runner build --workspace"
 # ...then, per package with a lib/ (apps skipped), from the workspace root:
-sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
+sh "#{dart_cmd} tools/barrel_generator/generate.dart #{lib_dir.shellescape}"
 ```
 
 Lock files are not committed, so this is a plain `pub get`: the versions come from the catalog `pubspec_dependencies.yaml` (RULE-74) and the Flutter version from `.fvmrc`.

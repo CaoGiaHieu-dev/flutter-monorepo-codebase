@@ -56,22 +56,16 @@ Chỉnh `path:` theo độ sâu của package bạn. Đừng ghi version: chúng
 Không bao giờ đặt ở `core_common`, không bao giờ ở `core_storage` (RULE-09, RULE-44). Ví dụ xuyên suốt là auth token, thứ thật sự có trong repo:
 
 ```dart
-// modules/auth/data/lib/src/utils/auth_storage_keys.dart
-/// Physical storage keys owned exclusively by `feature_auth`'s data layer.
-///
-/// Package-internal by convention — no other package's pubspec declares a
-/// dependency on `data_auth`, so nothing outside this package can reach
-/// [AuthLocalDataSource] (or these keys) even though the barrel re-exports
-/// them. Never reference these keys from another package.
+// modules/auth/data/lib/src/utils/auth_constants.dart
+/// Physical storage keys owned by `data_auth` — no other package reads them.
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
-Quy ước: private constructor, `UPPER_SNAKE_CASE`, mỗi owner một class. Các owner của shell theo đúng quy ước này trong `platform/shell/adapters/lib/src/utils/` (`ThemeStorageKeys`, `LanguageStorageKeys`, `AppBootStorageKeys`). Một key là tên vật lý đã được ghi trên máy người dùng: đổi tên nó là làm mồ côi những gì đang lưu dưới tên cũ.
+Cùng file đó chứa `AuthApiConstants`, các endpoint của package: RULE-09 cho phép key và endpoint nằm chung một `<owner>_constants.dart`, hoặc mỗi loại một file. Quy ước: private constructor, `UPPER_SNAKE_CASE`, mỗi owner một class key. Các owner của shell theo đúng quy ước này trong `platform/shell/adapters/lib/src/utils/` (`ThemeStorageKeys`, `LanguageStorageKeys`, `AppBootStorageKeys`). Một key là tên vật lý đã được ghi trên máy người dùng: đổi tên nó là làm mồ côi những gì đang lưu dưới tên cũ.
 
 ## 4. Khai `StorageValue` bên trong class sở hữu
 
@@ -89,11 +83,6 @@ class AuthLocalDataSource {
     _storageManager.getStorage(StorageType.secure),
     AuthStorageKeys.TOKEN,
   );
-
-  late final _authUser = StorageValue<Map<String, dynamic>>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.AUTH_USER,
-  );
 ```
 
 Các field là `private` + `late final`: bên ngoài class không chạm được `StorageValue` thô, chỉ dùng được các method bạn chủ động phơi ra.
@@ -101,13 +90,13 @@ Các field là `private` + `late final`: bên ngoài class không chạm đượ
 ## 5. Đăng ký owner là singleton và nạp dữ liệu cho nó
 
 ```dart
-  /// Hydrates the in-memory cache from disk at startup so synchronous
-  /// getters below return correct values immediately.
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
-  }
+  Future<void> initialize() => _token.readFromStorage();
 ```
+
+Owner có nhiều giá trị thì nạp chúng cùng lúc: `await Future.wait([_a.readFromStorage(), _b.readFromStorage()])`.
 
 > [!CAUTION]
 > Đăng ký owner là `@singleton` / `@lazySingleton` — **tuyệt đối không `@injectable`** (RULE-45). `@injectable` là factory: mỗi điểm inject dựng một instance *mới* với cache RAM rỗng. Khi đó getter đồng bộ trả `null` dù giá trị vẫn nằm trên đĩa. Hãy đi kèm `@PostConstruct(preResolve: true)`, để DI chờ đọc đĩa xong rồi mới giao đồ thị cho app.
@@ -173,8 +162,12 @@ late final _viewedOnboard = StorageValue<bool>(
   },
 );
 
+// …
+
 bool get viewedOnboard => _viewedOnboard.value ?? false;
 
+/// Records that the entry location has been shown. The in-memory value
+/// changes at once; the returned future completes when it is persisted.
 Future<void> markOnboardViewed() => _viewedOnboard.save(true);
 ```
 
@@ -192,7 +185,9 @@ Theme là ví dụ thật của loại thứ nhất:
 ```dart
 // platform/foundation/contracts/lib/src/i_theme_storage.dart — không để lọt kiểu của tầng storage
 abstract class IThemeStorage {
+  /// Gets the current ThemeMode from storage.
   ThemeMode getThemeMode();
+  /// Saves the given ThemeMode to storage.
   void saveThemeMode(ThemeMode mode);
 }
 ```

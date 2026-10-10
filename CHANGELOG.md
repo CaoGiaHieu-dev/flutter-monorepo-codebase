@@ -19,7 +19,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Added
 
-- A signed-in user whose session expires sees a translated "session expired" toast (`SessionExpiredFailure`, the global key `sessionExpired`, en and vi); the Settings theme row shows the current mode; the sample's minimum password length is one constant (`AuthValidationConstants.MIN_PASSWORD_LENGTH`, `passwordTooShort` takes `{min}`).
+- A signed-in user whose session expires sees a translated "session expired" toast (`SessionExpiredFailure`, the global key `sessionExpired`, en and vi); the Settings theme row shows the current mode.
 - Tests: database upgrades in `modules/cache/data` and `core_database`, a palette contrast test, the modal overlay and the shared widgets' states, and the notification permission flow.
 - **`composer reconcile`** declares `absent` every optional capability whose last provider is gone (the V3 scan, not a list); `remove_sample --apply` runs it and then `sync`, so `composer verify` stays green for every bundle and for all bundles together. A fully stripped template keeps `modules/.gitkeep`.
 - **V15 checks native flavors.** On a committed Android or iOS runner it requires a `productFlavor` per declared flavor and an Xcode scheme plus `Debug-`/`Release-`/`Profile-<flavor>` configurations; the failure names the flavor and the recipe in guide 13.
@@ -104,7 +104,7 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - Lock files (`pubspec.lock`, `Gemfile.lock`, `Podfile.lock`) are git-ignored and no longer committed; CI resolves with plain `flutter pub get`.
 - `composer` with no command exits 64; its help lists V13, V15, V16 and V17; `16kb_check.sh` exits 1 when `zipalign` verification fails.
 - CI workflows run with `contents: read`; the fastlane workflow reads the Flutter version from `.fvmrc`; `code_review` defaults to English with no author in the footer.
-- Generated package descriptions say what the layer is, and five shipped pubspecs got real descriptions; the freezed constraint is `^4.0.1`; the splash shows "Codebase" and a neutral tagline (en, vi); `LoadMoreListView` takes its spinner padding from `AppSpacing`.
+- Generated package descriptions say what the layer is, and five shipped pubspecs got real descriptions; the freezed constraint is `^4.0.1`; `LoadMoreListView` takes its spinner padding from `AppSpacing`.
 - **Layout.** `packages/core/*` → `platform/*`, product packages → vertical slices
   `modules/<name>/{api,domain,data,feature}`, `app/` → `apps/mobile/` (package `mobile_app`).
   `platform/` is regrouped into six role folders — `foundation/` (`kernel`, `contracts` = `core_di`,
@@ -162,9 +162,16 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
   the permission prompt is opt-in (`PushNotificationService.requestPermission()`) and the background
   handler initialises Firebase without DI.
 - `DioFailureClassifier` maps an unknown error caused by bad JSON to `ParseFailure` and one caused by a TLS error or a pin mismatch to a certificate failure (`BAD_CERTIFICATE`) that the retry policy does not retry.
-- Samples follow the rules they teach: a simpler auth sample (an offline start keeps the stored session;
-  `RestoreSessionUseCase`; `session/` folder), `lib/di/` holds the DI module only, settings reads
-  `LanguageProvider` / `ThemeProvider` from the tree, the module generator's templates match.
+- Samples follow the rules they teach: a simpler auth sample (a `session/` folder for its session
+  contributions), `lib/di/` holds the DI module only, settings reads `LanguageProvider` /
+  `ThemeProvider` from the tree, the module generator's templates match.
+- The sample modules are much smaller (`modules/*/{api,domain,data,feature}/lib`, without generated
+  files and barrels, about 2,640 → 1,720 lines; their tests about 3,750 → 1,310): auth is one login use case, a token-only local data source and one inline
+  login form (ARB keys 13 → 5); the splash is a logo and a spinner with no strings; onboarding keeps one
+  route-module file; `domain_cache` is an entity and a repository contract; the cache database tests are
+  one old-file upgrade test and one repository round trip; the Home title, the settings row icons and
+  the dashboard's RTL special case are gone; a 404 on sign-in is a server failure with its code
+  (`SessionServerFailure`); an app started offline opens on the login screen (the token stays stored).
 - Flutter 3.47 / Dart 3.13 toolchain, pinned in `.fvmrc`; FVM is optional everywhere. Lock files are
   generated and git-ignored (see above); versions come from the `pubspec_dependencies.yaml`
   catalog. Fastlane runs through Bundler, from the repository root or `apps/mobile`.
@@ -186,6 +193,14 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 
 ### Removed
 
+- Sample code: `UserRole`, `LogoutUseCase`, `RestoreSessionUseCase` with `IAuthRepository.restoreSession`,
+  `AuthFormWidget`, `AuthHeaderWidget`, `AuthUiConstants`, `AuthValidationConstants`, the stored user
+  (`AuthLocalDataSource.saveUserData` / `getUserData`; `clearAllAuthData` is now `clearUserToken`),
+  `isTransientFailure` (now a private `_isTransient` in `AuthSessionGatewayImpl`), the auth ARB keys
+  `email`, `password`, `invalidEmail`, `passwordTooShort`, `signInSubtitle`, `showPassword`,
+  `hidePassword`, `emailIsRequired` and `passwordIsRequired` (replaced by `fieldRequired`), the splash
+  ARBs, `CacheEntryParams` and the cache use cases, `AppGradients.liquidOnboarding` and the
+  `liquidOnboardingColors` palette token.
 - Dead and duplicated code across the platform packages: `BaseViewWidget2`…`6`, `PaginatedViewWidget`,
   `BaseProxyWidget`, `ErrorStateRegistry`, `AppProvider`, `AppRouter.currentContext` / `push` /
   `replace` / `back`, `ThemeSystemInterface`, the `ContextExtension` getters `core_responsive` already
@@ -226,17 +241,17 @@ The step-by-step record of how it got here is `docs/history/restructure-log.md`.
 - The splash waits (up to the connect timeout) for the stored-session restore, so a returning user does not see the signed-out home.
 - The retry handler recovers when its prompt callback throws and no longer replays timed-out POST and PATCH requests (opt in with `EXTRA_IDEMPOTENT`).
 - `CustomButton` keeps a 48 dp tap target, the toast is announced by screen readers and spinners are labelled (new global `loading` string, en and vi).
-- The sample auth keeps the signed-in session when a certificate or pin is rejected on renewal or at app start (`BAD_CERTIFICATE` counts as "no verdict from the server", like a lost network), instead of signing the user out.
+- The sample auth keeps the signed-in session when a certificate or pin is rejected on renewal (`BAD_CERTIFICATE` counts as "no verdict from the server", like a lost network), instead of signing the user out; at app start only a 401/403 from the server drops the stored token.
 - A throwing `executeOperation` leaves loading for the error state; a sign-in or refresh answer without a token no longer wipes the stored credential; the login email is trimmed.
 - A database upgrade runs all its steps in one transaction: a failing step no longer leaves a half-migrated file that fails every launch; the file keeps its old version and the next launch retries.
 - `ThemeProvider` applies the palette's text colours to every text style (it used to leave Material's defaults on all of them).
-- The sample login button's label and spinner read on the brand fill in both themes, and Done on the keyboard no longer sends a second sign-in (`AuthProvider.login` ignores a call while one is pending).
+- The sample login button's label reads on the brand fill in both themes, and Done on the keyboard no longer sends a second sign-in (`AuthProvider.login` ignores a call while one is pending).
 - `CustomButton` has a distinct disabled fill with a readable label, `CustomInputField` has contrast-safe resting, focused, error and disabled borders and is at least 48 dp tall, and `showDropDown` rows are at least 48 dp (RULE-39).
 - `AppOverlay` dialogs and the loading layer hide the page behind them from assistive technology and keyboard focus.
-- Onboarding, splash and home scroll instead of overflowing on short or square windows with large text; the dashboard bottom bar keeps its labels from the fourth tab.
+- Onboarding and home scroll instead of overflowing on short or square windows with large text; the dashboard bottom bar keeps its labels from the fourth tab.
 - A throwing `convert` settles on the error state in `BaseProvider` and `BaseBloc` instead of leaving `loading`.
 - Deep links keep repeated query keys, fragments and `myapp:///path`; `BaseEntity.isSuccess` accepts any 2xx; `ValidationHelper` dates and `isValidEmail` (any-length TLD, `+`); `EncryptedStorage.encryptData('')` no longer throws.
-- The toast pill is near-opaque (alpha 0.92); the light palette's `error`, `info` and `primaryContainer` are darker so their on-colours reach WCAG AA; the splash text uses `textInverse`; `PushNotificationService.requestPermission()` returns whether notifications are allowed and no longer uses `dart:io` `Platform`.
+- The toast pill is near-opaque (alpha 0.92); the light palette's `error`, `info` and `primaryContainer` are darker so their on-colours reach WCAG AA; `PushNotificationService.requestPermission()` returns whether notifications are allowed and no longer uses `dart:io` `Platform`.
 - The iOS runner uses the UIScene lifecycle (the first iOS build no longer rewrites tracked files) and each flavored Xcode configuration uses its own icon set.
 - `code_review.yml` stubs Firebase like the other workflows; the generated Provider page renders a translated error and ships a failing-load test; a rolled-back generator or `remove_sample` run restores each app's README report and `app_profile.dart` facts; `firebase_config.dart` refuses to run without terminals.
 - The `code_review` workflow skips its review and comment steps, with a notice, when `GEMINI_API_KEY` is not set (a fresh adopter, a fork PR) instead of failing every pull request that touches Dart.

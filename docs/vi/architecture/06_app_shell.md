@@ -145,7 +145,7 @@ void runShellApp({
   required AppProfile profile,
   required Future<void> Function() configureDependencies,
   ShellHooks hooks = const ShellHooks(),
-})
+}) { … }
 ```
 
 `registerAppProfile` gắn `AppProfile`, `AppPlatform` (platform của lần chạy này), `PlatformFacts` của platform đó, `SslPinningPolicy` và các phần `RouterProfile`, `LocaleProfile`, `ThemeProfile`, `NetworkProfile`, mỗi thứ theo đúng type của nó (RULE-14). Nó chạy trước `configureDependencies`, nên một class mà graph dựng có thể nhận một phần làm tham số constructor tuỳ chọn — kể cả eager singleton, không bao giờ vướng RULE-13. injectable resolve một tham số như vậy vô điều kiện, nên `configureDependencies` được sinh ra gọi `registerProfileDefaults` ngay trước khi graph được dựng: nó đăng ký mặc định của template cho mọi phần còn thiếu, và một graph boot không có profile (test riêng của một package) hoàn tất thay vì ném "`NetworkProfile` is not registered". Class dựng tay thì rơi về cùng những mặc định `const` đó. Thứ tự của cả quá trình khởi động là danh sách đánh số ở [Từng bước](#từng-bước); `checkAppContract` resolve mọi dòng của catalog bên dưới, và `handleCompositionReport` quyết định dừng hay đi tiếp.
@@ -276,6 +276,9 @@ Với Sentry, `recordError` gọi `Sentry.captureException(error, stackTrace: st
 ```dart
 // The platform's declared `splash` decides — iOS keeps its native splash
 // for the whole boot by default, so no Dart splash is built there.
+final platformFacts =
+    profile.facts.platformFor(runtime.platform) ??
+    const PlatformFacts.today();
 final usesDartSplash = platformFacts.splash == SplashMode.dart;
 // ...
 splashScreen: usesDartSplash
@@ -324,13 +327,13 @@ Thứ tự được khai trong [`apps/mobile/app_manifest.yaml`](../../../apps/m
 ```dart
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
-    ..._notificationsModules,
-    ..._shellModules,
-    ..._uiModules,
-    ..._domainModules,
-    ..._dataModules,
-    ..._featureModules,
-    ..._otherModules,
+  ..._notificationsModules,
+  ..._shellModules,
+  ..._uiModules,
+  ..._domainModules,
+  ..._dataModules,
+  ..._featureModules,
+  ..._otherModules,
 ];
 ```
 
@@ -418,7 +421,10 @@ class NetworkConfigImpl implements NetworkConfig {
     LocaleProfile locale = const LocaleProfile(),
   ]) : _languages = LanguageSet(locale);
 
-  /// Null in a build that composes no auth module.
+  final ILanguageStorage _languageStorage;
+  final LanguageSet _languages;
+
+  /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
   // ...
 }
@@ -460,14 +466,21 @@ Shell hiện thực những hợp đồng mà package core khai báo nhưng tự
 [`app_router.dart`](../../../platform/shell/app_shell/lib/src/navigation/app_router.dart) dựng GoRouter **hoàn toàn từ các đóng góp qua DI**.
 
 ```dart
-List<RouteBase> get _featureRoutes => [
-  for (final module in getAllOrEmpty<IFeatureRouteModule>()) ...module.routes,
-];
-
+/// Every [INavDestinationModule], sorted by `order` — collected once, when
+/// the router is built. Branch `i` of the dashboard shell is destination
+/// `i`; the dashboard receives this same list through
+/// [IDashboardRouteModule.builder], so the two can never disagree.
 late final List<INavDestinationModule> destinations = List.unmodifiable(
   getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order)),
 );
+
+List<RouteBase> get _featureRoutes {
+  return [
+    for (final module in getAllOrEmpty<IFeatureRouteModule>())
+      ...module.routes,
+  ];
+}
 ```
 
 Cấu trúc tạo ra:
@@ -515,6 +528,19 @@ String get fallbackLocation {
   return _emptyDestinationPath;
 }
 
+/// Where a cold start lands, by the app's [RouterProfile.entry]:
+///
+/// - [EntryPolicy.firstLaunch] (the default): the registered
+///   [IAppEntryLocation] (onboarding, when composed) on the first launch
+///   only, else [fallbackLocation];
+/// - [EntryPolicy.always]: the entry location on every cold start;
+/// - [EntryPolicy.never]: [fallbackLocation], whatever is registered.
+///
+/// "First launch" is the shell's own [AppBootStorage.viewedOnboard] flag,
+/// which `NavigatorWrapperWidget` sets the first time it keeps the user on
+/// the entry location. Returning it on every cold start would show a
+/// returning user onboarding until the session restore finished and the
+/// boot redirect moved them on.
 String get entryLocation {
   final entry = usesEntryLocation ? getItOrNull<IAppEntryLocation>() : null;
   return resolveEntryLocation(
@@ -558,16 +584,31 @@ Nằm bên trong app `ShellRoute` và bọc mọi route trong app. Nó tách đi
 
 ```dart
 WidgetsBinding.instance.endOfFrame.whenComplete(() async {
-  await _session?.ensureInitialized(); // ISessionState, via getItOrNull
+  await _session?.ensureInitialized();
   if (!mounted) return;
-  // entry location? → ISignInLocation? → IPostSignInLocation (else fallbackLocation)
+  final isGoToOnboarding = _goToOnboarding();
+  if (isGoToOnboarding) {
+    _bootCompleted = true;
+    // With a session owner, leaving onboarding leads to a sign-in, and
+    // `_onSessionChanged` → `_goToPostSignIn` starts deep links. Without
+    // one no sign-in ever comes, so start them once the user leaves the
+    // entry location instead — still never over onboarding itself.
+    if (_session == null) _startDeepLinksOnLeavingEntry();
+    return;
+  }
+  final isGoToSignIn = _goToSignIn();
+  if (isGoToSignIn) {
+    _bootCompleted = true;
+    return;
+  }
+  _goToPostSignIn();
   _bootCompleted = true;
 });
 ```
 
-Chờ `endOfFrame` bảo đảm khung hình đầu tiên đã lên màn hình trước mọi redirect, còn `ensureInitialized()` chờ việc khôi phục phiên hoàn tất để quyết định được đưa ra dựa trên trạng thái thật (boot đã giữ splash để chờ nó, tối đa `NetworkProfile.connectTimeout`, nên khi khởi động bình thường việc khôi phục đã xong từ trước). Không ghép module nào sở hữu phiên đăng nhập thì `_session` là null và app được coi như chưa đăng nhập. Mỗi trường hợp đi tới đâu do thêm hai hợp đồng `core_di` quyết định, cả hai resolve bằng `getItOrNull`: `ISignInLocation` (do `feature_auth` đóng góp: đường dẫn login) cho người dùng chưa đăng nhập — không có ai đăng ký thì không redirect — và `IPostSignInLocation` (do `feature_home` đóng góp: tab home) cho người đã đăng nhập — không có ai đăng ký thì về `AppRouter.fallbackLocation`. Widget tự gọi `context.go(path)`; nó không gọi tên module hay luồng sản phẩm nào.
+Chờ `endOfFrame` bảo đảm khung hình đầu tiên đã lên màn hình trước mọi redirect, còn `ensureInitialized()` chờ việc khôi phục phiên hoàn tất để quyết định được đưa ra dựa trên trạng thái thật (boot đã giữ splash để chờ nó, tối đa `NetworkProfile.connectTimeout`, nên khi khởi động bình thường việc khôi phục đã xong từ trước). Trong sample, việc khôi phục là `AuthProvider.initialize` gọi `IAuthRepository.refreshToken()`: không có token đã lưu, hoặc token bị từ chối, nghĩa là chưa đăng nhập, còn app khởi động lúc offline không nhận được câu trả lời từ server nên mở ra màn hình đăng nhập trong khi token đã lưu vẫn được giữ cho lần khởi động sau. Không ghép module nào sở hữu phiên đăng nhập thì `_session` là null và app được coi như chưa đăng nhập. Mỗi trường hợp đi tới đâu do thêm hai hợp đồng `core_di` quyết định, cả hai resolve bằng `getItOrNull`: `ISignInLocation` (do `feature_auth` đóng góp: đường dẫn login) cho người dùng chưa đăng nhập — không có ai đăng ký thì không redirect — và `IPostSignInLocation` (do `feature_home` đóng góp: tab home) cho người đã đăng nhập — không có ai đăng ký thì về `AppRouter.fallbackLocation`. Widget tự gọi `context.go(path)`; nó không gọi tên module hay luồng sản phẩm nào.
 
-**Các chuyển đổi về sau** đến qua hai stream subscription mở trong `initState` — `ISessionState.sessionChanges` và `.sessionFailures` — và được chặn theo hai cách khác nhau. `_onSessionChanged` (có điều hướng) bị bỏ qua cho tới khi `_bootCompleted && _session.hasRestoredSession`, để chính lần phát của bước khôi phục phiên không tranh giành lần điều hướng đầu tiên với redirect khởi động. `_onSessionFailure` (chỉ hiện toast) chỉ kiểm tra `_bootCompleted` — nó không điều hướng, nên không có gì để tranh giành. Nó diễn đạt failure bằng một `switch` đầy đủ trên `SessionFailure` dạng sealed (năm biến thể: sai thông tin đăng nhập, không có người dùng, một lỗi server được diễn đạt từ code của nó, `SessionExpiredFailure` — một phiên đang đăng nhập đã kết thúc, key ARB toàn cục `sessionExpired` — và không xác định). Bản thân `build` chỉ là `Overlay.wrap(child: widget.child)`.
+**Các chuyển đổi về sau** đến qua hai stream subscription mở trong `initState` — `ISessionState.sessionChanges` và `.sessionFailures` — và được chặn theo hai cách khác nhau. `_onSessionChanged` (có điều hướng) bị bỏ qua cho tới khi `_bootCompleted && _session.hasRestoredSession`, để chính lần phát của bước khôi phục phiên không tranh giành lần điều hướng đầu tiên với redirect khởi động. `_onSessionFailure` (chỉ hiện toast) chỉ kiểm tra `_bootCompleted` — nó không điều hướng, nên không có gì để tranh giành. Nó diễn đạt failure bằng một `switch` đầy đủ trên `SessionFailure` dạng sealed (năm biến thể: sai thông tin đăng nhập, không có người dùng, một lỗi server được diễn đạt từ code của nó, `SessionExpiredFailure` — một phiên đang đăng nhập đã kết thúc, key ARB toàn cục `sessionExpired` — và không xác định). `AuthProvider` của sample sinh ra ba trong số đó: sai thông tin đăng nhập cho `401`, lỗi server mang code cho mọi lỗi đăng nhập khác (kể cả `404`) và phiên hết hạn; `SessionUserNotFoundFailure` vẫn nằm trong hợp đồng cho chủ sở hữu phân biệt được trường hợp đó. Bản thân `build` chỉ là `Overlay.wrap(child: widget.child)`.
 
 **Deep link** được khởi động trong `_goToPostSignIn`, nên không bao giờ được route đè lên onboarding hay màn đăng nhập. Có module sở hữu phiên đăng nhập thì mọi đường đều được phủ — rời onboarding dẫn tới đăng nhập, và đăng nhập dẫn tới `_goToPostSignIn`. Không có module auth thì không bao giờ có lần đăng nhập nào, nên khi boot dừng ở entry location, widget sẽ khởi động deep link vào lần đầu router rời khỏi đó (`navigator_wrapper_widget_test.dart`).
 
@@ -659,7 +700,7 @@ Cách thêm một chuỗi hay một ngôn ngữ: [`../guides/09_localization_the
 | `context.sp(x)` (thang chữ của theme, `AppTextStyles`) | `core_responsive`, vào `TextStyle.fontSize` | "cỡ thiết kế này to bao nhiêu trong cửa sổ này?" — theo chiều rộng cửa sổ, kẹp bởi `textScaleBounds`. Nó không bao giờ đọc `MediaQuery.textScaler` |
 | `MediaQuery.textScaler` | `Text` / `RichText` của Flutter, lúc layout | "người dùng muốn chữ to hơn bao nhiêu?" |
 
-Một style body 16 đơn vị là 16 × (hệ số cửa sổ) logical pixel, rồi × tỉ lệ của người dùng khi vẽ — mỗi cái đúng một lần. Thứ **không** lớn theo text scale là bố cục đặt kích thước bằng `context.h` / `context.w`: một hộp cao cố định chứa chữ có thể tràn ở 2x. Hãy để khung chứa chữ tự co theo nội dung (padding, `minHeight`), đừng đặt chiều cao cố định. `modules/auth/feature/test/login_page_text_scale_test.dart` và `modules/dashboard/feature/test/dashboard_text_scale_test.dart` dựng màn hình đăng nhập trên ba cỡ điện thoại và phần chrome của dashboard từ điện thoại tới desktop ở 2x, và fail khi có bất kỳ overflow nào — hãy chép chúng cho màn hình mới.
+Một style body 16 đơn vị là 16 × (hệ số cửa sổ) logical pixel, rồi × tỉ lệ của người dùng khi vẽ — mỗi cái đúng một lần. Thứ **không** lớn theo text scale là bố cục đặt kích thước bằng `context.h` / `context.w`: một hộp cao cố định chứa chữ có thể tràn ở 2x. Hãy để khung chứa chữ tự co theo nội dung (padding, `minHeight`), đừng đặt chiều cao cố định. `modules/auth/feature/test/login_page_test.dart` và `modules/dashboard/feature/test/dashboard_text_scale_test.dart` dựng màn hình đăng nhập trên cửa sổ điện thoại nhỏ nhất (320 × 568) và bốn tab của dashboard trên cửa sổ compact, medium và large, tất cả ở 2x, và fail khi có bất kỳ overflow nào — hãy chép chúng cho màn hình mới.
 
 ---
 

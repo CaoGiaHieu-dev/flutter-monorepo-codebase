@@ -138,7 +138,8 @@ A database-backed source wraps the Drift row instead of JSON and converts it at 
 ### Step 5: Endpoint constants (data)
 
 Endpoints live in the owning package's `utils/` (RULE-09), `modules/<module>/data/lib/src/utils/product_api_constants.dart`
-(shape of `modules/auth/data/lib/src/utils/auth_api_constants.dart`):
+(shape of `AuthApiConstants` in `modules/auth/data/lib/src/utils/auth_constants.dart`, which also holds that
+package's storage keys in the same file):
 
 ```dart
 class ProductApiConstants {

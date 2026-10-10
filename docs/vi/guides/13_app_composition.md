@@ -123,7 +123,7 @@ const AppProfile appProfile = AppProfile(
 );
 ```
 
-Điều một phần không được phép nói thì bị từ chối ở nơi có thể: `DisplayProfile(textScaleMax: 1.5)` không biên dịch được (`const_eval_throws_exception` — RULE-38), một header của `NetworkProfile` tên `authorization`, `cookie`, `set-cookie`, `proxy-authorization` hoặc `content-type` làm client mặc định ném lỗi lúc boot (RULE-66), và một `LocaleProfile` không cung cấp ngôn ngữ nào đã có hoặc có fallback mà nó không cung cấp thì ném lỗi lúc boot, nêu tên trường. `shadow` và `scrim` của palette, cùng hai gradient, không ghi đè được: gradient suy ra từ `primary`, `primaryContainer`, `info` và `error`.
+Điều một phần không được phép nói thì bị từ chối ở nơi có thể: `DisplayProfile(textScaleMax: 1.5)` không biên dịch được (`const_eval_throws_exception` — RULE-38), một header của `NetworkProfile` tên `authorization`, `cookie`, `set-cookie`, `proxy-authorization` hoặc `content-type` làm client mặc định ném lỗi lúc boot (RULE-66), và một `LocaleProfile` không cung cấp ngôn ngữ nào đã có hoặc có fallback mà nó không cung cấp thì ném lỗi lúc boot, nêu tên trường. `shadow` và `scrim` của palette, cùng gradient, không ghi đè được: gradient suy ra từ `primary` và `primaryContainer`.
 
 `authorizedHosts` là một tập tên host trần (`files.example.com`: không scheme, port hay path). Bearer token chỉ đi tới host của `BASE_URL` và các host này; một request tới host khác (CDN, URL storage đã ký sẵn) ra đi mà không có thông tin đăng nhập ([`08_networking.md`](08_networking.md) § 6).
 

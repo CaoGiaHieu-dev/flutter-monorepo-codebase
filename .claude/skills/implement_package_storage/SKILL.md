@@ -23,7 +23,7 @@ and never let another package import the owner's key class.
 
 | Value | Owner | Keys file |
 | :--- | :--- | :--- |
-| Auth token / user payload | `data_auth` → `AuthLocalDataSource` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
+| Auth token | `data_auth` → `AuthLocalDataSource` | `modules/auth/data/lib/src/utils/auth_constants.dart` (with the endpoints) |
 | Theme mode (pure UI preference) | the shell → `ThemeStorageImpl` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
 | Locale (pure UI preference) | the shell → `LanguageStorageImpl` | `platform/shell/adapters/lib/src/utils/language_storage_keys.dart` |
 | Onboarding-seen boot flag | the shell → `AppBootStorage` | `platform/shell/adapters/lib/src/utils/app_boot_storage_keys.dart` |
@@ -88,9 +88,7 @@ class ProfileLocalDataSource {
 
   /// Fills the in-memory cache from disk before anything reads it.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_bioLocked.readFromStorage()]);
-  }
+  Future<void> initialize() => _bioLocked.readFromStorage();
 
   bool get isBioLocked => _bioLocked.value ?? false;
 
@@ -101,15 +99,15 @@ class ProfileLocalDataSource {
 ```
 
 `AuthLocalDataSource` (`modules/auth/data/lib/src/data_sources/local/auth_local_data_source.dart`) is the
-real one, with two `secure` values. Storage types: `StorageType.pref` (SharedPreferences — settings, flags)
+real one, with a single `secure` value (the token). Storage types: `StorageType.pref` (SharedPreferences — settings, flags)
 and `StorageType.secure` (Keychain / KeyStore — tokens, PII). Both seal every value with AES-256-CBC.
 
 - `String`, `num`, `bool`, `Map<String, dynamic>` and typed lists read back without a `reviver`. An enum or a
   custom type needs `reviver: (key, value) { … }`, called **once** per decode with the decoded root, never with
   `null`, and kept free of side effects (`ThemeStorageImpl` revives a `ThemeMode` from its name).
 - **Singleton, never `@injectable`** (RULE-45): a factory builds a fresh instance with an empty cache, and the
-  synchronous getters return `null` although the value is on disk. A second value goes into the same
-  `readFromStorage` list.
+  synchronous getters return `null` although the value is on disk. With a second value, hydrate both:
+  `await Future.wait([_a.readFromStorage(), _b.readFromStorage()])`.
 
 ### Step 4: Read and write
 

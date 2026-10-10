@@ -89,7 +89,7 @@ class AuthPath {
 | `feature_settings` | Tab Settings | không (dùng provider toàn cục) | `INavDestinationModule` (order 1) |
 | `feature_splash` | Màn hình splash | không | `IAppSplashScreen` — **không phải route**; do `MainScope` hiển thị |
 
-Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocalization` của mình — trừ `feature_dashboard`, vốn không có chuỗi nào. `ISessionGateway` do `data_auth` đăng ký, không phải feature. `feature_onboarding` import `auth_api` và `home_api`, `feature_settings` import `auth_api` — những cạnh liên module duy nhất, mỗi cạnh trỏ tới một package API, không bao giờ tới feature khác.
+Mọi feature có chuỗi hiển thị đều đăng ký thêm `IFeatureLocalization` của mình — trừ `feature_dashboard` và `feature_splash`, vốn không có chuỗi nào. `ISessionGateway` do `data_auth` đăng ký, không phải feature. `feature_onboarding` import `auth_api` và `home_api`, `feature_settings` import `auth_api` — những cạnh liên module duy nhất, mỗi cạnh trỏ tới một package API, không bao giờ tới feature khác.
 
 `feature_auth` và `feature_home` được xây trên **hai** hướng state khác nhau một cách có chủ đích, để template minh hoạ cả hai. Xem [state management](../guides/03_state_management.md) — và hãy đọc phần so sánh trung thực ở đó trước khi chọn, vì hai nhánh **không** được trang bị ngang nhau.
 
@@ -125,55 +125,62 @@ class DashboardRouteModuleImpl implements IDashboardRouteModule {
 // modules/dashboard/feature/lib/src/pages/dashboard_page.dart
 @override
 Widget build(BuildContext context) {
-  final index = navigationShell.currentIndex;
-  final tabs = destinations;
-  if (tabs.length < 2) return Scaffold(body: navigationShell);
+  // A bar or rail needs at least two destinations.
+  if (destinations.length < 2) return Scaffold(body: navigationShell);
 
-  final selected = index.clamp(0, tabs.length - 1);
-  // This is where a neutral [NavDestination] becomes one app's widget —
-  // the same modules feed both forms below, unchanged.
-  final items = [for (final tab in tabs) tab.destination(context)];
-
-  // A phone keeps the bottom bar (the shell locks phone-sized displays to
-  // portrait). From a medium window up — a tablet in either orientation,
-  // an unfolded foldable, a desktop window — the tabs move to a side
-  // rail, which costs width the window has to spare instead of height it
-  // has not.
+  final items = [for (final tab in destinations) tab.destination(context)];
+  final selected = navigationShell.currentIndex;
   final sizeClass = context.windowSizeClass;
+
   if (sizeClass.isSmallerThan(WindowSizeClass.medium)) {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selected,
         onTap: _onSelect,
-        items: [for (final d in items) _itemOf(d)],
+        // `shifting` (Flutter's default from the fourth tab) hides the
+        // labels of unselected tabs.
+        type: BottomNavigationBarType.fixed,
+        showUnselectedLabels: true,
+        items: [
+          for (final d in items)
+            BottomNavigationBarItem(
+              icon: Icon(d.icon),
+              activeIcon: Icon(d.selectedIcon ?? d.icon),
+              label: d.label,
+            ),
+        ],
       ),
     );
   }
 
+  // The rail costs width a wide window has to spare, not height it has not.
   final extended = sizeClass.isAtLeast(WindowSizeClass.large);
-  // The rail sits at the start edge: the left in LTR, the right in RTL
-  // (a `Row` follows the text direction). It pads for the insets on its
-  // outer side only; the side facing the content is the content's to pad.
-  final isRtl = Directionality.of(context) == TextDirection.rtl;
   return Scaffold(
-    body: Row(
-      children: [
-        SafeArea(
-          left: !isRtl,
-          right: isRtl,
-          child: NavigationRail(
+    body: SafeArea(
+      top: false,
+      bottom: false,
+      child: Row(
+        children: [
+          NavigationRail(
             selectedIndex: selected,
             onDestinationSelected: _onSelect,
             extended: extended,
             labelType: extended
                 ? NavigationRailLabelType.none
                 : NavigationRailLabelType.all,
-            destinations: [for (final d in items) _railItemOf(d)],
+            destinations: [
+              for (final d in items)
+                NavigationRailDestination(
+                  icon: Icon(d.icon),
+                  selectedIcon: Icon(d.selectedIcon ?? d.icon),
+                  label: Text(d.label),
+                ),
+            ],
           ),
-        ),
-        Expanded(child: navigationShell),
-      ],
+          Expanded(child: navigationShell),
+        ],
+      ),
     ),
   );
 }
@@ -196,10 +203,13 @@ Feature đăng ký một implementation là có ngay branch và nav item:
 
 ```dart
 // modules/home/feature/lib/src/routing/home_nav_destination.dart
+/// SAMPLE: a module contributing one primary navigation destination. It
+/// describes the destination ([NavDestination]) instead of building a widget,
+/// so the dashboard can render it as a bottom bar or a rail.
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
-  int get order => 0;                       // khóa sắp xếp tăng dần, duy nhất mỗi tab
+  int get order => 0;
 
   @override
   String get path => HomePath.HOME;
@@ -216,7 +226,7 @@ class HomeNavDestination extends INavDestinationModule {
 }
 ```
 
-Bấm vào chính tab đang mở sẽ đưa branch đó về trang đầu của nó (`navigationShell.goBranch(index, initialLocation: …)` trong dashboard).
+`order` là khóa sắp xếp tăng dần và phải duy nhất mỗi tab. Bấm vào chính tab đang mở sẽ đưa branch đó về trang đầu của nó (`navigationShell.goBranch(index, initialLocation: …)` trong dashboard).
 
 Chỉ dùng `INavDestinationModule` cho **điểm đến chính của bottom-nav** cần `StatefulShellBranch` riêng. Màn hình push chồng lên một tab chỉ là route thường bên trong branch đó.
 
@@ -271,17 +281,17 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 > [!CAUTION]
 > **Không bọc lần thứ hai bên trong page.** Nếu route đã cung cấp controller, thêm một `BlocProvider` / `ChangeNotifierProvider` nữa trong `HomePage.build` sẽ tạo ra một instance *khác*. Page hiển thị một object trong khi event lại đi tới object kia — giao diện trông như đứng yên, và cả hai instance đều không được dispose đúng cách.
 
-Controller toàn cục thì không cần bọc gì cả. `AuthProvider` là `@lazySingleton`, nên `LoginRoute` dựng thẳng `const LoginPage()` và page đọc nó bằng `Consumer<AuthProvider>`:
+Controller toàn cục thì không cần bọc gì cả. `AuthProvider` là `@lazySingleton`, nên `LoginRoute` dựng thẳng `const LoginPage()` và page đọc nó bằng `context.read<AuthProvider>()` và một `Selector`:
 
 ```dart
+@TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
+
   static final $parentNavigatorKey = NavigatorKeys.appKey;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const LoginPage();
-  }
+  Widget build(BuildContext context, GoRouterState state) => const LoginPage();
 }
 ```
 
@@ -392,7 +402,7 @@ tên một kiểu thuộc package `domain_*` (RULE-08): import đó khiến mọ
 phụ thuộc `domain_auth` ngay lúc biên dịch, và `getItOrNull` không gỡ được điều đó. Vì vậy `core_di`
 sở hữu một value type nhỏ,
 [`SessionPrincipal`](../../../platform/foundation/contracts/lib/src/session/session_principal.dart), và feature
-auth thu hẹp entity của mình về kiểu đó tại ranh giới (`AuthStatusStreamImpl.toPrincipal`). Hợp đồng cố ý nhỏ
+auth thu hẹp entity của mình về kiểu đó tại ranh giới (`AuthStatusStreamImpl.updateAuthStatus`). Hợp đồng cố ý nhỏ
 hơn entity — bên tiêu thụ chỉ hỏi *ai đang đăng nhập* sẽ không bao giờ thấy phần còn lại.
 
 ### Vì sao có `currentUser` bên cạnh stream

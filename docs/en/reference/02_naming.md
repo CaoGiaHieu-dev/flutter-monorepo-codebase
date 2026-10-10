@@ -13,7 +13,7 @@ Every example below is a real path in this repository — open it to see the con
 | Component | File suffix | Class suffix | Real example |
 |---|---|---|---|
 | Screen | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `modules/auth/feature/lib/src/pages/login_page.dart` |
-| Sub-widget | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `modules/auth/feature/lib/src/widgets/auth_header_widget.dart` |
+| Sub-widget | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `platform/ui/ui_kit/lib/src/feedback/loading_widget.dart` |
 | Controller (Provider) | `_provider.dart` | `Provider` | `modules/auth/feature/lib/src/provider/auth_provider.dart` |
 | Controller (BLoC) | `_bloc.dart` | `Bloc` | `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` |
 | Controller (Cubit) | `_cubit.dart` | `Cubit` | *only when events are unnecessary* |
@@ -42,12 +42,12 @@ Every example below is a real path in this repository — open it to see the con
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/src/dialogs/retry_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | *no sample yet* |
 | Route definitions (`GoRouteData`) | `_route_module.dart` | `Route` | `modules/home/feature/lib/src/routing/home_route_module.dart` (declares `HomeRoute`) |
-| Stack route contribution (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` |
+| Stack route contribution (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` (a feature with one route may keep it in its `_route_module.dart`, as `modules/onboarding/feature/lib/src/routing/onboarding_route_module.dart` does) |
 | Nav destination (`INavDestinationModule`) | `_nav_destination.dart` | `NavDestination` | `modules/home/feature/lib/src/routing/home_nav_destination.dart` |
 | Route paths | `<feature>_path.dart` | `Path` | `modules/home/feature/lib/src/utils/home_path.dart` |
-| Storage keys | `<owner>_storage_keys.dart` | `StorageKeys` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| API endpoints | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
-| UI constants | `<owner>_ui_constants.dart` | `UiConstants` | `modules/auth/feature/lib/src/utils/auth_ui_constants.dart` |
+| Storage keys | `<owner>_storage_keys.dart` | `StorageKeys` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
+| API endpoints | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_constants.dart` (holds `AuthApiConstants` and `AuthStorageKeys` — a small package may keep both in one `<owner>_constants.dart`) |
+| UI constants | `<owner>_ui_constants.dart` | `UiConstants` | `platform/ui/ui_kit/lib/src/utils/shared_ui_constants.dart` |
 | Drift database | `_database.dart` (in `database/`) | `Database` | `modules/cache/data/lib/src/database/cache_database.dart` |
 | Drift table | `_table.dart` (in `database/tables/`) | plural noun, no suffix | `modules/cache/data/lib/src/database/tables/cache_entries_table.dart` (declares `CacheEntries`) |
 | Drift DAO | `_dao.dart` (in `database/dao/`) | `Dao` | `modules/cache/data/lib/src/database/dao/cache_entries_dao.dart` |
@@ -74,7 +74,6 @@ Every example below is a real path in this repository — open it to see the con
 // modules/home/feature/lib/src/utils/home_path.dart
 class HomePath {
   HomePath._();
-
   static const String HOME = '/home';
 }
 ```

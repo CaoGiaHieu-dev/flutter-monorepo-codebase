@@ -26,29 +26,38 @@ A ViewModel does not toggle loading or map results by hand. It delegates that to
 ```dart
 // modules/auth/feature/lib/src/provider/auth_provider.dart (abridged)
 Future<void> login(String email, String password) async {
+  // One sign-in at a time: a second submit (the keyboard's Done pressed
+  // twice) would race two outcomes.
+  if (isLoading) return;
   await executeOperation(
     OperationConfig(
       operation: () =>
           _loginUseCase(LoginParams(email: email, password: password)),
-      onSuccess: (user) async {
-        DynamicLogger.log('Login successful for user: ${user?.name}');
-      },
-      // Map a Domain failure to the feature's error state.
+      onSuccess: _authStream.updateAuthStatus,
+      onFailure: (failure) => _failures.add(
+        mapAuthFailure(failure) == const AuthErrorState.invalidCredentials()
+            ? const SessionInvalidCredentialsFailure()
+            : SessionServerFailure(code: failure.code),
+      ),
       errorStateBuilder: mapAuthFailure,
     ),
   );
 }
 
-/// ErrorHandler: HTTP 401/403 arrives as an AuthFailure, every other 4xx/5xx
-/// as a ServerFailure; a network failure has no HTTP status.
-static ErrorState? mapAuthFailure(AppFailure<dynamic> failure) {
+// …
+
+/// A 401 is a credential problem; every other failure keeps only its code.
+/// A network failure has no HTTP status, so it is never read as one, and a
+/// 403 is a locked account, not a wrong password.
+static AuthErrorState mapAuthFailure(AppFailure<dynamic> failure) {
   return switch (failure) {
     AuthFailure(code: 401) => const AuthErrorState.invalidCredentials(),
-    ServerFailure(code: 404) => const AuthErrorState.userNotFound(),
     _ => AuthErrorState.failed(code: failure.code),
   };
 }
 ```
+
+`onSuccess` hands the user to the session stream, `onFailure` publishes the failure for the app shell, and `errorStateBuilder` maps the `AppFailure` to the feature's error state, which the page reads. The `if (isLoading) return;` guard keeps a second submit from racing the first.
 
 Behaviour worth knowing (`platform/state/provider/lib/src/management/operation_executor.dart`):
 
@@ -125,32 +134,32 @@ Use **`ProviderStateListener`** (or `MultiProviderStateListener` with a list of 
 
 ```dart
 // modules/auth/feature/lib/src/pages/login_page.dart (abridged)
-void _onLoginFailed(BuildContext context, ErrorState? error, String? _) {
-  if (error == const AuthErrorState.invalidCredentials()) {
-    _passwordController.clear();
-  }
-}
-
 @override
 Widget build(BuildContext context) {
   return ProviderStateListener<AuthProvider, UserEntity>(
-    onError: _onLoginFailed,
+    onError: (context, error, _) {
+      if (error == const AuthErrorState.invalidCredentials()) {
+        _passwordController.clear();
+      }
+    },
     child: Scaffold(
-      body: Consumer<AuthProvider>(
-        builder: (context, authProvider, _) {
-          return AuthFormWidget(
-            emailController: _emailController,
-            passwordController: _passwordController,
-            submitButtonText: context.l10nAuth.signIn,
-            isLoading: authProvider.isLoading,
-            onSubmit: _onLoginPressed,
-          );
-        },
-      ),
+      // …
+                    Selector<AuthProvider, bool>(
+                      selector: (_, auth) => auth.isLoading,
+                      builder: (context, isLoading, _) =>
+                          CustomButton.rectangle(
+                            disable: isLoading,
+                            onPressed: _submit,
+                            // …
+                          ),
+                    ),
+      // …
     ),
   );
 }
 ```
+
+`Selector` rebuilds only the button when `isLoading` changes. The page does not wrap itself in a provider: the global `AuthProvider` is mounted once by `AuthTreeWrapper`.
 
 > The page only clears the password field: the app shell (`NavigatorWrapperWidget`) **already** shows every sign-in failure as a translated toast, through `ISessionState`, so a toast here would repeat it. For a toast of your own, call `AppOverlay.showToast(content: ...)` with a translated string.
 
@@ -168,17 +177,16 @@ import 'package:provider_state_management/provider_state_management.dart';
 
 part 'auth_error_state.freezed.dart';
 
+/// Why a sign-in failed, as far as the screen words it differently. Carries no
+/// text (RULE-34): the shell shows a translated toast for the session failure.
 @freezed
 abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
 
-  const factory AuthErrorState.userNotFound() = _UserNotFound;
-
-  /// Anything else — offline, a timeout, a 5xx, a locked account (403).
-  /// [code] is the failure's `ErrorCodes` / HTTP status, which picks the
-  /// translated sentence.
+  /// Anything else — offline, a timeout, a 5xx, a locked account. [code] is the
+  /// failure's `ErrorCodes` / HTTP status.
   const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```

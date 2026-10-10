@@ -65,7 +65,7 @@ dart tools/workspace_setup/configure.dart
 1. `dart pub global activate flutterfire_cli` — only the real-Firebase path in [§3](#3-generate-the-firebase-options-required--the-repo-does-not-compile-without-it) uses it.
 2. `flutter clean` at the root.
 3. `flutter pub get` at the root — resolves the whole workspace and writes the one root `pubspec.lock`.
-4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/ui/design_system` and the auth, home, onboarding, settings and splash features).
+4. `flutter gen-l10n` in every package that has an `l10n.yaml` (today `platform/ui/design_system` and the auth, home, onboarding and settings features).
 5. `dart run build_runner build --workspace` — injectable, freezed, json_serializable, retrofit, go_router_builder, drift, flutter_gen.
 6. `dart tools/barrel_generator/generate.dart <package>/lib` for every package with a `lib/` — the apps are skipped, because they have no barrel. On a fresh clone it changes nothing: the barrels are committed.
 
@@ -79,7 +79,7 @@ To run the steps by hand, run all three, in this order (bash shown). The barrel 
 flutter pub get
 # gen-l10n in each package that has an l10n.yaml
 (cd platform/ui/design_system && flutter gen-l10n)
-for f in auth home onboarding settings splash; do (cd modules/$f/feature && flutter gen-l10n); done
+for f in auth home onboarding settings; do (cd modules/$f/feature && flutter gen-l10n); done
 dart run build_runner build --workspace
 ```
 
@@ -303,9 +303,9 @@ With the committed `env.dev` as it is, the sample app runs but **cannot sign in*
 
 | Step | Screen | Why |
 | :--- | :--- | :--- |
-| 1 | A splash: on Android the Dart splash (logo, "Codebase", "A Flutter app, ready to build on", a spinner); on iOS the native splash stays up for the whole boot | `platforms.<p>.splash` in the manifest. Meanwhile the auth module tries to restore a session; with no stored token it answers "signed out" locally, without a network call |
+| 1 | A splash: on Android the Dart splash (the Flutter logo and a spinner, no text); on iOS the native splash stays up for the whole boot | `platforms.<p>.splash` in the manifest. Meanwhile the auth module tries to restore a session; with no stored token it answers "signed out" locally, without a network call |
 | 2 | Onboarding: "Welcome to Codebase" and a **Get Started** button | `feature_onboarding` contributes the first-launch entry location. It is shown once: the flag is stored, so the next launch skips it |
-| 3 | Sign-in: "Welcome Back", an email field and a password field | **Get Started** goes to `feature_auth`'s login page. The form checks the input itself — an email shape, a password of at least 6 characters (`AuthValidationConstants.MIN_PASSWORD_LENGTH`) — and sends nothing until both pass |
+| 3 | Sign-in: "Welcome Back", an email field and a password field | **Get Started** goes to `feature_auth`'s login page. The form checks only that both fields are filled in ("This field is required" under an empty one) and sends nothing until they are |
 | 4 | A spinner on the button, then a toast, "A network error occurred. Please try again.", and you stay on the sign-in screen | The request is `POST /user/login` against an empty `BASE_URL`, a path with no host, which the HTTP client rejects before any connection is made |
 
 To get past step 4, do one of these two:
@@ -313,7 +313,7 @@ To get past step 4, do one of these two:
 - **Point it at a backend.** Set `BASE_URL` in `apps/mobile/env.dev` to your server (a URL only — the file is committed). The server must answer the sample's sign-in call; the endpoint, request body and response fields are in [`../guides/08_networking.md` § 8](../guides/08_networking.md#the-sample-sign-in-contract), together with what the user reads for each failure.
 - **Write your own data source.** Keep the domain contract (`IAuthRepository`, `LoginParams`, `UserEntity`) and replace what sits behind it with your transport — Firebase, GraphQL, a different REST shape ([`../guides/02_new_domain_data.md`](../guides/02_new_domain_data.md)).
 
-The module's tests (`cd modules/auth/data && flutter test`) run against a fake data source, so they pass with no server at all.
+The module's tests (`cd modules/auth/data && flutter test`) run the repository and the local data source against a fake remote data source and an in-memory storage, so they pass with no server at all.
 
 ### Building an APK
 
@@ -421,7 +421,7 @@ The template ships under placeholder names, and a few identifiers in it belong t
 | Firebase | the IDs you register: run `dart tools/firebase/firebase_config.dart --app mobile` with the new base bundle ID (§3.1), or put the new `package_name` in the stub `google-services.json` files of §3.2 |
 | Fastlane | `app_bundle_ids.ios` and `.android` in `apps/mobile/fastlane/Config.yaml` ([`02_fastlane_release.md` § 5](../operations/02_fastlane_release.md#5-bundle-ids)); the flavor suffixes there must stay in step with Gradle and Xcode |
 | Icon and splash | the images under `assets/branding/`, then `dart tools/theme_generator/theme_setting.dart --app mobile` (it reads `icons_launcher-<flavor>.yaml` and `flutter_native_splash-<flavor>.yaml` at the repository root). On iOS the flavored build configurations use their own icon sets — `devAppIcon`, `stagingAppIcon`, `prodAppIcon` in `Runner/Assets.xcassets`, written by `icons_launcher` from each flavor's yaml — through `ASSETCATALOG_COMPILER_APPICON_NAME` in `project.pbxproj`; the unflavored configurations keep the stock `AppIcon`. So a changed image reaches an iOS build only through a flavor |
-| Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb`, and the splash text `appName` ("Codebase") and `tagline` ("A Flutter app, ready to build on") in `modules/splash/feature/assets/language/{en,vi}.arb` — keep the same keys in both files (`arch_check` R21) |
+| Sample text | words such as `welcomeToOnboarding` ("Welcome to Codebase") in `modules/onboarding/feature/assets/language/*.arb` — keep the same keys in both files (`arch_check` R21). The splash has no text |
 
 `apps/admin` has no native project yet. When you create its runners ([`13_app_composition.md` § 7](../guides/13_app_composition.md#add-a-platform)), pass your own reverse domain to `flutter create --org` instead of `com.example`.
 

@@ -45,18 +45,14 @@ class AuthPath {
 Routes are declared with annotations and generated into `*_route_module.g.dart`. `modules/auth/feature/lib/src/routing/auth_route_module.dart`:
 
 ```dart
-/// SAMPLE — a feature contributing a top-level route.
-///
-/// The login screen sits on the app navigator, above the dashboard's tabs,
-/// so it names [NavigatorKeys.appKey] as its parent. Add sibling screens as
-/// further `@TypedGoRoute` classes here and list them in
+/// SAMPLE — a feature contributing a top-level route, on the app navigator
+/// above the dashboard's tabs. List further routes in
 /// `AuthFeatureRouteModule.routes`.
 ///
-/// Controllers are instantiated at the route, not inside the page — RULE-21.
-/// Here `AuthProvider` is a global `@lazySingleton` mounted by
-/// `AuthTreeWrapper`, so this route builds the page directly. A screen-scoped
-/// controller would wrap it in
-/// `ChangeNotifierProvider(create: (_) => getIt<XProvider>())` instead.
+/// Controllers are created at the route, not in the page (RULE-21). Here
+/// `AuthProvider` is a global `@lazySingleton` mounted by `AuthTreeWrapper`, so
+/// the route builds the page directly; a screen-scoped controller would wrap it
+/// in `ChangeNotifierProvider(create: (_) => getIt<XProvider>())`.
 @TypedGoRoute<LoginRoute>(path: AuthPath.LOGIN)
 class LoginRoute extends GoRouteDataCustom with $LoginRoute {
   const LoginRoute();
@@ -128,6 +124,9 @@ The route's `build()` is where a screen controller is created and bound to the t
 **BLoC** — `modules/home/feature/lib/src/routing/home_route_module.dart`:
 
 ```dart
+/// SAMPLE — a tab's route is an ordinary typed route; the shell turns each
+/// destination's routes into a `StatefulShellBranch`.
+@TypedGoRoute<HomeRoute>(path: HomePath.HOME)
 class HomeRoute extends GoRouteDataCustom with $HomeRoute {
   const HomeRoute();
 
@@ -174,9 +173,10 @@ abstract class IFeatureRouteModule {
 }
 ```
 
-Registered in the owning feature — `modules/onboarding/feature/lib/src/routing/onboarding_feature_route_module.dart`:
+Registered in the owning feature — `modules/onboarding/feature/lib/src/routing/onboarding_route_module.dart`, which holds the typed route and both contributions of this small feature:
 
 ```dart
+/// Contributes the route to the app shell's router (RULE-20).
 @LazySingleton(as: IFeatureRouteModule)
 class OnboardingFeatureRouteModule implements IFeatureRouteModule {
   @override
@@ -184,9 +184,11 @@ class OnboardingFeatureRouteModule implements IFeatureRouteModule {
 }
 ```
 
-Where the first launch starts is a separate contract, registered next to it — `onboarding_app_entry_location.dart`:
+Where the first launch starts is a separate contract, registered next to it in the same file:
 
 ```dart
+/// Where a first launch starts. The shell resolves `IAppEntryLocation` with
+/// `getItOrNull` and shows it once, before any sign-in redirect.
 @LazySingleton(as: IAppEntryLocation)
 class OnboardingAppEntryLocation implements IAppEntryLocation {
   @override
@@ -210,6 +212,9 @@ abstract class INavDestinationModule {
 `modules/home/feature/lib/src/routing/home_nav_destination.dart`:
 
 ```dart
+/// SAMPLE: a module contributing one primary navigation destination. It
+/// describes the destination ([NavDestination]) instead of building a widget,
+/// so the dashboard can render it as a bottom bar or a rail.
 @LazySingleton(as: INavDestinationModule)
 class HomeNavDestination extends INavDestinationModule {
   @override
@@ -238,6 +243,10 @@ Only `feature_dashboard` implements this contract. The shell sorts the registere
 
 ```dart
 abstract class IDashboardRouteModule {
+  /// [destinations] are the registered [INavDestinationModule]s sorted by
+  /// `order`, collected once by the shell's router: destination `i` is
+  /// branch `i` of [navigationShell]. Render them rather than collecting
+  /// them again.
   Widget builder(
     BuildContext context,
     GoRouterState state,
@@ -275,6 +284,10 @@ Feature A never imports feature B (RULE-04). Navigation crosses the boundary thr
 **1. Declare** — `modules/auth/api/lib/src/navigators/auth_navigator.dart` (package `auth_api`):
 
 ```dart
+/// Routes owned by auth, for other features (onboarding's "Get started").
+///
+/// Resolve with `getItOrNull<AuthNavigator>()` — `feature_auth` implements it
+/// and is removable (RULE-12). The shell uses `ISignInLocation`, not this.
 abstract class AuthNavigator {
   void toLogin(BuildContext context);
 }
@@ -323,12 +336,19 @@ Rules that apply at the call site:
 class NavigatorKeys {
   NavigatorKeys._();
 
+  /// Navigator for the app [ShellRoute] that wraps all in-app routes.
   static final appKey = GlobalKey<NavigatorState>(debugLabel: 'app');
+
+  /// Root navigator owned by `GoRouter` itself — used for full-screen routes
+  /// that must escape the app shell.
   static final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
   static final _nested = <String, GlobalKey<NavigatorState>>{};
 
   /// The nested navigator key registered under [id], created on first use.
+  ///
+  /// Returns the *same* instance for the same id — which is the whole
+  /// requirement, since a shell route and its children must share one.
   static GlobalKey<NavigatorState> nested(String id) => _nested.putIfAbsent(
     id,
     () => GlobalKey<NavigatorState>(debugLabel: 'nested:$id'),
@@ -406,6 +426,8 @@ Rename the Android and the iOS values together when you rename the app.
     <data android:scheme="https" />
     <data android:host="@string/WEB_DOMAIN" />
 </intent-filter>
+<!-- Custom scheme: <DEEP_LINK_SCHEME>://<first-segment>/<rest>,
+     one scheme per flavor (build.gradle.kts productFlavors). -->
 <intent-filter>
     <action android:name="android.intent.action.VIEW" />
     <category android:name="android.intent.category.DEFAULT" />

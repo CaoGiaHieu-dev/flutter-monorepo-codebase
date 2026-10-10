@@ -30,31 +30,38 @@ Extend `BaseProvider<T>` and run each use case through `executeOperation`. A rea
 @lazySingleton
 class AuthProvider extends BaseProvider<UserEntity>
     implements ISessionState, ISessionRefreshListenable {
-  AuthProvider(
-    this._loginUseCase,
-    this._logoutUseCase,
-    this._restoreSessionUseCase,
-    this._authStream,
-  ) : super();
+  AuthProvider(this._loginUseCase, this._repository, this._authStream);
 
   // …
 
+  /// Signs in. `executeOperation` shows loading, runs the use case and settles
+  /// success or the classified error; the page reacts through
+  /// `ProviderStateListener`, the shell through the session channels. No
+  /// navigation here: the shell routes on [sessionChanges].
   Future<void> login(String email, String password) async {
+    // One sign-in at a time: a second submit (the keyboard's Done pressed
+    // twice) would race two outcomes.
+    if (isLoading) return;
     await executeOperation(
       OperationConfig(
         operation: () =>
             _loginUseCase(LoginParams(email: email, password: password)),
-        onSuccess: (user) async {
-          DynamicLogger.log('Login successful for user: ${user?.name}');
-        },
+        onSuccess: _authStream.updateAuthStatus,
+        onFailure: (failure) => _failures.add(
+          mapAuthFailure(failure) == const AuthErrorState.invalidCredentials()
+              ? const SessionInvalidCredentialsFailure()
+              : SessionServerFailure(code: failure.code),
+        ),
         errorStateBuilder: mapAuthFailure,
       ),
     );
   }
+
+  // …
 }
 ```
 
-`AuthProvider` is `@lazySingleton` because it is a **global** controller: session state outlives any one screen. A screen-scoped controller is `@injectable` (step 9).
+`AuthProvider` is `@lazySingleton` because it is a **global** controller: session state outlives any one screen. A screen-scoped controller is `@injectable` (step 9). The three callbacks split the outcome: `onSuccess` hands the signed-in user to the session stream, `onFailure` publishes the failure on the shell's session channel, and `errorStateBuilder` classifies the error state the page reads. The `if (isLoading) return;` guard keeps a second submit from racing the first.
 
 ### Configure the operation
 
@@ -70,10 +77,20 @@ class OperationConfig<R, T> {
     this.errorStateBuilder,
   });
 
+  /// The operation function to execute (API call, database operation, etc.)
+  /// Now returns Result<R> directly instead of BaseResult<R>
   final FutureOr<Result<R>> Function() operation;
+
+  /// Optional callback when operation succeeds with data
   final FutureOr<void> Function(T? data)? onSuccess;
+
+  /// Optional callback when operation fails with system failure
   final FutureOr<void> Function(AppFailure<dynamic> failure)? onFailure;
+
+  /// Whether to show loading state (default: true)
   final bool showLoading;
+
+  /// Optional builder to map failure to ErrorState
   final ErrorState? Function(AppFailure<dynamic> failure)? errorStateBuilder;
 }
 ```
@@ -95,7 +112,7 @@ class OperationConfig<R, T> {
 Future<void> executeOperation<R>(
   OperationConfig<R, T> config, {
   T? Function(R? data)? convert,
-})
+}) async { … }
 ```
 
 ```dart
@@ -148,18 +165,22 @@ abstract class ViewState with _$ViewState {
   const factory ViewState.success() = _Success;
   const factory ViewState.error({ErrorState? error}) = _Error;
   const factory ViewState.loadingMore() = _LoadingMore;
+  // …
 }
 ```
 
 `ViewState` is the **state machine only — it carries no data**. The data lives on the wrapper:
 
 ```dart
-@Freezed(genericArgumentFactories: true)
+@freezed
 abstract class ViewStateModel<T> with _$ViewStateModel<T> {
   const ViewStateModel._();
   const factory ViewStateModel({
+    /// The current state of the view model.
     @Default(ViewState.initial()) ViewState state,
+    /// The data associated with the current state.
     T? data,
+    /// The optional message associated with the state.
     String? message,
   }) = _ViewStateModel<T>;
 }
@@ -178,27 +199,21 @@ import 'package:provider_state_management/provider_state_management.dart';
 
 part 'auth_error_state.freezed.dart';
 
-/// Why a sign-in failed, as far as this feature can tell.
-///
-/// Carries no text: `AppFailure.message` is an English diagnostic, and what
-/// the user reads comes from the ARBs — see `SessionFailure`, which the app
-/// shell turns into a translated toast.
+/// Why a sign-in failed, as far as the screen words it differently. Carries no
+/// text (RULE-34): the shell shows a translated toast for the session failure.
 @freezed
 abstract class AuthErrorState extends CustomErrorState with _$AuthErrorState {
   const AuthErrorState._();
 
   const factory AuthErrorState.invalidCredentials() = _InvalidCredentials;
 
-  const factory AuthErrorState.userNotFound() = _UserNotFound;
-
-  /// Anything else — offline, a timeout, a 5xx, a locked account (403).
-  /// [code] is the failure's `ErrorCodes` / HTTP status, which picks the
-  /// translated sentence.
+  /// Anything else — offline, a timeout, a 5xx, a locked account. [code] is the
+  /// failure's `ErrorCodes` / HTTP status.
   const factory AuthErrorState.failed({int? code}) = _Failed;
 }
 ```
 
-`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`: it turns an `AppFailure` into one of these, and its fallback `AuthErrorState.failed(code: failure.code)` carries the code on. An `errorStateBuilder` returns `null` for "no feature-specific error"; the state is then a plain `ViewState.error()`.
+`AuthProvider.mapAuthFailure` (`auth_provider.dart`) is the matching `errorStateBuilder`: it turns an `AppFailure` into one of these — a 401 is `invalidCredentials`, and its fallback `AuthErrorState.failed(code: failure.code)` carries the code on. A 403 is a locked account, not a wrong password, so it falls to `failed`. An `errorStateBuilder` returns `null` for "no feature-specific error"; the state is then a plain `ViewState.error()`.
 
 The error state carries no text: `AppFailure.message` is an English diagnostic and never reaches the screen (RULE-34). A screen words a failure from its code — see § 4 for the Provider branch, § 8 for BLoC.
 
@@ -291,11 +306,9 @@ ProviderStateListener<AuthProvider, UserEntity>(
     // the code the error state carries, through the global ARB.
     if (error is AuthErrorState) {
       AppOverlay.showToast(
-        content: error.maybeWhen(
+        content: error.when(
           invalidCredentials: () => context.l10n.invalidCredentials,
-          userNotFound: () => context.l10n.userNotFound,
           failed: (code) => context.l10n.failureMessage(code),
-          orElse: () => context.l10n.somethingWentWrong,
         ),
       );
     }
@@ -311,9 +324,9 @@ ProviderStateListener<AuthProvider, UserEntity>(
 )
 ```
 
-This is an illustrative listener, as a screen inside `feature_auth` would write it. It navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages. `context.l10n.failureMessage(code)` is `core_base_ui`'s mapping from a failure's code (an `ErrorCodes` value or an HTTP status) to a translated sentence, so every screen words the same fault the same way. It is an extension on `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` and `CONNECTION_ERROR` read as no connection, the two timeout codes as a timeout, the rest of the network range as a network error, an HTTP 5xx as the server being unavailable, and anything else — a `null` code included — as "something went wrong".
+This is an illustrative listener, as a screen inside `feature_auth` would write it; the real sign-in page (`login_page.dart`) uses the smaller form, because the shell already shows the failure: its `onError` only clears a rejected password and it passes no `listenWhen` (the default already lets every failed operation through). The example navigates through **navigator interfaces resolved with `getItOrNull`**, never through a hardcoded path ([`04_routing.md`](04_routing.md)). `AuthNavigator` / `HomeNavigator` come from the `auth_api` / `home_api` packages. `context.l10n.failureMessage(code)` is `core_base_ui`'s mapping from a failure's code (an `ErrorCodes` value or an HTTP status) to a translated sentence, so every screen words the same fault the same way. It is an extension on `AppLocalizations` (`platform/ui/design_system/lib/src/extensions/failure_message_extension.dart`): `ErrorCodes.NO_INTERNET` and `CONNECTION_ERROR` read as no connection, the two timeout codes as a timeout, the rest of the network range as a network error, an HTTP 5xx as the server being unavailable, and anything else — a `null` code included — as "something went wrong".
 
-The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator. `AuthProvider` publishes each failed sign-in as a `SessionFailure` — a `SessionServerFailure(code:)` for everything it cannot name — and the shell words it from the same `failureMessage(code)`. When a signed-in session is lost (`onSessionLost()`), it publishes `SessionExpiredFailure` instead, which the shell words with the global key `sessionExpired`.
+The app shell does the same job without this widget. [`navigator_wrapper_widget.dart`](../../../platform/shell/app_shell/lib/src/widgets/navigator_wrapper_widget.dart) may not import `AuthProvider`. It subscribes to `ISessionState.sessionChanges` / `sessionFailures` from `core_di` instead, and navigates to the paths of `ISignInLocation` / `IPostSignInLocation`. It uses no module navigator. `AuthProvider` publishes each failed sign-in as a `SessionFailure` — `SessionInvalidCredentialsFailure` for a 401, a `SessionServerFailure(code:)` for everything else — and the shell words it from the global `invalidCredentials` key or the same `failureMessage(code)`. When a signed-in session is lost (`onSessionLost()`), it publishes `SessionExpiredFailure` instead, which the shell words with the global key `sessionExpired`.
 
 `MultiProviderStateListener` nests several listeners without a pyramid of widgets.
 
@@ -322,11 +335,13 @@ The app shell does the same job without this widget. [`navigator_wrapper_widget.
 Override `initialize()` for setup that must finish first, then `await provider.ensureInitialized()`:
 
 ```dart
+/// Restores the stored session: no token, or a refused one, means signed out.
 @override
 Future<void> initialize() async {
   updateState(state: const ViewState.loading());
-  _authSubscription ??= listen(_syncAuthStream);
-  await _restoreSession();
+  final result = await _repository.refreshToken();
+  _setUser(result.dataOrNull);
+  _hasRestoredSession = true;
   await super.initialize();
 }
 ```
@@ -356,11 +371,8 @@ class HomeProfileBloc
   final ISessionStatusStream? _sessionStatusStream;
   StreamSubscription<SessionPrincipal?>? _subscription;
 
-  /// Subscribes to session changes once, then shows the current user.
-  ///
-  /// A broadcast stream does not replay, so a change made while nobody was
-  /// listening is only picked up by re-reading `currentUser` — which is what
-  /// `refreshed` is for.
+  /// Subscribes once, then shows the current user. A broadcast stream does not
+  /// replay, so `refreshed` re-reads `currentUser`.
   Future<void> _onLoad(
     HomeProfileEvent event,
     Emitter<BlocViewState<SessionPrincipal?>> emit,
@@ -562,7 +574,7 @@ class HomeRoute extends GoRouteDataCustom with $HomeRoute {
 > [!CAUTION]
 > **Do not double-wrap.** The route already provides the controller, so the page must **not** wrap itself in another `BlocProvider` / `ChangeNotifierProvider`. That creates a second instance: the page reads one while your events go to the other. The state silently never updates, and the first instance leaks.
 
-Global controllers such as `AuthProvider` are the exception. Routes do **not** wrap them: they are provided once near the app root (`AuthTreeWrapper`, an `IAppTreeWrapper`, mounts `AuthProvider`) and read with `Consumer<AuthProvider>` / `context.watch`.
+Global controllers such as `AuthProvider` are the exception. Routes do **not** wrap them: they are provided once near the app root (`AuthTreeWrapper`, an `IAppTreeWrapper`, mounts `AuthProvider`) and read with `context.read`, `Selector<AuthProvider, …>`, `Consumer<AuthProvider>` or `context.watch`.
 
 ---
 

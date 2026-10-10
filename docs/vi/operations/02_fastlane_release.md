@@ -297,6 +297,7 @@ create("staging") {
     dimension = "environment"
     applicationIdSuffix = ".stg"
     signingConfig = signingConfigs.getByName("staging")
+    // …
 }
 ```
 
@@ -375,11 +376,12 @@ Sau đó nó chạy `install_dependencies`, thêm `fvm ` trước `dart` / `flut
 sh "#{dart_cmd} pub global activate flutterfire_cli"
 sh "#{dart_cmd} pub global activate flutter_gen"
 sh "#{flutter_cmd} clean"
+# Lock files are not committed; versions come from pubspec_dependencies.yaml.
 sh "#{flutter_cmd} pub get"
 # ...rồi flutter gen-l10n cho mọi l10n.yaml trong cây thư mục
 sh "#{dart_cmd} run build_runner build --workspace"
 # ...rồi, với mỗi package có lib/ (bỏ qua app), chạy từ gốc workspace:
-sh "#{dart_cmd} tools/barrel_generator/generate.dart <package>/lib"
+sh "#{dart_cmd} tools/barrel_generator/generate.dart #{lib_dir.shellescape}"
 ```
 
 File lock không được commit, nên đây chỉ là `pub get` thường: version đến từ catalog `pubspec_dependencies.yaml` (RULE-74) và version Flutter từ `.fvmrc`.

@@ -14,7 +14,7 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Thành phần | Hậu tố file | Hậu tố class | Ví dụ thật |
 |---|---|---|---|
 | Màn hình | `_page.dart` / `_screen.dart` | `Page` / `Screen` | `modules/auth/feature/lib/src/pages/login_page.dart` |
-| Widget con | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `modules/auth/feature/lib/src/widgets/auth_header_widget.dart` |
+| Widget con | `_widget.dart` / `_card.dart` | `Widget` / `Card` | `platform/ui/ui_kit/lib/src/feedback/loading_widget.dart` |
 | Controller (Provider) | `_provider.dart` | `Provider` | `modules/auth/feature/lib/src/provider/auth_provider.dart` |
 | Controller (BLoC) | `_bloc.dart` | `Bloc` | `modules/home/feature/lib/src/bloc/home_profile_bloc.dart` |
 | Controller (Cubit) | `_cubit.dart` | `Cubit` | *chỉ khi không cần event* |
@@ -43,12 +43,12 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 | Dialog | `_dialog.dart` | `Dialog` | `platform/ui/ui_kit/lib/src/dialogs/retry_dialog.dart` |
 | Bottom sheet | `_bottom_sheet.dart` | `BottomSheet` | *chưa có ví dụ* |
 | Định nghĩa route (`GoRouteData`) | `_route_module.dart` | `Route` | `modules/home/feature/lib/src/routing/home_route_module.dart` (khai `HomeRoute`) |
-| Đóng góp route stack (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` |
+| Đóng góp route stack (`IFeatureRouteModule`) | `_feature_route_module.dart` | `FeatureRouteModule` | `modules/auth/feature/lib/src/routing/auth_feature_route_module.dart` (feature chỉ có một route có thể để nó trong `_route_module.dart` của mình, như `modules/onboarding/feature/lib/src/routing/onboarding_route_module.dart`) |
 | Điểm đến điều hướng (`INavDestinationModule`) | `_nav_destination.dart` | `NavDestination` | `modules/home/feature/lib/src/routing/home_nav_destination.dart` |
 | Route path | `<feature>_path.dart` | `Path` | `modules/home/feature/lib/src/utils/home_path.dart` |
-| Storage key | `<owner>_storage_keys.dart` | `StorageKeys` | `modules/auth/data/lib/src/utils/auth_storage_keys.dart` |
-| API endpoint | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_api_constants.dart` |
-| Hằng số UI | `<owner>_ui_constants.dart` | `UiConstants` | `modules/auth/feature/lib/src/utils/auth_ui_constants.dart` |
+| Storage key | `<owner>_storage_keys.dart` | `StorageKeys` | `platform/shell/adapters/lib/src/utils/theme_storage_keys.dart` |
+| API endpoint | `<owner>_api_constants.dart` | `ApiConstants` | `modules/auth/data/lib/src/utils/auth_constants.dart` (chứa `AuthApiConstants` và `AuthStorageKeys` — package nhỏ có thể gộp cả hai vào một `<owner>_constants.dart`) |
+| Hằng số UI | `<owner>_ui_constants.dart` | `UiConstants` | `platform/ui/ui_kit/lib/src/utils/shared_ui_constants.dart` |
 | Database Drift | `_database.dart` (trong `database/`) | `Database` | `modules/cache/data/lib/src/database/cache_database.dart` |
 | Bảng Drift | `_table.dart` (trong `database/tables/`) | danh từ số nhiều, không hậu tố | `modules/cache/data/lib/src/database/tables/cache_entries_table.dart` (khai `CacheEntries`) |
 | DAO Drift | `_dao.dart` (trong `database/dao/`) | `Dao` | `modules/cache/data/lib/src/database/dao/cache_entries_dao.dart` |
@@ -75,7 +75,6 @@ Mọi ví dụ dưới đây đều là đường dẫn có thật trong repo �
 // modules/home/feature/lib/src/utils/home_path.dart
 class HomePath {
   HomePath._();
-
   static const String HOME = '/home';
 }
 ```

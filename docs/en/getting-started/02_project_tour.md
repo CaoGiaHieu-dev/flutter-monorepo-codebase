@@ -108,8 +108,8 @@ Infrastructure shared by all layers. **Core must never depend on a feature or on
 | Package | Path | Owns |
 | :--- | :--- | :--- |
 | `domain_core` | `platform/layers/domain` | `Result<T>`, `BaseEntity<T>`, `PaginatedEntity<T>`, `BaseUseCase`, `NoParams`, `AppFailure` |
-| `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` |
-| `domain_auth` | `modules/auth/domain` | `UserEntity`, `UserRole`, `LoginParams`, `IAuthRepository`, `LoginUseCase` / `LogoutUseCase` / `RestoreSessionUseCase` |
+| `domain_cache` | `modules/cache/domain` | `CacheEntryEntity`, `ICacheEntryRepository` |
+| `domain_auth` | `modules/auth/domain` | `UserEntity`, `LoginParams`, `IAuthRepository`, `LoginUseCase` |
 
 ### Data — `modules/*/data`
 
@@ -119,7 +119,7 @@ Implements the domain contracts. Data sources return **Models**, never entities,
 | :--- | :--- | :--- |
 | `data_core` | `platform/layers/data` | `BaseRepository` (`execute()` / `executeSync()`), `BaseModel`, `BaseRequest` |
 | `data_cache` | `modules/cache/data` | `CacheDatabase` + `CacheEntries` table + `CacheEntriesDao`, `CacheEntryModel`, `CacheEntryLocalDataSource`, `CacheEntryRepositoryImpl`, `CacheConstants` |
-| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns `token` / `auth_user`), `AuthRepositoryImpl`, `AuthSessionGatewayImpl`, `AuthStorageKeys`, `AuthApiConstants` |
+| `data_auth` | `modules/auth/data` | `UserModel`, `AuthRemoteDataSource` (Retrofit), `AuthLocalDataSource` (owns the `token` key), `AuthRepositoryImpl`, `AuthSessionGatewayImpl`, `AuthStorageKeys`, `AuthApiConstants` |
 
 ### Features — `modules/*/feature`
 
@@ -131,7 +131,7 @@ One bounded UI concern per package. A feature may depend on `domain_*`, `core_di
 | `feature_home` | `modules/home/feature` | Home tab, `HomeProfileBloc` (BLoC branch), `HomeNavDestination`, `HomeNavigatorImpl` (implementing `home_api`), `HomePostSignInLocation` |
 | `feature_settings` | `modules/settings/feature` | Settings tab, `SettingsNavDestination` |
 | `feature_onboarding` | `modules/onboarding/feature` | Onboarding flow, `IAppEntryLocation` implementation |
-| `feature_dashboard` | `modules/dashboard/feature` | **Shell chrome only** — the `Scaffold` + primary navigation: a bottom bar on a `compact` window, a `NavigationRail` from `medium` up (extended from `large`). Builds destinations from `getAllOrEmpty<INavDestinationModule>()`; owns no tab page. |
+| `feature_dashboard` | `modules/dashboard/feature` | **Shell chrome only** — the `Scaffold` + primary navigation: a bottom bar on a `compact` window, a `NavigationRail` from `medium` up (extended from `large`). Renders the destinations the shell's router hands to `IDashboardRouteModule.builder` (it collects them with `getAllOrEmpty<INavDestinationModule>()`); owns no tab page. |
 | `feature_splash` | `modules/splash/feature` | `SplashPage` and `SplashScreenImpl` (`IAppSplashScreen`), shown by `MainScope` before the router exists |
 
 > [!NOTE]

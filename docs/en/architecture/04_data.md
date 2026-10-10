@@ -83,9 +83,11 @@ Future<Result<T>> execute<R, T>(
       return _toResult<R, T>(response, mapper);
     }
     await onFailure?.call(response);
+    // The server answered; the success condition rejected what it said.
+    // Coded apart from HTTP 5xx so a caller can tell this verdict from a
+    // transient fault: a code-500 server failure would be read by the auth
+    // gateway as "server down, keep the session".
     return Failure(
-      // Coded ErrorCodes.RESPONSE_REJECTED — never a 5xx — with the envelope's
-      // message when a BaseEntity reports an error.
       ErrorHandler.responseRejectedFailure(
         response is BaseEntity && response.hasError ? response.message : null,
       ),
@@ -129,7 +131,7 @@ Both wrappers funnel every throw into `ErrorHandler.handleError(e)` from `platfo
 > );
 > ```
 >
-> Every one of them is the same failure, so any UI that maps failures by code — such as `AuthProvider.mapAuthFailure`, which matches an `AuthFailure` with `401` and a `ServerFailure` with `404` — can never match. The fallback also calls `ErrorHandler.onUnclassifiedError`, which the app shell points at the optional `IErrorReporter` as a non-fatal error (RULE-67), so at least the gap is reported.
+> Every one of them is the same failure, so any UI that maps failures by code — such as `AuthProvider.mapAuthFailure`, which matches an `AuthFailure` with `401` — can never match. The fallback also calls `ErrorHandler.onUnclassifiedError`, which the app shell points at the optional `IErrorReporter` as a non-fatal error (RULE-67), so at least the gap is reported.
 >
 > If you add a Firebase-backed repository, implement `ErrorClassifier` for its exception types and hand it to `ErrorHandler.registerClassifier` first (RULE-43). `DioFailureClassifier` in `platform/infra/network/lib/src/error/dio_failure_classifier.dart` is the model.
 
@@ -144,6 +146,7 @@ A Model is the Data layer's own representation. It never escapes into Domain —
 ```dart
 // platform/layers/data/lib/src/models/base_model.dart
 abstract class BaseModel<E> {
+  /// The domain entity this model represents.
   E toEntity();
 }
 ```
@@ -158,33 +161,21 @@ abstract class UserModel with _$UserModel implements BaseModel<UserEntity> {
   const UserModel._();
 
   const factory UserModel({
-    @JsonKey(name: 'id') required String id,
-    @JsonKey(name: 'email') String? email,
-    @JsonKey(name: 'name') String? name,
-    @JsonKey(name: 'role') String? role, // the backend's spelling
-    @JsonKey(name: 'token') String? token, // a credential: never reaches the entity
+    required String id,
+    String? email,
+    String? name,
+    String? token,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
 
   @override
-  UserEntity toEntity() {
-    return UserEntity(
-      id: id,
-      email: email,
-      name: name,
-      role: role == null ? null : _roleFromName(role!),
-    );
-  }
-
-  factory UserModel.fromEntity(UserEntity entity) { /* … */ }
+  UserEntity toEntity() => UserEntity(id: id, email: email, name: name);
 }
 ```
 
-The role stays a `String` on the wire and is mapped in `toEntity()`: the spelling is the transport's concern, so `domain_auth`'s `UserRole` carries no JSON annotation, and a role the backend adds later maps to `UserRole.unknown` instead of throwing.
-
-`fromEntity` is the reverse trip, for writing an entity back to the API or a cache. Nothing in the sample writes back, so today only `modules/auth/data/test/user_model_test.dart` exercises it.
+`token` is the session credential: the model carries it from the wire to `AuthRepositoryImpl`, which hands it to the local data source, and `toEntity()` leaves it out, so it never travels upward. The field names equal the JSON keys, so the sample needs no `@JsonKey`; add `@JsonKey(name: '…')` to a field when the backend spells it differently from the Dart name. Nothing in the sample writes an entity back to the API, so the model has no reverse mapping — write one when a flow needs it.
 
 ### A database Model
 
@@ -203,9 +194,12 @@ abstract class CacheEntryModel
     required DateTime updatedAt,
   }) = _CacheEntryModel;
 
-  /// Maps a Drift row into the data-layer model.
   factory CacheEntryModel.fromRow(CacheEntry row) {
-    return CacheEntryModel(key: row.key, value: row.value, updatedAt: row.updatedAt);
+    return CacheEntryModel(
+      key: row.key,
+      value: row.value,
+      updatedAt: row.updatedAt,
+    );
   }
 
   @override
@@ -234,11 +228,8 @@ Registry: RULE-41.
 This is the rule that `CacheEntryModel` exists to satisfy. `modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart`:
 
 ```dart
-/// Contract for reading/writing cache rows.
-///
 /// Signatures speak in [CacheEntryModel], never in Drift's generated row
-/// class — that keeps Drift an implementation detail of `data_cache` instead
-/// of leaking it to every consumer of this package.
+/// class, so Drift stays an implementation detail of `data_cache`.
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
 
@@ -281,14 +272,14 @@ Registry: RULE-44.
 
 `core_storage` provides only the mechanism. Each consumer declares its own `StorageValue`s and keeps its keys in its own `utils/`.
 
-`modules/auth/data/lib/src/utils/auth_storage_keys.dart`:
+`modules/auth/data/lib/src/utils/auth_constants.dart`:
 
 ```dart
+/// Physical storage keys owned by `data_auth` — no other package reads them.
 class AuthStorageKeys {
   AuthStorageKeys._();
 
   static const String TOKEN = 'token';
-  static const String AUTH_USER = 'auth_user';
 }
 ```
 
@@ -306,17 +297,10 @@ class AuthLocalDataSource {
     AuthStorageKeys.TOKEN,
   );
 
-  late final _authUser = StorageValue<Map<String, dynamic>>(
-    _storageManager.getStorage(StorageType.secure),
-    AuthStorageKeys.AUTH_USER,
-  );
-
-  /// Hydrates the in-memory cache from disk at startup so synchronous
-  /// getters below return correct values immediately.
+  /// Hydrates the cache from disk at startup, so [getUserToken] is correct from
+  /// the first read.
   @PostConstruct(preResolve: true)
-  Future<void> initialize() async {
-    await Future.wait([_token.readFromStorage(), _authUser.readFromStorage()]);
-  }
+  Future<void> initialize() => _token.readFromStorage();
   // …
 }
 ```
@@ -326,13 +310,13 @@ class AuthLocalDataSource {
 >
 > `StorageValue` keeps an in-memory cache that `initialize()` fills from disk once at boot. A factory registration builds a **new, empty** instance on every injection, so `getUserToken()` would return `null` even though the token is on disk. The pairing is: singleton registration **+** `@PostConstruct(preResolve: true)`.
 
-REST endpoints follow the same ownership rule — `modules/auth/data/lib/src/utils/auth_api_constants.dart` holds `AuthApiConstants`, because those endpoints belong to auth and to nothing else.
+REST endpoints follow the same ownership rule — the same file, `auth_constants.dart`, holds `AuthApiConstants` next to `AuthStorageKeys` (a package this small keeps both in one `<owner>_constants.dart`, RULE-09), because those endpoints belong to auth and to nothing else.
 
 ---
 
 ## 6. `data_auth` — read this before copying it
 
-`AuthRepositoryImpl` is the most-copied file in the template, so it is written the way this document describes the layer: a Retrofit data source for the network, a `StorageValue` data source for the session, `execute()` around both, and a model-to-entity mapping at the boundary. Besides `login` and `logout` it implements `refreshToken` and `restoreSession`; when a renewal never reached the server, `restoreSession` falls back to the user stored at the last sign-in, so an offline start stays signed in.
+`AuthRepositoryImpl` is the most-copied file in the template, so it is written the way this document describes the layer: a Retrofit data source for the network, a `StorageValue` data source for the session, `execute()` around both, and a model-to-entity mapping at the boundary. Besides `login` and `logout` it implements `refreshToken`, which the app calls at start to restore a stored session. There is no offline fallback: an app started with no network shows the login screen, and the token stays stored for the next start that can reach the server.
 
 ```dart
 @LazySingleton(as: IAuthRepository)
@@ -348,6 +332,9 @@ The Retrofit client is built once in [`modules/auth/data/lib/di/module.dart`](..
 ```dart
 @module
 abstract class AuthDataDiModule {
+  /// Builds the Retrofit client from the shared [Dio] that `core_network`
+  /// registers, so the data source inherits its interceptor chain. Built here,
+  /// not inside the repository, so a test can pass a fake in.
   @lazySingleton
   AuthRemoteDataSource authRemoteDataSource(Dio dio) =>
       AuthRemoteDataSource(dio);
@@ -368,23 +355,23 @@ Future<Result<UserEntity>> _authenticate(
   Future<BaseEntity<UserModel>> Function() request, {
   bool requiresToken = false,
 }) {
-  bool hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
-
   return execute<BaseEntity<UserModel>, UserEntity>(
     request,
     successCondition: (response) {
       final user = response.data;
-      if (!response.isSuccess || user == null) return false;
-      return !requiresToken || hasToken(user);
+      return response.isSuccess &&
+          user != null &&
+          (!requiresToken || _hasToken(user));
     },
     onSuccess: (response) async {
       final user = response.data!;
-      if (hasToken(user)) await _local.saveUserToken(user.token);
-      await _local.saveUserData(user);
+      if (_hasToken(user)) await _local.saveUserToken(user.token!);
     },
     mapper: (response) => response.data!.toEntity(),
   );
 }
+
+static bool _hasToken(UserModel user) => user.token?.isNotEmpty ?? false;
 ```
 
 Three details carry the weight:
@@ -393,9 +380,9 @@ Three details carry the weight:
 |:---|:---|
 | `successCondition` | Without it, `execute` treats **any** response that did not throw as a success. An API that reports failure inside a 200 body would log the user in. A rejected response fails with `ServerFailure(code: ErrorCodes.RESPONSE_REJECTED)` — not `500` — so the session gateway treats it as the server's refusal, not an outage |
 | `onSuccess` saves the token | `NetworkConfig.getToken()` reads it back through `ISessionGateway`, which `data_auth` implements over `AuthLocalDataSource`. Skip this and no `Authorization` header is ever sent, and the 401 refresh flow in `core_network` can never trigger. A sign-in answer without a token is a failure (`requiresToken`) and stores nothing; a renewal without one keeps the stored token, because saving `null` would delete it |
-| `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward — there is a test asserting exactly that |
+| `token` lives on `UserModel`, not `UserEntity` | A credential is something the transport hands back, not part of who the user is. It is read once here and never travels upward: `UserEntity` has no token field, and `auth_data_test.dart` checks that a sign-in stores the token while the entity comes back without it |
 
-`logout` is `execute<void, void>(_local.clearAllAuthData)`: clearing storage is asynchronous, so the failure of a write reaches the caller as a `Result` instead of being lost.
+`logout` is `execute<void, void>(_local.clearUserToken)`: clearing storage is asynchronous, so the failure of a write reaches the caller as a `Result` instead of being lost.
 
 This is what closes the loop with `core_network`'s 401 refresh interceptor. See [the networking guide](../guides/08_networking.md).
 

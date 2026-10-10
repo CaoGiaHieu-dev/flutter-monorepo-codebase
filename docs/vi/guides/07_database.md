@@ -11,9 +11,9 @@ Bạn cho một package database quan hệ của riêng nó: bảng, DAO, một 
 - **Vì sao không có `AppDatabase` dùng chung**, `core_database` export những gì, runner migration replay thế nào, các `PRAGMA` nó áp dụng và file hỏng được cách ly ra sao — [`../architecture/02_core.md` § 8](../architecture/02_core.md#8-core_database--lưu-trữ-quan-hệ-drift--sqlite). Các luật: RULE-46, RULE-47.
 
 > [!NOTE]
-> Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` → `GetCacheEntryUseCase` / `SaveCacheEntryUseCase` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire trọn vẹn, nhưng **không feature nào trong template này tiêu thụ nó**. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
+> Chuỗi — `CacheEntries` → `CacheEntriesDao` → `CacheEntryLocalDataSource` → `CacheEntryRepositoryImpl` → `ICacheEntryRepository` — chính là module `cache` (`modules/cache/domain` + `modules/cache/data`), được wire tới tận hợp đồng repository, nhưng **không feature và không use case nào trong template này tiêu thụ nó**: `domain_cache` chỉ là một entity và một repository interface, không hơn. Nó tồn tại như một tham chiếu chạy được cho hình dạng ở trên, và là fixture để các test database chạy trên đó.
 >
-> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Các test database đi theo nó; chúng kiểm tra `DatabaseHandle` và `driftMigrationStrategy` của `core_database` qua fixture này, nên muốn giữ phần kiểm tra đó thì hãy cho chúng một fixture khác trước khi xoá.
+> Đây là một module gỡ được như mọi module khác: `apps/mobile` ghép nó, `apps/admin` thì không — nên chỉ mobile mở file SQLite lúc boot. Hãy copy hình dạng này cho bảng thật, hoặc gỡ nó bằng `dart tools/sample_cleanup/remove_sample.dart cache --apply` (thiếu `--apply` thì chỉ xem trước). Hai test database đi theo nó, và test repository là test duy nhất chạy `DatabaseHandle` của `core_database` — nên muốn giữ phần kiểm tra đó thì hãy cho nó một fixture khác trước khi xoá.
 
 ---
 
@@ -62,17 +62,12 @@ Class kế thừa `Table` là độc lập: nó không tham chiếu database nà
 // modules/cache/data/lib/src/database/tables/cache_entries_table.dart
 import 'package:drift/drift.dart';
 
-/// Example table — stores arbitrary string payloads keyed by a unique id.
-///
-/// Use this as a template when adding feature-specific tables.
+/// Example table — string payloads keyed by a unique id.
 class CacheEntries extends Table {
-  /// Unique cache key (e.g. `home_feed`, `user_profile_draft`).
   TextColumn get key => text()();
 
-  /// Serialized payload (JSON string, plain text, etc.).
   TextColumn get value => text()();
 
-  /// Last write timestamp for TTL / eviction policies.
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -103,13 +98,7 @@ class CacheEntriesDao extends DatabaseAccessor<CacheDatabase>
     );
   }
 
-  /// Reads the payload for [key], or `null` when missing.
-  Future<String?> getValue(String key) async {
-    final row = await getEntry(key);
-    return row?.value;
-  }
-
-  /// Reads the full row for [key], or `null` when missing.
+  /// Reads the row for [key], or `null` when missing.
   Future<CacheEntry?> getEntry(String key) {
     return (select(
       cacheEntries,
@@ -130,12 +119,8 @@ Theo luật chung của repo, constants nằm ở `utils/` của package sở h�
 class CacheConstants {
   CacheConstants._();
 
-  /// On-disk SQLite file for this package's [CacheDatabase], resolved inside
-  /// the app documents directory.
-  ///
-  /// Named after its owner rather than the app, because each package that
-  /// persists data opens its own file. Changing this value points the package
-  /// at a different database and makes existing on-device rows unreachable.
+  /// SQLite file of this package's [CacheDatabase], named after its owner:
+  /// each package that persists data opens its own file.
   static const String DATABASE_FILE_NAME = 'cache.sqlite';
 }
 ```
@@ -158,50 +143,44 @@ import 'tables/cache_entries_table.dart';
 part 'cache_database.g.dart';
 part 'dao/cache_entries_dao.dart';
 
+/// SAMPLE — the database owned by `data_cache`, holding only its own tables.
+///
+/// Drift binds tables at compile time and a DAO must be a `part of` its
+/// database, so each package that persists data declares its own database
+/// next to its tables, DAO and data source; deleting the package deletes the
+/// database with it. `core_database` supplies only the mechanism
+/// ([DriftDatabaseOpener], [driftMigrationStrategy], [IDatabaseMigration],
+/// [IDatabaseHandle]).
 @DriftDatabase(tables: [CacheEntries], daos: [CacheEntriesDao])
 class CacheDatabase extends _$CacheDatabase {
-  CacheDatabase._(
-    super.e,
-    Iterable<IDatabaseMigration> migrations, [
-    this.schemaVersion = _currentSchemaVersion,
-  ]) : _migrations = migrations;
+  CacheDatabase._(super.e, this._migrations, [this.schemaVersion = 1]);
 
-  /// The schema version this build ships. Bump it together with a new
-  /// [IDatabaseMigration]; see [migration].
-  static const int _currentSchemaVersion = 1;
-
-  /// Schema steps contributed for this database.
-  ///
-  /// Passed in rather than looked up here so the database stays testable and
-  /// free of service-locator calls; the DI module does the collection.
+  /// Schema steps contributed for this database, collected by the DI module.
   final Iterable<IDatabaseMigration> _migrations;
 
-  /// Opens the cache database on a background isolate.
-  ///
-  /// Corruption recovery and connection verification are handled by
-  /// [DriftDatabaseOpener]; see its documentation for exactly when a damaged file
-  /// is quarantined rather than deleted.
+  /// Bump it together with a new [IDatabaseMigration] whose `version` is the
+  /// new number; nothing else in this file changes.
+  @override
+  final int schemaVersion;
+
+  /// Opens the database on a background isolate, with corruption recovery
+  /// ([DriftDatabaseOpener]).
   static Future<CacheDatabase> open({
-    String fileName = CacheConstants.DATABASE_FILE_NAME,
-    int readPool = DatabaseConstants.DEFAULT_READ_POOL,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
   }) {
     return DriftDatabaseOpener.open(
       (executor) => CacheDatabase._(executor, migrations),
-      fileName: fileName,
-      readPool: readPool,
+      fileName: CacheConstants.DATABASE_FILE_NAME,
     );
   }
 
-  /// In-memory database for unit tests (runs on the current isolate).
-  ///
-  /// [schemaVersion] lets an upgrade test reopen a hand-written old file as a
-  /// newer build would, so the contributed [migrations] actually run.
+  /// In-memory database for tests. [executor] and [schemaVersion] let an
+  /// upgrade test reopen a hand-written old file so the [migrations] run.
   @visibleForTesting
   factory CacheDatabase.forTesting([
     QueryExecutor? executor,
     Iterable<IDatabaseMigration> migrations = const <IDatabaseMigration>[],
-    int schemaVersion = _currentSchemaVersion,
+    int schemaVersion = 1,
   ]) {
     return CacheDatabase._(
       executor ?? NativeDatabase.memory(),
@@ -209,9 +188,6 @@ class CacheDatabase extends _$CacheDatabase {
       schemaVersion,
     );
   }
-
-  @override
-  final int schemaVersion;
 
   @override
   MigrationStrategy get migration =>
@@ -232,16 +208,21 @@ Hai điểm cần copy nguyên xi:
 // modules/cache/data/lib/di/module.dart
 @module
 abstract class DataCacheDiModule {
+  /// Opens [CacheDatabase] while the module initialises, which runs the
+  /// collected migrations — so every step must be registered by then.
+  /// `@Order(1)` makes a step declared in this package (default order 0)
+  /// register before the open; a step from another package needs an earlier
+  /// DI group. The collection is typed to [CacheDatabase], so another
+  /// package's steps never reach it.
   @Order(1)
   @preResolve
   @lazySingleton
   Future<CacheDatabase> cacheDatabase() => CacheDatabase.open(
-    // Typed to [CacheDatabase]: a step another package registers for its
-    // own database is a different GetIt type and never reaches this one.
     migrations: getAllOrEmpty<IDatabaseMigration<CacheDatabase>>(),
   );
 
-  /// Narrow accessor handle for this package's data sources.
+  /// Data sources take this handle instead of [CacheDatabase], so each gets
+  /// only the DAO it asks for.
   @lazySingleton
   IDatabaseHandle<CacheDatabase> cacheDatabaseHandle(CacheDatabase database) =>
       DatabaseHandle<CacheDatabase>(database);
@@ -263,6 +244,8 @@ abstract class DataCacheDiModule {
 
 ```dart
 // modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
+/// SAMPLE — takes [IDatabaseHandle] rather than [CacheDatabase] (only the one
+/// DAO it asks for) and converts Drift rows to models here.
 @LazySingleton(as: ICacheEntryLocalDataSource)
 class CacheEntryLocalDataSource implements ICacheEntryLocalDataSource {
   CacheEntryLocalDataSource(IDatabaseHandle<CacheDatabase> handle)
@@ -299,6 +282,8 @@ await _handle.transaction(() async {
 
 ```dart
 // modules/cache/data/lib/src/data_sources/local/cache_entry_local_data_source.dart
+/// Signatures speak in [CacheEntryModel], never in Drift's generated row
+/// class, so Drift stays an implementation detail of `data_cache`.
 abstract class ICacheEntryLocalDataSource {
   Future<void> save(String key, String value);
 
@@ -310,6 +295,9 @@ abstract class ICacheEntryLocalDataSource {
 
 ```dart
 // modules/cache/data/lib/src/models/cache_entry_model.dart
+/// Data-layer form of a `cache_entries` row. The generated Drift [CacheEntry]
+/// is converted here, at the boundary, so Drift never leaks past `data_cache`.
+/// Not `json_serializable`: rows come from SQLite, not an API payload.
 @freezed
 abstract class CacheEntryModel
     with _$CacheEntryModel
@@ -322,7 +310,6 @@ abstract class CacheEntryModel
     required DateTime updatedAt,
   }) = _CacheEntryModel;
 
-  /// Maps a Drift row into the data-layer model.
   factory CacheEntryModel.fromRow(CacheEntry row) {
     return CacheEntryModel(
       key: row.key,
@@ -357,6 +344,9 @@ Bạn không bao giờ sửa file database của package khác để đổi sche
 // platform/infra/database/lib/src/migration/i_database_migration.dart
 abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
   /// Schema version produced by [upgrade]; must be `>= 2` and unique.
+  ///
+  /// Version 1 is the initial schema created by `Migrator.createAll()`, so
+  /// there is nothing to migrate *to* it.
   int get version;
 
   /// Moves the schema from `version - 1` to [version].
@@ -364,6 +354,12 @@ abstract class IDatabaseMigration<TDb extends GeneratedDatabase> {
 
   /// Reverses [upgrade], moving the schema from [version] back to
   /// `version - 1`.
+  ///
+  /// Drift has no dedicated downgrade callback — it routes both directions
+  /// through `onUpgrade` — so this is invoked when a user installs an older
+  /// build over a newer one. Implement it whenever the change is reversible;
+  /// throw a descriptive error when it is not, so the failure is explicit
+  /// instead of leaving a schema that no longer matches the running code.
   Future<void> downgrade(Migrator m);
 }
 ```
@@ -377,10 +373,10 @@ Một thay đổi schema là **ba chỗ sửa đi cùng nhau** — thiếu một
    DateTimeColumn get expiresAt => dateTime().nullable()();
    ```
 
-2. **Tăng số phiên bản schema** trong class database (`_currentSchemaVersion` trong sample, `1` → `2`; đó là giá trị `schemaVersion` trả về). Nó phải bằng `version` cao nhất trong các bước của bạn: Drift chỉ gọi `onUpgrade` khi `user_version` đang lưu nhỏ hơn `schemaVersion`, nên không tăng thì không bước nào chạy trên máy đã cài, và các query hỏng với *"no such column"*.
+2. **Tăng số phiên bản schema** trong class database (constructor private của sample đặt mặc định cho nó, `[this.schemaVersion = 1]` → `2`; đó là giá trị `schemaVersion` trả về). Nó phải bằng `version` cao nhất trong các bước của bạn: Drift chỉ gọi `onUpgrade` khi `user_version` đang lưu nhỏ hơn `schemaVersion`, nên không tăng thì không bước nào chạy trên máy đã cài, và các query hỏng với *"no such column"*. `forTesting` thì nhận số phiên bản làm tham số — test nâng cấp truyền `2` cùng với file cũ viết tay của nó.
 
    ```dart
-   static const int _currentSchemaVersion = 2;
+   CacheDatabase._(super.e, this._migrations, [this.schemaVersion = 2]);
    ```
 
 3. **Đăng ký bước migration** — bên dưới. Rồi chạy `dart run build_runner build --workspace` (class bảng được sinh có thêm cột).
@@ -414,6 +410,7 @@ class AddExpiresAtToCacheEntries
 
 - **`version` là version mà bước này *tạo ra*.** `version == 2` nghĩa là "lấy database ở version 1 và đưa nó lên version 2". Do đó `upgrade` phải chạy được trên `version - 1`, và `downgrade` phải đưa nó về đúng hình dạng đó.
 - **Version 1 không migrate được** — đó là thứ `Migrator.createAll()` tạo ra. Runner từ chối `version < 2` ngay lúc khởi tạo.
+- **Version trùng bị từ chối**, không âm thầm chọn một trong số chúng.
 - **Cả lần upgrade là một transaction.** `driftMigrationStrategy` chạy mọi bước bên trong `database.transaction`, nên một bước ném lỗi sẽ rollback cả các bước trước đó: file giữ nguyên version và schema cũ, và lần khởi động sau thử lại upgrade từ đầu. Hãy viết bước nào cũng chạy lại an toàn từ schema cũ, và đừng bao giờ dựa vào trạng thái áp dụng dở dang.
 
 ## 12. Test database
@@ -431,13 +428,13 @@ Bộ test hiện có được chia theo đúng vị trí code:
 | `core_database` | `migration_test.dart` | Kiểm tra runner (version < 2, trùng version, sắp xếp), replay khi nhảy version, downgrade giảm dần, khoảng trống, downgrade không đảo ngược được, downgrade không có bước tương ứng bị từ chối (và version đã lưu được giữ nguyên, trên file thật), registry rỗng, và upgrade trên file thật: mọi bước được replay và giữ nguyên các row, một bước lỗi làm các bước trước đó bị rollback |
 | `core_database` | `drift_database_opener_test.dart` | Trực tiếp predicate phát hiện hỏng — gồm cả trường hợp marker môi trường phủ quyết marker hỏng file |
 | `core_database` | `database_connection_factory_test.dart` | Các kết nối trong read pool mang busy timeout, thứ mà `beforeOpen` chỉ đặt cho writer |
-| `data_cache` | `cache_database_test.dart` | Round-trip DAO, wiring migration, và hành vi trên **file thật** (WAL, khoá ngoại, dữ liệu sống sót qua close/reopen, file version cũ nâng cấp qua bước của nó và giữ nguyên row, một bước lỗi để file cũ nguyên trạng) |
-| `data_cache` | `database_handle_test.dart` | Accessor đọc/ghi, các row hiện ra trên chính database, transaction commit / rollback / giá trị trả về |
+| `data_cache` | `cache_database_test.dart` | Một lần nâng cấp trên **file thật**: một file version cũ viết tay (`user_version = 1`) mở lại như version 2 chạy lại bước của nó và giữ nguyên row |
+| `data_cache` | `cache_entry_repository_test.dart` | Repository trên một database in-memory thật (`DatabaseHandle` → DAO → model → entity): giá trị đã lưu quay về thành entity và key không có thành `null`; một data source ném lỗi trở thành `Failure`, không bao giờ là exception |
 
 Hai thói quen đáng học:
 
 - **Test trực tiếp predicate phát hiện hỏng.** Nó quyết định database của người dùng có bị dời đi hay không — kiểm chứng gián tiếp qua một file hỏng thật là chưa đủ.
-- **Test pragma trên file thật.** Database in-memory báo `journal_mode = memory`, nên không thể chứng minh WAL đang bật.
+- **Test pragma trên file thật.** Database in-memory báo `journal_mode = memory`, nên không thể chứng minh WAL đang bật. Test của chính template không còn kiểm các pragma (`foreign_keys`, `journal_mode`): hãy thêm test đó nếu package của bạn dựa vào chúng.
 
 ---
 
@@ -446,7 +443,7 @@ Hai thói quen đáng học:
 ```bash
 dart run build_runner build --workspace   # <name>_database.g.dart, mixin của DAO, module.module.dart
 flutter analyze                           # No issues found!
-cd modules/cache/data && flutter test     # test tham chiếu: DAO, migration, WAL trên file thật
+cd modules/cache/data && flutter test     # test tham chiếu: nâng cấp file cũ và round-trip repository
 cd platform/infra/database && flutter test
 cd apps/mobile && flutter test test/di_smoke_test.dart   # lệnh mở @preResolve thành công trong graph thật
 ```

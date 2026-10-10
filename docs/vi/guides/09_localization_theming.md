@@ -21,7 +21,7 @@ Chuỗi nằm ở đâu (RULE-34, RULE-37):
 - Chuỗi của một feature nằm trong các file `.arb` của feature đó.
 - Chuỗi thật sự dùng chung nằm ở `core_base_ui`.
 - `core_ui_kit` **không** định nghĩa `.arb` riêng: nó là thư viện widget mà mọi feature dùng, và chuỗi của nó lấy từ `core_base_ui`.
-- Nội dung hiển thị của một failure không bao giờ là `AppFailure.message` (văn bản cho developer, dùng để ghi log). Một lỗi chung được diễn đạt bằng `context.l10n.failureMessage(failure.code)`, do `core_base_ui` ánh xạ từ `code` của failure; feature nào nói được cụ thể hơn (sai mật khẩu, không có người dùng) thì tự phân loại failure và dùng key ARB của mình. `modules/home/feature/lib/src/pages/home_page.dart` minh hoạ dạng chung.
+- Nội dung hiển thị của một failure không bao giờ là `AppFailure.message` (văn bản cho developer, dùng để ghi log). Một lỗi chung được diễn đạt bằng `context.l10n.failureMessage(failure.code)`, do `core_base_ui` ánh xạ từ `code` của failure; feature nào nói được cụ thể hơn (chẳng hạn sai mật khẩu) thì tự phân loại failure và diễn đạt bằng key ARB của mình — `AuthProvider.mapAuthFailure` phân loại một `401`, và shell diễn đạt failure phiên đó thành toast đã dịch. `modules/home/feature/lib/src/pages/home_page.dart` minh hoạ dạng chung.
 
 ### Sửa các file `.arb`
 
@@ -30,7 +30,6 @@ Trong `modules/home/feature/assets/language/en.arb` — ARB là JSON thuần, n�
 ```json
 {
   "@@locale": "en",
-  "home": "Home",
   "tabLabel": "Home",
   "userLoggedIn": "User is Logged In",
   "userLoggedOut": "User is Logged Out",
@@ -139,7 +138,7 @@ const AppProfile appProfile = AppProfile(
 
 ### Thêm ARB cho mọi feature
 
-Thêm `assets/language/ja.arb`, dịch đủ mọi key, vào **từng** feature có `l10n.yaml` — hiện là `modules/{auth,home,onboarding,settings,splash}/feature`. Bước này không tuỳ chọn: extension của mỗi feature ép non-null delegate của nó —
+Thêm `assets/language/ja.arb`, dịch đủ mọi key, vào **từng** feature có `l10n.yaml` — hiện là `modules/{auth,home,onboarding,settings}/feature` (splash không có chuỗi nào). Bước này không tuỳ chọn: extension của mỗi feature ép non-null delegate của nó —
 
 ```dart
 FeatureHomeLocalizations get l10nHome => FeatureHomeLocalizations.of(this)!;
@@ -184,7 +183,7 @@ Container(
   color: context.colors.surface,
   padding: EdgeInsets.all(AppSpacing.lg(context)),
   child: Text(
-    context.l10nHome.home,
+    context.l10nHome.userLoggedIn,
     style: AppTextStyles.bodyMediumStyle(context),
   ),
 )
@@ -283,12 +282,22 @@ Các giá trị mặc định không phải token của widget dùng chung nằm
 ```dart
 /// Timing, overlay and default-size constants owned by `core_ui_kit`.
 ///
+/// Package-internal by convention: these are defaults for the reusable
+/// widgets in this package. Features that need a different value pass it
+/// explicitly through the widget's constructor instead of reading these.
+///
 /// Sizes are **design pixels**: a widget scales its own default through
 /// `core_responsive` (`context.w/h/r`) when the caller passes nothing. A value
 /// the caller passes is already scaled and used as-is.
 class SharedUiConstants {
   SharedUiConstants._();
 
+  /// Default show/hide duration of a dialog raised through `AppOverlay`.
+  static const Duration DIALOG_TRANSITION_DURATION = Duration(
+    milliseconds: 200,
+  );
+
+  /// Default visible duration for a toast raised by `AppOverlay.showToast`.
   static const Duration TOAST_DURATION = Duration(seconds: 3);
 
   /// Default height of `CustomButton.rectangle`.

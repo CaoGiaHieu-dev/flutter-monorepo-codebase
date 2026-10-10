@@ -31,6 +31,18 @@ Already wired in `platform/shell/app_shell/lib/src/main_scope.dart`. A feature *
 // platform/shell/app_shell/lib/src/main_scope.dart — _ResponsiveWrapper.build (comments trimmed)
 return ResponsiveInit(
   designSize: Size(display.designSize.width, display.designSize.height),
+  // Left at their defaults, `scaleBounds` and `textScaleBounds` are
+  // `ScaleBounds.downOnly()`: a phone narrower than the artboard scales
+  // the design down to fit, and nothing ever scales up — a tablet or a
+  // desktop window draws it 1:1 and gives the extra room to the layout
+  // (see `AdaptiveLayout`). A class the app lists in
+  // `DisplayProfile.scale` is scaled by its own policy instead — the
+  // template lists `expanded`: tablets in landscape, unfolded foldables
+  // and desktop windows are laid out in real logical pixels. (Phones
+  // never get there: the shell locks phone-sized displays to portrait —
+  // see `AppInitializer.preferredOrientationsFor`.) Without it, a laptop
+  // window shorter than the 812-tall phone artboard would still shrink
+  // every vertical gap and radius.
   profiles: {
     for (final entry in display.scale.entries)
       WindowSizeClass.values.byName(entry.key.name): _profileOf(

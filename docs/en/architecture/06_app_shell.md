@@ -144,7 +144,7 @@ void runShellApp({
   required AppProfile profile,
   required Future<void> Function() configureDependencies,
   ShellHooks hooks = const ShellHooks(),
-})
+}) { … }
 ```
 
 `registerAppProfile` binds `AppProfile`, `AppPlatform` (the platform of this run), that platform's `PlatformFacts`, the `SslPinningPolicy` and the `RouterProfile`, `LocaleProfile`, `ThemeProfile` and `NetworkProfile` sections, each under its own exact type (RULE-14). It runs before `configureDependencies`, so a class the graph builds can take a section as an optional constructor parameter — an eager singleton included, which can never hit RULE-13. injectable resolves such a parameter unconditionally, so the generated `configureDependencies` calls `registerProfileDefaults` right before the graph is built: it registers the template default of every section still missing, and a graph booted with no profile (a package's own test) completes instead of throwing "`NetworkProfile` is not registered". A class built by hand falls back to the same `const` defaults. The order of the whole boot is the numbered list in [Step by step](#step-by-step); `checkAppContract` resolves every row of the catalog below, and `handleCompositionReport` decides stop-or-go.
@@ -275,6 +275,9 @@ For Sentry, `recordError` calls `Sentry.captureException(error, stackTrace: stac
 ```dart
 // The platform's declared `splash` decides — iOS keeps its native splash
 // for the whole boot by default, so no Dart splash is built there.
+final platformFacts =
+    profile.facts.platformFor(runtime.platform) ??
+    const PlatformFacts.today();
 final usesDartSplash = platformFacts.splash == SplashMode.dart;
 // ...
 splashScreen: usesDartSplash
@@ -323,13 +326,13 @@ The order is declared in [`apps/mobile/app_manifest.yaml`](../../../apps/mobile/
 ```dart
 const _externalModulesBefore = [..._coreModules];
 const _externalModulesAfter = [
-    ..._notificationsModules,
-    ..._shellModules,
-    ..._uiModules,
-    ..._domainModules,
-    ..._dataModules,
-    ..._featureModules,
-    ..._otherModules,
+  ..._notificationsModules,
+  ..._shellModules,
+  ..._uiModules,
+  ..._domainModules,
+  ..._dataModules,
+  ..._featureModules,
+  ..._otherModules,
 ];
 ```
 
@@ -417,7 +420,10 @@ class NetworkConfigImpl implements NetworkConfig {
     LocaleProfile locale = const LocaleProfile(),
   ]) : _languages = LanguageSet(locale);
 
-  /// Null in a build that composes no auth module.
+  final ILanguageStorage _languageStorage;
+  final LanguageSet _languages;
+
+  /// Null in a build that composes no session owner.
   ISessionGateway? get _session => getItOrNull<ISessionGateway>();
   // ...
 }
@@ -459,14 +465,21 @@ The shell implements the contracts that core packages declare but cannot satisfy
 [`app_router.dart`](../../../platform/shell/app_shell/lib/src/navigation/app_router.dart) builds GoRouter **entirely from DI contributions**.
 
 ```dart
-List<RouteBase> get _featureRoutes => [
-  for (final module in getAllOrEmpty<IFeatureRouteModule>()) ...module.routes,
-];
-
+/// Every [INavDestinationModule], sorted by `order` — collected once, when
+/// the router is built. Branch `i` of the dashboard shell is destination
+/// `i`; the dashboard receives this same list through
+/// [IDashboardRouteModule.builder], so the two can never disagree.
 late final List<INavDestinationModule> destinations = List.unmodifiable(
   getAllOrEmpty<INavDestinationModule>().toList()
     ..sort((a, b) => a.order.compareTo(b.order)),
 );
+
+List<RouteBase> get _featureRoutes {
+  return [
+    for (final module in getAllOrEmpty<IFeatureRouteModule>())
+      ...module.routes,
+  ];
+}
 ```
 
 Structure produced:
@@ -514,6 +527,19 @@ String get fallbackLocation {
   return _emptyDestinationPath;
 }
 
+/// Where a cold start lands, by the app's [RouterProfile.entry]:
+///
+/// - [EntryPolicy.firstLaunch] (the default): the registered
+///   [IAppEntryLocation] (onboarding, when composed) on the first launch
+///   only, else [fallbackLocation];
+/// - [EntryPolicy.always]: the entry location on every cold start;
+/// - [EntryPolicy.never]: [fallbackLocation], whatever is registered.
+///
+/// "First launch" is the shell's own [AppBootStorage.viewedOnboard] flag,
+/// which `NavigatorWrapperWidget` sets the first time it keeps the user on
+/// the entry location. Returning it on every cold start would show a
+/// returning user onboarding until the session restore finished and the
+/// boot redirect moved them on.
 String get entryLocation {
   final entry = usesEntryLocation ? getItOrNull<IAppEntryLocation>() : null;
   return resolveEntryLocation(
@@ -557,16 +583,31 @@ Sits inside the app `ShellRoute` and wraps every in-app route. It splits navigat
 
 ```dart
 WidgetsBinding.instance.endOfFrame.whenComplete(() async {
-  await _session?.ensureInitialized(); // ISessionState, via getItOrNull
+  await _session?.ensureInitialized();
   if (!mounted) return;
-  // entry location? → ISignInLocation? → IPostSignInLocation (else fallbackLocation)
+  final isGoToOnboarding = _goToOnboarding();
+  if (isGoToOnboarding) {
+    _bootCompleted = true;
+    // With a session owner, leaving onboarding leads to a sign-in, and
+    // `_onSessionChanged` → `_goToPostSignIn` starts deep links. Without
+    // one no sign-in ever comes, so start them once the user leaves the
+    // entry location instead — still never over onboarding itself.
+    if (_session == null) _startDeepLinksOnLeavingEntry();
+    return;
+  }
+  final isGoToSignIn = _goToSignIn();
+  if (isGoToSignIn) {
+    _bootCompleted = true;
+    return;
+  }
+  _goToPostSignIn();
   _bootCompleted = true;
 });
 ```
 
-Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state (the boot already held the splash for it, up to `NetworkProfile.connectTimeout`, so on a normal start the restore is done by now). With no session owner composed, `_session` is null and the app is treated as signed out. Where each case lands comes from two more `core_di` contracts, both resolved with `getItOrNull`: `ISignInLocation` (contributed by `feature_auth`: the login path) for a signed-out user — none registered, no redirect — and `IPostSignInLocation` (contributed by `feature_home`: the home tab) for a signed-in one — none registered, `AppRouter.fallbackLocation`. The widget calls `context.go(path)` itself; it names no module and no product flow.
+Waiting for `endOfFrame` guarantees the first frame is on screen before any redirect, and `ensureInitialized()` waits for session restore to finish so the decision is made against real state (the boot already held the splash for it, up to `NetworkProfile.connectTimeout`, so on a normal start the restore is done by now). In the sample the restore is `AuthProvider.initialize` calling `IAuthRepository.refreshToken()`: no stored token, or a refused one, means signed out, and an app started offline gets no answer from the server, so it opens on the login screen while the stored token stays for the next start. With no session owner composed, `_session` is null and the app is treated as signed out. Where each case lands comes from two more `core_di` contracts, both resolved with `getItOrNull`: `ISignInLocation` (contributed by `feature_auth`: the login path) for a signed-out user — none registered, no redirect — and `IPostSignInLocation` (contributed by `feature_home`: the home tab) for a signed-in one — none registered, `AppRouter.fallbackLocation`. The widget calls `context.go(path)` itself; it names no module and no product flow.
 
-**Later transitions** arrive through two stream subscriptions opened in `initState` — `ISessionState.sessionChanges` and `.sessionFailures` — and are gated differently. `_onSessionChanged` (which navigates) is ignored until `_bootCompleted && _session.hasRestoredSession`, so the restore's own emission does not fight the boot redirect over the very first navigation. `_onSessionFailure` (which only shows a toast) checks `_bootCompleted` alone — it never navigates, so it has nothing to fight over. It words the failure with an exhaustive `switch` over the sealed `SessionFailure` (five variants: invalid credentials, user not found, a server failure worded from its code, `SessionExpiredFailure` — a signed-in session ended, the global ARB key `sessionExpired` — and unknown). `build` itself is just `Overlay.wrap(child: widget.child)`.
+**Later transitions** arrive through two stream subscriptions opened in `initState` — `ISessionState.sessionChanges` and `.sessionFailures` — and are gated differently. `_onSessionChanged` (which navigates) is ignored until `_bootCompleted && _session.hasRestoredSession`, so the restore's own emission does not fight the boot redirect over the very first navigation. `_onSessionFailure` (which only shows a toast) checks `_bootCompleted` alone — it never navigates, so it has nothing to fight over. It words the failure with an exhaustive `switch` over the sealed `SessionFailure` (five variants: invalid credentials, user not found, a server failure worded from its code, `SessionExpiredFailure` — a signed-in session ended, the global ARB key `sessionExpired` — and unknown). The sample's `AuthProvider` produces three of them: invalid credentials for a `401`, a server failure carrying the code for every other sign-in failure (a `404` included) and the expired session; `SessionUserNotFoundFailure` stays in the contract for an owner that can tell that case apart. `build` itself is just `Overlay.wrap(child: widget.child)`.
 
 **Deep links** start in `_goToPostSignIn`, so they are never routed over onboarding or the sign-in screen. With a session owner that covers every path — leaving onboarding leads to a sign-in, and the sign-in to `_goToPostSignIn`. Without one no sign-in ever comes, so when boot stays on the entry location the widget instead starts deep links the first time the router leaves it (`navigator_wrapper_widget_test.dart`).
 
@@ -658,7 +699,7 @@ This does **not** double-scale text with `core_responsive`. The two factors are 
 | `context.sp(x)` (the theme's type scale, `AppTextStyles`) | `core_responsive`, into `TextStyle.fontSize` | "how big is this design size in this window?" — from the window width, clamped by `textScaleBounds`. It never reads `MediaQuery.textScaler` |
 | `MediaQuery.textScaler` | Flutter's `Text` / `RichText`, at layout | "how much larger does this user want text?" |
 
-A 16-unit body style is 16 × (window factor) logical pixels, then × the user's scale when drawn — once each. What does **not** grow with the text scale is layout sized with `context.h` / `context.w`: a fixed-height box holding text can overflow at 2x. Size text containers by their content (padding, `minHeight`), not a fixed height. `modules/auth/feature/test/login_page_text_scale_test.dart` and `modules/dashboard/feature/test/dashboard_text_scale_test.dart` lay out the login screen on three phone sizes and the dashboard chrome from phone to desktop at 2x, and fail on any overflow — copy them for a new screen.
+A 16-unit body style is 16 × (window factor) logical pixels, then × the user's scale when drawn — once each. What does **not** grow with the text scale is layout sized with `context.h` / `context.w`: a fixed-height box holding text can overflow at 2x. Size text containers by their content (padding, `minHeight`), not a fixed height. `modules/auth/feature/test/login_page_test.dart` and `modules/dashboard/feature/test/dashboard_text_scale_test.dart` lay out the login screen on the smallest phone window (320 × 568) and the dashboard's four tabs on a compact, a medium and a large window, all at 2x, and fail on any overflow — copy them for a new screen.
 
 ---
 

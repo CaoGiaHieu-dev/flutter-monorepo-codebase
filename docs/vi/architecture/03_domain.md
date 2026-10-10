@@ -152,7 +152,7 @@ Future<R> whenAsync<R>({
 ```dart
 @Freezed(genericArgumentFactories: true)
 abstract class BaseEntity<T> with _$BaseEntity<T> {
-  const BaseEntity._();
+  const BaseEntity._(); // private constructor for getters
 
   const factory BaseEntity({
     @JsonKey(name: 'statusCode') @Default(200) int statusCode,
@@ -160,6 +160,9 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
     @JsonKey(name: 'message') String? message,
   }) = _BaseEntity<T>;
 
+  /// Whether the envelope reports success: any 2xx. A create answered `201`
+  /// or an action answered `204` is as successful as a `200`; only an
+  /// envelope reporting a 1xx, 3xx, 4xx or 5xx is [hasError].
   bool get isSuccess =>
       statusCode >= DomainConstants.SUCCESS_STATUS_CODE &&
       statusCode < DomainConstants.SUCCESS_STATUS_CEILING;
@@ -176,6 +179,10 @@ abstract class BaseEntity<T> with _$BaseEntity<T> {
 
 ```dart
 abstract class BaseUseCase<RType, Params> {
+  /// Execute the use case with given parameters
+  ///
+  /// Parameters are expected to be already validated at construction time.
+  /// Returns Result<RType> containing either Success with data or Failure with error.
   FutureOr<Result<RType>> call(Params params);
 }
 ```
@@ -186,7 +193,7 @@ Dùng `NoParams()` khi thao tác không cần đầu vào.
 
 ### Mẫu cache
 
-Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là một lát cắt nhỏ hơn — `CacheEntryEntity`, `CacheEntryParams`, `ICacheEntryRepository`, và `GetCacheEntryUseCase` / `SaveCacheEntryUseCase`. Đây là nửa Domain của ví dụ Drift mô tả trong [hướng dẫn database](../guides/07_database.md).
+Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là lát cắt nhỏ nhất — `CacheEntryEntity` và `ICacheEntryRepository`, không có lớp params và không có use case phía trên: hợp đồng là tất cả những gì `data_cache` phải hiện thực. Đây là nửa Domain của ví dụ Drift mô tả trong [hướng dẫn database](../guides/07_database.md).
 
 ---
 
@@ -194,27 +201,26 @@ Package domain mẫu thứ hai, `domain_cache` (`modules/cache/domain`), là m�
 
 | File | Nội dung |
 |:---|:---|
-| `entities/user_entity.dart` | `UserEntity` (Freezed) |
-| `entities/user_role.dart` | enum `UserRole` — `customer`, `owner`, `none`, `unknown` |
+| `entities/user_entity.dart` | `UserEntity` (Freezed) — `id`, `email`, `name` |
 | `params/login_params.dart` | `LoginParams` |
-| `repositories/i_auth_repository.dart` | `IAuthRepository` — `login`, `logout`, `refreshToken`, `restoreSession` |
-| `usecases/` | `LoginUseCase`, `LogoutUseCase`, `RestoreSessionUseCase` |
+| `repositories/i_auth_repository.dart` | `IAuthRepository` — `login`, `logout`, `refreshToken` |
+| `usecases/` | `LoginUseCase` — use case duy nhất |
 
 ### Một use case đầy đủ
 
 `modules/auth/domain/lib/src/usecases/login_usecase.dart`:
 
 ```dart
+/// Authenticates a user with email and password.
 @injectable
 class LoginUseCase extends BaseUseCase<UserEntity, LoginParams> {
-  LoginUseCase(this._authRepository);
+  LoginUseCase(this._repository);
 
-  final IAuthRepository _authRepository;
+  final IAuthRepository _repository;
 
   @override
-  Future<Result<UserEntity>> call(LoginParams params) {
-    return _authRepository.login(params);
-  }
+  Future<Result<UserEntity>> call(LoginParams params) =>
+      _repository.login(params);
 }
 ```
 
@@ -222,31 +228,9 @@ Ba điều cần sao chép từ đây:
 
 1. **`@injectable`** — use case là factory, không bao giờ là singleton.
 2. **Constructor injection** — repository interface đi vào qua constructor. Tuyệt đối không gọi `getIt<T>()` bên trong use case.
-3. **Không validate, không bóc tách** — use case chuyển thẳng params đi tiếp. `LoginParams` cũng không tự validate; nó chỉ mang dữ liệu đầu vào, vốn đã được form đăng nhập (`AuthFormWidget` trong `feature_auth`) validate trước khi dựng params. Quy tắc nào phải đúng bất kể bên gọi là ai thì thuộc về use case, trả về dưới dạng `Failure` — repository đã trả sẵn `Result<T>`, nên không có gì phải bóc tách.
+3. **Không validate, không bóc tách** — use case chuyển thẳng params đi tiếp. `LoginParams` cũng không tự validate; nó chỉ mang dữ liệu đầu vào, vốn đã được trang đăng nhập (`LoginPage` trong `feature_auth`) kiểm tra — cả hai trường đều đã điền — trước khi dựng params. Quy tắc nào phải đúng bất kể bên gọi là ai thì thuộc về use case, trả về dưới dạng `Failure` — repository đã trả sẵn `Result<T>`, nên không có gì phải bóc tách.
 
-Use case không có đầu vào nhận `NoParams` và trông y như vậy:
-
-```dart
-@injectable
-class LogoutUseCase extends BaseUseCase<void, NoParams> {
-  LogoutUseCase(this._authRepository);
-
-  final IAuthRepository _authRepository;
-
-  @override
-  Future<Result<void>> call(NoParams params) {
-    return _authRepository.logout();
-  }
-}
-```
-
-### `UserRole` có thành viên `unknown` là có chủ đích
-
-```dart
-enum UserRole { customer, owner, none, unknown }
-```
-
-Enum này là Dart thuần: backend viết một role trên đường truyền ra sao là chuyện của transport, nên domain không gọi tên giá trị JSON nào. `unknown` là điểm rơi mà `UserModel` (trong `data_auth`) ánh xạ một chuỗi role lạ vào, nhờ đó một role mà server thêm sau này vẫn đọc được thay vì ném lỗi.
+Use case không có đầu vào nhận `NoParams` và trông y như vậy, chỉ khác kiểu tham số: `BaseUseCase<List<ThingEntity>, NoParams>`, gọi bằng `_getThings(const NoParams())`. Bản mẫu không có use case nào như vậy: `AuthProvider` tự gọi `IAuthRepository.logout()` và `refreshToken()`, nên `LoginUseCase` là use case duy nhất của module và không có lớp bọc nào chỉ để chuyển tiếp một lời gọi.
 
 ---
 
@@ -283,14 +267,10 @@ Tiền tố `I` chỉ đánh dấu interface (RULE-78); hằng số nằm trong 
 ```dart
 @freezed
 abstract class UserEntity with _$UserEntity {
-  const UserEntity._();          // ← bắt buộc để thêm getter/method
+  const UserEntity._();
 
-  const factory UserEntity({
-    required String id,
-    String? email,
-    String? name,
-    UserRole? role,
-  }) = _UserEntity;
+  const factory UserEntity({required String id, String? email, String? name}) =
+      _UserEntity;
 }
 ```
 

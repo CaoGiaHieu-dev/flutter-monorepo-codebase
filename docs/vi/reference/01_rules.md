@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/reference/01_rules.md@d109d3f -->
+<!-- translated-from: docs/en/reference/01_rules.md@37796af -->
 # Luật kiến trúc
 
 **File này trả lời:** cái gì được phép, cái gì bị cấm, **vì sao**, và thứ gì thực thi luật đó — cho từng tầng của monorepo.

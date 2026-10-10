@@ -1,4 +1,4 @@
-<!-- translated-from: docs/en/guides/10_cross_feature.md@d21d457 -->
+<!-- translated-from: docs/en/guides/10_cross_feature.md@37796af -->
 # Hướng dẫn: Giao tiếp giữa các feature
 
 ## Mục tiêu
